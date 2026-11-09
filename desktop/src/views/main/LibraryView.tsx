@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type ClientFolder, type ExportFormat, type LearnOffer, type MeetingPackFormat, type ScreenMoment, type LibraryItem, type SearchResult, type SharedItem, type SmartFolder, type TranscriptDetail, type TranscriptionLanguage, type TranscriptSuggestion, type TranscriptView, type TranscriptViewsState } from "../../lib/ipc";
-import { folderLabel, inFolderHere } from "../../lib/folders";
+import { folderLabel, inFolderHere, LIBRARY_VIEWS, type LibraryView as LibraryViewKey } from "../../lib/folders";
+import { PageHeader } from "../../components/Page";
+import { Menu } from "../../components/Menu";
+import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
+import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
@@ -11,9 +15,9 @@ import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
-import { ChoiceMenu, GroupHeader } from "./LibraryGrouping";
+import { GroupHeader, ViewMenu } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, CloseIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, CloseIcon, ColumnsIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, ListIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TableIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
@@ -77,6 +81,16 @@ function withUnsureMarks(text: string): ReactNode {
 const UNSURE_WORD = "Not sure of this word. Click to hear it.";
 const UNSURE_LINE = "The engine was not sure of this line. Click to hear it.";
 
+/** List or Table, kept on this computer. */
+const LAYOUT_KEY = "echoledger-library-layout";
+
+/** The subtitle's words for Waiting, Pinned and Failed uploads (v1.6). */
+const VIEW_LINE: Record<LibraryViewKey, string> = {
+  waiting: "waiting for Keep or Discard.",
+  pinned: "pinned.",
+  failed: "that did not upload or transcribe. Retry or delete each.",
+};
+
 /** The row's time: the clock for today, the day before that (the day group names the rest). */
 export function rowTime(iso?: string): string {
   const when = formatWhen(iso);
@@ -91,7 +105,7 @@ const initialOf = (name: string): string => [...name.trim()][0]?.toUpperCase() ?
  * recording beside it. Recordings waiting for a decision and uploads that need the user sit at the top of the list;
  * `focus` brings one of them into view.
  */
-export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null, projects = null }: {
+export function LibraryView({ notify, focus = null, onFocusHandled, openRequest = null, initialSelected = null, onSelectedChange, onImport, onOpenClient, smartFolder = null, onSmartFolder, sharedFocus = null, projects = null, smartView = null, crumb = null, aside = null }: {
   notify: (t: string, e?: boolean) => void;
   focus?: PendingFocus | null;
   onFocusHandled?: () => void;
@@ -111,6 +125,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   sharedFocus?: string | null;
   /** Every project, as the sidebar has them (since v1.5); without them the Library asks for its own. */
   projects?: ClientFolder[] | null;
+  /** Waiting, Pinned or Failed uploads (v1.6, P4.2): a view of the whole Library. */
+  smartView?: LibraryViewKey | null;
+  /** The place shown, after "Library" in the breadcrumbs. */
+  crumb?: string | null;
+  /** The nested column (v1.6, P4.2): the Library's places with their counts. */
+  aside?: ReactNode;
 }) {
   // The Move dialog of one recording (its row menu).
   const [moveFor, setMoveFor] = useState<{ ids: string[]; title: string | null; current: string | null } | null>(null);
@@ -144,6 +164,44 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState<Record<string, number>>(loadOpened);
   const [selected, setSelected] = useState<string | null>(initialSelected);
+  // The page pattern (v1.6, P4.4): List or Table, the table's columns, the row the keys are on, and the density
+  // (Account → Preferences, here too as on the phone's View sheet).
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  const [layout, setLayout] = useState<"list" | "table">(() => {
+    try {
+      return window.localStorage.getItem(LAYOUT_KEY) === "table" ? "table" : "list";
+    } catch {
+      return "list";
+    }
+  });
+  const chooseLayout = (next: "list" | "table") => {
+    setLayout(next);
+    try {
+      window.localStorage.setItem(LAYOUT_KEY, next);
+    } catch {
+      // Storage can be unavailable; the choice then lasts until the app restarts.
+    }
+  };
+  const [columns, setColumns] = useState<Set<TableColumn>>(loadColumns);
+  const toggleColumn = (id: TableColumn) => setColumns((c) => {
+    const next = new Set(c);
+    if (!next.delete(id)) next.add(id);
+    saveColumns(next);
+    return next;
+  });
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [density, setDensity] = useState<Density>(() => loadPreferences().density);
+  useEffect(() => {
+    const follow = (e: Event) => setDensity((e as CustomEvent<Preferences>).detail?.density ?? loadPreferences().density);
+    window.addEventListener(PREFERENCES_EVENT, follow);
+    return () => window.removeEventListener(PREFERENCES_EVENT, follow);
+  }, []);
+  const chooseDensity = (next: Density) => {
+    const prefs = { ...loadPreferences(), density: next };
+    savePreferences(prefs);
+    setDensity(next);
+    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: prefs }));
+  };
   useEffect(() => onSelectedChange?.(selected), [selected, onSelectedChange]);
   useEffect(() => {
     if (selected) setOpened(rememberOpened(selected));
@@ -294,15 +352,20 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   // A smart folder's recordings: the server's list (each shown as saved here when it is), else what this computer can tell.
   const shared = smartFolder === "shared";
   const folderBase = useMemo(() => {
+    if (smartView) return items.filter((i) => inSmartView(i, smartView));
     if (!smartFolder || smartFolder === "shared") return items;
     if (folderItems === null) return items.filter((i) => inFolderHere(i, smartFolder) === true);
     const saved = new Map(items.map((i) => [i.id, i]));
     return folderItems.map((i) => saved.get(i.id) ?? i).filter((i) => !i.deleted);
-  }, [items, smartFolder, folderItems]);
+  }, [items, smartFolder, folderItems, smartView]);
   // Recently opened reads the times kept when the list was shown, so opening a recording does not move it under the pointer.
   const openedAtSort = useMemo(() => opened, [sort]); // eslint-disable-line react-hooks/exhaustive-deps
   const filtered = useMemo(() => sortItems(searchItems(filterByClient(filterByLabel(applyFilters(folderBase, filters), label), folder), query), sort, openedAtSort), [folderBase, filters, label, folder, query, sort, openedAtSort]);
   const groups = useMemo(() => groupBy(filtered, choice.group, sort), [filtered, choice.group, sort]);
+  // Shared with me keeps its own list; everything else may be a table.
+  const tableView = layout === "table" && smartFolder !== "shared";
+  // The rows the keys move through: the shown ones, in order, not those of a folded group.
+  const rows = useMemo(() => groups.flatMap((g) => (collapsedGroups.has(g.key) ? [] : g.items)), [groups, collapsedGroups]);
   const toggleCollapsed = (key: string) => setCollapsedGroups((c) => {
     const next = new Set(c);
     if (next.has(key)) next.delete(key);
@@ -717,7 +780,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || document.querySelector(".palette-backdrop, .sheet-backdrop")) return;
     const audio = audioRef.current;
     const target = e.target instanceof HTMLElement ? e.target : document.body;
-    const action = playerKey(e.key, target.tagName, target.isContentEditable);
+    const action = playerKey(e.key, target.tagName, target.isContentEditable, e.shiftKey);
     if (!audio || !action) return;
     e.preventDefault();
     if (action === "toggle") togglePlay();
@@ -727,6 +790,55 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   playerKeyRef.current = onPlayerKey;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => playerKeyRef.current(e);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // J / K move through the list, Enter opens, X selects, Esc closes, "/" searches (v1.6, P4.4). Never while typing,
+  // with a dialog or menu open, or with a modifier held.
+  const listKeyRef = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  listKeyRef.current = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.repeat || shared) return;
+    const target = e.target instanceof HTMLElement ? e.target : null;
+    if (target && (target.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName))) return;
+    if (document.querySelector(".palette-backdrop, .sheet-backdrop, .menu-pop, .row-menu-pop, details[open] > .bulk-pop, .suggest-pop, .filter-panel")) return;
+    if (e.key === "/" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      e.preventDefault();
+      searchRef.current?.focus();
+      return;
+    }
+    const key = listKey(e);
+    if (!key) return;
+    if (key === "next" || key === "previous") {
+      const at = rows.findIndex((i) => i.id === (cursor ?? selected));
+      const next = rows[stepIndex(at, rows.length, key === "next" ? 1 : -1)];
+      if (!next) return;
+      e.preventDefault();
+      setCursor(next.id);
+      document.querySelector(`[data-row="${CSS.escape(next.id)}"]`)?.scrollIntoView?.({ block: "nearest" });
+    } else if (key === "open") {
+      // Enter on a button is the button's own.
+      if (!cursor || target?.tagName === "BUTTON" || target?.tagName === "A") return;
+      e.preventDefault();
+      setSelected(cursor);
+    } else if (key === "pick") {
+      const id = cursor ?? selected;
+      if (!id) return;
+      e.preventDefault();
+      setSelecting(true);
+      togglePicked(id);
+    } else if (key === "close") {
+      if (selected) {
+        e.preventDefault();
+        setSelected(null);
+      } else if (selecting) {
+        e.preventDefault();
+        endSelecting();
+      }
+    }
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => listKeyRef.current(e);
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
@@ -955,39 +1067,37 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const total = items.filter((i) => !i.deleted).length;
+  // The place shown after "Library" (the shell names it; on its own the Library names it itself).
+  const place = crumb ?? (smartView ? LIBRARY_VIEWS.find(([v]) => v === smartView)?.[1] ?? null : smartFolder ? folderLabel(smartFolder) : null);
   const durationMs = current ? playerLength(current.duration_ms, transcript?.segments, mediaSeconds) : 0;
   const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">{smartFolder ? folderLabel(smartFolder) : "Library"}</h1>
-          {smartFolder ? (
-            <p className="page-sub">
-              {shared ? "Recordings and projects teammates sent you." : `${filtered.length} recording${filtered.length === 1 ? "" : "s"} in this smart folder of your Library.`}{" "}
-              {onSmartFolder && <button type="button" className="btn text compact inline-link" onClick={() => onSmartFolder(null)}>Show every recording</button>}
-            </p>
-          ) : (
-            <p className="page-sub">{total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}</p>
+      <PageHeader crumbs={place ? [{ label: "Library", onOpen: onSmartFolder ? () => onSmartFolder(null) : undefined }, { label: place }] : []}
+        title={place ?? "Library"}
+        subtitle={smartView ? `${filtered.length} recording${filtered.length === 1 ? "" : "s"} ${VIEW_LINE[smartView]}`
+          : smartFolder ? (shared ? "Recordings and projects teammates sent you." : `${filtered.length} recording${filtered.length === 1 ? "" : "s"} in this smart folder of your Library.`)
+            : total === 0 ? "Recordings from your phone, this computer and the web will appear here." : `${total} recording${total === 1 ? "" : "s"} from your phone, this computer and the web.`}
+        actions={<>
+          {!shared && <button type="button" className="btn ghost" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}><TrashIcon size={16} />Recently deleted</button>}
+          <button className="btn ghost" onClick={refresh} disabled={loading}><RefreshIcon size={16} />{loading ? "Syncing…" : "Sync"}</button>
+          {onImport && (
+            <button type="button" className="btn primary" onClick={onImport} title="Voice notes, audio or video files. You can also drop them anywhere in this window.">
+              <ImportIcon size={16} />Upload
+            </button>
           )}
-        </div>
-        <div className="spacer" />
-        {onImport && (
-          <button type="button" className="btn" onClick={onImport} title="Voice notes, audio or video files. You can also drop them anywhere in this window.">
-            <ImportIcon size={16} />Import
-          </button>
-        )}
-        <button className="btn ghost" onClick={refresh} disabled={loading}><RefreshIcon size={16} />{loading ? "Syncing…" : "Sync"}</button>
-      </div>
-      {!shared && (<>
-      <div className="toolbar">
-        <label className="searchbox">
-          <SearchIcon size={18} />
-          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings" />
-          {query && <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button>}
+        </>} />
+      <div className="page-split">
+      {aside}
+      <div className="page-main library-main">
+      {!shared && (
+      <div className="toolbar library-toolbar" role="toolbar" aria-label="Library tools">
+        <label className="searchbox compact library-search">
+          <SearchIcon size={16} />
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings"
+            onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); } }} />
+          {query ? <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button> : <span className="kbd" aria-hidden="true">/</span>}
         </label>
-      </div>
-      <div className="chips library-chips">
         <LibraryFilters state={filters} onChange={setFilters} counts={viewCounts} tags={tags} showBookmarks={anyBookmarks || filters.tags.size > 0} />
         {(folders.length > 0 || folder !== null) && (
           <select className={`chip ${folder !== null ? "active" : ""}`} value={folder ?? "*"} onChange={(e) => setFolder(e.target.value === "*" ? null : e.target.value)} aria-label="Filter by project">
@@ -1002,16 +1112,23 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             {labels.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         )}
-        <ChoiceMenu label="Group by" value={choice.group} options={(Object.keys(GROUP_LABELS) as GroupKey[]).map((k) => [k, GROUP_LABELS[k]] as const)}
-          onChange={(group) => setChoice({ group })} />
-        <ChoiceMenu label="Sort by" value={sort} options={(Object.keys(SORT_LABELS) as SortKey[]).map((k) => [k, SORT_LABELS[k]] as const)}
-          onChange={(next) => setChoice({ sort: next })} />
-        <span className="spacer" />
+        <ViewMenu sections={[
+          { label: "Group by", value: choice.group, options: (Object.keys(GROUP_LABELS) as GroupKey[]).map((k) => [k, GROUP_LABELS[k]] as const), onChange: (group) => setChoice({ group: group as GroupKey }) },
+          { label: "Sort by", value: sort, options: (Object.keys(SORT_LABELS) as SortKey[]).map((k) => [k, SORT_LABELS[k]] as const), onChange: (next) => setChoice({ sort: next as SortKey }) },
+          { label: "Density", value: density, options: DENSITIES, onChange: (next) => chooseDensity(next as Density) },
+        ]} />
+        <span className="segmented layout-switch" role="group" aria-label="Show as">
+          <button type="button" aria-pressed={layout === "list"} title="List" onClick={() => chooseLayout("list")}><ListIcon size={16} /><span className="sr-only">List</span></button>
+          <button type="button" aria-pressed={layout === "table"} title="Table" onClick={() => chooseLayout("table")}><TableIcon size={16} /><span className="sr-only">Table</span></button>
+        </span>
+        {layout === "table" && (
+          <Menu label="Columns" title="Columns" buttonClass="chip columns-btn" button={<ColumnsIcon size={16} />}
+            items={TABLE_COLUMNS.map(([id, name]) => ({ id: `col-${id}`, label: name, checked: columns.has(id), onPick: () => toggleColumn(id) }))} />
+        )}
         <button type="button" className="chip" aria-pressed={selecting} onClick={() => (selecting ? endSelecting() : setSelecting(true))}>{selecting ? "Cancel selection" : "Select"}</button>
-        <button type="button" className="chip" aria-pressed={binOpen} onClick={() => setBinOpen(!binOpen)}>Recently deleted</button>
       </div>
-      </>)}
-      <div className="library">
+      )}
+      <div className={`library ${tableView ? "as-table" : ""}`}>
         <div className="list" data-testid="library-list">
           {binOpen && <BinPanel notify={notify} onClose={() => setBinOpen(false)} />}
           {shared && (
@@ -1030,7 +1147,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>
             </div>
           )}
-          {!smartFolder && <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />}
+          {!smartFolder && smartView !== "pinned" && <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />}
           {shownHits.length > 0 && (
             <div className="group search-hits" role="region" aria-label="Matches in transcripts">
               <div className="group-label">In transcripts</div>
@@ -1078,7 +1195,19 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <div className="empty">{filters.views.size === 1 && filters.views.has("waiting") ? "Nothing is waiting here. Recordings waiting for Keep or Discard on this computer are listed at the top." : "Nothing matches. Try a different search or filter."}</div>
             )
           )}
-          {!shared && groups.map((group) => (
+          {!shared && tableView && filtered.length > 0 && (
+            <LibraryTable groups={groups} columns={columns} collapsed={collapsedGroups} onToggleGroup={toggleCollapsed} picked={picked} selecting={selecting}
+              selected={selected} cursor={cursor} onOpen={(item) => { setCursor(item.id); setSelected(item.id); }} onPick={togglePicked}
+              onPickGroup={(items) => { setSelecting(true); setPicked((p) => toggleGroup(items, p)); }} onPointerDown={startDrag}
+              menu={(item) => (
+                <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                  onRename={() => { setSelected(item.id); setRenaming({ id: item.id, where: "detail" }); }}
+                  onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
+                  onPin={() => void togglePin(item)}
+                  onDelete={() => void remove(item.id)} />
+              )} />
+          )}
+          {!shared && !tableView && groups.map((group) => (
             <div key={group.key} className="group" role="group" aria-label={group.label || undefined}>
               {group.label && (
                 <GroupHeader label={group.label} items={group.items} picked={picked} collapsed={collapsedGroups.has(group.key)}
@@ -1112,7 +1241,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 }
                 return (
                   <div key={item.id} className={`item-wrap ${selecting ? "" : "with-menu"}`}>
-                    <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""}`}
+                    <button type="button" className={`item ${item.id === selected ? "selected" : ""} ${selecting && picked.has(item.id) ? "picked" : ""} ${item.id === cursor ? "cursor" : ""}`}
+                      data-row={item.id}
                       aria-current={!selecting && item.id === selected ? "true" : undefined} aria-pressed={selecting ? picked.has(item.id) : undefined}
                       onPointerDown={(e) => startDrag(e, item)}
                       onClick={(e) => {
@@ -1157,7 +1287,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </div>
           ))}
         </div>
-        <div className="detail card" ref={detailRef}>
+        {tableView && current && <div className="drawer-scrim" aria-hidden="true" onMouseDown={() => setSelected(null)} />}
+        <div className={`detail card ${tableView ? "drawer" : ""}`} ref={detailRef} hidden={tableView && !current} role={tableView ? "dialog" : undefined}
+          aria-label={tableView && current ? current.title ?? "Recording" : undefined}>
+          {tableView && current && (
+            <button type="button" className="btn ghost icon-only drawer-close" aria-label="Close" title="Close (Esc)" onClick={() => setSelected(null)}><CloseIcon size={18} /></button>
+          )}
           {!current && (
             <div className="empty-state">
               <span className="empty-icon"><LibraryIcon size={26} /></span>
@@ -1272,6 +1407,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
                       {/* The server says what happened; the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
+                      {/* One click to try again (v1.6, P6), in the same language; not when the key is missing or nothing was heard. */}
+                      {!readOnly && transcript.error_code !== "no_audio" && transcript.error_code !== "needs_transcription_key" && (
+                        <div className="notice-hint"><button type="button" className="btn compact" onClick={() => void retranscribeSame()}>Try again</button></div>
+                      )}
                       {/* The Free plan (v1.6): transcribed with the person's own Groq key, and none is added yet. */}
                       {transcript.error_code === "needs_transcription_key" && (
                         <div className="notice-hint needs-key" data-testid="needs-key">
@@ -1418,6 +1557,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
             </>
           )}
         </div>
+      </div>
+      </div>
       </div>
       {screenOpen !== null && screens?.[screenOpen] && (
         <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}

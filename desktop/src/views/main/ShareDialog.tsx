@@ -117,6 +117,15 @@ function LinkPart({ target, links, view, notify, onMade }: {
       });
       setMade(link.url ?? null);
       setPassword("");
+      // The new link is on the clipboard at once (v1.6, P6: one click fewer); Copy link stays for later.
+      if (link.url) {
+        try {
+          await navigator.clipboard.writeText(link.url);
+          notify("Link made and copied");
+        } catch {
+          // No clipboard here: the link is shown to copy.
+        }
+      }
       await onMade();
     } catch (e) {
       setError(errorMessage(e));

@@ -10,6 +10,7 @@ import { formatWhen } from "../../lib/format";
 import { dayGroup } from "../../lib/library";
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
+import { BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
 import { CheckIcon } from "../../components/ControlIcons";
 
 /** What is on its way (Phase 1C, C4): uploads with their %, and recordings being transcribed, the Library's words. */
@@ -58,23 +59,27 @@ function useInProgress(): InProgressRow[] {
   return rows;
 }
 
-/** The unread count of the activity centre, kept current by the core's `activity:updated`. */
-export function useActivityUnread(): [number, (n: number) => void] {
-  const [unread, setUnread] = useState(0);
+/**
+ * The notifications the Activity badge is counted from (v1.6, P6: lib/badge.ts), read when the window opens and again
+ * whenever the core says the activity changed (its own poll, or something marked read).
+ */
+export function useActivityItems(): [ActivityItem[], (items: ActivityItem[]) => void] {
+  const [items, setItems] = useState<ActivityItem[]>([]);
   useEffect(() => {
-    api.activity().then((r) => setUnread(r.unread_count ?? 0)).catch(() => undefined);
-    const un = listenTo("activity:updated", (n) => setUnread(typeof n === "number" ? n : 0));
+    let alive = true;
+    const read = () => api.activity(BADGE_READ_LIMIT).then((r) => alive && setItems(Array.isArray(r?.data) ? r.data : [])).catch(() => undefined);
+    void read();
+    const un = listenTo("activity:updated", () => void read());
     return () => {
+      alive = false;
       un.then((f) => f()).catch(() => undefined);
     };
   }, []);
-  return [unread, setUnread];
+  return [items, setItems];
 }
 
-const FAILED_KINDS = new Set(["transcript_failed", "upload_failed", "budget_reached"]);
-
 function ActivityTile({ kind }: { kind: string | null }) {
-  if (kind && FAILED_KINDS.has(kind)) return <span className="activity-tile failed"><AlertIcon size={20} /></span>;
+  if (isProblem(kind)) return <span className="activity-tile failed"><AlertIcon size={20} /></span>;
   if (kind === "transcript_ready") return <span className="activity-tile"><CheckIcon size={20} /></span>;
   if (kind === "device_paired") return <span className="activity-tile neutral"><DesktopIcon size={20} /></span>;
   return <span className="activity-tile neutral"><BellIcon size={20} /></span>;
@@ -87,14 +92,15 @@ function shortWhen(iso: string | null): string {
   return text.startsWith("Today · ") ? text.slice("Today · ".length) : text.split(" · ")[0];
 }
 
-export function ActivityView({ status, notify, onOpenRecording, onReview, onUnread }: {
+export function ActivityView({ status, notify, onOpenRecording, onReview, onItems }: {
   status: AppStatus;
   /** The main window's toast (Restore says what happened). */
   notify?: (text: string, error?: boolean) => void;
   onOpenRecording: (id: string) => void;
   /** Opens the waiting recordings in the Library (the first one in view). */
   onReview: (pendingId: string | null) => void;
-  onUnread: (n: number) => void;
+  /** The list as it now stands (the badge is counted from it). */
+  onItems?: (items: ActivityItem[]) => void;
 }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -109,7 +115,6 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onUnre
   const load = () =>
     api.activity().then((r) => {
       setItems(r.data ?? []);
-      onUnread(r.unread_count ?? 0);
       setError(null);
     }, (e) => setError(errorMessage(e)));
 
@@ -147,22 +152,27 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onUnre
     }
   };
 
+  // The badge follows what this page shows (marking read here takes it off at once).
+  useEffect(() => {
+    if (items) onItems?.(items);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [items]);
+
   const choose = async (item: ActivityItem) => {
     if (!item.read) {
-      const r = await api.markActivityRead([item.id]).catch(() => null);
-      if (r) onUnread(r.unread_count);
+      await api.markActivityRead([item.id]).catch(() => null);
       setItems((list) => list?.map((i) => (i.id === item.id ? { ...i, read: true } : i)) ?? null);
     }
     if (item.session_id) onOpenRecording(item.session_id);
   };
   const readAll = async () => {
-    const r = await api.markActivityRead().catch(() => null);
-    if (r) onUnread(r.unread_count);
+    await api.markActivityRead().catch(() => null);
     setItems((list) => list?.map((i) => ({ ...i, read: true })) ?? null);
   };
 
   const unread = (items ?? []).filter((i) => !i.read).length;
-  const needsAction = (items ?? []).filter((i) => !i.read && i.kind !== null && FAILED_KINDS.has(i.kind));
+  // The same rule as the badge (lib/badge.ts): unread problems and answers to an upgrade request.
+  const needsAction = (items ?? []).filter(asksForAction);
   const rest = (items ?? []).filter((i) => !needsAction.includes(i));
   const groups: { label: string; items: ActivityItem[] }[] = [];
   for (const item of rest) {

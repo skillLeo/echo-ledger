@@ -71,19 +71,17 @@ export function speakerLabels(segments: Pick<Segment, "speaker">[]): string[] {
 export type PlayerKey = "toggle" | "back10" | "forward10" | "back5" | "forward5";
 
 /**
- * What a key does in the player: Space and K play or pause, J and L jump 10 s, the arrows 5 s. Keys typed into a
- * field are never taken, and Space and the arrows keep their meaning on buttons and the audio element.
+ * What a key does in the player: Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s. Since v1.6
+ * (P4.4) J and K move through the list instead, as in the console. Keys typed into a field are never taken, and Space
+ * and the arrows keep their meaning on buttons and the audio element.
  */
-export function playerKey(key: string, targetTag: string, editable = false): PlayerKey | null {
+export function playerKey(key: string, targetTag: string, editable = false, shift = false): PlayerKey | null {
   const tag = targetTag.toUpperCase();
   if (editable || ["INPUT", "TEXTAREA", "SELECT"].includes(tag)) return null;
   const onControl = ["BUTTON", "AUDIO", "A"].includes(tag);
-  const k = key.length === 1 ? key.toLowerCase() : key;
-  if (k === "k" || (k === " " && !onControl)) return "toggle";
-  if (k === "j") return "back10";
-  if (k === "l") return "forward10";
-  if (k === "ArrowLeft" && !onControl) return "back5";
-  if (k === "ArrowRight" && !onControl) return "forward5";
+  if (key === " " && !onControl) return "toggle";
+  if (key === "ArrowLeft" && !onControl) return shift ? "back10" : "back5";
+  if (key === "ArrowRight" && !onControl) return shift ? "forward10" : "forward5";
   return null;
 }
 

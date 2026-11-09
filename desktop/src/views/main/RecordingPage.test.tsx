@@ -238,17 +238,17 @@ describe("Find and the player keys", () => {
     expect(within(detail()).queryByRole("textbox", { name: "Find in transcript" })).not.toBeInTheDocument();
   });
 
-  it("Space plays and pauses from anywhere in the window, J / L jump 10 s, and typing is left alone", async () => {
+  it("Space plays and pauses from anywhere in the window, Shift with an arrow jumps 10 s, and typing is left alone", async () => {
     await openRecording();
     fireEvent.keyDown(document.body, { key: " " });
     expect(play).toHaveBeenCalledTimes(1);
     audio().currentTime = 30;
-    fireEvent.keyDown(document.body, { key: "l" });
+    fireEvent.keyDown(document.body, { key: "ArrowRight", shiftKey: true });
     expect(audio().currentTime).toBe(40);
-    fireEvent.keyDown(document.body, { key: "j" });
+    fireEvent.keyDown(document.body, { key: "ArrowLeft", shiftKey: true });
     expect(audio().currentTime).toBe(30);
     fireEvent.click(within(detail()).getByRole("button", { name: "Find in this transcript" }));
-    fireEvent.keyDown(within(detail()).getByRole("textbox", { name: "Find in transcript" }), { key: "l" });
+    fireEvent.keyDown(within(detail()).getByRole("textbox", { name: "Find in transcript" }), { key: "ArrowRight", shiftKey: true });
     expect(audio().currentTime).toBe(30);
   });
 });

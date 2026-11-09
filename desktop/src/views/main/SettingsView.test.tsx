@@ -35,7 +35,7 @@ async function setup(settings: Partial<Settings> = {}, status: Partial<AppStatus
   const helpers = makeRun();
   const onUnpaired = vi.fn();
   const view = render(<SettingsView status={makeStatus(status)} run={helpers.run} onUnpaired={onUnpaired} />);
-  await screen.findByRole("heading", { name: "Settings" });
+  await screen.findByRole("heading", { name: "Account", level: 1 });
   return { ...helpers, onUnpaired, ...view };
 }
 
@@ -61,7 +61,7 @@ describe("SettingsView loading", () => {
     const { container } = render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
     expect(container).toBeEmptyDOMElement();
     release(makeSettings());
-    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Account", level: 1 })).toBeInTheDocument();
     expect(callsOf("get_settings")).toHaveLength(1);
     expect(callsOf("list_clients")).toHaveLength(1);
   });
@@ -70,7 +70,7 @@ describe("SettingsView loading", () => {
     respond("get_settings", makeSettings());
     respondWith("list_clients", () => Promise.reject("Server returned 500: oops"));
     render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    await screen.findByRole("heading", { name: "Settings" });
+    await screen.findByRole("heading", { name: "Account", level: 1 });
     expect(screen.getByRole("option", { name: "No project" })).toBeInTheDocument();
   });
 

@@ -14,10 +14,10 @@ const ACME_PATH = [{ id: "c-acme", name: "Acme Holdings" }];
 
 // v1.5: projects with subfolders (Acme Holdings › Invoices, Contracts).
 export const CLIENTS: ClientFolder[] = [
-  { id: "c-acme", name: "Acme Holdings", session_count: 2, ai_notes: true, parent_id: null, path: [], children_count: 2, nested_session_count: 4 },
+  { id: "c-acme", name: "Acme Holdings", session_count: 2, ai_notes: true, pinned: true, parent_id: null, path: [], children_count: 2, nested_session_count: 4 },
   { id: "c-acme-inv", name: "Invoices", session_count: 1, ai_notes: true, parent_id: "c-acme", path: ACME_PATH, children_count: 0, nested_session_count: 1 },
   { id: "c-acme-con", name: "Contracts", session_count: 1, ai_notes: true, parent_id: "c-acme", path: ACME_PATH, children_count: 0, nested_session_count: 1 },
-  { id: "c-north", name: "Northwind", session_count: 1, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 1 },
+  { id: "c-north", name: "Northwind", session_count: 1, ai_notes: true, pinned: true, parent_id: null, path: [], children_count: 0, nested_session_count: 1 },
   { id: "c-aria", name: "Aria Studio", session_count: 1, ai_notes: false, parent_id: null, path: [], children_count: 0, nested_session_count: 1 },
   { id: "c-zed", name: "Zed Logistics", session_count: 0, ai_notes: true, parent_id: null, path: [], children_count: 0, nested_session_count: 0 },
 ];
@@ -227,4 +227,7 @@ export const ACCOUNT = {
   created_at: "2026-11-01T09:00:00+00:00",
   workspace: { id: 1, name: "Acme team", role: "owner" },
   deletes_at: null,
+  // v1.6 shell: the server's operator (the avatar menu offers the admin panel) with two workspaces to switch between.
+  super_admin: true,
+  workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }],
 };

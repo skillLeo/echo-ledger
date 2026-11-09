@@ -157,6 +157,27 @@ async fn the_account_page_reads_the_account_and_hides_on_an_older_server() {
 
     let old = MockServer::start(Router::new());
     assert_eq!(authed(&old).account().await.unwrap(), None);
+    // A server that does not say who is staff or list the workspaces: no admin panel, the one workspace.
+    assert!(!got.super_admin);
+    assert!(got.workspaces.is_empty());
+}
+
+#[tokio::test]
+async fn the_avatar_menu_and_the_switcher_read_staff_and_workspaces_when_the_server_sends_them() {
+    let account = json!({"name": "Hassam", "email": "h@example.test", "workspace": {"id": 1, "name": "Personal", "role": "owner"},
+        "is_super_admin": true,
+        "workspaces": [{"id": 1, "name": "Personal", "role": "owner", "current": true}, {"id": 2, "name": "Acme team", "role": "member"}, "not a workspace"]});
+    let server = MockServer::start(Router::new().fixed("GET", "/api/account", Reply::json(200, account)));
+    let got = authed(&server).account().await.unwrap().expect("an account");
+    assert!(got.super_admin, "is_super_admin is read as super_admin");
+    assert_eq!(got.workspaces.len(), 2, "an entry that is not a workspace is dropped");
+    assert_eq!(got.workspaces[1].name, "Acme team");
+    assert_eq!(got.workspaces[0].current, Some(true));
+    // Anything but true is not staff.
+    let odd = MockServer::start(Router::new().fixed("GET", "/api/account", Reply::json(200, json!({"name": "A", "email": "a@example.test", "super_admin": "yes", "workspaces": null}))));
+    let got = authed(&odd).account().await.unwrap().expect("an account");
+    assert!(!got.super_admin);
+    assert!(got.workspaces.is_empty());
 }
 
 #[tokio::test]

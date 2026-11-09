@@ -211,6 +211,10 @@ export interface Account {
   workspace: { id: unknown; name: string; role: string } | null;
   /** When the account will be deleted; null when it is not. */
   deletes_at: string | null;
+  /** The server's operator (v1.6 shell; false when the server does not say): the avatar menu offers the admin panel. */
+  super_admin?: boolean;
+  /** Every workspace of the person (v1.6 shell; empty when the server does not list them). */
+  workspaces?: { id: unknown; name: string; role?: string | null; current?: boolean | null }[];
 }
 
 /** Signed updates from the server (since v1.5). */
@@ -1218,7 +1222,8 @@ export interface EventPayloads {
 export type AppEvent = keyof EventPayloads;
 
 /** The server's public pages the app opens in the browser (since v1.5). */
-export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads";
+/** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "admin/workspace" | "admin/profile";
 
 export const api = {
   status: () => invoke<AppStatus>("app_status"),

@@ -18,40 +18,40 @@ beforeEach(() => resetTauriMock());
 
 describe("activity page (B18)", () => {
   function renderPage(status = makeStatus()) {
-    const props = { onOpenRecording: vi.fn(), onReview: vi.fn(), onUnread: vi.fn() };
+    const props = { onOpenRecording: vi.fn(), onReview: vi.fn(), onItems: vi.fn() };
     render(<ActivityView status={status} {...props} />);
     return props;
   }
   beforeEach(() => respond("pending_list", []));
 
-  it("lists the notifications with the unread one marked, and reports the unread count", async () => {
+  it("lists the notifications with the unread one marked, and hands the list to the badge", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
-    const { onUnread } = renderPage();
+    const { onItems } = renderPage();
     expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
     expect(screen.getByText("Pixel 9 paired")).toBeInTheDocument();
     expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
     expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
-    expect(onUnread).toHaveBeenCalledWith(1);
+    expect(onItems).toHaveBeenCalledWith(ITEMS);
   });
 
   it("opens a recording from its notification and marks it read", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     respond("activity_read", { unread_count: 0 });
-    const { onOpenRecording, onUnread } = renderPage();
+    const { onOpenRecording, onItems } = renderPage();
     fireEvent.click(await screen.findByText("Acme kickoff"));
     await waitFor(() => expect(onOpenRecording).toHaveBeenCalledWith("s1"));
     expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]);
-    expect(onUnread).toHaveBeenLastCalledWith(0);
+    expect(onItems.mock.lastCall?.[0].every((i: { read: boolean }) => i.read)).toBe(true);
     expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread");
   });
 
   it("marks everything read", async () => {
     respondWith("activity_list", () => ({ data: ITEMS, unread_count: 1 }));
     respond("activity_read", { unread_count: 0 });
-    const { onUnread } = renderPage();
+    const { onItems } = renderPage();
     fireEvent.click(await screen.findByRole("button", { name: "Mark all read" }));
     await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: null }]));
-    expect(onUnread).toHaveBeenLastCalledWith(0);
+    await waitFor(() => expect(onItems.mock.lastCall?.[0].every((i: { read: boolean }) => i.read)).toBe(true));
     expect(screen.queryByRole("button", { name: "Mark all read" })).not.toBeInTheDocument();
   });
 
@@ -94,7 +94,7 @@ describe("skipped calls (v1.5)", () => {
   ];
   function renderPage() {
     const notify = vi.fn();
-    render(<ActivityView status={makeStatus()} notify={notify} onOpenRecording={vi.fn()} onReview={vi.fn()} onUnread={vi.fn()} />);
+    render(<ActivityView status={makeStatus()} notify={notify} onOpenRecording={vi.fn()} onReview={vi.fn()} onItems={vi.fn()} />);
     return notify;
   }
   const line = () => screen.queryByTestId("skipped-calls");
@@ -184,19 +184,45 @@ describe("skipped calls (v1.5)", () => {
 });
 
 describe("Activity in the sidebar", () => {
-  it("counts the unread notifications and follows updates from the core", async () => {
-    respond("app_status", makeStatus());
+  function mockApp(status = makeStatus()) {
+    respond("app_status", status);
     respond("library_list", []);
     respond("library_refresh", []);
     respond("get_settings", makeSettings());
     respond("list_clients", { data: [] });
+  }
+  const failed = (id: string, read = false) => ({ id, kind: "transcript_failed", title: "Transcription failed", body: "Call", session_id: null, read, at: "2026-10-28T09:00:00Z" });
+  const ready = (id: string) => ({ id, kind: "transcript_ready", title: "Transcript ready", body: "Call", session_id: null, read: false, at: "2026-10-28T09:00:00Z" });
+
+  it("counts only what needs the person, and follows updates from the core (v1.6, P6)", async () => {
+    mockApp();
+    let list = [...ITEMS, failed("f1")];
+    respondWith("activity_list", () => ({ data: list, unread_count: list.filter((i) => !i.read).length }));
+    render(<MainApp />);
+    // One unread finished transcript and one failure: the badge says 1, not 2.
+    expect(await screen.findByRole("button", { name: /^Activity\s*,\s*1 needs you$/ })).toBeInTheDocument();
+    list = [...list, failed("f2"), failed("f3"), { ...failed("u1"), kind: "upgrade_approved" }];
+    await emitEvent("activity:updated", 6);
+    expect(await screen.findByRole("button", { name: /^Activity\s*,\s*4 need you$/ })).toBeInTheDocument();
+    list = list.map((i) => ({ ...i, read: true }));
+    await emitEvent("activity:updated", 0);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument());
+  });
+
+  it("is never 21: twenty finished transcripts count nothing, and more than nine say 9+", async () => {
+    mockApp(makeStatus({ pendingDecisions: 2 }));
+    const list = [...Array.from({ length: 20 }, (_, i) => ready(`r${i}`)), ...Array.from({ length: 9 }, (_, i) => failed(`f${i}`))];
+    respond("activity_list", { data: list, unread_count: 29 });
+    render(<MainApp />);
+    const activity = await screen.findByRole("button", { name: /^Activity\s*,\s*11 need you$/ });
+    expect(within(activity).getByText("9+")).toBeInTheDocument();
+  });
+
+  it("counts the calls waiting for Keep or Discard", async () => {
+    mockApp(makeStatus({ pendingDecisions: 1 }));
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     render(<MainApp />);
-    expect(await screen.findByRole("button", { name: /^Activity\s*,\s*1 unread$/ })).toBeInTheDocument();
-    await emitEvent("activity:updated", 4);
-    expect(screen.getByRole("button", { name: /^Activity\s*,\s*4 unread$/ })).toBeInTheDocument();
-    await emitEvent("activity:updated", 0);
-    expect(screen.getByRole("button", { name: "Activity" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /^Activity\s*,\s*1 needs you$/ })).toBeInTheDocument();
   });
 });
 

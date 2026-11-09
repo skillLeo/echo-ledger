@@ -120,14 +120,14 @@ describe("the Move dialog", () => {
   });
 });
 
-describe("dragging recordings onto the sidebar", () => {
+describe("dragging recordings onto the Library's column (v1.6; the sidebar's pinned projects take them too)", () => {
   async function renderApp() {
     respond("app_status", makeStatus());
     respond("get_settings", makeSettings());
     respond("mic_users", []);
     respond("library_views", { folders: { inbox: 2 } });
     render(<MainApp />);
-    await screen.findByRole("list", { name: "Projects in the sidebar" });
+    await screen.findByRole("list", { name: "Projects in the column" });
     await within(screen.getByTestId("library-list")).findByText("Loose call");
   }
   const drag = (from: HTMLElement, target: Element | null) => {
@@ -146,7 +146,7 @@ describe("dragging recordings onto the sidebar", () => {
   it("drops a recording on a project in the tree", async () => {
     respond("session_organise", { data: ITEMS[1] });
     await renderApp();
-    const target = within(screen.getByRole("list", { name: "Projects in the sidebar" })).getByRole("button", { name: "Zed" });
+    const target = within(screen.getByRole("list", { name: "Projects in the column" })).getByRole("button", { name: "Zed" });
     drag(row("Loose call"), target);
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c2" } }]));
     expect(await screen.findByRole("status")).toHaveTextContent("Moved “Loose call” to Zed");

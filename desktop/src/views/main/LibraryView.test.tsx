@@ -171,9 +171,14 @@ describe("LibraryView list", () => {
     expect(titlesInList()).toEqual(["Zoom with Acme", "WhatsApp call", "Google Meet standup", "Voice note from Sam", "Client briefing"]);
   });
 
-  const choose = (menu: "Group by" | "Sort by", option: string) => {
-    fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${menu}:`) }));
-    fireEvent.click(screen.getByRole("menuitemradio", { name: new RegExp(`${option}$`) }));
+  /** A section of the View menu (v1.6: Group by, Sort by and Density, the phone's View sheet), opened when it is not. */
+  const viewSection = (menu: "Group by" | "Sort by" | "Density") => {
+    const button = screen.getByRole("button", { name: /^View:/ });
+    if (button.getAttribute("aria-expanded") !== "true") fireEvent.click(button);
+    return within(screen.getByRole("group", { name: menu }));
+  };
+  const choose = (menu: "Group by" | "Sort by" | "Density", option: string) => {
+    fireEvent.click(viewSection(menu).getByRole("menuitemradio", { name: new RegExp(`${option}$`) }));
   };
 
   it("drops the headings when grouped by None", async () => {
@@ -187,10 +192,10 @@ describe("LibraryView list", () => {
   it("offers the sort orders as a toolbar menu and applies each", async () => {
     await renderLibrary();
     choose("Group by", "None");
-    fireEvent.click(screen.getByRole("button", { name: /^Sort by: Newest/ }));
-    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened"]);
-    expect(screen.getByRole("menuitemradio", { name: /Newest$/ })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /Oldest$/ }));
+    const sorts = viewSection("Sort by");
+    expect(sorts.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Newest", "Oldest", "Longest", "Shortest", "Name A–Z", "Recently opened"]);
+    expect(sorts.getByRole("menuitemradio", { name: /Newest$/ })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(sorts.getByRole("menuitemradio", { name: /Oldest$/ }));
     expect(titlesInList()).toEqual(["Client briefing", "Voice note from Sam", "Google Meet standup", "WhatsApp call", "Zoom with Acme"]);
     choose("Sort by", "Longest");
     expect(titlesInList()).toEqual(["WhatsApp call", "Client briefing", "Google Meet standup", "Zoom with Acme", "Voice note from Sam"]);
@@ -200,9 +205,12 @@ describe("LibraryView list", () => {
 
   it("groups by date by default and by each other choice, headers with name and count", async () => {
     await renderLibrary();
-    fireEvent.click(screen.getByRole("button", { name: /^Group by: Date/ }));
-    expect(screen.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Date", "App / Type", "Project", "Language", "Status", "Device", "None"]);
-    fireEvent.click(screen.getByRole("menuitemradio", { name: /Status$/ }));
+    expect(screen.getByRole("button", { name: /^View: Date · Newest · Comfortable/ })).toBeInTheDocument();
+    // The phone's View sheet's names and choices, in the same order.
+    const groups = viewSection("Group by");
+    expect(groups.getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Date", "App / Type", "Project", "Language", "Status", "Device", "None"]);
+    expect(viewSection("Density").getAllByRole("menuitemradio").map((o) => o.textContent)).toEqual(["Comfortable", "Compact"]);
+    fireEvent.click(groups.getByRole("menuitemradio", { name: /Status$/ }));
     const heads = () => [...list().querySelectorAll(".group-head")].map((h) => `${h.querySelector(".group-label")?.textContent} ${h.querySelector(".group-count")?.textContent}`);
     expect(heads()).toEqual(["Needs you 1", "Transcribing 1", "Ready 3"]);
     choose("Group by", "Device");
@@ -268,8 +276,56 @@ describe("LibraryView list", () => {
     choose("Sort by", "Longest");
     unmount();
     await renderLibrary();
-    expect(screen.getByRole("button", { name: /^Group by: Project/ })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Sort by: Longest/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^View: Project · Longest/ })).toBeInTheDocument();
+  });
+
+  it("makes the rows compact from View → Density, kept with the Preferences", async () => {
+    await renderLibrary();
+    choose("Density", "Compact");
+    expect(document.documentElement.dataset.density).toBe("compact");
+    expect(JSON.parse(window.localStorage.getItem("echoledger-preferences") ?? "{}").density).toBe("compact");
+    choose("Density", "Comfortable");
+    expect(document.documentElement.dataset.density).toBe("comfortable");
+  });
+
+  it("shows the Library as a table with the chosen columns, and the recording in a drawer that Esc closes", async () => {
+    await renderLibrary();
+    fireEvent.click(within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Table" }));
+    expect(window.localStorage.getItem("echoledger-library-layout")).toBe("table");
+    const table = screen.getByRole("table", { name: "Recordings" });
+    const heads = () => [...table.querySelectorAll("thead th")].map((h) => h.textContent);
+    expect(heads()).toEqual(["Recording", "Date", "Length", "App", "Project", "Status", "Actions"]);
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Device" }));
+    expect(heads()).toContain("Device");
+    expect(JSON.parse(window.localStorage.getItem("echoledger-library-columns") ?? "[]")).toContain("device");
+    fireEvent.click(within(table).getByRole("button", { name: "Zoom with Acme" }));
+    const drawer = await screen.findByRole("dialog", { name: "Zoom with Acme" });
+    expect(drawer).toHaveClass("drawer");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Zoom with Acme" })).not.toBeInTheDocument());
+  });
+
+  it("moves through the list with J and K, opens with Enter, selects with X and focuses the search with /", async () => {
+    await renderLibrary();
+    choose("Group by", "None");
+    fireEvent.keyDown(screen.getByRole("button", { name: /^View:/ }), { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "j" });
+    expect(itemButton("Zoom with Acme")).toHaveClass("cursor");
+    fireEvent.keyDown(document.body, { key: "j" });
+    expect(itemButton("WhatsApp call")).toHaveClass("cursor");
+    fireEvent.keyDown(document.body, { key: "k" });
+    expect(itemButton("Zoom with Acme")).toHaveClass("cursor");
+    fireEvent.keyDown(document.body, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Zoom with Acme" })).not.toBeInTheDocument());
+    fireEvent.keyDown(document.body, { key: "x" });
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByText("1 selected")).not.toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "/" });
+    expect(screen.getByLabelText("Search recordings")).toHaveFocus();
   });
 
   it("sorts by recently opened on this computer", async () => {
@@ -483,6 +539,10 @@ describe("LibraryView transcript", () => {
     expect(notice.closest(".notice")).toHaveClass("error");
     expect(notice.closest(".notice")).toHaveTextContent("The speech provider rejected the audio (unsupported codec).");
     expect(within(detail()).queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
+    // v1.6 (P6): one click tries again, in the same language.
+    respond("session_retranscribe", {});
+    fireEvent.click(within(notice.closest(".notice") as HTMLElement).getByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(callsOf("session_retranscribe")).toHaveLength(1));
   });
 
   it("uses a generic failure message when the server gave no reason", async () => {
@@ -1071,16 +1131,16 @@ describe("transcript tools in the library (B6-B12)", () => {
     expect(media().currentTime).toBe(65);
   });
 
-  it("answers J, K and L while the transcript has focus", async () => {
+  it("answers Space and the arrows while the transcript has focus (J and K move through the list since v1.6)", async () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
     media().currentTime = 30;
-    fireEvent.keyDown(detail(), { key: "l" });
+    fireEvent.keyDown(detail(), { key: "ArrowRight", shiftKey: true });
     expect(media().currentTime).toBe(40);
-    fireEvent.keyDown(detail(), { key: "j" });
+    fireEvent.keyDown(detail(), { key: "ArrowLeft", shiftKey: true });
     fireEvent.keyDown(detail(), { key: "ArrowLeft" });
     expect(media().currentTime).toBe(25);
-    fireEvent.keyDown(detail(), { key: "k" });
+    fireEvent.keyDown(detail(), { key: " " });
     expect(play).toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { CommandPalette, paletteCommands, paletteMatches } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makeRecording, makeStatus } from "../../test/fixtures";
@@ -53,13 +53,47 @@ describe("command palette (B9)", () => {
     const props = renderPalette();
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "go to" } });
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Record", "Go to Activity", "Go to Settings"]);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Home", "Go to Activity", "Go to Shared", "Go to Account"]);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(props.onClose).toHaveBeenCalled();
     expect(props.onGo).toHaveBeenCalledWith("record");
+  });
+
+  it("makes things and opens Account's tabs and any page by name (v1.6, P4.3)", () => {
+    const extra = { upload: vi.fn(), newProject: vi.fn(), requestLink: vi.fn(), invite: vi.fn(), account: vi.fn(), help: vi.fn() };
+    const open = vi.fn();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
+      pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
+    const input = screen.getByRole("combobox");
+    expect(input).toHaveAttribute("placeholder", "Search recordings, transcripts, pages… or type a command");
+    fireEvent.change(input, { target: { value: "new project" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(extra.newProject).toHaveBeenCalled();
+    cleanup();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
+      pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "devices" } });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(extra.account).toHaveBeenCalledWith("devices");
+    cleanup();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
+      pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "acme" } });
+    expect(screen.getByRole("option", { name: "Go to Acme Holdings · Projects" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(open).toHaveBeenCalled();
+    for (const word of ["upload", "request link", "invite"]) {
+      cleanup();
+      render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra} />);
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: word } });
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    }
+    expect(extra.upload).toHaveBeenCalled();
+    expect(extra.requestLink).toHaveBeenCalled();
+    expect(extra.invite).toHaveBeenCalled();
   });
 
   it("runs app actions through the shared runner", () => {

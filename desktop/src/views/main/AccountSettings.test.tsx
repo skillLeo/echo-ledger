@@ -50,7 +50,7 @@ async function openAccount(account: Account | null = makeAccount(), status: Part
   const helpers = makeRun();
   const onUnpaired = vi.fn();
   render(<SettingsView status={makeStatus(status)} run={helpers.run} onUnpaired={onUnpaired} />);
-  await screen.findByRole("heading", { name: "Settings" });
+  await screen.findByRole("heading", { name: "Account", level: 1 });
   await flushAsync();
   return { ...helpers, onUnpaired };
 }
@@ -67,20 +67,25 @@ afterEach(async () => {
 describe("Settings → Account", () => {
   it("shows who is signed in, the workspace and role, two-factor and Google", async () => {
     await openAccount(makeAccount({ two_factor: true, google: false }));
-    expect(screen.getByRole("button", { name: /^Account/ })).toBeInTheDocument();
+    // The account's tabs (v1.6, P4.5), then this computer's.
+    const tabs = within(screen.getByRole("navigation", { name: "Settings groups" }));
+    for (const tab of ["Profile", "Password & sign-in methods", "Devices", "Notifications", "Preferences", "Plan & usage", "Privacy & data"]) {
+      expect(tabs.getByRole("button", { name: tab })).toBeInTheDocument();
+    }
     const card = region("Your account");
     expect(within(card).getByText("Hassam")).toBeInTheDocument();
     expect(within(card).getByText("hassam@example.test")).toBeInTheDocument();
     expect(within(card).getByText("Acme team · Owner")).toBeInTheDocument();
-    expect(within(card).getByText("On")).toBeInTheDocument();
-    expect(within(card).getByText("Not connected")).toBeInTheDocument();
     expect(within(card).getByText("1 November 2026")).toBeInTheDocument();
+    const methods = region("Password & sign-in methods");
+    expect(within(methods).getByText("On")).toBeInTheDocument();
+    expect(within(methods).getByText("Not connected")).toBeInTheDocument();
     expect(callsOf("account_get")).toHaveLength(1);
   });
 
   it("has no Account group on a server without accounts", async () => {
     await openAccount(null);
-    expect(screen.queryByRole("button", { name: /^Account/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Your account" })).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "General" })).toBeInTheDocument();
   });
@@ -88,7 +93,10 @@ describe("Settings → Account", () => {
   it("says an address is not verified and turning two-factor on happens in the console", async () => {
     await openAccount(makeAccount({ email_verified: false, two_factor: false }));
     expect(within(region("Your account")).getByText("hassam@example.test (not verified yet)")).toBeInTheDocument();
-    expect(within(region("Your account")).getByText(/Off: turn it on in the console/)).toBeInTheDocument();
+    expect(within(region("Password & sign-in methods")).getByText("Off")).toBeInTheDocument();
+    respond("server_page_open", undefined);
+    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Open Profile in the browser" }));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin/profile", serverUrl: null }]));
   });
 
   it("tells a viewer, in the documented sentence, that this computer does not record", async () => {
@@ -102,11 +110,11 @@ describe("Settings → Account", () => {
     const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { onUnpaired, notices } = await openAccount();
 
-    fireEvent.click(within(region("Your account")).getByRole("button", { name: "Sign out everywhere" }));
+    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Sign out everywhere" }));
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Every computer, phone and browser signed in to your account is signed out, this computer too."));
     expect(callsOf("account_sign_out_everywhere")).toHaveLength(0);
 
-    fireEvent.click(within(region("Your account")).getByRole("button", { name: "Sign out everywhere" }));
+    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Sign out everywhere" }));
     await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(signedOut));
     expect(notices).toContain("Signed out everywhere");
   });
@@ -306,7 +314,8 @@ describe("Settings → Account with entitlements (v1.6)", () => {
       expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
       await flushAsync();
       expect(scrolled).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole("button", { name: /^Account/ })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("button", { name: "Transcription key" })).toHaveAttribute("aria-current", "page");
+      expect(screen.getByRole("heading", { level: 1, name: "Transcription key" })).toBeInTheDocument();
     } finally {
       act(() => resetEntitlementsForTests());
     }

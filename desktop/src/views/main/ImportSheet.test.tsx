@@ -48,7 +48,7 @@ describe("Import button", () => {
   it("picks several files and imports them with the chosen client and language", async () => {
     respond("import_pick", [NOTE, VIDEO]);
     await renderPaired();
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Upload" }));
     await flushAsync();
 
     const dialog = screen.getByRole("dialog", { name: "Import 2 files" });
@@ -69,17 +69,17 @@ describe("Import button", () => {
   it("opens nothing when the picker is cancelled", async () => {
     respond("import_pick", []);
     await renderPaired();
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Upload" }));
     await flushAsync();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(callsOf("import_voice_notes")).toHaveLength(0);
   });
 
-  it("is also on the Record page, next to the drop area", async () => {
+  it("is also on Home, next to the drop area", async () => {
     respond("import_pick", [NOTE]);
     respond("mic_users", []);
     await renderPaired();
-    fireEvent.click(screen.getByRole("button", { name: "Record" }));
+    fireEvent.click(within(document.querySelector(".sidebar") as HTMLElement).getByRole("button", { name: "Home" }));
     fireEvent.click(await screen.findByRole("button", { name: "Choose files…" }));
     await flushAsync();
     expect(screen.getByRole("dialog", { name: "Import 1 file" })).toBeInTheDocument();
@@ -110,7 +110,7 @@ describe("Dropping files on the window", () => {
 
   it("works from any page of the window", async () => {
     await renderPaired();
-    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.click(within(document.querySelector(".sidebar") as HTMLElement).getByRole("button", { name: "Account" }));
     await emitEvent("tauri://drag-drop", { paths: [VIDEO], position: { x: 10, y: 10 } });
     expect(screen.getByRole("dialog", { name: "Import 1 file" })).toBeInTheDocument();
   });
@@ -214,7 +214,7 @@ describe("Duplicates", () => {
     respond("import_pick", [NOTE, NOTE, VIDEO]);
     await renderPaired();
     respond("import_voice_notes", { queued: 1, duplicates: 2, unsupported: 0, failed: 0 });
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Upload" }));
     await flushAsync();
     fireEvent.click(within(sheet()).getByRole("button", { name: "Import 3 files" }));
     await flushAsync();
@@ -232,7 +232,7 @@ describe("Duplicates", () => {
     respond("import_pick", [TEXT, NOTE]);
     await renderPaired();
     respond("import_voice_notes", { queued: 0, duplicates: 0, unsupported: 1, failed: 1 });
-    fireEvent.click(screen.getByRole("button", { name: "Import" }));
+    fireEvent.click(within(screen.getByRole("main")).getByRole("button", { name: "Upload" }));
     await flushAsync();
     fireEvent.click(within(sheet()).getByRole("button", { name: "Import" }));
     await flushAsync();

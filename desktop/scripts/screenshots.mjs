@@ -1,4 +1,4 @@
-// Screenshots of every desktop screen, light and dark, at 1280 x 800, into docs/design/screens/desktop/. The views run in
+// Screenshots of every desktop screen, light and dark, at 1440 x 900 (and the narrowest window, 860 x 560, for the main pages), into docs/design/screens/desktop/. The views run in
 // the Vite dev server's fixture mode (scripts/screens/) or the older harness (screenshots/harness.ts, screen moments and
 // held recordings), answered by Tauri's IPC mock with sample data. Motion is off (reduced motion), so nothing is caught
 // mid-transition.
@@ -96,8 +96,9 @@ const SCREENS = [
   }],
   ["library-grouped", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
-    await page.getByRole("button", { name: /^Group by:/ }).click();
-    await page.getByRole("menuitemradio", { name: /Project$/ }).click();
+    await page.getByRole("button", { name: /^View:/ }).click();
+    await page.getByRole("group", { name: "Group by" }).getByRole("menuitemradio", { name: /Project$/ }).click();
+    await page.keyboard.press("Escape");
     await page.waitForSelector(".group-head");
   }],
   // v1.5: signing in, the account and plan, a viewer's Record page, an update ready to install.
@@ -127,18 +128,35 @@ const SCREENS = [
   }],
   ["settings-plan-free", "settings-free", async (page) => {
     await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: /^Account/ }).click();
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
     await page.waitForSelector("[data-testid=plan-usage]");
   }],
   ["settings-key-free", "settings-free", async (page) => {
     await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: /^Account/ }).click();
-    await page.locator("[data-testid=transcription-key]").scrollIntoViewIfNeeded();
+    await page.getByRole("button", { name: "Transcription key", exact: true }).click();
+    await page.waitForSelector("[data-testid=transcription-key]");
   }],
   ["settings-account", "settings-account", async (page) => {
     await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: /^Account/ }).click();
-    await page.waitForSelector("[data-testid=plan-card]");
+    await page.getByRole("button", { name: "Profile", exact: true }).click();
+    await page.waitForSelector(".account-card");
+  }],
+  // v1.6 (P4.5): the account's other tabs.
+  ["settings-sign-in", "settings-account", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Password & sign-in methods", exact: true }).click();
+    await page.getByText("Email codes").waitFor();
+  }],
+  ["settings-preferences", "settings-account", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Preferences", exact: true }).click();
+    await page.getByRole("group", { name: "Sidebar style" }).getByRole("button", { name: "Light" }).click();
+    await page.waitForSelector("[data-testid=saved]");
+  }],
+  ["settings-privacy", "settings-account", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Privacy & data", exact: true }).click();
+    await page.getByText("Export my data").first().waitFor();
   }],
   ["record-viewer", "record-viewer", async (page) => page.waitForSelector("[data-testid=viewer-notice]")],
   ["library-update", "library-update", async (page) => {
@@ -157,7 +175,7 @@ const SCREENS = [
   }],
   ["settings", "settings", async (page) => {
     await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "General" }).click();
+    await page.getByRole("button", { name: "This computer", exact: true }).click();
   }],
   ["settings-calls", "settings", async (page) => {
     await page.waitForSelector(".settings-row");
@@ -209,6 +227,50 @@ const SCREENS = [
     for (let i = 0; i < 3; i += 1) await page.getByRole("button", { name: "Continue" }).click();
     await page.waitForSelector("[data-testid=permission-screen]");
   }],
+  // v1.6 (P4): the app shell. The Library as a table, a recording in the drawer, the command palette, the top bar's
+  // menus, Help & shortcuts, the sidebar as a rail and in its other styles, and Shared.
+  ["library-table", "library-table", async (page) => page.waitForSelector(".lib-table .lib-row")],
+  ["library-drawer", "library-table", async (page) => {
+    await page.getByRole("table", { name: "Recordings" }).getByRole("button", { name: "Kick-off: Contoso website", exact: true }).click();
+    await page.waitForSelector(".detail.drawer .segments .segment");
+  }],
+  ["palette", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.keyboard.press("Control+k");
+    await page.locator(".palette-input").fill("new");
+    await page.waitForSelector(".palette-item");
+  }],
+  ["create-menu", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: "Create" }).click();
+    await page.waitForSelector(".shell-pop");
+  }],
+  ["avatar-menu", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: /^Account menu:/ }).click();
+    await page.waitForSelector(".shell-pop");
+  }],
+  ["help", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
+    await page.waitForSelector(".help-sheet");
+  }],
+  ["sidebar-rail", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: "Collapse the sidebar" }).click();
+  }],
+  ["sidebar-grey", "library-grey", async (page) => page.waitForSelector(".segments .segment")],
+  ["sidebar-dark", "library-darkbar", async (page) => page.waitForSelector(".segments .segment")],
+  ["shared-page", "shared", async (page) => {
+    await page.locator(".sidebar").getByRole("button", { name: "Shared", exact: true }).click();
+    await page.waitForSelector(".page-tabs");
+  }],
+  // The narrowest window the app allows (860 x 560): the main pages.
+  ["library-narrow", "library", async (page) => page.waitForSelector(".segments .segment"), { width: 860, height: 560 }],
+  ["record-narrow", "record", async (page) => page.waitForSelector(".record-btn"), { width: 860, height: 560 }],
+  ["projects-narrow", "projects", async (page) => page.waitForSelector(".project-tree.on-page"), { width: 860, height: 560 }],
+  ["settings-narrow", "settings-account", async (page) => page.waitForSelector(".settings-row"), { width: 860, height: 560 }],
+  ["activity-narrow", "activity", async (page) => page.waitForSelector(".activity-item"), { width: 860, height: 560 }],
 ];
 
 /**
@@ -234,7 +296,8 @@ const HARNESS = [
     await page.waitForSelector(".screen-viewer img");
   }],
   ["project-screens", "w=main&screens=1", async (page) => {
-    await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Northwind", exact: true }).click();
+    await page.locator(".sidebar").getByRole("button", { name: "Projects", exact: true }).click();
+    await page.getByRole("list", { name: "Projects in the column" }).getByRole("button", { name: "Northwind", exact: true }).click();
     await page.getByRole("tab", { name: "Screens", exact: true }).click();
     await page.waitForSelector(".screen-thumb img");
   }],
@@ -261,7 +324,7 @@ async function openWeeklySync(page) {
 
 /** Opens Acme Holdings from the sidebar's project tree. */
 async function openAcme(page) {
-  await page.getByRole("list", { name: "Projects in the sidebar" }).getByRole("button", { name: "Acme Holdings", exact: true }).click();
+  await page.getByRole("list", { name: "Projects in the column" }).getByRole("button", { name: "Acme Holdings", exact: true }).click();
   await page.waitForSelector(".crumbs");
 }
 
@@ -294,10 +357,10 @@ const base = server.resolvedUrls.local[0];
 const browser = await launch();
 await mkdir(out, { recursive: true });
 try {
-  for (const [name, screen, prepare] of SCREENS) {
+  for (const [name, screen, prepare, viewport] of SCREENS) {
     if (only && !name.startsWith(only)) continue;
     for (const theme of ["light", "dark"]) {
-      const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+      const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
       await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}`);
       await prepare(page);
@@ -308,7 +371,7 @@ try {
   for (const [name, query, prepare, viewport] of HARNESS) {
     if (only && !name.startsWith(only)) continue;
     for (const theme of ["light", "dark"]) {
-      const page = await browser.newPage({ viewport: viewport ?? { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+      const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
       await page.goto(`${base}screenshots/harness.html?${query}&theme=${theme}`);
       await page.waitForSelector("html[data-shot-ready]");

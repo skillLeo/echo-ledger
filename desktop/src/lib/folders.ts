@@ -7,10 +7,10 @@ export const SMART_FOLDERS: readonly (readonly [SmartFolder, string])[] = [
   ["inbox", "Inbox"],
   ["whatsapp", "WhatsApp"],
   ["whatsapp_business", "WhatsApp Business"],
-  ["google_meet", "Google Meet"],
+  ["google_meet", "Meet"],
   ["zoom", "Zoom"],
   ["teams", "Teams"],
-  ["phone", "Phone"],
+  ["phone", "SIM"],
   ["voice_notes", "Voice notes"],
   ["imported", "Imported"],
   ["shared", "Shared with me"],
@@ -56,4 +56,43 @@ export function shownFolders(counts: Partial<Record<SmartFolder, number>> | null
   if (!counts) return [];
   const listed = (folder: SmartFolder) => (folder === "shared" ? counts.shared !== undefined : folder === "inbox" || folder === open || (counts[folder] ?? 0) > 0);
   return SMART_FOLDERS.filter(([folder]) => listed(folder)).map(([folder, label]) => ({ folder, label, count: Math.max(0, counts[folder] ?? 0) }));
+}
+
+/**
+ * The Library's views that are not server folders (v1.6, P4.2): calls waiting for Keep or Discard, pinned recordings
+ * and failed uploads (with failed transcriptions), each counted with what this computer holds too.
+ */
+export type LibraryView = "waiting" | "pinned" | "failed";
+export const LIBRARY_VIEWS: readonly (readonly [LibraryView, string])[] = [["waiting", "Waiting"], ["pinned", "Pinned"], ["failed", "Failed uploads"]];
+
+/** One place of the Library's column: every recording, a view, or a smart folder. */
+export interface LibraryPlace {
+  key: string;
+  label: string;
+  folder: SmartFolder | null;
+  view: LibraryView | null;
+  count: number;
+  /** Recordings dropped on it move there (the Inbox: out of their project). */
+  drop: boolean;
+}
+
+/**
+ * The places of the Library's nested column, in the plan's order: All · Waiting · Pinned · Failed uploads, then the
+ * smart folders as `shownFolders` lists them. `local` adds what only this computer knows (calls waiting for a decision
+ * here, uploads that stopped here) to the server's view counts.
+ */
+export function libraryPlaces(views: { views?: Record<string, number> | null; folders?: Partial<Record<SmartFolder, number>> | null } | null | undefined,
+  local: { total: number; waiting: number; failed: number; pinned: number }, open: SmartFolder | null): LibraryPlace[] {
+  const server = views?.views ?? {};
+  const count = (n: unknown) => (typeof n === "number" && Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+  const viewCounts: Record<LibraryView, number> = {
+    waiting: count(server.waiting) + count(local.waiting),
+    pinned: Math.max(count(server.pinned), count(local.pinned)),
+    failed: count(server.failed) + count(local.failed),
+  };
+  return [
+    { key: "all", label: "All", folder: null, view: null, count: count(local.total), drop: false },
+    ...LIBRARY_VIEWS.map(([view, label]) => ({ key: view, label, folder: null, view, count: viewCounts[view], drop: false })),
+    ...shownFolders(views?.folders, open).map(({ folder, label, count: n }) => ({ key: folder, label, folder, view: null, count: n, drop: folder === "inbox" })),
+  ];
 }

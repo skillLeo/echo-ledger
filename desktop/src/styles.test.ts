@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { COLUMN_CONTENT, NARROW_CONTENT, SIDEBAR_DEFAULT } from "./lib/shell";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Vitest turns imported CSS into an empty module, so the file is read from disk.
@@ -92,21 +93,19 @@ const AA = 4.5;
 const THEMES: Theme[] = ["dark", "light"];
 
 describe("library layout down to the minimum window (A6.DU5)", () => {
-  it("stacks the list and the transcript below 1030 px", () => {
-    const narrow = media("(max-width: 1029px)");
-    expect(narrow.length).toBeGreaterThan(0);
-    expect(prop(".library", "grid-template-columns", narrow)).toBe("minmax(0, 1fr)");
-    expect(prop(".library", "height", narrow)).toBe("auto");
-    expect(prop(".list", "max-height", narrow)).not.toBe("");
+  // v1.6: the page's width (the window's less the 64–320 px sidebar) decides, as `.narrow` on the app (lib/shell.ts).
+  it("stacks the list and the transcript on a narrow page", () => {
+    expect(prop(".app.narrow .library", "grid-template-columns")).toBe("minmax(0, 1fr)");
+    expect(prop(".app.narrow .library", "height")).toBe("auto");
+    expect(prop(".app.narrow .list", "max-height")).not.toBe("");
   });
 
   it("pins the find bar and the player to the page edges when the page scrolls", () => {
     // Regression: below 1030 px .content scrolls with 24 px padding, so the sticky bars stopped 24 px in and transcript
     // lines showed above the find bar and below the player.
-    const narrow = media("(max-width: 1029px)");
-    expect(prop(".content", "padding", narrow)).toBe("var(--space-5) var(--space-5)");
-    expect(prop(".detail .find-bar", "top", narrow)).toBe("calc(-1 * var(--space-5))");
-    expect(prop(".detail .player-dock", "bottom", narrow)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".app.narrow .content", "padding")).toBe("var(--space-5) var(--space-5)");
+    expect(prop(".app.narrow .detail .find-bar", "top")).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".app.narrow .detail .player-dock", "bottom")).toBe("calc(-1 * var(--space-5))");
     expect(prop(".find-bar", "top")).toBe("0px");
     expect(prop(".player-dock", "bottom")).toBe("0px");
   });
@@ -117,14 +116,20 @@ describe("library layout down to the minimum window (A6.DU5)", () => {
     expect(main.minWidth).toBeLessThanOrEqual(1029);
   });
 
-  it("fits the two columns from 1030 px, a scrollbar included", () => {
-    const sidebar = Number.parseFloat(prop(".app", "grid-template-columns").split(" ")[0]);
+  it("fits the two columns on a page that is not narrow, and the nested column beside them where it is shown", () => {
     const padding = resolve(prop(".content", "padding"), "dark").split(" ").map(Number.parseFloat);
     const horizontal = 2 * (padding[1] ?? padding[0]);
     const columns = [...prop(".library", "grid-template-columns").matchAll(/minmax\((\d+)px/g)].map((m) => Number(m[1]));
     const gap = Number.parseFloat(resolve(prop(".library", "gap"), "dark"));
     expect(columns).toHaveLength(2);
-    expect(sidebar + horizontal + columns[0] + gap + columns[1] + 17).toBeLessThanOrEqual(1030);
+    const library = horizontal + columns[0] + gap + columns[1] + 17;
+    expect(library).toBeLessThanOrEqual(NARROW_CONTENT);
+    const column = Number.parseFloat(prop(".page-split", "grid-template-columns"));
+    const split = Number.parseFloat(resolve(prop(".page-split", "gap"), "dark"));
+    expect(library + column + split).toBeLessThanOrEqual(COLUMN_CONTENT);
+    // The default sidebar is 240 px: the smallest window (860 px) has a narrow page, and so does a wide sidebar there.
+    expect(SIDEBAR_DEFAULT).toBe(240);
+    expect(tauriConf.app.windows.find((w) => w.label === "main")!.minWidth - SIDEBAR_DEFAULT).toBeLessThan(NARROW_CONTENT);
   });
 });
 
@@ -201,11 +206,12 @@ describe("long text never breaks the layout (A6.DU8)", () => {
   });
 
   it("gives the library what is left of the page, so a budget banner takes its own height, only in the two-column layout", () => {
-    const wide = media("(min-width: 1030px)");
-    expect(prop(".content.page-library", "display", wide)).toBe("flex");
-    expect(prop(".content.page-library", "flex-direction", wide)).toBe("column");
-    expect(prop(".content.page-library .library", "flex", wide)).toMatch(/^1 1 0/);
-    expect(prop(".content.page-library .library", "min-height", wide)).toBe("0px");
+    expect(prop(".app:not(.narrow) .content.page-library", "display")).toBe("flex");
+    expect(prop(".app:not(.narrow) .content.page-library", "flex-direction")).toBe("column");
+    expect(prop(".app:not(.narrow) .content.page-library > .page-split", "flex")).toMatch(/^1 1 0/);
+    expect(prop(".app:not(.narrow) .content.page-library .library-main", "display")).toBe("flex");
+    expect(prop(".app:not(.narrow) .content.page-library .library", "flex")).toMatch(/^1 1 0/);
+    expect(prop(".app:not(.narrow) .content.page-library .library", "min-height")).toBe("0px");
     expect(prop(".banner", "flex")).toMatch(/^(none|0 0 auto)$/);
     expect(prop(".content.page-library", "display")).toBe("");
   });

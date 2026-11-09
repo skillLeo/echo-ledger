@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
+import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
 
 // One index.html for every window; the view is chosen from the window label.
@@ -34,6 +35,8 @@ const label = currentLabel();
 document.documentElement.dataset.window = label;
 applyTheme(getThemeChoice());
 watchSystemTheme();
+// Account → Preferences (v1.6): the sidebar's style, density and the clock, before anything is drawn.
+applyPreferences(loadPreferences());
 
 // C2: the window material (Mica / vibrancy). The accent stays the design system's indigo, as on the phone, so the OS
 // accent colour is not applied (lib/accent.ts can still map one). Backgrounds turn translucent only when the core

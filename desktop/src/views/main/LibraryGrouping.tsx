@@ -51,6 +51,56 @@ export function ChoiceMenu<T extends string>({ label, value, options, onChange }
 }
 
 /**
+ * View (v1.6, P4.4): Group by, Sort by and Density in one menu, with the phone's View sheet's names and choices, so the
+ * toolbar stays one row. Each section is a group of radio items; a choice keeps the menu open, Esc or a click
+ * elsewhere closes it.
+ */
+export function ViewMenu({ sections }: {
+  sections: readonly { label: string; value: string; options: readonly (readonly [string, string])[]; onChange: (value: string) => void }[];
+}) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const outside = (e: MouseEvent) => {
+      if (!box.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const escape = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", outside);
+    document.addEventListener("keydown", escape);
+    return () => {
+      document.removeEventListener("mousedown", outside);
+      document.removeEventListener("keydown", escape);
+    };
+  }, [open]);
+  const summary = sections.map((s) => s.options.find(([v]) => v === s.value)?.[1] ?? s.value).join(" · ");
+  return (
+    <div className="menu-button choice-menu view-menu" ref={box}>
+      <button type="button" className="chip" aria-haspopup="menu" aria-expanded={open} aria-label={`View: ${summary}`} title={summary} onClick={() => setOpen(!open)}>
+        View<ChevronDownIcon size={14} />
+      </button>
+      {open && (
+        <div className="menu-pop card view-pop" role="menu" aria-label="View">
+          {sections.map((section) => (
+            <div key={section.label} role="group" aria-label={section.label} className="view-section">
+              <div className="view-head" aria-hidden="true">{section.label}</div>
+              {section.options.map(([v, text]) => (
+                <button key={v} type="button" role="menuitemradio" aria-checked={v === section.value} className="btn ghost small choice-item"
+                  onClick={() => section.onChange(v)}>
+                  <span className="choice-tick" aria-hidden="true">{v === section.value && <CheckIcon size={14} />}</span>{text}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
  * A group's header (P5.1): two controls that never do each other's job. The box only selects (none, some or all of the
  * group's recordings, tri-state); the chevron, the name and the count only fold and unfold the group. The box sits in
  * its own label, a target big enough that a click meant for it never lands on the name, and its clicks stop there.
