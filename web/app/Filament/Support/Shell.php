@@ -308,6 +308,7 @@ final class Shell
             ['notifications', 'Notifications', 'Account', $account.'?tab=notifications', 'emails alerts', true],
             ['preferences', 'Preferences', 'Account', $account.'?tab=preferences', 'sidebar style density clock 24-hour shortcuts theme', true],
             ['plan', 'Plan & usage', 'Account', $account.'?tab=plan', 'upgrade pro business free minutes', true],
+            ['all-features', 'All features', 'Account', $account.'?tab=plan#all-features', 'features plan pro ultra business compare upgrade locked included', true],
             ['usage', 'Usage', 'Account', Usage::getUrl(panel: 'app'), 'minutes cost budget', Usage::canAccess()],
             ['privacy', 'Privacy & data', 'Account', $account.'?tab=privacy', 'export delete account support access', true],
             ['security', 'Security', 'Account', Security::getUrl(panel: 'app'), 'audit log passkeys browsers', Security::canAccess()],

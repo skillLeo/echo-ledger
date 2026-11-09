@@ -24,6 +24,7 @@ use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\Entitlements\Entitlements;
+use App\Services\Entitlements\Features;
 use App\Services\Entitlements\TranscriptionKeys;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\PairingService;
@@ -109,6 +110,7 @@ class EditProfile extends BaseEditProfile
                 ]),
                 Tab::make('Plan & usage')->key('plan', isInheritable: false)->icon(Heroicon::OutlinedSparkles)->schema([
                     $this->planSection(),
+                    $this->allFeaturesSection(),
                 ]),
                 Tab::make('Transcription key')->key('key', isInheritable: false)->icon(Heroicon::OutlinedLockClosed)->visible(fn (): bool => $this->needsOwnKey())->schema([
                     $this->transcriptionKeySection(),
@@ -284,6 +286,29 @@ class EditProfile extends BaseEditProfile
                 }),
                 Actions::make([PlanLock::sheet('comparePlans', null, 'Compare plans')])->key('plan-actions'),
             ]);
+    }
+
+    /**
+     * Plan & usage → All features (since v1.6.2): every feature of the registry in its order, a tick where the plan has
+     * it, else the badge of the lowest plan that has it, which opens the upgrade sheet for that feature.
+     */
+    private function allFeaturesSection(): Section
+    {
+        return Section::make('All features')
+            ->description(function (): string {
+                $has = count(array_filter(PlanLock::features(), fn (array $f): bool => $f['has']));
+
+                return 'Your plan has '.$has.' of '.count(Features::ALL).' features.';
+            })
+            ->schema([
+                View::make('filament.profile.all-features')->viewData(fn (): array => ['features' => PlanLock::features()]),
+            ]);
+    }
+
+    /** The upgrade sheet for the feature whose badge was clicked in All features, or the plans ("Compare plans"). */
+    public function upgradeFeatureAction(): Action
+    {
+        return PlanLock::sheetFor('upgradeFeature');
     }
 
     /**
