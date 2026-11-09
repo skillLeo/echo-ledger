@@ -106,6 +106,10 @@ class BackgroundWorkTest : AppTest() {
 
         assertEquals(listOf("Record now", "Turn off"), notification.actions.map { it.title.toString() })
         assertEquals("Ready to record WhatsApp calls", shadowOf(notification).contentTitle.toString())
+        // Keep automatically is the default since v1.5: no question after the call.
+        assertEquals("Calls are recorded and kept automatically.", shadowOf(notification).contentText.toString())
+        val asking = Notifications.armed(app, askAfterCall = true)
+        assertEquals("Calls are recorded automatically; you decide after each call.", shadowOf(asking).contentText.toString())
     }
 
     @Test

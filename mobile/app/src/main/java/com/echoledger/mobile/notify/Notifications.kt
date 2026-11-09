@@ -274,25 +274,31 @@ object Notifications {
     )
 
     /** Auto-record on; [ready] false: the capture helper is not running, so calls would not be recorded. */
-    fun armed(context: Context, ready: Boolean = true): Notification = NotificationCompat.Builder(context, CHANNEL_RECORDING)
-        .setSmallIcon(R.drawable.ic_stat_rec)
-        .setContentTitle(if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix")
-        .setContentText(
-            if (ready) {
-                "Calls are captured automatically; you decide after each call."
-            } else {
-                "Start Shizuku (or run the setup command), then open Setup."
-            }
-        )
-        .setOngoing(true)
-        .setOnlyAlertOnce(true)
-        .setSilent(true)
-        .setCategory(NotificationCompat.CATEGORY_SERVICE)
-        .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
-        .setContentIntent(openApp(context))
-        .addAction(0, "Record now", serviceAction(context, RecordingService.ACTION_TOGGLE, 12))
-        .addAction(0, "Turn off", serviceAction(context, RecordingService.ACTION_DISARM, 13))
-        .build()
+    fun armed(context: Context, ready: Boolean = true, askAfterCall: Boolean = false): Notification =
+        NotificationCompat.Builder(context, CHANNEL_RECORDING)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(if (ready) "Ready to record WhatsApp calls" else "Call capture isn't ready — tap to fix")
+            .setContentText(
+                if (ready) {
+                    // Since v1.6: what happens after a call follows the After a call setting (Keep automatically by default).
+                    if (askAfterCall) {
+                        "Calls are recorded automatically; you decide after each call."
+                    } else {
+                        "Calls are recorded and kept automatically."
+                    }
+                } else {
+                    "Start Shizuku (or run the setup command), then open Setup."
+                }
+            )
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setContentIntent(openApp(context))
+            .addAction(0, "Record now", serviceAction(context, RecordingService.ACTION_TOGGLE, 12))
+            .addAction(0, "Turn off", serviceAction(context, RecordingService.ACTION_DISARM, 13))
+            .build()
 
     /**
      * Post-call question with Keep / Discard (A2.7): a heads-up notification with the same preview as the desktop

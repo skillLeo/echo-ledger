@@ -338,7 +338,7 @@ class RecordingService : LifecycleService() {
     /** Enters (or updates) the foreground state. Returns false when the system refuses; never crashes. */
     private fun goForeground(mic: Boolean, title: String, detail: String): Boolean {
         val notification = if (!mic && capture == null) {
-            Notifications.armed(this, ready = helperAlive())
+            Notifications.armed(this, ready = helperAlive(), askAfterCall = settings.afterCall == "ask")
         } else {
             Notifications.recording(
                 this,
