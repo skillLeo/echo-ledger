@@ -71,3 +71,6 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [x] Promo codes for one plan, 1–100 %, staff only, the upgrade sheet's "Have a promo code?" on all apps (v1.6.3). Live; ADMIN_GUIDE "Promo codes".
 - [x] The new desktop build on this Mac (CI run 42619946410 for `d3776495`, green on Windows and macOS; installed 2026-11-09 18:10).
 - [x] API Credentials refuse a browser-filled password (v1.6.4, `43e45887`): Chrome had put the saved sign-in password into the Soniox and ElevenLabs boxes; a save with the admin's password, the same text in two boxes or a key under 16 characters now saves nothing and says why. Live.
+- [x] v1.7.0 (2026-11-09): Settings and Plan & usage rebuilt on phone, desktop and console (account card with Upgrade on top, plain rows, one icon family, search to every setting), payment receipts with staff review, Wallpaper colours fixed. Live; Mac build installed.
+- [ ] The v1.7.0 phone build on the S25 (needs a phone window).
+
