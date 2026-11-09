@@ -7,6 +7,7 @@ namespace App\Filament\Resources\Devices\Pages;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\WatchesPairing;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Models\Device;
 use App\Models\User;
 use App\Services\PairingService;
 use chillerlan\QRCode\QRCode;
@@ -14,6 +15,7 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\ViewField;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
+use Illuminate\Validation\ValidationException;
 
 class ListDevices extends ListRecords
 {
@@ -48,6 +50,26 @@ class ListDevices extends ListRecords
                 ->modalCancelActionLabel('Done')
                 ->modalWidth('md'),
         ];
+    }
+
+    /**
+     * "Sign in again" (since v1.6): a code bound to one of the person's own devices that is signed out, revoked or
+     * expired; the app comes back on the same row.
+     *
+     * @return array{pairing: array<string, string>}
+     */
+    public function signInAgainForm(Device $record): array
+    {
+        /** @var User $user */
+        $user = auth()->user();
+        try {
+            $code = app(PairingService::class)->createBoundCode($user, (string) $record->getKey());
+        } catch (ApiError|ValidationException $e) {
+            return ['pairing' => ['error' => $e->getMessage()]];
+        }
+        $this->watchPairing($code);
+
+        return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render(app(PairingService::class)->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
     }
 
     /** A list page is the top of its section: no "Sessions > List" trail (C3). */

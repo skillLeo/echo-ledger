@@ -263,7 +263,7 @@ describe('search', function () {
 
     it('finds screens on the console search too, linked to their moment', function () {
         $this->actingAs($this->device->user, 'web');
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
 
         Livewire::test(Search::class)->fillForm(['q' => 'falcon'])
             ->assertSee('Billing call')->assertSee('Screen 2:')->assertSee('<mark>Falcon</mark>', false)->assertSee('?t=872000', false);

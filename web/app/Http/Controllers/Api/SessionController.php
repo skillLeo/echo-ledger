@@ -119,6 +119,8 @@ final class SessionController extends Controller
             // An app that lost the answer of an open session (or crashed) and now sends the one-shot create with the
             // same client_ref finishes that session. A tombstone is returned unchanged.
             if ($withArtifacts && ! $existing->trashed() && $existing->status === SessionStatus::Recording) {
+                // Since v1.6 finishing it this way is checked against the plan's longest recording too.
+                app(PlanLimits::class)->assertFileMinutes($device->workspace_id, self::longestOf($data), $device->user_id);
                 $existing = $lifecycle->finish($device, $existing, $data);
             }
 
@@ -293,6 +295,8 @@ final class SessionController extends Controller
         }
         /** @var Device $device */
         $device = $request->user();
+        // Since v1.6: a file longer than the plan's longest recording is not taken.
+        app(PlanLimits::class)->assertFileMinutes($device->workspace_id, isset($data['duration_ms']) ? (int) $data['duration_ms'] : null, $device->user_id);
         $uploads->assertOpenUploadCapacity($device, 1);
         $recording = $uploads->createRecording($session, $data, ChunkedUploadService::advertisedChunkSize());
 

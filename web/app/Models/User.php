@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
+use App\Services\Staff\StaffAccess;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthenticationRecovery;
@@ -56,8 +57,11 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
  * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
+ * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
+ * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
+ * @property-read StaffRole|null $staffRole
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
@@ -82,9 +86,14 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Super admins (the server operator) and members of a workspace reach /admin; `is_super_admin` and
-        // `current_workspace_id` are never mass-assignable. Content is always that of the current workspace.
-        return $panel->getId() === 'admin' && ($this->is_super_admin || $this->workspaces()->exists());
+        // The app (/app): super admins (the server operator) and members of a workspace; content is always that of the
+        // current workspace. The admin panel (/admin, since v1.6): platform staff only. `is_super_admin` and
+        // `current_workspace_id` are never mass-assignable.
+        return match ($panel->getId()) {
+            'app' => $this->is_super_admin || $this->workspaces()->exists(),
+            'admin' => StaffAccess::isStaff($this),
+            default => false,
+        };
     }
 
     /** In the 7-day deletion grace (v1.5): signing in only offers "Keep my account". */
@@ -107,13 +116,13 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     /** The console's confirmation link, as a queued email of our own (Mail::fake() sees it in tests). */
     public function sendEmailVerificationNotification(): void
     {
-        Mail::to($this->email)->queue(new VerifyEmailMail(Filament::getPanel('admin')->getVerifyEmailUrl($this)));
+        Mail::to($this->email)->queue(new VerifyEmailMail(Filament::getPanel('app')->getVerifyEmailUrl($this)));
     }
 
     /** @param  string  $token */
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
     {
-        Mail::to($this->email)->queue(new ResetPasswordMail(Filament::getPanel('admin')->getResetPasswordUrl($token, $this)));
+        Mail::to($this->email)->queue(new ResetPasswordMail(Filament::getPanel('app')->getResetPasswordUrl($token, $this)));
     }
 
     /** @return BelongsToMany<Workspace, $this> */
@@ -126,6 +135,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     public function currentWorkspace(): BelongsTo
     {
         return $this->belongsTo(Workspace::class, 'current_workspace_id');
+    }
+
+    /** @return BelongsTo<StaffRole, $this> */
+    public function staffRole(): BelongsTo
+    {
+        return $this->belongsTo(StaffRole::class);
     }
 
     /** @return HasMany<Device, $this> */
@@ -166,6 +181,8 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'transcription_key_checked_at' => 'datetime',
             'suspended_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
+            'support_access_until' => 'datetime',
+            'staff_role_id' => 'integer',
         ];
     }
 }

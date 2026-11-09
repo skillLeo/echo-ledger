@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Admin\Pages\ServerUsage;
+use App\Filament\Admin\Pages\Settings;
 use App\Models\User;
 use App\Services\SettingsRepository;
 use App\Services\Usage\UsageBreakdown;
@@ -79,7 +81,7 @@ class Usage extends Page
                     return self::csvResponse($rows, 'usage-'.$from->format('Y-m').'.csv');
                 }),
             Action::make('serverUsage')->label('Whole server')->icon(Heroicon::OutlinedServerStack)->color('gray')
-                ->visible(fn (): bool => ServerUsage::canAccess())->url(fn (): string => ServerUsage::getUrl()),
+                ->visible(fn (): bool => ServerUsage::canAccess())->url(fn (): string => ServerUsage::getUrl(panel: 'admin')),
         ];
     }
 
@@ -133,7 +135,7 @@ class Usage extends Page
             'plan' => app(PlanLimits::class)->summary($workspaceId),
             'server' => $server,
             'isCurrentMonth' => $month === array_key_first($months),
-            'settingsUrl' => $server !== null ? Settings::getUrl() : null,
+            'settingsUrl' => $server !== null ? Settings::getUrl(panel: 'admin') : null,
             'ownOnly' => $own !== null,
             // Owners and admins: the workspace per person. Everyone with this page: their trend.
             'people' => $own === null ? $breakdown->report($from, $to, $workspaceId)['people'] : null,

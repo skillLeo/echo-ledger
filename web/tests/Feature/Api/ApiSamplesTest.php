@@ -192,7 +192,7 @@ it('keeps the shape of every answer the apps read', function () {
         }
     });
 
-    $me = Fx::superAdmin(['email' => 'sample@example.test', 'name' => 'Sample Owner', 'password' => 'Sample-password-1234']);
+    $me = Fx::superAdmin(['email' => 'sample@example.test', 'name' => 'Sample Owner', 'password' => 'Sample-password-1234'], twoFactor: false);
     app(DemoSeeder::class)->run(app(RecordingIngestor::class));
     $teammate = User::factory()->create(['email' => 'teammate@example.test']);
     $teammate->workspaces()->syncWithoutDetaching([$me->current_workspace_id => ['role' => 'member']]);

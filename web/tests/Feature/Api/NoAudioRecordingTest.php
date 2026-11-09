@@ -51,7 +51,7 @@ it('sends the failure reason with library items so the apps can say No audio', f
 });
 
 it('shows No audio on the recording page without a player, share button or share links', function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $admin = $this->signInAsAdmin();
     $silent = silentSession($admin->id);
 

@@ -41,12 +41,24 @@ use UnitEnum;
 
 /**
  * The current workspace (B20; v1.5 roles): its people and their roles, invitations, handing it over, leaving it,
- * switching between workspaces, and for the server admin an overview of every workspace (names and totals only, never
- * content). What each role may do is App\Policies\WorkspacePolicy.
+ * switching between workspaces (since v1.6 the overview of every workspace is on the admin panel's home). What each
+ * role may do is App\Policies\WorkspacePolicy.
  */
 class WorkspaceSettings extends Page implements HasTable
 {
     use InteractsWithTable;
+
+    /** What each role may do in a workspace (docs/API.md "Workspaces, roles and privacy"): owner, admin, member, viewer. */
+    public const ROLE_MATRIX = [
+        'Record, upload, import' => ['yes', 'yes', 'yes', 'no'],
+        'Sign in their own phones and computers' => ['yes', 'yes', 'yes', 'yes'],
+        'Their own recordings and projects: open, edit, share, delete' => ['yes', 'yes', 'yes', 'has none'],
+        'Shared with me: open, Save to my library' => ['yes', 'yes', 'yes', 'open only'],
+        'Invite and remove people, change roles' => ['yes', 'members and viewers', 'no', 'no'],
+        'Workspace usage: minutes and costs per person (never content)' => ['yes', 'yes', 'their own', 'no'],
+        'Revoke another person\'s device' => ['yes', 'yes', 'no', 'no'],
+        'Plan, workspace name, hand over, delete the workspace' => ['yes', 'no', 'no', 'no'],
+    ];
 
     /** People one account may add or invite in an hour (since v1.5). */
     public const ADDS_PER_HOUR = 20;
@@ -88,9 +100,8 @@ class WorkspaceSettings extends Page implements HasTable
             View::make('filament.pages.workspace-invitations')
                 ->visible(fn (): bool => $this->can('invite'))
                 ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'plan' => $this->planLine()]),
-            View::make('filament.pages.workspaces-overview')
-                ->visible(fn (): bool => (bool) $this->user()->is_super_admin)
-                ->viewData(fn (): array => ['rows' => $this->overview()]),
+            // Since v1.6 (P2.5): what each role may do here, as the admin panel shows staff roles.
+            View::make('filament.pages.workspace-roles-matrix')->viewData(fn (): array => ['rows' => self::ROLE_MATRIX, 'mine' => $this->roleOf($this->user())?->value]),
         ]);
     }
 
@@ -365,18 +376,6 @@ class WorkspaceSettings extends Page implements HasTable
         $seats = app(PlanLimits::class)->summary((int) CurrentWorkspace::id())['seats'];
 
         return $seats['limit'] === null ? null : "{$seats['used']} of {$seats['limit']} seats taken (open invitations count).";
-    }
-
-    /** @return list<array{name: string, plan: string, members: int, devices: int, minutes: float}> */
-    private function overview(): array
-    {
-        $limits = app(PlanLimits::class);
-
-        return Workspace::query()->with('plan')->withCount('members')->orderBy('name')->limit(200)->get()
-            ->map(fn (Workspace $w): array => [
-                'name' => $w->name, 'plan' => $w->plan->name, 'members' => (int) $w->getAttribute('members_count'),
-                'devices' => $limits->devicesUsed($w->id), 'minutes' => $limits->minutesUsed($w->id),
-            ])->all();
     }
 
     /** One row of App\Policies\WorkspacePolicy for the signed-in person in the current workspace. */

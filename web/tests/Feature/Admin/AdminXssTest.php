@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Infolists\TranscriptPlayerEntry;
-use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ListClients;
@@ -27,7 +27,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 const ADMIN_XSS_SCRIPT = "<script>alert('xss')</script>";
@@ -72,8 +72,8 @@ it('escapes a session title everywhere it is shown', function () {
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => ADMIN_XSS_SCRIPT]);
 
     adminAssertEscaped($this->panelComponent(ListCaptureSessions::class)->html(), ADMIN_XSS_SCRIPT, 'the sessions list');
-    adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page');
-    adminAssertEscaped($this->get('/admin/sessions')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the sessions page');
+    adminAssertEscaped($this->get('/app/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page');
+    adminAssertEscaped($this->get('/app/sessions')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the sessions page');
 
     $delete = $this->panelComponent(ListCaptureSessions::class)->mountAction(TestAction::make(DeleteAction::class)->table($session));
     foreach (adminRawMarkers() as $marker) {
@@ -85,8 +85,8 @@ it('escapes a session title that tries to break out of an attribute', function (
     $admin = $this->signInAsAdmin();
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'title' => ADMIN_XSS_IMG]);
 
-    adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_IMG, 'the session page');
-    adminAssertEscaped($this->get('/admin/sessions')->assertOk()->getContent(), ADMIN_XSS_IMG, 'the sessions page');
+    adminAssertEscaped($this->get('/app/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_IMG, 'the session page');
+    adminAssertEscaped($this->get('/app/sessions')->assertOk()->getContent(), ADMIN_XSS_IMG, 'the sessions page');
 });
 
 it('escapes a client name in the clients list, the edit page and every place a session shows it', function () {
@@ -95,12 +95,12 @@ it('escapes a client name in the clients list, the edit page and every place a s
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'client_id' => $client->id, 'title' => 'Plain title']);
 
     adminAssertEscaped($this->panelComponent(ListClients::class)->html(), ADMIN_XSS_SCRIPT, 'the clients list');
-    adminAssertEscaped($this->get('/admin/clients')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the clients page');
-    $edit = $this->get('/admin/clients/'.$client->id.'/edit')->assertOk()->getContent();
+    adminAssertEscaped($this->get('/app/clients')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the clients page');
+    $edit = $this->get('/app/clients/'.$client->id.'/edit')->assertOk()->getContent();
     adminAssertEscaped($edit, ADMIN_XSS_SCRIPT, 'the client edit page');
     adminAssertEscaped($edit, ADMIN_XSS_IMG, 'the client edit page notes');
     adminAssertEscaped($this->panelComponent(ListCaptureSessions::class)->html(), ADMIN_XSS_SCRIPT, 'the sessions list client column and filter');
-    adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page client entry');
+    adminAssertEscaped($this->get('/app/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page client entry');
 });
 
 it('escapes a client name offered for an upload batch', function () {
@@ -120,10 +120,10 @@ it('escapes a device name in the devices list, the rename and revoke dialogs and
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'device_id' => $device->id]);
 
     adminAssertEscaped($this->panelComponent(ListDevices::class)->html(), ADMIN_XSS_SCRIPT, 'the devices list');
-    adminAssertEscaped($this->get('/admin/devices')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the devices page');
+    adminAssertEscaped($this->get('/app/devices')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the devices page');
     // The Device column is optional (hidden by default since C3): show every column first.
     adminAssertEscaped($this->panelComponent(ListCaptureSessions::class)->toggleAllTableColumns()->html(), ADMIN_XSS_SCRIPT, 'the sessions list device column');
-    adminAssertEscaped($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page device entry');
+    adminAssertEscaped($this->get('/app/sessions/'.$session->id)->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the session page device entry');
 
     $rename = $this->panelComponent(ListDevices::class)->mountAction(TestAction::make('rename')->table($device));
     foreach (adminRawMarkers() as $marker) {
@@ -148,8 +148,8 @@ it('escapes keyterms', function () {
 it('escapes the signed-in admin\'s own name in the account menu, profile and dashboard', function () {
     $this->signInAsAdmin(['name' => ADMIN_XSS_SCRIPT]);
 
-    adminAssertEscaped($this->get('/admin')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the dashboard');
-    adminAssertEscaped($this->get('/admin/profile')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the profile page', mustShow: false);
+    adminAssertEscaped($this->get('/app')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the dashboard');
+    adminAssertEscaped($this->get('/app/profile')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the profile page', mustShow: false);
 });
 
 it('escapes a provider error message shown on the session page', function () {
@@ -160,7 +160,7 @@ it('escapes a provider error message shown on the session page', function () {
         'status' => TranscriptStatus::Failed, 'error' => ADMIN_XSS_IMG, 'language' => ADMIN_XSS_SHORT,
     ]);
 
-    $html = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
+    $html = $this->get('/app/sessions/'.$session->id)->assertOk()->getContent();
 
     adminAssertEscaped($html, ADMIN_XSS_IMG, 'the error entry');
     adminAssertEscaped($html, ADMIN_XSS_SCRIPT, 'the engine entry');
@@ -211,15 +211,15 @@ it('keeps hostile data that arrives through the device API inert in the console'
     // Now the admin looks at all of it.
     $this->app['auth']->forgetGuards();
     $this->actingAs($admin, 'web');
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
-    foreach (['/admin/devices', '/admin/sessions', '/admin/sessions/'.$sessionId] as $url) {
+    foreach (['/app/devices', '/app/sessions', '/app/sessions/'.$sessionId] as $url) {
         $html = $this->get($url)->assertOk()->getContent();
         foreach (adminRawMarkers() as $marker) {
             Assert::assertStringNotContainsString($marker, $html, "raw markup reached {$url}");
         }
     }
-    $view = $this->get('/admin/sessions/'.$sessionId)->getContent();
+    $view = $this->get('/app/sessions/'.$sessionId)->getContent();
     // The player renders the lines from its data with x-text (never as HTML): the data holds the text verbatim.
     $player = TranscriptPlayerEntry::payload(CaptureSession::query()->findOrFail($sessionId));
     expect(array_column($player['segments'], 'text'))->toBe([ADMIN_XSS_SCRIPT, ADMIN_XSS_IMG])

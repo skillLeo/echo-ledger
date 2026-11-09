@@ -642,7 +642,7 @@ describe('limits and records', function () {
         connectorTool($this, $token, 'list_recent');
         app('auth')->forgetGuards();
 
-        $this->actingAs($person->fresh(), 'web')->get('/admin/security')->assertOk()->assertSee('ChatGPT used list_recent')->assertSee('Read by a connected app');
+        $this->actingAs($person->fresh(), 'web')->get('/app/security')->assertOk()->assertSee('ChatGPT used list_recent')->assertSee('Read by a connected app');
     });
 
     it('marks the connection as used', function () {

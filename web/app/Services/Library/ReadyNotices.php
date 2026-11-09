@@ -54,7 +54,7 @@ final class ReadyNotices
             if (! $owner instanceof User || ($ready && EmailPreferences::wants($owner, EmailPreferences::TRANSCRIPTION))) {
                 return;
             }
-            $url = url('/admin/sessions/'.$session->id);
+            $url = url('/app/sessions/'.$session->id);
             Mail::to($owner->email)->queue($ready
                 ? new TranscriptReadyMail($session->displayTitle(), $url, asked: true)
                 : new TranscriptFailedMail($session->displayTitle(), $url));

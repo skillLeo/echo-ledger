@@ -77,7 +77,7 @@ be restored from the console's Recently deleted page for 48 hours.
 - **whisper.cpp:** run `whisper-server` behind an HTTPS reverse proxy that checks `Authorization: Bearer <token>`.
 
 ## Email and Google sign-in (since v1.5)
-- **Email:** Settings → Email takes the SMTP server, port, encryption, user, password and From address; Send a test
+- **Email:** Admin panel → Settings → Email takes the SMTP server, port, encryption, user, password and From address; Send a test
   email checks them. Without a server there, the `.env` mailer (`MAIL_MAILER`, `MAIL_HOST`, …) is used. Add the SPF,
   DKIM and DMARC records of `docs/EMAIL_DNS.md` to the From address's domain, or the emails land in spam.
 - **Google sign-in:** in the Google Cloud console (APIs & Services → Credentials) create an OAuth client ID of type
@@ -101,7 +101,7 @@ be restored from the console's Recently deleted page for 48 hours.
 - **Plans page and Server usage:** System → Plans makes, edits and assigns plans; System → Server usage has the
   costs per provider, workspace and person with its own price table (Prices). Check the Free plan's numbers before
   opening sign-up.
-- **Members' console:** Settings → Privacy & security → Members can use the console (on by default); off, members
+- **Members' console:** Admin panel → Settings → Privacy & security → Members can use the console (on by default); off, members
   and viewers are pointed to the apps.
 
 ## The security review of v1.5.0

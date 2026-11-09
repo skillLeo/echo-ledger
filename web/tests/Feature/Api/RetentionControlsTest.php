@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Pages\RecentlyDeleted;
-use App\Filament\Pages\Settings;
 use App\Filament\Widgets\StorageOverview;
 use App\Models\CaptureSession;
 use App\Models\Client;

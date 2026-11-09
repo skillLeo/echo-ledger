@@ -144,7 +144,7 @@ final class Entitlements
      */
     public function offered(): array
     {
-        return Plan::query()->where('on_offer', true)->orderBy('sort_order')->orderBy('price_usd')->orderBy('id')->get()->all();
+        return Plan::query()->where('on_offer', true)->whereNull('archived_at')->orderBy('sort_order')->orderBy('price_usd')->orderBy('id')->get()->all();
     }
 
     /** The cheapest plan on offer that grants [$feature]. */
@@ -264,7 +264,7 @@ final class Entitlements
             'name' => $plan->name,
             'badge' => $plan->badgeText(),
             'color' => $plan->colorOrDefault(),
-            'price' => filled($plan->price_label) ? $plan->price_label : ((float) $plan->price_usd > 0 ? '$'.number_format((float) $plan->price_usd, 2).' a month' : 'Free'),
+            'price' => $plan->displayPrice(),
             'description' => $plan->description,
             'features' => array_values(array_filter(Features::paid(), fn (string $f): bool => $plan->allows($f))),
             'limits' => $limits,

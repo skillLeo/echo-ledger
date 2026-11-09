@@ -17,7 +17,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 function adminChecklist(): OnboardingChecklist
@@ -36,7 +36,7 @@ function adminFinishSetup(User $admin): void
 }
 
 it('starts with every step to do on a fresh install', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
 
     expect(adminChecklist()->status($admin))->toBe([
         'two_factor' => false,
@@ -49,7 +49,7 @@ it('starts with every step to do on a fresh install', function () {
 });
 
 it('lists the steps in order with their links', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     $steps = Livewire::test(OnboardingChecklistWidget::class)->instance()->steps();
 
@@ -61,15 +61,15 @@ it('lists the steps in order with their links', function () {
             'Sign in your first device',
             'Choose how long to keep recordings',
         ])
-        ->and($steps[0]['url'])->toEndWith('/admin/security')
+        ->and($steps[0]['url'])->toEndWith('/app/security')
         ->and($steps[1]['url'])->toEndWith('/admin/api-credentials')
         ->and($steps[2]['url'])->toEndWith('/admin/settings')
-        ->and($steps[3]['url'])->toEndWith('/admin/devices')
+        ->and($steps[3]['url'])->toEndWith('/app/devices')
         ->and($steps[4]['url'])->toEndWith('/admin/settings');
 });
 
 it('ticks two-factor sign-in for an authenticator app or a passkey', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     expect(adminChecklist()->status($admin)['two_factor'])->toBeFalse();
 
     $admin->forceFill(['app_authentication_secret' => 'JBSWY3DPEHPK3PXP'])->save();
@@ -88,7 +88,7 @@ it('ticks two-factor sign-in for an authenticator app or a passkey', function ()
 });
 
 it('ticks the provider key once any provider has a key', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     $vault = app(CredentialVault::class);
 
     $vault->put('assemblyai', 'webhook_secret', 'only-a-webhook-secret');
@@ -99,7 +99,7 @@ it('ticks the provider key once any provider has a key', function () {
 });
 
 it('ticks certificate pins, the first device and a chosen retention', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     $settings = app(SettingsRepository::class);
 
     $settings->set('app.pins', ['sha256/'.str_repeat('B', 43).'=']);
@@ -111,16 +111,16 @@ it('ticks certificate pins, the first device and a chosen retention', function (
 });
 
 it('ignores certificate pins that devices could not use', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     app(SettingsRepository::class)->set('app.pins', ['not a pin']);
 
     expect(adminChecklist()->status($admin)['cert_pins'])->toBeFalse();
 });
 
 it('shows the checklist on the dashboard with the steps that are left', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
-    $this->get('/admin')->assertOk()
+    $this->get('/app')->assertOk()
         ->assertSee('Finish setting up')
         ->assertSee('0 of 5 done')
         ->assertSee('Turn on two-factor sign-in')
@@ -130,11 +130,11 @@ it('shows the checklist on the dashboard with the steps that are left', function
 });
 
 it('counts the finished steps and drops their link', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai-secret-key-1234567890');
     Device::factory()->create(['user_id' => $admin->id]);
 
-    $this->get('/admin')->assertOk()
+    $this->get('/app')->assertOk()
         ->assertSee('2 of 5 done')
         ->assertDontSee('Open API Credentials')
         ->assertDontSee('Open Devices')
@@ -142,17 +142,17 @@ it('counts the finished steps and drops their link', function () {
 });
 
 it('disappears once every step is done', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     adminFinishSetup($admin);
 
     expect(adminChecklist()->complete($admin))->toBeTrue()
         ->and(adminChecklist()->visibleTo($admin))->toBeFalse()
         ->and(OnboardingChecklistWidget::canView())->toBeFalse();
-    $this->get('/admin')->assertOk()->assertDontSee('Finish setting up');
+    $this->get('/app')->assertOk()->assertDontSee('Finish setting up');
 });
 
 it('comes back if a finished step is undone', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     adminFinishSetup($admin);
     app(SettingsRepository::class)->set('app.pins', []);
 
@@ -160,14 +160,14 @@ it('comes back if a finished step is undone', function () {
 });
 
 it('can be dismissed and stays away', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     Livewire::test(OnboardingChecklistWidget::class)->call('dismiss');
 
     expect(Setting::query()->where('key', 'onboarding.dismissed')->exists())->toBeTrue()
         ->and(adminChecklist()->dismissed())->toBeTrue()
         ->and(OnboardingChecklistWidget::canView())->toBeFalse();
-    $this->get('/admin')->assertOk()->assertDontSee('Finish setting up');
+    $this->get('/app')->assertOk()->assertDontSee('Finish setting up');
 });
 
 it('is for a super admin only', function () {
@@ -178,10 +178,10 @@ it('is for a super admin only', function () {
 });
 
 it('never reveals a credential in the checklist', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai-secret-key-1234567890');
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
     expect($html)->not->toContain('aai-secret-key-1234567890')->not->toContain('7890');
 });

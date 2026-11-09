@@ -26,7 +26,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
 });

@@ -11,7 +11,7 @@
             search, share with your team, and open in Claude or ChatGPT.
         </p>
         <p style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <a class="button" href="{{ url('/admin') }}">Sign in</a>
+            <a class="button" href="{{ url('/app') }}">Sign in</a>
             @if ($hasBuilds)
                 <a class="button secondary" href="{{ route('downloads') }}">Get the apps</a>
             @endif

@@ -6,13 +6,13 @@
     @php
         // Since v1.5 the small console (members and viewers) has the library and Shared with me only.
         $items = \App\Services\Workspaces\ConsoleAccess::full() ? [
-            ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.admin.resources.sessions.*', 'icon' => 'film'],
-            ['label' => 'Projects', 'url' => \App\Filament\Resources\Clients\ClientResource::getUrl('index'), 'route' => 'filament.admin.resources.clients.*', 'icon' => 'folder'],
-            ['label' => 'Upload', 'url' => \App\Filament\Pages\Upload::getUrl(), 'route' => 'filament.admin.pages.upload', 'icon' => 'arrow-up-tray'],
-            ['label' => 'Activity', 'url' => \App\Filament\Pages\Activity::getUrl(), 'route' => 'filament.admin.pages.activity', 'icon' => 'bell', 'badge' => \App\Filament\Pages\Activity::getNavigationBadge()],
+            ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.app.resources.sessions.*', 'icon' => 'film'],
+            ['label' => 'Projects', 'url' => \App\Filament\Resources\Clients\ClientResource::getUrl('index'), 'route' => 'filament.app.resources.clients.*', 'icon' => 'folder'],
+            ['label' => 'Upload', 'url' => \App\Filament\Pages\Upload::getUrl(), 'route' => 'filament.app.pages.upload', 'icon' => 'arrow-up-tray'],
+            ['label' => 'Activity', 'url' => \App\Filament\Pages\Activity::getUrl(), 'route' => 'filament.app.pages.activity', 'icon' => 'bell', 'badge' => \App\Filament\Pages\Activity::getNavigationBadge()],
         ] : (\App\Services\Workspaces\ConsoleAccess::open() ? [
-            ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.admin.resources.sessions.*', 'icon' => 'film'],
-            ['label' => 'Shared', 'url' => \App\Filament\Pages\SharedWithMe::getUrl(), 'route' => 'filament.admin.pages.shared-with-me', 'icon' => 'users'],
+            ['label' => 'Library', 'url' => \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('index'), 'route' => 'filament.app.resources.sessions.*', 'icon' => 'film'],
+            ['label' => 'Shared', 'url' => \App\Filament\Pages\SharedWithMe::getUrl(), 'route' => 'filament.app.pages.shared-with-me', 'icon' => 'users'],
         ] : []);
     @endphp
     <nav class="el-bottom-nav" aria-label="Main">

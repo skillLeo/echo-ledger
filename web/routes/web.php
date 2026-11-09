@@ -12,6 +12,7 @@ use App\Http\Controllers\Auth\GoogleController;
 use App\Http\Controllers\Auth\InvitationController;
 use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
+use App\Http\Controllers\LegacyConsoleRedirect;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
@@ -27,7 +28,7 @@ use Illuminate\Support\Facades\Route;
 
 // Console routes outside Filament's pages check what the panel's own pages check (since v1.5): a session the password
 // change has ended, a confirmed email, the current workspace, and an account being deleted reaching only "Keep my account".
-$consoleVerified = 'verified:filament.admin.auth.email-verification.prompt';
+$consoleVerified = 'verified:filament.app.auth.email-verification.prompt';
 $console = ['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWorkspaceMember::class, EnsureConsoleAccess::class, AccountGate::class];
 
 // The public site (since v1.5): the landing page, the downloads page, the legal pages and the apps' update manifests (docs/API.md
@@ -46,6 +47,12 @@ Route::middleware('throttle:site')->group(function (): void {
         ->where('name', '[A-Za-z0-9][A-Za-z0-9._-]{0,119}')
         ->name('downloads.file');
 });
+
+// Since v1.6 (P2.1) the app lives at /app and /admin is the staff panel: the app's old addresses under /admin go to the
+// same page under /app (LegacyConsoleRedirect; a good signed link is signed again for its new address).
+Route::get('/admin/{path}', LegacyConsoleRedirect::class)
+    ->where('path', '('.implode('|', LegacyConsoleRedirect::PATHS).')(/.*)?')
+    ->middleware('throttle:site')->name('legacy.console');
 
 // Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
 Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');

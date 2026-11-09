@@ -16,7 +16,7 @@ uses(AdminTestHelpers::class);
 /* Group by and Sort by in the console's Library (since v1.5, Phase 1C, D1–D4). */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
     $this->travelTo(now()->setTime(15, 0));
     $make = fn (string $title, array $extra = []): CaptureSession => CaptureSession::factory()->create(['user_id' => $this->admin->id, 'title' => $title, 'status' => SessionStatus::Completed, ...$extra]);

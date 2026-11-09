@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\Client;
@@ -19,7 +19,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /**
@@ -79,7 +79,7 @@ function adminPlantSecrets($test): array
     $secrets['remember token'] = 'remember-canary-0123456789abcdef';
 
     $test->actingAs($admin, 'web');
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     return $secrets;
 }
@@ -126,8 +126,8 @@ it('never renders tokens, API keys, the recordings key or other secrets on any c
     $secrets['recording storage path'] = (string) $recording->stored_path;
 
     $urls = [
-        '/admin', '/admin/sessions', '/admin/sessions/'.$session->id, '/admin/clients', '/admin/clients/create',
-        '/admin/clients/'.$client->id.'/edit', '/admin/devices', '/admin/settings', '/admin/api-credentials', '/admin/profile',
+        '/app', '/app/sessions', '/app/sessions/'.$session->id, '/app/clients', '/app/clients/create',
+        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile',
         '/admin/does-not-exist', '/definitely-not-a-page',
     ];
     foreach ($urls as $url) {
@@ -156,7 +156,7 @@ it('never leaks secrets through the login page or a failed login', function () {
     $secrets = adminPlantSecrets($this);
     auth()->logout();
 
-    adminAssertNoSecrets($secrets, $this->get('/admin/login')->getContent(), 'the login page');
+    adminAssertNoSecrets($secrets, $this->get('/app/login')->getContent(), 'the login page');
     $failed = $this->panelComponent(Login::class)
         ->fillForm(['email' => 'nobody@example.test', 'password' => 'wrong'])
         ->call('authenticate');
@@ -193,7 +193,7 @@ it('shows the last four characters of a stored key only on the credentials page'
         expect($credentials)->toContain('ends …'.$tail);
     }
 
-    foreach (['/admin', '/admin/settings', '/admin/devices', '/admin/sessions', '/admin/profile'] as $url) {
+    foreach (['/app', '/admin/settings', '/app/devices', '/app/sessions', '/app/profile'] as $url) {
         expect($this->get($url)->getContent())->not->toContain('ends …');
     }
     expect($secrets)->not->toBeEmpty();

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
-use App\Models\User;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use App\Stt\GroqPacer;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -37,7 +37,7 @@ class ApiCredentials extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 2;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $title = 'API Credentials';
 
@@ -46,9 +46,7 @@ class ApiCredentials extends Page
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('credentials.manage');
     }
 
     public function mount(): void

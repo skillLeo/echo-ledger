@@ -27,7 +27,7 @@
             @endif
             <div class="actions">
                 <button type="submit" class="button">{{ $link ? 'Link and sign in' : 'Sign in' }}</button>
-                <a href="{{ url('/admin/login') }}">Cancel</a>
+                <a href="{{ url('/app/login') }}">Cancel</a>
             </div>
         </form>
     </div>

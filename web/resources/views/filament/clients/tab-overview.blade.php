@@ -6,6 +6,7 @@
 @endphp
 <div class="el-workspace-grid">
     <div style="display: flex; flex-direction: column; gap: var(--space-5); min-width: 0">
+        @include('filament.clients.ai-locked')
         {{-- AI notes, the month's budget and Copy for AI --}}
         <section class="el-card" aria-labelledby="ai-heading">
             <div class="el-setting-row">
@@ -19,7 +20,11 @@
                 <p class="el-meta" data-ai-budget>AI this month: ${{ number_format($budget['spent_usd'], 2) }} of ${{ number_format($budget['budget_usd'], 2) }} · this project ${{ number_format($clientSpend, 2) }}</p>
                 <div class="el-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ $percent }}" aria-label="AI budget used this month"><span style="width: {{ $percent }}%"></span></div>
                 @unless ($configured)
-                    <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to use project notes and Ask.</p>
+                    @if ($credentialsUrl)
+                        <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to use project notes and Ask.</p>
+                    @else
+                        <p class="el-caption">Project notes and Ask are not set up on this server yet.</p>
+                    @endif
                 @endunless
             </div>
             <div style="display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-4)" x-data="{ copied: null }">

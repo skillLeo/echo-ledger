@@ -5,8 +5,8 @@ declare(strict_types=1);
 use App\Enums\SessionStatus;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Pages\Search;
-use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Resources\CaptureSessions\RelationManagers\ShareLinksRelationManager;
 use App\Filament\Resources\Clients\Pages\EditClient;
@@ -30,7 +30,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin(['name' => 'Sam Admin']);
     $this->client = Client::factory()->create(['user_id' => $this->admin->id, 'name' => 'Acme']);
     $this->session = $this->sessionWithTranscript($this->admin, [

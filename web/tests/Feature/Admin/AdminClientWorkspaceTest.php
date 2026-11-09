@@ -33,7 +33,7 @@ require_once __DIR__.'/../Api/Support/client_workspace_helpers.php';
  * notes, Copy for AI), Recordings, Files and Ask, all through ClientWorkspace, refreshing only while something is made.
  */
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
     $this->isolatedStorage();
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');

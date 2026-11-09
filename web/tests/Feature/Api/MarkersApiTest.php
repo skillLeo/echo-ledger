@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Models\CaptureSession;
@@ -181,7 +181,7 @@ describe('tag presets', function () {
     });
 
     it('saves the presets from the console settings page into the config', function () {
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
         $this->signInAsAdmin();
 
         $this->panelComponent(Settings::class)
@@ -195,7 +195,7 @@ describe('tag presets', function () {
 
 describe('the console', function () {
     beforeEach(function () {
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
     });
 
     it('shows bookmarks on the session page', function () {

@@ -33,7 +33,7 @@ function adminReplay($test, string $snapshot, array $updates = [], array $calls 
 
 it('accepts a component update from the signed-in admin', function () {
     $this->actingAs($this->makeAdmin(), 'web');
-    $snapshot = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Pages\Settings');
+    $snapshot = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Admin\Pages\Settings');
 
     $response = adminReplay($this, $snapshot, ['data.default_language' => 'ur']);
 
@@ -42,7 +42,7 @@ it('accepts a component update from the signed-in admin', function () {
 
 it('refuses a settings update once the admin has signed out', function () {
     $this->actingAs($this->makeAdmin(), 'web');
-    $snapshot = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Pages\Settings');
+    $snapshot = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Admin\Pages\Settings');
     auth()->logout();
 
     adminReplay($this, $snapshot, ['data.retention_days' => 7], [['path' => '', 'method' => 'save', 'params' => []]])->assertUnauthorized();
@@ -52,7 +52,7 @@ it('refuses a settings update once the admin has signed out', function () {
 
 it('refuses a credentials update once the admin has signed out', function () {
     $this->actingAs($this->makeAdmin(), 'web');
-    $snapshot = adminSnapshotOf($this, '/admin/api-credentials', 'App\Filament\Pages\ApiCredentials');
+    $snapshot = adminSnapshotOf($this, '/admin/api-credentials', 'App\Filament\Admin\Pages\ApiCredentials');
     auth()->logout();
 
     adminReplay($this, $snapshot, ['data.assemblyai__api_key' => 'planted-by-a-guest'], [['path' => '', 'method' => 'save', 'params' => []]])->assertUnauthorized();
@@ -62,8 +62,8 @@ it('refuses a credentials update once the admin has signed out', function () {
 
 it('refuses a replayed admin snapshot from a signed-in account that is not a super admin', function () {
     $this->actingAs($this->makeAdmin(), 'web');
-    $settings = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Pages\Settings');
-    $credentials = adminSnapshotOf($this, '/admin/api-credentials', 'App\Filament\Pages\ApiCredentials');
+    $settings = adminSnapshotOf($this, '/admin/settings', 'App\Filament\Admin\Pages\Settings');
+    $credentials = adminSnapshotOf($this, '/admin/api-credentials', 'App\Filament\Admin\Pages\ApiCredentials');
     auth()->logout();
     $this->actingAs($this->makeRegularUser(), 'web');
 
@@ -75,7 +75,7 @@ it('refuses a replayed admin snapshot from a signed-in account that is not a sup
 
 it('rejects a tampered snapshot', function () {
     $this->actingAs($this->makeAdmin(), 'web');
-    $snapshot = json_decode(adminSnapshotOf($this, '/admin/settings', 'App\Filament\Pages\Settings'), true);
+    $snapshot = json_decode(adminSnapshotOf($this, '/admin/settings', 'App\Filament\Admin\Pages\Settings'), true);
     $snapshot['data']['data'][0]['retention_days'] = 365;
     $tampered = json_encode($snapshot);
 

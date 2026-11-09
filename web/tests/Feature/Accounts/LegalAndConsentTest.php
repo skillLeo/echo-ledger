@@ -11,7 +11,7 @@ use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
-beforeEach(fn () => Filament::setCurrentPanel('admin'));
+beforeEach(fn () => Filament::setCurrentPanel('app'));
 
 it('serves the Terms and the Privacy Policy as marked drafts, phone-sized, without signing in', function (string $url, string $heading) {
     $page = $this->get($url)->assertOk()->assertSee($heading)->assertSee('Draft — for review')
@@ -57,32 +57,32 @@ it('throttles the legal pages with the rest of the public site (429)', function 
 });
 
 it('links the legal pages from the sign-in page and under every console page', function () {
-    expect($this->get('/admin/login')->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
+    expect($this->get('/app/login')->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
     app(SettingsRepository::class)->set('signup.mode', 'anyone');
-    expect($this->get('/admin/register')->assertOk()->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
+    expect($this->get('/app/register')->assertOk()->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
 
     $this->actingAs(Fx::user(), 'web');
-    expect($this->get('/admin')->assertOk()->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
+    expect($this->get('/app')->assertOk()->getContent())->toContain(route('legal.terms'))->toContain(route('legal.privacy'));
 });
 
 it('shows a new account the recording-consent notice once, then keeps it in the profile', function () {
     $user = User::factory()->newAccount()->create();
     $this->actingAs($user, 'web');
 
-    $this->get('/admin')->assertRedirect(RecordingConsentNotice::getUrl());
-    $this->get('/admin/sessions')->assertRedirect(RecordingConsentNotice::getUrl());
+    $this->get('/app')->assertRedirect(RecordingConsentNotice::getUrl());
+    $this->get('/app/sessions')->assertRedirect(RecordingConsentNotice::getUrl());
     $this->get(RecordingConsentNotice::getUrl())->assertOk()->assertSee(RecordingConsent::TEXT)->assertSee(RecordingConsent::CONFIRM);
 
     Livewire::test(RecordingConsentNotice::class)->callAction(TestAction::make('understood')->schemaComponent('consent-actions', schema: 'content'))->assertRedirect();
     expect($user->fresh()->consent_seen_at)->not->toBeNull();
 
     $this->actingAs($user->fresh(), 'web');
-    $this->get('/admin')->assertOk();
-    $this->get('/admin/profile')->assertOk()->assertSee('Recording consent')->assertSee(RecordingConsent::TEXT);
+    $this->get('/app')->assertOk();
+    $this->get('/app/profile')->assertOk()->assertSee('Recording consent')->assertSee(RecordingConsent::TEXT);
 });
 
 it('never shows the notice to accounts that existed before it', function () {
     $this->actingAs(Fx::user(), 'web');
 
-    $this->get('/admin')->assertOk();
+    $this->get('/app')->assertOk();
 });

@@ -37,12 +37,12 @@ final class DeviceSignInController extends Controller
         $user = Auth::guard('web')->user();
         if (! $user instanceof User) {
             // The console's sign-in page brings the browser back here afterwards.
-            return redirect()->guest(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+            return redirect()->guest(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
         }
         try {
             $this->signIn->assertCanSignIn($user);
         } catch (ApiError $e) {
-            return $this->message(403, 'This account cannot sign in a device', $e->getMessage(), url('/admin'), 'Open the console');
+            return $this->message(403, 'This account cannot sign in a device', $e->getMessage(), url('/app'), 'Open the console');
         }
 
         $response = response()->view('auth.device-sign-in', [
@@ -71,7 +71,7 @@ final class DeviceSignInController extends Controller
         try {
             $code = $this->signIn->approve($user, $params);
         } catch (ApiError $e) {
-            return $this->message(403, 'This device cannot be signed in', $e->getMessage(), url('/admin'), 'Open the console');
+            return $this->message(403, 'This device cannot be signed in', $e->getMessage(), url('/app'), 'Open the console');
         }
 
         return redirect()->away(DeviceSignIn::REDIRECT_URI.'?'.http_build_query(['code' => $code, 'state' => $params['state']]));

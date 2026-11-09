@@ -11,6 +11,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\ActivityFeed;
 use Filament\Facades\Filament;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -21,7 +22,7 @@ uses(AdminTestHelpers::class);
  * detail pane on wide screens, and the Activity and Upload pages.
  */
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
 });
 
@@ -47,19 +48,21 @@ describe('navigation', function () {
 
         expect($css)->toMatch('/@media \(min-width: 1024px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
             ->toMatch('/@media \(max-width: 1023\.98px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
-        expect(Filament::getPanel('admin')->isSidebarCollapsibleOnDesktop())->toBeTrue();
+        expect(Filament::getPanel('app')->isSidebarCollapsibleOnDesktop())->toBeTrue();
     });
 
     it('leaves the bottom bar off the sign-in page', function () {
         auth()->logout();
 
-        expect($this->get('/admin/login')->assertOk()->getContent())->not->toContain('el-bottom-nav');
+        expect($this->get('/app/login')->assertOk()->getContent())->not->toContain('el-bottom-nav');
     });
 
-    it('marks Activity in the bar with the number of unread notifications', function () {
+    it('marks Activity in the bar with the number of what needs you (since v1.6 a ready transcript is not counted)', function () {
         CaptureSession::factory()->create(['user_id' => $this->admin->id])->transcripts()->create([
             'kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'segments' => []]);
+        expect($this->get(Activity::getUrl())->assertOk()->getContent())->not->toContain('el-bottom-nav-badge');
 
+        app(ActivityFeed::class)->post($this->admin, 'transcript_failed', 'Transcription failed', 'Call', null, 'heroicon-o-exclamation-triangle');
         $html = $this->get(Activity::getUrl())->assertOk()->getContent();
 
         expect($html)->toContain('el-bottom-nav-badge')->toMatch('/aria-current="page"[^>]*>\s*<span class="el-bottom-nav-icon">/');

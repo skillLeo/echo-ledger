@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Admin\Pages\UpgradeRequestsPage;
 use App\Filament\Auth\EditProfile;
-use App\Filament\Pages\UpgradeRequestsPage;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\UpgradeDecidedMail;
 use App\Models\Plan;
@@ -81,7 +81,7 @@ describe('the API', function () {
 });
 
 describe('System → Upgrade requests', function () {
-    beforeEach(fn () => Filament::setCurrentPanel('admin'));
+    beforeEach(fn () => Filament::setCurrentPanel('app'));
 
     it('approves: the plan until a date, an email and an activity item', function () {
         $id = $this->api($this->token)->postJson('/api/upgrade-requests', ['plan' => 'pro'])->json('id');
@@ -127,7 +127,7 @@ describe('System → Upgrade requests', function () {
 
 describe('the console\'s badge and sheet', function () {
     beforeEach(function () {
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
         $this->person->forceFill(['consent_seen_at' => now()])->save();
         $this->actingAs($this->person, 'web');
     });
@@ -142,7 +142,7 @@ describe('the console\'s badge and sheet', function () {
     });
 
     it('shows the plan on the profile, with the plans side by side', function () {
-        $this->get('/admin/profile')->assertOk()->assertSee('Your plan')->assertSee('FREE ✦', false);
+        $this->get('/app/profile')->assertOk()->assertSee('Your plan')->assertSee('FREE ✦', false);
         Livewire::test(EditProfile::class)
             ->callAction(TestAction::make('comparePlans')->schemaComponent('plan-actions', schema: 'content'), ['plan' => 'pro'])
             ->assertNotified('Request sent. We\'ll activate it once confirmed.');

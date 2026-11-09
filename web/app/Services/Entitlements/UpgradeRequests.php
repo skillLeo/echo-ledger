@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -54,7 +55,7 @@ final class UpgradeRequests
      */
     public function create(User $user, int $workspaceId, string $planKey, ?string $message): UpgradeRequest
     {
-        $plan = Plan::query()->where('key', $planKey)->where('on_offer', true)->first();
+        $plan = Plan::query()->where('key', $planKey)->where('on_offer', true)->whereNull('archived_at')->first();
         if (! $plan instanceof Plan) {
             throw ValidationException::withMessages(['plan' => 'Choose one of the plans on offer.']);
         }
@@ -78,27 +79,30 @@ final class UpgradeRequests
             ]);
         });
         $this->audit->record('upgrade_requested', $user->id, $request, "Asked for the {$plan->name} plan");
-        // The super admins see it in the bell (and on System → Upgrade requests).
-        User::query()->where('is_super_admin', true)->get()->each(fn (User $admin) => app(ActivityFeed::class)
-            ->post($admin, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}.", null, 'heroicon-o-arrow-trending-up'));
+        // Staff who answer them see it in the bell (and on Admin panel → Upgrade requests).
+        User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
+            ->filter(fn (User $staff): bool => StaffAccess::can('upgrades.manage', $staff))
+            ->each(fn (User $staff) => app(ActivityFeed::class)
+                ->post($staff, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}.", null, 'heroicon-o-arrow-trending-up'));
 
         return $request;
     }
 
-    /** Approves: the workspace goes on [$planKey], until [$until] or not; the person is told. */
-    public function approve(UpgradeRequest $request, User $admin, string $planKey, ?Carbon $until): void
+    /** Approves: the workspace goes on [$planKey], until [$until] or not, with an optional [$message]; the person is told. */
+    public function approve(UpgradeRequest $request, User $admin, string $planKey, ?Carbon $until, ?string $message = null): void
     {
+        $message = filled($message) ? mb_substr(trim((string) $message), 0, 1000) : null;
         $plan = Plan::query()->where('key', $planKey)->firstOrFail();
-        DB::transaction(function () use ($request, $admin, $plan, $until): void {
+        DB::transaction(function () use ($request, $admin, $plan, $until, $message): void {
             Workspace::query()->whereKey($request->workspace_id)->update(['plan_id' => $plan->id, 'plan_expires_at' => $until]);
             $request->forceFill([
                 'status' => UpgradeRequest::APPROVED, 'approved_plan' => $plan->key, 'approved_until' => $until,
-                'decided_by' => $admin->id, 'decided_at' => now(), 'reply' => null,
+                'decided_by' => $admin->id, 'decided_at' => now(), 'reply' => $message,
             ])->save();
         });
         app(Entitlements::class)->forget();
         $this->audit->record('upgrade_approved', $admin->id, $request, "Upgrade to {$plan->name} approved for ".$request->user->email);
-        $this->tell($request, true, $plan->name, $until, null);
+        $this->tell($request, true, $plan->name, $until, $message);
     }
 
     /** Declines with [$reply]; the person is told. */
@@ -113,9 +117,9 @@ final class UpgradeRequests
     {
         $user = $request->user;
         $when = $until?->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
-        Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/admin')));
+        Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/app')));
         $approved
-            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', "You are on {$planName} now", $when !== null ? "Until {$when}. Thank you!" : 'Thank you! Everything in it is on.', null, 'heroicon-o-check-badge')
+            ? app(ActivityFeed::class)->post($user, 'upgrade_approved', "You are on {$planName} now", $reply ?? ($when !== null ? "Until {$when}. Thank you!" : 'Thank you! Everything in it is on.'), null, 'heroicon-o-check-badge')
             : app(ActivityFeed::class)->post($user, 'upgrade_declined', "Your request for {$planName} was declined", $reply ?? 'Write to us if you have a question.', null, 'heroicon-o-x-circle');
     }
 

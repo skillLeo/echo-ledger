@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
-use App\Models\User;
 use App\Services\Accuracy\AccuracyLab as Lab;
+use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -27,7 +27,7 @@ class AccuracyLab extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 5;
+    protected static ?int $navigationSort = 6;
 
     protected static ?string $title = 'Accuracy Lab';
 
@@ -35,15 +35,13 @@ class AccuracyLab extends Page
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('devices.reports');
     }
 
     /** @return array<string, mixed> */
     protected function getViewData(): array
     {
-        return ['report' => app(Lab::class)->report((int) CurrentWorkspace::id()), 'settingsUrl' => Settings::getUrl()];
+        return ['report' => app(Lab::class)->report((int) CurrentWorkspace::id()), 'settingsUrl' => Settings::getUrl(panel: 'admin')];
     }
 
     protected function getHeaderActions(): array

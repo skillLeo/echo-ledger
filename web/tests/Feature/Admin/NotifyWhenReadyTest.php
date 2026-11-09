@@ -63,7 +63,7 @@ it('sends one email when the transcript is ready, even with transcript emails of
     $final->update(['status' => TranscriptStatus::Completed]);
 
     Mail::assertQueued(TranscriptReadyMail::class, fn (TranscriptReadyMail $mail): bool => $mail->hasTo($this->admin->email) && $mail->asked && $mail->title === 'Laptop call'
-        && str_ends_with($mail->url, '/admin/sessions/'.$session->id));
+        && str_ends_with($mail->url, '/app/sessions/'.$session->id));
     Mail::assertQueuedCount(1);
     expect(app(ReadyNotices::class)->asked($this->admin, $session))->toBeFalse();
 });

@@ -142,7 +142,7 @@ it('builds the pairing QR from the configured URL and never from the request hos
     $payload = json_decode($pairing->qrPayload('ABCD-EFGH'), true);
 
     expect($payload)->toBe(['v' => 1, 'url' => rtrim((string) config('app.url'), '/'), 'code' => 'ABCDEFGH', 'pins' => []]);
-    $this->withServerVariables(['HTTP_HOST' => 'attacker.example'])->get('/admin/login');
+    $this->withServerVariables(['HTTP_HOST' => 'attacker.example'])->get('/app/login');
     expect(json_decode($pairing->qrPayload('ABCD-EFGH'), true)['url'])->not->toContain('attacker');
 });
 

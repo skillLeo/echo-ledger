@@ -42,7 +42,7 @@ require_once __DIR__.'/Support/account_helpers.php';
 require_once __DIR__.'/../Api/Support/screen_helpers.php';
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 
@@ -58,6 +58,9 @@ describe('GET /api/account', function () {
             'created_at' => $user->created_at->toAtomString(),
             'workspace' => ['id' => $device->workspace_id, 'name' => 'Personal', 'role' => 'owner'],
             'deletes_at' => null,
+            // Since v1.6.
+            'super_admin' => false,
+            'workspaces' => [['id' => $device->workspace_id, 'name' => 'Personal', 'role' => 'owner', 'current' => true]],
         ]);
     });
 });
@@ -124,23 +127,23 @@ describe('the 7 days', function () {
         $user->forceFill(['deletion_requested_at' => now(), 'deletes_at' => now()->addDays(7)])->save();
         $this->actingAs($user, 'web');
 
-        $this->get('/admin')->assertRedirect(AccountBeingDeleted::getUrl());
-        $this->get('/admin/profile')->assertRedirect(AccountBeingDeleted::getUrl());
-        $this->get('/admin/sessions')->assertRedirect(AccountBeingDeleted::getUrl());
+        $this->get('/app')->assertRedirect(AccountBeingDeleted::getUrl());
+        $this->get('/app/profile')->assertRedirect(AccountBeingDeleted::getUrl());
+        $this->get('/app/sessions')->assertRedirect(AccountBeingDeleted::getUrl());
         $this->get(AccountBeingDeleted::getUrl())->assertOk()->assertSee('Keep my account');
 
         Livewire::test(AccountBeingDeleted::class)->callAction(TestAction::make('keepAccount')->schemaComponent('deletion-actions', schema: 'content'))
             ->assertRedirect();
         expect($user->fresh()->deletes_at)->toBeNull()
             ->and(AuditEvent::query()->where('event', 'account_deletion_cancelled')->exists())->toBeTrue();
-        $this->actingAs($user->fresh(), 'web')->get('/admin')->assertOk();
+        $this->actingAs($user->fresh(), 'web')->get('/app')->assertOk();
     });
 });
 
 describe('/account/delete', function () {
     it('explains and sends a guest to the console sign-in, then back', function () {
         $this->get('/account/delete')->assertOk()->assertSee('Delete your account')->assertSee('Sign in to continue');
-        $this->get('/account/delete?sign_in=1')->assertRedirect(route('filament.admin.auth.login'));
+        $this->get('/account/delete?sign_in=1')->assertRedirect(route('filament.app.auth.login'));
         expect(session('url.intended'))->toBe(url('/account/delete?sign_in=1'));
     });
 

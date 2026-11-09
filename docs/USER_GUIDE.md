@@ -177,6 +177,10 @@ again on the same phone or computer uses the same row. **Rename** gives it your 
 once (its recordings stay) and keeps it in the list until you **Remove from list**; the **Show** filter shows the
 signed-out ones. While the **Sign in a device** code is open, it says **Waiting for the app…**, then "✓ Galaxy S25
 Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
+**Sign in again** on a device that is signed out, revoked or expired shows a code and a QR code for that device only
+(10 minutes, once): scan it in the app on that phone or computer and it comes back on the same row, with its name and
+recordings. Where your plan leaves something out (a project's AI notes and Ask, Claude and ChatGPT under **Connected
+apps**), the plan's badge shows with **See plans**.
 
 **Your devices (phone, since v1.6).** **You → Devices** lists the same devices with their readable names. **Rename**
 works on any of them, this phone too; **Sign out** signs another one out at once.
@@ -211,6 +215,12 @@ key". **Pro** and **Business** transcribe for you, with no key of your own.
 plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
+
+### Support access (since v1.6)
+
+EchoLedger's support never sees your recordings. If you want help with one, open **Profile → Support access → Let
+support look** and choose for how long (1 hour, 1 day or 7 days). Until then support can open your recordings and their
+transcripts, and every look shows in your activity log. **Stop now** ends it at once.
 
 ## 3c. Find your way in the computer app (since v1.6)
 
@@ -673,6 +683,10 @@ readiness**, which is Critical: a call that will not be recorded is always said.
 **Test** (one sample notification) and **Sound & vibration** (Android's own page for that kind). If you switched a kind off
 in Android's settings, it says so here with **Turn on in Android**. **Recording** cannot be switched off: Android shows it
 while a recording runs.
+
+**The bell in the console (since v1.6)** counts only what needs you: a transcription or upload that failed, the monthly
+limit reached, an answer to your upgrade request, and calls waiting for **Keep** or **Discard**. Finished transcripts,
+new devices and shares are listed but not counted. Above nine it says **9+**.
 
 ## 14. Keep recordings for a set time (retention)
 

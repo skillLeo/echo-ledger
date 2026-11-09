@@ -371,6 +371,8 @@ for the plan (then the default plan). Every route checks them; the apps only sho
 | `provider_error` | 502 | Groq could not be asked about the key (try again) |
 | `request_pending` | 409 | An upgrade request is already waiting (`request` holds it) |
 | `account_suspended` | 403 | The account is suspended: every call of its devices |
+| `update_required` | 426 | The app is older than the minimum and the server refuses older apps |
+| `maintenance` | 503 | The server is in maintenance (`until`, `Retry-After`) |
 
 - Devices are counted per person (active, not expired); "recordings a day" is recordings started in the last 24 hours
   by that person in that workspace; "longest recording" is checked when a recording is created and finished.
@@ -386,6 +388,24 @@ for the plan (then the default plan). Every route checks them; the apps only sho
 - `PATCH /api/devices/{id}` — `sessions:write`: `{"name": "…"}` (1–60 characters, trimmed) → `200` with the device as
   `GET /api/security` lists it. Another person's device `404 not_found`. An older server answers `404`/`405`: the apps
   say to rename it in the console.
+
+### Updates, announcements and maintenance (since v1.6, P2.7)
+- `GET /api/config` gains three fields, each `null` when unused:
+  - `"app_update": {"minimum": "1.6.0", "required": true, "refused": false, "message": "Please update EchoLedger to
+    1.6.0 or later.", "url": "https://<server>/downloads"}`: this app's version is below the minimum the admin set. The
+    apps show the message with **Update** (the url; the desktop's own updater first, when it has one). `refused`: the
+    admin turned on "Refuse older apps".
+  - `"announcement": {"text": "…", "level": "info" | "warning", "until": "<ISO>" | null}`: a banner at the top until
+    `until`; the person may close it for that text.
+  - `"maintenance": {"message": "…", "until": "<ISO>" | null}`: the server is in maintenance.
+- `426 {"message", "code": "update_required", "minimum": "1.6.0", "url": "…"}` on every device route except
+  `GET /api/config`, only while "Refuse older apps" is on and the app is below the minimum. The apps keep their
+  recordings and say to update.
+- `503 {"message", "code": "maintenance", "until": "<ISO>" | null}` with `Retry-After` on every device route except
+  `GET /api/config` while in maintenance (staff devices are let through). The apps keep recordings and uploads waiting
+  and try again after `Retry-After`; it is not an error to show as a failure.
+- Activity kind `cost_alert` (staff only: the month's provider spend at 80 % and 100 % of the budget).
+- `GET /api/upgrade-requests/latest`: `reply` is also set on an approval when the admin wrote a message.
 
 ### Signing a device in again (since v1.6, P3)
 - In the console a device row that is signed out, revoked or expired has **Sign in again**: a one-time pairing code

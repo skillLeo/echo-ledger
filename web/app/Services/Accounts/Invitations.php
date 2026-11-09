@@ -72,7 +72,7 @@ final class Invitations
     /** The sign-up page with the invitation, for an address without an account. */
     public function signUpUrl(string $token): string
     {
-        return Filament::getPanel('admin')->getRegistrationUrl(['invite' => $token]) ?? url('/admin/register?invite='.$token);
+        return Filament::getPanel('app')->getRegistrationUrl(['invite' => $token]) ?? url('/app/register?invite='.$token);
     }
 
     /** The signed page that asks an account to join; the signature ends with the invitation. */
@@ -84,7 +84,7 @@ final class Invitations
     /** Tells an existing account it was added to a workspace (no link to accept: it is a member already). */
     public function tellAdded(Workspace $workspace, User $inviter, User $member): void
     {
-        Mail::to($member->email)->queue(new InvitationMail($workspace->name, $inviter->name, Filament::getPanel('admin')->getUrl() ?? url('/admin'), signUp: false));
+        Mail::to($member->email)->queue(new InvitationMail($workspace->name, $inviter->name, Filament::getPanel('app')->getUrl() ?? url('/app'), signUp: false));
     }
 
     public function find(?string $token): ?WorkspaceInvitation

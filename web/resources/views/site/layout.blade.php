@@ -42,7 +42,7 @@
     <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">EchoLedger</a>
     <nav class="site" aria-label="Site">
         <a href="{{ route('downloads') }}">Downloads</a>
-        <a href="{{ url('/admin') }}">Sign in</a>
+        <a href="{{ url('/app') }}">Sign in</a>
     </nav>
 </header>
 <main>

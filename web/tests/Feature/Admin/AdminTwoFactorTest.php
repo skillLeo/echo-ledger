@@ -13,7 +13,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** Gives the user an authenticator secret and recovery codes, returning both in plain text. */
@@ -44,7 +44,7 @@ function adminOpenTotpSetup($test, User $user): array
 }
 
 it('is configured as optional two-factor authentication with recovery codes', function () {
-    $panel = Filament::getPanel('admin');
+    $panel = Filament::getPanel('app');
 
     expect($panel->hasMultiFactorAuthentication())->toBeTrue()
         ->and($panel->isMultiFactorAuthenticationRequired())->toBeFalse();
@@ -55,16 +55,17 @@ it('is configured as optional two-factor authentication with recovery codes', fu
         ->and($providers['app']->getBrandName())->toBe('EchoLedger');
 });
 
-it('lets an admin without two-factor use the console without being forced to enrol', function () {
-    $this->signInAsAdmin();
+it('lets an admin without two-factor use the app without being forced to enrol; the admin panel asks for it first', function () {
+    $this->signInAsAdmin(twoFactor: false);
 
-    $this->get('/admin')->assertOk();
-    $this->get('/admin/sessions')->assertOk();
-    $this->get('/admin/settings')->assertOk();
+    $this->get('/app')->assertOk();
+    $this->get('/app/sessions')->assertOk();
+    // Since v1.6 (P2.5) every member of staff has it on before /admin opens.
+    $this->get('/admin/settings')->assertRedirect('/app/profile');
 });
 
 it('lets an admin without two-factor sign in with only a password', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(Login::class)
         ->fillForm(['email' => 'owner@example.test', 'password' => 'password'])
@@ -76,7 +77,7 @@ it('lets an admin without two-factor sign in with only a password', function () 
 });
 
 it('offers two-factor set-up on the profile page while it is switched off', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     $html = $this->panelComponent(EditProfile::class)->html();
 
@@ -86,7 +87,7 @@ it('offers two-factor set-up on the profile page while it is switched off', func
 });
 
 it('enables two-factor with a valid code and the account password', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret, $recoveryCodes] = adminOpenTotpSetup($this, $admin);
 
     $profile->set('mountedActions.0.data.code', adminCurrentCode($admin, $secret))
@@ -100,7 +101,7 @@ it('enables two-factor with a valid code and the account password', function () 
 });
 
 it('shows a QR code and the text secret in the set-up dialog', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret] = adminOpenTotpSetup($this, $admin);
 
     $html = $this->modalHtml($profile);
@@ -109,7 +110,7 @@ it('shows a QR code and the text secret in the set-up dialog', function () {
 });
 
 it('does not enable two-factor when the verification code is wrong', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret] = adminOpenTotpSetup($this, $admin);
 
     $profile->set('mountedActions.0.data.code', '000000')
@@ -121,7 +122,7 @@ it('does not enable two-factor when the verification code is wrong', function ()
 });
 
 it('does not enable two-factor when the account password is wrong', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret] = adminOpenTotpSetup($this, $admin);
 
     $profile->set('mountedActions.0.data.code', adminCurrentCode($admin, $secret))
@@ -133,7 +134,7 @@ it('does not enable two-factor when the account password is wrong', function () 
 });
 
 it('stores the secret encrypted and the recovery codes hashed', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret, $recoveryCodes] = adminOpenTotpSetup($this, $admin);
     $profile->set('mountedActions.0.data.code', adminCurrentCode($admin, $secret))
         ->set('mountedActions.0.data.password', 'password')
@@ -148,7 +149,7 @@ it('stores the secret encrypted and the recovery codes hashed', function () {
 });
 
 it('does not show the recovery codes again once two-factor is enabled', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret, $recoveryCodes] = adminOpenTotpSetup($this, $admin);
     $profile->set('mountedActions.0.data.code', adminCurrentCode($admin, $secret))
         ->set('mountedActions.0.data.password', 'password')
@@ -166,7 +167,7 @@ it('does not show the recovery codes again once two-factor is enabled', function
 });
 
 it('limits repeated set-up attempts', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$profile, $secret] = adminOpenTotpSetup($this, $admin);
 
     foreach (range(1, 6) as $_) {
@@ -184,7 +185,7 @@ it('limits repeated set-up attempts', function () {
 });
 
 it('asks for the authenticator code after the password when two-factor is on', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $login = $this->panelComponent(Login::class)
@@ -197,7 +198,7 @@ it('asks for the authenticator code after the password when two-factor is on', f
 });
 
 it('completes the sign-in with a valid authenticator code', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $this->panelComponent(Login::class)
@@ -212,7 +213,7 @@ it('completes the sign-in with a valid authenticator code', function () {
 });
 
 it('refuses a wrong authenticator code', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $this->panelComponent(Login::class)
@@ -226,7 +227,7 @@ it('refuses a wrong authenticator code', function () {
 });
 
 it('refuses a wrong password before the authenticator code is ever requested', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $login = $this->panelComponent(Login::class)
@@ -239,7 +240,7 @@ it('refuses a wrong password before the authenticator code is ever requested', f
 });
 
 it('does not accept the same authenticator code twice', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
     $code = adminCurrentCode($admin, $secret);
 
@@ -263,7 +264,7 @@ it('does not accept the same authenticator code twice', function () {
 });
 
 it('signs in with a recovery code, and that code works only once', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [, $codes] = adminEnrolTotp($admin);
 
     $this->panelComponent(Login::class)
@@ -290,7 +291,7 @@ it('signs in with a recovery code, and that code works only once', function () {
 });
 
 it('rejects an invented recovery code', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $this->panelComponent(Login::class)
@@ -306,7 +307,7 @@ it('rejects an invented recovery code', function () {
 });
 
 it('never renders the authenticator secret on the challenge screen', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [$secret, $codes] = adminEnrolTotp($admin);
 
     $html = $this->panelComponent(Login::class)
@@ -321,7 +322,7 @@ it('never renders the authenticator secret on the challenge screen', function ()
 });
 
 it('regenerates recovery codes and invalidates the old ones', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$secret, $oldCodes] = adminEnrolTotp($admin);
     $oldHashes = $admin->fresh()->getAppAuthenticationRecoveryCodes();
 
@@ -342,7 +343,7 @@ it('regenerates recovery codes and invalidates the old ones', function () {
 });
 
 it('disables two-factor with the password and a valid code, after which sign-in needs no code', function () {
-    $admin = $this->signInAsAdmin(['email' => 'owner@example.test']);
+    $admin = $this->signInAsAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $this->panelComponent(EditProfile::class)
@@ -366,7 +367,7 @@ it('disables two-factor with the password and a valid code, after which sign-in 
 });
 
 it('disables two-factor with a recovery code instead of an authenticator code', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [, $codes] = adminEnrolTotp($admin);
 
     $this->panelComponent(EditProfile::class)
@@ -381,7 +382,7 @@ it('disables two-factor with a recovery code instead of an authenticator code', 
 });
 
 it('keeps two-factor on when disabling is attempted with the wrong password', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $this->panelComponent(EditProfile::class)
@@ -395,7 +396,7 @@ it('keeps two-factor on when disabling is attempted with the wrong password', fu
 });
 
 it('keeps two-factor on when disabling is attempted with a wrong code', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $this->panelComponent(EditProfile::class)
@@ -409,7 +410,7 @@ it('keeps two-factor on when disabling is attempted with a wrong code', function
 });
 
 it('limits repeated attempts to disable two-factor', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $profile = $this->panelComponent(EditProfile::class)
@@ -427,7 +428,7 @@ it('limits repeated attempts to disable two-factor', function () {
 });
 
 it('throttles repeated wrong authenticator codes at the challenge', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     [$secret] = adminEnrolTotp($admin);
 
     $login = $this->panelComponent(Login::class)
@@ -443,7 +444,7 @@ it('throttles repeated wrong authenticator codes at the challenge', function () 
 });
 
 it('binds the recovery-code field without a blur update, so one click on Confirm signs in (A6.W26)', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $html = $this->panelComponent(Login::class)
@@ -454,11 +455,11 @@ it('binds the recovery-code field without a blur update, so one click on Confirm
 
     expect($html)->toContain('wire:model="data.multiFactor.app.recoveryCode"')
         ->not->toMatch('/wire:model\.[a-z.]*="data\.multiFactor\.app\.recoveryCode"/');
-    expect(Filament::getPanel('admin')->getMultiFactorAuthenticationProviders()['app'])->toBeInstanceOf(AppAuthentication::class);
+    expect(Filament::getPanel('app')->getMultiFactorAuthenticationProviders()['app'])->toBeInstanceOf(AppAuthentication::class);
 });
 
 it('asks for the recovery code, not the 6-digit code, once the admin chose to use a recovery code', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     adminEnrolTotp($admin);
 
     $login = $this->panelComponent(Login::class)

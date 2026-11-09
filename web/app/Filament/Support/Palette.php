@@ -100,4 +100,22 @@ final class Palette
         900 => '#0D3D38',
         950 => '#0D2D2A',
     ];
+
+    /**
+     * Orange, the admin panel's accent (since v1.6, P2.1): staff always see at a glance that they are on the platform's
+     * side, not in their own app. White text sits on #CC4E00 (4.5:1); #FFA057 is the text on dark.
+     */
+    public const ORANGE = [
+        50 => '#FFF7ED',
+        100 => '#FFEFD6',
+        200 => '#FFDFB5',
+        300 => '#F5AE73',
+        400 => '#FFA057',
+        500 => '#CC4E00',
+        600 => '#CC4E00',
+        700 => '#B04300',
+        800 => '#8F3A0A',
+        900 => '#462100',
+        950 => '#331E0B',
+    ];
 }

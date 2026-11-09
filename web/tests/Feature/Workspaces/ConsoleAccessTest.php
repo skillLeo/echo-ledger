@@ -3,14 +3,14 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Admin\Pages\Plans;
+use App\Filament\Admin\Pages\ServerUsage;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Pages\Activity;
-use App\Filament\Pages\Plans;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Filament\Pages\RequestLinksPage;
 use App\Filament\Pages\Search;
 use App\Filament\Pages\Security;
-use App\Filament\Pages\ServerUsage;
-use App\Filament\Pages\Settings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Pages\Shares;
 use App\Filament\Pages\Upload;
@@ -41,7 +41,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 beforeEach(function () {
     Fx::fakeRecordingsDisk();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 afterEach(fn () => Fx::cleanupDisks());
 
@@ -85,23 +85,23 @@ const SMALL_CONSOLE = [
 function consoleUrl(string $page): string
 {
     return match ($page) {
-        'library' => CaptureSessionResource::getUrl('index'),
-        'shared' => SharedWithMe::getUrl(),
-        'workspace' => WorkspaceSettings::getUrl(),
-        'usage' => Usage::getUrl(),
-        'profile' => (string) Filament::getPanel('admin')->getProfileUrl(),
-        'projects' => ClientResource::getUrl('index'),
-        'devices' => DeviceResource::getUrl('index'),
-        'upload' => Upload::getUrl(),
-        'search' => Search::getUrl(),
-        'activity' => Activity::getUrl(),
-        'shares' => Shares::getUrl(),
-        'requests' => RequestLinksPage::getUrl(),
-        'deleted' => RecentlyDeleted::getUrl(),
-        'security' => Security::getUrl(),
-        'settings' => Settings::getUrl(),
-        'plans' => Plans::getUrl(),
-        'server-usage' => ServerUsage::getUrl(),
+        'library' => CaptureSessionResource::getUrl('index', panel: 'app'),
+        'shared' => SharedWithMe::getUrl(panel: 'app'),
+        'workspace' => WorkspaceSettings::getUrl(panel: 'app'),
+        'usage' => Usage::getUrl(panel: 'app'),
+        'profile' => (string) Filament::getPanel('app')->getProfileUrl(),
+        'projects' => ClientResource::getUrl('index', panel: 'app'),
+        'devices' => DeviceResource::getUrl('index', panel: 'app'),
+        'upload' => Upload::getUrl(panel: 'app'),
+        'search' => Search::getUrl(panel: 'app'),
+        'activity' => Activity::getUrl(panel: 'app'),
+        'shares' => Shares::getUrl(panel: 'app'),
+        'requests' => RequestLinksPage::getUrl(panel: 'app'),
+        'deleted' => RecentlyDeleted::getUrl(panel: 'app'),
+        'security' => Security::getUrl(panel: 'app'),
+        'settings' => Settings::getUrl(panel: 'admin'),
+        'plans' => Plans::getUrl(panel: 'admin'),
+        'server-usage' => ServerUsage::getUrl(panel: 'admin'),
     };
 }
 
@@ -175,7 +175,7 @@ it('points members and viewers to the apps when Settings closes the console to t
 
     foreach (['member', 'viewer'] as $who) {
         $this->actingAs($t[$who], 'web');
-        $this->get('/admin')->assertOk()->assertSee('Use the EchoLedger apps')->assertSee(route('downloads'));
+        $this->get('/app')->assertOk()->assertSee('Use the EchoLedger apps')->assertSee(route('downloads'));
         foreach (array_keys(SMALL_CONSOLE) as $page) {
             expect($this->get(consoleUrl($page))->status())->toBe($page === 'profile' ? 200 : 403, "{$who} {$page}");
         }
@@ -185,7 +185,7 @@ it('points members and viewers to the apps when Settings closes the console to t
 
     // Owners and admins keep the console.
     $this->actingAs($t['admin'], 'web');
-    $this->get('/admin')->assertOk()->assertDontSee('Use the EchoLedger apps');
+    $this->get('/app')->assertOk()->assertDontSee('Use the EchoLedger apps');
     $this->get(ClientResource::getUrl('index'))->assertOk();
 });
 

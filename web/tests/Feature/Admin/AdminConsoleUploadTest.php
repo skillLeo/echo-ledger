@@ -36,7 +36,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Http::preventStrayRequests();
     Queue::fake();
     $this->isolatedStorage();
@@ -93,7 +93,7 @@ describe('chunked upload', function () {
         }
         $this->postJson(route('admin.uploads.complete', $id))->assertStatus(202)
             ->assertJson(['status' => 'ready', 'title' => 'Acme kickoff call'])
-            ->assertJsonPath('url', route('filament.admin.resources.sessions.view', ['record' => $start->json('session_id')]));
+            ->assertJsonPath('url', route('filament.app.resources.sessions.view', ['record' => $start->json('session_id')]));
 
         $session = CaptureSession::query()->with('primaryRecording')->sole();
         expect($session->source_device)->toBe(SourceDevice::Web)
@@ -266,7 +266,7 @@ describe('access', function () {
         $this->postJson(route('admin.uploads.store'), $body)->assertUnauthorized();
         $this->getJson(route('admin.uploads.show', '01JNOSUCHRECORDING0000000'))->assertUnauthorized();
         $this->deleteJson(route('admin.uploads.destroy', '01JNOSUCHRECORDING0000000'))->assertUnauthorized();
-        $this->post(route('admin.uploads.store'), $body)->assertRedirect(route('filament.admin.auth.login'));
+        $this->post(route('admin.uploads.store'), $body)->assertRedirect(route('filament.app.auth.login'));
 
         $this->actingAs($this->makeRegularUser(), 'web');
         $this->postJson(route('admin.uploads.store'), $body)->assertForbidden();
@@ -283,7 +283,7 @@ describe('duplicates', function () {
 
         uplStart($this, $bytes, 'copy.wav')->assertStatus(409)
             ->assertJson(['code' => 'duplicate_recording', 'message' => 'Already in your Library', 'session_id' => $existing->id, 'title' => 'Earlier copy'])
-            ->assertJsonPath('url', route('filament.admin.resources.sessions.view', ['record' => $existing->id]));
+            ->assertJsonPath('url', route('filament.app.resources.sessions.view', ['record' => $existing->id]));
 
         expect(CaptureSession::query()->count())->toBe(1);
     });
@@ -368,7 +368,7 @@ describe('titles and types', function () {
 
 describe('the list page', function () {
     it('has Upload and the drop zone, wired to the console upload routes', function () {
-        $this->get('/admin/sessions')->assertOk()
+        $this->get('/app/sessions')->assertOk()
             ->assertSee('Upload')
             ->assertSee('Drop sound or video files here')
             ->assertSee('el-upload-pick', false)

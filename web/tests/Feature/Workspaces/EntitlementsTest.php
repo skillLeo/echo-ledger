@@ -6,7 +6,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
-use App\Filament\Pages\Plans;
+use App\Filament\Admin\Pages\Plans;
 use App\Models\AuditEvent;
 use App\Models\Plan;
 use App\Models\User;
@@ -240,7 +240,7 @@ describe('limits', function () {
 });
 
 describe('the Plans page (super admin)', function () {
-    beforeEach(fn () => Filament\Facades\Filament::setCurrentPanel('admin'));
+    beforeEach(fn () => Filament\Facades\Filament::setCurrentPanel('app'));
 
     it('sets a person\'s overrides and clears them again', function () {
         $admin = Fx::superAdmin();

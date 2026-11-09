@@ -38,7 +38,7 @@ uses(ApiClient::class);
 
 beforeEach(function () {
     Fx::fakeRecordingsDisk();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 afterEach(fn () => Fx::cleanupDisks());
 
@@ -314,7 +314,7 @@ describe('invitations', function () {
         $ws = Workspace::query()->findOrFail($owner->current_workspace_id);
         $accountUrl = app(Invitations::class)->invite($ws, $owner, $guest->email, WorkspaceRole::Member);
 
-        $this->get($accountUrl)->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
+        $this->get($accountUrl)->assertRedirect(Filament::getPanel('app')->getLoginUrl());
         // An address without an account goes straight to the sign-up page with the invitation.
         $signUpUrl = app(Invitations::class)->invite($ws, $owner, 'brand.new@example.test', WorkspaceRole::Member);
         expect($signUpUrl)->toContain('invite=');
@@ -556,7 +556,7 @@ describe('handing over and leaving', function () {
         $stranger = Workspace::query()->findOrFail(Fx::user()->current_workspace_id);
         $this->actingAs($user, 'web');
 
-        $this->get('/admin')->assertOk()->assertSee('Second place');
+        $this->get('/app')->assertOk()->assertSee('Second place');
         $this->post(route('admin.workspaces.switch', $second->id))->assertRedirect();
         expect($user->fresh()->current_workspace_id)->toBe($second->id);
 
@@ -567,7 +567,7 @@ describe('handing over and leaving', function () {
     it('hides the switcher from someone in one workspace', function () {
         $this->actingAs(Fx::user(), 'web');
 
-        $this->get('/admin')->assertOk()->assertDontSee('Switch workspace', false);
+        $this->get('/app')->assertOk()->assertDontSee('Switch workspace', false);
     });
 });
 

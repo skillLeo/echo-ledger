@@ -24,7 +24,7 @@ require_once __DIR__.'/Support/account_helpers.php';
 */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
     Http::preventStrayRequests();
     $this->person = Fx::user(['email' => 'farah@example.test', 'password' => 'a-good-password-42']);
@@ -87,7 +87,7 @@ it('asks a new address for the Turnstile check before emailing a code when Turns
     app(CredentialVault::class)->put('turnstile', 'secret_key', '0x4AAAA-secret');
     Http::fake(['challenges.cloudflare.com/*' => Http::sequence()->push(['success' => false])->push(['success' => true])]);
 
-    expect((string) $this->get('/admin/register')->headers->get('Content-Security-Policy'))->toContain('https://challenges.cloudflare.com');
+    expect((string) $this->get('/app/register')->headers->get('Content-Security-Policy'))->toContain('https://challenges.cloudflare.com');
     $page = Livewire::test(Register::class)->fillForm(['email' => 'new.one@example.test'])->call('authenticate')
         ->assertSet('step', Login::STEP_HUMAN)->assertSeeHtml('0x4AAAA-site')->assertDontSeeHtml('0x4AAAA-secret');
     $page->call('authenticate')->assertSet('step', Login::STEP_HUMAN)->assertNotified();
@@ -102,7 +102,7 @@ it('asks a new address for the Turnstile check before emailing a code when Turns
 
 it('skips Turnstile without its keys, and the console policy loads nothing from another origin then', function () {
     app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
-    expect((string) $this->get('/admin/register')->headers->get('Content-Security-Policy'))->not->toContain('cloudflare');
+    expect((string) $this->get('/app/register')->headers->get('Content-Security-Policy'))->not->toContain('cloudflare');
     Livewire::test(Register::class)->fillForm(['email' => 'new.one@example.test'])->call('authenticate')->assertSet('step', Login::STEP_CODE);
 });
 

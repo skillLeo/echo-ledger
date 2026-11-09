@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
-use App\Filament\Pages\AccuracyLab as LabPage;
+use App\Filament\Admin\Pages\AccuracyLab as LabPage;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Jobs\MakeTranscriptViewsJob;
 use App\Jobs\ScoreAccuracyJob;
@@ -45,7 +45,7 @@ function labRun(CaptureSession $session, string $provider, string $text, int $se
 }
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 it('counts the words and letters an engine got wrong, after folding case, punctuation and Urdu spelling', function () {
@@ -105,7 +105,7 @@ it('lets the owner set the reference on the recording page and shows the Lab', f
         ->assertNotified('Reference saved. Run "Compare engines" to score the engines on this recording.');
     expect($session->fresh()->reference_text)->toBe('Hello there');
 
-    $this->get(LabPage::getUrl())->assertOk()->assertSee('How to test the engines')->assertSee($session->displayTitle());
+    $this->get(LabPage::getUrl(panel: 'admin'))->assertOk()->assertSee('How to test the engines')->assertSee($session->displayTitle());
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])->callAction('accuracy_reference_clear');
     expect($session->fresh()->reference_text)->toBeNull();
 });
@@ -163,7 +163,7 @@ it('scores the original transcript and the Roman Urdu view apart', function () {
         ->and(ErrorRates::wer('bhejoon theek zaroor', 'bhejun thik zarur', true))->toBe(0.0)
         ->and(ErrorRates::wer('bhejoon theek', 'bhejun thik'))->toBe(1.0)
         ->and($report['recordings'][0]['scores']['gemini'])->toMatchArray(['wer' => 0.2, 'roman_wer' => 0.0]);
-    $this->get(LabPage::getUrl())->assertOk()->assertSee('Roman Urdu WER')->assertSee('Google Gemini');
+    $this->get(LabPage::getUrl(panel: 'admin'))->assertOk()->assertSee('Roman Urdu WER')->assertSee('Google Gemini');
 });
 
 it('has a run\'s Roman Urdu view made when it has none, and scores it once it is ready', function () {
@@ -304,7 +304,7 @@ it('names no winner and applies nothing while no engine has a score yet', functi
     expect($session->trials()->get()->every(fn (Transcript $run): bool => ($run->meta['score']['roman_pending'] ?? false) === true))->toBeTrue()
         ->and(app(AccuracyLab::class)->useWinners($this->admin->current_workspace_id))->toBe([])
         ->and(app(SettingsRepository::class)->get('routing.final')['ur'])->toBe($routes['ur']);
-    $this->get(LabPage::getUrl())->assertOk()->assertSee('not scored yet');
+    $this->get(LabPage::getUrl(panel: 'admin'))->assertOk()->assertSee('not scored yet');
 });
 
 it('keeps an Arabic recording\'s reference in Arabic, so its winner never reorders the list for mixed calls', function () {

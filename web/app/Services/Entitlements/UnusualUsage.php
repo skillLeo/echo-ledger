@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
@@ -55,8 +56,11 @@ final class UnusualUsage
             }
             $rounded = round($hours, 1);
             $this->audit->record('unusual_usage', $user->id, $user, "{$rounded} hours of recordings in a day (alert above {$limit})");
-            foreach (User::query()->where('is_super_admin', true)->get() as $admin) {
-                Mail::to($admin->email)->queue(new UnusualUsageMail($user->name, $user->email, $rounded, $limit, url('/admin/plans')));
+            // Since v1.6 the staff who can suspend an account hear about it too.
+            $staff = User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
+                ->filter(fn (User $u): bool => StaffAccess::can('customers.manage', $u));
+            foreach ($staff as $admin) {
+                Mail::to($admin->email)->queue(new UnusualUsageMail($user->name, $user->email, $rounded, $limit, url('/admin/customers/'.$user->id)));
                 app(ActivityFeed::class)->post($admin, 'unusual_usage', 'Unusual use', "{$user->name} ({$user->email}) recorded {$rounded} hours in a day.", null, 'heroicon-o-exclamation-triangle');
             }
         } catch (Throwable $e) {

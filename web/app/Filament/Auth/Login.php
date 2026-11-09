@@ -271,7 +271,7 @@ class Login extends BaseLogin
         $codes->countSignUp($ip);
         Filament::auth()->login($user);
         session()->regenerate();
-        $this->redirect(GetTheApps::getUrl(panel: 'admin'));
+        $this->redirect(GetTheApps::getUrl(panel: 'app'));
 
         return null;
     }

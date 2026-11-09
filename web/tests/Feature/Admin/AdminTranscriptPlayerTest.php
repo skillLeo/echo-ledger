@@ -20,7 +20,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** @return list<array<string, mixed>> */
@@ -37,7 +37,7 @@ function adminCallSegments(): array
 
 function adminPlayerPage($test, CaptureSession $session): string
 {
-    return $test->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
+    return $test->get('/app/sessions/'.$session->id)->assertOk()->getContent();
 }
 
 /** The player's root element as a DOM node, so assertions look at structure rather than raw text. */

@@ -33,7 +33,7 @@ final class ConsentPage
         try {
             $this->signIn->assertCanSignIn($user);
         } catch (ApiError $e) {
-            return response()->view('auth.message', ['title' => 'This account cannot connect an app', 'message' => $e->getMessage(), 'back' => url('/admin'), 'backLabel' => 'Open the console'], 403);
+            return response()->view('auth.message', ['title' => 'This account cannot connect an app', 'message' => $e->getMessage(), 'back' => url('/app'), 'backLabel' => 'Open the console'], 403);
         }
         $origins = self::origins($client);
         /** @var list<Scope> $scopes */

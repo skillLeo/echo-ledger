@@ -20,6 +20,6 @@ final class SiteController
     /** `/sign-up` (since v1.6): the console's sign-up page while sign-up is open, else its sign-in page. */
     public function signUp(SignUp $signUp): RedirectResponse
     {
-        return redirect()->to($signUp->open() ? route('filament.admin.auth.register') : route('filament.admin.auth.login'));
+        return redirect()->to($signUp->open() ? route('filament.app.auth.register') : route('filament.app.auth.login'));
     }
 }

@@ -180,7 +180,7 @@ describe('browser sign-in', function () {
         [, $challenge] = pkcePair();
         $query = browserQuery($challenge);
 
-        $this->get('/device/sign-in?'.http_build_query($query))->assertRedirect(route('filament.admin.auth.login'));
+        $this->get('/device/sign-in?'.http_build_query($query))->assertRedirect(route('filament.app.auth.login'));
         $intended = (string) session('url.intended');
         parse_str((string) parse_url($intended, PHP_URL_QUERY), $kept);
         expect($intended)->toStartWith(url('/device/sign-in?'))->and($kept)->toEqual($query);
@@ -255,7 +255,7 @@ describe('browser sign-in', function () {
 
     it('needs a signed-in, confirmed account to approve', function () {
         [, $challenge] = pkcePair();
-        $this->post('/device/sign-in', browserQuery($challenge))->assertRedirect(route('filament.admin.auth.login'));
+        $this->post('/device/sign-in', browserQuery($challenge))->assertRedirect(route('filament.app.auth.login'));
 
         $unconfirmed = User::factory()->unverified()->create();
         $this->actingAs($unconfirmed, 'web')->get('/device/sign-in?'.http_build_query(browserQuery($challenge)))->assertForbidden()->assertSee('Confirm your email');
@@ -271,12 +271,12 @@ describe('browser sign-in', function () {
         // The password changes elsewhere: this session is one from before it, and the console already refuses it.
         $this->person->forceFill(['password' => Hash::make('a-new-good-password-43')])->save();
 
-        $this->post('/device/sign-in', $query)->assertRedirect(route('filament.admin.auth.login'));
+        $this->post('/device/sign-in', $query)->assertRedirect(route('filament.app.auth.login'));
         $this->assertGuest('web');
         expect(DeviceSignInCode::query()->count())->toBe(0);
 
         $this->withSession(['password_hash_web' => 'from before the change'])->actingAs($this->person, 'web')
-            ->get('/device/sign-in?'.http_build_query($query))->assertRedirect(route('filament.admin.auth.login'));
+            ->get('/device/sign-in?'.http_build_query($query))->assertRedirect(route('filament.app.auth.login'));
         $this->assertGuest('web');
     });
 
@@ -322,7 +322,7 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
             'google' => false,
             'sign_up' => false,
             'sign_up_url' => null,
-            'reset_url' => route('filament.admin.auth.password-reset.request'),
+            'reset_url' => route('filament.app.auth.password-reset.request'),
             'browser_sign_in' => true,
             'code' => true,
             'server' => 'https://echoledger.test',
@@ -335,7 +335,7 @@ describe('GET /api/auth/options (since v1.5, Phase 1C)', function () {
         $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('google', true)->assertJsonPath('sign_up', false)->assertJsonPath('sign_up_url', null);
 
         app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
-        $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('sign_up', true)->assertJsonPath('sign_up_url', route('filament.admin.auth.register'));
+        $this->getJson('/api/auth/options')->assertOk()->assertJsonPath('sign_up', true)->assertJsonPath('sign_up_url', route('filament.app.auth.register'));
     });
 
     it('needs no token and reads nothing of anyone', function () {

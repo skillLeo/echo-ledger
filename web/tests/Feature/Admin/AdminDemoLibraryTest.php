@@ -19,7 +19,7 @@ uses(AdminTestHelpers::class);
 
 /** The seeded demo library is the product's own end-to-end sample: phone, desktop and web items with audio and transcripts. */
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->isolatedStorage();
     $this->admin = $this->makeAdmin(['email' => 'owner@echoledger.test']);
     $provider = AppAuthentication::make();
@@ -49,7 +49,7 @@ it('shows every demo session in the list with its source and app label', functio
 
 it('opens every demo session with its transcript, speakers and audio player', function () {
     foreach (CaptureSession::query()->with(['transcripts', 'finalTranscript'])->get() as $session) {
-        $html = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
+        $html = $this->get('/app/sessions/'.$session->id)->assertOk()->getContent();
         $segments = $session->finalTranscript->segments;
 
         expect($html)->toContain('el-player')
@@ -67,7 +67,7 @@ it('labels the speakers Me and Client for calls and a single speaker for the voi
     $call = CaptureSession::query()->where('title', 'Retainer check-in')->firstOrFail();
     $note = CaptureSession::query()->where('source_app', SourceApp::VoiceNote)->firstOrFail();
 
-    $this->get('/admin/sessions/'.$call->id)->assertOk();
+    $this->get('/app/sessions/'.$call->id)->assertOk();
     $callSpeakers = array_unique(array_column(TranscriptPlayerEntry::payload($call)['segments'], 'speaker'));
     $noteSpeakers = array_unique(array_column(TranscriptPlayerEntry::payload($note)['segments'], 'speaker'));
 
@@ -102,7 +102,7 @@ it('lists the demo devices as a phone and a desktop', function () {
 });
 
 it('renders every console page with the demo data in place', function () {
-    foreach (['/admin', '/admin/sessions', '/admin/clients', '/admin/clients/create', '/admin/devices', '/admin/settings', '/admin/api-credentials', '/admin/profile'] as $url) {
+    foreach (['/app', '/app/sessions', '/app/clients', '/app/clients/create', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile'] as $url) {
         $this->get($url)->assertOk();
     }
 });

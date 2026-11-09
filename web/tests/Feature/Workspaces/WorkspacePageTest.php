@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
-beforeEach(fn () => Filament::setCurrentPanel('admin'));
+beforeEach(fn () => Filament::setCurrentPanel('app'));
 
 it('lets an owner add a new person as a member with a one-time password', function () {
     $owner = Fx::user();
@@ -84,11 +84,13 @@ it('switches between the workspaces a person belongs to and only those', functio
     expect($user->fresh()->current_workspace_id)->toBe($second->id);
 });
 
-it('gives the server admin an overview of every workspace without content', function () {
+it('gives the server admin an overview of every workspace without content, on the admin panel since v1.6', function () {
     $admin = Fx::superAdmin();
-    Fx::session(Fx::user(), null, ['title' => 'Private title']);
+    $other = Fx::user();
+    Fx::session($other, null, ['title' => 'Private title']);
     $this->actingAs($admin, 'web');
 
-    Livewire::test(WorkspaceSettings::class)->assertSee('All workspaces')->assertDontSee('Private title');
-    $this->get(WorkspaceSettings::getUrl())->assertOk();
+    Livewire::test(WorkspaceSettings::class)->assertDontSee('All workspaces');
+    $this->get(WorkspaceSettings::getUrl(panel: 'app'))->assertOk()->assertDontSee('All workspaces');
+    $this->get('/admin')->assertOk()->assertSee('All workspaces')->assertSee(e($other->currentWorkspace->name))->assertDontSee('Private title');
 });

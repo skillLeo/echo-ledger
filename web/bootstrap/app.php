@@ -27,7 +27,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // the anchors. Laravel skips this in local and in tests; Security/ReleaseReviewTest.php runs it as production does.
         $middleware->trustHosts(fn (): array => ['^'.preg_quote((string) parse_url((string) config('app.url'), PHP_URL_HOST)).'$'], subdomains: false);
         // API clients and the connector's /mcp get 401 JSON; browsers go to the Filament login.
-        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*', 'mcp') ? null : route('filament.admin.auth.login'));
+        $middleware->redirectGuestsTo(fn (Request $request) => $request->is('api/*', 'mcp') ? null : route('filament.app.auth.login'));
         // nosniff, Referrer-Policy, framing, HSTS and the console CSP on every answer.
         $middleware->append(SecurityHeaders::class);
     })

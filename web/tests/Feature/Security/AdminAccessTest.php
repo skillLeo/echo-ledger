@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Devices\Pages\ListDevices;
@@ -25,7 +25,7 @@ uses(ApiClient::class);
 
 afterEach(fn () => Fx::cleanupDisks());
 
-const SEC_ADMIN_PAGES = ['/admin', '/admin/sessions', '/admin/clients', '/admin/clients/create', '/admin/devices', '/admin/api-credentials', '/admin/settings'];
+const SEC_ADMIN_PAGES = ['/app', '/app/sessions', '/app/clients', '/app/clients/create', '/app/devices', '/admin/api-credentials', '/admin/settings'];
 
 /** A super admin who has enrolled an authenticator app. */
 function secMfaAdmin(): User
@@ -38,7 +38,7 @@ function secMfaAdmin(): User
 
 it('sends guests to the login page for every console page', function (string $path) {
     $this->get($path)->assertRedirect();
-    expect($this->get($path)->headers->get('Location'))->toContain('/admin/login');
+    expect($this->get($path)->headers->get('Location'))->toContain('/app/login');
 })->with(SEC_ADMIN_PAGES);
 
 it('sends guests to the login page for the audio route and never serves bytes', function () {
@@ -48,7 +48,7 @@ it('sends guests to the login page for the audio route and never serves bytes', 
     $response = $this->get('/admin-media/recordings/'.$recording->id);
 
     $response->assertRedirect();
-    expect($response->headers->get('Location'))->toContain('/admin/login');
+    expect($response->headers->get('Location'))->toContain('/app/login');
 });
 
 it('denies every console page to a signed-in user who is neither a super admin nor a workspace member', function (string $path) {
@@ -77,7 +77,7 @@ it('plays a recording for a signed-in super admin while the panel does not requi
     $admin = Fx::superAdmin();
     $recording = Fx::readyRecording(Fx::session($admin), 'owner audio bytes');
     $this->actingAs($admin);
-    $panelRequiresMfa = Filament::getPanel('admin')->isMultiFactorAuthenticationRequired();
+    $panelRequiresMfa = Filament::getPanel('app')->isMultiFactorAuthenticationRequired();
 
     $response = $this->get('/admin-media/recordings/'.$recording->id);
 
@@ -131,13 +131,13 @@ it('answers 404 for audio that is missing, deleted or not ready', function () {
 it('does not let a device token open the console or its media route', function () {
     $token = Fx::token(Fx::device());
 
-    $this->api($token, false)->get('/admin/sessions')->assertRedirect();
+    $this->api($token, false)->get('/app/sessions')->assertRedirect();
     $this->api($token, false)->get('/admin-media/recordings/'.Fx::MISSING_ID)->assertRedirect();
 });
 
 it('locks the login form after five attempts in a minute even when the sixth password is right', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
-    Filament::setCurrentPanel('admin');
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
+    Filament::setCurrentPanel('app');
     RateLimiter::clear('filament');
     Cache::flush();
 
@@ -151,8 +151,8 @@ it('locks the login form after five attempts in a minute even when the sixth pas
 });
 
 it('accepts the correct password when it is the first attempt', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
-    Filament::setCurrentPanel('admin');
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
+    Filament::setCurrentPanel('app');
     Cache::flush();
 
     Livewire::test(Login::class)->fillForm(['email' => $admin->email, 'password' => 'a-long-correct-password'])->call('authenticate');
@@ -163,7 +163,7 @@ it('accepts the correct password when it is the first attempt', function () {
 it('limits wrong two-factor codes so a six-digit code cannot be brute-forced', function () {
     $admin = secMfaAdmin();
     $admin->forceFill(['password' => 'a-long-correct-password'])->save();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Cache::flush();
     $google = app(Google2FA::class);
 
@@ -179,7 +179,7 @@ it('limits wrong two-factor codes so a six-digit code cannot be brute-forced', f
 it('accepts the correct two-factor code on a first attempt', function () {
     $admin = secMfaAdmin();
     $admin->forceFill(['password' => 'a-long-correct-password'])->save();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Cache::flush();
 
     $page = Livewire::test(Login::class)->fillForm(['email' => $admin->email, 'password' => 'a-long-correct-password'])->call('authenticate');
@@ -188,8 +188,8 @@ it('accepts the correct two-factor code on a first attempt', function () {
     expect(Auth::guard('web')->check())->toBeTrue();
 });
 it('gives the same answer for an unknown account and a wrong password', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
-    Filament::setCurrentPanel('admin');
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
+    Filament::setCurrentPanel('app');
     Cache::flush();
 
     $unknown = Livewire::test(Login::class)->fillForm(['email' => 'nobody@example.test', 'password' => 'whatever-123'])->call('authenticate');
@@ -202,7 +202,7 @@ it('gives the same answer for an unknown account and a wrong password', function
 
 it('does not sign a user without a workspace into the console even with the right password', function () {
     $user = withoutWorkspace(Fx::user(['password' => 'a-long-correct-password']));
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Cache::flush();
 
     Livewire::test(Login::class)->fillForm(['email' => $user->email, 'password' => 'a-long-correct-password'])->call('authenticate');
@@ -216,12 +216,12 @@ it('keeps each admin to their own sessions, clients and devices in the console',
     $aliceSession = Fx::session($alice, null, ['title' => 'Alice call']);
     $bobSession = Fx::session($bob, null, ['title' => 'Bob call']);
     $this->actingAs($alice);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(ListCaptureSessions::class)->assertCanSeeTableRecords([$aliceSession])->assertCanNotSeeTableRecords([$bobSession]);
 
-    $this->get('/admin/sessions/'.$bobSession->id)->assertNotFound();
-    $this->get('/admin/sessions/'.$aliceSession->id)->assertOk();
+    $this->get('/app/sessions/'.$bobSession->id)->assertNotFound();
+    $this->get('/app/sessions/'.$aliceSession->id)->assertOk();
 });
 
 it('cannot delete another admin\'s data through the console actions', function () {
@@ -231,7 +231,7 @@ it('cannot delete another admin\'s data through the console actions', function (
     $bobClient = Client::query()->create(['user_id' => $bob->id, 'name' => 'Bob client']);
     $bobDevice = Fx::device($bob);
     $this->actingAs($alice);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     foreach ([
         fn () => Livewire::test(ListCaptureSessions::class)->callTableAction('delete', $bobSession->id),
@@ -256,7 +256,7 @@ it('treats table search and sort input as data', function (string $payload) {
     Fx::session($admin, null, ['title' => 'Quarterly review']);
     Fx::session($admin, null, ['title' => '100% done_deal']);
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     $page = Livewire::test(ListCaptureSessions::class)->searchTable($payload)->assertSuccessful();
     $page->sortTable($payload)->assertSuccessful();
@@ -297,7 +297,7 @@ function secProviderUrlCases(array $urls): array
 it('rejects non-https and non-web schemes for every outbound provider URL in the settings', function (string $field, string $url) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasFormErrors([$field]);
 })->with(secProviderUrlCases(['file:///etc/passwd', 'javascript:alert(1)']));
@@ -305,7 +305,7 @@ it('rejects non-https and non-web schemes for every outbound provider URL in the
 it('rejects plain http, ftp and gopher for every outbound provider URL in the settings', function (string $field, string $url) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasFormErrors([$field]);
 })->with(secProviderUrlCases(['gopher://127.0.0.1:6379/_PING', 'ftp://example.com/x', 'http://example.com/plain-text-key']));
@@ -313,7 +313,7 @@ it('rejects plain http, ftp and gopher for every outbound provider URL in the se
 it('accepts https provider URLs on the provider\'s own hosts in the settings', function (string $field, string $url) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasNoFormErrors();
 })->with([
@@ -329,7 +329,7 @@ it('accepts https provider URLs on the provider\'s own hosts in the settings', f
 it('rejects provider URLs that would send the key to another host (A6.W10)', function (string $field, string $url) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm([$field => $url])->call('save')->assertHasFormErrors([$field]);
     expect(DB::table('settings')->count())->toBe(0);
@@ -348,7 +348,7 @@ it('rejects provider URLs that would send the key to another host (A6.W10)', fun
 it('refuses settings that would break the service', function () {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     foreach ([['retention_days', 0], ['retention_days', 366], ['retention_days', -5], ['retention_days', 'abc'], ['whisper_chunk_seconds', 59], ['whisper_chunk_seconds', 1801], ['display_timezone', 'Mars/Olympus']] as [$field, $value]) {
         Livewire::test(Settings::class)->fillForm([$field => $value])->call('save')->assertHasFormErrors([$field]);
@@ -358,7 +358,7 @@ it('refuses settings that would break the service', function () {
 it('rejects an Azure region that is not a plain region name, because it is placed inside a hostname', function (string $region) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm(['azure_region' => $region])->call('save')->assertHasFormErrors(['azure_region']);
 })->with(['attacker.example/x?', 'x@attacker.example#', 'a b', '../x', 'east.us', "a\nb", 'EASTUS!', str_repeat('a', 80)]);
@@ -366,7 +366,7 @@ it('rejects an Azure region that is not a plain region name, because it is place
 it('accepts ordinary Azure region names', function (string $region) {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(Settings::class)->fillForm(['azure_region' => $region])->call('save')->assertHasNoFormErrors();
 })->with(['centralindia', 'eastus', 'westeurope', 'uksouth']);

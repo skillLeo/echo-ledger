@@ -116,7 +116,7 @@ it('learns the caller as a contact when the recording is filed under a client', 
 });
 
 it('lets the owner keep contacts on the client page', function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $admin = $this->signInAsAdmin();
     $client = Client::factory()->create(['user_id' => $admin->id, 'workspace_id' => $admin->current_workspace_id, 'name' => 'Delta']);
 

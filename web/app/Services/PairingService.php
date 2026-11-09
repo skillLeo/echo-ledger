@@ -27,10 +27,7 @@ final class PairingService
     /** @return string display form "XXXX-XXXX" (shown once) */
     public function createCode(User $user): string
     {
-        $raw = '';
-        for ($i = 0; $i < 8; $i++) {
-            $raw .= self::ALPHABET[random_int(0, 31)];
-        }
+        $raw = self::randomCode();
 
         // The device joins the workspace the user is working in when they make the code (B20).
         app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id, $user->id);
@@ -39,6 +36,41 @@ final class PairingService
             'user_id' => $user->id,
             'code_hash' => hash('sha256', $raw),
             'expires_at' => now()->addMinutes((int) config('echoledger.pairing_code_minutes', 10)),
+        ]);
+
+        return substr($raw, 0, 4).'-'.substr($raw, 4);
+    }
+
+    private static function randomCode(): string
+    {
+        $raw = '';
+        for ($i = 0; $i < 8; $i++) {
+            $raw .= self::ALPHABET[random_int(0, 31)];
+        }
+
+        return $raw;
+    }
+
+    /**
+     * "Sign in again" (since v1.6, docs/API.md "Signing a device in again"): a one-time code bound to one of the person's
+     * own devices that is signed out, revoked or expired. Redeemed like any code, it brings that same row back. Another
+     * person's device is never found (404).
+     *
+     * @return string display form "XXXX-XXXX" (shown once)
+     */
+    public function createBoundCode(User $user, string $deviceId): string
+    {
+        $device = Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->whereKey($deviceId)->firstOrFail();
+        if ($device->status() === Device::ACTIVE) {
+            throw ValidationException::withMessages(['device' => 'This device is signed in already.']);
+        }
+        $raw = self::randomCode();
+        DevicePairingCode::query()->create([
+            'workspace_id' => $device->workspace_id,
+            'user_id' => $user->id,
+            'code_hash' => hash('sha256', $raw),
+            'expires_at' => now()->addMinutes((int) config('echoledger.pairing_code_minutes', 10)),
+            'bound_device_id' => $device->id,
         ]);
 
         return substr($raw, 0, 4).'-'.substr($raw, 4);
@@ -82,11 +114,50 @@ final class PairingService
                 throw ValidationException::withMessages(['pairing_code' => 'This code is invalid, expired, or already used.']);
             }
 
-            [$device, $token] = $this->createDevice($pairing->workspace_id, $pairing->user_id, $attributes, $ip);
+            [$device, $token] = $pairing->bound_device_id !== null
+                ? $this->signInAgain($pairing, $attributes, $ip)
+                : $this->createDevice($pairing->workspace_id, $pairing->user_id, $attributes, $ip);
             $pairing->update(['used_at' => now(), 'device_id' => $device->id]);
 
             return [$device, $token];
         });
+    }
+
+    /**
+     * Brings the code's bound row back (since v1.6): active again, its name and recordings kept, a new token (the old
+     * ones stay revoked), the install id of the request when sent. Only on the row's own platform; the device limit
+     * counts the row once.
+     *
+     * @param  array{name: string, platform: string, app_version?: string|null, os_version?: string|null, install_id?: string|null}  $attributes
+     * @return array{0: Device, 1: NewAccessToken}
+     */
+    private function signInAgain(DevicePairingCode $pairing, array $attributes, ?string $ip): array
+    {
+        $device = Device::query()->withoutGlobalScopes()->where('user_id', $pairing->user_id)->whereKey((string) $pairing->bound_device_id)->lockForUpdate()->first();
+        if (! $device instanceof Device) {
+            throw ValidationException::withMessages(['pairing_code' => 'This code is invalid, expired, or already used.']);
+        }
+        if ($device->platform->value !== $attributes['platform']) {
+            throw ValidationException::withMessages(['pairing_code' => "This code signs in {$device->readableName()} again; use it on that device."]);
+        }
+        if ($device->status() !== Device::ACTIVE) {
+            app(PlanLimits::class)->assertDevices($device->workspace_id, $device->user_id);
+        }
+        $installId = $attributes['install_id'] ?? null;
+        $device->tokens()->delete();
+        $device->forceFill([
+            'app_version' => $attributes['app_version'] ?? $device->app_version,
+            'os_version' => $attributes['os_version'] ?? $device->os_version,
+            'install_id' => is_string($installId) && $installId !== '' ? $installId : $device->install_id,
+            'last_seen_at' => now(),
+            'last_ip' => $ip,
+            'signed_out_at' => null,
+            'signed_out_by' => null,
+        ])->save();
+        $device->signedInAgain = true;
+        app(AuditLog::class)->record('device_signed_in_again', $device->user_id, $device, "Signed in again: {$device->readableName()}");
+
+        return [$device, $this->issueToken($device)];
     }
 
     /**

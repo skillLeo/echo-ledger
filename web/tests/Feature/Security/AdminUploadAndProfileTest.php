@@ -22,7 +22,7 @@ beforeEach(function () {
     $admin = Fx::superAdmin();
     $admin->saveAppAuthenticationSecret('JBSWY3DPEHPK3PXP'); // enrolled, so the console audio route is reachable
     $this->actingAs($admin->fresh());
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 function secWav(int $dataBytes = 3200): string

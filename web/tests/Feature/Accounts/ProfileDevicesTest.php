@@ -25,7 +25,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 uses(InteractsWithDeviceApi::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 
@@ -45,7 +45,7 @@ it('lists the person\'s own devices in every workspace, and nobody else\'s', fun
     Device::factory()->create(['user_id' => $owner->id, 'name' => 'Owner secret tablet']);
     $this->actingAs($member->fresh(), 'web');
 
-    $this->get('/admin/profile')->assertOk()->assertSee('Devices')->assertSee('Member phone')->assertSee('Team laptop')
+    $this->get('/app/profile')->assertOk()->assertSee('Devices')->assertSee('Member phone')->assertSee('Team laptop')
         ->assertSee($team->name)->assertSee('Sign in a device')->assertSee('Sign out everywhere')->assertDontSee('Owner secret tablet');
 });
 
@@ -89,7 +89,7 @@ it('signs out everywhere from the profile: every device, token and browser, this
     $this->actingAs($member, 'web');
 
     Livewire::test(EditProfile::class)->callAction(TestAction::make('signOutEverywhere')->schemaComponent('device-actions', schema: 'content'))
-        ->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
+        ->assertRedirect(Filament::getPanel('app')->getLoginUrl());
 
     // Since v1.6 the rows stay, signed out, with no token left.
     expect(unscoped(fn () => Device::query()->where('user_id', $member->id)->whereNull('signed_out_at')->count()))->toBe(0)
@@ -161,7 +161,7 @@ it('shows a console browser\'s country from the account\'s last sign-in at that 
     KnownBrowser::query()->create(['user_id' => Fx::user()->id, 'token_hash' => str_repeat('f', 64), 'label' => 'Firefox', 'ip' => '203.0.113.5', 'country' => 'PK', 'last_used_at' => now()->addMinute()]);
     $this->actingAs($member, 'web');
 
-    $this->get('/admin/profile')->assertOk()->assertSeeText('203.0.113.5 · AE · active')->assertDontSeeText('203.0.113.5 · PK');
+    $this->get('/app/profile')->assertOk()->assertSeeText('203.0.113.5 · AE · active')->assertDontSeeText('203.0.113.5 · PK');
 });
 
 it('shows the device\'s country when the server\'s proxy names it', function () {
@@ -179,5 +179,5 @@ it('shows the device\'s country when the server\'s proxy names it', function () 
     expect(unscoped(fn () => $device->fresh()->last_country))->toBeNull();
 
     $this->actingAs($member, 'web');
-    $this->get('/admin/profile')->assertOk()->assertSee($device->name);
+    $this->get('/app/profile')->assertOk()->assertSee($device->name);
 });

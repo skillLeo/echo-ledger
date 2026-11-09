@@ -80,7 +80,7 @@ final class AccountDeletion
         $user->forceFill(['deletion_requested_at' => $user->deletion_requested_at ?? now(), 'deletes_at' => $deletesAt])->save();
         $this->sessions->signOutEverywhere($user);
         $date = $deletesAt->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
-        Mail::to($user->email)->queue(new DeletionScheduledMail($date, Filament::getPanel('admin')->getLoginUrl() ?? url('/admin/login')));
+        Mail::to($user->email)->queue(new DeletionScheduledMail($date, Filament::getPanel('app')->getLoginUrl() ?? url('/app/login')));
         $this->audit->record('account_deletion_requested', $user->id, $user, "Account deletion asked for: erased on {$date}");
 
         return $deletesAt;

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
-use App\Filament\Pages\DeviceReports;
+use App\Filament\Admin\Pages\DeviceReports;
 use App\Models\DeviceReport;
 use App\Models\User;
 use App\Models\Workspace;
@@ -33,7 +33,7 @@ function reportBody(array $overrides = []): array
 }
 
 beforeEach(function () {
-    Filament::setCurrentPanel(Filament::getPanel('admin'));
+    Filament::setCurrentPanel(Filament::getPanel('app'));
 });
 
 it('keeps the last report of a device, in that device\'s workspace', function () {
@@ -105,19 +105,19 @@ describe('System → Device reports', function () {
         ]);
     }
 
-    it('shows an owner their workspace and the super admin every device', function () {
+    it('is on the admin panel since v1.6: staff see every device\'s, an owner none', function () {
         $owner = Fx::user();
         $other = Fx::user();
         $mine = reportOf($owner, 'Mine-1');
         $theirs = reportOf($other, 'Theirs-1');
 
-        $this->actingAs($owner, 'web');
-        Livewire::test(DeviceReports::class)->assertCanSeeTableRecords([$mine])->assertCanNotSeeTableRecords([$theirs]);
+        $this->actingAs($owner, 'web')->get(DeviceReports::getUrl(panel: 'admin'))->assertForbidden();
 
         $admin = Fx::user();
         $admin->forceFill(['is_super_admin' => true])->save();
         $this->actingAs($admin, 'web');
-        Livewire::test(DeviceReports::class)->assertCanSeeTableRecords([$mine, $theirs]);
+        Filament::setCurrentPanel('admin');
+        Livewire::test(DeviceReports::class)->assertCanSeeTableRecords([$mine, $theirs])->assertSee('Mine-1')->assertSee('Theirs-1');
     });
 
     it('is closed to members and viewers', function () {
@@ -127,7 +127,7 @@ describe('System → Device reports', function () {
         app(Workspaces::class)->addMember($workspace, $member, WorkspaceRole::Member);
         $member->forceFill(['current_workspace_id' => $workspace->id])->save();
 
-        $this->actingAs($member, 'web')->get(DeviceReports::getUrl())->assertForbidden();
+        $this->actingAs($member, 'web')->get(DeviceReports::getUrl(panel: 'admin'))->assertForbidden();
     });
 
     it('prints what a phone sent as text', function () {

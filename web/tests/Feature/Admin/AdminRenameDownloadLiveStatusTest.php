@@ -24,7 +24,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Http::preventStrayRequests();
     $this->admin = $this->signInAsAdmin();
 });
@@ -123,7 +123,7 @@ describe('rename', function () {
     it('escapes the title it shows with the Rename button', function () {
         $session = CaptureSession::factory()->create(['user_id' => $this->admin->id, 'title' => '<script>alert(1)</script>']);
 
-        expect($this->get('/admin/sessions/'.$session->id)->assertOk()->getContent())
+        expect($this->get('/app/sessions/'.$session->id)->assertOk()->getContent())
             ->not->toContain('<script>alert(1)</script>')
             ->toContain('&lt;script&gt;alert(1)&lt;/script&gt;');
     });

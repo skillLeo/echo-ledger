@@ -16,7 +16,7 @@
             <div class="card">
                 <p style="margin: 0;">The account <strong>{{ $user->email }}</strong> will be erased on <strong>{{ $date }}</strong>.</p>
                 <p class="hint">Changed your mind? Open the console and choose "Keep my account".</p>
-                <div class="actions"><a class="button secondary" href="{{ url('/admin') }}">Open the console</a></div>
+                <div class="actions"><a class="button secondary" href="{{ url('/app') }}">Open the console</a></div>
             </div>
         @else
             <form method="post" action="{{ route('account.delete.store') }}" class="card">
@@ -51,7 +51,7 @@
                 @endif
                 <div class="actions">
                     <button type="submit" class="button danger">Delete my account</button>
-                    <a href="{{ url('/admin') }}">Cancel</a>
+                    <a href="{{ url('/app') }}">Cancel</a>
                 </div>
             </form>
         @endif

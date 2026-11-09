@@ -7,6 +7,7 @@ namespace App\Filament\Pages;
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Models\User;
+use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
@@ -45,19 +46,19 @@ class Activity extends Page
 
     protected string $view = 'filament.pages.activity';
 
+    /** Since v1.6 (P6): only what needs the person, "9+" above nine, as the bell and the apps count it. */
     public static function getNavigationBadge(): ?string
     {
         $user = auth()->user();
-        $unread = $user instanceof User ? $user->unreadNotifications()->count() : 0;
 
-        return $unread > 0 ? (string) $unread : null;
+        return $user instanceof User ? ActionBadge::label(app(ActionBadge::class)->count($user, (int) CurrentWorkspace::id())) : null;
     }
 
     protected function getHeaderActions(): array
     {
         return [
             Action::make('markAllRead')->label('Mark all as read')->color('gray')->icon(Heroicon::OutlinedCheck)
-                ->visible(fn (): bool => self::getNavigationBadge() !== null)
+                ->visible(fn (): bool => $this->user()?->unreadNotifications()->exists() === true)
                 ->action(fn () => $this->user()?->unreadNotifications()->update(['read_at' => now()])),
         ];
     }

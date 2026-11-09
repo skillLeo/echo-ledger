@@ -32,6 +32,7 @@ use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
@@ -44,6 +45,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The profile (since v1.5): name, email, password and two-step sign-in as before, and below them the account's own
@@ -77,6 +79,7 @@ class EditProfile extends BaseEditProfile
                 Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
             ]),
             $this->emailsSection(),
+            $this->supportAccessSection(),
             $this->dataSection(),
         ]);
     }
@@ -207,6 +210,43 @@ class EditProfile extends BaseEditProfile
             ]);
     }
 
+    /**
+     * Profile → Support access (since v1.6, P2.2): EchoLedger's support never sees anyone's recordings, unless the
+     * person lets them for a while, to help with a problem. Until the end staff may open the recordings and their
+     * transcripts; every look is in the person's activity log. Off by default; Stop now ends it at once.
+     */
+    private function supportAccessSection(): Section
+    {
+        return Section::make('Support access')
+            ->description('Support never sees your recordings. To get help with one, you can let support look for a while; every look is in your activity log.')
+            ->schema([
+                Text::make(fn (): string => ($until = $this->account()->support_access_until) !== null && $until->isFuture()
+                    ? 'On until '.$until->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y H:i').'.'
+                    : 'Off.'),
+                Actions::make([
+                    Action::make('grantSupportAccess')->label('Let support look')->icon(Heroicon::OutlinedLifebuoy)->color('gray')
+                        ->modalDescription('Support can open your recordings and their transcripts until the time you choose. You can stop it at any time.')
+                        ->schema([Select::make('hours')->label('For')->required()->selectablePlaceholder(false)->default('24')
+                            ->options(['1' => '1 hour', '24' => '1 day', '168' => '7 days'])])
+                        ->action(function (array $data): void {
+                            $hours = in_array((int) ($data['hours'] ?? 0), [1, 24, 168], true) ? (int) $data['hours'] : 24;
+                            $user = $this->account();
+                            $user->forceFill(['support_access_until' => now()->addHours($hours)])->save();
+                            app(AuditLog::class)->record('support_access_granted', $user->id, $user, "Support access on for {$hours} h");
+                            Notification::make()->title('Support can look until '.$user->support_access_until?->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, H:i'))->success()->send();
+                        }),
+                    Action::make('endSupportAccess')->label('Stop now')->icon(Heroicon::OutlinedXMark)->color('gray')
+                        ->visible(fn (): bool => $this->account()->support_access_until?->isFuture() === true)
+                        ->action(function (): void {
+                            $user = $this->account();
+                            $user->forceFill(['support_access_until' => null])->save();
+                            app(AuditLog::class)->record('support_access_ended', $user->id, $user, 'Support access turned off');
+                            Notification::make()->title('Support access is off')->success()->send();
+                        }),
+                ])->key('support-access-actions'),
+            ]);
+    }
+
     /** One category of emails on or off (Profile → Emails). */
     public function toggleEmail(string $category): void
     {
@@ -250,10 +290,40 @@ class EditProfile extends BaseEditProfile
                             Filament::auth()->logout();
                             session()->invalidate();
                             session()->regenerateToken();
-                            $this->redirect(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+                            $this->redirect(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
                         }),
                 ])->key('device-actions'),
             ]);
+    }
+
+    /**
+     * Profile → Devices → Sign in again (since v1.6, docs/API.md "Signing a device in again"): a one-time code bound to
+     * one of the person's own signed-out, revoked or expired devices; the app redeems it like any code and comes back on
+     * the same row. Only the person's own devices (another's id is 404).
+     */
+    public function signInAgainAction(): Action
+    {
+        return Action::make('signInAgain')
+            ->modalHeading(fn (array $arguments): string => 'Sign in '.$this->ownDevice($arguments)->readableName().' again')
+            ->modalDescription('Open the EchoLedger app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
+            ->fillForm(function (array $arguments, PairingService $pairing): array {
+                try {
+                    $code = $pairing->createBoundCode($this->account(), $this->ownDevice($arguments)->id);
+                } catch (ApiError|ValidationException $e) {
+                    return ['pairing' => ['error' => $e->getMessage()]];
+                }
+                $this->watchPairing($code);
+
+                return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
+            })
+            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+    }
+
+    /** @param  array<string, mixed>  $arguments */
+    private function ownDevice(array $arguments): Device
+    {
+        return Device::query()->withoutGlobalScopes()->where('user_id', $this->account()->id)->whereKey((string) ($arguments['device'] ?? ''))->firstOrFail();
     }
 
     /** @return array<string, mixed> */
@@ -323,6 +393,11 @@ class EditProfile extends BaseEditProfile
         return Section::make('Connected apps')
             ->description('Apps you allowed to read your recordings. They only read; Disconnect ends their access at once.')
             ->schema([
+                // Since v1.6 (P1.4): the plan's badge and the upgrade sheet when the plan leaves the connector out.
+                Text::make(fn (): HtmlString => new HtmlString((PlanLock::badge('connector')?->toHtml() ?? '').' '.e('Asking Claude or ChatGPT about your recordings is not in your plan.')))
+                    ->visible(fn (): bool => ! PlanLock::allows('connector')),
+                Actions::make([PlanLock::sheet('upgradeConnector', 'connector', 'Claude and ChatGPT')])->key('connector-actions')
+                    ->visible(fn (): bool => ! PlanLock::allows('connector')),
                 View::make('filament.profile.connected-apps')->viewData(fn (): array => $this->connectedAppsData()),
             ]);
     }

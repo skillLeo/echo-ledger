@@ -22,7 +22,7 @@ uses(AdminTestHelpers::class);
  * an edit, suggested fixes accepted or dismissed, and the Client and Labels chips.
  */
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
     $this->client = Client::factory()->create(['user_id' => $this->admin->id, 'name' => 'Acme']);
@@ -114,7 +114,7 @@ describe('learning from edits', function () {
     });
 
     it('asks in the player with Yes and No, and never as HTML', function () {
-        $html = $this->get('/admin/sessions/'.recordingCall($this, $this->client)->id)->assertOk()->getContent();
+        $html = $this->get('/app/sessions/'.recordingCall($this, $this->client)->id)->assertOk()->getContent();
 
         expect($html)->toContain('Always write “<strong x-text="r.from"></strong>” as “<strong x-text="r.to"></strong>” for <span x-text="r.client_name"></span>?')
             ->toContain('teach(ri, true)')->toContain('teach(ri, false)');
@@ -129,7 +129,7 @@ describe('suggested fixes', function () {
         ]]);
 
         expect(TranscriptPlayerEntry::payload($session->fresh())['suggestions'])->toBe([['id' => 0, 'line' => 1, 'from' => 'login page', 'to' => 'Login page', 'reason' => 'product name']]);
-        expect($this->get('/admin/sessions/'.$session->id)->getContent())->toContain('decide(s.id, true)')->toContain('decide(s.id, false)')->toContain('data-sugg');
+        expect($this->get('/app/sessions/'.$session->id)->getContent())->toContain('decide(s.id, true)')->toContain('decide(s.id, false)')->toContain('data-sugg');
     });
 
     it('accepts a fix (the words change, as an edit) and dismisses another (nothing changes)', function () {
@@ -181,7 +181,7 @@ it('shows the Show as switch in the phone\'s order, a find box and the docked pl
     $session = recordingCall($this, $this->client);
     $this->readyRecording($session);
 
-    $html = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
+    $html = $this->get('/app/sessions/'.$session->id)->assertOk()->getContent();
 
     expect($html)->toContain('aria-label="Show as"')
         ->and(strpos($html, '>Roman Urdu</button>'))->toBeLessThan(strpos($html, '>اردو</button>'))

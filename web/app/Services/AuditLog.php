@@ -82,12 +82,43 @@ final class AuditLog
         'device_renamed' => 'Device renamed',
         'account_suspended' => 'Account suspended',
         'account_unsuspended' => 'Account suspension lifted',
+        // Since v1.6 (P2): the admin panel and the people it serves.
+        'plan_created' => 'Plan made',
+        'plan_changed' => 'Plan changed',
+        'plan_assigned' => 'Plan assigned',
+        'plan_deleted' => 'Plan deleted',
+        'prices_changed' => 'Usage prices changed',
+        'invitation_revoked' => 'Invitation taken back',
+        'member_left' => 'Left a workspace',
+        'workspace_deleted' => 'Workspace deleted',
+        'workspace_transferred' => 'Workspace handed over',
+        'admin_note_added' => 'Staff note added',
+        'verification_resent' => 'Confirmation email sent again',
+        'mfa_reset_by_staff' => 'Two-step sign-in reset by staff',
+        'signed_out_by_staff' => 'Signed out everywhere by staff',
+        'account_deletion_by_staff' => 'Deletion started by staff',
+        'support_access_granted' => 'Support access turned on',
+        'support_access_ended' => 'Support access turned off',
+        'support_content_viewed' => 'Support opened a recording',
+        'staff_role_changed' => 'Staff or their roles changed',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',
         'connector_token_reused' => 'App disconnected: used token came back',
         'connector_tool_call' => 'Read by a connected app',
     ];
+
+    /** Events whose summary names a recording or a project (its title): staff read the event's name instead. */
+    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed'];
+
+    /**
+     * How the admin panel shows an event (since v1.6, P2.2): metadata only, so an event that names a recording or a
+     * project by its title shows what happened, not the title.
+     */
+    public static function forStaff(AuditEvent $event): string
+    {
+        return in_array($event->event, self::NAMES_CONTENT, true) ? self::EVENTS[$event->event] : $event->summary;
+    }
 
     /**
      * @param  array<string, mixed>  $meta

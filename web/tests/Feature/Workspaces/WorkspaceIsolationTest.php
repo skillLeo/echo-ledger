@@ -118,7 +118,7 @@ it('answers 404 to workspace A on every console route outside Filament that take
 it('never shows workspace B in any console resource, page, widget or global search, and 404s its records', function () {
     $b = isoWorld();
     $this->actingAs($b['alice'], 'web');
-    $panel = Filament::getPanel('admin');
+    $panel = Filament::getPanel('app');
     Filament::setCurrentPanel($panel);
     $records = [CaptureSession::class => $b['session'], Client::class => $b['client'], Device::class => $b['device']];
     $failures = [];

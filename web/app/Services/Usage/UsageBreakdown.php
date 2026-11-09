@@ -179,6 +179,38 @@ final class UsageBreakdown
         return $rows;
     }
 
+    /**
+     * Minutes and US dollars per day in [$from, $to) in the console's time zone (since v1.6, P2.6), for the whole server
+     * or one workspace.
+     *
+     * @return list<array{date: string, label: string, minutes: float, cost_usd: float}>
+     */
+    public function daily(Carbon $from, Carbon $to, ?int $workspaceId = null): array
+    {
+        $zone = $this->settings->displayTimezone();
+        $days = [];
+        for ($day = $from->copy()->setTimezone($zone)->startOfDay(); $day->lt($to) && count($days) < 400; $day->addDay()) {
+            $days[$day->format('Y-m-d')] = ['date' => $day->format('Y-m-d'), 'label' => $day->format('M j'), 'minutes' => 0.0, 'cost_usd' => 0.0];
+        }
+        $prices = $this->prices();
+        $rows = UsageLedgerEntry::query()->withoutGlobalScope(WorkspaceScope::class)
+            ->when($workspaceId !== null, fn ($q) => $q->where('workspace_id', $workspaceId))
+            ->where('occurred_at', '>=', $from->copy()->utc())->where('occurred_at', '<', $to->copy()->utc())
+            ->toBase()->select(['provider', 'source', 'billable', 'billed_ms', 'input_tokens', 'output_tokens', 'cost_usd', 'occurred_at'])->cursor();
+        foreach ($rows as $row) {
+            $key = Carbon::parse($row->occurred_at, 'UTC')->setTimezone($zone)->format('Y-m-d');
+            if (! isset($days[$key])) {
+                continue;
+            }
+            $row->stored_only_usd = (int) $row->billed_ms === 0 && $row->input_tokens === null && $row->output_tokens === null ? (float) $row->cost_usd : 0.0;
+            $line = $this->line($row, self::providerOf((string) $row->provider), $prices);
+            $days[$key]['minutes'] += $line['minutes'];
+            $days[$key]['cost_usd'] += $line['cost_usd'];
+        }
+
+        return array_values(array_map(fn (array $d): array => [...$d, 'minutes' => round($d['minutes'], 1), 'cost_usd' => round($d['cost_usd'], 4)], $days));
+    }
+
     public static function providerOf(string $ledgerKey): string
     {
         return self::SAME_PROVIDER[$ledgerKey] ?? $ledgerKey;

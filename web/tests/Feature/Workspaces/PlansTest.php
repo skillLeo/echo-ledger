@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
-use App\Filament\Pages\Plans;
+use App\Filament\Admin\Pages\Plans;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Plan;
@@ -37,7 +37,7 @@ uses(ApiClient::class);
 
 beforeEach(function () {
     Fx::fakeRecordingsDisk();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 afterEach(fn () => Fx::cleanupDisks());
@@ -66,10 +66,10 @@ function pngUpload(): UploadedFile
 describe('the Plans page', function () {
     it('is only for the super admin', function () {
         $this->actingAs(Fx::user(), 'web');
-        $this->get(Plans::getUrl())->assertForbidden();
+        $this->get(Plans::getUrl(panel: 'admin'))->assertForbidden();
 
         $this->actingAs(Fx::superAdmin(), 'web');
-        $this->get(Plans::getUrl())->assertOk()->assertSee('Personal')->assertSee('Free');
+        $this->get(Plans::getUrl(panel: 'admin'))->assertOk()->assertSee('Personal')->assertSee('Free');
     });
 
     it('creates a plan with limits and features, an empty limit being none', function () {

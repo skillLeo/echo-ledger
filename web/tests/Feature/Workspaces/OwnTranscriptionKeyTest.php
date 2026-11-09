@@ -175,12 +175,12 @@ it('gives new sign-ups the Free plan: the free features, 2 devices, 1 GB, 30 day
 });
 
 it('sets up the key on Profile → Transcription key in three steps, and refuses one Groq does not take', function () {
-    Filament\Facades\Filament::setCurrentPanel('admin');
+    Filament\Facades\Filament::setCurrentPanel('app');
     groqTakesKeys();
     $this->actingAs($this->user, 'web');
     $this->user->forceFill(['consent_seen_at' => now()])->save();
 
-    $this->get('/admin/profile')->assertOk()->assertSee('Transcription key')->assertSee('No key yet');
+    $this->get('/app/profile')->assertOk()->assertSee('Transcription key')->assertSee('No key yet');
     Livewire\Livewire::test(EditProfile::class)
         ->callAction(TestAction::make('addTranscriptionKey')->schemaComponent('transcription-key-actions', schema: 'content'), ['key' => 'gsk_wrong_key_000000000000000000'])
         ->assertNotified('Groq did not accept this key. Copy it again from console.groq.com → API Keys, or make a new one.');
@@ -190,7 +190,7 @@ it('sets up the key on Profile → Transcription key in three steps, and refuses
         ->callAction(TestAction::make('addTranscriptionKey')->schemaComponent('transcription-key-actions', schema: 'content'), ['key' => OWN_KEY])
         ->assertNotified('Your Groq key is saved');
     expect($this->user->fresh()->transcription_key)->toBe(OWN_KEY);
-    expect($this->get('/admin/profile')->assertOk()->assertSee('ending in 3f9a')->getContent())->not->toContain(OWN_KEY);
+    expect($this->get('/app/profile')->assertOk()->assertSee('ending in 3f9a')->getContent())->not->toContain(OWN_KEY);
 });
 
 describe('re-transcribing a Free recording', function () {

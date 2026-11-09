@@ -372,7 +372,7 @@ it('asks Claude for structured JSON with the model from Settings and the refusal
 
 it('offers Show as on the recording page and says when the key is missing', function () {
     Queue::fake();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'آپ کیسے ہیں']],
         ['status' => 'completed', 'language' => 'ur'], transcript: ['language' => 'ur']);

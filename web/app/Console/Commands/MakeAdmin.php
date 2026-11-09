@@ -50,7 +50,7 @@ final class MakeAdmin extends Command
             $workspaces->createFor($user);
         }
 
-        $this->info("Super admin ready: {$email}. Sign in at /admin.");
+        $this->info("Super admin ready: {$email}. Sign in at /app; the admin panel is at /admin.");
         $this->line('Two-factor sign-in is optional and recommended. Set it up on your profile page.');
 
         return self::SUCCESS;

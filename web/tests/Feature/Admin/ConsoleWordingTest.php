@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\Device;
@@ -145,13 +145,13 @@ describe('the word for a folder', function () {
             'app/Stt/TranscriptNormalizer.php' => ['Client'],
             'app/Services/Callers/CallerMatcher.php' => ['Client'],
             'app/Services/Accuracy/ReferenceText.php' => ['(?:speaker(?:[ _-]?[0-9a-z]{1,3})?|me|client)'],
-            'app/Filament/Pages/Settings.php' => ['Both (Me + Client)', 'Client only (half the streaming cost)'],
+            'app/Filament/Admin/Pages/Settings.php' => ['Both (Me + Client)', 'Client only (half the streaming cost)'],
             'app/Services/SettingsSearch.php' => ['engine provider channels client only cost streaming'],
             // The person the notes are about (the heading the apps also show, in docs/API.md).
             'app/Models/CallNote.php' => ['To confirm with the client'],
             // Google's own names for its sign-in credentials, as its console shows them.
             'app/Services/CredentialVault.php' => ['Client ID', 'Client secret'],
-            'app/Filament/Pages/ApiCredentials.php' => ['An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '],
+            'app/Filament/Admin/Pages/ApiCredentials.php' => ['An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '],
             // Words a search answers to, never shown: someone may still type the old word.
             'app/Filament/Support/CommandPalette.php' => ['clients customers folders keyterms vocabulary corrections'],
             // The prompts sent to the AI: nobody reads them, and their JSON input calls it client.
@@ -203,7 +203,7 @@ describe('the word for a folder', function () {
         $this->signInAsAdmin();
 
         $this->get(CaptureSessionResource::getUrl('index'))->assertOk()->assertDontSee('No client')->assertDontSee('Move to client');
-        $this->get(Settings::getUrl())->assertOk()->assertDontSee('filed under a client')->assertDontSee('client workspaces');
+        $this->get(Settings::getUrl(panel: 'admin'))->assertOk()->assertDontSee('filed under a client')->assertDontSee('client workspaces');
     });
 });
 

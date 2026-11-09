@@ -89,9 +89,8 @@ describe('the icons map', function () {
     ]);
 
     it('has every sidebar item outlined at rest and solid when active', function () {
-        $panel = Filament::getPanel('admin');
         $checked = 0;
-        foreach ([...$panel->getPages(), ...$panel->getResources()] as $class) {
+        foreach ([...Filament::getPanel('app')->getPages(), ...Filament::getPanel('app')->getResources(), ...Filament::getPanel('admin')->getPages(), ...Filament::getPanel('admin')->getResources()] as $class) {
             $rest = $class::getNavigationIcon();
             if ($rest === null) {
                 continue; // not in the sidebar
@@ -234,11 +233,11 @@ describe('the brand', function () {
             ->toContain('font-weight: 600')
             ->toContain('letter-spacing: -0.4px')
             ->toContain('color: var(--text)')
-            ->and(Filament::getPanel('admin')->getBrandLogoHeight())->toBe('1.5rem');
+            ->and(Filament::getPanel('app')->getBrandLogoHeight())->toBe('1.5rem');
     });
 
     it('shows the mark on the sign-in page and in the panel, the favicon on every page', function () {
-        $login = $this->get('/admin/login')->assertOk()->getContent();
+        $login = $this->get('/app/login')->assertOk()->getContent();
         expect($login)->toContain('mark.svg')->toContain('favicon.svg')->toContain('Sign in')
             ->and(substr_count($login, '>Terms<'))->toBe(1);
 

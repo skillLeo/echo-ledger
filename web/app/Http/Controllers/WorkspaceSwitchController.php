@@ -25,6 +25,6 @@ final class WorkspaceSwitchController extends Controller
         abort_unless($target instanceof Workspace, 404);
         $workspaces->switchTo($user, $target);
 
-        return redirect()->to(Filament::getPanel('admin')->getUrl() ?? '/admin');
+        return redirect()->to(Filament::getPanel('app')->getUrl() ?? '/app');
     }
 }

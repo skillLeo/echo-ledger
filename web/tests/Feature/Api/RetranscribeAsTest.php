@@ -91,7 +91,7 @@ it('runs a failed transcript again in the new language instead', function () {
 
 it('warns before English only on a recording with Urdu in it, and not on an English one', function () {
     Queue::fake();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $admin = $this->signInAsAdmin();
     $urdu = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'آپ کل کی meeting کب ہے']], ['status' => 'completed', 'language' => 'ur']);
     $this->readyRecording($urdu);
@@ -111,7 +111,7 @@ it('warns before English only on a recording with Urdu in it, and not on an Engl
 
 it('offers Re-transcribe as on the recording page', function () {
     Queue::fake();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $admin = $this->signInAsAdmin();
     $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1000, 'text' => 'Hello']], ['status' => 'completed']);
     $this->readyRecording($session);

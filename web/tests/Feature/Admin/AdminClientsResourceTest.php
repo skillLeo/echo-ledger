@@ -18,7 +18,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 function adminKeytermsManager($test, Client $client)
@@ -30,9 +30,9 @@ it('renders the clients list, create and edit pages', function () {
     $admin = $this->signInAsAdmin();
     $client = Client::factory()->create(['user_id' => $admin->id, 'name' => 'Acme Holdings']);
 
-    $this->get('/admin/clients')->assertOk()->assertSee('Projects');
-    $this->get('/admin/clients/create')->assertOk();
-    $this->get('/admin/clients/'.$client->id.'/edit')->assertOk()->assertSee('Acme Holdings', false);
+    $this->get('/app/clients')->assertOk()->assertSee('Projects');
+    $this->get('/app/clients/create')->assertOk();
+    $this->get('/app/clients/'.$client->id.'/edit')->assertOk()->assertSee('Acme Holdings', false);
 });
 
 it('lists clients with keyterm and session counts, and "auto" for no language', function () {
@@ -198,7 +198,7 @@ it('returns 404 when editing another admin\'s client', function () {
     $this->signInAsAdmin();
     $theirs = Client::factory()->create(['user_id' => $this->makeAdmin()->id]);
 
-    $this->get('/admin/clients/'.$theirs->id.'/edit')->assertNotFound();
+    $this->get('/app/clients/'.$theirs->id.'/edit')->assertNotFound();
 });
 
 it('deletes a client from the list, keeping its sessions but detaching them', function () {
@@ -240,7 +240,7 @@ it('shows the keyterms relation manager on the edit page', function () {
     $admin = $this->signInAsAdmin();
     $client = Client::factory()->create(['user_id' => $admin->id]);
 
-    $this->get('/admin/clients/'.$client->id.'/edit')->assertOk()->assertSee('Keyterms');
+    $this->get('/app/clients/'.$client->id.'/edit')->assertOk()->assertSee('Keyterms');
 });
 
 it('lists a client\'s keyterms and not another client\'s', function () {

@@ -25,7 +25,7 @@ uses(AdminTestHelpers::class);
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Queue::fake();
     app(SettingsRepository::class)->set('display.timezone', 'Asia/Karachi'); // UTC+5
     $this->admin = $this->signInAsAdmin();

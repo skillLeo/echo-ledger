@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Jobs\EngineFallbackJob;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\ProviderRequest;

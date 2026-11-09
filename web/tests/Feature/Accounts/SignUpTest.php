@@ -3,12 +3,12 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
 use App\Filament\Pages\GetTheApps;
-use App\Filament\Pages\Settings;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\EmailCodeMail;
 use App\Mail\InvitationMail;
@@ -27,7 +27,7 @@ use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 
@@ -56,9 +56,9 @@ function consoleSignUp(mixed $page, string $email, string $name = 'Ayesha Malik'
 it('keeps sign-up closed by default: no page and no link on the sign-in page', function () {
     expect(app(SignUp::class)->mode())->toBe(SignUp::NOBODY);
 
-    $this->get('/admin/register')->assertNotFound();
-    expect($this->get('/admin/login')->assertOk()->getContent())->not->toContain('/admin/register');
-    $this->get('/sign-up')->assertRedirect(route('filament.admin.auth.login'));
+    $this->get('/app/register')->assertNotFound();
+    expect($this->get('/app/login')->assertOk()->getContent())->not->toContain('/app/register');
+    $this->get('/sign-up')->assertRedirect(route('filament.app.auth.login'));
     // A new address is told sign-up is closed; nothing is emailed.
     Livewire::test(Login::class)->fillForm(['email' => 'new.person@example.test'])->call('authenticate')->assertHasFormErrors(['email'])->assertSet('step', Login::STEP_EMAIL);
     Mail::assertNotQueued(EmailCodeMail::class);
@@ -66,10 +66,10 @@ it('keeps sign-up closed by default: no page and no link on the sign-in page', f
 
 it('lets anyone make an account when sign-up is open: confirmed by the code, a personal workspace, then Get the apps', function () {
     openSignUp();
-    $this->get('/sign-up')->assertRedirect(route('filament.admin.auth.register'));
-    $this->get('/admin/register')->assertOk()->assertSee('Create your free account');
+    $this->get('/sign-up')->assertRedirect(route('filament.app.auth.register'));
+    $this->get('/app/register')->assertOk()->assertSee('Create your free account');
 
-    consoleSignUp(Livewire::test(Register::class), 'Ayesha@Example.test')->assertHasNoFormErrors()->assertRedirect(GetTheApps::getUrl(panel: 'admin'));
+    consoleSignUp(Livewire::test(Register::class), 'Ayesha@Example.test')->assertHasNoFormErrors()->assertRedirect(GetTheApps::getUrl(panel: 'app'));
 
     $user = User::query()->where('email', 'ayesha@example.test')->firstOrFail();
     expect($user->hasVerifiedEmail())->toBeTrue()
@@ -83,7 +83,7 @@ it('lets anyone make an account when sign-up is open: confirmed by the code, a p
     $this->assertAuthenticatedAs($user, 'web');
     Mail::assertNotQueued(VerifyEmailMail::class);
     expect(AuditEvent::query()->where('event', 'account_created')->where('user_id', $user->id)->exists())->toBeTrue();
-    $this->get(GetTheApps::getUrl(panel: 'admin'))->assertOk()->assertSee('Get the apps')->assertSee('downloads');
+    $this->get(GetTheApps::getUrl(panel: 'app'))->assertOk()->assertSee('Get the apps')->assertSee('downloads');
 });
 
 it('makes the account from the sign-in page too, and needs a name and the Terms', function () {
@@ -100,17 +100,17 @@ it('keeps an unconfirmed account out of the console until its email is confirmed
     $user = User::factory()->unverified()->create();
     $this->actingAs($user, 'web');
 
-    $this->get('/admin')->assertRedirect(route('filament.admin.auth.email-verification.prompt'));
-    $this->get('/admin/sessions')->assertRedirect(route('filament.admin.auth.email-verification.prompt'));
-    $this->get('/admin-upload/recordings/'.str_repeat('0', 26))->assertRedirect(route('filament.admin.auth.email-verification.prompt'));
-    $this->get(route('filament.admin.auth.email-verification.prompt'))->assertOk()->assertSee($user->email);
+    $this->get('/app')->assertRedirect(route('filament.app.auth.email-verification.prompt'));
+    $this->get('/app/sessions')->assertRedirect(route('filament.app.auth.email-verification.prompt'));
+    $this->get('/admin-upload/recordings/'.str_repeat('0', 26))->assertRedirect(route('filament.app.auth.email-verification.prompt'));
+    $this->get(route('filament.app.auth.email-verification.prompt'))->assertOk()->assertSee($user->email);
 
     Livewire::test(EmailVerificationPrompt::class)->callAction('resendNotification');
     Mail::assertQueued(VerifyEmailMail::class, fn (VerifyEmailMail $mail): bool => $mail->hasTo($user->email));
 
-    $this->get(Filament::getPanel('admin')->getVerifyEmailUrl($user))->assertRedirect();
+    $this->get(Filament::getPanel('app')->getVerifyEmailUrl($user))->assertRedirect();
     expect($user->fresh()->hasVerifiedEmail())->toBeTrue();
-    $this->get('/admin')->assertOk();
+    $this->get('/app')->assertOk();
 });
 
 it('signs up by invitation only for the invited address, joins the workspace and starts confirmed', function () {
@@ -122,7 +122,7 @@ it('signs up by invitation only for the invited address, joins the workspace and
     Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail): bool => $mail->hasTo('guest@example.test') && $mail->signUp && $mail->url === $url);
 
     // Without the link the page only explains.
-    $this->get('/admin/register')->assertOk()->assertSee('by invitation');
+    $this->get('/app/register')->assertOk()->assertSee('by invitation');
     // Someone else's address is refused on the sign-in page: sign-up is by invitation.
     Livewire::test(Login::class)->fillForm(['email' => 'someone.else@example.test'])->call('authenticate')->assertHasFormErrors(['email']);
 
@@ -161,7 +161,7 @@ it('refuses an expired or used invitation link', function () {
     parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
     WorkspaceInvitation::query()->update(['expires_at' => now()->subMinute()]);
 
-    $this->get('/admin/register?invite='.$query['invite'])->assertOk()->assertSee('by invitation');
+    $this->get('/app/register?invite='.$query['invite'])->assertOk()->assertSee('by invitation');
     expect(app(Invitations::class)->find($query['invite']))->toBeNull()
         ->and(app(Invitations::class)->find('not-a-token'))->toBeNull();
 });
@@ -206,7 +206,7 @@ it('lets one account add or invite 20 people an hour, so a workspace cannot mail
 
 it('sends a reset link to an account and says the same for an unknown address', function () {
     $user = User::factory()->create(['email' => 'reset.me@example.test']);
-    $this->get('/admin/password-reset/request')->assertOk();
+    $this->get('/app/password-reset/request')->assertOk();
 
     Livewire::test(RequestPasswordReset::class)->fillForm(['email' => 'Reset.Me@example.test'])->call('request')->assertNotified('Check your email');
     Mail::assertQueued(ResetPasswordMail::class, fn (ResetPasswordMail $mail): bool => $mail->hasTo('reset.me@example.test') && str_contains($mail->url, '/password-reset/reset'));
