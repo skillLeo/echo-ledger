@@ -2,6 +2,8 @@ package com.echoledger.mobile.ui
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -34,6 +36,21 @@ class PlanUiTest : ScreenTest() {
             PlanOfferDto("pro", "Pro", "PRO", "#7c3aed", "Rs 2,000 a month", features = listOf("views"))
         )
     )
+
+    @Test
+    fun `All features lists every feature, a check for what the plan has and the badge for the rest (v1_6_2)`() {
+        val mixed = plan.copy(features = plan.features + ("record" to FeatureDto(true, "Record and upload")))
+        show { AllFeatures(vm, mixed) }
+
+        compose.onNodeWithText("Your plan has 1 of 3 features.").assertExists()
+        compose.onNodeWithText("Record and upload").assertExists()
+        compose.onNodeWithContentDescription("Included").assertExists()
+        compose.onNodeWithText("Roman Urdu and English views").assertExists()
+        compose.onAllNodesWithText(PlanState.badgeText("PRO")).assertCountEquals(2)
+
+        compose.onAllNodesWithText(PlanState.badgeText("PRO"))[0].performClick()
+        compose.onNodeWithText("Request upgrade").assertExists()
+    }
 
     @Test
     fun `Request upgrade sends the plan and the message, then shows the payment instructions`() {

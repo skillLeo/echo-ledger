@@ -53,12 +53,13 @@ class ClientWorkspaceTest : ScreenTest() {
     }
 
     @Test
-    fun `a plan without AI notes has no Ask tab, no AI switch and no Make again, and the brief stays`() {
+    fun `a plan without AI notes shows Ask locked, has no AI switch and no Make again, and the brief stays`() {
         runBlocking { app.graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState(aiNotes = false)) } }
         showWorkspace()
 
         compose.onNodeWithText(com.echoledger.mobile.core.PlanState.NO_AI_NOTES).assertExists()
-        assertTrue(compose.onAllNodesWithText("Ask").fetchSemanticsNodes().isEmpty())
+        // Since v1.6.2 the Ask tab is there (locked inside), so a Free person sees what the plans add.
+        assertTrue(compose.onAllNodesWithText("Ask").fetchSemanticsNodes().isNotEmpty())
         assertTrue(compose.onAllNodesWithText("Make again").fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithContentDescription("AI notes").fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("• Login").assertExists()

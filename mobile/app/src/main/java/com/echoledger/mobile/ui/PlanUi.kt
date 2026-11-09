@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -174,6 +175,74 @@ fun PlanSection(vm: MainViewModel, plan: PlanState) {
         if (plan.offers.isNotEmpty()) EchoButton("See plans", { sheet = true }, kind = ButtonKind.Secondary)
     }
     if (sheet) UpgradeSheet(vm, plan, null) { sheet = false }
+    AllFeatures(vm, plan)
+}
+
+/**
+ * A paid feature the plan lacks, shown where it would be (since v1.6.2): its name, what it does and its badge; a tap opens
+ * the plans. Never the feature itself.
+ */
+@Composable
+fun LockedFeature(vm: MainViewModel, plan: PlanState, feature: String, title: String, modifier: Modifier = Modifier) {
+    val lock = plan.lockFor(feature) ?: return
+    var sheet by remember { mutableStateOf(false) }
+    Column(
+        modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Brand.Surface).clickable { sheet = true }.padding(Space.s3),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontWeight = FontWeight.SemiBold, color = Brand.Text, modifier = Modifier.weight(1f))
+            PlanBadge(lock, onClick = { sheet = true })
+        }
+        if (lock.description.isNotBlank()) Text(lock.description, color = Brand.Muted, fontSize = 13.sp)
+    }
+    if (sheet) UpgradeSheet(vm, plan, lock) { sheet = false }
+}
+
+/**
+ * All features (since v1.6.2, Hassam): every feature, the ones this plan has with a check and the others with the badge of
+ * the cheapest plan that has them; a tap on a badge opens the plans for that feature. Locked ones are shown, never hidden.
+ */
+@Composable
+fun AllFeatures(vm: MainViewModel, plan: PlanState) {
+    val list = plan.allFeatures
+    if (list.isEmpty()) return
+    var sheetFor by remember { mutableStateOf<PlanState.Lock?>(null) }
+    SectionCard {
+        Text("All features", fontWeight = FontWeight.SemiBold, color = Brand.Text)
+        Text("Your plan has ${plan.includedCount} of ${list.size} features.", color = Brand.Muted, fontSize = 13.sp)
+        list.forEach { (key, feature) ->
+            val lock = plan.lockFor(key)
+            Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        feature.name.ifBlank { key },
+                        color = if (lock ==
+                            null
+                        ) {
+                            Brand.Text
+                        } else {
+                            Brand.Muted
+                        },
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (feature.description.isNotBlank()) Text(feature.description, color = Brand.Muted, fontSize = 12.sp)
+                }
+                Spacer(Modifier.width(8.dp))
+                if (lock == null) {
+                    Icon(
+                        Icons.Rounded.Check,
+                        contentDescription = "Included",
+                        tint = Brand.Success,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    PlanBadge(lock, onClick = { sheetFor = lock })
+                }
+            }
+        }
+    }
+    sheetFor?.let { lock -> UpgradeSheet(vm, plan, lock) { sheetFor = null } }
 }
 
 private val LIMIT_NAMES = listOf(

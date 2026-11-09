@@ -181,10 +181,10 @@ fun ClientWorkspaceScreen(
         }
     }
     var menuOpen by remember { mutableStateOf(false) }
-    // Since v1.5: a plan without AI notes has no Ask tab (and no AI parts on Notes).
+    // Since v1.6.2 a plan without AI notes still shows the Ask tab, locked with its badge (Free people see what they miss).
     val settings by vm.settings.collectAsState()
     val aiNotesInPlan = settings.plan.aiNotes
-    val tabs = if (aiNotesInPlan) TABS else TABS.dropLast(1)
+    val tabs = TABS
     val shownTab = tab.coerceAtMost(tabs.lastIndex)
     // The project's screens (since v1.5), loaded when the Screens tab is first opened, 60 a page.
     val scope = rememberCoroutineScope()
@@ -370,7 +370,13 @@ fun ClientWorkspaceScreen(
 
             shownTab == 2 -> item(key = "files") { FilesTab(vm, client, w, onChanged = { reload++ }) }
 
-            else -> item(key = "ask") { AskTab(vm, client, onOpenAt) }
+            else -> item(key = "ask") {
+                if (aiNotesInPlan) {
+                    AskTab(vm, client, onOpenAt)
+                } else {
+                    LockedFeature(vm, settings.plan, "ai_notes", "Ask about this project", Modifier.padding(horizontal = Space.screen))
+                }
+            }
         }
     }
 }
