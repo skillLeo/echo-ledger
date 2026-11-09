@@ -43,13 +43,15 @@ return [
     ],
 
     // Android App Links (v1.5): /.well-known/assetlinks.json lets the phone app open /s/, /p/ and /r/ links of this
-    // server. The SHA-256 fingerprints of the signing certificates, comma separated: the debug build's by default; add
-    // the release key's when there is one.
+    // server. The SHA-256 fingerprints of the signing certificates, comma separated: the debug builds' by default (the
+    // Windows laptop's, and since 2026-11-09 this Mac's, which builds the phone app now); add the release key's when
+    // there is one.
     'android_app' => [
         'package' => env('ECHOLEDGER_ANDROID_PACKAGE', 'com.echoledger.mobile'),
         'fingerprints' => array_values(array_filter(array_map('trim', explode(',', (string) env(
             'ECHOLEDGER_ANDROID_FINGERPRINTS',
-            '34:AC:18:19:18:77:F6:C3:12:A2:88:3E:07:C8:40:0B:85:C4:71:62:A4:0F:77:B4:FE:2D:4F:27:08:AF:F1:B6',
+            '34:AC:18:19:18:77:F6:C3:12:A2:88:3E:07:C8:40:0B:85:C4:71:62:A4:0F:77:B4:FE:2D:4F:27:08:AF:F1:B6,'.
+            'D2:17:D1:96:65:25:59:76:0D:C0:A9:F2:38:0A:01:69:FF:1E:07:CC:AF:20:93:FF:6D:EB:59:7A:B1:27:14:15',
         ))))),
     ],
 ];
