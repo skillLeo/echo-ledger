@@ -30,9 +30,9 @@ php artisan serve
 php artisan queue:work --stop-when-empty
 ```
 
-Sign in at `http://localhost:8000/app`. Two-factor sign-in is optional for customers and recommended. Turn it on from
-your profile page; it adds an authenticator-app code and one-time recovery codes. The admin panel at
-`http://localhost:8000/admin` (staff only, from the avatar menu) needs it on.
+Sign in at `http://localhost:8000/app`. Two-factor sign-in is optional and recommended. Turn it on from your
+profile page; it adds an authenticator-app code and one-time recovery codes. Staff need it on to open the admin
+panel at `http://localhost:8000/admin` (from the avatar menu).
 
 Outside `APP_ENV=local` the seeder never uses the demo password: it takes `ADMIN_PASSWORD` (12 or more
 characters) or gives a new admin a random password and prints it once. On a server use
