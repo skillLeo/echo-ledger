@@ -6,6 +6,8 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
 use App\Models\User;
 use App\Services\ActionBadge;
@@ -15,7 +17,6 @@ use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Notifications\DatabaseNotification;
@@ -64,29 +65,25 @@ class Activity extends Page
         ];
     }
 
-    /** Opens what a notification is about and marks it as read. */
+    /**
+     * Opens what a notification is about and marks it as read: the same target as the bell's card (since v1.6.1,
+     * NoticeTargets), a recording only while it is in this Library.
+     */
     public function open(string $id): void
     {
-        $notification = $this->user()?->notifications()->find($id);
-        if (! $notification instanceof DatabaseNotification) {
+        $user = $this->user();
+        $notification = $user?->notifications()->find($id);
+        if (! $user instanceof User || ! $notification instanceof DatabaseNotification) {
             return;
         }
         $notification->markAsRead();
-        $item = ActivityFeed::payload($notification);
-        // What a teammate sent (v1.5) is in their workspace: it opens in Shared with me, as the bell's Open does.
-        if ($item['kind'] === 'shared_with_you') {
-            $this->redirect(SharedWithMe::getUrl(), navigate: true);
+        $target = NoticeTargets::forNotification($notification, $user);
+        if ($target !== null) {
+            $this->redirect($target, navigate: ! str_contains($target, '/admin'));
 
             return;
         }
-        $session = $item['session_id'];
-        if ($session === null) {
-            return;
-        }
-        // The recording page finds only this workspace's recordings that are not deleted; anything else would be a 404.
-        if (CaptureSessionResource::getEloquentQuery()->whereKey($session)->exists()) {
-            $this->redirect(CaptureSessionResource::getUrl('view', ['record' => $session]), navigate: true);
-        } else {
+        if (ActivityFeed::payload($notification)['session_id'] !== null) {
             Notification::make()->title('This recording is no longer in this workspace\'s library.')->warning()->send();
         }
     }

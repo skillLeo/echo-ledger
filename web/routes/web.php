@@ -14,6 +14,7 @@ use App\Http\Controllers\ConsoleUploadController;
 use App\Http\Controllers\DownloadsController;
 use App\Http\Controllers\LegacyConsoleRedirect;
 use App\Http\Controllers\LegalController;
+use App\Http\Controllers\NoticeOpenController;
 use App\Http\Controllers\PasskeyLoginController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
@@ -133,6 +134,10 @@ Route::middleware([AuthenticateSession::class, 'signed', 'throttle:account'])->g
     Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
     Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
 });
+
+// A notification of the bell opened (since v1.6.1): marked read, then where it is about. Only the person's own.
+Route::get('/notices/{notification}/open', NoticeOpenController::class)
+    ->middleware(['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWorkspaceMember::class, AccountGate::class, 'throttle:account'])->name('notices.open');
 
 // The console's workspace switcher (v1.5): only a workspace the person belongs to.
 Route::post('/admin-workspaces/{workspace}/switch', WorkspaceSwitchController::class)->whereNumber('workspace')
