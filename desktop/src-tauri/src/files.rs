@@ -192,6 +192,21 @@ pub async fn pick_client_files(app: &AppHandle) -> Vec<PathBuf> {
     chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
 }
 
+/// The receipt picker (v1.7): screenshots and PDFs of a bank transfer, several at once. Empty when cancelled.
+#[cfg(any(windows, target_os = "macos"))]
+pub async fn pick_receipts(app: &AppHandle) -> Vec<PathBuf> {
+    let chosen = file_dialog(app, |dialog| dialog.set_title("Add payment receipt").add_filter("Screenshot or PDF", &RECEIPT_EXTENSIONS).pick_files()).await;
+    chosen.flatten().unwrap_or_default().iter().map(|f| f.path().to_path_buf()).collect()
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
+pub async fn pick_receipts(_app: &AppHandle) -> Vec<PathBuf> {
+    Vec::new()
+}
+
+/// What the receipt picker offers; the core reads the type from the bytes all the same.
+pub const RECEIPT_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "pdf"];
+
 /// Other systems have no native dialog here: nothing is chosen.
 #[cfg(not(any(windows, target_os = "macos")))]
 pub async fn ask_save_path(_app: &AppHandle, _file_name: &str, _kind: &str) -> Option<PathBuf> {

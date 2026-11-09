@@ -950,6 +950,9 @@ pub struct LimitEntitlement {
     pub limit: Option<f64>,
     #[serde(default, deserialize_with = "lenient")]
     pub used: Option<f64>,
+    /// When the monthly minutes start again (since v1.7, `monthly_minutes` only): the 1st of next month.
+    #[serde(default, deserialize_with = "lenient", skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<String>,
 }
 
 /// The person's own transcription key: whether one is set and its last four characters, never the key.
@@ -995,6 +998,117 @@ pub struct UpgradeRequest {
     pub approved_plan: Option<String>,
     #[serde(default, deserialize_with = "lenient")]
     pub approved_until: Option<String>,
+    /// Payment receipts (since v1.7): the reference to write on the transfer, the amount in whole rupees, how to pay
+    /// and what was sent, and the request's steps so far.
+    #[serde(default, deserialize_with = "lenient")]
+    pub reference_code: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub amount_due_pkr: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub currency: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub payment: Option<PaymentState>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub timeline: Vec<TimelineStep>,
+}
+
+/// How a request is paid for and where it stands (since v1.7, `payment` of the request).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PaymentState {
+    /// `awaiting_payment`, `in_review`, `needs_receipt`, `approved`, `declined` or `cancelled`.
+    #[serde(default)]
+    pub stage: String,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub accounts: Vec<PaymentAccount>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub note: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub review_hours: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub paid_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub reference: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub payer_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub proof_request: Option<ProofRequest>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub proofs: Vec<Proof>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub max_proofs: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub max_bytes: Option<u64>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub accepts: Vec<String>,
+}
+
+/// One bank account the money goes to.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PaymentAccount {
+    #[serde(default, deserialize_with = "lenient")]
+    pub bank: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub branch: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub title: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub account_number: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub iban: Option<String>,
+}
+
+/// Staff asked for a new receipt: why, and when.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProofRequest {
+    #[serde(default, deserialize_with = "lenient")]
+    pub note: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub at: Option<String>,
+}
+
+/// One receipt on a request. Its file is read through the core (`upgrade_request_proof_file`), never by its URL: the
+/// URLs need the device token, which the page never has, so they are not sent on to it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Proof {
+    #[serde(default)]
+    pub id: String,
+    /// `image` or `pdf`.
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub mime: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub bytes: Option<u64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub width: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub height: Option<u32>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub created_at: Option<String>,
+    #[serde(default)]
+    pub locked: bool,
+    #[serde(default, deserialize_with = "lenient", skip_serializing)]
+    pub thumb_url: Option<String>,
+    #[serde(default, deserialize_with = "lenient", skip_serializing)]
+    pub file_url: Option<String>,
+}
+
+/// One step of a request (`requested`, `receipt_sent`, `receipt_requested`, `decided`, `cancelled`) and when.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TimelineStep {
+    #[serde(default)]
+    pub step: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub at: Option<String>,
+}
+
+/// A receipt's file as the page shows it: its type and its bytes in base64, made into a `blob:` URL and let go.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct ProofFile {
+    pub mime: String,
+    pub data: String,
 }
 
 /// `POST /api/promo-codes/check` (since v1.6.2): a valid code for the plan asked, its discount and the prices before
@@ -1043,6 +1157,14 @@ pub struct OfferedPlan {
     pub color: Option<String>,
     #[serde(default, deserialize_with = "lenient")]
     pub price: Option<String>,
+    /// Since v1.7: the price in whole rupees (none when free or not set) and as the apps write it ("Rs 2,999 a month").
+    #[serde(default, deserialize_with = "lenient")]
+    pub price_pkr: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub price_text: Option<String>,
+    /// Up to five lines about the plan, when the server sends them.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub highlights: Vec<String>,
     #[serde(default, deserialize_with = "lenient")]
     pub description: Option<String>,
     #[serde(default, deserialize_with = "lenient_list")]
@@ -1073,6 +1195,7 @@ impl Entitlements {
         for plan in &mut self.plans {
             plan.badge = badge_text(plan.badge.take());
             plan.color = colour(plan.color.take());
+            plan.highlights = std::mem::take(&mut plan.highlights).into_iter().map(|h| h.trim().to_string()).filter(|h| !h.is_empty()).take(5).collect();
         }
         self
     }

@@ -27,6 +27,7 @@ pub mod permissions;
 pub mod plan;
 pub mod projects;
 pub mod readiness;
+pub mod receipts;
 pub mod recovery;
 pub mod refusal;
 pub mod screens;
@@ -464,6 +465,13 @@ pub fn run() {
             commands::upgrade_request_create,
             commands::promo_code_check,
             commands::upgrade_request_latest,
+            commands::upgrade_receipt_pick,
+            commands::upgrade_request_proof,
+            commands::upgrade_request_proof_data,
+            commands::upgrade_request_proof_delete,
+            commands::upgrade_request_proof_file,
+            commands::upgrade_request_paid,
+            commands::upgrade_request_cancel,
             commands::device_rename,
             commands::auth_page_open,
             commands::sign_in_browser_cancel,
