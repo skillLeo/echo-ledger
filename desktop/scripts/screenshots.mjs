@@ -135,6 +135,22 @@ const SCREENS = [
     await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
     await page.waitForSelector("[data-testid=plan-usage]");
   }],
+  // v1.6.2: All features under Plan & usage, for Free (six of fifteen, the badges) and the top plan (all ticked).
+  ["settings-features-free", "settings-free", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
+  }],
+  ["settings-plan-ultra", "settings-ultra", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.waitForSelector("[data-testid=plan-usage]");
+  }],
+  ["settings-features-ultra", "settings-ultra", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
+  }],
   ["settings-key-free", "settings-free", async (page) => {
     await page.waitForSelector(".settings-row");
     await page.getByRole("button", { name: "Transcription key", exact: true }).click();
