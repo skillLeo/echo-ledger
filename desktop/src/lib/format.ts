@@ -36,12 +36,23 @@ export function formatDuration(ms?: number | null): string {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
+/** Account → Preferences (v1.6): times read "9:05 AM" (12-hour, the default) or "09:05" (24-hour). */
+let clock24 = false;
+export function setClock24(on: boolean): void {
+  clock24 = on;
+}
+export function clockTime(date: Date): string {
+  return clock24
+    ? date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" })
+    : date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+}
+
 export function formatWhen(iso?: string, now: Date = new Date()): string {
   if (!iso) return "";
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
   const sameDay = date.toDateString() === now.toDateString();
-  const time = date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+  const time = clockTime(date);
   if (sameDay) return `Today · ${time}`;
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);

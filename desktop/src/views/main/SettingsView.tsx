@@ -2,14 +2,16 @@ import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, listenTo, type AfterCall, type AppStatus, type Corner, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
-import { CallIcon, ChevronRightIcon, KeyboardIcon, MicIcon, SearchIcon, SettingsIcon, SourceAppIcon, TuneIcon, UserIcon } from "../../components/Icons";
+import { BellIcon, CallIcon, DesktopIcon, KeyIcon, LockIcon, MicIcon, PaletteIcon, SearchIcon, SettingsIcon, ShieldIcon, SourceAppIcon, SparkleIcon, UserIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SelectRow, Toggle } from "./SettingsControls";
 import { AutoRecordApps, CaptionStyleCard, MicrophoneCard } from "./CaptureSettings";
 import { DictationCard } from "./DictationSettings";
 import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
-import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
+import { AccountCard, PlanCard, SignInMethodsCard, YourDataCard, useAccount } from "./AccountSettings";
+import { PageHeader, SavedIndicator } from "../../components/Page";
+import { CLOCKS, DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, SIDEBAR_STYLES, type Preferences } from "../../lib/shell";
 import { PlanUsageCard, TranscriptionKeyCard } from "./Upgrade";
 import { useEntitlements } from "../../lib/entitlements";
 import { ConsentNotice } from "./ConsentNotice";
@@ -31,29 +33,39 @@ const ACTIONS: [ShortcutAction, string][] = [
   ["mark", "Bookmark this moment of a recording"],
 ];
 
-type Group = "account" | "general" | "calls" | "voice" | "shortcuts";
-/** The account (v1.5, when the server has accounts), General, then one panel per way of using the app, as on the
- * phone's settings (B19). */
-export const GROUPS: readonly Group[] = ["account", "general", "calls", "voice", "shortcuts"];
+/**
+ * Account (v1.6, P4.5): the account's tabs (Profile · Password & sign-in methods · Devices · Notifications · Preferences ·
+ * Plan & usage · Transcription key · Privacy & data), then this computer's (Calls & meetings · Voice notes & dictation ·
+ * This computer). "All settings" lists every card on one page, and the search finds a setting in any of them.
+ */
+type Group = "profile" | "sign-in" | "devices" | "notifications" | "preferences" | "plan" | "key" | "privacy" | "calls" | "voice" | "computer";
+export const GROUPS: readonly Group[] = ["profile", "sign-in", "devices", "notifications", "preferences", "plan", "key", "privacy", "calls", "voice", "computer"];
 export const GROUP_LABEL: Record<Group, string> = {
-  account: "Account", general: "General", calls: "Calls & meetings", voice: "Voice notes & dictation", shortcuts: "Shortcuts",
+  profile: "Profile", "sign-in": "Password & sign-in methods", devices: "Devices", notifications: "Notifications", preferences: "Preferences",
+  plan: "Plan & usage", key: "Transcription key", privacy: "Privacy & data", calls: "Calls & meetings", voice: "Voice notes & dictation", computer: "This computer",
 };
-const GROUP_SUB: Record<Group, string> = {
-  account: "You, your workspace and plan, your data",
-  general: "This computer, look, lock, privacy, storage",
-  calls: "Call apps, after a call, captions, microphone, screens",
-  voice: "The dictation box, its words and history",
-  shortcuts: "Keys for captions, saving, bookmarks, the app",
+/** The tabs that belong to the account (the rest are this computer's). */
+const ACCOUNT_GROUPS: ReadonlySet<Group> = new Set(["profile", "sign-in", "devices", "notifications", "preferences", "plan", "key", "privacy"]);
+/** The tabs "Find a page" and the palette open (`section` ids). */
+/** Sections other parts of the app open by id, and the tab each is in. */
+const SECTION_GROUP: Record<string, Group> = { "transcription-key": "key", plan: "plan", devices: "devices", shortcuts: "preferences", "your-data": "privacy" };
+export const ACCOUNT_TABS: readonly (readonly [Group, string])[] = GROUPS.map((g) => [g, GROUP_LABEL[g]] as const);
+const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = {
+  all: SettingsIcon, profile: UserIcon, "sign-in": LockIcon, devices: DesktopIcon, notifications: BellIcon, preferences: PaletteIcon, plan: SparkleIcon,
+  key: KeyIcon, privacy: ShieldIcon, calls: CallIcon, voice: MicIcon, computer: DesktopIcon,
 };
-const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = { all: SettingsIcon, account: UserIcon, general: TuneIcon, calls: CallIcon, voice: MicIcon, shortcuts: KeyboardIcon };
 const THEMES: readonly [ThemeChoice, string][] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 /** Keys of the main window itself (not global; they work while EchoLedger is in front). */
 const APP_KEYS: readonly [string, string][] = [
-  ["Ctrl+K", "Search recordings and run commands"],
+  ["Ctrl+K", "Search recordings, pages and commands"],
+  ["/", "Search this page's list"],
+  ["J / K", "Next or previous recording; Enter opens it, X selects it"],
   ["N", "Start or stop a voice note"],
   ["Space", "Play or pause the open recording"],
-  ["J / L", "Back or forward 10 seconds"],
+  ["Shift+← / →", "Back or forward 10 seconds (← / → 5 seconds)"],
   ["Ctrl+F", "Find in the open transcript"],
+  ["[", "Collapse or expand the sidebar"],
+  ["?", "Help & shortcuts"],
 ];
 /** A Mac's own keys (since v1.5): the app menu answers them, and they read as a Mac person expects. */
 const MAC_KEYS: readonly [string, string][] = [
@@ -69,7 +81,7 @@ export function appKeys(platform: string): readonly [string, string][] {
 }
 interface SettingsSection { id: string; group: Group; title: string; keywords: string; node: ReactNode }
 /** Signing this computer out (v1.5; "Unpair" before accounts): the token goes, the recordings waiting here stay. */
-const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here and upload when you sign in again with this account, never into another one.";
+export const SIGN_OUT_CONFIRM = "Sign out of this computer? Recordings waiting to upload stay here and upload when you sign in again with this account, never into another one.";
 
 /** "Signed in to ledger.example.com" (the server's host, as on the phone), or "Not signed in". */
 export function signedInLine(serverUrl: string | null | undefined): string {
@@ -173,15 +185,30 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
 }) {
   const [ownTheme, setOwnTheme] = useState<ThemeChoice>(getThemeChoice);
   const themeChoice = theme ?? ownTheme;
-  const chooseTheme = onTheme ?? ((next: ThemeChoice) => {
+  const setTheme = onTheme ?? ((next: ThemeChoice) => {
     saveThemeChoice(next);
     applyTheme(next);
     setOwnTheme(next);
   });
+  const chooseTheme = (next: ThemeChoice) => {
+    setTheme(next);
+    setSavedAt(Date.now());
+  };
   const [settings, setSettings] = useState<Settings | null>(null);
   const [recording, setRecording] = useState<ShortcutAction | null>(null);
   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
   const [group, setGroup] = useState<Group | "all">("all");
+  // Account → Preferences kept on this computer (v1.6): the sidebar's style, density, the clock.
+  const [prefs, setPrefs] = useState<Preferences>(loadPreferences);
+  // "Saved · just now" (v1.6, P4.4): when a setting here was last saved.
+  const [savedAt, setSavedAt] = useState<number | null>(null);
+  const setPref = (change: Partial<Preferences>) => {
+    const next = { ...prefs, ...change };
+    setPrefs(next);
+    savePreferences(next);
+    window.dispatchEvent(new CustomEvent(PREFERENCES_EVENT, { detail: next }));
+    setSavedAt(Date.now());
+  };
   const [query, setQuery] = useState("");
   // The account (v1.5): none from a server without accounts, and then no Account group.
   const [account, setAccount] = useAccount();
@@ -189,15 +216,20 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
   const entitlements = useEntitlements();
   const showKey = !!entitlements && (entitlements.features.platform_transcription?.enabled === false || !!entitlements.transcription_key?.set
     || entitlements.engines.includes("own_groq"));
-  // A section asked for from elsewhere: its group, then the section itself in view once it is there.
+  // A tab or a section asked for from elsewhere (the avatar menu, Find a page, a recording that needs the key): its
+  // tab, then the section itself in view once it is there.
   useEffect(() => {
     if (!section) return;
     setQuery("");
-    setGroup("account");
+    setGroup((GROUPS as readonly string[]).includes(section.id) ? (section.id as Group) : SECTION_GROUP[section.id] ?? "all");
   }, [section]);
   const shownSection = useRef(0);
   useEffect(() => {
     if (!section || shownSection.current === section.seq) return;
+    if ((GROUPS as readonly string[]).includes(section.id)) {
+      shownSection.current = section.seq;
+      return;
+    }
     const element = document.getElementById(`settings-${section.id}`);
     if (!element) return; // not there yet (the settings or the entitlements are still being read): the next render tries
     shownSection.current = section.seq;
@@ -233,7 +265,10 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
   /** Saves a change; resolves to true when the core accepted it. */
   const patch = async (p: Parameters<typeof api.updateSettings>[0]): Promise<boolean> => {
     const next = await run(() => api.updateSettings(p));
-    if (next) setSettings(next);
+    if (next) {
+      setSettings(next);
+      setSavedAt(Date.now());
+    }
     return !!next;
   };
   const errorFor = (a: ShortcutAction) => status.shortcutErrors.find(([x]) => x === a)?.[1];
@@ -241,24 +276,24 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
   const shortcutConflict = (action: ShortcutAction) => conflictFor(settings.shortcuts[action], status.platform);
   const sections: SettingsSection[] = [
     ...(account ? [
-      { id: "account", group: "account", title: "Your account", keywords: "account email name workspace role two-factor google sign out everywhere",
-        node: <AccountCard account={account} status={status} run={run} onSignedOut={onUnpaired} /> },
+      { id: "account", group: "profile", title: "Your account", keywords: "account profile email name workspace role member",
+        node: <AccountCard account={account} status={status} /> },
+      { id: "sign-in-methods", group: "sign-in", title: "Password & sign-in methods", keywords: "password two-factor 2fa google sign in methods sign out everywhere security",
+        node: <SignInMethodsCard account={account} run={run} onSignedOut={onUnpaired} /> },
       entitlements
-        ? { id: "plan", group: "account", title: "Plan & usage", keywords: "plan usage limits minutes storage devices uploads upgrade request pro business badge features",
+        ? { id: "plan", group: "plan", title: "Plan & usage", keywords: "plan usage limits minutes storage devices uploads upgrade request pro business badge features",
           node: <PlanUsageCard e={entitlements} /> }
-        : { id: "plan", group: "account", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
+        : { id: "plan", group: "plan", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
           node: <PlanCard status={status} /> },
-      ...(entitlements && showKey ? [{ id: "transcription-key", group: "account", title: "Transcription key", keywords: "transcription key groq free own api key",
+      ...(entitlements && showKey ? [{ id: "transcription-key", group: "key", title: "Transcription key", keywords: "transcription key groq free own api key",
         node: <TranscriptionKeyCard e={entitlements} /> }] satisfies SettingsSection[] : []),
-      { id: "your-data", group: "account", title: "Your data", keywords: "export my data download zip delete my account",
+      { id: "your-data", group: "privacy", title: "Your data", keywords: "export my data download zip delete my account",
         node: <YourDataCard account={account} onAccount={setAccount} /> },
     ] satisfies SettingsSection[] : []),
-    { id: "general", group: "general", title: "General", keywords: "start sign in login autostart language transcription project client keyterms", node: (
+    { id: "general", group: "computer", title: "General", keywords: "start sign in login autostart project client keyterms", node: (
       <div className="card">
         <b>General</b>
         <Toggle label="Start EchoLedger when I sign in" on={settings.autostart} onChange={(v) => patch({ autostart: v })} />
-        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={260}
-          onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
         <div className="toggle">
           <div><label htmlFor="settings-client">Project keyterms</label><div id="settings-client-hint" className="small muted">Names and jargon of the selected project improve accuracy.</div></div>
           {/* "No project" sends clientId: null (clears it); a missing key would keep the stored client (A6.DU4). */}
@@ -269,19 +304,35 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
         </div>
       </div>
     ) },
-    { id: "appearance", group: "general", title: "Appearance", keywords: "theme dark light system look", node: (
+    { id: "appearance", group: "preferences", title: "Look and language", keywords: "theme dark light system look sidebar style soft grey density compact comfortable clock 12-hour 24-hour time language transcription", node: (
       <div className="card">
-        <b>Appearance</b>
+        <b>Look and language</b>
         <div className="toggle">
           <span id="settings-theme">Theme</span>
           <span className="segmented" role="group" aria-labelledby="settings-theme">
             {THEMES.map(([value, text]) => <button key={value} type="button" aria-pressed={themeChoice === value} onClick={() => chooseTheme(value)}>{text}</button>)}
           </span>
         </div>
+        <div className="toggle">
+          <span id="settings-sidebar-style">Sidebar style</span>
+          <span className="segmented" role="group" aria-labelledby="settings-sidebar-style">
+            {SIDEBAR_STYLES.map(([value, text]) => <button key={value} type="button" aria-pressed={prefs.sidebarStyle === value} onClick={() => setPref({ sidebarStyle: value })}>{text}</button>)}
+          </span>
+        </div>
+        <div className="toggle">
+          <span id="settings-density">Density</span>
+          <span className="segmented" role="group" aria-labelledby="settings-density">
+            {DENSITIES.map(([value, text]) => <button key={value} type="button" aria-pressed={prefs.density === value} onClick={() => setPref({ density: value })}>{text}</button>)}
+          </span>
+        </div>
+        <SelectRow label="Times" value={prefs.clock} options={CLOCKS} width={220} onChange={(v) => setPref({ clock: v })} />
+        <SelectRow label="Transcription language" value={(settings.transcriptionLanguage ?? "") as "" | TranscriptionLanguage} options={LANGUAGES} width={260}
+          hint="The language recordings are transcribed in. The app itself is in English."
+          onChange={(v) => patch({ transcriptionLanguage: v === "" ? null : v })} />
       </div>
     ) },
-    { id: "notifications", group: "general", title: "Notifications", keywords: "notifications quiet hours bell activity sound test critical recording transcription uploads sharing updates", node: <NotificationsCard settings={settings} patch={patch} run={run} /> },
-    { id: "consent", group: "general", title: "Privacy & consent", keywords: "consent law participants terms privacy policy", node: (
+    { id: "notifications", group: "notifications", title: "Notifications", keywords: "notifications quiet hours bell activity sound test critical recording transcription uploads sharing updates", node: <NotificationsCard settings={settings} patch={patch} run={run} /> },
+    { id: "consent", group: "calls", title: "Privacy & consent", keywords: "consent law participants terms privacy policy", node: (
       <div className="card">
         <b>Privacy &amp; consent</b>
         <ConsentNotice legal={status.plan.known && status.paired} />
@@ -324,7 +375,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     ) },
     { id: "caption-style", group: "calls", title: "Caption style", keywords: "size width opacity colour compact", node: <CaptionStyleCard settings={settings} patch={patch} /> },
     { id: "dictation", group: "voice", title: "Dictation", keywords: "dictation hold talk clean up sounds replacements snippets history", node: <DictationCard settings={settings} patch={patch} /> },
-    { id: "shortcuts", group: "shortcuts", title: "Global shortcuts", keywords: "shortcuts keys hotkeys keyboard", node: (
+    { id: "shortcuts", group: "preferences", title: "Global shortcuts", keywords: "shortcuts keys hotkeys keyboard", node: (
       <div className="card">
         <div className="row"><b>Global shortcuts</b><span className="spacer" /><button className="btn ghost small" onClick={async () => { const s = await run(api.resetShortcuts, "Shortcuts reset"); if (s) setSettings(s); }}>Reset defaults</button></div>
         {ACTIONS.map(([action, label]) => (
@@ -344,7 +395,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
         <p className="small muted">A shortcut used by another EchoLedger action is refused; one used by another app is reported here.</p>
       </div>
     ) },
-    { id: "app-keys", group: "shortcuts", title: "In the app", keywords: "keys search voice note play pause find", node: (
+    { id: "app-keys", group: "preferences", title: "In the app", keywords: "keys search voice note play pause find", node: (
       <div className="card">
         <b>In the app</b>
         {appKeys(status.platform).map(([keys, what]) => (
@@ -352,59 +403,66 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
         ))}
       </div>
     ) },
-    { id: "lock", group: "general", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
+    { id: "lock", group: "computer", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
     // Account → Devices (v1.6, P3) when the server has accounts: rename any, revoke the others.
-    { id: "devices", group: account ? "account" : "general", title: "Devices", keywords: "devices rename revoke signed in paired activity audit", node: <DevicesCard run={run} /> },
-    { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
+    { id: "devices", group: "devices", title: "Devices", keywords: "devices rename revoke signed in paired activity audit", node: <DevicesCard run={run} /> },
+    { id: "this-device", group: "computer", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>{status.deviceName}</b><div className="small muted" data-testid="signed-in-to">{signedInLine(status.serverUrl)}</div></div><span className="spacer" />
           <button className="btn danger" onClick={async () => { if (window.confirm(SIGN_OUT_CONFIRM)) { const s = await run(api.unpair); if (s) onUnpaired(s); } }}>Sign out of this computer…</button>
         </div>
       </div>
     ) },
-    { id: "storage", group: "general", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard limitBytes={status.plan.storageBytes} /> },
+    { id: "storage", group: "computer", title: "Storage and retention", keywords: "storage disk retention deleted bin", node: <StorageCard limitBytes={status.plan.storageBytes} /> },
     // The Mac's own check (since v1.5): on any other computer this section does not exist.
     ...(status.platform === "macos" ? [
-      { id: "help", group: "general", title: "Help & diagnostics", keywords: "help diagnostics run mac check permissions microphone system audio screen recording report admin",
+      { id: "help", group: "computer", title: "Help & diagnostics", keywords: "help diagnostics run mac check permissions microphone system audio screen recording report admin",
         node: <MacCheckCard status={status} /> },
     ] satisfies SettingsSection[] : []),
-    { id: "about", group: "general", title: "About", keywords: "version server updates check for updates restart export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
+    { id: "about", group: "computer", title: "About", keywords: "version server updates check for updates restart export import backup settings file", node: <AboutCard status={status} run={run} onImported={setSettings} /> },
   ];
   const q = query.trim().toLowerCase();
-  // Panels in their order (General first), the cards of a panel in the order they are listed.
+  // The tabs that have something on this computer and server (an older server has no account tabs).
+  const present = new Set(sections.map((sec) => sec.group));
+  const shown = GROUPS.filter((g) => present.has(g));
+  const current: Group | "all" = group !== "all" && !present.has(group) ? "all" : group;
+  // Tabs in their order, the cards of a tab in the order they are listed.
   const visible = sections
-    .filter((s) => (q ? `${s.title} ${s.keywords} ${GROUP_LABEL[s.group]}`.toLowerCase().includes(q) : group === "all" || s.group === group))
+    .filter((sec) => (q ? `${sec.title} ${sec.keywords} ${GROUP_LABEL[sec.group]}`.toLowerCase().includes(q) : current === "all" || sec.group === current))
     .sort((a, b) => GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group));
+  const tabRow = (g: Group | "all") => {
+    const Icon = GROUP_ICON[g];
+    const active = !q && current === g;
+    return (
+      <button key={g} type="button" className={`settings-row ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}
+        onClick={() => { setGroup(g); setQuery(""); }}>
+        <span className="settings-row-icon"><Icon size={18} /></span>
+        <span className="settings-row-title">{g === "all" ? "All settings" : GROUP_LABEL[g]}</span>
+      </button>
+    );
+  };
+  const title = q || current === "all" ? "Account" : GROUP_LABEL[current];
 
   return (
     <>
-      <h1 className="page-title">Settings</h1>
-      <p className="page-sub">{signedInLine(status.serverUrl)} {status.pinned ? "· secure connection" : "· connection not verified"}</p>
+      <PageHeader crumbs={current !== "all" && !q ? [{ label: "Account", onOpen: () => { setGroup("all"); setQuery(""); } }, { label: GROUP_LABEL[current] }] : []}
+        title={title} subtitle={`${signedInLine(status.serverUrl)} ${status.pinned ? "· secure connection" : "· connection not verified"}`}
+        actions={<SavedIndicator at={savedAt} />} />
       <div className="settings-layout">
         <nav className="settings-nav" aria-label="Settings groups">
           <label className="searchbox compact"><SearchIcon size={16} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search settings" aria-label="Search settings" /></label>
-          {(["all", ...GROUPS.filter((g) => g !== "account" || account)] as const).map((g) => {
-            const Icon = GROUP_ICON[g];
-            const active = !q && group === g;
-            return (
-              <button key={g} type="button" className={`settings-row ${active ? "active" : ""}`} aria-current={active ? "page" : undefined}
-                aria-labelledby={`settings-row-${g}`} aria-describedby={`settings-sub-${g}`} onClick={() => { setGroup(g); setQuery(""); }}>
-                <span className="settings-row-icon"><Icon size={20} /></span>
-                <span className="settings-row-main">
-                  <span className="settings-row-title" id={`settings-row-${g}`}>{g === "all" ? "All settings" : GROUP_LABEL[g]}</span>
-                  <span className="settings-row-sub" id={`settings-sub-${g}`}>{g === "all" ? "Every setting on one page" : GROUP_SUB[g]}</span>
-                </span>
-                <ChevronRightIcon size={16} />
-              </button>
-            );
-          })}
+          {tabRow("all")}
+          {shown.some((g) => ACCOUNT_GROUPS.has(g)) && <div className="settings-nav-head">Account</div>}
+          {shown.filter((g) => ACCOUNT_GROUPS.has(g)).map(tabRow)}
+          <div className="settings-nav-head">This computer</div>
+          {shown.filter((g) => !ACCOUNT_GROUPS.has(g)).map(tabRow)}
         </nav>
         <div className="settings-content">
           {visible.length === 0 && <div className="empty">No setting matches “{query}”.</div>}
-          {visible.map((s, i) => (
-            <section key={s.id} id={`settings-${s.id}`} aria-label={s.title}>
-              {(i === 0 || visible[i - 1].group !== s.group) && <h2 className="settings-group-title">{GROUP_LABEL[s.group]}</h2>}
-              {s.node}
+          {visible.map((sec, i) => (
+            <section key={sec.id} id={`settings-${sec.id}`} aria-label={sec.title}>
+              {(current === "all" || q) && (i === 0 || visible[i - 1].group !== sec.group) && <h2 className="settings-group-title">{GROUP_LABEL[sec.group]}</h2>}
+              {sec.node}
             </section>
           ))}
         </div>

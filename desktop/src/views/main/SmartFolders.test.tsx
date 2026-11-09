@@ -59,7 +59,8 @@ describe("the Library on a smart folder", () => {
     await waitFor(() => expect(titles()).toEqual(["Imported memo"]));
     expect(callsOf("library_folder")).toEqual([{ folder: "imported" }]);
     expect(screen.getByText(/1 recording in this smart folder/)).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Show every recording" }));
+    // The breadcrumbs go back to every recording (v1.6, P4.4).
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByRole("button", { name: "Library" }));
     expect(onSmartFolder).toHaveBeenCalledWith(null);
   });
 
@@ -208,7 +209,7 @@ describe("Shared with me", () => {
   });
 });
 
-describe("the sidebar's smart folders", () => {
+describe("the Library's column of smart folders (v1.6, P4.2)", () => {
   function appBackend() {
     libraryBackend();
     respond("app_status", makeStatus());
@@ -222,14 +223,17 @@ describe("the sidebar's smart folders", () => {
     respondWith("library_folder", ({ folder }) => (folder === "inbox" ? [ITEMS[1], ITEMS[2]] : []));
     render(<MainApp />);
     const folders = await screen.findByRole("list", { name: "Smart folders" });
-    // Shared with me is listed with nothing counted in it: a project sent with no recordings counts none.
-    expect(within(folders).getAllByRole("button").map((b) => b.textContent)).toEqual(["Inbox2", "WhatsApp1", "Imported1", "Shared with me"]);
+    // All, Waiting, Pinned and Failed uploads first (v1.6, P4.2), then the folders that hold something; Shared with me
+    // is listed with nothing counted in it: a project sent with no recordings counts none.
+    await within(folders).findByRole("button", { name: "Inbox" });
+    expect(within(folders).getAllByRole("button").map((b) => b.querySelector(".place-name")?.textContent)).toEqual(["All", "Waiting", "Pinned", "Failed uploads", "Inbox", "WhatsApp", "Imported", "Shared with me"]);
+    expect(within(folders).getAllByRole("button").slice(4).map((b) => b.textContent)).toEqual(["Inbox2", "WhatsApp1", "Imported1", "Shared with me"]);
     expect(callsOf("library_views")[0].tz).toEqual(expect.any(String));
     fireEvent.click(within(folders).getByRole("button", { name: "Inbox" }));
     expect(await screen.findByRole("heading", { name: "Inbox" })).toBeInTheDocument();
     expect(within(folders).getByRole("button", { name: "Inbox" })).toHaveAttribute("aria-current", "true");
     await waitFor(() => expect(titles()).toEqual(["WhatsApp call", "Imported memo"]));
-    fireEvent.click(screen.getByRole("button", { name: "Library" }));
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByRole("button", { name: "Library" }));
     expect(await screen.findByRole("heading", { name: "Library" })).toBeInTheDocument();
     await waitFor(() => expect(titles()).toEqual(["Zoom with Acme", "WhatsApp call", "Imported memo"]));
   });
@@ -242,7 +246,7 @@ describe("the sidebar's smart folders", () => {
     render(<MainApp />);
     await screen.findByRole("heading", { name: "Library" });
     await flushAsync();
-    expect(screen.queryByRole("list", { name: "Smart folders" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     const input = within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
     fireEvent.change(input, { target: { value: "shared with me" } });
@@ -258,7 +262,8 @@ describe("the sidebar's smart folders", () => {
     await screen.findByRole("heading", { name: "Library" });
     await flushAsync();
     expect(callsOf("library_views")).toHaveLength(1);
-    expect(screen.queryByRole("list", { name: "Smart folders" })).not.toBeInTheDocument();
+    // The column keeps All, Waiting, Pinned and Failed uploads; no smart folder.
+    expect(within(screen.getByRole("list", { name: "Smart folders" })).queryByRole("button", { name: "Inbox" })).not.toBeInTheDocument();
   });
 
   it("counts again shortly after the library changes", async () => {

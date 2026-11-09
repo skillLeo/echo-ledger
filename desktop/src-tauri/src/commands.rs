@@ -486,7 +486,9 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
 }
 
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
-const SERVER_PAGES: [&str; 4] = ["terms", "privacy", "account/delete", "downloads"];
+/// The server's pages the apps open in the browser (v1.6 adds the console's admin panel, workspace and profile pages,
+/// for the avatar menu, the workspace switcher and Account → Password & sign-in methods).
+const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "admin/workspace", "admin/profile"];
 
 /// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
 /// signed-in server.

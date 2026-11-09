@@ -53,34 +53,49 @@ describe("system-style settings", () => {
   }
   const groupTitles = () => [...document.querySelectorAll(".settings-group-title")].map((h) => h.textContent);
 
-  it("shows General and every mode panel under its heading, then one panel at a time", async () => {
+  it("shows every tab under its heading, then one tab at a time with its name as the title (v1.6 Account tabs)", async () => {
     await setup();
-    expect(groupTitles()).toEqual(["General", "Calls & meetings", "Voice notes & dictation", "Shortcuts"]);
+    // A server without accounts: no Profile, Plan or Privacy tabs; the rest are there.
+    expect(groupTitles()).toEqual(["Devices", "Notifications", "Preferences", "Calls & meetings", "Voice notes & dictation", "This computer"]);
     fireEvent.click(screen.getByRole("button", { name: "Calls & meetings" }));
-    expect(groupTitles()).toEqual(["Calls & meetings"]);
+    expect(groupTitles()).toEqual([]);
+    expect(screen.getByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByRole("button", { name: "Account" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAccessibleDescription("Call apps, after a call, captions, microphone, screens");
     expect(screen.getByRole("switch", { name: "Auto-record calls" })).toBeInTheDocument();
     expect(screen.getByRole("combobox", { name: "Caption position" })).toBeInTheDocument();
     expect(screen.queryByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toBeInTheDocument();
   });
 
-  it("changes the theme from General → Appearance", async () => {
+  it("changes the theme from Preferences, and says it saved", async () => {
     window.localStorage.clear();
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
     const theme = screen.getByRole("group", { name: "Theme" });
     fireEvent.click(within(theme).getByRole("button", { name: "Dark" }));
     expect(within(theme).getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(window.localStorage.getItem("echoledger-theme")).toBe("dark");
+    expect(screen.getByTestId("saved")).toHaveTextContent("Saved · just now");
   });
 
-  it("lists the keys of the app itself under Shortcuts", async () => {
+  it("keeps the sidebar style, density and clock on this computer (Preferences)", async () => {
+    window.localStorage.clear();
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Sidebar style" })).getByRole("button", { name: "Soft grey" }));
+    fireEvent.click(within(screen.getByRole("group", { name: "Density" })).getByRole("button", { name: "Compact" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Times" }), { target: { value: "24" } });
+    expect(document.documentElement.dataset.sidebar).toBe("grey");
+    expect(document.documentElement.dataset.density).toBe("compact");
+    expect(JSON.parse(window.localStorage.getItem("echoledger-preferences") ?? "{}")).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
+  });
+
+  it("lists the keys of the app itself under Preferences", async () => {
+    await setup();
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
     const keys = screen.getByRole("region", { name: "In the app" });
-    for (const what of ["Search recordings and run commands", "Start or stop a voice note", "Play or pause the open recording", "Back or forward 10 seconds"]) {
+    for (const what of ["Search recordings, pages and commands", "Start or stop a voice note", "Play or pause the open recording", "Back or forward 10 seconds (← / → 5 seconds)", "Collapse or expand the sidebar"]) {
       expect(within(keys).getByText(what)).toBeInTheDocument();
     }
   });
@@ -89,14 +104,14 @@ describe("system-style settings", () => {
     await setup();
     fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "quiet" } });
     expect(screen.getByRole("region", { name: "Notifications" })).toBeInTheDocument();
-    expect(groupTitles()).toEqual(["General"]);
+    expect(groupTitles()).toEqual(["Notifications"]);
     fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "zzzz" } });
     expect(screen.getByText("No setting matches “zzzz”.")).toBeInTheDocument();
   });
 
   it("warns when a shortcut takes over a browser shortcut", async () => {
     await setup(makeSettings({ shortcuts: { toggle_saving: "CommandOrControl+Shift+R", copy_last2_min: "CommandOrControl+Alt+Shift+C" } as never }));
-    fireEvent.click(screen.getByRole("button", { name: "Shortcuts" }));
+    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
     expect(screen.getByText(/This shortcut also hard-reloads the page in browsers/)).toBeInTheDocument();
     expect(screen.getAllByText(/This shortcut also/)).toHaveLength(1);
   });
@@ -105,7 +120,7 @@ describe("system-style settings", () => {
     respond("settings_export", "C:\\Users\\me\\Downloads\\EchoLedger settings 2026-10-28.json");
     respondWith("settings_import", ({ text }) => ({ ...makeSettings(), captionLines: JSON.parse(text as string).settings.captionLines }));
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "General" }));
+    fireEvent.click(screen.getByRole("button", { name: "This computer" }));
     expect(screen.getByRole("region", { name: "About" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Export settings" }));
     await waitFor(() => expect(callsOf("settings_export")).toHaveLength(1));

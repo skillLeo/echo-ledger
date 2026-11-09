@@ -4,22 +4,27 @@ import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type Ap
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
-import { actionCount, badgeLabel, badgeSpoken } from "../../lib/badge";
+import { actionCount } from "../../lib/badge";
+import { COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL } from "../../lib/shell";
+import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
+import { TopBar } from "./TopBar";
+import { HelpDialog } from "./HelpDialog";
+import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
+import { HomeView } from "./HomeView";
+import { SharedView } from "./SharedView";
+import { RequestLinksSheet } from "./RequestLinks";
+import { ACCOUNT_TABS, SIGN_OUT_CONFIRM } from "./SettingsView";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
-import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MonitorIcon, MoonIcon, RecordIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
-import { BrandMark } from "../../components/BrandMark";
-import { applyTheme, getThemeChoice, nextThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
+import { AlertIcon, CloseIcon } from "../../components/Icons";
+import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { UpdateBanner } from "./UpdateSettings";
 import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
-import { RecordView } from "./RecordView";
 import { SettingsView } from "./SettingsView";
 import { ProjectsView, useExpandedProjects } from "./ProjectsView";
-import { ProjectTree } from "./ProjectTree";
-import { SmartFolderList } from "./SmartFolders";
-import { shownFolders } from "../../lib/folders";
+import { folderLabel, LIBRARY_VIEWS, libraryPlaces, shownFolders, type LibraryPlace, type LibraryView as LibraryViewKey } from "../../lib/folders";
 import { CommandPalette } from "./CommandPalette";
 import { ImportSheet } from "./ImportSheet";
 import { useWindowShown } from "../../lib/visibility";
@@ -27,28 +32,18 @@ import { fileDropClaim } from "../../lib/dropTarget";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
-import { ReadyChip } from "./ReadyCheck";
-import type { OneSided } from "../../lib/ipc";
+import type { Account, OneSided } from "../../lib/ipc";
 import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 
 type Tab = MainTab;
-const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
-/** The pages, with the phone's metaphors: outlined at rest, filled on the active page (DESIGN_SYSTEM.md "Icons"). */
-const NAV: readonly [Tab, string, typeof LibraryIcon][] = [
-  ["library", "Library", LibraryIcon],
-  ["projects", "Projects", FolderIcon],
-  ["record", "Record", RecordIcon],
-  ["activity", "Activity", BellIcon],
-  ["settings", "Settings", SettingsIcon],
-];
+/** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
+const TABS: readonly Tab[] = ["record", "library", "projects", "activity", "shared", "settings"];
 /** How long after the library changed the sidebar's project counts are read again (changes come in bursts). */
 const RELOAD_AFTER_CHANGE_MS = 800;
 
 const BUDGET_REACHED = "Monthly transcription limit reached. Recordings are kept but not transcribed.";
 const BUDGET_WARN = "You have used 80% of this month's transcription limit.";
-/** Whether the sidebar shows icons only; kept on this computer like the theme. */
-const SIDEBAR_KEY = "echoledger-sidebar";
 
 /**
  * Where a recording an app link stands for opens (the server answers `session` for this workspace's recordings and for
@@ -72,23 +67,31 @@ export function typingIn(target: EventTarget | null): boolean {
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return window.localStorage.getItem(SIDEBAR_KEY) === "collapsed";
-    } catch {
-      return false;
-    }
-  });
-  const toggleSidebar = () => {
+  // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
+  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
+  const toggleSidebar = useCallback(() => {
     setCollapsed((c) => {
-      try {
-        window.localStorage.setItem(SIDEBAR_KEY, c ? "expanded" : "collapsed");
-      } catch {
-        // Storage can be unavailable; the choice then lasts until the app restarts.
-      }
+      saveCollapsed(!c);
       return !c;
     });
-  };
+  }, []);
+  // The page's width (the window's less the sidebar's) decides whether the Library's columns fit (styles.css).
+  const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
+  useEffect(() => {
+    const resized = () => setWindowWidth(window.innerWidth);
+    window.addEventListener("resize", resized);
+    return () => window.removeEventListener("resize", resized);
+  }, []);
+  const resizeSidebar = useCallback((width: number, done: boolean) => {
+    setSidebarWidth(width);
+    if (done) saveSidebarWidth(width);
+  }, []);
+  const [help, setHelp] = useState(false);
+  const [requestSheet, setRequestSheet] = useState(false);
+  // "+ New project" from the top bar or the Projects column: the Projects page opens its dialog.
+  const [projectRequest, setProjectRequest] = useState<{ kind: "new"; seq: number } | null>(null);
+  const [account, setAccount] = useState<Account | null | undefined>(undefined);
   // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
   const [activityItems, setActivityItems] = useActivityItems();
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
@@ -99,6 +102,9 @@ export default function MainApp() {
   // Smart folders (since v1.5): their counts for the sidebar and the one the Library shows (null: every recording).
   const [views, setViews] = useState<LibraryViews | null>(null);
   const [libraryFolder, setLibraryFolder] = useState<SmartFolder | null>(null);
+  // Waiting, Pinned and Failed uploads (v1.6, P4.2): views of the whole Library, not server folders.
+  const [libraryView, setLibraryView] = useState<LibraryViewKey | null>(null);
+  const [sharedTab, setSharedTab] = useState<SharedTab>("with-me");
   const [sharedFocus, setSharedFocus] = useState<string | null>(null);
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
@@ -184,7 +190,19 @@ export default function MainApp() {
         return;
       }
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || e.repeat || typingIn(e.target)) return;
-      if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !document.querySelector(".palette-backdrop, .sheet-backdrop")) {
+      const open = !!document.querySelector(".palette-backdrop, .sheet-backdrop");
+      // "[" folds the sidebar to its rail and back; "?" lists every key (v1.6, P4.1).
+      if (e.key === "[" && statusRef.current?.paired && !open) {
+        e.preventDefault();
+        toggleSidebar();
+        return;
+      }
+      if (e.key === "?" && statusRef.current?.paired && !open) {
+        e.preventDefault();
+        setHelp(true);
+        return;
+      }
+      if (e.key.toLowerCase() === "n" && statusRef.current?.paired && !open) {
         const recording = statusRef.current.recording;
         e.preventDefault();
         // Like the Record page: a call or a captured voice note has to stop first.
@@ -207,7 +225,6 @@ export default function MainApp() {
     setTheme(next);
     api.setWindowTheme(next).catch(() => undefined);
   };
-  const cycleTheme = () => chooseTheme(nextThemeChoice(theme));
 
   const clearFocus = useCallback(() => setFocus(null), []);
   const clearRequestFocus = useCallback(() => setRequestFocus(null), []);
@@ -253,6 +270,7 @@ export default function MainApp() {
         // The waiting recordings and a clicked notification's recording are in the whole Library, not a smart folder.
         if (nav.view === "library") {
           setLibraryFolder(null);
+          setLibraryView(null);
           setSharedFocus(null);
         }
         const id = nav.pendingId;
@@ -300,8 +318,11 @@ export default function MainApp() {
       setProjectsError(errorMessage(e));
     }
   }, []);
+  // How many recordings the Library holds (All in the column), from what is saved on this computer.
+  const [libraryTotal, setLibraryTotal] = useState(0);
   // The smart folders' counts; a server older than v1.5 sends none and the sidebar lists no smart folders.
   const loadViews = useCallback(async () => {
+    api.library().then((items) => setLibraryTotal(Array.isArray(items) ? items.filter((i) => !i.deleted).length : 0)).catch(() => undefined);
     let tz: string | null = null;
     try {
       tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
@@ -353,6 +374,19 @@ export default function MainApp() {
       document.removeEventListener("visibilitychange", again);
     };
   }, [paired, ready]);
+  // The account (v1.5) for the top bar: the workspace, the avatar, staff; read once signed in, none from an older server.
+  useEffect(() => {
+    if (!paired) {
+      setAccount(undefined);
+      return;
+    }
+    if (!ready) return;
+    let alive = true;
+    api.account().then((a) => alive && setAccount(a ?? null), () => alive && setAccount(null));
+    return () => {
+      alive = false;
+    };
+  }, [paired, ready]);
   // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
   useEffect(() => {
@@ -390,10 +424,12 @@ export default function MainApp() {
           } else if (place.in === "shared") {
             setTab("library");
             setLibraryFolder("shared");
+            setLibraryView(null);
             setSharedFocus(place.itemId);
           } else {
             setTab("library");
             setLibraryFolder(null);
+            setLibraryView(null);
             setSharedFocus(null);
             setOpenRequest({ id: target.session_id, ms: 0, seq: ++navigations.current });
           }
@@ -406,6 +442,7 @@ export default function MainApp() {
         case "shared":
           setTab("library");
           setLibraryFolder("shared");
+          setLibraryView(null);
           setSharedFocus(target.shared_id);
           break;
         case "request":
@@ -500,12 +537,22 @@ export default function MainApp() {
   }
 
   const needsYou = actionCount(activityItems, status.pendingDecisions);
+  const canRecord = !isViewer(status);
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
     setLibraryFolder(folder);
+    setLibraryView(null);
     setSharedFocus(null);
   };
+  /** The Library on Waiting, Pinned or Failed uploads (v1.6, P4.2). */
+  const openLibraryView = (view: LibraryViewKey | null) => {
+    setTab("library");
+    setLibraryFolder(null);
+    setLibraryView(view);
+    setSharedFocus(null);
+  };
+  const openPlace = (place: LibraryPlace) => (place.view ? openLibraryView(place.view) : openFolder(place.folder));
   const openRecording = (id: string, ms = 0) => {
     openFolder(null);
     setOpenRequest({ id, ms, seq: ++navigations.current });
@@ -515,112 +562,133 @@ export default function MainApp() {
     setTab("projects");
     setProjectId(id);
   };
+  const openShared = (next: SharedTab) => {
+    setTab("shared");
+    setSharedTab(next);
+  };
   /** A page from the sidebar or the command palette: the whole Library, the list of projects, or another page. */
   const goTo = (id: Tab) => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id));
+  /** Account → a tab or a section of it (Devices, Plan & usage, Preferences…). */
+  const openAccount = (section: string) => {
+    setTab("settings");
+    setSettingsSection({ id: section, seq: ++navigations.current });
+  };
+  const newProject = () => {
+    setTab("projects");
+    setProjectId(null);
+    setProjectRequest({ kind: "new", seq: ++navigations.current });
+  };
+  const signOut = async () => {
+    if (!window.confirm(SIGN_OUT_CONFIRM)) return;
+    const next = await run(api.unpair);
+    if (next) setStatus(next);
+  };
+  const record = () => void run(status.recording ? api.stopRecording : api.recordNow);
+  const voiceNote = () => void run(api.toggleMicNote);
+
+  // The Library's places with their counts: the server's, and what only this computer knows (v1.6, P4.2).
+  const places = libraryPlaces(views, {
+    total: libraryTotal,
+    waiting: status.pendingDecisions,
+    failed: status.failedUploads,
+    pinned: 0,
+  }, tab === "library" ? libraryFolder : null);
+  // "Find a page" (v1.6): every page, place, project and Account tab by name.
+  const pages: ShellPage[] = [
+    { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
+    { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
+    ...places.filter((p) => p.key !== "all").map((p) => ({ id: `place-${p.key}`, label: p.label, group: "Library", keywords: "smart folder recordings", open: () => openPlace(p) })),
+    { id: "projects", label: "Projects", keywords: "clients folders", open: () => openProject(null) },
+    ...(projects ?? []).map((p) => ({ id: `project-${p.id}`, label: p.name, group: "Projects", keywords: "project client", open: () => openProject(p.id) })),
+    { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
+    ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
+    ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
+    ...ACCOUNT_TABS.map(([id, label]) => ({ id: `account-${id}`, label, group: "Account", keywords: "settings account preferences", open: () => openAccount(id) })),
+    { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
+  ];
+  const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
+  const uploading = status.pendingUploads > 0 ? (status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`) : null;
+  const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
   return (
-    <div className={`app ${collapsed ? "collapsed" : ""}`}>
+    <div className={`app ${collapsed ? "collapsed" : ""} ${pageWidth < NARROW_CONTENT ? "narrow" : ""} ${pageWidth < COLUMN_CONTENT ? "no-column" : ""}`}
+      style={{ ["--sidebar-w" as string]: `${collapsed ? SIDEBAR_RAIL : sidebarWidth}px` }}>
       {/* macOS: the title bar is inset (traffic lights over the sidebar); this strip keeps the window draggable. */}
       <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
-      <aside className="sidebar">
-        <div className="brand">
-          <BrandMark size={24} />
-          <span className="brand-name">EchoLedger</span>
-          <button type="button" className="sidebar-toggle" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
-            title={collapsed ? "Expand" : "Collapse"} onClick={toggleSidebar}><SidebarIcon size={18} /></button>
-        </div>
-        {/* Calls: Ready / Not ready — Fix (Phase 1C): whether the next call will be recorded; opens the Ready check. */}
-        {!isViewer(status) && <ReadyChip status={status} onOpen={() => goTo("record")} />}
-        <nav className="nav" aria-label="Main">
-          {NAV.map(([id, label, Icon]) => (
-            <div key={id} className="nav-group">
-              <button type="button" className={`nav-btn ${tab === id ? "active" : ""}`} aria-current={tab === id ? "page" : undefined}
-                title={collapsed ? label : undefined} onClick={() => goTo(id)}>
-                <Icon size={20} filled={tab === id} /><span className="nav-label">{label}</span>
-                {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
-                {id === "activity" && needsYou > 0 && <><span className="nav-count" aria-hidden="true">{badgeLabel(needsYou)}</span><span className="sr-only">, {badgeSpoken(needsYou)}</span></>}
-              </button>
-              {/* The smart folders (since v1.5): views of the Library, each with its count; the Inbox takes dropped recordings. */}
-              {id === "library" && !collapsed && (
-                <SmartFolderList counts={views?.folders} open={tab === "library" ? libraryFolder : null} onOpen={(folder) => openFolder(folder)} />
-              )}
-              {/* The project tree (since v1.5): each project opens its page; recordings dragged onto one move into it. */}
-              {id === "projects" && !collapsed && projects && projects.length > 0 && (
-                <ProjectTree projects={projects} label="Projects in the sidebar" variant="sidebar" selectedId={tab === "projects" ? projectId : null}
-                  expanded={expanded} onToggle={toggleExpanded} onOpen={(pid) => openProject(pid)} dropTargets />
-              )}
+      <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
+        recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
+        projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} pages={pages} uploading={uploading} canUpload={canRecord} />
+      <div className="main-col">
+        <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
+          onActivity={() => goTo("activity")} onAccount={() => openAccount("profile")} onPlan={() => openAccount("plan")}
+          onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
+          onWorkspaces={() => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true))}
+          onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
+          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
+        <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
+          <UpdateBanner appStatus={status} notify={notify} />
+          {status.platform === "macos" && <PermissionLossNotice />}
+          {oneSided && (
+            <div className="banner warn one-sided-banner" role="alert" data-testid="one-sided">
+              <AlertIcon size={16} />
+              <span className="one-sided-text"><b>{oneSided.title}</b><span className="small">{oneSided.reason} {oneSided.fix}</span></span>
+              <button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>
+              <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setOneSided(null)}><CloseIcon size={14} /></button>
             </div>
-          ))}
-        </nav>
-        <div className="sidebar-footer">
-          <button className="theme-toggle" onClick={cycleTheme} aria-label={`Theme: ${theme}. Click to change.`}>
-            {theme === "light" ? <SunIcon size={15} /> : theme === "dark" ? <MoonIcon size={15} /> : <MonitorIcon size={15} />}
-            {theme === "system" ? "Theme: System" : theme === "light" ? "Theme: Light" : "Theme: Dark"}
-          </button>
-          {/* Mirrors the tray icon (A3.4): paused, decisions waiting, uploads stopped, uploading. */}
-          {status.recording && status.paused && <div className="row footer-state"><span className="status-dot paused" />Paused</div>}
-          {status.pendingDecisions > 0 && (
-            <button type="button" className="footer-link" onClick={() => openFolder(null)}>
-              <span className="status-dot attention" />{status.pendingDecisions} waiting for your decision
-            </button>
           )}
-          {status.failedUploads > 0 && (
-            <button type="button" className="footer-link" onClick={() => openFolder(null)}>
-              <span className="status-dot failed" />Uploads that need you
-            </button>
+          {status.budget === "reached" && (
+            <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
           )}
-          <div className="row"><CaptionsIcon size={14} />{status.captionsLive ? "Captions live" : "Captions off"}</div>
-          <div>{status.deviceName}</div>
-          <div className="small">{status.pendingUploads > 0 ? "Uploading…" : "All uploads done"}</div>
-        </div>
-      </aside>
-      <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
-        <UpdateBanner appStatus={status} notify={notify} />
-        {status.platform === "macos" && <PermissionLossNotice />}
-        {oneSided && (
-          <div className="banner warn one-sided-banner" role="alert" data-testid="one-sided">
-            <AlertIcon size={16} />
-            <span className="one-sided-text"><b>{oneSided.title}</b><span className="small">{oneSided.reason} {oneSided.fix}</span></span>
-            <button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>
-            <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setOneSided(null)}><CloseIcon size={14} /></button>
-          </div>
-        )}
-        {status.budget === "reached" && (
-          <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
-        )}
-        {status.budget === "warn" && !budgetWarnDismissed && (
-          <div className="banner warn" data-testid="budget-banner">
-            <AlertIcon size={16} /><span>{BUDGET_WARN}</span>
-            <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
-          </div>
-        )}
-        {tab === "library" && (
-          <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
-            initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={() => void pickImport()} onOpenClient={(id) => openProject(id)}
-            smartFolder={libraryFolder} onSmartFolder={openFolder} sharedFocus={sharedFocus} projects={projects} />
-        )}
-        {tab === "projects" && (
-          <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
-            projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
-            requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} />
-        )}
-        {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
-        {tab === "activity" && (
-          <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
-            onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
-        )}
-        {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
-      </main>
+          {status.budget === "warn" && !budgetWarnDismissed && (
+            <div className="banner warn" data-testid="budget-banner">
+              <AlertIcon size={16} /><span>{BUDGET_WARN}</span>
+              <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
+            </div>
+          )}
+          {tab === "library" && (
+            <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
+              initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={canRecord ? () => void pickImport() : undefined} onOpenClient={(id) => openProject(id)}
+              smartFolder={libraryFolder} onSmartFolder={openFolder} smartView={libraryView} crumb={libraryCrumb} sharedFocus={sharedFocus} projects={projects}
+              aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
+                onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
+          )}
+          {tab === "projects" && (
+            <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
+              projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
+              requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+              aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
+          )}
+          {tab === "record" && (
+            <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
+              onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
+              onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />
+          )}
+          {tab === "activity" && (
+            <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
+              onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
+          )}
+          {tab === "shared" && (
+            <SharedView tab={sharedTab} onTab={setSharedTab} notify={notify} projects={projects} onOpenShared={(id) => { openFolder("shared"); setSharedFocus(id); }}
+              onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)} />
+          )}
+          {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
+        </main>
+      </div>
       {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
-          run={(fn, ok) => void run(fn, ok)}
+          run={(fn, ok) => void run(fn, ok)} pages={pages}
+          extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
+            invite: () => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
       {dragging && !importPaths && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onShortcuts={() => openAccount("preferences")} />}
+      {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       <UpgradeSheet />
       {toastView}
     </div>

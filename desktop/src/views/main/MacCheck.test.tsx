@@ -177,7 +177,7 @@ describe("Help & diagnostics in Settings", () => {
       dictation_history: [],
     });
     render(<SettingsView status={makeStatus({ platform })} run={async (fn) => fn()} onUnpaired={vi.fn()} />);
-    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Account" })).toBeInTheDocument());
     await flushAsync();
   }
 

@@ -63,6 +63,14 @@ const free = screen.endsWith("-free");
 const signedOut = screen.startsWith("sign-in");
 // Acme Holdings shows its folders in the trees.
 localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
+// v1.6 (P4): "library-table" opens the Library as a table; "library-grey" and "library-darkbar" show the sidebar's
+// Soft grey and Dark styles (Account → Preferences).
+if (screen === "library-table") localStorage.setItem("echoledger-library-layout", "table");
+if (screen === "library-grey" || screen === "library-darkbar") {
+  const sidebarStyle = screen === "library-grey" ? "grey" : "dark";
+  localStorage.setItem("echoledger-preferences", JSON.stringify({ sidebarStyle, density: "comfortable", clock: "12" }));
+  document.documentElement.dataset.sidebar = sidebarStyle;
+}
 const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"] };
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
@@ -112,7 +120,7 @@ const commands: Record<string, (args: Args) => unknown> = {
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false } }),
-  main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" ? null : opened, scroll: {} }),
+  main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : ITEMS),
   library_refresh: () => (empty ? [] : ITEMS),

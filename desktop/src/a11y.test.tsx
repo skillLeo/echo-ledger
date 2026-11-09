@@ -65,11 +65,11 @@ globalThis.ResizeObserver ??= class {
 } as unknown as typeof ResizeObserver;
 
 describe("screen-reader names (C7)", () => {
-  it.each(["Library", "Record", "Settings"])("names every control on the %s page", async (tab) => {
+  it.each(["Library", "Home", "Account"])("names every control on the %s page", async (tab) => {
     setWindowLabel("main");
     render(<MainApp />);
     await flushAsync();
-    fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${tab}`) }));
+    fireEvent.click(await screen.findByRole("button", { name: tab }));
     await flushAsync();
     if (tab === "Library") {
       fireEvent.click(screen.getByText("Weekly sync").closest("button")!);
@@ -135,7 +135,7 @@ describe("keyboard (C7)", () => {
       (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0,
     );
     const names = focusable.map((el) => computeAccessibleName(el));
-    for (const wanted of ["Library", "Record", "Settings", "Search recordings", "Copy text"]) {
+    for (const wanted of ["Library", "Home", "Account", "Find a page", "Search recordings", "Copy text"]) {
       expect(names.some((n) => n.includes(wanted)), wanted).toBe(true);
     }
     expect(names.some((n) => n.includes("Weekly sync"))).toBe(true);

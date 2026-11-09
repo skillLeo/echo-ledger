@@ -91,7 +91,7 @@ describe("the kept main view", () => {
     render(<MainApp />);
     await flushAsync();
     await flushAsync();
-    expect(screen.getByRole("heading", { name: "Settings" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Account", level: 1 })).toBeTruthy();
     expect(callsOf("window_ready")).toHaveLength(1);
     expect(tabAtReady).not.toBe("Library");
 

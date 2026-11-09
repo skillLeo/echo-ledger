@@ -293,6 +293,35 @@ pub struct AccountDto {
     pub workspace: Option<AccountWorkspace>,
     #[serde(default)]
     pub deletes_at: Option<String>,
+    /// The server's operator (v1.6 shell): the avatar menu then offers the console's admin panel. Missing (a server
+    /// that does not say) is false, and the menu leaves it out.
+    #[serde(default, alias = "is_super_admin", deserialize_with = "lenient_bool")]
+    pub super_admin: bool,
+    /// Every workspace the person belongs to (v1.6 shell, for the switcher); empty when the server does not list them.
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub workspaces: Vec<AccountWorkspaceEntry>,
+}
+
+/// One of the person's workspaces in `account.workspaces` (v1.6 shell).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AccountWorkspaceEntry {
+    #[serde(default)]
+    pub id: serde_json::Value,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub role: Option<String>,
+    /// The one this device works in.
+    #[serde(default)]
+    pub current: Option<bool>,
+}
+
+/// A flag that is false unless the server sends `true` (anything else, `null` included, is false).
+fn lenient_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(matches!(Option::<serde_json::Value>::deserialize(deserializer)?, Some(serde_json::Value::Bool(true))))
 }
 
 /// `account.workspace`: the device's workspace and the person's role in it.

@@ -97,7 +97,7 @@ describe("after-call styles", () => {
     expect(icon.width).toBe("20px");
     expect(icon.display).toBe("grid");
     expect(icon.gridTemplateColumns).toBe("none");
-    expect(styleOf("after-icon app", "after-pill").gridTemplateColumns, "what the old class picked up").toBe("232px 1fr");
+    expect(styleOf("after-icon app", "after-pill").gridTemplateColumns, "what the old class picked up").toBe("var(--sidebar-w, 240px) minmax(0, 1fr)");
     const ok = styleOf("after-icon ok", "after-pill");
     expect(ok.width).toBe("20px");
   });

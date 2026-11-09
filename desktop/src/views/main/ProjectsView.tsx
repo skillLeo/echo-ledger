@@ -1,7 +1,8 @@
 // Projects (since v1.5; Clients in v1.4): every project as a tree with its subfolders, and a project's page. The apps
 // call client folders projects; the API keeps the name clients. A project can be renamed, moved into another one or
 // to the top, get a folder inside, or be deleted: its recordings then go to the Inbox and its folders up a level.
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { PageHeader } from "../../components/Page";
 import { api, errorMessage, listenTo, type ClientFolder, type LibraryItem } from "../../lib/ipc";
 import { canAddSubfolder, hasSubfolders, projectLabel } from "../../lib/projects";
 import { FolderIcon, LinkIcon, PlusIcon, RequestFilesIcon } from "../../components/Icons";
@@ -31,7 +32,7 @@ export function deletedText(name: string, answer: { moved_sessions?: number; mov
   return parts.join(" · ");
 }
 
-export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true }: {
+export function ProjectsView({ notify, projects, error = null, onReload, onChanged, projectId, onOpenProject, onOpenRecording, expanded, onToggle, requestFocus = null, onRequestFocusHandled, aiNotesInPlan = true, request = null, aside = null }: {
   notify: Notify;
   /** Every project; null while they load. */
   projects: ClientFolder[] | null;
@@ -53,9 +54,19 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
   onRequestFocusHandled?: () => void;
   /** The plan has call notes, memory and Ask (`ai_notes`, since v1.5). */
   aiNotesInPlan?: boolean;
+  /** "+ New project" from the top bar or the column (v1.6): the dialog opens once per `seq`. */
+  request?: { kind: "new"; seq: number } | null;
+  /** The nested column (v1.6, P4.2): every project and "+ New project". */
+  aside?: ReactNode;
 }) {
   const [items, setItems] = useState<LibraryItem[]>([]);
   const [dialog, setDialog] = useState<Dialog | null>(null);
+  const handledRequest = useRef(0);
+  useEffect(() => {
+    if (!request || handledRequest.current === request.seq) return;
+    handledRequest.current = request.seq;
+    setDialog({ kind: "new", parentId: null });
+  }, [request]);
   // Request links exist on this server (since v1.5): asked once; Request files is hidden until it says so.
   const [requests, setRequests] = useState(false);
   useEffect(() => {
@@ -189,31 +200,34 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       </button>
     );
     return (
-      <div className="project-page">
+      <div className="page-split">
+      {aside}
+      <div className="project-page page-main">
         <ClientWorkspace key={project.id} client={project} projects={list} items={items} notify={notify} onOpenRecording={onOpenRecording} aiNotesInPlan={aiNotesInPlan}
           onClientChanged={(next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c)))}
           onOpenProject={onOpenProject} menu={menu} actions={share || null} onMoveRecordings={(ids, target) => void dropMove(ids, target)}
           rules={nested ? <RulesSection project={project} notify={notify} /> : null} />
         {dialogs}
       </div>
+      </div>
     );
   }
 
   return (
     <div className="projects-home">
-      <div className="page-head">
-        <div>
-          <h1 className="page-title">Projects</h1>
-          <p className="page-sub">Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox.</p>
-        </div>
-        <span className="spacer" />
-        {requests && (
-          <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
-            <RequestFilesIcon size={16} />Request files
-          </button>
-        )}
-        <button type="button" className="btn primary" onClick={() => setDialog({ kind: "new", parentId: null })}><PlusIcon size={16} />New project</button>
-      </div>
+      <PageHeader title="Projects"
+        subtitle="Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox."
+        actions={<>
+          {requests && (
+            <button type="button" className="btn" onClick={() => setDialog({ kind: "requests", projectId: null, focusId: null })} title="A link anyone can use to send you voice notes and files">
+              <RequestFilesIcon size={16} />Request files
+            </button>
+          )}
+          <button type="button" className="btn primary" onClick={() => setDialog({ kind: "new", parentId: null })}><PlusIcon size={16} />New project</button>
+        </>} />
+      <div className="page-split">
+      {aside}
+      <div className="page-main">
       {error && (
         <div className="notice error sync-error" role="alert">
           <span>Couldn't load the projects. {error}</span>
@@ -242,6 +256,8 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
       {projects && projects.length > 0 && (
         <ProjectTree projects={projects} label="Projects" variant="page" expanded={expanded} onToggle={onToggle} onOpen={onOpenProject} items={items} />
       )}
+      </div>
+      </div>
       {dialogs}
     </div>
   );

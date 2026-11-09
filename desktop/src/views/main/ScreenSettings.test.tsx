@@ -34,7 +34,7 @@ async function setup(settings: Partial<Settings> = {}, screens: ScreensStatus = 
     }
   }) as never;
   render(<SettingsView status={makeStatus({ platform: screens.platform === "macos" ? "macos" : "windows" })} run={run} onUnpaired={vi.fn()} />);
-  await screen.findByRole("heading", { name: "Settings" });
+  await screen.findByRole("heading", { name: "Account", level: 1 });
   await flushAsync();
   return { errors, card: () => screen.getByTestId("screen-moments-card") };
 }

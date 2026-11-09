@@ -2,7 +2,8 @@
 // next window opens on the same page, with the same recording open and the same scroll positions.
 import { api } from "./ipc";
 
-export type MainTab = "library" | "projects" | "record" | "activity" | "settings";
+/** The pages (v1.6: "record" is Home, "settings" is Account, "shared" is Shared). */
+export type MainTab = "library" | "projects" | "record" | "activity" | "shared" | "settings";
 
 /** The scroll areas whose position is kept (class names in styles.css). */
 export const SCROLL_AREAS = ["content", "list", "detail"] as const;
@@ -14,7 +15,7 @@ export interface MainView {
   scroll: Partial<Record<ScrollArea, number>>;
 }
 
-const TABS: MainTab[] = ["library", "projects", "record", "activity", "settings"];
+const TABS: MainTab[] = ["library", "projects", "record", "activity", "shared", "settings"];
 const SAVE_DELAY_MS = 250;
 const RESTORE_FOR_MS = 2000;
 

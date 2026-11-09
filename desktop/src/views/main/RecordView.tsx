@@ -116,8 +116,6 @@ export function RecordView({ status, run, onImport }: {
   if (isViewer(status) && !recording) {
     return (
       <>
-        <h1 className="page-title">Record</h1>
-        <p className="page-sub">What is shared with you is in the Library, under Shared with me.</p>
         <div className="card notice-card" data-testid="viewer-notice">
           <div className="row"><RecordIcon /><b>Recording is off for viewers</b></div>
           <p className="small">{viewerSentence(status.plan.workspace)}</p>
@@ -129,8 +127,7 @@ export function RecordView({ status, run, onImport }: {
   }
   return (
     <>
-      <h1 className="page-title">Record</h1>
-      <p className="page-sub">Two channels: your microphone is "Me", the other side of the call is "Client".</p>
+      <h2 className="section-title">Record</h2>
       <PermissionBanner recordingRef={recording?.clientRef ?? null} />
       {!recording && <ReadyCheckCard />}
       {status.systemAudioNote && <div className="banner warn" role="status" data-testid="whole-system-note"><AlertIcon size={16} /><span>{status.systemAudioNote}.</span></div>}
@@ -151,7 +148,7 @@ export function RecordView({ status, run, onImport }: {
               <span className={`status-dot ${paused ? "paused" : recording ? "live" : ""}`} />
               {recording ? `${paused ? "Paused" : "Recording"} · ${what}` : "Not recording"}
             </div>
-            {!recording && <div className="small muted" data-testid="record-now-hint">Record now: a meeting or call on screen is recorded with both sides, anything else as a voice note.</div>}
+            {!recording && <div className="small muted" data-testid="record-now-hint">Record now: a meeting or call on screen is recorded with both sides, anything else as a voice note. Your microphone is "Me", the other side of the call is "Client".</div>}
             {recording && <div className="small muted">{BACKEND_LABEL[recording.backend] ?? recording.backend}</div>}
             {recording && (
               <div className="record-controls">

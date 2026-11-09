@@ -37,9 +37,12 @@ describe("transcript player helpers (B6)", () => {
 
   it("maps keys to player actions and leaves fields and controls alone", () => {
     expect(playerKey(" ", "DIV")).toBe("toggle");
-    expect(playerKey("K", "DIV")).toBe("toggle");
-    expect(playerKey("j", "BUTTON")).toBe("back10");
-    expect(playerKey("l", "DIV")).toBe("forward10");
+    // J and K move through the list since v1.6 (P4.4); the player keeps Space and the arrows.
+    expect(playerKey("K", "DIV")).toBeNull();
+    expect(playerKey("j", "BUTTON")).toBeNull();
+    expect(playerKey("l", "DIV")).toBeNull();
+    expect(playerKey("ArrowLeft", "DIV", false, true)).toBe("back10");
+    expect(playerKey("ArrowRight", "DIV", false, true)).toBe("forward10");
     expect(playerKey("ArrowLeft", "DIV")).toBe("back5");
     expect(playerKey("ArrowRight", "DIV")).toBe("forward5");
     expect(playerKey(" ", "BUTTON")).toBeNull();

@@ -38,15 +38,10 @@ function roleOf(account: Account, status: AppStatus): WorkspaceRole | null {
   return role && role in ROLE_LABEL ? (role as WorkspaceRole) : null;
 }
 
-/** Who is signed in, the workspace and role, two-factor and Google, and Sign out everywhere. */
-export function AccountCard({ account, status, run, onSignedOut }: { account: Account; status: AppStatus; run: Run; onSignedOut: (s: AppStatus) => void }) {
+/** Profile (v1.6 Account tab): who is signed in, the workspace and role, and since when. */
+export function AccountCard({ account, status }: { account: Account; status: AppStatus }) {
   const role = roleOf(account, status);
   const workspace = account.workspace?.name || status.plan.workspace;
-  const signOutEverywhere = async () => {
-    if (!window.confirm(SIGN_OUT_EVERYWHERE_CONFIRM)) return;
-    const signedOut = await run(api.signOutEverywhere, "Signed out everywhere");
-    if (signedOut) onSignedOut(signedOut);
-  };
   return (
     <div className="card account-card">
       <b>Your account</b>
@@ -59,11 +54,35 @@ export function AccountCard({ account, status, run, onSignedOut }: { account: Ac
         <div><dt>Name</dt><dd>{account.name || "—"}</dd></div>
         <div><dt>Email</dt><dd>{account.email}{account.email_verified ? "" : " (not verified yet)"}</dd></div>
         <div><dt>Workspace</dt><dd>{workspace || "—"}{role ? ` · ${ROLE_LABEL[role]}` : ""}</dd></div>
-        <div><dt>Two-factor sign-in</dt><dd>{account.two_factor ? "On" : "Off: turn it on in the console under Profile → Security"}</dd></div>
-        <div><dt>Google</dt><dd>{account.google ? "Connected" : "Not connected"}</dd></div>
         {account.created_at && <div><dt>Member since</dt><dd>{longDate(account.created_at)}</dd></div>}
       </dl>
       {role === "viewer" && <div className="notice small" role="note">{viewerSentence(workspace)}</div>}
+      <p className="small muted">Your name and email are changed in the console, under Profile.</p>
+    </div>
+  );
+}
+
+/** Password & sign-in methods (v1.6 Account tab): the password, two-factor and Google, and Sign out everywhere. */
+export function SignInMethodsCard({ account, run, onSignedOut }: { account: Account; run: Run; onSignedOut: (s: AppStatus) => void }) {
+  const signOutEverywhere = async () => {
+    if (!window.confirm(SIGN_OUT_EVERYWHERE_CONFIRM)) return;
+    const signedOut = await run(api.signOutEverywhere, "Signed out everywhere");
+    if (signedOut) onSignedOut(signedOut);
+  };
+  const security = () => void run(() => api.openServerPage("admin/profile"));
+  return (
+    <div className="card account-card">
+      <b>Password &amp; sign-in methods</b>
+      <dl className="account-facts">
+        <div><dt>Email codes</dt><dd>On: a 6-digit code to {account.email}</dd></div>
+        <div><dt>Two-factor sign-in</dt><dd>{account.two_factor ? "On" : "Off"}</dd></div>
+        <div><dt>Google</dt><dd>{account.google ? "Connected" : "Not connected"}</dd></div>
+      </dl>
+      <div className="row organise-field">
+        <span className="small muted">Change your password or turn two-factor sign-in on in the browser.</span>
+        <span className="spacer" />
+        <button type="button" className="btn ghost" onClick={security}>Open Profile in the browser</button>
+      </div>
       <div className="row organise-field">
         <span className="small muted">Signs out every computer, phone and browser, this one too.</span>
         <span className="spacer" />

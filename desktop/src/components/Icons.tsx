@@ -196,6 +196,38 @@ export const SparkleIcon = (p: IconProps) => (
 export const ChevronRightIcon = (p: IconProps) => (
   <Svg {...p}><path d="m9 6 6 6-6 6" /></Svg>
 );
+/** Home (v1.6): recording, what needs you and the latest recordings. */
+export const HomeIcon = ({ filled, ...p }: StateIconProps) => (
+  <Svg {...p}><path d="M3.5 10.5 12 3.8l8.5 6.7V19a1.5 1.5 0 0 1-1.5 1.5h-4.2v-6h-5.6v6H5A1.5 1.5 0 0 1 3.5 19z" fill={fill(filled)} /></Svg>
+);
+/** Help & shortcuts (v1.6): a question in a circle. */
+export const HelpIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="9" /><path d="M9.6 9.3a2.5 2.5 0 0 1 4.8.9c0 1.7-2.4 2.2-2.4 3.8" /><Dot x={12} y={17} r={1.1} /></Svg>
+);
+/** Shared (v1.6): an arrow leaving a box. */
+export const ShareIcon = ({ filled, ...p }: StateIconProps) => (
+  <Svg {...p}><path d="M8 10H6.5A1.5 1.5 0 0 0 5 11.5v7A1.5 1.5 0 0 0 6.5 20h11a1.5 1.5 0 0 0 1.5-1.5v-7a1.5 1.5 0 0 0-1.5-1.5H16" fill={fill(filled)} /><path d="M12 14V3.5M8.5 7 12 3.5 15.5 7" /></Svg>
+);
+/** The Library as rows (v1.6). */
+export const ListIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M9 6.5h11M9 12h11M9 17.5h11" /><Dot x={4.8} y={6.5} /><Dot x={4.8} y={12} /><Dot x={4.8} y={17.5} /></Svg>
+);
+/** The Library as a table (v1.6). */
+export const TableIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10" /></Svg>
+);
+/** Columns of the table (v1.6). */
+export const ColumnsIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M9.2 4.5v15M14.8 4.5v15" /></Svg>
+);
+/** Signing out (v1.6 avatar menu). */
+export const SignOutIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M14 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H14M10.5 12h10M17 8.5l3.5 3.5-3.5 3.5" /></Svg>
+);
+/** Opens in the browser (v1.6): a box with an arrow out of its corner. */
+export const ExternalIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M13.5 4.5h6v6M19.5 4.5 11 13M17.5 14v4a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 18V8A1.5 1.5 0 0 1 6 6.5h4" /></Svg>
+);
 /** A project (a folder, since v1.5). */
 export const FolderIcon = ({ filled, ...p }: StateIconProps) => (
   <Svg {...p}><path d="M3.5 7a2 2 0 0 1 2-2h3.8l2 2.2h7.2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2V7z" fill={fill(filled)} /></Svg>
