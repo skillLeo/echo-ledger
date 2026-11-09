@@ -466,6 +466,31 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
   });
 
+  it("keeps Invite people in the workspace menu with its badge on a Free plan, opening the upgrade sheet, not the browser (v1.6.2)", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", sampleEntitlements("free"));
+    respond("account_get", account());
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
+    const invite = screen.getByRole("menuitem", { name: "Invite people, Team workspace is in the Ultra plan" });
+    expect(invite).toHaveTextContent("Invite peopleULTRA ✦");
+    fireEvent.click(invite);
+    expect(await screen.findByRole("dialog", { name: "Team workspace" })).toBeInTheDocument();
+    expect(callsOf("server_page_open")).toEqual([]);
+  });
+
+  it("opens the workspace in the browser from Invite people when the plan has teams", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", sampleEntitlements("ultra"));
+    respond("account_get", account());
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Invite people" }));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/workspace", serverUrl: null }]));
+  });
+
   it("offers the admin panel only to the super admin, in the browser", async () => {
     respond("account_get", account({ super_admin: true }));
     respond("server_page_open", undefined);

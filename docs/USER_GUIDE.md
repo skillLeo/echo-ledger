@@ -770,6 +770,13 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
   project's Notes, and in Plan & usage. Click it to see what the feature does and the plans side by side. **Request
   upgrade** (with a message if you like) sends the request to the owner; the app then shows how to pay and says
   "We'll activate it once confirmed". A pending request shows as pending until the owner decides.
+- **All features** (since v1.6.2; under Plan & usage, or **Ctrl+K → All features**, **⌘K** on a Mac) lists every
+  feature, in the same order as the server, with a line on what it does: a tick when your plan has it, otherwise its
+  badge. The line at the top says how many your plan has ("Your plan has 6 of 15 features"). Locked features stay in
+  view where they would be: the **AI notes** and **Screens** tabs of a project and **Ask** on its Notes, the **Keep
+  screen moments** switch, **Double-check**, **Screens**, **Ask Claude or ChatGPT** and the premium engines on a
+  recording, **Invite people** in the workspace menu and the command palette, and **Live Translate**. Clicking one opens
+  the plans for that feature, never the feature itself.
 - **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Account →
   Transcription key** and follow the three steps: open console.groq.com and sign in, choose **API Keys → Create API
   key** and copy it, paste it and press **Save**. The server checks it once and keeps it encrypted, only for your

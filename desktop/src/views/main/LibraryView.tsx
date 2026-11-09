@@ -1387,6 +1387,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         </button>
                       </span>
                     )}
+                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="ElevenLabs · Gemini" />}
                     {alternateId && (
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
@@ -1455,7 +1456,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         )}
                         {/* The views are a paid feature since v1.6: their badge where the switch would be. */}
                         {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && !readOnly && (
-                          <LockedChip feature="views" label="Roman Urdu · English · اردو" />
+                          <>
+                            <LockedChip feature="views" label="Roman Urdu · English · اردو" />
+                            <LockedChip feature="double_check" label="Double-check" />
+                          </>
                         )}
                       </div>
                       {barView !== null && transcript.kind === "final" && <ImprovingBar view={barView} percent={barPercent} />}
@@ -1470,6 +1474,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             <MonitorIcon size={14} />{screens.length === 1 ? "1 screen" : `${screens.length} screens`}
                           </button>
                         )}
+                        {/* Paid parts of a recording the plan leaves out (v1.6.2): in view with their badge. */}
+                        {!readOnly && !screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
+                        {!readOnly && <LockedChip feature="connector" label="Ask Claude or ChatGPT" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
                       {showAs !== "original" && (

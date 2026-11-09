@@ -8,7 +8,7 @@ import { useEffect, useId, useState, type CSSProperties } from "react";
 import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type UpgradeRequest } from "../../lib/ipc";
 // The sheet is opened through the store (lib/entitlements), so a badge anywhere opens the one sheet MainApp holds.
 import {
-  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lowestPlan, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
+  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lockedBadge, lowestPlan, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
   pendingRequest, refreshEntitlements, useEntitlements, useUpgradeSheet,
 } from "../../lib/entitlements";
 import { fileSize } from "../../lib/format";
@@ -40,6 +40,37 @@ export function PlanBadge({ feature, onOpen }: { feature: string; onOpen?: (feat
       aria-label={`${name} is in the ${plan?.name ?? "paid"} plan. See what it does`} title={`${name}: ${plan?.name ?? "a paid"} plan`}>
       <LockIcon size={11} /><span>{plan ? badgeText(plan) : "UPGRADE ✦"}</span>
     </button>
+  );
+}
+
+/**
+ * The same badge as words only, inside something that is itself the button (a project's locked tab, a menu item, a
+ * palette row): that control opens the upgrade sheet.
+ */
+export function BadgeMark({ feature }: { feature: string }) {
+  const badge = lockedBadge(useEntitlements(), feature);
+  if (!badge) return null;
+  return <span className="plan-badge static mark" style={badgeStyle(badge.color)} aria-hidden="true"><LockIcon size={11} /><span>{badge.text}</span></span>;
+}
+
+/**
+ * A setting's switch for a feature the plan leaves out (v1.6.2): in view, off, with the badge; a click opens the
+ * upgrade sheet and changes nothing.
+ */
+export function LockedToggle({ feature, label, hint }: { feature: string; label: string; hint?: string }) {
+  const e = useEntitlements();
+  const hintId = useId();
+  if (!isLocked(e, feature)) return null;
+  const plan = lowestPlan(e, feature)?.name ?? "paid";
+  return (
+    <div className="toggle locked-toggle" data-testid={`locked-toggle-${feature}`}>
+      <div><div>{label}</div>{hint && <div id={hintId} className="small muted">{hint}</div>}</div>
+      <span className="locked-toggle-end">
+        <BadgeMark feature={feature} />
+        <button type="button" className="switch" role="switch" aria-checked={false} aria-disabled="true" aria-label={`${label}, in the ${plan} plan`}
+          aria-describedby={hint ? hintId : undefined} onClick={() => openSheet(feature)} />
+      </span>
+    </div>
   );
 }
 

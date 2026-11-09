@@ -85,6 +85,13 @@ export function badgeText(plan: Pick<OfferedPlan, "badge" | "name" | "key">): st
   return `${(plan.badge || plan.name || plan.key).toUpperCase()} ✦`;
 }
 
+/** The badge a feature the plan leaves out wears ("PRO ✦", in the plan's colour); none when the plan has it or the server is older. */
+export function lockedBadge(e: Entitlements | null | undefined, feature: string): { text: string; color: string | null; plan: string | null } | null {
+  if (!isLocked(e, feature)) return null;
+  const plan = lowestPlan(e, feature);
+  return { text: plan ? badgeText(plan) : "UPGRADE ✦", color: plan?.color ?? null, plan: plan?.name ?? null };
+}
+
 /** A feature's name and what it does: the server's words, else the app's. */
 export function featureWords(e: Entitlements | null | undefined, feature: string): { name: string; description: string } {
   const known = PAID_FEATURES.find(([key]) => key === feature);

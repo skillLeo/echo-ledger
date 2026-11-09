@@ -8,12 +8,16 @@ import { snippetParts } from "../../lib/player";
 import type { MainTab } from "../../lib/mainView";
 import { findPages, type PageEntry } from "../../lib/shell";
 import type { NoticeTarget } from "../../lib/notice";
+import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
+import { BadgeMark } from "./Upgrade";
 
 export interface PaletteCommand {
   id: string;
   label: string;
   /** Extra words the command answers to. */
   keywords?: string;
+  /** A paid feature (v1.6.2): while the plan leaves it out the row wears its badge and opens the upgrade sheet instead. */
+  feature?: string;
   run: () => void;
 }
 
@@ -71,11 +75,12 @@ export function paletteCommands(status: AppStatus, actions: {
       id: "mic_note", label: status.recording?.mode === "mic_note" ? "Stop and save voice note" : "Record a voice note", keywords: "microphone new dictate n",
       run: () => actions.run(api.toggleMicNote),
     }]),
+    { id: "live-translate", label: "Live Translate", keywords: "translate subtitles captions game video language", feature: "live_translate", run: () => actions.go("record") },
     { id: "copy", label: "Copy the last 2 minutes of captions", keywords: "clipboard", run: () => actions.run(() => api.copyLastMinutes(2)) },
     ...(extra.upload ? [{ id: "upload", label: "Upload files", keywords: "import audio video voice notes add", run: extra.upload }] : []),
     ...(extra.newProject ? [{ id: "new-project", label: "New project", keywords: "create client folder add", run: extra.newProject }] : []),
     ...(extra.requestLink ? [{ id: "request-link", label: "Request link", keywords: "request files send me voice notes upload link", run: extra.requestLink }] : []),
-    ...(extra.invite ? [{ id: "invite", label: "Invite people to the workspace", keywords: "invite team teammate member add person", run: extra.invite }] : []),
+    ...(extra.invite ? [{ id: "invite", label: "Invite people to the workspace", keywords: "invite team teammate member add person", feature: "team", run: extra.invite }] : []),
     { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) },
     { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
     ...(openFolder ? (actions.folders ?? []).map(({ folder, label }) => (
@@ -112,6 +117,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   extra?: PaletteExtra;
 }) {
   const [query, setQuery] = useState("");
+  const entitlements = useEntitlements();
   const [index, setIndex] = useState(0);
   const [found, setFound] = useState<SearchResult["data"]>([]);
   const listId = useId();
@@ -152,7 +158,9 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const choose = (option: PaletteCommand | undefined) => {
     if (!option) return;
     onClose();
-    option.run();
+    // The server still refuses a locked feature (`feature_not_in_plan`); the palette shows what it would bring instead.
+    if (option.feature && isLocked(entitlements, option.feature)) openUpgradeSheet(option.feature);
+    else option.run();
   };
 
   const onKey = (e: React.KeyboardEvent) => {
@@ -185,7 +193,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
             return (
               <li key={o.id} id={`${listId}-${o.id}`} role="option" aria-selected={i === selected} className={`palette-item ${i === selected ? "active" : ""}`}
                 onMouseEnter={() => setIndex(i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
-                <span className="palette-label">{o.label}</span>
+                <span className="palette-label">{o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
+                {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in the {lowestPlan(entitlements, o.feature)?.name ?? "paid"} plan</span>}
                 {hit && (
                   <span className="palette-detail small muted" dir="auto">{timestamp(hit.start_ms)} · {snippetParts(hit.snippet, hit.highlights).map((p, k) => (p.hit ? <mark key={k}>{p.text}</mark> : <span key={k}>{p.text}</span>))}</span>
                 )}

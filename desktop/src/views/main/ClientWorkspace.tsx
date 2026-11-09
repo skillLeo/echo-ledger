@@ -21,7 +21,8 @@ import { PlayIcon } from "../../components/ControlIcons";
 import { NotesSections } from "./CallNotes";
 import { ClientAvatar, clientSummary } from "./ClientAvatar";
 import { MenuButton, type MenuItem } from "./MenuButton";
-import { PlanBadge } from "./Upgrade";
+import { BadgeMark, LockedChip, PlanBadge, useLocked } from "./Upgrade";
+import { featureWords, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { ProjectScreens } from "./ScreenMoments";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
@@ -97,6 +98,9 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   // AI notes are shown while they are on for the project; before the workspace has loaded, as the list says. A plan
   // without them hides them whatever the project's switch says.
   const aiNotes = aiNotesInPlan && (ws ? ws.client.ai_notes : client.ai_notes !== false);
+  const entitlements = useEntitlements();
+  const aiLocked = useLocked("ai_notes");
+  const screensLocked = useLocked("screen_moments");
   // Screen moments (since v1.5): the first page of the project's screens is read with the project; a server without
   // them (or a plan without them) answers none, and the tab goes.
   const [screens, setScreens] = useState<{ id: string; page: ProjectScreensPage | null; error: string | null } | null>(null);
@@ -110,7 +114,13 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   }, [client.id, screensAttempt]);
   const screensRead = screens?.id === client.id ? screens : null;
   const screensMissing = !!screensRead && !screensRead.page && !screensRead.error;
-  const tabs = TABS.filter(([id]) => (id !== "ai_notes" || aiNotes) && (id !== "screens" || !screensMissing));
+  // A plan without AI notes or screen moments (v1.6.2) still shows their tab, with its badge: it opens the upgrade
+  // sheet, never the tab (the server refuses the feature with `feature_not_in_plan` all the same).
+  const lockedTab: Partial<Record<Tab, string>> = {
+    ...(aiLocked ? { ai_notes: "ai_notes" } : {}),
+    ...(screensLocked ? { screens: "screen_moments" } : {}),
+  };
+  const tabs = TABS.filter(([id]) => lockedTab[id] || ((id !== "ai_notes" || aiNotes) && (id !== "screens" || !screensMissing)));
   // The tabs that list things show how many (v1.6, P4.4): the recordings the tab lists, the files, the screens (with a
   // "+" while there are more pages). Notes and AI notes are documents, not lists.
   const tabCount = (id: Tab): string | null => {
@@ -120,9 +130,9 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
     return null;
   };
   useEffect(() => {
-    if (tab === "ai_notes" && !aiNotes) setTab("notes");
-    if (tab === "screens" && screensMissing) setTab("recordings");
-  }, [tab, aiNotes, screensMissing]);
+    if (tab === "ai_notes" && (!aiNotes || aiLocked)) setTab("notes");
+    if (tab === "screens" && (screensMissing || screensLocked)) setTab("recordings");
+  }, [tab, aiNotes, screensMissing, aiLocked, screensLocked]);
 
   const load = async () => {
     try {
@@ -202,11 +212,20 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
         </div>
       )}
       <div className="tabs" role="tablist" aria-label={`${client.name} project`}>
-        {tabs.map(([id, label]) => (
-          <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>
-            {label}{tabCount(id) !== null && <span className="tab-count" aria-hidden="true">{tabCount(id)}</span>}
-          </button>
-        ))}
+        {tabs.map(([id, label]) => {
+          const feature = lockedTab[id];
+          return feature ? (
+            <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab locked" aria-selected={false} aria-disabled="true"
+              aria-label={`${label}, ${featureWords(entitlements, feature).name} is in the ${lowestPlan(entitlements, feature)?.name ?? "paid"} plan`}
+              data-testid={`locked-tab-${id}`} onClick={() => openUpgradeSheet(feature)}>
+              {label}<BadgeMark feature={feature} />
+            </button>
+          ) : (
+            <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>
+              {label}{tabCount(id) !== null && <span className="tab-count" aria-hidden="true">{tabCount(id)}</span>}
+            </button>
+          );
+        })}
       </div>
       <div role="tabpanel" id={`ws-panel-${tab}`} aria-labelledby={`ws-tab-${tab}`}>
         {error && !ws && tab !== "recordings" && tab !== "screens" && (
@@ -227,7 +246,7 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
           <Recordings client={client} projects={projects} items={items} hasFolders={subfolders.length > 0} onOpen={(id, ms) => onOpenRecording(id, ms)} onMove={onMoveRecordings} rules={rules} />
         )}
         {tab === "files" && ws && <Files ws={ws} clientId={client.id} notify={notify} onChange={setWs} />}
-        {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} inPlan={aiNotesInPlan} />}
+        {tab === "notes" && ws && <Notes ws={ws} client={client} notify={notify} onChange={setWs} onReload={load} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} inPlan={aiNotesInPlan && !aiLocked} />}
         {tab === "screens" && (screensRead?.page ? (
           <ProjectScreens client={client} first={screensRead.page} notify={notify} onOpenRecording={onOpenRecording} onClientChanged={onClientChanged} />
         ) : screensRead?.error ? (
@@ -265,6 +284,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
   inPlan: boolean;
 }) {
   const [busy, setBusy] = useState(false);
+  const askLocked = useLocked("ai_notes");
   const toggleNotes = async () => {
     const on = !ws.client.ai_notes;
     setBusy(true);
@@ -284,6 +304,12 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
         <section className="ws-section" aria-label="AI">
           <div className="card small muted row" data-testid="ai-not-in-plan"><span>{NO_AI_NOTES}</span><span className="spacer" /><PlanBadge feature="ai_notes" /></div>
         </section>
+        {/* Ask stays in view with its badge (v1.6.2): the badge opens the upgrade sheet, never a question. */}
+        {askLocked && (
+          <section className="ws-section" aria-label="Ask">
+            <LockedChip feature="ai_notes" label="Ask: answers about this project, from its recordings and files" />
+          </section>
+        )}
         <Brief ws={ws} clientId={client.id} notify={notify} onChange={onChange} onReload={onReload} canMake={false} />
         <Memory ws={ws} clientId={client.id} notify={notify} onChange={onChange} onOpenRecording={onOpenRecording} />
       </>

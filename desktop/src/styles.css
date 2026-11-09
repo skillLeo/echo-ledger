@@ -1463,3 +1463,9 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .feature-name { font-size: var(--text-sm); font-weight: 600; }
 .feature-list li.locked .feature-name { color: var(--text-muted); }
 .feature-included { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: var(--radius-full); color: var(--success, var(--accent)); background: color-mix(in srgb, var(--success, var(--accent)) 14%, transparent); }
+/* A locked feature in place (v1.6.2): a project's tab, a menu item, a palette row or a setting, with its badge. */
+.plan-badge.mark { margin-inline-start: var(--space-2); cursor: inherit; }
+.tab.locked { color: var(--text-muted); display: inline-flex; align-items: center; }
+.tab.locked:hover { color: var(--text); }
+.locked-toggle-end { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; }
+.locked-toggle .switch { opacity: 0.55; }
