@@ -6,6 +6,8 @@ use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
+use App\Models\UpgradeRequest;
+use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
@@ -126,15 +128,19 @@ function isoWorld(bool $sameWorkspace = false): array
     $upload = Fx::pendingRecording($uploading, str_repeat('b', 2048), 1024);
     ['link' => $requestLink] = app(RequestLinks::class)->create($client->workspace_id, $bob->id, $client, 'BOB-SECRET-TITLE request', null, 20, 100);
     $sent = SentItem::query()->create(['workspace_id' => $session->workspace_id, 'from_user_id' => $bob->id, 'to_user_id' => Fx::user()->id, 'kind' => 'session', 'capture_session_id' => $session->id, 'title' => 'BOB-SECRET-TITLE sent', 'sent_at' => now()]);
+    // Since v1.7: Bob's upgrade request with a receipt not sent yet.
+    $upgrade = UpgradeRequest::query()->create(['user_id' => $bob->id, 'workspace_id' => $bob->current_workspace_id, 'plan' => 'pro', 'status' => UpgradeRequest::PENDING]);
+    $proof = UpgradeRequestProof::query()->create(['upgrade_request_id' => $upgrade->id, 'user_id' => $bob->id, 'kind' => 'image', 'mime' => 'image/webp', 'name' => 'BOB-SECRET-RECEIPT.png',
+        'bytes' => 1, 'sha256' => str_repeat('c', 64), 'path' => 'payment-proofs/bob.elr', 'thumb_path' => 'payment-proofs/bob-thumb.elr']);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id];
 }
 
 /**
@@ -259,6 +265,12 @@ function isoApiCases(array $b): array
         // Since v1.6.2: another workspace's code is no different from an unknown one.
         'api.promo-codes.check' => ['POST', '/api/promo-codes/check', ['code' => 'NO-SUCH-CODE'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_promo_code'],
         'api.upgrade-requests.store' => ['POST', '/api/upgrade-requests', ['plan' => 'no-such-plan'], fn (TestResponse $r): bool => $r->status() === 422],
+        // Since v1.7: Bob's request and receipt are the same 404 as unknown ones.
+        'api.upgrade-requests.proofs.show' => ['GET', "/api/upgrade-requests/{$b['upgrade']->id}/proofs/{$b['proof']->id}", [], 404],
+        'api.upgrade-requests.proofs.store' => ['POST', "/api/upgrade-requests/{$b['upgrade']->id}/proofs", [], 404],
+        'api.upgrade-requests.proofs.destroy' => ['DELETE', "/api/upgrade-requests/{$b['upgrade']->id}/proofs/{$b['proof']->id}", [], 404],
+        'api.upgrade-requests.paid' => ['POST', "/api/upgrade-requests/{$b['upgrade']->id}/paid", ['payment_reference' => 'HIJACK'], 404],
+        'api.upgrade-requests.cancel' => ['POST', "/api/upgrade-requests/{$b['upgrade']->id}/cancel", [], 404],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],

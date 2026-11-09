@@ -34,6 +34,7 @@
             <li><strong>Your recordings:</strong> the audio, encrypted on the server with a key that is not the server's own login key; transcripts, views, notes, screens and project files, stored with them.</li>
             <li><strong>Devices and sign-ins:</strong> the phones and computers signed in to your account, the browsers you sign in from, their addresses, and an audit log of sign-ins, shares, deletions and settings changes, kept for a year.</li>
             <li><strong>Usage:</strong> how many minutes each engine transcribed and what it cost, per workspace.</li>
+            <li><strong>Payment receipts:</strong> the receipts you send with an upgrade request are encrypted, seen only by our payments team, and deleted 90 days after we decide on the request.</li>
         </ul>
 
         <h2>Transcription and translation</h2>

@@ -41,7 +41,9 @@ describe('the API', function () {
         $created = $this->api($this->token)->postJson('/api/upgrade-requests', ['plan' => 'pro', 'message' => 'For my clinic'])->assertCreated()
             ->assertJsonPath('plan', 'pro')->assertJsonPath('status', 'pending')->assertJsonPath('message', 'For my clinic')
             ->assertJsonPath('payment_instructions', "JazzCash 0300 0000000\nReference: your email");
-        expect(array_keys($created->json()))->toBe(['id', 'plan', 'status', 'message', 'promo_code', 'percent', 'amount_due', 'payment_instructions', 'created_at']);
+        expect(array_keys($created->json()))->toBe(['id', 'plan', 'status', 'message', 'promo_code', 'percent', 'amount_due', 'payment_instructions', 'created_at',
+            // Since v1.7 (Payment receipts): additive.
+            'reference_code', 'amount_due_pkr', 'currency', 'payment', 'timeline']);
 
         $this->api($this->token)->postJson('/api/upgrade-requests', ['plan' => 'business'])->assertStatus(409)
             ->assertJsonPath('code', 'request_pending')->assertJsonPath('request.id', $created->json('id'));

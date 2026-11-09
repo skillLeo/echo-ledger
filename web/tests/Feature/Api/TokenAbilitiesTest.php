@@ -115,6 +115,12 @@ function abilityRoutes(): array
         'ask for a plan' => ['POST', '/api/upgrade-requests', 'sessions:write'],
         'rename a device' => ['PATCH', "/api/devices/{$id}", 'sessions:write'],
         'your latest upgrade request' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
+        // Since v1.7: payment receipts.
+        'send a receipt' => ['POST', "/api/upgrade-requests/{$id}/proofs", 'sessions:write'],
+        'read a receipt' => ['GET', "/api/upgrade-requests/{$id}/proofs/{$id}", 'config:read'],
+        'remove a receipt' => ['DELETE', "/api/upgrade-requests/{$id}/proofs/{$id}", 'sessions:write'],
+        'say it is paid' => ['POST', "/api/upgrade-requests/{$id}/paid", 'sessions:write'],
+        'cancel a request' => ['POST', "/api/upgrade-requests/{$id}/cancel", 'sessions:write'],
         'check a promo code' => ['POST', '/api/promo-codes/check', 'config:read'],
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],

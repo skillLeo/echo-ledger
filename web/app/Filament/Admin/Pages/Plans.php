@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\AuditLog;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
+use App\Services\Entitlements\PaymentDetails;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
 use BackedEnum;
@@ -143,10 +144,50 @@ class Plans extends Page implements HasTable
                 TextColumn::make('workspaces_count')->label('Workspaces')->numeric(),
             ])
             ->headerActions([
+                // Since v1.7: the account customers pay into, shown with each upgrade request's reference and amount.
+                Action::make('paymentDetails')->label('Payment details')->icon(Heroicon::OutlinedBuildingLibrary)->color('gray')
+                    ->authorize(fn (): bool => StaffAccess::can('settings.manage'))
+                    ->modalDescription('The account customers pay into by bank transfer. The apps and the console show it with each request\'s reference code and amount. While all of it is empty they show the payment instructions text instead.')
+                    ->fillForm(fn (): array => collect(PaymentDetails::FIELDS)->mapWithKeys(fn (string $key): array => [Str::after($key, 'payment.') => app(SettingsRepository::class)->get($key)])->all())
+                    ->schema([
+                        Grid::make(['default' => 2])->schema([
+                            TextInput::make('bank')->label('Bank')->maxLength(80)->placeholder('Meezan Bank'),
+                            TextInput::make('branch')->label('Branch')->maxLength(120)->placeholder('Main Branch (0001)'),
+                            TextInput::make('account_title')->label('Account title')->maxLength(120)
+                                ->helperText('Exactly as the bank shows it to the person paying.'),
+                            TextInput::make('account_number')->label('Account number')->maxLength(34),
+                        ]),
+                        TextInput::make('iban')->label('IBAN')->maxLength(40)->placeholder('PK36SCBL0000001123456702')
+                            ->rule(fn (): \Closure => function (string $attribute, mixed $value, \Closure $fail): void {
+                                if (filled($value) && ! PaymentDetails::validIban((string) $value)) {
+                                    $fail('Write a Pakistani IBAN: PK and 22 letters and digits (24 in all). Check it against the bank\'s letter.');
+                                }
+                            }),
+                        Textarea::make('note')->label('Note for the customer (optional)')->rows(2)->maxLength(500)
+                            ->placeholder("Put {reference} in the transfer's note.")
+                            ->helperText('{reference} becomes the request\'s code, e.g. EL-7K2Q9M. Empty: "Put EL-… in the transfer\'s note."'),
+                    ])
+                    ->action(function (array $data): void {
+                        $settings = app(SettingsRepository::class);
+                        $before = (string) $settings->get('payment.iban');
+                        $values = [];
+                        foreach (PaymentDetails::FIELDS as $key) {
+                            $value = trim((string) ($data[Str::after($key, 'payment.')] ?? ''));
+                            if ($key === 'payment.iban' && $value !== '') {
+                                $value = PaymentDetails::normalizeIban($value);
+                            }
+                            $values[$key] = $value !== '' ? $value : null;
+                        }
+                        $settings->setMany($values);
+                        $mask = fn (?string $v): ?string => filled($v) ? '••••'.substr((string) $v, -4) : null;
+                        app(AuditLog::class)->record('payment_details_changed', (int) auth()->id(), null, 'Payment details changed',
+                            ['account_title' => $values['payment.account_title'], 'iban_before' => $mask($before), 'iban_after' => $mask($values['payment.iban'])]);
+                        Notification::make()->title('Payment details saved')->success()->send();
+                    }),
                 // Since v1.6: what people read after "Request upgrade" (bank or JazzCash details, what to write).
                 Action::make('paymentInstructions')->label('Payment instructions')->icon(Heroicon::OutlinedBanknotes)->color('gray')
                     ->authorize(fn (): bool => StaffAccess::can('settings.manage'))
-                    ->modalDescription('Shown after someone presses "Request upgrade", in the apps and the console, with "We\'ll activate it once confirmed".')
+                    ->modalDescription('Shown after someone presses "Request upgrade", in the apps and the console, with "We\'ll activate it once confirmed". Since v1.7 only while Payment details are empty.')
                     ->fillForm(fn (): array => ['text' => app(SettingsRepository::class)->get('upgrade.payment_instructions')])
                     ->schema([Textarea::make('text')->label('Payment instructions')->rows(6)->maxLength(2000)
                         ->placeholder('Bank: … · Account name: … · Account number: … · Reference: your email')])
@@ -322,6 +363,9 @@ class Plans extends Page implements HasTable
                 TextInput::make('price_label')->label('Price as shown (optional)')->maxLength(80)->placeholder('Rs 2,000 a month')
                     ->helperText('Leave empty to show the price and currency above.'),
                 TextInput::make('price_usd')->label('Price in US$ (for reports)')->numeric()->minValue(0)->maxValue(100000)->required(),
+                // Since v1.7: what a month costs by bank transfer, the amount due on an upgrade request.
+                TextInput::make('price_pkr')->label('Price by bank transfer (Rs a month)')->integer()->minValue(0)->maxValue(10_000_000)
+                    ->helperText('What a customer pays for a month, before a promo code. Empty: not sold by bank transfer.'),
                 TextInput::make('sort_order')->label('Order on the comparison')->integer()->minValue(0)->maxValue(1000)->required(),
                 TextInput::make('trial_minutes')->label('Trial minutes')->integer()->minValue(0)->maxValue(100000)->required()
                     ->helperText('Transcription on EchoLedger a person may try once without that feature.'),
@@ -406,6 +450,7 @@ class Plans extends Page implements HasTable
             'uploads_per_day' => $plan->uploads_per_day,
             'engines' => $plan->engineList(),
             'price_usd' => $plan->price_usd,
+            'price_pkr' => $plan->price_pkr,
             'monthly_minutes' => $plan->monthly_minutes,
             'storage_gb' => $plan->storage_bytes === null ? null : round($plan->storage_bytes / 1024 ** 3, 2),
             'max_devices' => $plan->max_devices,
@@ -442,6 +487,7 @@ class Plans extends Page implements HasTable
             'uploads_per_day' => $number('uploads_per_day'),
             'engines' => count($engines) === count(Features::ENGINES) ? null : $engines,
             'price_usd' => (float) ($data['price_usd'] ?? 0),
+            'price_pkr' => $number('price_pkr'),
             'monthly_minutes' => $number('monthly_minutes'),
             'storage_bytes' => filled($data['storage_gb'] ?? null) ? (int) round((float) $data['storage_gb'] * 1024 ** 3) : null,
             'max_devices' => $number('max_devices'),

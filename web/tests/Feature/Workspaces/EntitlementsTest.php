@@ -76,7 +76,7 @@ describe('GET /api/me/entitlements', function () {
             ->and($body['features']['platform_transcription'])->toMatchArray(['enabled' => false, 'name' => 'Transcription on EchoLedger', 'cost' => 'paid', 'lowest_plan' => 'pro_test'])
             ->and($body['features']['live_translate'])->toMatchArray(['enabled' => false, 'lowest_plan' => 'business_test'])
             ->and($body['limits'])->toBe([
-                'monthly_minutes' => ['limit' => 0, 'used' => 0], 'devices' => ['limit' => 2, 'used' => 1],
+                'monthly_minutes' => ['limit' => 0, 'used' => 0, 'resets_at' => now('Asia/Karachi')->startOfMonth()->addMonthNoOverflow()->toAtomString()], 'devices' => ['limit' => 2, 'used' => 1],
                 'storage_bytes' => ['limit' => 1073741824, 'used' => 0], 'retention_days' => ['limit' => 30],
                 'seats' => ['limit' => 1, 'used' => 1], 'max_file_minutes' => ['limit' => 180],
                 'uploads_per_day' => ['limit' => 50, 'used' => 1], 'ai_usd_month' => ['limit' => 0, 'used' => 0],
