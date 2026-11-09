@@ -76,7 +76,7 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     const announcement = { text: "New: Send to WhatsApp from any recording.", level: "info", until: null };
     const { unmount } = render(<ServerBanners server={{ ...NONE, announcement }} notify={vi.fn()} />);
     expect(screen.getByTestId("announcement")).toHaveClass("info");
-    fireEvent.click(screen.getByRole("button", { name: "Close this announcement" }));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("announcement")).not.toBeInTheDocument();
     unmount();
     const again = render(<ServerBanners server={{ ...NONE, announcement }} notify={vi.fn()} />);

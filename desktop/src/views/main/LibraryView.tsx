@@ -7,6 +7,7 @@ import { Menu } from "../../components/Menu";
 import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
 import { WhatsAppSheet } from "./WhatsAppSheet";
+import { StateBanner } from "../../components/StateBanner";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
@@ -1154,11 +1155,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               }} />
           )}
           {selecting && !shared && <BulkBar ids={pickedIds} clients={folders} knownLabels={labels} notify={notify} onDone={endSelecting} onClientCreated={addClient} onSelectAll={() => setPicked(new Set(filtered.map((i) => i.id)))} />}
+          {/* Offline (a state, v1.6.1 Notices): no timer; a click tries again; closed until the next problem. */}
           {syncError && (
-            <div className="notice error sync-error" role="alert">
+            <StateBanner id="library-sync" state={syncError} tone="danger" role="alert" className="sync-error" onOpen={() => void refresh()} openLabel="Couldn't sync with the server. Try again"
+              actions={<button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>}>
               <span>Couldn't sync with the server. Showing what is saved on this computer.</span>
-              <button type="button" className="btn compact" onClick={refresh} disabled={loading}>Retry</button>
-            </div>
+            </StateBanner>
           )}
           {!smartFolder && smartView !== "pinned" && <LibraryQueue notify={notify} focus={focus} onFocusHandled={onFocusHandled} />}
           {shownHits.length > 0 && (

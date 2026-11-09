@@ -16,7 +16,7 @@ import { RequestLinksSheet } from "./RequestLinks";
 import { ACCOUNT_TABS, SIGN_OUT_CONFIRM } from "./SettingsView";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
-import { AlertIcon, CloseIcon } from "../../components/Icons";
+import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
 import { UpdateBanner } from "./UpdateSettings";
@@ -37,6 +37,7 @@ import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { Notice } from "../../components/Notice";
+import { StateBanner } from "../../components/StateBanner";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 
 type Tab = MainTab;
@@ -124,8 +125,6 @@ export default function MainApp() {
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
   const [focus, setFocus] = useState<PendingFocus | null>(null);
   const navigations = useRef(0);
-  // The 80% notice can be dismissed until the app restarts; the limit-reached banner stays.
-  const [budgetWarnDismissed, setBudgetWarnDismissed] = useState(false);
   const [palette, setPalette] = useState(false);
   const [openRequest, setOpenRequest] = useState<{ id: string; ms: number; seq: number } | null>(null);
   const [lock, setLock] = useState<LockStatus | null>(null);
@@ -670,26 +669,24 @@ export default function MainApp() {
           onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
           onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
-        <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
-          <UpdateBanner appStatus={status} notify={notify} />
+        <main ref={contentRef} className={`content page-${tab}`}>
+          <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
           <ServerBanners server={status.server} notify={notify} />
           {status.platform === "macos" && <PermissionLossNotice />}
+          {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
           {oneSided && (
-            <div className="banner warn one-sided-banner" role="alert" data-testid="one-sided">
-              <AlertIcon size={16} />
+            <Notice kind="banner" tone="warn" className="banner warn one-sided-banner" role="alert" testId="one-sided" icon={<AlertIcon size={16} />} timeoutMs={null}
+              onOpen={() => goTo("record")} onDismiss={() => setOneSided(null)}
+              actions={<button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>}>
               <span className="one-sided-text"><b>{oneSided.title}</b><span className="small">{oneSided.reason} {oneSided.fix}</span></span>
-              <button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>
-              <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setOneSided(null)}><CloseIcon size={14} /></button>
-            </div>
+            </Notice>
           )}
-          {status.budget === "reached" && (
-            <div className="banner danger" data-testid="budget-banner"><AlertIcon size={16} /><span>{BUDGET_REACHED}</span></div>
-          )}
-          {status.budget === "warn" && !budgetWarnDismissed && (
-            <div className="banner warn" data-testid="budget-banner">
-              <AlertIcon size={16} /><span>{BUDGET_WARN}</span>
-              <button type="button" className="banner-close" aria-label="Dismiss" onClick={() => setBudgetWarnDismissed(true)}><CloseIcon size={14} /></button>
-            </div>
+          {/* The month's limit (a state): goes to Plan & usage; closed until it changes (warning, then reached). */}
+          {status.budget !== "ok" && (status.budget === "reached" || status.budget === "warn") && (
+            <StateBanner id="budget" state={status.budget} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
+              onOpen={() => openAccount("plan")} openLabel={`${status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN} Open Plan & usage`}>
+              <span>{status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN}</span>
+            </StateBanner>
           )}
           {tab === "library" && (
             <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}

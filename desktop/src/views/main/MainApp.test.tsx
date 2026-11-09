@@ -678,20 +678,26 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
   it("shows nothing while the budget is fine", async () => {
     await renderPaired({ budget: "ok" });
     expect(banner()).not.toBeInTheDocument();
-    expect(document.querySelector(".content")).not.toHaveClass("has-banner");
   });
 
-  it("keeps a banner up while the limit is reached, on every page, with no way to dismiss it", async () => {
+  it("keeps a banner up while the limit is reached, on every page, with no timer; × closes it until the state changes (v1.6.1)", async () => {
+    respond("account_get", { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
     await renderPaired({ budget: "reached" });
     expect(banner()).toHaveTextContent("Monthly transcription limit reached. Recordings are kept but not transcribed.");
     expect(banner()).toHaveClass("danger");
-    expect(within(banner()!).queryByRole("button")).not.toBeInTheDocument();
-    expect(document.querySelector(".content")).toHaveClass("has-banner");
+    // A state: it never hides by itself (Notice's own tests prove a notice without a time has no timer).
+    expect(banner()!.querySelector(".notice-timer")).toBeNull();
     fireEvent.click(nav("Home"));
     expect(banner()).toHaveTextContent("Monthly transcription limit reached.");
     fireEvent.click(nav("Account"));
     await screen.findByRole("heading", { name: "Account", level: 1 });
     expect(banner()).toBeInTheDocument();
+    // A click goes to Plan & usage; × closes it for this state.
+    fireEvent.click(within(banner()!).getByRole("button", { name: /Open Plan & usage/ }));
+    expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
+    expect(banner()).not.toBeInTheDocument();
+    await emitEvent("app:status", makeStatus({ budget: "reached", captionsLive: true }));
+    expect(banner()).not.toBeInTheDocument();
   });
 
   it("warns at 80% and lets the user dismiss the warning for the session", async () => {
@@ -700,7 +706,6 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
     expect(banner()).toHaveClass("warn");
     fireEvent.click(within(banner()!).getByRole("button", { name: "Dismiss" }));
     expect(banner()).not.toBeInTheDocument();
-    expect(document.querySelector(".content")).not.toHaveClass("has-banner");
     await emitEvent("app:status", makeStatus({ budget: "warn", captionsLive: true }));
     expect(banner()).not.toBeInTheDocument();
   });

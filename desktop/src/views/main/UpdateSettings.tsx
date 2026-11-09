@@ -6,6 +6,7 @@ import { api, errorMessage, listenTo, type AppStatus, type UpdateStatus } from "
 import { formatWhen } from "../../lib/format";
 import { DownloadIcon } from "../../components/Icons";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { StateBanner } from "../../components/StateBanner";
 
 /** Where updates stand, kept current by `update:status`; null until the core answered. */
 export function useUpdateStatus(): [UpdateStatus | null, (s: UpdateStatus) => void] {
@@ -88,7 +89,7 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
 }
 
 /** "Update ready — Restart" across the top of the window once an update is downloaded, or Later (the next start). */
-export function UpdateBanner({ appStatus, notify }: { appStatus: AppStatus; notify: Notify }) {
+export function UpdateBanner({ appStatus, notify, onOpen }: { appStatus: AppStatus; notify: Notify; onOpen?: () => void }) {
   const [status] = useUpdateStatus();
   const [later, setLater] = useState<string | null>(null);
   if (status?.phase !== "ready" || !status.version || later === status.version) return null;
@@ -99,12 +100,15 @@ export function UpdateBanner({ appStatus, notify }: { appStatus: AppStatus; noti
       notify(errorMessage(e), true);
     }
   };
+  // A state (an update waits to install): no timer; × or a swipe closes it until another version (v1.6.1 Notices).
   return (
-    <div className="banner update-banner" data-testid="update-banner" role="status">
-      <DownloadIcon size={16} />
+    <StateBanner id="update-ready" state={status.version} tone="accent" testId="update-banner" role="status" icon={<DownloadIcon size={16} />}
+      onOpen={onOpen} openLabel={`Update ready: EchoLedger ${status.version}. Open the updates`}
+      actions={<>
+        <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart</button>
+        <button type="button" className="btn compact ghost" onClick={() => { setLater(status.version); notify("The update installs the next time EchoLedger starts.", false, NO_TARGET); }}>Later</button>
+      </>}>
       <span><b>Update ready</b> — EchoLedger {status.version}</span>
-      <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart</button>
-      <button type="button" className="btn compact ghost" onClick={() => { setLater(status.version); notify("The update installs the next time EchoLedger starts.", false, NO_TARGET); }}>Later</button>
-    </div>
+    </StateBanner>
   );
 }

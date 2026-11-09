@@ -5,7 +5,9 @@
 import { useState } from "react";
 import { api, errorMessage, MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT, type AnnouncementNotice, type ServerNotices } from "../../lib/ipc";
 import { clockTime } from "../../lib/format";
-import { AlertIcon, BellIcon, CloseIcon, RefreshIcon } from "../../components/Icons";
+import { AlertIcon, BellIcon, RefreshIcon } from "../../components/Icons";
+import { Notice } from "../../components/Notice";
+import { StateBanner } from "../../components/StateBanner";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const CLOSED_KEY = "echoledger-announcements-closed";
@@ -79,33 +81,32 @@ export function ServerBanners({ server, notify }: { server: ServerNotices | null
 
   return (
     <>
+      {/* States (v1.6.1 Notices): no timer; closed until the state changes or the next start. A click on the update
+          runs it; maintenance is about nothing to open. */}
       {update && (
-        <div className={`banner ${update.refused ? "danger" : "warn"}`} data-testid="app-update">
-          <AlertIcon size={16} />
+        <StateBanner id="app-update" state={`${update.minimum}|${update.refused}`} tone={update.refused ? "danger" : "warn"} testId="app-update" icon={<AlertIcon size={16} />}
+          onOpen={() => void runUpdate()}
+          actions={<button type="button" className="btn compact" disabled={checking} onClick={() => void runUpdate()}><RefreshIcon size={14} />{checking ? "Looking…" : "Update"}</button>}>
           <span className="banner-text">
             <b>{update.message || (update.minimum ? `Please update EchoLedger to ${update.minimum} or later.` : "Please update EchoLedger.")}</b>
             {update.refused && <span className="small"> The server no longer accepts this version: your recordings wait on this computer and upload after the update.</span>}
           </span>
-          <button type="button" className="btn compact" disabled={checking} onClick={() => void runUpdate()}><RefreshIcon size={14} />{checking ? "Looking…" : "Update"}</button>
-        </div>
+        </StateBanner>
       )}
       {server.maintenance && (
-        <div className="banner quiet" data-testid="maintenance">
-          <RefreshIcon size={16} />
+        <StateBanner id="maintenance" state={`${server.maintenance.message}|${server.maintenance.until ?? ""}`} tone="quiet" testId="maintenance" icon={<RefreshIcon size={16} />}>
           <span className="banner-text">
             <b>{server.maintenance.message && server.maintenance.message !== MAINTENANCE_TEXT ? server.maintenance.message : "The server is in maintenance."}</b>
             <span className="small"> {backAbout(server.maintenance.until)} Recordings and uploads wait on this computer and go when it is back.</span>
           </span>
-        </div>
+        </StateBanner>
       )}
+      {/* The announcement is closed per text, for good (it is remembered on this computer). */}
       {showsAnnouncement(announcement, closed) && (
-        <div className={`banner ${announcement.level === "warning" ? "warn" : "info"}`} data-testid="announcement">
-          <BellIcon size={16} />
+        <Notice kind="banner" tone={announcement.level === "warning" ? "warn" : "info"} className={`banner ${announcement.level === "warning" ? "warn" : "info"}`} testId="announcement"
+          icon={<BellIcon size={16} />} timeoutMs={null} onDismiss={() => { rememberClosed(announcement.text); setClosed(closedAnnouncements()); }}>
           <span className="banner-text" dir="auto">{announcement.text}</span>
-          <button type="button" className="banner-close" aria-label="Close this announcement" onClick={() => { rememberClosed(announcement.text); setClosed(closedAnnouncements()); }}>
-            <CloseIcon size={14} />
-          </button>
-        </div>
+        </Notice>
       )}
     </>
   );

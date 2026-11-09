@@ -7,6 +7,7 @@ import { formatDuration } from "../../lib/format";
 import { isViewer } from "../../lib/plan";
 import { AlertIcon, AppTileIcon, appKind, BellIcon, HourglassIcon, ImportIcon } from "../../components/Icons";
 import { PageHeader } from "../../components/Page";
+import { StateBanner } from "../../components/StateBanner";
 import { RecordView } from "./RecordView";
 import { rowTime } from "./LibraryView";
 
@@ -48,37 +49,23 @@ export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, 
   const recent = useRecent();
   const problems = needsYou.filter(needsAction).length;
   const viewer = isViewer(status);
+  // What needs you (states, v1.6.1 Notices): a click goes there, × or a swipe closes a card until its count changes.
+  const card = (id: string, count: number, icon: React.ReactNode, title: string, line: string, action: string, onOpen: () => void) => (
+    <StateBanner key={id} id={`home-${id}`} state={String(count)} bare className="action-card" icon={icon} onOpen={onOpen}
+      actions={<button type="button" className="btn text" onClick={onOpen}>{action}</button>}>
+      <span className="action-card-main">
+        <span className="action-card-title">{title}</span>
+        <span className="small muted">{line}</span>
+      </span>
+    </StateBanner>
+  );
   const cards = [
-    status.pendingDecisions > 0 && (
-      <div className="action-card" key="waiting">
-        <HourglassIcon size={22} />
-        <div className="action-card-main">
-          <span className="action-card-title">Keep or discard?</span>
-          <span className="small muted">{status.pendingDecisions === 1 ? "1 call is waiting for your decision" : `${status.pendingDecisions} calls are waiting for your decision`}</span>
-        </div>
-        <button type="button" className="btn text" onClick={onReview}>Review</button>
-      </div>
-    ),
-    status.failedUploads > 0 && (
-      <div className="action-card" key="failed">
-        <AlertIcon size={22} />
-        <div className="action-card-main">
-          <span className="action-card-title">Uploads that need you</span>
-          <span className="small muted">{status.failedUploads === 1 ? "1 recording did not finish uploading" : `${status.failedUploads} recordings did not finish uploading`}</span>
-        </div>
-        <button type="button" className="btn text" onClick={onFailed}>Open</button>
-      </div>
-    ),
-    problems > 0 && (
-      <div className="action-card" key="problems">
-        <BellIcon size={22} />
-        <div className="action-card-main">
-          <span className="action-card-title">{problems === 1 ? "1 notification needs you" : `${problems} notifications need you`}</span>
-          <span className="small muted">A transcript that failed, the monthly limit, or an answer to your upgrade request.</span>
-        </div>
-        <button type="button" className="btn text" onClick={onActivity}>Open</button>
-      </div>
-    ),
+    status.pendingDecisions > 0 && card("waiting", status.pendingDecisions, <HourglassIcon size={22} />, "Keep or discard?",
+      status.pendingDecisions === 1 ? "1 call is waiting for your decision" : `${status.pendingDecisions} calls are waiting for your decision`, "Review", onReview),
+    status.failedUploads > 0 && card("failed", status.failedUploads, <AlertIcon size={22} />, "Uploads that need you",
+      status.failedUploads === 1 ? "1 recording did not finish uploading" : `${status.failedUploads} recordings did not finish uploading`, "Open", onFailed),
+    problems > 0 && card("problems", problems, <BellIcon size={22} />, problems === 1 ? "1 notification needs you" : `${problems} notifications need you`,
+      "A transcript that failed, the monthly limit, or an answer to your upgrade request.", "Open", onActivity),
   ].filter(Boolean);
   return (
     <div className="home-page">
