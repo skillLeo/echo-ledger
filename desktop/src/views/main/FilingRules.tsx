@@ -5,6 +5,7 @@ import { api, errorMessage, type ClientFolder, type FilingRule, type LibraryItem
 import { SOURCE_APP_LABELS } from "../../lib/format";
 import { filedByRuleText, RULE_APPS, RULE_KINDS, ruleText } from "../../lib/sharing";
 import { PlusIcon, TrashIcon } from "../../components/Icons";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const PLACEHOLDER: Record<RuleKind, string> = {
   title: "Words in the title, like Acme",
@@ -17,7 +18,7 @@ const PLACEHOLDER: Record<RuleKind, string> = {
  * without filing rules shows nothing. What the core refuses (the same rule on another project, a number that is not
  * one) is said under the form.
  */
-export function RulesSection({ project, notify }: { project: Pick<ClientFolder, "id" | "name">; notify: (text: string, error?: boolean) => void }) {
+export function RulesSection({ project, notify }: { project: Pick<ClientFolder, "id" | "name">; notify: Notify }) {
   const [rules, setRules] = useState<FilingRule[] | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [kind, setKind] = useState<RuleKind>("title");
@@ -52,7 +53,7 @@ export function RulesSection({ project, notify }: { project: Pick<ClientFolder, 
       const { data } = await api.addClientRule(project.id, kind, text);
       setRules((list) => [...(list ?? []).filter((r) => r.id !== data.id), data]);
       setValue("");
-      notify(`Rule added: ${ruleText(data)}`);
+      notify(`Rule added: ${ruleText(data)}`, false, NO_TARGET);
     } catch (e) {
       setError(errorMessage(e));
     } finally {

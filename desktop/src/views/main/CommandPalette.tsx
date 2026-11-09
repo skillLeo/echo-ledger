@@ -7,6 +7,7 @@ import { timestamp } from "../../lib/format";
 import { snippetParts } from "../../lib/player";
 import type { MainTab } from "../../lib/mainView";
 import { findPages, type PageEntry } from "../../lib/shell";
+import type { NoticeTarget } from "../../lib/notice";
 
 export interface PaletteCommand {
   id: string;
@@ -43,7 +44,7 @@ export interface PaletteExtra {
 /** The commands that make sense right now (recording or not, captions on or off). */
 export function paletteCommands(status: AppStatus, actions: {
   go: (tab: MainTab) => void;
-  run: (fn: () => Promise<unknown>, ok?: string) => void;
+  run: (fn: () => Promise<unknown>, ok?: string, target?: NoticeTarget) => void;
   /** The smart folders (since v1.5), here too so they open with the sidebar collapsed. */
   folders?: readonly PaletteFolder[];
   openFolder?: (folder: SmartFolder) => void;
@@ -61,7 +62,7 @@ export function paletteCommands(status: AppStatus, actions: {
     list.push(status.paused
       ? { id: "resume", label: "Resume recording", keywords: "continue", run: () => actions.run(api.resumeRecording) }
       : { id: "pause", label: "Pause recording", keywords: "off the record hold", run: () => actions.run(api.pauseRecording) });
-    list.push({ id: "mark", label: "Bookmark this moment", keywords: "mark tag", run: () => actions.run(() => api.markMoment(), "Bookmarked") });
+    list.push({ id: "mark", label: "Bookmark this moment", keywords: "mark tag", run: () => actions.run(() => api.markMoment(), "Bookmarked", { kind: "page", page: "record" }) });
   }
   list.push(
     { id: "captions", label: status.captionsLive ? "Turn captions off" : "Turn captions on", keywords: "live subtitles", run: () => actions.run(api.toggleCaptions) },
@@ -75,7 +76,7 @@ export function paletteCommands(status: AppStatus, actions: {
     ...(extra.newProject ? [{ id: "new-project", label: "New project", keywords: "create client folder add", run: extra.newProject }] : []),
     ...(extra.requestLink ? [{ id: "request-link", label: "Request link", keywords: "request files send me voice notes upload link", run: extra.requestLink }] : []),
     ...(extra.invite ? [{ id: "invite", label: "Invite people to the workspace", keywords: "invite team teammate member add person", run: extra.invite }] : []),
-    { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced") },
+    { id: "sync", label: "Sync the library", keywords: "refresh download", run: () => actions.run(api.refreshLibrary, "Library synced", { kind: "library", view: null }) },
     { id: "library", label: "Go to Library", keywords: "recordings transcripts", run: () => actions.go("library") },
     ...(openFolder ? (actions.folders ?? []).map(({ folder, label }) => (
       { id: `folder-${folder}`, label: `Go to ${label}`, keywords: "smart folder library recordings", run: () => openFolder(folder) }
@@ -100,7 +101,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   status: AppStatus;
   onClose: () => void;
   onGo: (tab: MainTab) => void;
-  run: (fn: () => Promise<unknown>, ok?: string) => void;
+  run: (fn: () => Promise<unknown>, ok?: string, target?: NoticeTarget) => void;
   onOpenRecording: (id: string, ms: number) => void;
   /** The Library's smart folders the sidebar lists, and what opens one. */
   folders?: readonly PaletteFolder[];

@@ -8,8 +8,8 @@ import { formatWhen } from "../../lib/format";
 import { screenAlt, screenLabel, screenPicture, screensBySession } from "../../lib/screens";
 import { ChevronRightIcon, CloseIcon, MonitorIcon, TrashIcon } from "../../components/Icons";
 import { ChevronLeftIcon, PlayIcon } from "../../components/ControlIcons";
+import type { Notify } from "../../lib/notice";
 
-type Notify = (text: string, error?: boolean) => void;
 
 /** A screen's picture once it is fetched; `failed` when it could not be. */
 export function usePicture(url: string | null): { src: string | null; failed: boolean } {

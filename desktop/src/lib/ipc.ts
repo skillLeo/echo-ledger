@@ -1216,8 +1216,9 @@ export interface NavigatePayload {
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
 export interface EventPayloads {
   "app:status": AppStatus;
-  "app:error": string;
-  "app:toast": string;
+  /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
+  "app:error": string | { text: string; target?: unknown };
+  "app:toast": string | { text: string; target?: unknown };
   "library:updated": number;
   "overlay:visibility": boolean;
   "settings:changed": Settings;

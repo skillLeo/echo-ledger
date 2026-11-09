@@ -4,7 +4,7 @@ import { LibraryView } from "./LibraryView";
 import { BulkBar, OrganisePanel } from "./LibraryOrganise";
 import type { LibraryItem } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -101,7 +101,7 @@ describe("library organisation (B15)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Pin" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toEqual([{ ids: ["b", "c"], action: "pin", clientId: null, label: null }]));
-    expect(notify).toHaveBeenCalledWith("2 recordings updated");
+    expect(notify).toHaveBeenCalledWith("2 recordings updated", false, anyTarget);
   });
 
   it("keeps the selection actions on one compact line and selects every listed recording at once", async () => {
@@ -179,7 +179,7 @@ describe("bulk bar", () => {
     fireEvent.click(within(screen.getByRole("radiogroup", { name: "Move to" })).getByRole("radio", { name: /Acme Holdings/ }));
     fireEvent.click(within(screen.getByRole("dialog", { name: "Move 2 recordings" })).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toHaveLength(1));
-    expect(notify).toHaveBeenCalledWith("Moved 2 recordings to Acme Holdings");
+    expect(notify).toHaveBeenCalledWith("Moved 2 recordings to Acme Holdings", false, anyTarget);
     fireEvent.change(screen.getByLabelText("Label"), { target: { value: "Q4" } });
     fireEvent.click(screen.getByRole("button", { name: "Add label" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toHaveLength(2));
@@ -189,7 +189,7 @@ describe("bulk bar", () => {
     ]);
     fireEvent.change(screen.getByRole("combobox", { name: "Export format" }), { target: { value: "txt" } });
     fireEvent.click(screen.getByRole("button", { name: "Export transcripts" }));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Saved C:\\Users\\me\\Downloads\\EchoLedger transcripts.zip"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Saved C:\\Users\\me\\Downloads\\EchoLedger transcripts.zip", false, anyTarget));
     expect(callsOf("sessions_export")).toEqual([{ ids: ["a", "b"], format: "txt" }]);
   });
 
@@ -200,7 +200,7 @@ describe("bulk bar", () => {
     expect(callsOf("sessions_bulk")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Delete 2 (restorable for 48 hours)" }));
     await waitFor(() => expect(onDone).toHaveBeenCalled());
-    expect(notify).toHaveBeenCalledWith("2 deleted");
+    expect(notify).toHaveBeenCalledWith("2 deleted", false, anyTarget);
   });
 
   it("reports when nothing could be exported", async () => {

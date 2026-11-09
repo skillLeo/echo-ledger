@@ -8,7 +8,7 @@ import { deletedText, ProjectsView } from "./ProjectsView";
 import { budgetLine, citationLabel, workspaceBusy } from "./ClientWorkspace";
 import type { ClientFolder, ClientWorkspace, LibraryItem, ProjectScreen, ProjectScreensPage } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeScreen } from "../../test/fixtures";
+import { makeItem, makeScreen, anyTarget } from "../../test/fixtures";
 import { forgetPictures } from "../../lib/screens";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -132,7 +132,7 @@ describe("the Projects page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add project" }));
     await waitFor(() => expect(callsOf("client_create")).toEqual([{ name: "Nova", color: null, avatar: null, parentId: null }]));
     expect(await screen.findByRole("heading", { name: "Nova" })).toBeInTheDocument();
-    expect(props.notify).toHaveBeenCalledWith("Nova added");
+    expect(props.notify).toHaveBeenCalledWith("Nova added", false, { kind: "project", id: expect.any(String) });
     expect(props.onReload).toHaveBeenCalled();
   });
 
@@ -271,7 +271,7 @@ describe("the project menu", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: "Add folder" }));
     await waitFor(() => expect(callsOf("client_create")).toEqual([{ name: "Contracts", color: null, avatar: null, parentId: "c1" }]));
     expect(await screen.findByRole("heading", { name: "Contracts" })).toBeInTheDocument();
-    expect(props.notify).toHaveBeenCalledWith("Contracts added to Acme Holdings");
+    expect(props.notify).toHaveBeenCalledWith("Contracts added to Acme Holdings", false, anyTarget);
   });
 
   it("renames the project", async () => {
@@ -299,7 +299,7 @@ describe("the project menu", () => {
     fireEvent.click(within(picker).getByRole("radio", { name: /Zed Logistics/ }));
     fireEvent.click(screen.getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("client_update")).toEqual([{ id: "c3", patch: { parent_id: "c2" } }]));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Moved Invoices into Zed Logistics"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Moved Invoices into Zed Logistics", false, anyTarget));
     await flushAsync();
     expect(within(screen.getByRole("navigation", { name: "Where this project is" })).getByRole("button", { name: "Zed Logistics" })).toBeInTheDocument();
   });
@@ -340,7 +340,7 @@ describe("the project menu", () => {
     expect(dialog).toHaveTextContent("Its files, brief, notes, memory and filing rules are deleted with it.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete project" }));
     await waitFor(() => expect(callsOf("client_delete")).toEqual([{ id: "c1" }]));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Deleted Acme Holdings · 2 recordings moved to the Inbox · 1 folder moved up"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Deleted Acme Holdings · 2 recordings moved to the Inbox · 1 folder moved up", false, { kind: "library", folder: "inbox" }));
     expect(await screen.findByRole("heading", { name: "Projects" })).toBeInTheDocument();
     expect(within(screen.getByRole("list", { name: "Projects" })).getByText("Invoices")).toBeInTheDocument();
   });
@@ -475,7 +475,7 @@ describe("Notes", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy for AI" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("# Acme: project context\n\n## Brief\n…"));
     expect(callsOf("client_bundle")).toEqual([{ id: "c1", notes: null }]);
-    expect(props.notify).toHaveBeenCalledWith("Copied the brief, memory and recent call notes for AI");
+    expect(props.notify).toHaveBeenCalledWith("Copied the brief, memory and recent call notes for AI", false, anyTarget);
   });
 });
 
@@ -516,7 +516,7 @@ describe("Files", () => {
     tab("Files");
     fireEvent.click(screen.getByRole("button", { name: "Add files" }));
     await waitFor(() => expect(callsOf("client_file_upload")).toEqual([{ id: "c1", path: "C:\\docs\\scope v2.pdf" }]));
-    expect(props.notify).toHaveBeenCalledWith("Only PDF, Word (.docx), text and Markdown files can be added.", false);
+    expect(props.notify).toHaveBeenCalledWith("Only PDF, Word (.docx), text and Markdown files can be added.", false, undefined);
     expect(await screen.findByText("scope v2.pdf")).toBeInTheDocument();
     expect(screen.getAllByText("Reading…").length).toBeGreaterThan(0);
   });

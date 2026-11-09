@@ -8,7 +8,7 @@ import { OrganisePanel } from "./LibraryOrganise";
 import { movedText } from "./ProjectDialogs";
 import type { ClientFolder, LibraryItem } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeSettings, makeStatus, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeSettings, makeStatus, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -67,7 +67,7 @@ describe("the Move dialog", () => {
     fireEvent.click(within(picker).getByRole("radio", { name: /Invoices/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c3" } }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Acme › Invoices", false, { kind: "project", id: "c3" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
@@ -84,7 +84,7 @@ describe("the Move dialog", () => {
     fireEvent.click(within(dialog).getByRole("radio", { name: /Inbox/ }));
     fireEvent.click(within(dialog).getByRole("button", { name: "Move" }));
     await waitFor(() => expect(callsOf("sessions_bulk")).toEqual([{ ids: ["a", "c"], action: "move", clientId: null, label: null }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved 2 recordings to the Inbox"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved 2 recordings to the Inbox", false, { kind: "library", folder: "inbox" }));
   });
 
   it("makes a new project and moves into it", async () => {
@@ -99,7 +99,7 @@ describe("the Move dialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create and move" }));
     await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c9" } }]));
     expect(callsOf("client_create")).toEqual([{ name: "Nova", color: null, avatar: null, parentId: null }]);
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Nova"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved “Loose call” to Nova", false, anyTarget));
   });
 
   it("keeps the dialog open and says why a move failed", async () => {
@@ -212,7 +212,7 @@ describe("the recording page", () => {
     const select = screen.getByRole("combobox", { name: "Project" }) as HTMLSelectElement;
     expect([...select.options].map((o) => o.text)).toEqual(["Inbox", "Acme", "Acme › Invoices", "Zed", "New project…"]);
     fireEvent.change(select, { target: { value: "c3" } });
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved to Acme › Invoices"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Moved to Acme › Invoices", false, anyTarget));
   });
 
   it("says which rule filed the recording", async () => {

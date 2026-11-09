@@ -5,7 +5,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
 import type { LibraryItem, ScreenMoment, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeScreen, makeTranscript, anyTarget } from "../../test/fixtures";
 import { forgetPictures } from "../../lib/screens";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -139,7 +139,7 @@ describe("screens on the recording page", () => {
     await flushAsync();
     expect(callsOf("screen_delete")).toEqual([{ sessionId: "a", screen: "sc2" }]);
     expect(callsOf("session_screens")).toHaveLength(2);
-    expect(notify).toHaveBeenCalledWith("Deleted screen 2");
+    expect(notify).toHaveBeenCalledWith("Deleted screen 2", false, anyTarget);
     expect(screen.queryByText("Screen 2 · 14:40")).not.toBeInTheDocument();
   });
 
@@ -167,14 +167,14 @@ describe("screens on the recording page", () => {
     expect(within(exportMenu).getByRole("group", { name: "With the screens" })).toBeInTheDocument();
     fireEvent.change(exportMenu, { target: { value: "pack-pdf" } });
     await flushAsync();
-    expect(notify).toHaveBeenLastCalledWith("Opened the meeting pack in your browser: choose Save as PDF there");
+    expect(notify).toHaveBeenLastCalledWith("Opened the meeting pack in your browser: choose Save as PDF there", false, anyTarget);
     fireEvent.change(exportMenu, { target: { value: "pack-zip-audio" } });
     await flushAsync();
     expect(callsOf("meeting_pack")).toEqual([
       { id: "a", format: "pdf", view: null, includeAudio: false },
       { id: "a", format: "zip", view: null, includeAudio: true },
     ]);
-    expect(notify).toHaveBeenLastCalledWith("Saved to /Users/me/Downloads/Checkout review.zip");
+    expect(notify).toHaveBeenLastCalledWith("Saved to /Users/me/Downloads/Checkout review.zip", false, anyTarget);
     expect(callsOf("export_transcript")).toEqual([]);
   });
 

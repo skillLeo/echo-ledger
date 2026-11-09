@@ -95,7 +95,8 @@ describe("MainApp start-up and pairing gate", () => {
     await screen.findByRole("heading", { name: "Sign in with a code" });
     fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "NOPE" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));
-    const toast = await screen.findByRole("status");
+    // An error is said assertively (DESIGN_SYSTEM.md "Notices" 5).
+    const toast = await screen.findByRole("alert");
     expect(toast).toHaveTextContent("Server returned 422: The pairing code is invalid or has expired.");
     expect(toast).toHaveClass("toast", "error");
     expect(screen.getByRole("heading", { name: "Sign in with a code" })).toBeInTheDocument();
@@ -113,7 +114,7 @@ describe("MainApp start-up and pairing gate", () => {
     await emitEvent("app:error", "This computer was signed out on the server. Sign in again to upload.");
     await emitEvent("app:status", makeStatus({ paired: false }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
-    const toast = screen.getByRole("status");
+    const toast = screen.getByRole("alert");
     expect(toast).toHaveTextContent("This computer was signed out on the server. Sign in again to upload.");
     expect(toast).toHaveClass("toast", "error");
   });
@@ -124,8 +125,8 @@ describe("MainApp start-up and pairing gate", () => {
     render(<MainApp />);
     await screen.findByRole("heading", { name: "Sign in to EchoLedger" });
     await emitEvent("app:error", "Network error: the server's TLS certificate was not accepted (pin mismatch)");
-    expect(screen.getByRole("status")).toHaveTextContent("Network error: the server's TLS certificate was not accepted (pin mismatch)");
-    expect(screen.getByRole("status")).toHaveClass("error");
+    expect(screen.getByRole("alert")).toHaveTextContent("Network error: the server's TLS certificate was not accepted (pin mismatch)");
+    expect(screen.getByRole("alert")).toHaveClass("error");
   });
 
   // A6.DU7: every screen has a main landmark (start-up, pairing form and the paired app).
@@ -397,7 +398,7 @@ describe("MainApp sidebar and keys", () => {
     await renderPaired({ recording: makeRecording({ mode: "call" }) });
     fireEvent.keyDown(document.body, { key: "n" });
     expect(callsOf("toggle_mic_note")).toHaveLength(0);
-    expect(screen.getByRole("status")).toHaveTextContent("A recording is running. Stop it before starting a voice note.");
+    expect(screen.getByRole("alert")).toHaveTextContent("A recording is running. Stop it before starting a voice note.");
   });
 });
 
@@ -519,33 +520,84 @@ describe("MainApp events, toasts and polling", () => {
     expect(within(sidebar()).getByText("Uploading 1 recording…")).toBeInTheDocument();
   });
 
+  it("goes where a toast is about when it is clicked (DESIGN_SYSTEM.md Notices, v1.6.1)", async () => {
+    await renderPaired();
+    // The core says where its notice goes.
+    await emitEvent("app:toast", { text: "Uploaded 2 recording(s) for transcription", target: { kind: "page", page: "activity" } });
+    fireEvent.click(screen.getByRole("button", { name: "Uploaded 2 recording(s) for transcription" }));
+    expect(await screen.findByRole("heading", { name: "Activity", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // A plain one is about nothing in particular: not clickable.
+    await emitEvent("app:toast", "Copied the last 2 minutes of captions");
+    expect(screen.getByRole("status")).not.toHaveClass("has-target");
+    expect(screen.queryByRole("button", { name: "Copied the last 2 minutes of captions" })).not.toBeInTheDocument();
+  });
+
+  it("goes to the fix from an error toast that has one", async () => {
+    await renderPaired({ recording: makeRecording({ mode: "call" }) });
+    fireEvent.keyDown(document.body, { key: "n" });
+    fireEvent.click(screen.getByRole("button", { name: "A recording is running. Stop it before starting a voice note." }));
+    expect(await screen.findByRole("heading", { name: "Home", level: 1 })).toBeInTheDocument();
+  });
+
+  it("closes the newest toast with Esc before the page hears it", async () => {
+    await renderPaired();
+    fireEvent.click(within(screen.getByTestId("library-list")).getByText("Zoom with Acme").closest("button")!);
+    await flushAsync();
+    expect(screen.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
+    await emitEvent("app:toast", "Library synced");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    // The recording stays open: the Esc was the toast's.
+    expect(screen.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("heading", { name: "Zoom with Acme" })).not.toBeInTheDocument();
+  });
+
+  it("never offers a toast's target before the window is open (the sign-in form)", async () => {
+    mockBackend({ paired: false, serverUrl: null, deviceName: null });
+    render(<MainApp />);
+    await screen.findByRole("heading", { name: "Sign in to EchoLedger" });
+    await emitEvent("app:toast", { text: "Signed out", target: { kind: "page", page: "activity" } });
+    expect(screen.getByRole("status")).not.toHaveClass("has-target");
+  });
+
   it("shows app:error as an error toast and app:toast as a normal toast", async () => {
     await renderPaired();
     await emitEvent("app:error", "No sound was captured, so nothing was saved.");
-    expect(screen.getByRole("status")).toHaveTextContent("No sound was captured, so nothing was saved.");
-    expect(screen.getByRole("status")).toHaveClass("error");
+    expect(screen.getByRole("alert")).toHaveTextContent("No sound was captured, so nothing was saved.");
+    expect(screen.getByRole("alert")).toHaveClass("error");
     await emitEvent("app:toast", "Uploaded 2 recording(s) for transcription");
     expect(screen.getByRole("status")).toHaveTextContent("Uploaded 2 recording(s) for transcription");
     expect(screen.getByRole("status")).not.toHaveClass("error");
   });
 
-  it("hides a toast after 4.5 seconds, and restarts the timer when a new one replaces it", async () => {
+  it("hides a message after 6 seconds and an error after 10, and restarts the timer when a new one replaces it", async () => {
     await renderPaired();
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await emitEvent("app:toast", "first");
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(screen.getByRole("status")).toHaveTextContent("first");
     await emitEvent("app:toast", "second");
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(4_000);
+      await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(screen.getByRole("status")).toHaveTextContent("second");
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(600);
+      await vi.advanceTimersByTimeAsync(1_100);
     });
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await emitEvent("app:error", "Could not save");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9_000);
+    });
+    expect(screen.getByRole("alert")).toHaveTextContent("Could not save");
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_100);
+    });
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("re-reads the status every 1.5 seconds", async () => {
@@ -585,7 +637,7 @@ describe("MainApp action runner", () => {
     respondWith("record_now", () => Promise.reject("Audio error: no input device"));
     fireEvent.click(nav("Home"));
     fireEvent.click(screen.getByRole("button", { name: "Record now" }));
-    const toast = await screen.findByRole("status");
+    const toast = await screen.findByRole("alert");
     expect(toast).toHaveTextContent("Audio error: no input device");
     expect(toast).toHaveClass("error");
     expect(screen.getByRole("heading", { name: "Home", level: 1 })).toBeInTheDocument();

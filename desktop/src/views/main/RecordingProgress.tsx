@@ -5,6 +5,7 @@ import { api, errorMessage, type LibraryItem, type TranscriptView } from "../../
 import { improvingText, stepOf, stepStates, type Step } from "../../lib/progress";
 import { itemState } from "../../lib/library";
 import { fillWidth } from "../../lib/motion";
+import type { Notify } from "../../lib/notice";
 
 // The running step says its name; what it is doing (parts, time left, percent) is said once, under the steps.
 const STEP_WORDS: Record<Step, { waiting: string; active: string; done: string }> = {
@@ -18,7 +19,7 @@ export function RecordingSteps({ item, improving, notify }: {
   item: Pick<LibraryItem, "id" | "status" | "transcript">;
   /** The views are being made (the slim bar says how far). */
   improving: boolean;
-  notify?: (text: string, error?: boolean) => void;
+  notify?: Notify;
 }) {
   const [asked, setAsked] = useState(false);
   const { step, line } = stepOf(item);

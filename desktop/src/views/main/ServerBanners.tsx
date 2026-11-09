@@ -6,6 +6,7 @@ import { useState } from "react";
 import { api, errorMessage, MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT, type AnnouncementNotice, type ServerNotices } from "../../lib/ipc";
 import { clockTime } from "../../lib/format";
 import { AlertIcon, BellIcon, CloseIcon, RefreshIcon } from "../../components/Icons";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const CLOSED_KEY = "echoledger-announcements-closed";
 /** How many closed announcements are remembered (the oldest are forgotten first). */
@@ -49,7 +50,7 @@ export function isHoldMessage(text: string): boolean {
   return text === MAINTENANCE_TEXT || text === UPDATE_REQUIRED_TEXT;
 }
 
-export function ServerBanners({ server, notify }: { server: ServerNotices | null | undefined; notify: (text: string, error?: boolean) => void }) {
+export function ServerBanners({ server, notify }: { server: ServerNotices | null | undefined; notify: Notify }) {
   const [closed, setClosed] = useState<string[]>(closedAnnouncements);
   const [checking, setChecking] = useState(false);
   if (!server) return null;
@@ -63,11 +64,12 @@ export function ServerBanners({ server, notify }: { server: ServerNotices | null
     try {
       const status = await api.checkForUpdates().catch(() => null);
       if (status && (status.phase === "downloading" || status.phase === "ready")) {
-        notify(status.phase === "ready" ? "The update is ready: choose Restart to install it." : "Downloading the update. EchoLedger says when it is ready to restart.");
+        notify(status.phase === "ready" ? "The update is ready: choose Restart to install it." : "Downloading the update. EchoLedger says when it is ready to restart.", false,
+          { kind: "account", section: "about" });
         return;
       }
       await api.openServerPage("downloads");
-      notify("The Downloads page opened in your browser");
+      notify("The Downloads page opened in your browser", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {

@@ -36,6 +36,8 @@ import type { Account, OneSided } from "../../lib/ipc";
 import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
+import { Notice } from "../../components/Notice";
+import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -110,7 +112,13 @@ export default function MainApp() {
   // An echoledger://open link waiting to be opened (since v1.5), and a request link it pointed at.
   const [linkRequest, setLinkRequest] = useState<{ url: string; seq: number } | null>(null);
   const [requestFocus, setRequestFocus] = useState<{ id: string; seq: number } | null>(null);
-  const [toast, setToast] = useState<{ text: string; error?: boolean } | null>(null);
+  // The toast (v1.6.1, DESIGN_SYSTEM.md "Notices"): one at a time, the newest; a click goes to its target.
+  const [toast, setToast] = useState<{ id: number; text: string; error: boolean; target?: NoticeTarget } | null>(null);
+  const toastSeq = useRef(0);
+  // The server holding the work (maintenance, a refused version) is news, never a failure (v1.6, P2.7).
+  const showToast = useCallback((text: string, error = false, target?: NoticeTarget) => {
+    setToast({ id: ++toastSeq.current, text, error: error && !isHoldMessage(text), target });
+  }, []);
   // After a call where one side was never heard (Phase 1C): why and how to fix it, until dismissed.
   const [oneSided, setOneSided] = useState<OneSided | null>(null);
   const [theme, setTheme] = useState<ThemeChoice>(getThemeChoice);
@@ -147,7 +155,7 @@ export default function MainApp() {
         if (paths.length === 0 || !acceptDrops.current) return;
         const claim = fileDropClaim();
         if (claim) claim(paths);
-        else if (viewer.current) setToast({ text: viewer.current, error: true });
+        else if (viewer.current) showToast(viewer.current, true, NO_TARGET);
         else setImportPaths(paths);
       },
     });
@@ -208,11 +216,12 @@ export default function MainApp() {
         e.preventDefault();
         // Like the Record page: a call or a captured voice note has to stop first.
         if (recording && recording.mode !== "mic_note") {
-          setToast({ text: "A recording is running. Stop it before starting a voice note.", error: true });
+          showToast("A recording is running. Stop it before starting a voice note.", true, { kind: "page", page: "record" });
           return;
         }
         setTab("record");
-        void run(api.toggleMicNote, recording ? "Voice note saved" : "Recording a voice note. Press N again to stop.");
+        void run(api.toggleMicNote, recording ? "Voice note saved" : "Recording a voice note. Press N again to stop.",
+          recording ? { kind: "library", view: null } : { kind: "page", page: "record" });
       }
     };
     window.addEventListener("keydown", onKey);
@@ -256,8 +265,9 @@ export default function MainApp() {
     });
     const unlisten = [
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
-      listen<string>("app:error", (e) => setToast({ text: e.payload, error: !isHoldMessage(e.payload) })),
-      listen<string>("app:toast", (e) => setToast({ text: e.payload })),
+      // The core's notices: words, or words with where they go (v1.6.1).
+      listen<NoticePayload>("app:error", (e) => { const n = noticeOf(e.payload); showToast(n.text, true, n.target); }),
+      listen<NoticePayload>("app:toast", (e) => { const n = noticeOf(e.payload); showToast(n.text, false, n.target); }),
       listenTo("capture:one_sided", (said) => said && setOneSided(said)),
       // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
       listenTo("main:navigate", (nav) => {
@@ -410,7 +420,7 @@ export default function MainApp() {
     setLinkRequest(null);
     const inBrowser = async (why: string) => {
       await api.openLink(url);
-      setToast({ text: `Opened in your browser: ${why}` });
+      showToast(`Opened in your browser: ${why}`, false, NO_TARGET);
     };
     api.resolveLink(url).then(async (target) => {
       if (!target) {
@@ -452,7 +462,7 @@ export default function MainApp() {
           setRequestFocus({ id: target.request_link_id, seq: ++navigations.current });
           break;
       }
-    }).catch((e) => setToast({ text: errorMessage(e), error: true }));
+    }).catch((e) => showToast(errorMessage(e), true, NO_TARGET));
   }, [linkRequest, ready]);
   useEffect(() => {
     const scroll = restoredScroll.current;
@@ -461,14 +471,20 @@ export default function MainApp() {
     restoreScroll(scroll);
   }, [restored, paired]);
 
+  // Esc closes the newest toast before anything else hears it (an open dialog or menu keeps its own Esc).
   useEffect(() => {
     if (!toast) return;
-    const t = window.setTimeout(() => setToast(null), 4500);
-    return () => window.clearTimeout(t);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || document.querySelector(".palette-backdrop, .sheet-backdrop, .menu-pop, .row-menu-pop")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setToast(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
   }, [toast]);
 
-  // The server holding the work (maintenance, a refused version) is news, never a failure (v1.6, P2.7).
-  const notify = (text: string, error = false) => setToast({ text, error: error && !isHoldMessage(text) });
+  const notify: Notify = showToast;
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
     if (viewer.current) {
@@ -483,10 +499,10 @@ export default function MainApp() {
     }
   };
   const closeImport = useCallback(() => setImportPaths(null), []);
-  const run = async <T,>(fn: () => Promise<T>, ok?: string) => {
+  const run = async <T,>(fn: () => Promise<T>, ok?: string, target?: NoticeTarget) => {
     try {
       const result = await fn();
-      if (ok) notify(ok);
+      if (ok) notify(ok, false, target);
       refreshStatus();
       return result;
     } catch (e) {
@@ -498,9 +514,18 @@ export default function MainApp() {
   // Rendered in every branch: a pairing error, or "signed out on the server" arriving with the status that sends the
   // window back to the sign-in form, must stay visible (A6.DU1).
   // A message that confirms something carries the check that pops in (as on the phone).
+  // Its target opens only in the main window itself (never on the lock screen, the sign-in or the first-run wizard).
+  const goRef = useRef<((target: NoticeTarget) => void) | null>(null);
+  const inApp = !!status?.paired && restored && !lock?.locked && setupDone !== false;
   const toastView = toast && (
-    <div className={`toast ${toast.error ? "error" : ""}`} role="status">
-      {!toast.error && isConfirmation(toast.text) && <SuccessCheck size={16} />}{toast.text}
+    <div className="toast-region">
+      <Notice key={toast.id} kind="toast" className={`toast ${toast.error ? "error" : ""}`} tone={toast.error ? "error" : "neutral"}
+        role={toast.error ? "alert" : "status"} timeoutMs={toast.error ? ERROR_MS : MESSAGE_MS}
+        icon={!toast.error && isConfirmation(toast.text) ? <SuccessCheck size={16} /> : undefined}
+        onOpen={toast.target && inApp ? () => goRef.current?.(toast.target!) : undefined}
+        onDismiss={() => setToast((t) => (t?.id === toast.id ? null : t))}>
+        {toast.text}
+      </Notice>
     </div>
   );
 
@@ -570,6 +595,19 @@ export default function MainApp() {
   };
   /** A page from the sidebar or the command palette: the whole Library, the list of projects, or another page. */
   const goTo = (id: Tab) => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id));
+  /** Where a notice goes when it is clicked (v1.6.1): the recording, the page or setting, the fix. */
+  goRef.current = (target: NoticeTarget) => {
+    switch (target.kind) {
+      case "recording": openRecording(target.id, target.ms ?? 0); break;
+      case "page": goTo(target.page); break;
+      case "account": openAccount(target.section); break;
+      case "project": openProject(target.id); break;
+      case "library": if (target.view) openLibraryView(target.view); else openFolder(target.folder ?? null); break;
+      case "shared": openShared(target.tab); break;
+      case "server": void api.openServerPage(target.page).catch((e) => notify(errorMessage(e), true, NO_TARGET)); break;
+      case "action": target.run(); break;
+    }
+  };
   /** Account → a tab or a section of it (Devices, Plan & usage, Preferences…). */
   const openAccount = (section: string) => {
     setTab("settings");
@@ -685,7 +723,7 @@ export default function MainApp() {
       {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
-          run={(fn, ok) => void run(fn, ok)} pages={pages}
+          run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
             invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />

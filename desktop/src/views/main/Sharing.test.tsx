@@ -10,7 +10,7 @@ import { ProjectsView } from "./ProjectsView";
 import { LibraryView } from "./LibraryView";
 import type { ClientFolder, ShareLink } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -81,14 +81,14 @@ describe("the share dialog", () => {
     expect(made).toHaveTextContent("Copy it now. It is shown only once.");
     // v1.6 (P6): the new link is copied at once, one click fewer.
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/tok"));
-    expect(props.notify).toHaveBeenCalledWith("Link made and copied");
+    expect(props.notify).toHaveBeenCalledWith("Link made and copied", false, { kind: "shared", tab: "links" });
     writeText.mockClear();
     // A share made: the check pops in next to "Link made" (v1.5).
     expect(made).toHaveTextContent("Link made");
     expect(made.querySelector("[data-testid=success-check]")).not.toBeNull();
     fireEvent.click(within(made).getByRole("button", { name: "Copy link" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/tok"));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Link copied"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Link copied", false, { kind: "shared", tab: "links" }));
   });
 
   it("needs a password of six characters for a password link, and never sends it as a person", async () => {
@@ -164,7 +164,7 @@ describe("send to a teammate", () => {
     respond("sent_of", { data: [] });
     fireEvent.click(within(list).getByRole("button", { name: "Stop sharing" }));
     await waitFor(() => expect(callsOf("stop_sharing")).toEqual([{ id: "m1" }]));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Stopped sharing"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Stopped sharing", false, undefined));
     await waitFor(() => expect(screen.queryByRole("list", { name: "Sent to" })).not.toBeInTheDocument());
     expect(props.onClose).not.toHaveBeenCalled();
   });
@@ -185,7 +185,7 @@ describe("send to a teammate", () => {
     fireEvent.change(screen.getByLabelText("Note (optional)"), { target: { value: " for tomorrow " } });
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await waitFor(() => expect(callsOf("send_to_teammate")).toEqual([{ kind: "session", id: "s1", to: ["ana@example.com"], note: "for tomorrow" }]));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Sent to ana@example.com"));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("Sent to ana@example.com", false, anyTarget));
     expect(props.onClose).toHaveBeenCalled();
   });
 
@@ -238,7 +238,7 @@ describe("request files", () => {
     render(<RequestLinksSheet projects={PROJECTS} notify={notify} onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(callsOf("request_link_revoke")).toEqual([{ id: "rq1" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Request link revoked: it stops taking files at once"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Request link revoked: it stops taking files at once", false, anyTarget));
   });
 });
 

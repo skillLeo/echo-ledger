@@ -3,6 +3,7 @@ import { api, errorMessage, type AppStatus } from "../../lib/ipc";
 import { ShieldIcon } from "../../components/Icons";
 import { Wordmark } from "../../components/BrandMark";
 import { serverHost } from "../../lib/server";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /**
  * Sign in with a one-time code (or pasted QR text): servers older than accounts, and "Sign in a device" in the console
@@ -11,7 +12,7 @@ import { serverHost } from "../../lib/server";
  */
 export function PairingView({ onPaired, notify, notice, onUseAccount, serverUrl = "", defaultServer = "" }: {
   onPaired: (s: AppStatus) => void;
-  notify: (t: string, e?: boolean) => void;
+  notify: Notify;
   notice?: string | null;
   onUseAccount?: () => void;
   serverUrl?: string;
@@ -29,7 +30,7 @@ export function PairingView({ onPaired, notify, notice, onUseAccount, serverUrl 
     setBusy(true);
     try {
       onPaired(await api.pair(server.trim(), code.trim(), name.trim()));
-      notify("Signed in. Your library will sync now.");
+      notify("Signed in. Your library will sync now.", false, NO_TARGET);
     } catch (err) {
       notify(errorMessage(err), true);
     } finally {

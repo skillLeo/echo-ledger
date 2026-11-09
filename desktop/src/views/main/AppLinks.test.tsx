@@ -165,6 +165,6 @@ describe("app links", () => {
     respondWith("links_resolve", () => Promise.reject("That is not an EchoLedger link."));
     await renderApp();
     await open("https://ledger.example.test/admin");
-    expect(await screen.findByRole("status")).toHaveTextContent("That is not an EchoLedger link.");
+    expect(await screen.findByRole("alert")).toHaveTextContent("That is not an EchoLedger link.");
   });
 });

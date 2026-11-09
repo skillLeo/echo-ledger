@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { canMoveTo, projectLabel, projectTree, subtreeIds, visibleRows } from "../../lib/projects";
 import { FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
+import type { Notify } from "../../lib/notice";
 
 /** Moves recordings into a project (null: the Inbox): one through its own change, several in one bulk action. */
 export async function moveRecordings(ids: readonly string[], projectId: string | null): Promise<void> {
@@ -173,7 +174,7 @@ export function MoveRecordingsDialog({ ids, title = null, current, projects, not
   /** The project they are all in now (null: the Inbox; undefined: not all the same). */
   current?: string | null;
   projects: readonly ClientFolder[];
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
   onMoved?: (projectId: string | null) => void;
   onProjectCreated?: (project: ClientFolder) => void;
@@ -188,7 +189,7 @@ export function MoveRecordingsDialog({ ids, title = null, current, projects, not
     setBusy(true);
     try {
       await moveRecordings(ids, projectId);
-      notify(movedText(count, title, list, projectId));
+      notify(movedText(count, title, list, projectId), false, projectId ? { kind: "project", id: projectId } : { kind: "library", folder: "inbox" });
       onMoved?.(projectId);
       onClose();
     } catch (e) {

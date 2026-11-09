@@ -9,6 +9,7 @@ import { LinkIcon, PlusIcon, RequestFilesIcon, UsersIcon } from "../../component
 import { PageHeader, PageTabs } from "../../components/Page";
 import { RequestLinksSheet } from "./RequestLinks";
 import { SHARED_TABS, type SharedTab } from "./Sidebar";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /** What each tab lists, read when the page opens; null while loading, and on a server without it. */
 interface SharedData {
@@ -25,7 +26,7 @@ export function senderOf(item: Pick<SharedItem, "from">): string {
 export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenRecording, onOpenProject }: {
   tab: SharedTab;
   onTab: (tab: SharedTab) => void;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   projects: readonly ClientFolder[] | null;
   /** Opens an item of Shared with me in the Library. */
   onOpenShared: (id: string) => void;
@@ -54,7 +55,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   const revokeLink = async (link: ShareLink) => {
     try {
       await api.revokeShare(link.id);
-      notify("Link revoked: it stops working at once");
+      notify("Link revoked: it stops working at once", false, NO_TARGET);
       load();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -63,7 +64,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   const revokeRequest = async (link: RequestLink) => {
     try {
       await api.revokeRequestLink(link.id);
-      notify("Request link revoked");
+      notify("Request link revoked", false, NO_TARGET);
       load();
     } catch (e) {
       notify(errorMessage(e), true);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { anyTarget } from "../../test/fixtures";
 import { ATTACH_NOTE, fileName, linkMessage, WHATSAPP_LINK_SECONDS, WhatsAppSheet } from "./WhatsAppSheet";
 import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 
@@ -48,14 +49,14 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     await waitFor(() => expect(callsOf("whatsapp_open")).toEqual([{ text: TEXT }]));
     expect(writeText).toHaveBeenCalledWith(TEXT);
     await waitFor(() => expect(props.onClose).toHaveBeenCalled());
-    expect(props.notify).toHaveBeenCalledWith("Opening WhatsApp with the text");
+    expect(props.notify).toHaveBeenCalledWith("Opening WhatsApp with the text", false, anyTarget);
   });
 
   it("says the whole text is on the clipboard when the message had to be cut", async () => {
     respond("whatsapp_open", true);
     const props = renderSheet();
     fireEvent.click(screen.getByRole("button", { name: "Text only" }));
-    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("WhatsApp opens with the start of the text. The whole text is copied: paste it there."));
+    await waitFor(() => expect(props.notify).toHaveBeenCalledWith("WhatsApp opens with the start of the text. The whole text is copied: paste it there.", false, anyTarget));
   });
 
   it("Text and voice: saves the audio in Downloads, opens WhatsApp with the text and says to attach the file", async () => {
@@ -81,7 +82,7 @@ describe("Send to WhatsApp on the computer (v1.6, P5.5)", () => {
     await waitFor(() => expect(callsOf("whatsapp_open")).toEqual([{ text: "Kick-off\nhttps://ledger.example.test/s/tok" }]));
     expect(callsOf("share_create")).toEqual([{ sessionId: "s1", expiresIn: 604_800, password: null, includeAudio: true }]);
     expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/tok");
-    expect(props.notify).toHaveBeenCalledWith("Link made (it works for 7 days) and copied");
+    expect(props.notify).toHaveBeenCalledWith("Link made (it works for 7 days) and copied", false, { kind: "shared", tab: "links" });
     expect(props.onClose).toHaveBeenCalled();
   });
 

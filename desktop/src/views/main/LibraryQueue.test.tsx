@@ -6,7 +6,7 @@ import { LibraryView } from "./LibraryView";
 import type { PendingFocus } from "./LibraryQueue";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makePendingItem, makeUploadItem } from "../../test/fixtures";
+import { makeItem, makePendingItem, makeUploadItem, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -115,7 +115,7 @@ describe("Waiting recordings", () => {
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]));
     await waitFor(() => expect(screen.queryByTestId("pending-p1")).not.toBeInTheDocument());
     expect(row("p2")).toBeInTheDocument();
-    expect(notify).toHaveBeenCalledWith("Kept");
+    expect(notify).toHaveBeenCalledWith("Kept", false, { kind: "library", view: null });
   });
 
   it("reports a recording that is no longer waiting and re-reads the list", async () => {
@@ -139,7 +139,7 @@ describe("Waiting recordings", () => {
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Discard" }));
     await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Discarded");
+    expect(notify).toHaveBeenCalledWith("Discarded", false, undefined);
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
@@ -224,7 +224,7 @@ describe("Waiting recordings: slim line", () => {
     fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Kept 2 recordings");
+    expect(notify).toHaveBeenCalledWith("Kept 2 recordings", false, { kind: "library", view: null });
     expect(callsOf("pending_discard")).toHaveLength(0);
   });
 
@@ -234,7 +234,7 @@ describe("Waiting recordings: slim line", () => {
     respond("pending_list", [makePendingItem("p2")]);
     fireEvent.click(screen.getByRole("button", { name: "Keep all" }));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }, { id: "p2" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Kept 1 recording"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Kept 1 recording", false, anyTarget));
     expect(notify).toHaveBeenCalledWith("This recording is no longer waiting.", true);
   });
 
@@ -247,7 +247,7 @@ describe("Waiting recordings: slim line", () => {
     await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p1" }, { id: "p2" }]));
     await waitFor(() => expect(waitingLine()).not.toBeInTheDocument());
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(notify).toHaveBeenCalledWith("Discarded 2 recordings");
+    expect(notify).toHaveBeenCalledWith("Discarded 2 recordings", false, anyTarget);
     expect(callsOf("pending_keep")).toHaveLength(0);
   });
 
@@ -536,7 +536,7 @@ describe("Uploads that need you", () => {
     fireEvent.click(within(uploadRow("u1")).getByRole("button", { name: "Discard" }));
     await waitFor(() => expect(callsOf("upload_discard")).toEqual([{ id: "u1" }]));
     await waitFor(() => expect(screen.queryByTestId("upload-u1")).not.toBeInTheDocument());
-    expect(notify).toHaveBeenCalledWith("Discarded");
+    expect(notify).toHaveBeenCalledWith("Discarded", false, anyTarget);
   });
 
   it("shows an upload the server is still checking, without actions", async () => {
@@ -601,7 +601,7 @@ describe("Waiting for another account (v1.5)", () => {
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(confirm).toHaveBeenCalledWith("Discard all 2 recordings? It can't be undone.");
     await waitFor(() => expect(callsOf("upload_discard")).toEqual([{ id: "h1" }, { id: "h2" }]));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Discarded 2 recordings"));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Discarded 2 recordings", false, anyTarget));
     expect(screen.getByRole("region", { name: "Waiting for sara@example.test" })).toBeInTheDocument();
     expect(screen.queryByRole("region", { name: "Waiting for hassam@example.test" })).not.toBeInTheDocument();
   });
@@ -650,7 +650,7 @@ describe("Importing", () => {
     await flushAsync();
     expect(confirm).not.toHaveBeenCalled();
     expect(callsOf("upload_discard")).toEqual([{ id: "i1" }]);
-    expect(notify).toHaveBeenCalledWith("Import cancelled");
+    expect(notify).toHaveBeenCalledWith("Import cancelled", false, anyTarget);
     expect(screen.queryByTestId("upload-i1")).not.toBeInTheDocument();
     expect(uploadRow("i2")).toBeInTheDocument();
   });

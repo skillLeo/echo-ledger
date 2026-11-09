@@ -6,6 +6,7 @@ import { api, errorMessage, type SharedItem } from "../../lib/ipc";
 import { formatDuration, formatWhen } from "../../lib/format";
 import { AppTileIcon, appKind, FolderIcon, UsersIcon } from "../../components/Icons";
 import { SuccessCheck } from "../../components/SuccessCheck";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 /** "From Hassam · Oct 30 · 4:05 pm" */
 export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): string {
@@ -14,7 +15,7 @@ export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): string {
 }
 
 export function SharedWithMe({ notify, openId, onOpen, onSaved, focusId = null }: {
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   /** The shared recording open beside the list. */
   openId: string | null;
   onOpen: (item: SharedItem) => void;
@@ -51,7 +52,8 @@ export function SharedWithMe({ notify, openId, onOpen, onSaved, focusId = null }
     try {
       const saved = await api.saveShared(item.id);
       setItems((list) => (list ?? []).map((i) => (i.id === item.id ? { ...i, saved_at: new Date().toISOString() } : i)));
-      notify(item.kind === "project" ? `Saved ${item.title ?? "the project"} to your projects` : "Saved to your Library");
+      notify(item.kind === "project" ? `Saved ${item.title ?? "the project"} to your projects` : "Saved to your Library", false,
+        saved?.client_id ? { kind: "project", id: saved.client_id } : saved?.session_id ? { kind: "recording", id: saved.session_id } : NO_TARGET);
       onSaved(saved ?? {}, item);
     } catch (e) {
       notify(errorMessage(e), true);
@@ -64,7 +66,7 @@ export function SharedWithMe({ notify, openId, onOpen, onSaved, focusId = null }
     try {
       await api.removeShared(item.id);
       setItems((list) => (list ?? []).filter((i) => i.id !== item.id));
-      notify("Removed from Shared with me");
+      notify("Removed from Shared with me", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     } finally {

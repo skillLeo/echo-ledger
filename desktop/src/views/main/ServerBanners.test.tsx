@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { backAbout, isHoldMessage, ServerBanners, showsAnnouncement } from "./ServerBanners";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeItem, makeSettings, makeStatus, anyTarget } from "../../test/fixtures";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT, type ServerNotices } from "../../lib/ipc";
 import { setClock24 } from "../../lib/format";
 
@@ -41,7 +41,7 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     fireEvent.click(within(banner).getByRole("button", { name: "Update" }));
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "downloads", serverUrl: null }]));
     expect(callsOf("update_check")).toHaveLength(1);
-    expect(notify).toHaveBeenCalledWith("The Downloads page opened in your browser");
+    expect(notify).toHaveBeenCalledWith("The Downloads page opened in your browser", false, anyTarget);
   });
 
   it("lets the updater do it when it has a newer build", async () => {
@@ -49,7 +49,7 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     const notify = vi.fn();
     render(<ServerBanners server={{ ...NONE, appUpdate: UPDATE }} notify={notify} />);
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    await waitFor(() => expect(notify).toHaveBeenCalledWith("Downloading the update. EchoLedger says when it is ready to restart."));
+    await waitFor(() => expect(notify).toHaveBeenCalledWith("Downloading the update. EchoLedger says when it is ready to restart.", false, anyTarget));
     expect(callsOf("server_page_open")).toHaveLength(0);
   });
 
@@ -139,7 +139,7 @@ describe("the main window while the server holds the work (v1.6, P2.7)", () => {
     expect(screen.getByRole("status")).toHaveTextContent(MAINTENANCE_TEXT);
     expect(screen.getByRole("status")).not.toHaveClass("error");
     await emitEvent("app:error", "The server could not be reached.");
-    expect(screen.getByRole("status")).toHaveClass("error");
+    expect(screen.getByRole("alert")).toHaveClass("error");
   });
 
   it("asks for the update when this version is refused, and says the recordings wait", async () => {

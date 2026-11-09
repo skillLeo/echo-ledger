@@ -10,6 +10,7 @@ import { CopyIcon, SendIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { SharePanel } from "./TranscriptTools";
 import { SuccessCheck } from "../../components/SuccessCheck";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 export type ShareTarget =
   | { kind: "session"; id: string; title: string | null; hasAudio: boolean }
@@ -24,7 +25,7 @@ const VIEW_NAMES: Record<TranscriptView, string> = { roman: "Roman Urdu", englis
 
 export function ShareDialog({ target, notify, onClose, start = "link", view = null }: {
   target: ShareTarget;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
   /** The part that opens first. */
   start?: "link" | "send";
@@ -80,7 +81,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
   target: ShareTarget;
   links: ShareLink[] | null;
   view: TranscriptView | null;
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onMade: () => Promise<void>;
 }) {
   const [audience, setAudience] = useState<ShareAudience>("public");
@@ -121,7 +122,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
       if (link.url) {
         try {
           await navigator.clipboard.writeText(link.url);
-          notify("Link made and copied");
+          notify("Link made and copied", false, { kind: "shared", tab: "links" });
         } catch {
           // No clipboard here: the link is shown to copy.
         }
@@ -137,7 +138,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
     if (!made) return;
     try {
       await navigator.clipboard.writeText(made);
-      notify("Link copied");
+      notify("Link copied", false, { kind: "shared", tab: "links" });
     } catch {
       notify("Could not access the clipboard", true);
     }
@@ -146,7 +147,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
     try {
       await api.revokeShare(link.id);
       await onMade();
-      notify("Link revoked: it stops working at once");
+      notify("Link revoked: it stops working at once", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
     }
@@ -235,7 +236,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
   );
 }
 
-function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (text: string, error?: boolean) => void; onSent: () => void }) {
+function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: Notify; onSent: () => void }) {
   const [sentItems, setSentItems] = useState<SentItem[]>([]);
   const loadSent = useCallback(async () => {
     try {
@@ -249,7 +250,7 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (te
   const stop = async (item: SentItem) => {
     try {
       await api.stopSharing(item.id);
-      notify("Stopped sharing");
+      notify("Stopped sharing", false, NO_TARGET);
       await loadSent();
     } catch (e) {
       notify(errorMessage(e), true);
@@ -268,7 +269,7 @@ function SendPart({ target, notify, onSent }: { target: ShareTarget; notify: (te
     setError(null);
     try {
       const sent = await api.sendToTeammate(target.kind, target.id, parsed.emails, note.trim() || null);
-      notify(sent === 1 ? `Sent to ${parsed.emails[0]}` : `Sent to ${sent} people`);
+      notify(sent === 1 ? `Sent to ${parsed.emails[0]}` : `Sent to ${sent} people`, false, NO_TARGET);
       onSent();
     } catch (e) {
       setError(errorMessage(e));

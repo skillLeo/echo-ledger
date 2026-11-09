@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { PairingView } from "./PairingView";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeStatus } from "../../test/fixtures";
+import { makeStatus, anyTarget } from "../../test/fixtures";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -45,7 +45,7 @@ describe("PairingView", () => {
 
     await waitFor(() => expect(onPaired).toHaveBeenCalledWith(paired));
     expect(callsOf("pair_device")).toEqual([{ serverUrl: "https://ledger.example.test/", code: "ABCD-1234", deviceName: "Studio PC" }]);
-    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.");
+    expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.", false, anyTarget);
   });
 
   it("sends an empty device name when the optional field is blank", async () => {

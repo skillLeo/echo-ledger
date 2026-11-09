@@ -6,10 +6,11 @@ import { api, errorMessage, type ClientFolder, type TranscriptionLanguage } from
 import { MAIN_LANGUAGES, MORE_LANGUAGES, menuLabel } from "../../lib/languages";
 import { fileName, importNotice, importTitle, isImportable } from "../../lib/importFiles";
 import { folderBadge, sortFolders } from "../../lib/organise";
+import { NO_TARGET, type Notify } from "../../lib/notice";
 
 export function ImportSheet({ paths, notify, onClose }: {
   paths: string[];
-  notify: (text: string, error?: boolean) => void;
+  notify: Notify;
   onClose: () => void;
 }) {
   const [clients, setClients] = useState<ClientFolder[]>([]);
@@ -41,7 +42,7 @@ export function ImportSheet({ paths, notify, onClose }: {
     try {
       // Every path goes to the core, which decides what can be imported and counts the rest.
       const summary = await api.importVoiceNotes(paths, clientId || null, (language || null) as TranscriptionLanguage | null);
-      notify(importNotice(summary), summary.queued === 0 && summary.duplicates === 0);
+      notify(importNotice(summary), summary.queued === 0 && summary.duplicates === 0, summary.queued > 0 ? { kind: "page", page: "activity" } : NO_TARGET);
       onClose();
     } catch (e) {
       notify(errorMessage(e), true);
