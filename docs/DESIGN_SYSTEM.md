@@ -80,6 +80,26 @@ console draw the same metaphors in line icons of the same weight. `MotionAndIcon
 16 meta, 20 rows and chips, 24 bars, 28 record. Source apps show the installed app's own icon (PackageManager) on a 12% tint; no bundled third-party
 logos.
 
+## Notices (since v1.6.1, Hassam's rule, the same on web, desktop and phone)
+Every in-app notice — a toast ("Saved", "Link copied", "Turn on two-step sign-in"), an inline banner, an in-app
+alert — behaves the same way:
+1. **Click or tap it → it goes where it is about** (the setting, the recording, the fix), when it is about something;
+   the notice closes as it goes. A notice about nothing in particular has no target and is not clickable.
+2. **× closes it** (labelled "Dismiss" for screen readers), on every notice.
+3. **A timer:** a message hides by itself (6 s; an error 10 s), with a thin bar along its bottom edge showing the time
+   left. The timer pauses while the pointer is over it, a finger is on it or it has keyboard focus, and starts again
+   when that ends. Undo keeps its own time (5 s). **A notice about something still true** ("Calls are not being
+   recorded", offline, "Please update", maintenance, a failed upload) **has no timer**: hiding a problem by itself would
+   let it be missed; it still has × and swipe, and stays closed until the state changes or the next visit.
+4. **Swipe left or right to close**, with a finger on a phone or a touch screen, and with a trackpad or a mouse drag on
+   a laptop: the notice follows the drag and fades; past a third of its width (or a quick flick) it leaves, otherwise
+   it springs back. A short drag never counts as a click.
+5. Esc closes the newest toast. Notices are announced politely (`status`), errors assertively (`alert`). With Remove
+   animations / reduced motion they appear and go without sliding, and the timer bar does not move (the time still
+   runs).
+Operating-system notifications (Android's shade, Windows and macOS notification centres) already behave this way and
+are not changed.
+
 ## Controls
 Switches for on/off; segmented controls for 2-4 choices; bottom sheets for long lists.
 
