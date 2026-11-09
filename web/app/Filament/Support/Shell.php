@@ -69,7 +69,7 @@ final class Shell
     private const ALWAYS = ['waiting', 'pinned', 'failed'];
 
     /** @var array<string, string> */
-    public const VIEW_ICONS = ['all' => 'rectangle-stack', 'waiting' => 'clock', 'pinned' => 'bookmark', 'failed' => 'exclamation-circle', 'today' => 'calendar', 'this_week' => 'calendar-days', 'bookmarked' => 'flag'];
+    public const VIEW_ICONS = ['all' => 'squares-2x2', 'waiting' => 'clock', 'pinned' => 'bookmark', 'failed' => 'exclamation-circle', 'today' => 'calendar', 'this_week' => 'calendar-days', 'bookmarked' => 'flag'];
 
     /** The smart folders in the column, with the desktop's names (Meet, SIM). */
     public const FOLDERS = [

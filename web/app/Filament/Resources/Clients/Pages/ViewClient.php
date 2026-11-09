@@ -8,12 +8,14 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\Shell;
 use App\Filament\Support\StopsSharing;
 use App\Jobs\RefreshClientBriefJob;
 use App\Models\CallNote;
@@ -39,6 +41,7 @@ use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
+use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
@@ -56,7 +59,7 @@ use Livewire\WithFileUploads;
  */
 class ViewClient extends ViewRecord
 {
-    use StopsSharing, WithFileUploads;
+    use DropsRecordings, StopsSharing, WithFileUploads;
 
     protected static string $resource = ClientResource::class;
 
@@ -156,8 +159,12 @@ class ViewClient extends ViewRecord
 
     public function content(Schema $schema): Schema
     {
+        // Since v1.6 (P4.2): the projects in a column beside the project, as in the desktop app.
         return $schema->components([
-            View::make('filament.clients.workspace')->viewData(fn (): array => $this->workspaceData()),
+            Group::make([
+                View::make('filament.shell.column')->viewData(fn (): array => ['projects' => Shell::projects(), 'currentProject' => (string) $this->client()->id]),
+                View::make('filament.clients.workspace')->viewData(fn (): array => $this->workspaceData()),
+            ])->extraAttributes(['class' => 'el-with-col el-project-with-col']),
         ]);
     }
 

@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Resources\CaptureSessions\Pages;
 
+use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\SendsToWhatsApp;
+use App\Filament\Support\Shell;
+use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
@@ -22,7 +25,6 @@ use App\Stt\LanguageChoice;
 use Filament\Actions\Action;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Schemas\Components\EmbeddedTable;
-use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Tabs\Tab;
@@ -34,11 +36,13 @@ use Filament\Tables\View\TablesRenderHook;
 use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
+use Livewire\Attributes\On;
 use Livewire\Attributes\Url;
 use Livewire\Livewire;
 
 class ListCaptureSessions extends ListRecords
 {
+    use DropsRecordings;
     use SendsToWhatsApp;
 
     protected static string $resource = CaptureSessionResource::class;
@@ -220,6 +224,47 @@ class ListCaptureSessions extends ListRecords
         $this->updatedActiveTab();
     }
 
+    /**
+     * A place of the Library's column (since v1.6, P4.2): every recording, a view (Waiting, Pinned, Failed uploads…)
+     * or a smart folder. The sidebar's list follows.
+     */
+    public function openPlace(string $key): void
+    {
+        if ($key === 'all') {
+            $this->folder = null;
+            $this->activeTab = 'all';
+        } elseif (str_starts_with($key, 'folder:') && array_key_exists(substr($key, 7), self::FOLDER_LABELS) && $key !== 'folder:shared') {
+            $this->folder = substr($key, 7);
+            $this->activeTab = 'all';
+        } elseif (array_key_exists($key, self::VIEW_LABELS)) {
+            $this->folder = null;
+            $this->activeTab = $key;
+        } else {
+            return;
+        }
+        $this->selected = null;
+        $this->updatedActiveTab();
+        $this->dispatch('el-place', place: $this->activePlace());
+    }
+
+    /** The column's place that is open: a smart folder, else the view, else All. */
+    public function activePlace(): string
+    {
+        if ($this->folder !== null) {
+            return 'folder:'.$this->folder;
+        }
+        $tab = (string) ($this->activeTab ?: 'all');
+
+        return array_key_exists($tab, self::VIEW_LABELS) ? $tab : 'all';
+    }
+
+    /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
+    #[On('el-library-changed')]
+    public function libraryChanged(): void
+    {
+        Shell::forget();
+    }
+
     /** Picks a smart folder, or clears it when it is picked again. */
     public function setFolder(?string $folder): void
     {
@@ -276,15 +321,20 @@ class ListCaptureSessions extends ListRecords
         return $schema->components([
             View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
                 ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
-            Grid::make(['default' => 1, 'xl' => 2])->extraAttributes(['class' => 'el-library'])->schema([
+            // Since v1.6 (P4.2, P4.4): the column (places and projects) beside the list; the chosen recording opens in a
+            // drawer on the right.
+            Group::make([
+                View::make('filament.shell.column')->viewData(fn (): array => [
+                    'places' => Shell::libraryPlaces(), 'active' => $this->activePlace(), 'projects' => Shell::projects(), 'placeAction' => 'openPlace',
+                ]),
                 // The search pill, then one compact toolbar (filament.library.toolbar), then the rows.
                 Group::make([
                     RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                     EmbeddedTable::make(),
                     RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
                 ])->extraAttributes(['class' => 'el-list el-library-list']),
-                View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
-            ]),
+            ])->extraAttributes(['class' => 'el-library el-with-col']),
+            View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
         ]);
     }
 
@@ -311,6 +361,12 @@ class ListCaptureSessions extends ListRecords
     public function closeRecording(): void
     {
         $this->selected = null;
+    }
+
+    /** Send to WhatsApp from the drawer (the row's own is in its More menu). */
+    public function drawerWhatsappAction(): Action
+    {
+        return WhatsAppActions::send(fn (): CaptureSession => $this->selectedRecording() ?? abort(404), name: 'drawerWhatsapp');
     }
 
     private function selectedRecording(): ?CaptureSession

@@ -87,27 +87,28 @@ describe('library', function () {
             ->toMatch('/data-option="view-pinned" aria-checked="true"/');
     });
 
-    it('shows the chosen recording beside the list, with its transcript and Open', function () {
+    it('opens the chosen recording in the drawer on the right, with its transcript and Open (since v1.6, P4.4)', function () {
         $session = $this->sessionWithTranscript($this->admin, [
             ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello there'],
             ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 1000, 'end_ms' => 2000, 'text' => 'Hi, thanks for calling'],
         ], ['title' => 'Invoice questions']);
 
         $list = $this->panelComponent(ListCaptureSessions::class);
-        expect($list->html())->toContain('Choose a recording');
+        expect($list->html())->not->toContain('data-recording-drawer');
 
         $html = $list->call('selectRecording', $session->id)->assertSet('selected', $session->id)->html();
-        expect($html)->toContain('Invoice questions')->toContain('Hi, thanks for calling')
-            ->toContain(e(CaptureSessionResource::getUrl('view', ['record' => $session])));
+        expect($html)->toContain('data-recording-drawer="'.$session->id.'"')->toContain('Invoice questions')->toContain('Hi, thanks for calling')
+            ->toContain(e(CaptureSessionResource::getUrl('view', ['record' => $session])))
+            ->toContain('Copy text')->toContain('Close (Esc)')->toContain('closeRecording()');
 
-        expect($list->call('closeRecording')->html())->toContain('Choose a recording');
+        expect($list->call('closeRecording')->html())->not->toContain('data-recording-drawer');
     });
 
     it('does not show another workspace\'s recording beside the list', function () {
         $theirs = CaptureSession::factory()->create(['user_id' => $this->makeAdmin()->id, 'title' => 'Not yours']);
 
         expect($this->panelComponent(ListCaptureSessions::class)->call('selectRecording', $theirs->id)->html())
-            ->not->toContain('Not yours')->toContain('Choose a recording');
+            ->not->toContain('Not yours')->not->toContain('data-recording-drawer');
     });
 
     it('puts one slim waiting line above the list (since v1.5, no card)', function () {

@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
+use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Support\Shell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
@@ -178,5 +180,72 @@ describe('recordings dropped on a place', function () {
 
         Livewire::test(Sidebar::class)->call('dropRecordings', 'pinned', [$session->id])->assertForbidden();
         expect($session->fresh()->pinned)->toBeFalse();
+    });
+});
+
+describe('the nested column (P4.2)', function () {
+    it('lists the Library\'s places with their counts and the person\'s projects beside the list', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        $project = Fx::client($a, 'Acme Holdings');
+        Fx::client($b, 'Rival Column Co');
+        Fx::session($a, null, ['source_app' => 'whatsapp', 'client_id' => $project->id]);
+        Fx::session($a, null, ['source_app' => 'voice_note']);
+        $this->actingAs($a, 'web');
+
+        $html = Livewire::test(ListCaptureSessions::class)->html();
+        expect($html)->toContain('class="el-col"')->toContain('wire:click="openPlace(\'waiting\')"')->toContain('wire:click="openPlace(\'folder:whatsapp\')"')
+            ->toContain('Acme Holdings')->toContain('New project')->toContain('data-el-drop="project:'.$project->id.'"')
+            ->not->toContain('Rival Column Co');
+    });
+
+    it('opens a place: a view, a smart folder or every recording, and ignores anything else', function () {
+        $a = Fx::user();
+        $this->actingAs($a, 'web');
+
+        Livewire::test(ListCaptureSessions::class)
+            ->call('openPlace', 'waiting')->assertSet('activeTab', 'waiting')->assertSet('folder', null)->assertDispatched('el-place', place: 'waiting')
+            ->call('openPlace', 'folder:zoom')->assertSet('folder', 'zoom')->assertSet('activeTab', 'all')
+            ->call('openPlace', 'folder:../../etc')->assertSet('folder', 'zoom')
+            ->call('openPlace', 'all')->assertSet('folder', null)->assertSet('activeTab', 'all');
+    });
+
+    it('moves a recording dropped on a project in the column, and answers 404 for user A\'s recording or project', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        $aProject = Fx::client($a, 'Acme Holdings');
+        $bProject = Fx::client($b, 'B Project');
+        $aRecording = Fx::session($a);
+        $bRecording = Fx::session($b);
+
+        $this->actingAs($b, 'web');
+        Livewire::test(ListCaptureSessions::class)->call('dropRecordings', 'project:'.$bProject->id, [$bRecording->id])->assertOk();
+        expect($bRecording->fresh()->client_id)->toBe($bProject->id);
+
+        Livewire::test(ListCaptureSessions::class)->call('dropRecordings', 'project:'.$bProject->id, [$aRecording->id])->assertNotFound();
+        Livewire::test(ListCaptureSessions::class)->call('dropRecordings', 'project:'.$aProject->id, [$bRecording->id])->assertNotFound();
+        Livewire::test(ViewClient::class, ['record' => $bProject->id])->call('dropRecordings', 'project:'.$aProject->id, [$bRecording->id])->assertNotFound();
+        expect($aRecording->fresh()->client_id)->toBeNull()->and($bRecording->fresh()->client_id)->toBe($bProject->id);
+    });
+
+    it('puts the person\'s projects beside a project page, the open one marked, and no one else\'s', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        $one = Fx::client($a, 'Acme Holdings');
+        Fx::client($a, 'Nova Clinics');
+        Fx::client($b, 'Rival Column Co');
+        $this->actingAs($a, 'web');
+
+        $html = Livewire::test(ViewClient::class, ['record' => $one->id])->html();
+        expect($html)->toContain('class="el-col"')->toContain('Nova Clinics')->not->toContain('Rival Column Co')
+            ->toMatch('/class="el-col-item el-col-project el-on"\s+aria-current="page"[^>]*title="Acme Holdings"/');
+    });
+
+    it('makes the rows draggable, except in the read-only console', function () {
+        $a = Fx::user();
+        Fx::session($a, null, ['title' => 'Drag me']);
+        $this->actingAs($a, 'web');
+
+        expect(Livewire::test(ListCaptureSessions::class)->html())->toMatch('/class="el-row" data-recording="[0-9A-Za-z]{26}"\s+draggable="true"/');
     });
 });
