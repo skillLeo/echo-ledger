@@ -370,6 +370,11 @@ for the plan (then the default plan). Every route checks them; the apps only sho
 | `invalid_key` | 422 | Groq refused the person's key |
 | `provider_error` | 502 | Groq could not be asked about the key (try again) |
 | `request_pending` | 409 | An upgrade request is already waiting (`request` holds it) |
+| `request_decided` | 409 | Since v1.7: the upgrade request was already approved, declined or cancelled | Refresh the request; show its outcome |
+| `proof_required` | 422 | Since v1.7: `…/paid` with no unsent receipt and no transaction ID | Ask for a receipt or the transaction ID |
+| `proof_locked` | 409 | Since v1.7: the receipt was already sent with `…/paid` and can't be removed | Keep it; refresh |
+| `proof_not_found` | 404 | Since v1.7: unknown receipt, or not on this request | Refresh the request |
+| `too_many_proofs` | 409 | Since v1.7: 3 unsent receipts at a time, 10 on one request (`max`) | Remove one first |
 | `account_suspended` | 403 | The account is suspended: every call of its devices |
 | `invalid_promo_code` | 422 | A promo code that is unknown, ended, used up or already used by this person |
 | `promo_other_plan` | 422 | A valid promo code for another plan (`plan` names it) |
@@ -448,6 +453,65 @@ make codes; customers can never list them. Every use is in the activity log.
   `reply` once decided) or `404 not_found`.
 - The admin approves (the plan, until a date or not) or declines with a message; the person gets an email and an
   activity item (`kind`: `upgrade_approved` | `upgrade_declined`).
+
+### Payment receipts (since v1.7)
+A paid plan is bought by bank transfer. After `POST /api/upgrade-requests` the customer pays, sends a receipt (a
+screenshot or a PDF) and/or the bank's transaction ID, and staff approve or decline it in Admin → Upgrade requests.
+Everything here is additive: `status` stays `pending | approved | declined` and `payment_instructions` (now generated
+from the payment details) stays for v1.6 apps.
+
+**The request object** (every answer below, `GET /api/upgrade-requests/latest`, and `upgrade_request` in
+`GET /api/me/entitlements`) gains:
+```json
+{"reference_code": "EL-7K2Q9M", "amount_due": "Rs 1,500", "amount_due_pkr": 1500, "currency": "PKR",
+ "payment": {
+   "stage": "awaiting_payment",
+   "accounts": [{"bank": "Example Bank", "branch": "Main Branch (0001)", "title": "EXAMPLE PRIVATE LIMITED",
+                 "account_number": "0123456789", "iban": "PK00XXXX0000000123456789"}],
+   "note": "Put EL-7K2Q9M in the transfer's note.", "review_hours": "We check receipts every day. Most are done within a few hours.",
+   "paid_at": null, "reference": null, "payer_name": null,
+   "proof_request": null,
+   "proofs": [],
+   "max_proofs": 3, "max_bytes": 5242880, "accepts": ["image/jpeg", "image/png", "image/webp", "application/pdf"]},
+ "timeline": [{"step": "requested", "at": "2026-11-09T10:10:00Z"}]}
+```
+- `payment.stage` (computed, first match wins): `approved` · `cancelled` · `declined` · `needs_receipt` (staff asked
+  for a new receipt after the last one; `proof_request` is `{"note", "at"}`) · `in_review` (a receipt or transaction ID
+  was sent) · `awaiting_payment`.
+- Each `proofs[]` entry: `{"id", "kind": "image" | "pdf", "mime", "name", "bytes", "width", "height", "created_at",
+  "locked", "thumb_url", "file_url"}` (the URLs need the device token; a PDF has no `thumb_url`). Files sent with
+  `…/paid` are `locked` and can no longer be removed.
+- `timeline[].step`: `requested`, `receipt_sent`, `receipt_requested`, `decided`, `cancelled`, each with `at`.
+- Plan cards in `GET /api/me/entitlements` gain `price_pkr` (whole rupees, null when free or not set) and `price_text`
+  ("Rs 2,999 a month"); `limits.monthly_minutes` gains `resets_at` (the 1st of next month, Asia/Karachi).
+
+**Endpoints** (each looks the request up among the caller's own: anyone else's id, a teammate's too, is `404
+not_found`, the same as an unknown one):
+- `POST /api/upgrade-requests/{id}/proofs` — `sessions:write`, throttled (`upgrade-payment`: 20/hour, 60/day per
+  person): multipart `file` (JPEG, PNG, WebP or PDF, at most 5 MB; the type is read from the bytes) → `201 {"data":
+  <proof>}`; the same file again on the same request → `200` with the existing one. Images are re-encoded (metadata
+  removed); a PDF with a password or active content is refused. Errors: `413 too_large`; `422 validation_failed`
+  (`errors.file`, `reason`: `file_type` | `pdf_password` | `pdf_active` | `unreadable`); `409 too_many_proofs`
+  (`max`: 3 unsent files at a time, 10 on a request); `409 request_decided`.
+- `DELETE /api/upgrade-requests/{id}/proofs/{proof}` — `sessions:write`, same throttle → `204`; `404
+  proof_not_found`; `409 proof_locked` (already sent); `409 request_decided`.
+- `GET /api/upgrade-requests/{id}/proofs/{proof}` — `config:read`, `?variant=thumb|full` (default `full`) → the
+  decrypted file with `Cache-Control: private, no-store` and `X-Content-Type-Options: nosniff`; images inline, a PDF
+  always as an attachment (`EL-XXXXXX-receipt.pdf`, `Content-Security-Policy: default-src 'none'; sandbox`). `404
+  proof_not_found` for an unknown proof, a PDF asked for as `thumb`, or another `variant`.
+- `POST /api/upgrade-requests/{id}/paid` — `sessions:write`, same throttle: `{"payment_reference": "…" | null,
+  "payer_name": "…" | null}` (the bank's transaction ID, at most 64 characters; the name the money came from, at
+  most 120) → `200 <request>` with stage `in_review`; the files sent so far are locked and staff are told. Needs at
+  least one unsent file or a `payment_reference`: otherwise `422 {"code": "proof_required"}`. `409 request_decided`.
+- `POST /api/upgrade-requests/{id}/cancel` — `sessions:write`, same throttle → `200 <request>` (stage `cancelled`,
+  `status` `declined`, reply "Cancelled by you"; a promo use is given back). `409 request_decided`.
+
+Staff (Admin → Upgrade requests) see the receipts next to the request (an image opens full size, a PDF downloads),
+approve or decline with a reason, or **Ask for a new receipt** with a note (stage `needs_receipt`; the customer gets an
+email and an activity item `upgrade_receipt_requested` and sends another round of up to 3 files). Receipts are
+encrypted on the private disk, never public, seen only by the person and by staff with the upgrade-requests
+permission, and erased 90 days after the request is decided or cancelled (the request row stays). The payment details
+(bank, branch, account title, account number, IBAN, a note) are set in Admin → Plans → Payment details.
 
 ### Public pages and app downloads (since v1.5)
 No sign-in, throttled (60/min/IP). The apps open these pages in the browser.

@@ -87,6 +87,11 @@ function registeredApiRoutes(): array
 const SERVED_BEFORE_DOCUMENTED = [];
 
 const NOT_SERVED_YET = [
+    'POST /api/upgrade-requests/{}/proofs',
+    'DELETE /api/upgrade-requests/{}/proofs/{}',
+    'GET /api/upgrade-requests/{}/proofs/{}',
+    'POST /api/upgrade-requests/{}/paid',
+    'POST /api/upgrade-requests/{}/cancel',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
