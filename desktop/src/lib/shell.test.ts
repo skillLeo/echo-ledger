@@ -7,6 +7,12 @@ import { formatWhen } from "./format";
 import { rowTime } from "../views/main/LibraryView";
 import { workspacesOf } from "../views/main/TopBar";
 import { makeStatus } from "../test/fixtures";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The server's real answer, kept true by its ApiSamplesTest. */
+const accountSample = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../docs/api-samples/account.json"), "utf8");
 
 beforeEach(() => window.localStorage.clear());
 
@@ -131,6 +137,12 @@ describe("the Library's places (v1.6, P4.2)", () => {
 });
 
 describe("the workspace switcher (v1.6, P4.3)", () => {
+  it("lists the workspaces of the server's real answer (docs/api-samples/account.json)", () => {
+    const account = JSON.parse(accountSample);
+    expect(workspacesOf(account, makeStatus())).toEqual([{ key: "1", name: "Personal", role: "owner", current: true }]);
+    expect(account.super_admin).toBe(true);
+  });
+
   const account = { name: "Sara", email: "s@example.test", email_verified: true, two_factor: false, google: false, created_at: null,
     workspace: { id: 2, name: "Acme team", role: "member" }, deletes_at: null };
   it("lists the server's workspaces with the current one ticked, else the one this computer works in", () => {
