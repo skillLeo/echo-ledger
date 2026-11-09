@@ -1,17 +1,18 @@
 // The top bar (v1.6, P4.3): the workspace, search and commands (Ctrl/⌘+K), whether calls will be recorded, "+" to make
-// something, notifications, help and the avatar menu (Account, Plan & usage, the admin panel for the super admin,
-// the theme, Sign out).
+// something, notifications, help and the avatar menu (v1.7: who you are with the plan's chip, Upgrade or Plan & usage,
+// Settings, the admin panel for the super admin, Appearance, Sign out).
 import type { Account, AppStatus } from "../../lib/ipc";
 import type { ThemeChoice } from "../../lib/theme";
 import { initials, paletteKeys } from "../../lib/shell";
 import { badgeLabel, badgeSpoken } from "../../lib/badge";
 import { ROLE_LABEL } from "../../lib/plan";
-import { BellIcon, ExternalIcon, FolderIcon, HelpIcon, ImportIcon, MicIcon, MonitorIcon, MoonIcon, PlusIcon, RecordIcon, RequestFilesIcon, SearchIcon, SignOutIcon, SunIcon, UserIcon } from "../../components/Icons";
+import { BellIcon, ExternalIcon, FolderIcon, HelpIcon, ImportIcon, LucideCreditCardIcon, LucideSettingsIcon, LucideUserIcon, LucideUserPlusIcon, MicIcon, PlusIcon, RecordIcon, RequestFilesIcon, SearchIcon, SignOutIcon } from "../../components/Icons";
 import { ChevronDownIcon } from "../../components/ControlIcons";
 import { Menu } from "../../components/Menu";
 import { ReadyChip } from "./ReadyCheck";
-import { BadgeMark } from "./Upgrade";
-import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
+import { BadgeMark, canUpgrade, nextPlan } from "./Upgrade";
+import { Avatar, PlanChip } from "./ProfileCard";
+import { featureWords, isLocked, lowestPlan, openRequest, openUpgradeSheet, planName, useEntitlements } from "../../lib/entitlements";
 import { formatDuration, sourceAppLabel } from "../../lib/format";
 
 /** The workspaces the switcher lists: the server's list when it sends one, else the one this computer works in. */
@@ -29,7 +30,7 @@ export function workspacesOf(account: Account | null | undefined, status: Pick<A
 
 const roleText = (role: string | null | undefined) => (role && role in ROLE_LABEL ? ROLE_LABEL[role as keyof typeof ROLE_LABEL] : null);
 
-const THEMES: readonly (readonly [ThemeChoice, string, typeof SunIcon])[] = [["system", "System", MonitorIcon], ["light", "Light", SunIcon], ["dark", "Dark", MoonIcon]];
+const THEMES: readonly (readonly [ThemeChoice, string])[] = [["system", "System"], ["light", "Light"], ["dark", "Dark"]];
 
 export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, onActivity, onAccount, onPlan, onAdmin, onWorkspaces, onReady, onRecord, onVoiceNote,
   onUpload, onNewProject, onRequestLink, onHelp, onSignOut, canRecord }: {
@@ -60,7 +61,11 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
   const teamLocked = isLocked(entitlements, "team");
   const workspaces = workspacesOf(account, status);
   const here = workspaces.find((w) => w.current) ?? workspaces[0];
-  const name = account?.name || status.deviceName || "You";
+  // The account's name, never this computer's (a person glyph until it is known).
+  const accountName = account ? account.name?.trim() || account.email.split("@")[0] : null;
+  const name = accountName || "You";
+  const plan = entitlements?.plan ? planName(entitlements.plan) : null;
+  const upgradeOffered = !!entitlements && canUpgrade(here.role) && !openRequest(entitlements) && !!nextPlan(entitlements);
   const recording = status.recording;
   const what = recording ? (recording.mode === "mic_note" ? "Voice note" : sourceAppLabel(recording.sourceApp)) : "";
   return (
@@ -78,15 +83,15 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
           "separator",
           // Team workspaces (v1.6.2): a plan without them still shows Invite, with its badge, and opens the upgrade sheet.
           (teamLocked || here.role === "owner" || here.role === "admin") && {
-            id: "ws-invite", label: <>Invite people<BadgeMark feature="team" /></>, icon: <UserIcon size={16} />,
-            name: teamLocked ? `Invite people, ${featureWords(entitlements, "team").name} is in the ${lowestPlan(entitlements, "team")?.name ?? "paid"} plan` : "Invite people",
+            id: "ws-invite", label: <>Invite people<BadgeMark feature="team" /></>, icon: <LucideUserPlusIcon size={16} />,
+            name: teamLocked ? `Invite people, ${featureWords(entitlements, "team").name} is in ${lowestPlan(entitlements, "team")?.name ?? "a paid plan"}` : "Invite people",
             onPick: teamLocked ? () => openUpgradeSheet("team") : onWorkspaces,
           },
           { id: "ws-manage", label: "Switch or manage workspaces in the browser", icon: <ExternalIcon size={16} />, onPick: onWorkspaces },
         ]} />
       <button type="button" className="topbar-search" onClick={onPalette} aria-label={`Search and commands (${paletteKeys(status.platform)})`}>
         <SearchIcon size={16} />
-        <span className="topbar-search-text">Search recordings, transcripts, pages… or type a command</span>
+        <span className="topbar-search-text">Search recordings, settings, pages… or type a command</span>
         <span className="kbd" aria-hidden="true">{paletteKeys(status.platform)}</span>
       </button>
       <span className="spacer" />
@@ -113,16 +118,35 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
         {needsYou > 0 && <span className="bell-count" aria-hidden="true">{badgeLabel(needsYou)}</span>}
       </button>
       <button type="button" className="btn icon-only topbar-icon" onClick={onHelp} aria-label="Help & shortcuts" title="Help & shortcuts (?)"><HelpIcon size={18} /></button>
-      <Menu label={`Account menu: ${name}`} title={name} buttonClass="avatar-btn" button={<span className="avatar-initials" aria-hidden="true">{initials(name)}</span>}
-        header={<span className="menu-who"><b>{name}</b>{account?.email && <span className="small muted">{account.email}</span>}</span>}
+      <Menu label={`Account menu: ${name}`} title={name} buttonClass="avatar-btn"
+        button={<span className="avatar-initials" aria-hidden="true">{accountName ? initials(accountName) : <LucideUserIcon size={16} />}</span>}
+        header={
+          <button type="button" className="menu-who as-button" data-menu-close onClick={onAccount} aria-label={`${name}${account?.email ? `, ${account.email}` : ""}${plan ? `, ${plan} plan` : ""}. Opens Settings`}>
+            <Avatar name={accountName} size={36} />
+            <span className="menu-who-text"><b>{name}</b>{account?.email && <span className="small muted">{account.email}</span>}{plan && <PlanChip name={plan} />}</span>
+          </button>
+        }
+        footer={<>
+          <div className="menu-theme">
+            <span className="small" id="menu-theme-label">Appearance</span>
+            <span className="segmented" role="radiogroup" aria-labelledby="menu-theme-label">
+              {THEMES.map(([value, label]) => (
+                <button key={value} type="button" role="radio" aria-checked={theme === value} onClick={() => onTheme(value)}>{label}</button>
+              ))}
+            </span>
+          </div>
+          <div className="menu-sep" role="separator" />
+          <button type="button" role="menuitem" className="btn ghost small menu-item danger" data-menu-close onClick={onSignOut}>
+            <span className="menu-icon" aria-hidden="true"><SignOutIcon size={16} /></span><span className="menu-label">Sign out</span>
+          </button>
+          </>
+        }
         items={[
-          { id: "account", label: "Account", icon: <UserIcon size={16} />, onPick: onAccount },
-          { id: "plan", label: "Plan & usage", icon: <span className="menu-plan-dot" />, onPick: onPlan },
+          upgradeOffered
+            ? { id: "upgrade", label: "Upgrade", icon: <LucideCreditCardIcon size={16} />, onPick: () => openUpgradeSheet(null, { plan: nextPlan(entitlements)?.key ?? null }) }
+            : entitlements && { id: "plan", label: "Plan & usage", icon: <LucideCreditCardIcon size={16} />, onPick: onPlan },
+          { id: "account", label: "Settings", icon: <LucideSettingsIcon size={16} />, onPick: onAccount },
           account?.super_admin === true && { id: "admin", label: "Admin panel", icon: <ExternalIcon size={16} />, onPick: onAdmin },
-          "separator",
-          ...THEMES.map(([value, label, Icon]) => ({ id: `theme-${value}`, label: `Theme: ${label}`, icon: <Icon size={16} />, checked: theme === value, onPick: () => onTheme(value) })),
-          "separator",
-          { id: "sign-out", label: "Sign out", icon: <SignOutIcon size={16} />, danger: true, onPick: onSignOut },
         ]} />
     </header>
   );

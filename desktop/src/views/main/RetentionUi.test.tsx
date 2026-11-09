@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { BinPanel, BulkBar, eraseIn, OrganisePanel } from "./LibraryOrganise";
-import { fileSize, StorageCard } from "./SecuritySettings";
+import { StoragePage as StorageCard } from "./SecuritySettings";
+import { fileSize } from "../../lib/format";
 import { callsOf, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
 
@@ -17,8 +18,11 @@ describe("keep, the undo bin and storage (B17)", () => {
     expect(eraseIn("2026-10-28T11:10:00Z", now)).toBe("erased in 1 hour");
     expect(eraseIn("2026-10-28T10:20:00Z", now)).toBe("erased soon");
     expect(fileSize(512)).toBe("512 B");
-    expect(fileSize(1536)).toBe("1.5 KB");
-    expect(fileSize(5 * 1024 ** 3)).toBe("5.0 GB");
+    expect(fileSize(640 * 1024)).toBe("640 KB");
+    expect(fileSize(120 * 1024 ** 2)).toBe("120 MB");
+    expect(fileSize(5 * 1024 ** 3)).toBe("5 GB");
+    expect(fileSize(1.4 * 1024 ** 3)).toBe("1.4 GB");
+    expect(fileSize(1023.7 * 1024)).toBe("1 MB");
   });
 
   it("keeps a recording forever and back", async () => {
@@ -70,12 +74,13 @@ describe("keep, the undo bin and storage (B17)", () => {
     await waitFor(() => expect(notify).toHaveBeenCalledWith("This recording can no longer be restored.", true));
   });
 
-  it("shows the storage meter and the retention", async () => {
-    respond("storage_info", { recordings_bytes: 3 * 1024 ** 3, recordings_count: 42, disk_free_bytes: 25 * 1024 ** 3, disk_total_bytes: 100 * 1024 ** 3, retention_days: 14 });
-    render(<StorageCard />);
-    expect(await screen.findByText("Recordings on the server: 3.0 GB in 42 files.")).toBeInTheDocument();
-    expect(screen.getByRole("meter", { name: "Server disk used" })).toHaveAttribute("aria-valuenow", "75");
-    expect((screen.getByRole("meter", { name: "Server disk used" }).firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.75)");
-    expect(screen.getByText(/deleted after 14 days unless kept/)).toBeInTheDocument();
+  it("shows what is stored against the plan, the count and how long recordings are kept, never the server's disk", async () => {
+    respond("storage_info", { recordings_bytes: 125 * 1024 ** 2, recordings_count: 42, disk_free_bytes: 25 * 1024 ** 3, disk_total_bytes: 100 * 1024 ** 3, retention_days: 365 });
+    render(<StorageCard limitBytes={1024 ** 3} />);
+    expect(await screen.findByText("125 MB of 1 GB")).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Storage, 125 MB of 1 GB used" })).toHaveAttribute("aria-valuenow", "12");
+    expect(document.getElementById("setting-storage.count")).toHaveTextContent("42 recordings");
+    expect(document.getElementById("setting-storage.retention")).toHaveTextContent("1 year");
+    expect(screen.queryByText(/Server disk/)).not.toBeInTheDocument();
   });
 });

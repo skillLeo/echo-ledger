@@ -3,7 +3,7 @@
 // none: then nothing is locked here and every feature stays as it is today (the v1.5 plan in the config still hides
 // what its plan leaves out).
 import { useSyncExternalStore } from "react";
-import { api, type Entitlements, type OfferedPlan, type PromoCheck, type UpgradeRequest } from "./ipc";
+import { api, type Entitlements, type OfferedPlan, type PaymentStage, type PromoCheck, type UpgradeRequest } from "./ipc";
 
 /** undefined: not read yet; null: an older server (or signed out). */
 let current: Entitlements | null | undefined = undefined;
@@ -18,7 +18,7 @@ function set(next: Entitlements | null | undefined) {
 /** Reads the entitlements again; an error (offline) keeps the last answer. */
 export function refreshEntitlements(): Promise<void> {
   if (reading) return reading;
-  reading = api.entitlements().then((e) => set(e ?? null), () => undefined).finally(() => {
+  reading = api.entitlements().then((e) => set(e ? { ...e, upgrade_request: e.upgrade_request ? mergeRequest(current?.upgrade_request, e.upgrade_request) : null } : null), () => undefined).finally(() => {
     reading = null;
   });
   return reading;
@@ -54,9 +54,16 @@ export function promoPriceLine(check: PromoCheck): string {
   return `${head} → ${after} with ${check.code}`;
 }
 
-/** A request just made (or found pending): shown at once, before the next read. */
+/** A request just made, changed or read again: shown at once, before the next read (merged with what is known). */
 export function noteUpgradeRequest(request: UpgradeRequest): void {
-  if (current) set({ ...current, upgrade_request: request });
+  if (current) set({ ...current, upgrade_request: mergeRequest(current.upgrade_request, request) });
+}
+
+/** Reads the newest request again (`GET /api/upgrade-requests/latest`), which carries the payment details in full. */
+export function refreshUpgradeRequest(): Promise<void> {
+  return api.latestUpgradeRequest().then((r) => {
+    if (r) noteUpgradeRequest(r);
+  }, () => undefined);
 }
 
 /** Tests start from nothing. */
@@ -106,16 +113,24 @@ export function lowestPlan(e: Entitlements | null | undefined, feature: string):
   return e?.plans.find((p) => p.key === key) ?? { key, name: titleCase(key), badge: null, color: null, price: null, description: null, features: [feature], limits: {} };
 }
 
-/** "PRO ✦": the one badge text for a paid plan. */
-export function badgeText(plan: Pick<OfferedPlan, "badge" | "name" | "key">): string {
-  return `${(plan.badge || plan.name || plan.key).toUpperCase()} ✦`;
+/** A plan's name as people read it ("Pro", "Ultra"): its display name, never its key or a badge in capitals. */
+export function planName(plan: Pick<OfferedPlan, "name" | "key"> | null | undefined): string {
+  if (!plan) return "";
+  const name = plan.name?.trim();
+  return name || titleCase(plan.key === "business" ? "ultra" : plan.key);
 }
 
-/** The badge a feature the plan leaves out wears ("PRO ✦", in the plan's colour); none when the plan has it or the server is older. */
+/** The one tag text for a paid plan: its name in sentence case ("Pro"), with no sparkle, lock or capitals. */
+export function badgeText(plan: Pick<OfferedPlan, "badge" | "name" | "key">): string {
+  return planName(plan);
+}
+
+/** The tag a feature the plan leaves out wears ("Pro"); none when the plan has it or the server is older. Plans have
+ * no colours: the tag is neutral. */
 export function lockedBadge(e: Entitlements | null | undefined, feature: string): { text: string; color: string | null; plan: string | null } | null {
   if (!isLocked(e, feature)) return null;
   const plan = lowestPlan(e, feature);
-  return { text: plan ? badgeText(plan) : "UPGRADE ✦", color: plan?.color ?? null, plan: plan?.name ?? null };
+  return { text: plan ? badgeText(plan) : "Paid", color: null, plan: plan ? planName(plan) : null };
 }
 
 /** A feature's name and what it does: the server's words, else the app's. */
@@ -145,6 +160,65 @@ export function pendingRequest(e: Entitlements | null | undefined): UpgradeReque
   return e?.upgrade_request?.status === "pending" ? e.upgrade_request : null;
 }
 
+/** Where a request stands: the server's `payment.stage` (v1.7), or what a v1.6 server's `status` means. */
+export function requestStage(request: UpgradeRequest | null | undefined): PaymentStage | null {
+  if (!request) return null;
+  const stage = request.payment?.stage;
+  if (stage && ["awaiting_payment", "in_review", "needs_receipt", "approved", "declined", "cancelled"].includes(stage)) return stage as PaymentStage;
+  if (request.status === "approved") return "approved";
+  if (request.status === "declined") return request.reply === "Cancelled by you" ? "cancelled" : "declined";
+  return request.status === "pending" ? "awaiting_payment" : null;
+}
+
+/** The stages in which a request is still open (no Upgrade anywhere while one is). */
+export const OPEN_STAGES: readonly PaymentStage[] = ["awaiting_payment", "in_review", "needs_receipt"];
+
+/** The open request (waiting for payment, being checked, or needing a new receipt); none otherwise. */
+export function openRequest(e: Entitlements | null | undefined): UpgradeRequest | null {
+  const request = e?.upgrade_request ?? null;
+  const stage = requestStage(request);
+  return stage && OPEN_STAGES.includes(stage) ? request : null;
+}
+
+/** A newer answer about the same request merged into the one known: the payment part is never dropped by an answer that
+ * has none (the entitlements' slim copy after `latest`'s full one). Another request replaces it. */
+export function mergeRequest(known: UpgradeRequest | null | undefined, next: UpgradeRequest | null | undefined): UpgradeRequest | null {
+  if (!next) return known ?? null;
+  if (!known || known.id !== next.id) return next;
+  const merged: UpgradeRequest = { ...known, ...next };
+  for (const key of ["payment", "reference_code", "amount_due", "amount_due_pkr", "currency", "payment_instructions"] as const) {
+    if (next[key] == null && known[key] != null) (merged as unknown as Record<string, unknown>)[key] = known[key];
+  }
+  if ((!next.timeline || next.timeline.length === 0) && known.timeline?.length) merged.timeline = known.timeline;
+  return merged;
+}
+
+/** The plans above the current one, cheapest first (Free sees Pro and Ultra, Pro sees Ultra, Ultra none). */
+export function plansAbove(e: Entitlements | null | undefined): OfferedPlan[] {
+  if (!e) return [];
+  const paid = e.plans.filter((p) => p.key !== "free" && p.price_pkr !== 0);
+  const here = paid.findIndex((p) => p.key === e.plan?.key);
+  if (here >= 0) return paid.slice(here + 1);
+  return e.plan && e.plan.key !== "free" && isTopPlan(e) ? [] : paid;
+}
+
+/** Whether this person is on the top plan (Ultra): every feature the server names is on. */
+export function isTopPlan(e: Entitlements | null | undefined): boolean {
+  if (!e?.plan || e.plan.key === "free") return false;
+  const paid = e.plans.filter((p) => p.key !== "free");
+  if (paid.length > 0 && paid[paid.length - 1].key === e.plan.key) return true;
+  const keys = Object.keys(e.features);
+  return keys.length > 0 && keys.every((k) => e.features[k].enabled);
+}
+
+/** The price of a plan as written: the server's text ("Rs 2,999 a month"), else from its rupees, else its old text. */
+export function priceText(plan: Pick<OfferedPlan, "price" | "price_pkr" | "price_text">): string | null {
+  if (plan.price_text?.trim()) return plan.price_text.trim();
+  if (typeof plan.price_pkr === "number" && plan.price_pkr > 0) return `Rs ${Math.round(plan.price_pkr).toLocaleString("en-US")} a month`;
+  const old = plan.price?.trim();
+  return old && /\d/.test(old) ? old.replace(/\s*\/\s*month$/i, " a month") : null;
+}
+
 /** Whether this person transcribes with their own key: the plan has no platform transcription. */
 export function needsOwnKey(e: Entitlements | null | undefined): boolean {
   return isLocked(e, "platform_transcription");
@@ -164,14 +238,17 @@ export const LIMIT_LABELS: readonly (readonly [string, string, "minutes" | "byte
 
 // ---- Opening the upgrade sheet and Account sections from anywhere ------------------------------------------------
 
-type SheetRequest = { feature: string | null; seq: number } | null;
+/** Where the upgrade sheet opens: plan and promo, the bank details, the receipts, or the request's status. */
+export type SheetStep = "choose" | "pay" | "receipt" | "status";
+type SheetRequest = { feature: string | null; plan: string | null; step: SheetStep | null; seq: number } | null;
 let sheet: SheetRequest = null;
 const sheetListeners = new Set<() => void>();
 let seq = 0;
 
-/** Opens the one upgrade sheet for `feature` (null: the plans without a feature). */
-export function openUpgradeSheet(feature: string | null): void {
-  sheet = { feature, seq: ++seq };
+/** Opens the one upgrade sheet for `feature` (null: the plans without a feature), on `plan` or at `step`. While a
+ * request is open it opens on that request instead (no Upgrade while one is open). */
+export function openUpgradeSheet(feature: string | null, options: { plan?: string | null; step?: SheetStep | null } = {}): void {
+  sheet = { feature, plan: options.plan ?? null, step: options.step ?? null, seq: ++seq };
   sheetListeners.forEach((l) => l());
 }
 
@@ -194,4 +271,9 @@ export const OPEN_SECTION_EVENT = "echoledger:open-settings-section";
 
 export function openSettingsSection(id: string): void {
   window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: id }));
+}
+
+/** Settings at `page`, scrolled to the setting `id` and highlighted for a moment ("lock#lock.after"). */
+export function openSettings(page: string, id: string | null = null): void {
+  openSettingsSection(id ? `${page}#${id}` : page);
 }

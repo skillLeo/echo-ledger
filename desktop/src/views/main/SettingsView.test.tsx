@@ -1,17 +1,24 @@
+// Settings (v1.7): the Overview landing with who you are, the plan's button per plan, the one state row, the sections and
+// rows of the registry on every page (and only those), search that lands on a single setting, and the rows' saves.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { SettingsView, signedInLine } from "./SettingsView";
-import { errorMessage, type AppStatus, type Settings, type SiteRule } from "../../lib/ipc";
-import { callsOf, emitEvent, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeRecording, makeSettings, makeSiteRule, makeStatus } from "../../test/fixtures";
-import commandsRs from "../../../src-tauri/src/commands.rs?raw";
+import { LEGACY_SECTIONS, SettingsView, settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
+import { errorMessage, type Account, type AppStatus, type Entitlements, type Settings } from "../../lib/ipc";
+import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
+import { findSetting, HELP_ARTICLES, SETTINGS, setting } from "../../lib/settingsRegistry";
+import { resetEntitlementsForTests } from "../../lib/entitlements";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
+vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "1.7.0" }));
 
-const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }, { id: "c2", name: "Northwind", keyterm_count: 0 }] };
+const ACCOUNT: Account = {
+  name: "Hassam Ali", email: "hassam@example.com", email_verified: true, two_factor: true, google: false,
+  created_at: "2025-11-09T09:00:00Z", workspace: { id: 1, name: "Personal", role: "owner" }, deletes_at: null,
+};
+const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }] };
 
-/** Same contract as MainApp.run: executes the action, swallows and reports failures, resolves to undefined on error. */
 function makeRun() {
   const errors: string[] = [];
   const notices: string[] = [];
@@ -28,18 +35,6 @@ function makeRun() {
   return { run: run as never, errors, notices };
 }
 
-async function setup(settings: Partial<Settings> = {}, status: Partial<AppStatus> = {}) {
-  respond("get_settings", makeSettings(settings));
-  respond("list_clients", CLIENTS);
-  respond("update_settings", makeSettings(settings));
-  const helpers = makeRun();
-  const onUnpaired = vi.fn();
-  const view = render(<SettingsView status={makeStatus(status)} run={helpers.run} onUnpaired={onUnpaired} />);
-  await screen.findByRole("heading", { name: "Account", level: 1 });
-  return { ...helpers, onUnpaired, ...view };
-}
-
-/** The `update_settings` command echoes the patch back merged into the current settings, like the Rust side. */
 function echoSettings(base: Settings) {
   let current = base;
   respondWith("update_settings", ({ patch }) => {
@@ -48,564 +43,390 @@ function echoSettings(base: Settings) {
   });
 }
 
-const row = (label: string | RegExp) => screen.getByText(label).closest(".toggle") as HTMLElement;
-const keyDown = (init: KeyboardEventInit) => act(() => void window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init })));
+async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, section = null }: {
+  settings?: Partial<Settings>;
+  status?: Partial<AppStatus>;
+  account?: Account | null;
+  e?: Entitlements | null;
+  section?: { id: string; seq: number } | null;
+} = {}) {
+  respond("get_settings", makeSettings(settings));
+  respond("list_clients", CLIENTS);
+  respond("account_get", account);
+  respond("security_overview", { devices: [{ id: "d1", name: "Work laptop", platform: "windows", current: true }, { id: "d2", name: "Pixel 9", platform: "android", current: false }], events: [] });
+  respond("storage_info", { recordings_bytes: 125_829_120, recordings_count: 42, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
+  respond("input_devices", [{ id: "m1", name: "Realtek Audio", isDefault: true }]);
+  respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] });
+  respond("lock_status", { enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 });
+  respond("screens_status", { supported: true, platform: "windows", borderless: true, permission: true, inPlan: true, onServer: true });
+  respond("update_status", { phase: "up_to_date", current: "1.7.0", version: null, notes: null, checkedAt: null, message: null, progress: null });
+  respond("dictation_history", []);
+  respond("upgrade_request_latest", e?.upgrade_request ?? null);
+  respond("mac_check_last", null);
+  echoSettings(makeSettings(settings));
+  resetEntitlementsForTests(e);
+  const helpers = makeRun();
+  const onUnpaired = vi.fn();
+  const view = render(<SettingsView status={makeStatus({ serverUrl: "https://app.example.test", ...status })} run={helpers.run} onUnpaired={onUnpaired} section={section} />);
+  await screen.findAllByRole("heading", { level: 1 });
+  await waitFor(() => expect(callsOf("account_get").length).toBeGreaterThan(0));
+  return { ...helpers, onUnpaired, ...view };
+}
 
-describe("SettingsView loading", () => {
+const list = () => screen.getByRole("navigation", { name: "Settings" });
+const nav = (name: string) => within(list()).getByRole("button", { name });
+const go = async (name: string) => {
+  fireEvent.click(nav(name));
+  await screen.findByRole("heading", { name, level: 1 });
+};
+
+describe("the Overview and who you are", () => {
   beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
 
-  it("renders nothing until the settings have loaded, then loads settings and clients once", async () => {
-    let release: (v: unknown) => void = () => undefined;
-    respondWith("get_settings", () => new Promise((resolve) => (release = resolve)));
-    respond("list_clients", CLIENTS);
-    const { container } = render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    expect(container).toBeEmptyDOMElement();
-    release(makeSettings());
-    expect(await screen.findByRole("heading", { name: "Account", level: 1 })).toBeInTheDocument();
-    expect(callsOf("get_settings")).toHaveLength(1);
-    expect(callsOf("list_clients")).toHaveLength(1);
+  it("opens on the Overview: the card, the state row and this month, never a page or 'All settings'", async () => {
+    await setup({ e: sampleEntitlements("free") });
+    const overview = screen.getByTestId("settings-overview");
+    const card = within(overview).getByTestId("profile-card");
+    expect(await within(card).findByText("Hassam Ali")).toBeInTheDocument();
+    expect(within(card).getByText("hassam@example.com")).toBeInTheDocument();
+    expect(within(card).getByText("Free")).toHaveClass("plan-chip");
+    expect(within(overview).getByText("This month")).toBeInTheDocument();
+    expect(screen.queryByText("All settings")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signed in to/)).not.toBeInTheDocument();
+    // The sections of the root, in order, in sentence case.
+    const heads = within(list()).getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    expect(heads).toEqual(["Recording", "Transcription", "App", "Account", "Support"]);
   });
 
-  it("still renders when the client list cannot be loaded", async () => {
-    respond("get_settings", makeSettings());
-    respondWith("list_clients", () => Promise.reject("Server returned 500: oops"));
-    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    await screen.findByRole("heading", { name: "Account", level: 1 });
-    expect(screen.getByRole("option", { name: "No project" })).toBeInTheDocument();
-  });
-
-  it("shows the server it is signed in to and whether the certificate is pinned", async () => {
-    await setup({}, { serverUrl: "https://ledger.example.test", pinned: true });
-    expect(screen.getByText(/^Signed in to ledger\.example\.test\s+· secure connection/)).toBeInTheDocument();
-  });
-
-  it("says when the certificate is not pinned", async () => {
-    await setup({}, { pinned: false });
-    expect(screen.getByText(/· connection not verified/)).toBeInTheDocument();
-  });
-
-  it("shows the device name and the server it is signed in to next to Sign out (v1.5: no more Unpair)", async () => {
-    await setup({}, { deviceName: "Studio PC", serverUrl: "https://ledger.example.test" });
-    expect(screen.getByText("Studio PC")).toBeInTheDocument();
-    expect(screen.getByTestId("signed-in-to")).toHaveTextContent("Signed in to ledger.example.test");
-    expect(screen.getByRole("button", { name: "Sign out of this computer…" })).toBeInTheDocument();
-    expect(screen.queryByText(/unpair/i)).not.toBeInTheDocument();
-  });
-
-  it("says Signed in to the server's host, or Not signed in", () => {
-    expect(signedInLine("https://ledger.example.test")).toBe("Signed in to ledger.example.test");
-    expect(signedInLine("https://ledger.example.test:8443/")).toBe("Signed in to ledger.example.test:8443");
-    expect(signedInLine(null)).toBe("Not signed in");
-    expect(signedInLine("not a url")).toBe("Signed in to not a url");
-  });
-});
-
-describe("SettingsView switches", () => {
-  beforeEach(() => resetTauriMock());
-
-  const switches: [string, keyof Settings, boolean][] = [
-    ["Auto-record calls", "autoMode", true],
-    ["Show live captions while recording", "captionsOnRecord", true],
-    ["Hide overlays from screen sharing", "contentProtection", true],
-    ["Start EchoLedger when I sign in", "autostart", false],
-    ["I understand", "consentAcknowledged", false],
-    ["Ask me when an unrecognised app uses the microphone", "askUnknownApps", false],
-  ];
-
-  it.each(switches)("%s reflects its state and sends the inverse as `%s`", async (label, key, initial) => {
-    await setup({ [key]: initial });
-    const toggle = screen.getByRole("switch", { name: label });
-    expect(toggle).toHaveAttribute("aria-checked", String(initial));
-    fireEvent.click(toggle);
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { [key]: !initial } }]));
-  });
-
-  it("flips the switch after the backend confirms and flips back on the next click", async () => {
-    await setup();
-    echoSettings(makeSettings());
-    const toggle = screen.getByRole("switch", { name: "Start EchoLedger when I sign in" });
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "true"));
-    fireEvent.click(toggle);
-    await waitFor(() => expect(toggle).toHaveAttribute("aria-checked", "false"));
-    expect(callsOf("update_settings").map((c) => c.patch)).toEqual([{ autostart: true }, { autostart: false }]);
-  });
-
-  it("keeps the old state and reports the error when the backend rejects the change", async () => {
-    const { errors } = await setup();
-    respondWith("update_settings", () => Promise.reject("Settings could not be saved: disk full"));
-    const toggle = screen.getByRole("switch", { name: "Auto-record calls" });
-    fireEvent.click(toggle);
-    await waitFor(() => expect(errors).toEqual(["Settings could not be saved: disk full"]));
-    expect(toggle).toHaveAttribute("aria-checked", "true");
-  });
-});
-
-describe("SettingsView selects", () => {
-  beforeEach(() => resetTauriMock());
-
-  it("changes the caption corner", async () => {
-    await setup({ overlayCorner: "bottom_right" });
-    const select = screen.getByDisplayValue("Bottom right");
-    expect([...(select as HTMLSelectElement).options].map((o) => [o.value, o.text])).toEqual([
-      ["bottom_right", "Bottom right"],
-      ["top_right", "Top right"],
-      ["bottom_left", "Bottom left"],
-      ["top_left", "Top left"],
-    ]);
-    fireEvent.change(select, { target: { value: "top_left" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { overlayCorner: "top_left" } }]));
-  });
-
-  it("lists the server's clients, selects one and can clear the choice", async () => {
-    await setup({ clientId: null });
-    await screen.findByRole("option", { name: "Acme Holdings" });
-    const select = screen.getByDisplayValue("No project");
-    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["No project", "Acme Holdings", "Northwind"]);
-
-    fireEvent.change(select, { target: { value: "c2" } });
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: "c2" } });
-  });
-
-  it("sends clientId null when 'No project' is chosen", async () => {
-    await setup({ clientId: "c1" });
-    await screen.findByRole("option", { name: "Acme Holdings" });
-    const select = screen.getByDisplayValue("Acme Holdings");
-    fireEvent.change(select, { target: { value: "" } });
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    expect(callsOf("update_settings")[0]).toEqual({ patch: { clientId: null } });
-  });
-
-  // A6.DU4: the key must reach the core as an explicit null (clear), never be dropped (keep the stored client).
-  it("keeps clientId as an explicit null in the serialised command and shows No project afterwards", async () => {
-    await setup({ clientId: "c1" });
-    echoSettings(makeSettings({ clientId: "c1" }));
-    await screen.findByRole("option", { name: "Acme Holdings" });
-    const select = screen.getByLabelText("Project keyterms") as HTMLSelectElement;
-    expect(select.value).toBe("c1");
-    fireEvent.change(select, { target: { value: "" } });
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    // Command arguments travel to Rust as JSON: null survives JSON.stringify, undefined would drop the key.
-    expect(JSON.stringify(callsOf("update_settings")[0])).toBe('{"patch":{"clientId":null}}');
-    await waitFor(() => expect(select.value).toBe(""));
-    expect(screen.getByDisplayValue("No project")).toBe(select);
-  });
-
-  // A6.DU4 (core side, DESKTOP-CORE): plain serde turns `"clientId": null` into `None` for an Option<Option<String>>
-  // field, which update_settings reads as "keep". The field needs `#[serde(default, deserialize_with = ...)]` (or
-  // serde_with's double_option) so null arrives as Some(None).
-  it("A6.DU4: the core SettingsPatch keeps an explicit clientId null apart from a missing key", () => {
-    const patch = commandsRs.slice(commandsRs.indexOf("pub struct SettingsPatch"), commandsRs.indexOf("\n}\n", commandsRs.indexOf("pub struct SettingsPatch")));
-    const lines = patch.split("\n");
-    const at = lines.findIndex((l) => /^\s*(pub\s+)?client_id: Option<Option<String>>,/.test(l));
-    expect(at, "client_id is an Option<Option<String>>").toBeGreaterThan(0);
-    const attributes = lines.slice(0, at).reverse();
-    const own = attributes.slice(0, attributes.findIndex((l) => !/^\s*(#\[|\/\/)/.test(l)));
-    expect(own.join("\n"), "client_id needs a deserialiser that maps null to Some(None)").toMatch(/deserialize_with|with\s*=|double_option/);
-  });
-
-  it("changes the dictation output between typing and clipboard", async () => {
-    await setup({ dictationOutput: "type" });
-    const select = screen.getByDisplayValue("Type into the focused app");
-    fireEvent.change(select, { target: { value: "clipboard" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { dictationOutput: "clipboard" } }]));
-  });
-
-  // A6.DU7: the caption position, client keyterms and dictation output selects have no accessible name.
-  it("gives each select an accessible name", async () => {
-    await setup();
-    await screen.findByRole("option", { name: "Acme Holdings" });
-    for (const select of screen.getAllByRole("combobox")) {
-      expect(select, "select has no label / aria-label").toHaveAccessibleName();
-    }
-  });
-
-  it("names each select after its visible label and describes the client select with its hint", async () => {
-    await setup();
-    await screen.findByRole("option", { name: "Acme Holdings" });
-    expect(screen.getByRole("combobox", { name: "Caption position" })).toHaveValue("bottom_right");
-    expect(screen.getByRole("combobox", { name: "Dictation output" })).toHaveValue("type");
-    const client = screen.getByRole("combobox", { name: "Project keyterms" });
-    expect(client).toHaveAccessibleDescription("Names and jargon of the selected project improve accuracy.");
-  });
-
-  it("describes a switch with its hint", async () => {
-    await setup();
-    expect(screen.getByRole("switch", { name: "Auto-record calls" })).toHaveAccessibleDescription(
-      "Records a call when an app both uses your microphone and plays audio. Dictation and voice typing are never recorded.",
-    );
-    expect(screen.getByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toHaveAttribute("aria-describedby");
-  });
-});
-
-describe("SettingsView shortcuts", () => {
-  beforeEach(() => resetTauriMock());
-  afterEach(() => vi.restoreAllMocks());
-
-  it("lists all five actions with readable shortcuts and 'Not set' for the empty one", async () => {
-    await setup();
-    expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument();
-    expect(within(row("Start / stop saving a recording")).getByText("Ctrl + Shift + R")).toBeInTheDocument();
-    expect(within(row("Copy the last 2 minutes of captions")).getByText("Ctrl + Shift + C")).toBeInTheDocument();
-    expect(within(row("Dictation box")).getByText("Ctrl + Shift + D")).toBeInTheDocument();
-    expect(within(row("Capture voice note playing now")).getByText("Not set")).toBeInTheDocument();
-  });
-
-  it("uses macOS symbols on macOS", async () => {
-    await setup({}, { platform: "macos" });
-    expect(within(row("Show / hide live captions")).getByText("⌘⇧Space")).toBeInTheDocument();
-  });
-
-  it("only offers Clear for actions that have a shortcut", async () => {
-    await setup();
-    expect(within(row("Show / hide live captions")).getByRole("button", { name: "Clear" })).toBeInTheDocument();
-    expect(within(row("Capture voice note playing now")).queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
-  });
-
-  it("records a new shortcut from the keyboard and sends the accelerator", async () => {
-    await setup();
-    respondWith("set_shortcut", ({ action, accelerator }) => makeSettings({ shortcuts: { [action as string]: accelerator as string } }));
-    const target = row("Dictation box");
-    fireEvent.click(within(target).getByRole("button", { name: "Change" }));
-    expect(within(target).getByText("Press keys…")).toBeInTheDocument();
-
-    keyDown({ key: "K", code: "KeyK", ctrlKey: true, altKey: true });
-    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "dictation", accelerator: "CommandOrControl+Alt+K" }]));
-    await waitFor(() => expect(within(row("Dictation box")).getByText("Ctrl + Alt + K")).toBeInTheDocument());
-    expect(screen.queryByText("Press keys…")).not.toBeInTheDocument();
-  });
-
-  it("builds the accelerator with Command on macOS", async () => {
-    await setup({}, { platform: "macos" });
-    respond("set_shortcut", makeSettings());
-    fireEvent.click(within(row("Capture voice note playing now")).getByRole("button", { name: "Change" }));
-    keyDown({ key: "v", code: "KeyV", metaKey: true, shiftKey: true });
-    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "voice_note", accelerator: "CommandOrControl+Shift+V" }]));
-  });
-
-  it("keeps waiting after a modifier-only or modifier-less key press", async () => {
-    await setup();
-    respond("set_shortcut", makeSettings());
-    fireEvent.click(within(row("Show / hide live captions")).getByRole("button", { name: "Change" }));
-    keyDown({ key: "Control", code: "ControlLeft", ctrlKey: true });
-    keyDown({ key: "a", code: "KeyA" });
-    expect(screen.getByText("Press keys…")).toBeInTheDocument();
-    expect(callsOf("set_shortcut")).toHaveLength(0);
-  });
-
-  it("cancels recording with Escape without changing anything", async () => {
-    await setup();
-    fireEvent.click(within(row("Show / hide live captions")).getByRole("button", { name: "Change" }));
-    keyDown({ key: "Escape", code: "Escape" });
-    expect(screen.queryByText("Press keys…")).not.toBeInTheDocument();
-    expect(callsOf("set_shortcut")).toHaveLength(0);
-    expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument();
-  });
-
-  it("reports a conflicting shortcut and keeps the previous one", async () => {
-    const { errors } = await setup();
-    respondWith("set_shortcut", () => Promise.reject("Ctrl+Shift+R is already registered by another application"));
-    fireEvent.click(within(row("Start / stop saving a recording")).getByRole("button", { name: "Change" }));
-    keyDown({ key: "R", code: "KeyR", ctrlKey: true, shiftKey: true });
-    await waitFor(() => expect(errors).toEqual(["Ctrl+Shift+R is already registered by another application"]));
-    expect(within(row("Start / stop saving a recording")).getByText("Ctrl + Shift + R")).toBeInTheDocument();
-  });
-
-  it("clears a shortcut by sending an empty accelerator", async () => {
-    await setup();
-    respondWith("set_shortcut", ({ action }) => makeSettings({ shortcuts: { [action as string]: "" } }));
-    fireEvent.click(within(row("Copy the last 2 minutes of captions")).getByRole("button", { name: "Clear" }));
-    await waitFor(() => expect(callsOf("set_shortcut")).toEqual([{ action: "copy_last2_min", accelerator: "" }]));
-    await waitFor(() => expect(within(row("Copy the last 2 minutes of captions")).getByText("Not set")).toBeInTheDocument());
-  });
-
-  it("resets all shortcuts to their defaults", async () => {
-    const { notices } = await setup({ shortcuts: { toggle_captions: "CommandOrControl+Alt+X" } });
-    respond("reset_shortcuts", makeSettings());
-    fireEvent.click(screen.getByRole("button", { name: "Reset defaults" }));
-    await waitFor(() => expect(callsOf("reset_shortcuts")).toHaveLength(1));
-    await waitFor(() => expect(within(row("Show / hide live captions")).getByText("Ctrl + Shift + Space")).toBeInTheDocument());
-    expect(notices).toContain("Shortcuts reset");
-  });
-
-  it("shows the registration error of an action under its label", async () => {
-    await setup({}, { shortcutErrors: [["dictation", "Ctrl+Shift+D is used by another app"]] });
-    expect(within(row("Dictation box")).getByText("Ctrl+Shift+D is used by another app")).toHaveClass("error-text");
-    expect(within(row("Show / hide live captions")).queryByText(/another app/)).not.toBeInTheDocument();
-  });
-});
-
-describe("SettingsView unpair", () => {
-  beforeEach(() => resetTauriMock());
-  afterEach(() => vi.restoreAllMocks());
-
-  it("does nothing when the confirmation is declined", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-    const { onUnpaired } = await setup();
-    respond("unpair", makeStatus({ paired: false }));
-    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Sign out of this computer?"));
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(callsOf("unpair")).toHaveLength(0);
-    expect(onUnpaired).not.toHaveBeenCalled();
-  });
-
-  it("unpairs and hands the new status to the app when confirmed", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const { onUnpaired } = await setup();
-    const unpaired = makeStatus({ paired: false, deviceName: null, serverUrl: null });
-    respond("unpair", unpaired);
-    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
-    await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(unpaired));
-    expect(callsOf("unpair")).toHaveLength(1);
-  });
-
-  it("reports a failed unpair and keeps the computer paired", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    const { onUnpaired, errors } = await setup();
-    respondWith("unpair", () => Promise.reject("Keychain error: access denied"));
-    fireEvent.click(screen.getByRole("button", { name: "Sign out of this computer…" }));
-    await waitFor(() => expect(errors).toEqual(["Keychain error: access denied"]));
-    expect(onUnpaired).not.toHaveBeenCalled();
-  });
-});
-
-describe("SettingsView decisions and captions (A2.5, A2.6, A3.2)", () => {
-  beforeEach(() => resetTauriMock());
-
-  const optionsOf = (select: HTMLElement) => [...(select as HTMLSelectElement).options].map((o) => [o.value, o.text]);
-
-  it("offers Keep automatically and Ask me after a call and saves the choice", async () => {
-    await setup({ afterCall: "keep" });
-    const select = screen.getByRole("combobox", { name: "After a call" });
-    expect(select).toHaveValue("keep");
-    expect(optionsOf(select)).toEqual([["keep", "Keep automatically"], ["ask", "Ask me"]]);
-    expect(select).toHaveAccessibleDescription("Each call is saved at once. A small “Saved · Undo” shows near the tray for a few seconds.");
-    fireEvent.change(select, { target: { value: "ask" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { afterCall: "ask" } }]));
-  });
-
-  it("shows the stored choice and says what Ask me does", async () => {
-    await setup({ afterCall: "ask" });
-    const select = screen.getByRole("combobox", { name: "After a call" });
-    expect(select).toHaveValue("ask");
-    expect(select).toHaveAccessibleDescription("A small prompt near the tray asks Keep or Discard, and keeps the call by itself after 10 seconds.");
-    expect(screen.queryByRole("combobox", { name: "Ask before saving" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("combobox", { name: "If I don't choose within 60 s" })).not.toBeInTheDocument();
-  });
-
-  it("offers Skip calls shorter than (10 s by default) and sends the seconds as a number", async () => {
-    await setup({ skipCallsShorterThanS: 10 });
-    const select = screen.getByRole("combobox", { name: "Skip calls shorter than" });
-    expect(select).toHaveValue("10");
-    expect(optionsOf(select)).toEqual([["0", "Never"], ["5", "5 s"], ["10", "10 s (default)"], ["20", "20 s"], ["30", "30 s"]]);
-    expect(select).toHaveAccessibleDescription("Automatic calls that are this short, or where nobody spoke, are skipped quietly. Activity can restore them for 24 hours.");
-    fireEvent.change(select, { target: { value: "0" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { skipCallsShorterThanS: 0 } }]));
-  });
-
-  it("sends caption lines as a number (2, 3 or 5)", async () => {
-    await setup({ captionLines: 3 });
-    const select = screen.getByRole("combobox", { name: "Caption lines" });
-    expect(select).toHaveValue("3");
-    expect(optionsOf(select).map(([v]) => v)).toEqual(["2", "3", "5"]);
-    fireEvent.change(select, { target: { value: "5" } });
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { captionLines: 5 } }]));
-    expect(JSON.stringify(callsOf("update_settings")[0])).toBe('{"patch":{"captionLines":5}}');
-  });
-
-  it("reports the core's refusal of a caption line count and keeps the old value", async () => {
-    const { errors } = await setup({ captionLines: 2 });
-    respondWith("update_settings", () => Promise.reject("Choose 2, 3 or 5 lines."));
-    const select = screen.getByRole("combobox", { name: "Caption lines" });
-    fireEvent.change(select, { target: { value: "5" } });
-    await waitFor(() => expect(errors).toEqual(["Choose 2, 3 or 5 lines."]));
-    expect(select).toHaveValue("2");
-  });
-
-  it("describes the unrecognised-app ask chip", async () => {
-    await setup();
-    expect(screen.getByRole("switch", { name: "Ask me when an unrecognised app uses the microphone" })).toHaveAccessibleDescription("A small prompt appears for 8 seconds.");
-  });
-
-  it("offers reading browser tab addresses only on macOS", async () => {
-    const windows = await setup({}, { platform: "windows" });
-    expect(screen.queryByRole("switch", { name: "Read browser tab addresses" })).not.toBeInTheDocument();
-    windows.unmount();
-    resetTauriMock();
-    await setup({ browserAutomation: false }, { platform: "macos" });
-    const toggle = screen.getByRole("switch", { name: "Read browser tab addresses" });
-    expect(toggle).toHaveAccessibleDescription("Lets EchoLedger tell a Google Meet call from dictation. macOS asks for permission once.");
-    expect(toggle).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(toggle);
-    await waitFor(() => expect(callsOf("update_settings")).toEqual([{ patch: { browserAutomation: true } }]));
-  });
-
-  it("follows settings:changed from the core while open and stops listening on unmount", async () => {
-    const { unmount } = await setup({ afterCall: "keep" });
-    await waitFor(() => expect(listenerCount("settings:changed")).toBe(1));
-    await emitEvent("settings:changed", makeSettings({ afterCall: "ask" }));
-    expect(screen.getByRole("combobox", { name: "After a call" })).toHaveValue("ask");
+  it("gives Free a filled Upgrade, Pro an outlined one, and Ultra none but the date it is paid until", async () => {
+    const { unmount } = await setup({ e: sampleEntitlements("free") });
+    expect(within(await screen.findByTestId("profile-card")).getByRole("button", { name: "Upgrade" })).toHaveClass("primary");
     unmount();
-    await waitFor(() => expect(listenerCount("settings:changed")).toBe(0));
+    const pro = await setup({ e: sampleEntitlements("pro") });
+    const card = await screen.findByTestId("profile-card");
+    expect(within(card).getByRole("button", { name: "Upgrade" })).toHaveClass("outline");
+    expect(within(card).getByText("230 of 600 min this month")).toBeInTheDocument();
+    pro.unmount();
+    await setup({ e: sampleEntitlements("ultra") });
+    const ultra = await screen.findByTestId("profile-card");
+    expect(within(ultra).queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
+    expect(within(ultra).getByText("Paid until 9 Dec 2026")).toBeInTheDocument();
+    expect(within(ultra).getByText("Ultra")).toBeInTheDocument();
+  });
+
+  it("shows no Upgrade while a request is open, and the state row carries it instead", async () => {
+    const e = { ...sampleEntitlements("pro"), upgrade_request: makeUpgradeRequest("awaiting_payment", { plan: "ultra" }) };
+    await setup({ e });
+    const overview = screen.getByTestId("settings-overview");
+    expect(within(overview).queryByText("Upgrade")).not.toBeInTheDocument();
+    expect(within(overview).getByTestId("state-row")).toHaveTextContent("Ultra requested. Waiting for your payment");
+  });
+
+  it("puts the deletion first in the state row, with Cancel deletion", async () => {
+    await setup({ e: sampleEntitlements("free"), account: { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } });
+    const row = await screen.findByTestId("state-row");
+    expect(row).toHaveAttribute("data-state", "deleting");
+    expect(row).toHaveTextContent("Your account will be deleted on 9 Dec.");
+    fireEvent.click(within(row).getByRole("button", { name: "Cancel deletion" }));
+    expect(await screen.findByRole("heading", { name: "Privacy & data", level: 1 })).toBeInTheDocument();
+  });
+
+  it("asks a Free account without a key to set up free transcription", async () => {
+    await setup({ e: sampleEntitlements("free") });
+    const row = await screen.findByTestId("state-row");
+    expect(row).toHaveTextContent("Set up free transcription (2 minutes)");
+    fireEvent.click(within(row).getByRole("button", { name: /Set up free transcription/ }));
+    expect(await screen.findByRole("heading", { name: "Transcription key", level: 1 })).toBeInTheDocument();
+  });
+
+  it("the card's body opens Plan & usage, and the Upgrade button beside it is not inside it", async () => {
+    await setup({ e: sampleEntitlements("free") });
+    const card = await screen.findByTestId("profile-card");
+    const body = within(card).getByRole("button", { name: /Hassam Ali, hassam@example.com, Free plan\. Opens plan and usage\./ });
+    expect(within(body).queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
+    fireEvent.click(body);
+    expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
+  });
+
+  it("still shows the account's pages when this computer's settings can't be read, and offers Try again", async () => {
+    respondWith("get_settings", () => Promise.reject("disk"));
+    respond("list_clients", CLIENTS);
+    respond("account_get", ACCOUNT);
+    resetEntitlementsForTests(null);
+    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
+    await screen.findAllByRole("heading", { name: "Settings", level: 1 });
+    fireEvent.click(await within(list()).findByRole("button", { name: "Profile" }));
+    expect(await screen.findByText("Hassam Ali")).toBeInTheDocument();
+    fireEvent.click(nav("Captions"));
+    expect(await screen.findByText("Couldn't read this computer's settings.")).toBeInTheDocument();
+    respond("get_settings", makeSettings());
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("switch", { name: "Live captions while recording" })).toBeInTheDocument();
   });
 });
 
-describe("SettingsView call sites (A1.4)", () => {
+describe("pages from elsewhere", () => {
   beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
 
-  const lastRules = () => {
-    const calls = callsOf("update_settings");
-    return (calls[calls.length - 1].patch as { siteRules: SiteRule[] }).siteRules;
-  };
-  const siteList = (name: string) => screen.getByRole("list", { name });
-
-  it("lists the built-in call sites and the built-in never-record sites, all on", async () => {
-    await setup();
-    const calls = within(siteList("Call sites"));
-    for (const host of ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "web.whatsapp.com"]) {
-      expect(calls.getByRole("switch", { name: `Record calls on ${host}` })).toHaveAttribute("aria-checked", "true");
-    }
-    const never = within(siteList("Never record"));
-    for (const host of ["chatgpt.com", "claude.ai", "gemini.google.com"]) {
-      expect(never.getByRole("switch", { name: `Never record ${host}` })).toHaveAttribute("aria-checked", "true");
-    }
-    expect(calls.getByText("meet.google.com").closest(".site-rule")).toHaveTextContent("Google Meet");
+  it("maps the v1.6 section ids to the new pages", async () => {
+    expect(LEGACY_SECTIONS["transcription-key"]).toBe("key");
+    expect(LEGACY_SECTIONS.general).toBe("words");
+    expect(LEGACY_SECTIONS["all-features"]).toBe("plan#plan.compare");
+    await setup({ e: sampleEntitlements("free"), section: { id: "transcription-key", seq: 1 } });
+    expect(await screen.findByRole("heading", { name: "Transcription key", level: 1 })).toBeInTheDocument();
   });
 
-  it("switches a built-in off by saving a disabled user rule with its id", async () => {
-    await setup();
-    echoSettings(makeSettings());
-    const meet = screen.getByRole("switch", { name: "Record calls on meet.google.com" });
-    fireEvent.click(meet);
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    expect(lastRules()).toEqual([
-      { id: "builtin.meet", app: "google_meet", host: "meet.google.com", titlePrefix: "Meet - ", titleContains: "Google Meet", titleEquals: null, priority: 30, enabled: false },
-    ]);
-    await waitFor(() => expect(meet).toHaveAttribute("aria-checked", "false"));
-  });
-
-  it("switches a built-in back on by removing the override and keeps the other rules", async () => {
-    const mine = makeSiteRule({ id: "u-1", app: "zoom", host: "zoom.example.test" });
-    const override = { id: "builtin.never_gemini", app: "never", host: "gemini.google.com", titlePrefix: null, titleContains: null, titleEquals: null, priority: 100, enabled: false };
-    await setup({ siteRules: [mine, override] });
-    const gemini = screen.getByRole("switch", { name: "Never record gemini.google.com" });
-    expect(gemini).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(gemini);
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    expect(lastRules()).toEqual([mine]);
-  });
-
-  it("adds a call site typed as an address as a host rule for the chosen app", async () => {
-    await setup();
-    fireEvent.change(screen.getByRole("combobox", { name: "App" }), { target: { value: "other" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Address or title contains" }), { target: { value: "https://Meet.Example.test/room-42" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    const [rule] = lastRules();
-    expect(rule).toMatchObject({ app: "other", host: "meet.example.test", titleContains: null, titlePrefix: null, titleEquals: null, priority: 50, enabled: true });
-    expect(rule.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "Address or title contains" })).toHaveValue(""));
-  });
-
-  it("adds a never-record entry typed as title text", async () => {
-    await setup({ siteRules: [makeSiteRule()] });
-    fireEvent.change(screen.getByRole("combobox", { name: "App" }), { target: { value: "never" } });
-    const field = screen.getByRole("textbox", { name: "Address or title contains" });
-    fireEvent.change(field, { target: { value: "Voice typing" } });
-    fireEvent.submit(field.closest("form")!);
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    const rules = lastRules();
-    expect(rules[0]).toEqual(makeSiteRule());
-    expect(rules[1]).toMatchObject({ app: "never", host: null, titleContains: "Voice typing", priority: 100, enabled: true });
-  });
-
-  it("disables Add for an empty field and ignores a rule the user already has", async () => {
-    await setup({ siteRules: [makeSiteRule({ app: "google_meet", host: "meet.example.test" })] });
-    const add = screen.getByRole("button", { name: "Add" });
-    expect(add).toBeDisabled();
-    fireEvent.change(screen.getByRole("textbox", { name: "Address or title contains" }), { target: { value: "MEET.example.test" } });
-    expect(add).toBeEnabled();
-    fireEvent.click(add);
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "Address or title contains" })).toHaveValue(""));
-    expect(callsOf("update_settings")).toHaveLength(0);
-  });
-
-  it("lists the user's rules under their list and removes one", async () => {
-    const meet = makeSiteRule({ id: "u-meet", app: "google_meet", host: "meet.example.test" });
-    const chip = makeSiteRule({ id: "u-app", app: "never", host: null, titleEquals: "Recorder.exe", priority: 100 });
-    await setup({ siteRules: [meet, chip] });
-    expect(within(siteList("Call sites")).getByText("meet.example.test")).toBeInTheDocument();
-    expect(within(siteList("Never record")).getByText("Recorder.exe")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Remove Recorder.exe" }));
-    await waitFor(() => expect(callsOf("update_settings")).toHaveLength(1));
-    expect(lastRules()).toEqual([meet]);
-  });
-
-  it("keeps the typed text when the core refuses the rules", async () => {
-    const { errors } = await setup();
-    respondWith("update_settings", () => Promise.reject("Settings could not be saved: disk full"));
-    const field = screen.getByRole("textbox", { name: "Address or title contains" });
-    fireEvent.change(field, { target: { value: "jitsi.example.test" } });
-    fireEvent.click(screen.getByRole("button", { name: "Add" }));
-    await waitFor(() => expect(errors).toEqual(["Settings could not be saved: disk full"]));
-    expect(field).toHaveValue("jitsi.example.test");
-  });
-
-  it("gives the app select and the text field accessible names", async () => {
-    await setup();
-    expect(screen.getByRole("combobox", { name: "App" })).toHaveValue("google_meet");
-    expect([...(screen.getByRole("combobox", { name: "App" }) as HTMLSelectElement).options].map((o) => o.text)).toEqual([
-      "Google Meet", "Zoom", "Microsoft Teams", "WhatsApp Web", "Other", "Never record",
-    ]);
+  it("opens a page at a setting and highlights its row", async () => {
+    await setup({ section: { id: "lock#lock.after", seq: 1 } });
+    expect(await screen.findByRole("heading", { name: "App lock", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(document.getElementById("setting-lock.after")).toHaveClass("is-highlighted"));
+    expect(document.activeElement).toBe(document.getElementById("setting-lock.after"));
   });
 });
 
-describe("capture and control settings (B1, B3, B4, B5)", () => {
-  beforeEach(() => {
-    resetTauriMock();
-    respond("get_settings", makeSettings());
-    respond("list_clients", CLIENTS);
-    respond("input_devices", []);
-    respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows" });
+describe("search", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
+
+  const search = (q: string) => fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: q } });
+
+  it("finds single settings with where they live, and opens one highlighted", async () => {
+    await setup({ e: sampleEntitlements("free") });
+    search("lock after");
+    expect(screen.getByRole("heading", { name: "Results for “lock after”" })).toBeInTheDocument();
+    const results = within(screen.getByTestId("settings-results"));
+    const first = results.getAllByRole("option")[0];
+    expect(first).toHaveAttribute("data-result", "lock.after");
+    expect(first).toHaveTextContent("App › App lock");
+    expect(first).toHaveTextContent("After 5 minutes");
+    fireEvent.click(first);
+    expect(await screen.findByRole("heading", { name: "App lock", level: 1 })).toBeInTheDocument();
+    await waitFor(() => expect(document.getElementById("setting-lock.after")).toHaveClass("is-highlighted"));
   });
 
-  it("shows the auto-record apps, caption style and microphone cards", async () => {
-    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    expect(await screen.findByText("Auto-record apps")).toBeInTheDocument();
-    expect(screen.getByText("Caption style")).toBeInTheDocument();
-    expect(screen.getByText("Microphone")).toBeInTheDocument();
+  it("finds Upgrade for 'pro', never the audio probe, and hides sections with nothing", async () => {
+    await setup({ e: sampleEntitlements("free") });
+    search("pro");
+    const options = within(screen.getByTestId("settings-results")).getAllByRole("option");
+    expect(options[0]).toHaveAttribute("data-result", "plan.upgrade");
+    expect(options[1]).toHaveAttribute("data-result", "profile");
+    expect(within(list()).queryByRole("heading", { name: "App" })).not.toBeInTheDocument();
+    expect(within(within(list()).getByRole("button", { name: /^Plan & usage/ })).getByLabelText(/match/)).toBeInTheDocument();
   });
 
-  it("offers a shortcut for bookmarking", async () => {
-    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    expect(await screen.findByText("Bookmark this moment of a recording")).toBeInTheDocument();
+  it("moves through results with the arrows, opens with Enter and clears with Esc", async () => {
+    await setup();
+    const box = screen.getByRole("textbox", { name: "Search settings" });
+    search("quiet");
+    fireEvent.keyDown(box, { key: "ArrowDown" });
+    fireEvent.keyDown(box, { key: "ArrowUp" });
+    expect(within(screen.getByTestId("settings-results")).getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(box, { key: "Escape" });
+    expect(screen.queryByTestId("settings-results")).not.toBeInTheDocument();
+    search("quiet");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Notifications", level: 1 })).toBeInTheDocument();
   });
 
-  it("disables the microphone test while recording", async () => {
-    render(<SettingsView status={makeStatus({ recording: makeRecording() })} run={makeRun().run} onUnpaired={vi.fn()} />);
-    expect(await screen.findByRole("button", { name: "Test 10 seconds" })).toBeDisabled();
+  it("says when nothing matches, with no made-up suggestions, and offers Help", async () => {
+    await setup();
+    search("xyzzy");
+    expect(screen.getByText("No settings match “xyzzy”")).toBeInTheDocument();
+    expect(screen.getByText("Check the spelling or try another word.")).toBeInTheDocument();
+    expect(screen.queryByText("Closest matches")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Search help" })).toBeInTheDocument();
+  });
+
+  it("answers help questions apart and opens the answer", async () => {
+    await setup();
+    search("dark mode");
+    const help = screen.getByRole("listbox", { name: "Help found" });
+    fireEvent.click(within(help).getByRole("option", { name: /How do I turn on dark mode/ }));
+    expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
+    expect(screen.getByText("Go to Settings › Appearance › Theme and choose Dark.")).toBeInTheDocument();
   });
 });
 
-describe("transcription language (B12)", () => {
-  beforeEach(() => {
-    resetTauriMock();
-    respond("get_settings", makeSettings());
-    respond("list_clients", CLIENTS);
-    respond("input_devices", []);
-    respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows" });
-    respondWith("update_settings", ({ patch }) => makeSettings(patch as Partial<Settings>));
+describe("every row comes from the registry, and every entry has its row", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
+
+  // Rows that show only in a state the fixture is not in (a saved key, a team, a request, macOS, a deletion), and the
+  // entries made at run time or found only through search (the upgrade flow's own steps).
+  const CONDITIONAL = new Set(["calls.browser_tabs", "mic.perm.system_audio", "screen.permission", "help.mac_check", "privacy.cancel_deletion",
+    "profile.workspace", "plan.usage.members", "plan.usage.uploads", "plan.request", "plan.history", "plan.payment_details", "plan.receipt"]);
+  const pages = SETTINGS.filter((e) => e.kind === "page").map((e) => e.id);
+
+  it("renders each page's rows with registry ids and titles, and nothing else", async () => {
+    // Pro with a key of its own: screen moments unlocked, the key page with its saved key, Ultra above to upgrade to.
+    const e = { ...sampleEntitlements("pro"), transcription_key: { provider: "groq", set: true, last4: "3f9a" } };
+    const { container } = await setup({ e });
+    const available = settingsAvailability({ platform: "windows", account: ACCOUNT, entitlements: e, role: "owner" });
+    const seen = new Set<string>();
+    for (const id of ["calls", "calls.sites", "mic", "captions", "captions.style", "screen", "screen.excluded", "voice", "voice.replacements", "voice.snippets", "voice.history",
+      "transcription.language", "words", "key", "appearance", "notifications", "lock", "storage", "shortcuts", "profile", "plan", "security", "security.activity", "devices",
+      "privacy", "privacy.consent", "help", "about", "about.technical"]) {
+      if (id !== "transcription.language") expect(pages, id).toContain(id);
+      act(() => {
+        window.dispatchEvent(new Event("noop"));
+      });
+      await openPage(id);
+      await screen.findByRole("heading", { name: setting(id).title, level: 1 });
+      await waitFor(() => expect(container.querySelector(`.settings-page[data-page="${id}"]`)).not.toBeNull());
+      await act(async () => { await Promise.resolve(); });
+      for (const el of container.querySelectorAll<HTMLElement>(".settings-page [data-setting]")) {
+        const rid = el.dataset.setting!;
+        if (rid.startsWith("devices.item.")) continue;
+        const entry = findSetting(rid);
+        expect(entry, `${id}: row ${rid} is in the registry`).toBeDefined();
+        const title = el.classList.contains("set-row") ? el.querySelector(".set-title")?.textContent : null;
+        if (title && !rid.startsWith("calls.app.") && !rid.startsWith("help.article.")) expect(title, rid).toBe(entry!.title);
+        seen.add(rid);
+      }
+    }
+    for (const el of container.querySelectorAll<HTMLElement>("[data-nav]")) seen.add(el.dataset.nav!);
+    seen.add("app.autostart");
+    seen.add("signout");
+    const missing = SETTINGS.filter((e) => available(e) && !CONDITIONAL.has(e.id) && e.kind !== "page" && !seen.has(e.id) && !HELP_ARTICLES.includes(e)).map((e) => e.id);
+    expect(missing, "entries with no row").toEqual([]);
+    const rootPages = SETTINGS.filter((e) => e.page === null && e.kind === "page" && available(e)).map((e) => e.id);
+    for (const p of rootPages) expect(seen.has(p), `${p} is in the list`).toBe(true);
   });
 
-  it("offers the documented languages and sends null for Automatic", async () => {
-    render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
-    const select = await screen.findByLabelText("Transcription language");
-    expect([...(select as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)", "French (more languages)", "German (more languages)", "Spanish (more languages)", "Italian (more languages)", "Portuguese (more languages)", "Dutch (more languages)", "Turkish (more languages)", "Russian (more languages)"]);
-    fireEvent.change(select, { target: { value: "ar" } });
-    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { transcriptionLanguage: "ar" } }));
+  async function openPage(id: string): Promise<void> {
+    const parent = setting(id).page;
+    if (parent === null) {
+      fireEvent.click(nav(setting(id).title));
+      return;
+    }
+    if (!document.querySelector(`#setting-${CSS.escape(id)}`)) {
+      await openPage(parent);
+      await screen.findByRole("heading", { name: setting(parent).title, level: 1 });
+    }
+    fireEvent.click(await waitFor(() => document.querySelector<HTMLElement>(`#setting-${CSS.escape(id)}`)!));
+  }
+
+  it("titles each page as the row that opens it", () => {
+    for (const p of settingsPages(() => true)) expect(p.label).toBe(setting(p.page).title);
+  });
+});
+
+describe("rows that save", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
+
+  it("flips a switch once the core confirms, and keeps the old state when it refuses", async () => {
+    const { errors } = await setup({ settings: { captionsOnRecord: true } });
+    await go("Captions");
+    const live = screen.getByRole("switch", { name: "Live captions while recording" });
+    fireEvent.click(live);
+    await waitFor(() => expect(live).toHaveAttribute("aria-checked", "false"));
+    expect(callsOf("update_settings").at(-1)).toEqual({ patch: { captionsOnRecord: false } });
+    respondWith("update_settings", () => Promise.reject("Settings could not be saved"));
+    fireEvent.click(live);
+    await waitFor(() => expect(errors).toContain("Settings could not be saved"));
+    expect(live).toHaveAttribute("aria-checked", "false");
+  });
+
+  it("shows during screen share as the inverse of the old content protection", async () => {
+    await setup({ settings: { contentProtection: true } });
+    await go("Captions");
+    const share = screen.getByRole("switch", { name: "Show during screen share" });
+    expect(share).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(share);
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { contentProtection: false } }));
+  });
+
+  it("sends clientId null for None and the project's id otherwise", async () => {
+    await setup({ settings: { clientId: "c1" } });
+    await go("Custom words");
+    const select = await screen.findByLabelText("Use terms from project");
+    await screen.findByRole("option", { name: "Acme Holdings" });
     fireEvent.change(select, { target: { value: "" } });
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { clientId: null } }));
+  });
+
+  it("sends Automatic as a null language", async () => {
+    await setup({ settings: { transcriptionLanguage: "ur" } });
+    fireEvent.click(nav("Language"));
+    fireEvent.change(await screen.findByLabelText("Language"), { target: { value: "" } });
     await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { transcriptionLanguage: null } }));
+  });
+
+  it("chooses the theme in a radio group with one stop per option", async () => {
+    await setup();
+    await go("Appearance");
+    const group = screen.getByRole("radiogroup", { name: "Theme" });
+    const dark = within(group).getByRole("radio", { name: "Dark" });
+    expect(within(group).getByRole("radio", { name: "System" })).toHaveAttribute("tabindex", "0");
+    expect(dark).toHaveAttribute("tabindex", "-1");
+    fireEvent.click(dark);
+    await waitFor(() => expect(dark).toHaveAttribute("aria-checked", "true"));
+  });
+
+  it("starts at sign-in from its root row's switch", async () => {
+    await setup({ settings: { autostart: false } });
+    fireEvent.click(within(list()).getByRole("switch", { name: "Start when I sign in" }));
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { autostart: true } }));
+  });
+
+  it("records a new global shortcut, clears one and resets them all", async () => {
+    await setup({ settings: { shortcuts: { ...makeSettings().shortcuts } } });
+    respondWith("set_shortcut", () => makeSettings());
+    respond("reset_shortcuts", makeSettings());
+    await go("Keyboard shortcuts");
+    fireEvent.click(screen.getByRole("button", { name: "Change Record now" }));
+    expect(screen.getByText("Press keys…")).toBeInTheDocument();
+    await act(async () => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "R", code: "KeyR", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
+    });
+    await waitFor(() => expect(callsOf("set_shortcut").at(-1)).toEqual({ action: "record_now", accelerator: "CommandOrControl+Shift+R" }));
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
+    await waitFor(() => expect(callsOf("reset_shortcuts")).toHaveLength(1));
+  });
+
+  it("adds a call site and switches a built-in one off", async () => {
+    await setup({ settings: { siteRules: [] } });
+    await go("Calls & meetings");
+    fireEvent.click(screen.getByRole("button", { name: /^Call sites/ }));
+    await screen.findByRole("heading", { name: "Call sites", level: 1 });
+    fireEvent.change(screen.getByPlaceholderText("Address or title contains"), { target: { value: "calls.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(callsOf("update_settings").length).toBeGreaterThan(0));
+    const sent = callsOf("update_settings").at(-1) as { patch: { siteRules: { pattern: string }[] } };
+    expect(sent.patch.siteRules.some((r) => JSON.stringify(r).includes("calls.example.com"))).toBe(true);
+  });
+
+  it("follows settings:changed from the core and stops listening on unmount", async () => {
+    const { unmount } = await setup({ settings: { captionsOnRecord: true } });
+    await go("Captions");
+    await emitEvent("settings:changed", makeSettings({ captionsOnRecord: false }));
+    expect(screen.getByRole("switch", { name: "Live captions while recording" })).toHaveAttribute("aria-checked", "false");
+    unmount();
+    await flushAsync();
+    expect(listenerCount("settings:changed")).toBe(0);
+  });
+});
+
+describe("Sign out", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => resetEntitlementsForTests());
+
+  it("asks first, says what happens to recordings waiting, and signs out on confirm", async () => {
+    expect(signOutBody(0)).toBeNull();
+    expect(signOutBody(1)).toBe("1 recording hasn't uploaded yet. It'll stay on this computer, but nobody else can see it until you sign in again.");
+    respond("unpair", makeStatus({ paired: false }));
+    const { onUnpaired } = await setup({ status: { pendingUploads: 2 } });
+    fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
+    const dialog = screen.getByRole("dialog", { name: "Sign out of this computer?" });
+    expect(dialog).toHaveTextContent("2 recordings haven't uploaded yet.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(callsOf("unpair")).toHaveLength(0);
+    fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sign out" }));
+    await waitFor(() => expect(onUnpaired).toHaveBeenCalled());
   });
 });

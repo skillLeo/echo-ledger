@@ -1,5 +1,5 @@
 // The sidebar (v1.6, P4.1): "Find a page" at the top, then Home · Library (its smart folders) · Projects (the pinned
-// ones) · Activity · Shared (with me, my links, request links) · Upload, and at the bottom Help & shortcuts, Account and
+// ones) · Activity · Shared (with me, my links, request links) · Upload, and at the bottom Help & shortcuts, Settings and
 // Collapse sidebar. 240 px by default, 200–320 by dragging its edge (kept on this computer), or a 64 px icon rail ("[").
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { ClientFolder, SmartFolder } from "../../lib/ipc";
@@ -7,7 +7,7 @@ import type { LibraryPlace, LibraryView } from "../../lib/folders";
 import type { MainTab } from "../../lib/mainView";
 import { clampSidebar, findPages, loadOpenGroups, saveOpenGroups, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, type PageEntry, type SidebarGroup } from "../../lib/shell";
 import { badgeLabel, badgeSpoken } from "../../lib/badge";
-import { BellIcon, ChevronRightIcon, CloseIcon, FolderIcon, HelpIcon, HomeIcon, ImportIcon, LibraryIcon, LinkIcon, RequestFilesIcon, SearchIcon, ShareIcon, SidebarIcon, UserIcon, UsersIcon } from "../../components/Icons";
+import { BellIcon, ChevronRightIcon, CloseIcon, FolderIcon, HelpIcon, HomeIcon, ImportIcon, LibraryIcon, LinkIcon, RequestFilesIcon, SearchIcon, ShareIcon, SettingsIcon, SidebarIcon, UsersIcon } from "../../components/Icons";
 import { BrandMark } from "../../components/BrandMark";
 import { PlaceList } from "./SecondaryColumn";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
@@ -245,8 +245,8 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           <HelpIcon size={18} /><span className="nav-label">Help &amp; shortcuts</span><span className="kbd nav-kbd" aria-hidden="true">?</span>
         </button>
         <button type="button" className={`nav-btn footer-btn ${tab === "settings" ? "active" : ""}`} aria-current={tab === "settings" ? "page" : undefined}
-          title={collapsed ? "Account" : undefined} onClick={() => onGo("settings")}>
-          <UserIcon size={18} /><span className="nav-label">Account</span>
+          title={collapsed ? "Settings" : undefined} onClick={() => onGo("settings")}>
+          <SettingsIcon size={18} filled={tab === "settings"} /><span className="nav-label">Settings</span>
         </button>
         <button type="button" className="nav-btn footer-btn" aria-label={collapsed ? "Expand the sidebar" : "Collapse the sidebar"} aria-expanded={!collapsed}
           title={collapsed ? "Expand the sidebar ([)" : undefined} onClick={onCollapse}>

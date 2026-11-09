@@ -232,14 +232,76 @@ export function processName(name: string): string {
   return PROCESS_NAMES[base.toLowerCase()] ?? base;
 }
 
-/** "1.5 GB" style sizes. */
+/**
+ * One size formatter (v1.7): "640 KB" and "120 MB" without decimals, "1 GB", "1.4 GB" and "20 GB" with one decimal
+ * from a gigabyte up, the ".0" dropped.
+ */
 export function fileSize(bytes: number): string {
   const units = ["B", "KB", "MB", "GB", "TB"];
-  let value = bytes;
+  let value = Math.max(0, bytes);
   let unit = 0;
   while (value >= 1024 && unit < units.length - 1) {
     value /= 1024;
     unit++;
   }
-  return `${unit === 0 ? value : value.toFixed(1)} ${units[unit]}`;
+  // 1023.6 KB rounds to the next unit, never "1024 KB".
+  if (unit > 0 && unit < 3 && Math.round(value) >= 1024) {
+    value /= 1024;
+    unit++;
+  }
+  const text = unit < 3 ? String(Math.round(value)) : value.toFixed(1).replace(/\.0$/, "");
+  return `${text} ${units[unit]}`;
+}
+
+/** Money as the apps write it: "Rs 2,999" (whole rupees, grouped). */
+export function rupees(amount: number): string {
+  return `Rs ${Math.round(amount).toLocaleString("en-US")}`;
+}
+
+/** A whole number with groups: "3,000". */
+export function count(n: number): string {
+  return Math.round(n).toLocaleString("en-US");
+}
+
+/** A date in a row: "9 Dec" within this year, "9 Dec 2026" otherwise, in this computer's time zone. */
+export function rowDate(iso: string | null | undefined, now: Date = new Date()): string {
+  if (!iso) return "";
+  const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const thisYear = at.getFullYear() === now.getFullYear();
+  return at.toLocaleDateString("en-GB", thisYear ? { day: "numeric", month: "short" } : { day: "numeric", month: "short", year: "numeric" }).replace("Sept", "Sep");
+}
+
+/** A date in a row that always has its year: "9 Dec 2026". */
+export function rowDateWithYear(iso: string | null | undefined): string {
+  return rowDate(iso, new Date(1970, 0, 1));
+}
+
+/** A date in a sentence: "9 December 2026", in this computer's time zone. */
+export function sentenceDate(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const at = new Date(iso.length === 10 ? `${iso}T00:00:00` : iso);
+  return Number.isNaN(at.getTime()) ? "" : at.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+}
+
+/** A time of day by Settings › Appearance › Times: "3:42 pm" (12-hour) or "15:42" (24-hour). */
+export function formatTime(date: Date): string {
+  if (clock24) return date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const h = date.getHours();
+  const m = date.getMinutes();
+  return `${h % 12 === 0 ? 12 : h % 12}:${String(m).padStart(2, "0")} ${h < 12 ? "am" : "pm"}`;
+}
+
+/** A range of times: "10 pm–7 am" (":00" dropped) or "22:00–07:00". */
+export function timeRange(from: string, to: string): string {
+  const parse = (hhmm: string) => {
+    const [h, m] = hhmm.split(":").map(Number);
+    const d = new Date(2026, 0, 1, Number.isFinite(h) ? h : 0, Number.isFinite(m) ? m : 0);
+    return d;
+  };
+  const one = (hhmm: string) => {
+    const text = formatTime(parse(hhmm));
+    return clock24 ? text : text.replace(":00", "");
+  };
+  return `${one(from)}–${one(to)}`;
 }

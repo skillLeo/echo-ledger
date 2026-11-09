@@ -110,7 +110,7 @@ describe("Dropping files on the window", () => {
 
   it("works from any page of the window", async () => {
     await renderPaired();
-    fireEvent.click(within(document.querySelector(".sidebar") as HTMLElement).getByRole("button", { name: "Account" }));
+    fireEvent.click(within(document.querySelector(".sidebar") as HTMLElement).getByRole("button", { name: "Settings" }));
     await emitEvent("tauri://drag-drop", { paths: [VIDEO], position: { x: 10, y: 10 } });
     expect(screen.getByRole("dialog", { name: "Import 1 file" })).toBeInTheDocument();
   });

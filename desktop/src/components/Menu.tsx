@@ -74,7 +74,8 @@ export function Menu({ button, label, items, header, footer, align = "right", cl
       </button>
       {open && (
         <div id={menuId} className={`menu-pop card shell-pop ${align === "left" ? "left" : ""}`} role="menu" aria-label={label}>
-          {header && <div className="menu-head">{header}</div>}
+          {/* A button in the header marked data-menu-close (the avatar menu's "who you are") closes the menu too. */}
+          {header && <div className="menu-head" onClick={(e) => { if ((e.target as HTMLElement).closest("[data-menu-close]")) setOpen(false); }}>{header}</div>}
           {shown.map((item, i) => (item === "separator" ? <div key={`sep-${i}`} className="menu-sep" role="separator" /> : (
             <button key={item.id} type="button" role={item.checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={item.checked}
               aria-label={item.name} className={`btn ghost small menu-item ${item.danger ? "danger" : ""}`} disabled={item.disabled}
@@ -85,7 +86,7 @@ export function Menu({ button, label, items, header, footer, align = "right", cl
               {item.checked && <span className="menu-check" aria-hidden="true"><CheckIcon size={14} /></span>}
             </button>
           )))}
-          {footer && <div className="menu-foot">{footer}</div>}
+          {footer && <div className="menu-foot" onClick={(e) => { if ((e.target as HTMLElement).closest("[data-menu-close]")) setOpen(false); }}>{footer}</div>}
         </div>
       )}
     </div>

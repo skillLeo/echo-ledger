@@ -146,6 +146,8 @@ export interface FeatureEntitlement {
 export interface LimitEntitlement {
   limit: number | null;
   used: number | null;
+  /** Since v1.7, `monthly_minutes` only: when the minutes start again (the 1st of next month). */
+  resets_at?: string | null;
 }
 export interface TranscriptionKeyState {
   provider: string | null;
@@ -168,6 +170,56 @@ export interface UpgradeRequest {
   /** Since v1.6.2: a 100 % code approves at once; the plan switched on and until when. */
   approved_plan?: string | null;
   approved_until?: string | null;
+  /** Since v1.7 (payment receipts): the reference for the transfer, the amount in rupees, how to pay, the steps. */
+  reference_code?: string | null;
+  amount_due_pkr?: number | null;
+  currency?: string | null;
+  payment?: PaymentState | null;
+  timeline?: TimelineStep[];
+}
+/** Where a request stands (since v1.7), computed by the server. */
+export type PaymentStage = "awaiting_payment" | "in_review" | "needs_receipt" | "approved" | "declined" | "cancelled";
+export interface PaymentState {
+  stage: PaymentStage | string;
+  accounts: PaymentAccount[];
+  note: string | null;
+  review_hours: string | null;
+  paid_at: string | null;
+  reference: string | null;
+  payer_name: string | null;
+  proof_request: { note: string | null; at: string | null } | null;
+  proofs: Proof[];
+  max_proofs: number | null;
+  max_bytes: number | null;
+  accepts: string[];
+}
+export interface PaymentAccount {
+  bank: string | null;
+  branch: string | null;
+  title: string | null;
+  account_number: string | null;
+  iban: string | null;
+}
+/** One receipt on a request; its picture is read through the core (`receiptFile`). */
+export interface Proof {
+  id: string;
+  kind: "image" | "pdf" | string;
+  mime: string | null;
+  name: string | null;
+  bytes: number | null;
+  width: number | null;
+  height: number | null;
+  created_at: string | null;
+  locked: boolean;
+}
+export interface TimelineStep {
+  step: "requested" | "receipt_sent" | "receipt_requested" | "decided" | "cancelled" | string;
+  at: string | null;
+}
+/** A receipt's picture from the core: its type and base64 bytes, for a `blob:` URL that is let go on close. */
+export interface ProofFile {
+  mime: string;
+  data: string;
 }
 /** `POST /api/promo-codes/check` (since v1.6.2): a code that applies to the plan asked. */
 export interface PromoCheck {
@@ -193,6 +245,10 @@ export interface OfferedPlan {
   badge: string | null;
   color: string | null;
   price: string | null;
+  /** Since v1.7: the price in whole rupees and as written ("Rs 2,999 a month"); highlights when the server sends them. */
+  price_pkr?: number | null;
+  price_text?: string | null;
+  highlights?: string[];
   description: string | null;
   features: string[];
   limits: Record<string, number | null>;
@@ -222,7 +278,7 @@ export interface OneSided {
 
 /** Notification categories (Phase 1C), the phone's channels; `call_capture` is Critical (never held by quiet hours). */
 export type NotificationCategory = "recording" | "transcription" | "enhancement" | "uploads" | "call_capture" | "sharing"
-  | "account" | "usage" | "live_translate" | "app_updates" | "other";
+  | "account" | "usage" | "plan_payments" | "live_translate" | "app_updates" | "other";
 
 /** The plan and role (since v1.5); `known` is false on a server without plans (every feature on, no plan limits). */
 export interface PlanInfo {
@@ -1314,6 +1370,14 @@ export const api = {
   requestUpgrade: (plan: string, message: string | null, promoCode: string | null = null) => invoke<UpgradeRequest>("upgrade_request_create", { plan, message, promoCode }),
   checkPromoCode: (code: string, plan: string | null) => invoke<PromoAnswer>("promo_code_check", { code, plan }),
   latestUpgradeRequest: () => invoke<UpgradeRequest | null>("upgrade_request_latest"),
+  // Payment receipts (since v1.7): the core reads, checks and strips each file, and fetches their pictures.
+  pickReceipts: () => invoke<string[]>("upgrade_receipt_pick"),
+  sendReceiptFile: (id: string, path: string) => invoke<Proof>("upgrade_request_proof", { id, path }),
+  sendReceiptData: (id: string, name: string | null, data: string) => invoke<Proof>("upgrade_request_proof_data", { id, name, data }),
+  removeReceipt: (id: string, proof: string) => invoke<void>("upgrade_request_proof_delete", { id, proof }),
+  receiptFile: (id: string, proof: string, variant: "thumb" | "full") => invoke<ProofFile>("upgrade_request_proof_file", { id, proof, variant }),
+  markPaid: (id: string, reference: string | null, payerName: string | null) => invoke<UpgradeRequest>("upgrade_request_paid", { id, reference, payerName }),
+  cancelUpgradeRequest: (id: string) => invoke<UpgradeRequest>("upgrade_request_cancel", { id }),
   /** Account → Devices → Rename (since v1.6); the new name. */
   renameDevice: (id: string, name: string) => invoke<string>("device_rename", { id, name }),
   /** null on a server without accounts. */

@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -59,9 +59,48 @@ const plan = makePlan({
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
-const free = screen.endsWith("-free");
-// v1.6.2: "-ultra" is an account on the top plan (All features all ticked).
-const ultra = screen.endsWith("-ultra");
+// v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
+// minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).
+const planParam = params.get("plan");
+const free = planParam === "free" || screen.endsWith("-free");
+const ultra = planParam === "ultra" || screen.endsWith("-ultra");
+const pro = planParam === "pro";
+const requestStage = params.get("request") as Parameters<typeof makeUpgradeRequest>[0] | null;
+const near = params.get("near") === "1";
+
+/** A receipt as a phone screenshot: drawn here, handed out as base64 like the core does. */
+function receiptPicture(): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 192;
+  canvas.height = 192;
+  const g = canvas.getContext("2d")!;
+  g.fillStyle = "#f4f6f8"; g.fillRect(0, 0, 192, 192);
+  g.fillStyle = "#1e7b53"; g.beginPath(); g.arc(96, 46, 18, 0, Math.PI * 2); g.fill();
+  g.fillStyle = "#ffffff"; g.font = "bold 20px sans-serif"; g.fillText("✓", 88, 53);
+  g.fillStyle = "#1c2024"; g.font = "bold 18px sans-serif"; g.fillText("Rs 2,999", 56, 96);
+  g.fillStyle = "#60646c"; g.font = "11px sans-serif";
+  ["EXAMPLE PRIVATE LIMITED", "9 Nov 2026, 3:42 pm", "TID FT26313ABC7781"].forEach((t, i) => g.fillText(t, 28, 122 + i * 18));
+  return canvas.toDataURL("image/png").split(",")[1];
+}
+
+/** The entitlements of the plan asked for, with its request. */
+function entitlementsHere() {
+  if (!free && !ultra && !pro) return null;
+  const e = sampleEntitlements(free ? "free" : pro ? "pro" : "ultra");
+  if (near && e.limits.monthly_minutes) e.limits.monthly_minutes = { ...e.limits.monthly_minutes, used: 552 };
+  if (requestStage) {
+    const r = makeUpgradeRequest(requestStage, { plan: pro ? "ultra" : "pro", amount_due: pro ? "Rs 12,499" : "Rs 2,999", amount_due_pkr: pro ? 12499 : 2999 });
+    if (params.get("round") === "1" && r.payment) {
+      r.payment.proofs = [
+        ...r.payment.proofs,
+        { id: "01P2", kind: "image", mime: "image/png", name: "Screenshot 3.42 pm.png", bytes: 210_000, width: 720, height: 1560, created_at: new Date().toISOString(), locked: false },
+        { id: "01P3", kind: "pdf", mime: "application/pdf", name: "Bank statement.pdf", bytes: 348_000, width: null, height: null, created_at: new Date().toISOString(), locked: false },
+      ];
+    }
+    e.upgrade_request = r;
+  }
+  return e;
+}
 const signedOut = screen.startsWith("sign-in");
 // Acme Holdings shows its folders in the trees.
 localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
@@ -116,7 +155,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   auth_start: ({ email }) => (String(email).startsWith("new") ? { account: "new", methods: ["code", "google"], signUp: true } : { account: "existing", methods: ["password", "code", "google"], signUp: true }),
   auth_code_send: () => ({ resendAfter: 60, expiresIn: 600, sent: true }),
   auth_code_verify: () => ({ result: "profile", status: null }),
-  entitlements_get: () => (free ? sampleEntitlements("free") : ultra ? sampleEntitlements("ultra") : null),
+  entitlements_get: () => entitlementsHere(),
+  upgrade_request_latest: () => entitlementsHere()?.upgrade_request ?? null,
+  upgrade_request_proof_file: () => ({ mime: "image/png", data: receiptPicture() }),
+  upgrade_receipt_pick: () => [],
+  upgrade_request_create: ({ plan }) => makeUpgradeRequest("awaiting_payment", { plan: String(plan) }),
+  upgrade_request_paid: () => makeUpgradeRequest("in_review"),
   // v1.6.2: a promo code for Pro, at half price.
   promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
@@ -134,7 +178,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     pendingUploads: screen === "library-maintenance" ? 2 : screen === "library-refused" ? 1 : 0,
     server: SERVER_NOTICES[screen] ?? { appUpdate: null, announcement: null, maintenance: null, waiting: null },
   }),
-  account_get: () => ACCOUNT,
+  account_get: () => (params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
   save_audio_downloads: () => "C:\\Users\\Hassam\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",

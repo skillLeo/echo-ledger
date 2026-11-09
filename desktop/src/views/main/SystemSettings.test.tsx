@@ -43,85 +43,75 @@ describe("system-style settings", () => {
   async function setup(settings = makeSettings()) {
     respond("get_settings", settings);
     respond("list_clients", { data: [] });
+    respond("account_get", null);
     respond("input_devices", []);
     respond("permissions_status", { microphone: "allowed", browserAutomation: false, platform: "windows" });
     respond("lock_status", { enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 });
     respond("security_overview", { devices: [], events: [] });
     respond("storage_info", { recordings_bytes: 0, recordings_count: 0, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
+    respond("update_status", { phase: "idle", current: "1.7.0", version: null, notes: null, checkedAt: null, message: null, progress: null });
     render(<SettingsView status={makeStatus()} run={run} onUnpaired={vi.fn()} />);
-    await screen.findByRole("navigation", { name: "Settings groups" });
+    await screen.findByRole("navigation", { name: "Settings" });
   }
-  const groupTitles = () => [...document.querySelectorAll(".settings-group-title")].map((h) => h.textContent);
+  const open = (name: string) => fireEvent.click(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("button", { name }));
 
-  it("shows every tab under its heading, then one tab at a time with its name as the title (v1.6 Account tabs)", async () => {
+  it("leaves out the account's pages on a server without accounts, and titles each page as its row", async () => {
     await setup();
-    // A server without accounts: no Profile, Plan or Privacy tabs; the rest are there.
-    expect(groupTitles()).toEqual(["Devices", "Notifications", "Preferences", "Calls & meetings", "Voice notes & dictation", "This computer"]);
-    fireEvent.click(screen.getByRole("button", { name: "Calls & meetings" }));
-    expect(groupTitles()).toEqual([]);
+    const nav = within(screen.getByRole("navigation", { name: "Settings" }));
+    expect(nav.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
+    expect(nav.queryByRole("button", { name: "Plan & usage" })).not.toBeInTheDocument();
+    expect(nav.getByRole("button", { name: "Devices" })).toBeInTheDocument();
+    open("Calls & meetings");
     expect(screen.getByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
-    expect(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByRole("button", { name: "Account" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
+    expect(nav.getByRole("button", { name: "Calls & meetings" })).toHaveAttribute("aria-current", "page");
     expect(screen.getByRole("switch", { name: "Auto-record calls" })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Caption position" })).toBeInTheDocument();
-    expect(screen.queryByRole("switch", { name: "Start EchoLedger when I sign in" })).not.toBeInTheDocument();
   });
 
-  it("changes the theme from Preferences, and says it saved", async () => {
+  it("changes the theme from Appearance, and says it saved", async () => {
     window.localStorage.clear();
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
-    const theme = screen.getByRole("group", { name: "Theme" });
-    fireEvent.click(within(theme).getByRole("button", { name: "Dark" }));
-    expect(within(theme).getByRole("button", { name: "Dark" })).toHaveAttribute("aria-pressed", "true");
+    open("Appearance");
+    const theme = screen.getByRole("radiogroup", { name: "Theme" });
+    fireEvent.click(within(theme).getByRole("radio", { name: "Dark" }));
+    expect(within(theme).getByRole("radio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
     expect(document.documentElement.dataset.theme).toBe("dark");
     expect(window.localStorage.getItem("echoledger-theme")).toBe("dark");
     expect(screen.getByTestId("saved")).toHaveTextContent("Saved · just now");
   });
 
-  it("keeps the sidebar style, density and clock on this computer (Preferences)", async () => {
+  it("keeps the sidebar style, density and clock on this computer (Appearance)", async () => {
     window.localStorage.clear();
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Sidebar style" })).getByRole("button", { name: "Soft grey" }));
-    fireEvent.click(within(screen.getByRole("group", { name: "Density" })).getByRole("button", { name: "Compact" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Times" }), { target: { value: "24" } });
+    open("Appearance");
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Sidebar style" })).getByRole("radio", { name: "Soft grey" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Density" })).getByRole("radio", { name: "Compact" }));
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Times" })).getByRole("radio", { name: "24-hour" }));
     expect(document.documentElement.dataset.sidebar).toBe("grey");
     expect(document.documentElement.dataset.density).toBe("compact");
     expect(JSON.parse(window.localStorage.getItem("echoledger-preferences") ?? "{}")).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
   });
 
-  it("lists the keys of the app itself under Preferences", async () => {
+  it("lists the keys of the app itself under Keyboard shortcuts", async () => {
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
+    open("Keyboard shortcuts");
     const keys = screen.getByRole("region", { name: "In the app" });
-    for (const what of ["Search recordings, pages and commands", "Start or stop a voice note", "Play or pause the open recording", "Back or forward 10 seconds (← / → 5 seconds)", "Collapse or expand the sidebar"]) {
+    for (const what of ["Search recordings, pages, settings and commands", "Start or stop a voice note", "Play or pause the open recording", "Collapse or expand the sidebar"]) {
       expect(within(keys).getByText(what)).toBeInTheDocument();
     }
   });
 
-  it("finds settings by words, across groups", async () => {
-    await setup();
-    fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "quiet" } });
-    expect(screen.getByRole("region", { name: "Notifications" })).toBeInTheDocument();
-    expect(groupTitles()).toEqual(["Notifications"]);
-    fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "zzzz" } });
-    expect(screen.getByText("No setting matches “zzzz”.")).toBeInTheDocument();
-  });
-
   it("warns when a shortcut takes over a browser shortcut", async () => {
     await setup(makeSettings({ shortcuts: { toggle_saving: "CommandOrControl+Shift+R", copy_last2_min: "CommandOrControl+Alt+Shift+C" } as never }));
-    fireEvent.click(screen.getByRole("button", { name: "Preferences" }));
-    expect(screen.getByText(/This shortcut also hard-reloads the page in browsers/)).toBeInTheDocument();
-    expect(screen.getAllByText(/This shortcut also/)).toHaveLength(1);
+    open("Keyboard shortcuts");
+    expect(screen.getByText(/this shortcut also hard-reloads the page in browsers/)).toBeInTheDocument();
+    expect(screen.getAllByText(/this shortcut also/)).toHaveLength(1);
   });
 
-  it("exports and imports settings", async () => {
+  it("exports and imports settings from About", async () => {
     respond("settings_export", "C:\\Users\\me\\Downloads\\EchoLedger settings 2026-10-28.json");
     respondWith("settings_import", ({ text }) => ({ ...makeSettings(), captionLines: JSON.parse(text as string).settings.captionLines }));
     await setup();
-    fireEvent.click(screen.getByRole("button", { name: "This computer" }));
-    expect(screen.getByRole("region", { name: "About" })).toBeInTheDocument();
+    open("About");
     fireEvent.click(screen.getByRole("button", { name: "Export settings" }));
     await waitFor(() => expect(callsOf("settings_export")).toHaveLength(1));
     const file = new File([JSON.stringify({ format: "echoledger-settings", version: 1, settings: { captionLines: 2 } })], "s.json", { type: "application/json" });

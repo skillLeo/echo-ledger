@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import MainApp from "./MainApp";
 import { activityReporter, LockScreen } from "./LockScreen";
-import { eventLine, SecurityCard } from "./SecuritySettings";
+import { DevicesPage, LockPage, SignInActivityPage, eventLine } from "./SecuritySettings";
 import type { LockStatus } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
@@ -128,75 +128,74 @@ describe("privacy & security settings", () => {
   });
 
   it("describes who did each audited action", () => {
-    expect(eventLine({ summary: "Signed in", actor: "web", device: null })).toBe("Signed in · Console");
-    expect(eventLine({ summary: "Recording deleted", actor: "device", device: null })).toBe("Recording deleted · A device");
-    expect(eventLine({ summary: "Recording deleted", actor: "system", device: null })).toBe("Recording deleted · EchoLedger");
+    expect(eventLine({ summary: "Signed in", actor: "web", device: null })).toBe("Signed in, Console");
+    expect(eventLine({ summary: "Recording deleted", actor: "device", device: null })).toBe("Recording deleted, A device");
+    expect(eventLine({ summary: "Recording deleted", actor: "system", device: null })).toBe("Recording deleted, EchoLedger");
   });
 
-  it("sets a PIN, then turns the lock on and picks when it locks", async () => {
+  it("sets a PIN in its dialog, then turns the lock on and picks when it locks", async () => {
     respond("lock_status", lockStatus({ locked: false, enabled: false, hasPin: false }));
     respond("lock_set_pin", lockStatus({ locked: false, enabled: false, hasPin: true }));
     const patch = vi.fn(async () => true);
-    render(<SecurityCard settings={makeSettings()} patch={patch} run={run} />);
+    render(<LockPage settings={makeSettings({ appLock: true })} patch={patch} run={run} />);
     expect(await screen.findByText(/Set a PIN first/)).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText("PIN"), { target: { value: "2468" } });
-    fireEvent.change(screen.getByLabelText("Repeat the PIN"), { target: { value: "2469" } });
-    expect(screen.getByText("The PINs differ.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Set PIN" })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText("Repeat the PIN"), { target: { value: "2468" } });
-    fireEvent.click(screen.getByRole("button", { name: "Set PIN" }));
+    expect(document.getElementById("setting-lock.pin")).toHaveTextContent("PINNot set");
+    fireEvent.click(screen.getByRole("button", { name: /^PIN/ }));
+    const dialog = screen.getByRole("dialog", { name: "Set PIN" });
+    fireEvent.change(within(dialog).getByLabelText("PIN (4–12 digits)"), { target: { value: "2468" } });
+    fireEvent.change(within(dialog).getByLabelText("Repeat the PIN"), { target: { value: "2469" } });
+    expect(within(dialog).getByText("The PINs differ.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Set PIN" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Repeat the PIN"), { target: { value: "2468" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set PIN" }));
     await waitFor(() => expect(callsOf("lock_set_pin")).toEqual([{ pin: "2468" }]));
-    expect(await screen.findByRole("button", { name: "Change PIN" })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("switch", { name: "Lock EchoLedger" }));
-    fireEvent.change(screen.getByRole("combobox", { name: "Lock when not used" }), { target: { value: "15" } });
-    expect(patch.mock.calls).toEqual([[{ appLock: true }], [{ lockAfterMinutes: 15 }]]);
-  });
-
-  it("lists devices, revokes another one and shows recent activity", async () => {
-    respond("lock_status", lockStatus({ locked: false }));
-    respond("device_revoke", undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
-    render(<SecurityCard settings={makeSettings({ appLock: true })} patch={vi.fn(async () => true)} run={run} />);
-    const list = await screen.findByRole("list", { name: "Signed-in devices" });
-    expect(within(list).getByText("this computer", { exact: false })).toBeInTheDocument();
-    expect(within(list).getAllByRole("button", { name: "Revoke" })).toHaveLength(1);
-    fireEvent.click(within(list).getByRole("button", { name: "Revoke" }));
-    await waitFor(() => expect(callsOf("device_revoke")).toEqual([{ id: "d2" }]));
-    expect(screen.getByRole("list", { name: "Recent activity" })).toHaveTextContent("Recording deleted: Acme kickoff · Old phone");
-
+    await waitFor(() => expect(document.getElementById("setting-lock.pin")).toHaveTextContent("PINSet"));
+    fireEvent.click(screen.getByRole("switch", { name: "App lock" }));
+    fireEvent.change(screen.getByLabelText("Lock after"), { target: { value: "15" } });
+    expect(patch.mock.calls).toEqual([[{ appLock: false }], [{ lockAfterMinutes: 15 }]]);
     respond("lock_now", lockStatus());
     fireEvent.click(screen.getByRole("button", { name: "Lock now" }));
     await waitFor(() => expect(callsOf("lock_now")).toHaveLength(1));
   });
 
-  it("names platforms plainly and renames a device in place (v1.6)", async () => {
-    respond("lock_status", lockStatus({ locked: false }));
-    respond("device_rename", "Studio PC");
-    render(<SecurityCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run} />);
+  it("lists devices, signs another one out after asking, and shows recent activity", async () => {
+    respond("device_revoke", undefined);
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<DevicesPage run={run} />);
     const list = await screen.findByRole("list", { name: "Signed-in devices" });
-    expect(list).toHaveTextContent("Windows");
-    expect(list).toHaveTextContent("Android phone");
-    fireEvent.click(within(list).getByRole("button", { name: "Rename Work laptop" }));
-    const field = within(list).getByLabelText("New name for Work laptop") as HTMLInputElement;
-    expect(field).toHaveFocus();
-    expect(within(list).getByRole("button", { name: "Save" })).toBeDisabled();
-    fireEvent.change(field, { target: { value: " Studio PC " } });
-    fireEvent.click(within(list).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(callsOf("device_rename")).toEqual([{ id: "d1", name: "Studio PC" }]));
-    await waitFor(() => expect(callsOf("security_overview")).toHaveLength(2));
-    expect(within(list).queryByLabelText("New name for Work laptop")).not.toBeInTheDocument();
+    expect(within(list).getByText("This computer")).toBeInTheDocument();
+    expect(within(list).getAllByRole("button", { name: /^Sign out/ })).toHaveLength(1);
+    fireEvent.click(within(list).getByRole("button", { name: "Sign out Old phone" }));
+    expect(window.confirm).toHaveBeenCalledWith("Sign out Old phone? It will need to sign in again.");
+    await waitFor(() => expect(callsOf("device_revoke")).toEqual([{ id: "d2" }]));
+    cleanup();
+    render(<SignInActivityPage />);
+    expect(await screen.findByRole("list", { name: "Recent activity" })).toHaveTextContent("Recording deleted: Acme kickoff, Old phone");
   });
 
-  it("leaves a rename with Escape or Cancel without sending anything", async () => {
-    respond("lock_status", lockStatus({ locked: false }));
-    render(<SecurityCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run} />);
+  it("names platforms plainly and renames a device in a dialog (v1.6)", async () => {
+    respond("device_rename", "Studio PC");
+    render(<DevicesPage run={run} />);
+    const list = await screen.findByRole("list", { name: "Signed-in devices" });
+    expect(list).toHaveTextContent("Android phone");
+    fireEvent.click(within(list).getByRole("button", { name: "Rename Work laptop" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename Work laptop" });
+    const field = within(dialog).getByLabelText("Name") as HTMLInputElement;
+    expect(field).toHaveFocus();
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(field, { target: { value: " Studio PC " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(callsOf("device_rename")).toEqual([{ id: "d1", name: "Studio PC" }]));
+    await waitFor(() => expect(callsOf("security_overview")).toHaveLength(2));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("leaves a rename with Cancel without sending anything", async () => {
+    render(<DevicesPage run={run} />);
     const list = await screen.findByRole("list", { name: "Signed-in devices" });
     fireEvent.click(within(list).getByRole("button", { name: "Rename Old phone" }));
-    fireEvent.keyDown(within(list).getByLabelText("New name for Old phone"), { key: "Escape" });
-    expect(within(list).queryByLabelText("New name for Old phone")).not.toBeInTheDocument();
-    fireEvent.click(within(list).getByRole("button", { name: "Rename Old phone" }));
-    fireEvent.click(within(list).getByRole("button", { name: "Cancel" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(callsOf("device_rename")).toHaveLength(0);
   });
 });

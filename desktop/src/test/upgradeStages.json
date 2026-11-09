@@ -1,0 +1,428 @@
+{
+    "awaiting_payment": {
+        "id": "01m70jccdjr5m148e49763r5w6",
+        "plan": "pro",
+        "status": "pending",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-DZJRSB in the transfer's note.",
+        "created_at": "2026-11-09T16:31:08+00:00",
+        "decided_at": null,
+        "reply": null,
+        "approved_plan": null,
+        "approved_until": null,
+        "reference_code": "EL-DZJRSB",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "awaiting_payment",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-DZJRSB in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": null,
+            "reference": null,
+            "payer_name": null,
+            "proof_request": null,
+            "proofs": [],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:31:08Z"
+            }
+        ]
+    },
+    "in_review": {
+        "id": "01m70jccemr21p6h74ena5zb44",
+        "plan": "pro",
+        "status": "pending",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-PNKCVM in the transfer's note.",
+        "created_at": "2026-11-09T16:31:08+00:00",
+        "decided_at": null,
+        "reply": null,
+        "approved_plan": null,
+        "approved_until": null,
+        "reference_code": "EL-PNKCVM",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "in_review",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-PNKCVM in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": "2026-11-09T16:31:08+00:00",
+            "reference": "FT2611097781",
+            "payer_name": "Nida Khan",
+            "proof_request": null,
+            "proofs": [
+                {
+                    "id": "01m70jccfhqyke5azzszjqkvbe",
+                    "kind": "image",
+                    "mime": "image/webp",
+                    "name": "receipt.png",
+                    "bytes": 1834,
+                    "width": 600,
+                    "height": 300,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=thumb",
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=full"
+                },
+                {
+                    "id": "01m70jccgrv4jqcm6pw5nha8ch",
+                    "kind": "pdf",
+                    "mime": "application/pdf",
+                    "name": "statement.pdf",
+                    "bytes": 342,
+                    "width": null,
+                    "height": null,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": null,
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccgrv4jqcm6pw5nha8ch?variant=full"
+                }
+            ],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:31:08Z"
+            },
+            {
+                "step": "receipt_sent",
+                "at": "2026-11-09T16:31:08Z"
+            }
+        ]
+    },
+    "needs_receipt": {
+        "id": "01m70jccemr21p6h74ena5zb44",
+        "plan": "pro",
+        "status": "pending",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-PNKCVM in the transfer's note.",
+        "created_at": "2026-11-09T16:31:08+00:00",
+        "decided_at": null,
+        "reply": null,
+        "approved_plan": null,
+        "approved_until": null,
+        "reference_code": "EL-PNKCVM",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "needs_receipt",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-PNKCVM in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": "2026-11-09T16:31:08+00:00",
+            "reference": "FT2611097781",
+            "payer_name": "Nida Khan",
+            "proof_request": {
+                "note": "The receipt is cut off, so we can't see the date.",
+                "at": "2026-11-09T16:36:08+00:00"
+            },
+            "proofs": [
+                {
+                    "id": "01m70jccfhqyke5azzszjqkvbe",
+                    "kind": "image",
+                    "mime": "image/webp",
+                    "name": "receipt.png",
+                    "bytes": 1834,
+                    "width": 600,
+                    "height": 300,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=thumb",
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=full"
+                },
+                {
+                    "id": "01m70jccgrv4jqcm6pw5nha8ch",
+                    "kind": "pdf",
+                    "mime": "application/pdf",
+                    "name": "statement.pdf",
+                    "bytes": 342,
+                    "width": null,
+                    "height": null,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": null,
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccgrv4jqcm6pw5nha8ch?variant=full"
+                }
+            ],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:31:08Z"
+            },
+            {
+                "step": "receipt_sent",
+                "at": "2026-11-09T16:31:08Z"
+            },
+            {
+                "step": "receipt_requested",
+                "at": "2026-11-09T16:36:08Z"
+            }
+        ]
+    },
+    "approved": {
+        "id": "01m70jccemr21p6h74ena5zb44",
+        "plan": "pro",
+        "status": "approved",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-PNKCVM in the transfer's note.",
+        "created_at": "2026-11-09T16:31:08+00:00",
+        "decided_at": "2026-11-09T16:41:08+00:00",
+        "reply": "Thank you!",
+        "approved_plan": "pro",
+        "approved_until": "2026-12-09T16:41:08+00:00",
+        "reference_code": "EL-PNKCVM",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "approved",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-PNKCVM in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": "2026-11-09T16:31:08+00:00",
+            "reference": "FT2611097781",
+            "payer_name": "Nida Khan",
+            "proof_request": null,
+            "proofs": [
+                {
+                    "id": "01m70jccfhqyke5azzszjqkvbe",
+                    "kind": "image",
+                    "mime": "image/webp",
+                    "name": "receipt.png",
+                    "bytes": 1834,
+                    "width": 600,
+                    "height": 300,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=thumb",
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccfhqyke5azzszjqkvbe?variant=full"
+                },
+                {
+                    "id": "01m70jccgrv4jqcm6pw5nha8ch",
+                    "kind": "pdf",
+                    "mime": "application/pdf",
+                    "name": "statement.pdf",
+                    "bytes": 342,
+                    "width": null,
+                    "height": null,
+                    "created_at": "2026-11-09T16:31:08+00:00",
+                    "locked": true,
+                    "thumb_url": null,
+                    "file_url": "https://echoledger.test/api/upgrade-requests/01m70jccemr21p6h74ena5zb44/proofs/01m70jccgrv4jqcm6pw5nha8ch?variant=full"
+                }
+            ],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:31:08Z"
+            },
+            {
+                "step": "receipt_sent",
+                "at": "2026-11-09T16:31:08Z"
+            },
+            {
+                "step": "receipt_requested",
+                "at": "2026-11-09T16:36:08Z"
+            },
+            {
+                "step": "decided",
+                "at": "2026-11-09T16:41:08Z"
+            }
+        ]
+    },
+    "cancelled": {
+        "id": "01m70jccj9x16ws0g0hb3y976m",
+        "plan": "pro",
+        "status": "declined",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-RQ5ATA in the transfer's note.",
+        "created_at": "2026-11-09T16:41:08+00:00",
+        "decided_at": "2026-11-09T16:41:08+00:00",
+        "reply": "Cancelled by you",
+        "approved_plan": null,
+        "approved_until": null,
+        "reference_code": "EL-RQ5ATA",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "cancelled",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-RQ5ATA in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": null,
+            "reference": null,
+            "payer_name": null,
+            "proof_request": null,
+            "proofs": [],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:41:08Z"
+            },
+            {
+                "step": "cancelled",
+                "at": "2026-11-09T16:41:08Z"
+            }
+        ]
+    },
+    "declined": {
+        "id": "01m70jcck0k6t2myjn1vphf5zh",
+        "plan": "pro",
+        "status": "declined",
+        "message": null,
+        "promo_code": null,
+        "percent": null,
+        "amount_due": "Rs 2,999 a month",
+        "payment_instructions": "Bank: Example Bank\nBranch: Main Branch (0001)\nAccount title: EXAMPLE PRIVATE LIMITED\nAccount number: 0123456789\nIBAN: PK36SCBL0000001123456702\nPut EL-M7CCQG in the transfer's note.",
+        "created_at": "2026-11-09T16:41:08+00:00",
+        "decided_at": "2026-11-09T16:41:08+00:00",
+        "reply": "No payment arrived.",
+        "approved_plan": null,
+        "approved_until": null,
+        "reference_code": "EL-M7CCQG",
+        "amount_due_pkr": 2999,
+        "currency": "PKR",
+        "payment": {
+            "stage": "declined",
+            "accounts": [
+                {
+                    "bank": "Example Bank",
+                    "branch": "Main Branch (0001)",
+                    "title": "EXAMPLE PRIVATE LIMITED",
+                    "account_number": "0123456789",
+                    "iban": "PK36SCBL0000001123456702"
+                }
+            ],
+            "note": "Put EL-M7CCQG in the transfer's note.",
+            "review_hours": "We check receipts every day. Most are done within a few hours.",
+            "paid_at": "2026-11-09T16:41:08+00:00",
+            "reference": "TID778899",
+            "payer_name": null,
+            "proof_request": null,
+            "proofs": [],
+            "max_proofs": 3,
+            "max_bytes": 5242880,
+            "accepts": [
+                "image/jpeg",
+                "image/png",
+                "image/webp",
+                "application/pdf"
+            ]
+        },
+        "timeline": [
+            {
+                "step": "requested",
+                "at": "2026-11-09T16:41:08Z"
+            },
+            {
+                "step": "receipt_sent",
+                "at": "2026-11-09T16:41:08Z"
+            },
+            {
+                "step": "decided",
+                "at": "2026-11-09T16:41:08Z"
+            }
+        ]
+    }
+}

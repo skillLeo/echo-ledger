@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { CommandPalette, paletteCommands, paletteMatches } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makeRecording, makeStatus, sampleEntitlements } from "../../test/fixtures";
@@ -54,7 +54,7 @@ describe("command palette (B9)", () => {
     const props = renderPalette();
     const input = screen.getByRole("combobox");
     fireEvent.change(input, { target: { value: "go to" } });
-    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Home", "Go to Activity", "Go to Shared", "Go to Account"]);
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Library", "Go to Projects", "Go to Home", "Go to Activity", "Go to Shared", "Go to Settings"]);
     expect(screen.getAllByRole("option")[0]).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "ArrowDown" });
@@ -69,21 +69,15 @@ describe("command palette (B9)", () => {
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
       pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
     const input = screen.getByRole("combobox");
-    expect(input).toHaveAttribute("placeholder", "Search recordings, transcripts, pages… or type a command");
+    expect(input).toHaveAttribute("placeholder", "Search recordings, settings, pages… or type a command");
     fireEvent.change(input, { target: { value: "new project" } });
     fireEvent.keyDown(input, { key: "Enter" });
     expect(extra.newProject).toHaveBeenCalled();
     cleanup();
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
       pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "devices" } });
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "settings" } });
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
-    expect(extra.account).toHaveBeenCalledWith("devices");
-    cleanup();
-    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra} />);
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "all features" } });
-    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
-    expect(extra.account).toHaveBeenCalledWith("all-features");
     cleanup();
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
       pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
@@ -116,13 +110,13 @@ describe("command palette (B9)", () => {
       };
       show("invite");
       const invite = screen.getByRole("option", { name: /^Invite people to the workspace/ });
-      expect(invite).toHaveTextContent("Invite people to the workspaceULTRA ✦");
-      expect(invite).toHaveAccessibleName("Invite people to the workspace, Team workspace is in the Ultra plan");
+      expect(invite).toHaveTextContent("Invite people to the workspaceUltra");
+      expect(invite).toHaveAccessibleName("Invite people to the workspace, Team workspace is in Ultra");
       fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
       expect(sheet.result.current?.feature).toBe("team");
       expect(extra.invite).not.toHaveBeenCalled();
       show("live translate");
-      expect(screen.getByRole("option", { name: /^Live Translate/ })).toHaveTextContent("Live TranslateULTRA ✦");
+      expect(screen.getByRole("option", { name: /^Live Translate/ })).toHaveTextContent("Live TranslateUltra");
       fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
       expect(sheet.result.current?.feature).toBe("live_translate");
       expect(onGo).not.toHaveBeenCalled();
@@ -169,5 +163,35 @@ describe("command palette (B9)", () => {
     await waitFor(() => expect(screen.getByText("Nothing matches.")).toBeInTheDocument());
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
     expect(props.onClose).toHaveBeenCalled();
+  });
+});
+
+describe("settings in the palette (v1.7)", () => {
+  beforeEach(() => resetTauriMock());
+
+  it("finds single settings in their own group with where they live, and opens them", () => {
+    const open = vi.fn();
+    const settings = vi.fn(() => [{ id: "lock.after", title: "Lock after", breadcrumb: "App › App lock", open }]);
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} settings={settings} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "lock after" } });
+    const group = screen.getByRole("group", { name: "Settings" });
+    const option = within(group).getByRole("option", { name: /Lock after/ });
+    expect(option).toHaveTextContent("App › App lock");
+    fireEvent.mouseDown(option);
+    expect(open).toHaveBeenCalled();
+  });
+
+  it("offers Upgrade plan, or the open request instead, and a clear button", () => {
+    const run = vi.fn();
+    const { unmount } = render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={{ upgrade: { open: false, run } }} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "upgrade" } });
+    expect(screen.getByRole("option", { name: "Upgrade plan" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Clear" }));
+    expect(screen.getByRole("combobox")).toHaveValue("");
+    unmount();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={{ upgrade: { open: true, run } }} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "upgrade request" } });
+    expect(screen.getByRole("option", { name: "Your upgrade request" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Upgrade plan" })).not.toBeInTheDocument();
   });
 });

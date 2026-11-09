@@ -5,6 +5,7 @@ import type {
   AskPayload,
   Entitlements,
   OfferedPlan,
+  UpgradeRequest,
   LibraryItem,
   MicUser,
   NavigatePayload,
@@ -21,6 +22,7 @@ import type {
   TranscriptDetail,
   UploadItem,
 } from "../lib/ipc";
+import UPGRADE_STAGES from "./upgradeStages.json";
 
 export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
   return {
@@ -385,26 +387,44 @@ const PAID_KEYS = FEATURE_REGISTRY.filter(([, , , lowest]) => lowest).map(([key]
  */
 export function sampleEntitlements(planKey: "free" | "pro" | "ultra"): Entitlements {
   const top = { key: "ultra", name: "Ultra", badge: "ULTRA", color: "#0369a1" };
+  // Since v1.7 the plans carry their price in rupees and as written, and the server's highlights (docs/API.md).
   const plans: OfferedPlan[] = [
-    { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed", price: "Ask for the price",
+    { key: "free", name: "Free", badge: "FREE", color: "#64748b", price: null, price_pkr: null, price_text: null, highlights: [], description: "Record, organise, search, share links and export.",
+      features: FEATURE_REGISTRY.filter(([, , , lowest]) => !lowest).map(([key]) => key), limits: { monthly_minutes: 0, devices: 2, storage_bytes: 1073741824, retention_days: 30, seats: 1, max_file_minutes: 180, uploads_per_day: 50 } },
+    { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed", price: "Rs 2,999 a month", price_pkr: 2999, price_text: "Rs 2,999 a month",
+      highlights: ["600 transcription minutes a month, no key needed", "Roman Urdu, English and Urdu side by side", "A second check on words that were unclear", "Screenshots of shared screens, placed in the transcript", "Ask Claude or ChatGPT about your recordings"],
       description: "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and Claude or ChatGPT.",
-      features: PRO_FEATURES, limits: { monthly_minutes: 600, devices: 5, storage_bytes: 21474836480, retention_days: 365, seats: 1 } },
-    { ...top, price: "Ask for the price", description: "Everything in Pro, and a team with roles, premium engines, Live Translate and AI notes.",
-      features: PAID_KEYS, limits: { monthly_minutes: 3000, devices: 5, storage_bytes: 107374182400, retention_days: 365, seats: 10 } },
+      features: PRO_FEATURES, limits: { monthly_minutes: 600, devices: 5, storage_bytes: 21474836480, retention_days: 365, seats: 1, max_file_minutes: 240, uploads_per_day: 200 } },
+    { ...top, price: "Rs 12,499 a month", price_pkr: 12499, price_text: "Rs 12,499 a month",
+      highlights: ["3,000 transcription minutes a month", "A team of up to 10 people", "More accurate transcription for difficult audio", "Live Translate for games and videos", "AI notes for projects"],
+      description: "Everything in Pro, and a team with roles, premium engines, Live Translate and AI notes.",
+      features: PAID_KEYS, limits: { monthly_minutes: 3000, devices: 5, storage_bytes: 107374182400, retention_days: 365, seats: 10, max_file_minutes: 480, uploads_per_day: 500 } },
   ];
   const has = (lowest: string | null) => !lowest || planKey === "ultra" || (planKey === "pro" && lowest === "pro");
   const plan = planKey === "free" ? { key: "free", name: "Free", badge: "FREE", color: "#64748b" } : planKey === "pro" ? { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed" } : top;
   return {
-    plan: { ...plan, expires_at: null, trial_minutes_left: planKey === "free" ? 0 : null },
+    plan: { ...plan, expires_at: planKey === "free" ? null : "2026-12-09T10:00:00Z", trial_minutes_left: planKey === "free" ? 0 : null },
     features: Object.fromEntries(FEATURE_REGISTRY.map(([key, name, description, lowest]) => [key, {
       enabled: has(lowest), name, description, cost: lowest ? "paid" : "free", lowest_plan: lowest === "business" ? "ultra" : lowest,
     }])),
+    // All eight limits, as the server sends them (DK9); the minutes say when they reset.
     limits: planKey === "free"
-      ? { monthly_minutes: { limit: 0, used: 0 }, devices: { limit: 2, used: 1 }, storage_bytes: { limit: 1073741824, used: 4332716 }, retention_days: { limit: 30, used: null } }
-      : { monthly_minutes: { limit: planKey === "pro" ? 600 : 3000, used: 212 }, devices: { limit: 5, used: 3 }, storage_bytes: { limit: 107374182400, used: 4332716 }, seats: { limit: planKey === "pro" ? 1 : 10, used: 2 } },
+      ? { monthly_minutes: { limit: 0, used: 0, resets_at: "2026-12-01" }, devices: { limit: 2, used: 1 }, storage_bytes: { limit: 1073741824, used: 125829120 }, retention_days: { limit: 30, used: null },
+          seats: { limit: 1, used: 1 }, max_file_minutes: { limit: 180, used: null }, uploads_per_day: { limit: 50, used: 3 }, ai_usd_month: { limit: 0, used: 0 } }
+      : { monthly_minutes: { limit: planKey === "pro" ? 600 : 3000, used: 230, resets_at: "2026-12-01" }, devices: { limit: 5, used: 3 },
+          storage_bytes: { limit: planKey === "pro" ? 21474836480 : 107374182400, used: 1503238554 }, retention_days: { limit: 365, used: null },
+          seats: { limit: planKey === "pro" ? 1 : 10, used: planKey === "pro" ? 1 : 2 }, max_file_minutes: { limit: planKey === "pro" ? 240 : 480, used: null },
+          uploads_per_day: { limit: planKey === "pro" ? 200 : 500, used: 4 }, ai_usd_month: { limit: 5, used: 1.2 } },
     engines: planKey === "free" ? ["own_groq", "on_device"] : ["own_groq", "on_device", "assemblyai", "groq", "soniox", "azure_mai", ...(planKey === "ultra" ? ["elevenlabs", "gemini"] : [])],
     transcription_key: { provider: "groq", set: false, last4: null },
     upgrade_request: null,
     plans,
   };
+}
+
+/** An upgrade request at a stage, as the v1.7 server sends it (`upgradeStages.json`: real answers of the server for each
+ * stage). The proofs' URLs need the device token; the core reads them, the page never does. */
+export function makeUpgradeRequest(stage: "awaiting_payment" | "in_review" | "needs_receipt" | "approved" | "declined" | "cancelled", overrides: Partial<UpgradeRequest> = {}): UpgradeRequest {
+  const real = structuredClone((UPGRADE_STAGES as unknown as Record<string, UpgradeRequest>)[stage]);
+  return { ...real, ...overrides };
 }

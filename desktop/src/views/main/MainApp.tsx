@@ -13,7 +13,9 @@ import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
 import { SharedView } from "./SharedView";
 import { RequestLinksSheet } from "./RequestLinks";
-import { ACCOUNT_TABS, SIGN_OUT_CONFIRM } from "./SettingsView";
+import { settingsAvailability, settingsPages, signOutConfirm } from "./SettingsView";
+import { roleOf } from "./AccountSettings";
+import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
 import { AlertIcon } from "../../components/Icons";
@@ -33,7 +35,7 @@ import { isViewer, viewerSentence } from "../../lib/plan";
 import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib/motion";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
-import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../../lib/entitlements";
+import { OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { Notice } from "../../components/Notice";
@@ -397,6 +399,7 @@ export default function MainApp() {
       alive = false;
     };
   }, [paired, ready]);
+  const entitlements = useEntitlements();
   // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
   useEffect(() => {
@@ -618,7 +621,7 @@ export default function MainApp() {
     setProjectRequest({ kind: "new", seq: ++navigations.current });
   };
   const signOut = async () => {
-    if (!window.confirm(SIGN_OUT_CONFIRM)) return;
+    if (!window.confirm(signOutConfirm(status.pendingUploads))) return;
     const next = await run(api.unpair);
     if (next) setStatus(next);
   };
@@ -632,7 +635,12 @@ export default function MainApp() {
     failed: status.failedUploads,
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
-  // "Find a page" (v1.6): every page, place, project and Account tab by name.
+  // What Settings offers here (v1.7): the same availability for the palette, Find a page and Settings' own search.
+  const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status) });
+  const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
+    .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
+  const upgradeOpen = !!openUpgradeRequest(entitlements);
+  // "Find a page" (v1.6): every page, place, project and Settings page by name.
   const pages: ShellPage[] = [
     { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
     { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
@@ -642,7 +650,7 @@ export default function MainApp() {
     { id: "activity", label: "Activity", keywords: "notifications bell", open: () => goTo("activity") },
     ...SHARED_TABS.map(([id, label]) => ({ id: `shared-${id}`, label, group: "Shared", keywords: "share links shared", open: () => openShared(id) })),
     ...(canRecord ? [{ id: "upload", label: "Upload", keywords: "import files audio video", open: () => void pickImport() }] : []),
-    ...ACCOUNT_TABS.map(([id, label]) => ({ id: `account-${id}`, label, group: "Account", keywords: "settings account preferences", open: () => openAccount(id) })),
+    ...settingsPages(settingsAvailable).map((p) => ({ id: p.id, label: p.label, group: p.group, keywords: p.keywords, open: () => openAccount(p.page) })),
     { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
@@ -664,7 +672,7 @@ export default function MainApp() {
         onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} pages={pages} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
       <div className="main-col">
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
-          onActivity={() => goTo("activity")} onAccount={() => openAccount("profile")} onPlan={() => openAccount("plan")}
+          onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
           onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
@@ -722,14 +730,16 @@ export default function MainApp() {
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
-            invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
+            invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true),
+            upgrade: entitlements && (upgradeOpen || plansAbove(entitlements).length > 0) ? { open: upgradeOpen, run: () => (upgradeOpen ? openUpgradeSheet(null, { step: "status" }) : openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })) } : undefined }}
+          settings={findSettings}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
       {dragging && !importPaths && (
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
-      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onShortcuts={() => openAccount("preferences")} />}
+      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onShortcuts={() => openAccount("shortcuts")} />}
       {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       <UpgradeSheet />
       {toastView}

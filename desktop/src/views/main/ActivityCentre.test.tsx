@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { activitySubtitle, ActivityView } from "./ActivityCentre";
-import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsCard } from "./SecuritySettings";
+import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsPage as NotificationsCard, notificationsValue } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makePendingItem, makeSettings, makeSkippedItem, makeStatus, anyTarget } from "../../test/fixtures";
@@ -249,33 +249,35 @@ describe("notification settings", () => {
     render(<NotificationsCard settings={makeSettings({ quietHours: true })} patch={patch} />);
     fireEvent.click(screen.getByRole("switch", { name: "Show notifications" }));
     fireEvent.change(screen.getByLabelText("From"), { target: { value: "23:15" } });
-    fireEvent.change(screen.getByLabelText("to"), { target: { value: "06:45" } });
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "06:45" } });
     fireEvent.click(screen.getByRole("switch", { name: "Quiet hours" }));
     expect(patch.mock.calls).toEqual([[{ activityNotifications: false }], [{ quietFrom: "23:15" }], [{ quietTo: "06:45" }], [{ quietHours: false }]]);
   });
 
-  it("disables the times while quiet hours are off", () => {
+  it("disables the times while quiet hours are off, and says Quiet with the times in the clock's format", () => {
     render(<NotificationsCard settings={makeSettings()} patch={vi.fn(async () => true)} />);
     expect(screen.getByLabelText("From")).toBeDisabled();
+    expect(notificationsValue(makeSettings({ quietHours: true, quietFrom: "22:00", quietTo: "07:00" }))).toBe("Quiet 10 pm–7 am");
+    expect(notificationsValue(makeSettings({ activityNotifications: false }))).toBe("Off");
+    expect(notificationsValue(makeSettings())).toBe("On");
   });
 
-  it("mirrors the phone's categories, each on or off with its sound, and marks Critical", () => {
+  it("mirrors the phone's categories with Plan & payments, each on or off, and one Play sounds switch", () => {
     expect(NOTIFICATION_CATEGORIES.map(([, label]) => label)).toEqual([
       "Recording", "Transcription", "Enhancement", "Uploads", "Call capture & readiness", "Sharing", "Account & security",
-      "Usage & limits", "Live Translate", "App updates", "Other",
+      "Usage & limits", "Plan & payments", "Live Translate", "App updates", "Other",
     ]);
     const patch = vi.fn(async () => true);
-    render(<NotificationsCard settings={makeSettings({ notificationCategories: { sharing: false }, notificationSounds: { uploads: false } })} patch={patch} />);
+    render(<NotificationsCard settings={makeSettings({ notificationCategories: { sharing: false } })} patch={patch} />);
     expect(screen.getByRole("switch", { name: "Sharing" })).toHaveAttribute("aria-checked", "false");
     expect(screen.getByRole("switch", { name: "Transcription" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("button", { name: "Sound for Uploads" })).toHaveTextContent("Silent");
-    expect(screen.getByRole("button", { name: "Sound for Sharing" })).toBeDisabled();
-    expect(screen.getByTestId("notify-call_capture")).toHaveTextContent("Critical");
-    expect(screen.getByTestId("notify-call_capture")).toHaveTextContent("quiet hours never hold these back");
     fireEvent.click(screen.getByRole("switch", { name: "Sharing" }));
     fireEvent.click(screen.getByRole("switch", { name: "Uploads" }));
-    fireEvent.click(screen.getByRole("button", { name: "Sound for Uploads" }));
-    expect(patch.mock.calls).toEqual([[{ notificationCategories: { sharing: true } }], [{ notificationCategories: { uploads: false } }], [{ notificationSounds: { uploads: true } }]]);
+    fireEvent.click(screen.getByRole("switch", { name: "Play sounds" }));
+    expect(patch.mock.calls.slice(0, 2)).toEqual([[{ notificationCategories: { sharing: true } }], [{ notificationCategories: { uploads: false } }]]);
+    const sounds = patch.mock.calls[2][0] as { notificationSounds: Record<string, boolean> };
+    expect(Object.values(sounds.notificationSounds).every((v) => v === false)).toBe(true);
+    expect(Object.keys(sounds.notificationSounds)).toHaveLength(12);
   });
 
   it("turns every kind off with Show notifications", () => {
@@ -283,8 +285,8 @@ describe("notification settings", () => {
     expect(screen.getByRole("switch", { name: "Recording" })).toBeDisabled();
   });
 
-  it("sends a test of a kind and says when the system would not show it", async () => {
-    respondWith("notification_test", ({ category }) => category !== "other");
+  it("sends one test notification and says when the system wouldn't show it", async () => {
+    respondWith("notification_test", () => false);
     const said: string[] = [];
     const run = vi.fn(async <T,>(fn: () => Promise<T>, ok?: string) => {
       try {
@@ -297,11 +299,9 @@ describe("notification settings", () => {
       }
     });
     render(<NotificationsCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run as never} />);
-    fireEvent.click(screen.getByRole("button", { name: "Test Transcription" }));
-    fireEvent.click(screen.getByRole("button", { name: "Test Other" }));
-    await waitFor(() => expect(said).toHaveLength(2));
-    expect(callsOf("notification_test")).toEqual([{ category: "transcription" }, { category: "other" }]);
-    expect(said).toEqual(["Test sent: Transcription", NOT_SHOWN]);
+    fireEvent.click(screen.getByRole("button", { name: "Send a test notification" }));
+    await waitFor(() => expect(said).toHaveLength(1));
+    expect(said).toEqual([NOT_SHOWN]);
   });
 });
 

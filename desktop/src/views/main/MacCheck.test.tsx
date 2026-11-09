@@ -176,42 +176,47 @@ describe("Help & diagnostics in Settings", () => {
       bin_list: { data: [] },
       dictation_history: [],
     });
+    respond("account_get", null);
     render(<SettingsView status={makeStatus({ platform })} run={async (fn) => fn()} onUnpaired={vi.fn()} />);
-    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Account" })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument());
     await flushAsync();
   }
+  const open = (name: string) => fireEvent.click(within(screen.getByRole("navigation", { name: "Settings" })).getByRole("button", { name }));
 
-  it("is there on a Mac and is found by search", async () => {
+  it("is there on a Mac under Help and is found by search", async () => {
     await renderSettings("macos");
-    expect(screen.getByTestId("mac-check")).toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "mac check" } });
+    fireEvent.click(screen.getByRole("option", { name: /^Mac check/ }));
+    expect(await screen.findByRole("heading", { name: "Mac check", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByTestId("mac-check")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run Mac check" })).toBeInTheDocument();
   });
 
   it("does not exist anywhere else", async () => {
     await renderSettings("windows");
-    expect(screen.queryByTestId("mac-check")).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Help & diagnostics" })).not.toBeInTheDocument();
+    open("Help");
+    expect(screen.queryByRole("button", { name: /^Mac check/ })).not.toBeInTheDocument();
     fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "mac check" } });
-    expect(screen.getByText(/No setting matches/)).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /^Mac check/ })).not.toBeInTheDocument();
   });
 
   it("lists a Mac's keys with their Mac names, and a PC's with theirs", async () => {
     await renderSettings("macos");
-    fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "in the app" } });
+    open("Keyboard shortcuts");
     for (const key of ["⌘K", "⌘F", "⌘,", "⌘W", "⌘Q"]) expect(screen.getByText(key)).toBeInTheDocument();
     expect(screen.queryByText("Ctrl+K")).not.toBeInTheDocument();
   });
 
   it("keeps a PC's keys as they were", async () => {
     await renderSettings("windows");
-    fireEvent.change(screen.getByRole("textbox", { name: "Search settings" }), { target: { value: "in the app" } });
+    open("Keyboard shortcuts");
     expect(screen.getByText("Ctrl+K")).toBeInTheDocument();
     expect(screen.queryByText("⌘W")).not.toBeInTheDocument();
   });
 
   it("says where the after-call window is on each computer", async () => {
     await renderSettings("macos");
+    open("Calls & meetings");
     expect(screen.getByText(/in the corner of the screen/)).toBeInTheDocument();
     expect(screen.queryByText(/near the tray/)).not.toBeInTheDocument();
   });

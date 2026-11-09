@@ -3,7 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { PERMISSION_KINDS, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
-import { MicrophoneCard } from "./CaptureSettings";
+import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
 import { makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import type { PermissionsStatus } from "../../lib/ipc";
@@ -277,7 +277,8 @@ describe("the whole-system sentence of an old Windows, and the devices of a reco
     respondAll({ input_devices: [], permissions_status: mac({ systemAudio: "denied" }) });
     render(<MicrophoneCard settings={makeSettings()} patch={vi.fn(async () => true)} disabled={false} />);
     await flushAsync();
-    expect(screen.getByTestId("system-audio-permission")).toHaveTextContent(/your voice, not the other side/);
+    expect(document.getElementById("setting-mic.perm.system_audio")).toHaveTextContent("Screen and system audioNot allowed");
+    expect(screen.getAllByRole("button", { name: "Fix" })).toHaveLength(1);
   });
 
   it("says what happened to a device during a recording", async () => {

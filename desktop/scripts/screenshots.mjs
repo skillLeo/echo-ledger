@@ -3,7 +3,7 @@
 // held recordings), answered by Tauri's IPC mock with sample data. Motion is off (reduced motion), so nothing is caught
 // mid-transition.
 //   node scripts/screenshots.mjs              every screen
-//   node scripts/screenshots.mjs library      only the screens whose name starts with "library"
+//   node scripts/screenshots.mjs library      only the screens whose name starts with "library" (several: "library,plan")
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
@@ -94,10 +94,6 @@ const SCREENS = [
   }],
   // Phase 1C: the Ready check with two things to fix, Settings → Notifications by kind, the Library grouped by project.
   ["record-not-ready", "record-not-ready", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row")],
-  ["settings-notifications", "settings", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("notifications");
-    await page.waitForSelector(".notification-categories");
-  }],
   ["library-grouped", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.getByRole("button", { name: /^View:/ }).click();
@@ -128,64 +124,7 @@ const SCREENS = [
   ["record-free", "record-free", async (page) => page.waitForSelector("[data-testid=locked-live_translate] .plan-badge")],
   ["upgrade-free", "record-free", async (page) => {
     await page.locator("[data-testid=locked-live_translate] .plan-badge").click();
-    await page.waitForSelector(".upgrade-sheet .plan-compare");
-  }],
-  // v1.6.2: a promo code applied in the sheet.
-  ["upgrade-promo-free", "record-free", async (page) => {
-    await page.locator("[data-testid=locked-live_translate] .plan-badge").click();
-    await page.getByRole("radio", { name: /PRO ✦/ }).click();
-    await page.getByRole("button", { name: "Have a promo code?" }).click();
-    await page.getByLabel("Promo code").fill("SAVE50");
-    await page.getByRole("button", { name: "Apply" }).click();
-    await page.waitForSelector("[data-testid=promo-price-pro]");
-  }],
-  ["settings-plan-free", "settings-free", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
-    await page.waitForSelector("[data-testid=plan-usage]");
-  }],
-  // v1.6.2: All features under Plan & usage, for Free (six of fifteen, the badges) and the top plan (all ticked).
-  ["settings-features-free", "settings-free", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
-    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
-  }],
-  ["settings-plan-ultra", "settings-ultra", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
-    await page.waitForSelector("[data-testid=plan-usage]");
-  }],
-  ["settings-features-ultra", "settings-ultra", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
-    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
-  }],
-  ["settings-key-free", "settings-free", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Transcription key", exact: true }).click();
-    await page.waitForSelector("[data-testid=transcription-key]");
-  }],
-  ["settings-account", "settings-account", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Profile", exact: true }).click();
-    await page.waitForSelector(".account-card");
-  }],
-  // v1.6 (P4.5): the account's other tabs.
-  ["settings-sign-in", "settings-account", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Password & sign-in methods", exact: true }).click();
-    await page.getByText("Email codes").waitFor();
-  }],
-  ["settings-preferences", "settings-account", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Preferences", exact: true }).click();
-    await page.getByRole("group", { name: "Sidebar style" }).getByRole("button", { name: "Light" }).click();
-    await page.waitForSelector("[data-testid=saved]");
-  }],
-  ["settings-privacy", "settings-account", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Privacy & data", exact: true }).click();
-    await page.getByText("Export my data").first().waitFor();
+    await page.waitForSelector(".plan-radio");
   }],
   ["record-viewer", "record-viewer", async (page) => page.waitForSelector("[data-testid=viewer-notice]")],
   ["library-update", "library-update", async (page) => {
@@ -201,14 +140,6 @@ const SCREENS = [
     await page.waitForSelector("[data-testid=skipped-calls]");
     await page.getByTestId("skipped-calls").getByRole("button", { name: "Show" }).click();
     await page.waitForSelector(".skipped-list");
-  }],
-  ["settings", "settings", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "This computer", exact: true }).click();
-  }],
-  ["settings-calls", "settings", async (page) => {
-    await page.waitForSelector(".settings-row");
-    await page.getByRole("button", { name: "Calls & meetings" }).click();
   }],
   ["controls", "controls", async (page) => {
     await page.waitForSelector(".rec-pill");
@@ -230,18 +161,6 @@ const SCREENS = [
   ["library-lost-mac", "library-lost-mac", async (page) => {
     await page.waitForSelector("[data-testid=permission-loss]");
     await page.waitForSelector(".segments .segment");
-  }],
-  ["settings-mac-check", "settings-mac-check", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("mac check");
-    await page.waitForSelector("[data-testid=check-macos_version]");
-  }],
-  ["settings-keys-mac", "settings-keys-mac", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("in the app");
-    await page.waitForSelector("text=⌘W");
-  }],
-  ["settings-windows10", "settings-windows10", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("microphone");
-    await page.waitForSelector("[data-testid=whole-system-note]");
   }],
   ["onboarding-mac-microphone", "onboarding-mac", async (page) => {
     await page.getByRole("button", { name: "Continue" }).click();
@@ -294,7 +213,7 @@ const SCREENS = [
     await page.getByRole("button", { name: "Create" }).click();
     await page.waitForSelector(".shell-pop");
   }],
-  ["avatar-menu", "library", async (page) => {
+  ["avatar-menu", "library&plan=free", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.getByRole("button", { name: /^Account menu:/ }).click();
     await page.waitForSelector(".shell-pop");
@@ -314,11 +233,131 @@ const SCREENS = [
     await page.locator(".sidebar").getByRole("button", { name: "Shared", exact: true }).click();
     await page.waitForSelector(".page-tabs");
   }],
+  // v1.7 Settings: who you are, the sections from one registry, search to a single setting, Plan & usage, and the
+  // upgrade flow with the bank details and the receipts. `screen` carries the plan (`&plan=`) and a request's stage.
+  ["settings-overview-free", "settings&plan=free", settingsReady],
+  ["settings-overview-pro", "settings&plan=pro", settingsReady],
+  ["settings-overview-ultra", "settings&plan=ultra", settingsReady],
+  ["settings-overview-pro-pending", "settings&plan=pro&request=awaiting_payment", settingsReady],
+  ["settings-overview-deleting", "settings&plan=free&deleting=1", settingsReady],
+  ["settings-narrow", "settings&plan=free", settingsReady, { width: 860, height: 560 }],
+  ["settings-narrow-page", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Notifications"); }, { width: 860, height: 560 }],
+  ["plan-free", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["plan-free-plans", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Plan & usage");
+    await page.locator("#plans-above").scrollIntoViewIfNeeded();
+  }],
+  ["plan-features", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Plan & usage");
+    await page.getByRole("button", { name: /^See every feature/ }).click();
+    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
+  }],
+  ["plan-pro-near", "settings&plan=pro&near=1", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["plan-ultra", "settings&plan=ultra", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["plan-request-awaiting", "settings&plan=free&request=awaiting_payment", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["plan-request-needs-receipt", "settings&plan=free&request=needs_receipt", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["plan-request-declined", "settings&plan=free&request=declined", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
+  ["upgrade-step1", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByTestId("profile-card").getByRole("button", { name: "Upgrade" }).click();
+    await page.waitForSelector(".plan-radio");
+  }],
+  ["upgrade-step1-promo", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByTestId("profile-card").getByRole("button", { name: "Upgrade" }).click();
+    await page.getByRole("button", { name: /^Promo code/ }).click();
+    await page.getByLabel("Code").fill("SAVE50");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await page.waitForSelector(".promo-applied");
+  }],
+  ["upgrade-pay", "settings&plan=free&request=awaiting_payment", async (page) => {
+    await settingsReady(page);
+    await page.getByTestId("state-row").getByRole("button").first().click();
+    await page.waitForSelector(".pay-row");
+  }],
+  ["upgrade-receipt", "settings&plan=free&request=awaiting_payment&round=1", async (page) => {
+    await settingsReady(page);
+    await page.getByTestId("state-row").getByRole("button").first().click();
+    await page.getByRole("button", { name: "Add payment receipt" }).click();
+    await page.waitForSelector(".receipt-tile img");
+    await page.getByLabel(/Transaction ID/).fill("FT26313ABC7781");
+  }],
+  ["upgrade-receipt-second-round", "settings&plan=free&request=needs_receipt", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Plan & usage");
+    await page.getByRole("button", { name: "Add receipt" }).click();
+    await page.waitForSelector(".receipt-tile img");
+  }],
+  ["upgrade-status", "settings&plan=free&request=in_review", async (page) => {
+    await settingsReady(page);
+    await page.getByTestId("state-row").getByRole("button").first().click();
+    await page.waitForSelector(".timeline");
+  }],
+  ["upgrade-status-approved", "settings&plan=pro&request=approved", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Plan & usage");
+    await page.getByTestId("upgrade-request").getByRole("button").first().click();
+    await page.waitForSelector(".timeline");
+  }],
+  ["settings-search", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("pro");
+    await page.waitForSelector(".result-row");
+  }],
+  ["settings-search-lock", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("lock after");
+    await page.waitForSelector(".result-row");
+  }],
+  ["settings-search-empty", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("xyzzy");
+    await page.waitForSelector(".set-empty");
+  }],
+  ["settings-highlight", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("lock after");
+    await page.locator(".result-row").first().click();
+    await page.waitForSelector(".is-highlighted");
+  }],
+  ["palette-settings", "library&plan=free", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.keyboard.press("Control+k");
+    await page.locator(".palette-input").fill("dark");
+    await page.waitForSelector(".palette-group-head");
+  }],
+  ["settings-notifications", "settings", async (page) => { await settingsReady(page); await nav(page, "Notifications"); }],
+  ["settings-calls", "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); }],
+  ["settings-captions-style", "settings", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Captions");
+    await page.getByRole("button", { name: /^Style/ }).click();
+    await page.waitForSelector(".set-swatches");
+  }],
+  ["settings-appearance", "settings", async (page) => { await settingsReady(page); await nav(page, "Appearance"); }],
+  ["settings-key-free", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Transcription key"); }],
+  ["settings-profile", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Profile"); }],
+  ["settings-security", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Sign-in & security"); }],
+  ["settings-privacy", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Privacy & data"); }],
+  ["settings-about", "settings", async (page) => { await settingsReady(page); await nav(page, "About"); }],
+  ["settings-shortcuts-mac", "settings-keys-mac", async (page) => { await settingsReady(page); await nav(page, "Keyboard shortcuts"); }],
+  ["settings-mac-check", "settings-mac-check", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Help");
+    await page.getByRole("button", { name: /^Mac check/ }).click();
+    await page.waitForSelector("[data-testid=check-macos_version]");
+  }],
+  ["settings-microphone-windows10", "settings-windows10", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Microphone & audio");
+    await page.waitForSelector("[data-testid=whole-system-note]");
+  }],
   // The narrowest window the app allows (860 x 560): the main pages.
   ["library-narrow", "library", async (page) => page.waitForSelector(".segments .segment"), { width: 860, height: 560 }],
   ["record-narrow", "record", async (page) => page.waitForSelector(".record-btn"), { width: 860, height: 560 }],
   ["projects-narrow", "projects", async (page) => page.waitForSelector(".project-tree.on-page"), { width: 860, height: 560 }],
-  ["settings-narrow", "settings-account", async (page) => page.waitForSelector(".settings-row"), { width: 860, height: 560 }],
   ["activity-narrow", "activity", async (page) => page.waitForSelector(".activity-item"), { width: 860, height: 560 }],
 ];
 
@@ -351,11 +390,11 @@ const HARNESS = [
     await page.waitForSelector(".screen-thumb img");
   }],
   ["settings-screens-windows", "w=main&view=settings&screens=1&borderless=0", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("screen moments");
+    await nav(page, "Screen moments");
     await page.waitForSelector("text=Keep screen moments");
   }],
   ["settings-screens-macos", "w=main&view=settings&screens=1&platform=macos&permission=0", async (page) => {
-    await page.getByRole("textbox", { name: "Search settings" }).fill("screen moments");
+    await nav(page, "Screen moments");
     await page.waitForSelector("text=Allow Screen Recording");
   }],
   ["library-held", "w=main&held=1", async (page) => page.waitForSelector("text=Waiting for another account")],
@@ -364,6 +403,19 @@ const HARNESS = [
   ["lock", "w=main&view=lock", async (page) => page.waitForSelector("text=EchoLedger is locked")],
   ["onboarding", "w=main&view=onboarding", async (page) => page.waitForSelector("text=Welcome to EchoLedger")],
 ];
+
+/** Settings has drawn its list (and read the account). */
+async function settingsReady(page) {
+  await page.waitForSelector(".settings-root");
+  await page.waitForSelector("[data-testid=profile-card], .nav-row");
+  await page.waitForTimeout(300);
+}
+
+/** Opens a page from Settings' list. */
+async function nav(page, name) {
+  await page.getByRole("navigation", { name: "Settings" }).getByRole("button", { name, exact: false }).first().click();
+  await page.getByRole("heading", { level: 1, name }).waitFor();
+}
 
 /** Opens the harness's first recording, the one with screens. */
 async function openWeeklySync(page) {
@@ -399,7 +451,7 @@ async function shoot(page, file) {
   console.log(file);
 }
 
-const only = process.argv[2];
+const only = process.argv[2]?.split(",");
 const server = await createServer({ root: desktop, logLevel: "error", server: { port: 5199, strictPort: false } });
 await server.listen();
 const base = server.resolvedUrls.local[0];
@@ -407,18 +459,19 @@ const browser = await launch();
 await mkdir(out, { recursive: true });
 try {
   for (const [name, screen, prepare, viewport] of SCREENS) {
-    if (only && !name.startsWith(only)) continue;
+    if (only && !only.some((o) => name.startsWith(o))) continue;
     for (const theme of ["light", "dark"]) {
       const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
-      await page.goto(`${base}scripts/screens/index.html?screen=${screen}&theme=${theme}`);
+      const [screenName, ...extra] = screen.split("&");
+      await page.goto(`${base}scripts/screens/index.html?screen=${screenName}&theme=${theme}${extra.length ? `&${extra.join("&")}` : ""}`);
       await prepare(page);
       await shoot(page, join(out, `desktop-${name}-${theme}.png`));
       await page.close();
     }
   }
   for (const [name, query, prepare, viewport] of HARNESS) {
-    if (only && !name.startsWith(only)) continue;
+    if (only && !only.some((o) => name.startsWith(o))) continue;
     for (const theme of ["light", "dark"]) {
       const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));

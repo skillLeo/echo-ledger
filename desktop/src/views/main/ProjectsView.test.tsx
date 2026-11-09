@@ -404,13 +404,13 @@ describe("Notes", () => {
     try {
       respond("client_screens", null);
       await renderProjects({ aiNotesInPlan: false });
-      expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "ScreensPRO ✦", "AI notesULTRA ✦"]);
+      expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "ScreensPro", "AI notesUltra"]);
       const ai = screen.getByTestId("locked-tab-ai_notes");
       expect(ai).toHaveAccessibleName("AI notes, AI notes is in the Ultra plan");
-      expect(ai).toHaveTextContent("AI notesULTRA ✦");
+      expect(ai).toHaveTextContent("AI notesUltra");
       expect(ai).toHaveAttribute("aria-selected", "false");
       const screens = screen.getByTestId("locked-tab-screens");
-      expect(screens).toHaveTextContent("ScreensPRO ✦");
+      expect(screens).toHaveTextContent("ScreensPro");
       fireEvent.click(ai);
       expect(sheet.result.current?.feature).toBe("ai_notes");
       expect(screen.getByRole("tab", { name: "Recordings" })).toHaveAttribute("aria-selected", "true");
@@ -420,7 +420,7 @@ describe("Notes", () => {
       tab("Notes");
       const ask = screen.getByRole("region", { name: "Ask" });
       expect(ask).toHaveTextContent("Ask: answers about this project, from its recordings and files");
-      fireEvent.click(within(ask).getByRole("button", { name: /AI notes is in the Ultra plan/ }));
+      fireEvent.click(within(ask).getByRole("button", { name: "AI notes, in Ultra" }));
       expect(sheet.result.current?.feature).toBe("ai_notes");
       expect(screen.queryByRole("textbox", { name: "Question" })).not.toBeInTheDocument();
       expect(callsOf("client_ask")).toEqual([]);

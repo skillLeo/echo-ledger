@@ -306,15 +306,121 @@ impl ApiClient {
         if resp.status().as_u16() == 409 {
             let body: serde_json::Value = resp.json().await.unwrap_or_default();
             let pending = ["request", "upgrade_request", "data"].iter().find_map(|k| body.get(*k)).cloned().unwrap_or_else(|| body.clone());
-            return match serde_json::from_value::<UpgradeRequest>(pending).ok().filter(|r| !r.id.is_empty()) {
+            return match serde_json::from_value::<UpgradeRequest>(pending.clone()).ok().filter(|r| !r.id.is_empty()) {
                 Some(request) => Ok(request),
-                None => Err(AppError::msg("You already asked for an upgrade. It is waiting for the owner.")),
+                None => Err(AppError::msg(teammate_request_text(&pending))),
             };
+        }
+        let status = resp.status().as_u16();
+        if matches!(status, 403 | 422 | 429) {
+            let retry = Self::retry_after(&resp);
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            if body.get("code").and_then(|c| c.as_str()) == Some("promo_other_plan") {
+                let message = body.get("message").and_then(|m| m.as_str()).unwrap_or("This code is for another plan.").to_string();
+                return Err(AppError::Server { status, message, code: Some("promo_other_plan".into()), retry_after_secs: retry });
+            }
+            if body.get("code").and_then(|c| c.as_str()) == Some("invalid_promo_code") {
+                return Err(AppError::msg(crate::error::INVALID_PROMO_TEXT));
+            }
+            return Err(AppError::msg(crate::receipts::refusal_text(status, &body, retry)));
         }
         match Self::parse::<UpgradeRequest>(resp).await {
             Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take upgrade requests yet.")),
             other => other,
         }
+    }
+
+    /// The `Retry-After` header in whole seconds.
+    fn retry_after(resp: &reqwest::Response) -> Option<u64> {
+        resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok())
+    }
+
+    /// A refusal of a payment route in the app's calm words (docs/API.md "Payment receipts"); `401` still signs out.
+    async fn payment_refusal(resp: reqwest::Response) -> AppError {
+        let status = resp.status().as_u16();
+        if status == 401 {
+            return AppError::NotPaired;
+        }
+        let retry = Self::retry_after(&resp);
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        if status == 404 {
+            return AppError::Server { status, message: "This request is no longer there.".into(), code: body.get("code").and_then(|c| c.as_str()).map(str::to_string), retry_after_secs: retry };
+        }
+        AppError::msg(crate::receipts::refusal_text(status, &body, retry))
+    }
+
+    /// `POST /api/upgrade-requests/{id}/proofs` (since v1.7): one receipt, already checked and stripped of metadata
+    /// here. The same file sent again answers `200` with the receipt the server already has.
+    pub async fn upload_proof(&self, id: &str, receipt: crate::receipts::Receipt) -> AppResult<Proof> {
+        let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
+        let body = multipart_file(&boundary, "file", &receipt.name, receipt.mime, &receipt.bytes);
+        drop(receipt);
+        let resp = self
+            .authed(self.http.post(self.url(&format!("upgrade-requests/{id}/proofs"))))?
+            .header("Content-Type", format!("multipart/form-data; boundary={boundary}"))
+            .timeout(std::time::Duration::from_secs(180))
+            .body(body)
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(Self::payment_refusal(resp).await);
+        }
+        let value: serde_json::Value = resp.json().await?;
+        let proof = value.get("data").cloned().unwrap_or(value);
+        serde_json::from_value::<Proof>(proof).ok().filter(|p| !p.id.is_empty()).ok_or_else(|| AppError::msg(crate::receipts::SERVER_TROUBLE))
+    }
+
+    /// `DELETE /api/upgrade-requests/{id}/proofs/{proof}` (since v1.7): a receipt not sent yet. One that is gone
+    /// already counts as removed.
+    pub async fn delete_proof(&self, id: &str, proof: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url(&format!("upgrade-requests/{id}/proofs/{proof}"))))?.send().await?;
+        if resp.status().is_success() {
+            return Ok(());
+        }
+        match Self::payment_refusal(resp).await {
+            AppError::Server { status: 404, code, .. } if code.as_deref() == Some("proof_not_found") => Ok(()),
+            e => Err(e),
+        }
+    }
+
+    /// `GET /api/upgrade-requests/{id}/proofs/{proof}?variant=thumb|full` (since v1.7): the receipt's bytes and type,
+    /// read into memory only (the server answers `no-store`, and nothing is written here).
+    pub async fn proof_file(&self, id: &str, proof: &str, variant: &str) -> AppResult<(String, Vec<u8>)> {
+        let resp = self.authed(self.http.get(self.url(&format!("upgrade-requests/{id}/proofs/{proof}"))))?.query(&[("variant", variant)]).send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::payment_refusal(resp).await);
+        }
+        let mime = resp.headers().get(reqwest::header::CONTENT_TYPE).and_then(|v| v.to_str().ok()).unwrap_or("").split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        let bytes = resp.bytes().await?.to_vec();
+        let mime = match crate::receipts::sniff(&bytes) {
+            Some(kind) => kind.mime().to_string(),
+            None if mime.starts_with("image/") || mime == "application/pdf" => mime,
+            None => return Err(AppError::msg(crate::receipts::UNREADABLE)),
+        };
+        Ok((mime, bytes))
+    }
+
+    /// `POST /api/upgrade-requests/{id}/paid` (since v1.7): "Send receipt", with the bank's transaction ID and the
+    /// payer's name when given. The files sent so far are locked.
+    pub async fn mark_paid(&self, id: &str, reference: Option<&str>, payer_name: Option<&str>) -> AppResult<UpgradeRequest> {
+        let resp = self
+            .authed(self.http.post(self.url(&format!("upgrade-requests/{id}/paid"))))?
+            .json(&json!({ "payment_reference": reference, "payer_name": payer_name }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            return Err(Self::payment_refusal(resp).await);
+        }
+        Ok(resp.json::<UpgradeRequest>().await?)
+    }
+
+    /// `POST /api/upgrade-requests/{id}/cancel` (since v1.7).
+    pub async fn cancel_request(&self, id: &str) -> AppResult<UpgradeRequest> {
+        let resp = self.authed(self.http.post(self.url(&format!("upgrade-requests/{id}/cancel"))))?.send().await?;
+        if !resp.status().is_success() {
+            return Err(Self::payment_refusal(resp).await);
+        }
+        Ok(resp.json::<UpgradeRequest>().await?)
     }
 
     /// `POST /api/promo-codes/check` (since v1.6.2) for the plan the sheet shows. The server's two refusals are answers
@@ -1231,4 +1337,14 @@ fn percent_decode(text: &str) -> String {
         i += 1;
     }
     String::from_utf8_lossy(&out).into_owned()
+}
+
+/// A teammate's open request in the same workspace (`409 request_pending` with only its plan, stage and owner).
+pub fn teammate_request_text(body: &serde_json::Value) -> String {
+    let owner = body.get("owner_name").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+    let plan = body.get("plan_name").and_then(|v| v.as_str()).map(str::trim).filter(|v| !v.is_empty());
+    match (owner, plan) {
+        (Some(owner), Some(plan)) => format!("{owner} has already asked to upgrade this workspace to {plan}. We'll let everyone know when it's decided."),
+        _ => "You already asked for an upgrade. It is waiting for the EchoLedger team.".to_string(),
+    }
 }

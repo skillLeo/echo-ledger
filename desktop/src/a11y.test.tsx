@@ -65,7 +65,7 @@ globalThis.ResizeObserver ??= class {
 } as unknown as typeof ResizeObserver;
 
 describe("screen-reader names (C7)", () => {
-  it.each(["Library", "Home", "Account"])("names every control on the %s page", async (tab) => {
+  it.each(["Library", "Home", "Settings"])("names every control on the %s page", async (tab) => {
     setWindowLabel("main");
     render(<MainApp />);
     await flushAsync();

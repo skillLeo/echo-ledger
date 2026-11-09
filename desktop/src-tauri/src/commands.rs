@@ -566,6 +566,88 @@ pub async fn upgrade_request_latest(app: AppHandle) -> AppResult<Option<crate::n
     app.state::<AppState>().api()?.latest_upgrade_request().await
 }
 
+// ---- Payment receipts (v1.7, docs/API.md "Payment receipts") -------------------------------------------------------
+
+/// "Choose file…" on Send receipt: screenshots and PDFs, several at once; each path then goes to
+/// `upgrade_request_proof`. Empty when cancelled.
+#[tauri::command]
+pub async fn upgrade_receipt_pick(app: AppHandle) -> AppResult<Vec<String>> {
+    ensure_unlocked(&app.state::<AppState>())?;
+    Ok(crate::files::pick_receipts(&app).await.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
+}
+
+/// Sends one receipt from a file (chosen or dropped on the window): over 5 MB or not a JPEG, PNG, WebP or PDF is refused
+/// before it is read; an image loses its metadata first.
+#[tauri::command]
+pub async fn upgrade_request_proof(state: State<'_, AppState>, id: String, path: String) -> AppResult<crate::net::models::Proof> {
+    ensure_unlocked(&state)?;
+    let id = crate::receipts::checked_id(&id)?;
+    let path = std::path::PathBuf::from(path);
+    let size = tokio::fs::metadata(&path).await.map_err(|_| AppError::msg("That file could not be opened. Choose it again."))?.len();
+    if size > crate::receipts::MAX_RECEIPT_BYTES {
+        return Err(AppError::msg(crate::receipts::TOO_LARGE));
+    }
+    let bytes = tokio::fs::read(&path).await.map_err(|_| AppError::msg("That file could not be opened. Choose it again."))?;
+    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let receipt = crate::receipts::prepare(&name, bytes)?;
+    state.api()?.upload_proof(id, receipt).await.map_err(crate::receipts::calm)
+}
+
+/// Sends one receipt pasted from the clipboard (Ctrl/⌘+V on Send receipt), as base64 from the page.
+#[tauri::command]
+pub async fn upgrade_request_proof_data(state: State<'_, AppState>, id: String, name: Option<String>, data: String) -> AppResult<crate::net::models::Proof> {
+    use base64::Engine;
+    ensure_unlocked(&state)?;
+    let id = crate::receipts::checked_id(&id)?;
+    // Base64 is 4/3 of the bytes: anything longer is over 5 MB already.
+    if data.len() as u64 > crate::receipts::MAX_RECEIPT_BYTES / 3 * 4 + 8 {
+        return Err(AppError::msg(crate::receipts::TOO_LARGE));
+    }
+    let bytes = base64::engine::general_purpose::STANDARD.decode(data.trim()).map_err(|_| AppError::msg(crate::receipts::UNREADABLE))?;
+    let receipt = crate::receipts::prepare(name.as_deref().unwrap_or("Pasted receipt"), bytes)?;
+    state.api()?.upload_proof(id, receipt).await.map_err(crate::receipts::calm)
+}
+
+/// × on a receipt not sent yet.
+#[tauri::command]
+pub async fn upgrade_request_proof_delete(state: State<'_, AppState>, id: String, proof: String) -> AppResult<()> {
+    let id = crate::receipts::checked_id(&id)?;
+    let proof = crate::receipts::checked_id(&proof)?;
+    state.api()?.delete_proof(id, proof).await.map_err(crate::receipts::calm)
+}
+
+/// A receipt's picture (`thumb` or `full`) for the page, as base64 it turns into a `blob:` URL; nothing is kept here.
+#[tauri::command]
+pub async fn upgrade_request_proof_file(state: State<'_, AppState>, id: String, proof: String, variant: Option<String>) -> AppResult<crate::net::models::ProofFile> {
+    use base64::Engine;
+    ensure_unlocked(&state)?;
+    let id = crate::receipts::checked_id(&id)?;
+    let proof = crate::receipts::checked_id(&proof)?;
+    let variant = match variant.as_deref() {
+        None | Some("full") => "full",
+        Some("thumb") => "thumb",
+        Some(_) => return Err(AppError::msg("That picture size is not one of the server's.")),
+    };
+    let (mime, bytes) = state.api()?.proof_file(id, proof, variant).await.map_err(crate::receipts::calm)?;
+    Ok(crate::net::models::ProofFile { mime, data: base64::engine::general_purpose::STANDARD.encode(bytes) })
+}
+
+/// "Send receipt": the files of this round, the transaction ID and the payer's name when typed.
+#[tauri::command]
+pub async fn upgrade_request_paid(state: State<'_, AppState>, id: String, reference: Option<String>, payer_name: Option<String>) -> AppResult<crate::net::models::UpgradeRequest> {
+    let id = crate::receipts::checked_id(&id)?;
+    let reference = crate::receipts::reference_of(reference.as_deref())?;
+    let payer_name = crate::receipts::payer_of(payer_name.as_deref())?;
+    state.api()?.mark_paid(id, reference.as_deref(), payer_name.as_deref()).await.map_err(crate::receipts::calm)
+}
+
+/// "Cancel request".
+#[tauri::command]
+pub async fn upgrade_request_cancel(state: State<'_, AppState>, id: String) -> AppResult<crate::net::models::UpgradeRequest> {
+    let id = crate::receipts::checked_id(&id)?;
+    state.api()?.cancel_request(id).await.map_err(crate::receipts::calm)
+}
+
 /// Account → Devices → Rename (v1.6, P3).
 #[tauri::command]
 pub async fn device_rename(app: AppHandle, id: String, name: String) -> AppResult<String> {

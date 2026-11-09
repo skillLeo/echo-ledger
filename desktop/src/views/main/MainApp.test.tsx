@@ -81,8 +81,8 @@ describe("MainApp start-up and pairing gate", () => {
     // After signing in, the Ready check (Phase 1C): Home with it.
     expect(await screen.findByRole("heading", { name: "Home", level: 1 })).toBeInTheDocument();
     expect(screen.getByTestId("ready-card")).toBeInTheDocument();
-    // No account route on this server: the avatar is the computer's name.
-    expect(screen.getByRole("button", { name: "Account menu: Studio PC" })).toBeInTheDocument();
+    // No account route on this server: the avatar is a person, never the computer's name.
+    expect(screen.getByRole("button", { name: "Account menu: You" })).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("Signed in. Your library will sync now.");
   });
 
@@ -159,7 +159,7 @@ describe("MainApp navigation", () => {
     expect(sidebar()).toHaveTextContent("EchoLedger");
     expect(nav("Library")).toHaveClass("active");
     expect(nav("Home")).not.toHaveClass("active");
-    expect(nav("Account")).not.toHaveClass("active");
+    expect(nav("Settings")).not.toHaveClass("active");
     expect(await within(screen.getByTestId("library-list")).findByText("Zoom with Acme")).toBeInTheDocument();
   });
 
@@ -171,9 +171,9 @@ describe("MainApp navigation", () => {
     expect(nav("Library")).not.toHaveClass("active");
     expect(screen.queryByRole("heading", { name: "Library" })).not.toBeInTheDocument();
 
-    fireEvent.click(nav("Account"));
-    expect(await screen.findByRole("heading", { name: "Account", level: 1 })).toBeInTheDocument();
-    expect(nav("Account")).toHaveClass("active");
+    fireEvent.click(nav("Settings"));
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(nav("Settings")).toHaveClass("active");
 
     fireEvent.click(nav("Library"));
     expect(screen.getByRole("heading", { name: "Library" })).toBeInTheDocument();
@@ -208,7 +208,7 @@ describe("MainApp sidebar and keys", () => {
   it("lists Home, Library, Projects, Activity, Shared and Upload, and collapses to a rail of icons that keep their names", async () => {
     await renderPaired();
     expect([...document.querySelectorAll(".nav .nav-btn")].map((b) => b.textContent)).toEqual(["Home", "Library", "Projects", "Activity", "Shared", "Upload"]);
-    expect([...document.querySelectorAll(".sidebar-footer .nav-btn")].map((b) => b.querySelector(".nav-label")?.textContent)).toEqual(["Help & shortcuts", "Account", "Collapse sidebar"]);
+    expect([...document.querySelectorAll(".sidebar-footer .nav-btn")].map((b) => b.querySelector(".nav-label")?.textContent)).toEqual(["Help & shortcuts", "Settings", "Collapse sidebar"]);
     expect(document.querySelector(".app")).toHaveStyle({ "--sidebar-w": "240px" });
     fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
     expect(document.querySelector(".app")).toHaveClass("collapsed");
@@ -266,7 +266,7 @@ describe("MainApp sidebar and keys", () => {
     window.localStorage.setItem("echoledger-sidebar", "collapsed");
     await renderPaired({ pendingDecisions: 2 });
     expect(document.querySelector(".app")).toHaveClass("collapsed");
-    for (const name of ["Home", "Library", "Projects", "Shared", "Upload", "Account"]) expect(nav(name)).toHaveAttribute("title", expect.stringContaining(name));
+    for (const name of ["Home", "Library", "Projects", "Shared", "Upload", "Settings"]) expect(nav(name)).toHaveAttribute("title", expect.stringContaining(name));
     expect(within(nav("Activity, 2 need you")).getByText("2")).toHaveClass("nav-count");
     expect(screen.getByRole("button", { name: "Find a page" })).toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize the sidebar" })).not.toBeInTheDocument();
@@ -311,7 +311,7 @@ describe("MainApp sidebar and keys", () => {
     const footer = sidebar().querySelector(".sidebar-footer")!;
     expect(footer.closest(".sidebar-main")).toBeNull();
     expect(sidebar().querySelector(".sidebar-main .nav")).not.toBeNull();
-    expect(within(footer as HTMLElement).getAllByRole("button").map((b) => b.querySelector(".nav-label")?.textContent)).toEqual(["Help & shortcuts", "Account", "Collapse sidebar"]);
+    expect(within(footer as HTMLElement).getAllByRole("button").map((b) => b.querySelector(".nav-label")?.textContent)).toEqual(["Help & shortcuts", "Settings", "Collapse sidebar"]);
     expect(document.querySelector("header.topbar")).toHaveAttribute("data-tauri-drag-region");
   });
 
@@ -403,8 +403,11 @@ describe("MainApp sidebar and keys", () => {
 });
 
 describe("MainApp theme (the avatar menu, v1.6)", () => {
-  const openMenu = () => fireEvent.click(screen.getByRole("button", { name: /^Account menu:/ }));
-  const item = (name: string) => screen.getByRole("menuitemradio", { name });
+  // The menu stays open after a theme is chosen (it is a switch, not an item).
+  const openMenu = () => {
+    if (!screen.queryByRole("menu")) fireEvent.click(screen.getByRole("button", { name: /^Account menu:/ }));
+  };
+  const item = (name: string) => within(screen.getByRole("radiogroup", { name: "Appearance" })).getByRole("radio", { name: name.replace("Theme: ", "") });
 
   it("starts on System and changes from the avatar menu", async () => {
     await renderPaired();
@@ -442,11 +445,11 @@ describe("MainApp theme (the avatar menu, v1.6)", () => {
     expect(item("Theme: Light")).toHaveAttribute("aria-checked", "true");
   });
 
-  it("shows a distinct icon for each choice", async () => {
+  it("is one Appearance row with the three choices side by side, not three theme items", async () => {
     await renderPaired();
     openMenu();
-    const icons = ["Theme: System", "Theme: Light", "Theme: Dark"].map((name) => item(name).querySelector("svg")?.innerHTML);
-    expect(new Set(icons).size).toBe(3); // monitor (system), sun (light), moon (dark)
+    expect(within(screen.getByRole("radiogroup", { name: "Appearance" })).getAllByRole("radio").map((r) => r.textContent)).toEqual(["System", "Light", "Dark"]);
+    expect(screen.queryByRole("menuitemradio", { name: /^Theme:/ })).not.toBeInTheDocument();
   });
 });
 
@@ -462,8 +465,9 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     expect(avatar).toHaveTextContent("SA");
     fireEvent.click(avatar);
     expect(screen.queryByRole("menuitem", { name: "Admin panel" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Plan & usage" }));
-    expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Plan & usage" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("menuitem", { name: "Settings" }));
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
   });
 
   it("keeps Invite people in the workspace menu with its badge on a Free plan, opening the upgrade sheet, not the browser (v1.6.2)", async () => {
@@ -473,10 +477,11 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     await renderPaired();
     await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
     fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
-    const invite = screen.getByRole("menuitem", { name: "Invite people, Team workspace is in the Ultra plan" });
-    expect(invite).toHaveTextContent("Invite peopleULTRA ✦");
+    const invite = screen.getByRole("menuitem", { name: "Invite people, Team workspace is in Ultra" });
+    expect(invite).toHaveTextContent("Invite peopleUltra");
     fireEvent.click(invite);
-    expect(await screen.findByRole("dialog", { name: "Team workspace" })).toBeInTheDocument();
+    const flow = await screen.findByRole("dialog", { name: "Upgrade" });
+    expect(flow).toHaveTextContent("Team workspace is in Ultra. You're on Free.");
     expect(callsOf("server_page_open")).toEqual([]);
   });
 
@@ -541,7 +546,7 @@ describe("MainApp events, toasts and polling", () => {
   it("updates the sidebar from app:status events", async () => {
     await renderPaired();
     await emitEvent("app:status", makeStatus({ captionsLive: true, pendingUploads: 1, deviceName: "Renamed PC" }));
-    expect(screen.getByRole("button", { name: "Account menu: Renamed PC" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Account menu: You" })).toBeInTheDocument();
     expect(within(sidebar()).getByText("Uploading 1 recording…")).toBeInTheDocument();
   });
 
@@ -687,12 +692,12 @@ describe("MainApp action runner", () => {
     await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
   });
 
-  it("signing out from Account → This computer returns to the sign-in form", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+  it("signing out from Settings returns to the sign-in form", async () => {
     await renderPaired();
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
-    fireEvent.click(nav("Account"));
-    fireEvent.click(await screen.findByRole("button", { name: "Sign out of this computer…" }));
+    fireEvent.click(nav("Settings"));
+    fireEvent.click(await within(await screen.findByRole("navigation", { name: "Settings" })).findByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Sign out of this computer?" })).getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 });
@@ -706,6 +711,9 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
   });
 
   it("keeps a banner up while the limit is reached, on every page, with no timer; × closes it until the state changes (v1.6.1)", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", sampleEntitlements("pro"));
+    respond("upgrade_request_latest", null);
     respond("account_get", { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
     await renderPaired({ budget: "reached" });
     expect(banner()).toHaveTextContent("Monthly transcription limit reached. Recordings are kept but not transcribed.");
@@ -714,8 +722,8 @@ describe("MainApp monthly transcription limit (A5.2)", () => {
     expect(banner()!.querySelector(".notice-timer")).toBeNull();
     fireEvent.click(nav("Home"));
     expect(banner()).toHaveTextContent("Monthly transcription limit reached.");
-    fireEvent.click(nav("Account"));
-    await screen.findByRole("heading", { name: "Account", level: 1 });
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings", level: 1 });
     expect(banner()).toBeInTheDocument();
     // A click goes to Plan & usage; × closes it for this state.
     fireEvent.click(within(banner()!).getByRole("button", { name: /Open Plan & usage/ }));
@@ -767,8 +775,8 @@ describe("MainApp shows what the tray says (A3.4)", () => {
     expect(screen.getByRole("button", { name: "Notifications, 2 need you" })).toBeInTheDocument();
     const waiting = within(screen.getByRole("list", { name: "Smart folders" })).getByRole("button", { name: "Waiting" });
     expect(waiting).toHaveTextContent("2");
-    fireEvent.click(nav("Account"));
-    await screen.findByRole("heading", { name: "Account", level: 1 });
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings", level: 1 });
     fireEvent.click(nav("Home"));
     fireEvent.click(screen.getByRole("button", { name: "Review" }));
     expect(screen.getByRole("heading", { name: "Waiting", level: 1 })).toBeInTheDocument();
@@ -807,8 +815,8 @@ describe("MainApp main:navigate", () => {
   it("switches to the requested view", async () => {
     await renderPaired();
     await emitEvent("main:navigate", makeNavigate({ view: "settings" }));
-    expect(await screen.findByRole("heading", { name: "Account", level: 1 })).toBeInTheDocument();
-    expect(nav("Account")).toHaveClass("active");
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
+    expect(nav("Settings")).toHaveClass("active");
     await emitEvent("main:navigate", makeNavigate({ view: "record" }));
     expect(screen.getByRole("heading", { name: "Record" })).toBeInTheDocument();
   });
@@ -916,7 +924,7 @@ describe("command palette (B9)", () => {
     fireEvent.keyDown(window, { key: "K", metaKey: true });
     fireEvent.change(await paletteInput(), { target: { value: "go to account" } });
     fireEvent.keyDown(await paletteInput(), { key: "Enter" });
-    expect(await screen.findByRole("heading", { name: "Account", level: 1 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Settings", level: 1 })).toBeInTheDocument();
   });
 });
 
@@ -950,8 +958,8 @@ describe("motion and the brand in the main window (v1.5)", () => {
 
   it("fades the new page in from the side it sits on in the sidebar, 200 ms, transform and opacity only", async () => {
     await renderPaired();
-    fireEvent.click(nav("Account"));
-    await screen.findByRole("heading", { name: "Account", level: 1 });
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings", level: 1 });
     expect(pageParts().length).toBeGreaterThan(0);
     for (const call of pageParts()) {
       expect(call.keyframes).toEqual([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }]);
@@ -965,7 +973,7 @@ describe("motion and the brand in the main window (v1.5)", () => {
 
   it("never leaves a page half-faded: a click during a switch ends the last one at once", async () => {
     await renderPaired();
-    fireEvent.click(nav("Account"));
+    fireEvent.click(nav("Settings"));
     const first = pageParts();
     fireEvent.click(nav("Home"));
     expect(first.length).toBeGreaterThan(0);
@@ -980,8 +988,8 @@ describe("motion and the brand in the main window (v1.5)", () => {
   it("switches pages at once when the OS asks for reduced motion", async () => {
     prefersReducedMotion(true);
     await renderPaired();
-    fireEvent.click(nav("Account"));
-    await screen.findByRole("heading", { name: "Account", level: 1 });
+    fireEvent.click(nav("Settings"));
+    await screen.findByRole("heading", { name: "Settings", level: 1 });
     expect(anim.animate).not.toHaveBeenCalled();
   });
 
@@ -1025,41 +1033,39 @@ describe("MainApp and what the plan allows (v1.6)", () => {
       window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: "transcription-key" }));
     });
     expect(await screen.findByRole("heading", { name: "Transcription key", level: 1 })).toBeInTheDocument();
-    expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
+    expect(await screen.findByTestId("transcription-key")).toBeInTheDocument();
   });
 
   const SAM = { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null };
 
-  it("opens All features from the command palette, in view, with the Free plan's six of fifteen (v1.6.2)", async () => {
-    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+  it("opens every feature from the command palette, on Plan & usage, highlighted (v1.7)", async () => {
     resetEntitlementsForTests();
     respond("entitlements_get", sampleEntitlements("free"));
+    respond("upgrade_request_latest", null);
     respond("account_get", SAM);
     await renderPaired();
     await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     const input = within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
-    fireEvent.change(input, { target: { value: "all features" } });
-    expect(screen.getByRole("option", { name: "All features" })).toBeInTheDocument();
-    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.change(input, { target: { value: "every feature" } });
+    const option = within(screen.getByRole("group", { name: "Settings" })).getByRole("option", { name: /See every feature/ });
+    expect(option).toHaveTextContent("Account › Plan & usage");
+    fireEvent.mouseDown(option);
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
-    const region = await screen.findByRole("region", { name: "All features" });
-    expect(within(region).getByTestId("all-features-summary")).toHaveTextContent("Your plan has 6 of 15 features");
-    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
-    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts.at(-1)).toBe(region);
+    await waitFor(() => expect(document.getElementById("setting-plan.compare")).toHaveClass("is-highlighted"));
   });
 
-  it("shows All features under Plan & usage from the avatar menu, and Ultra has all fifteen (v1.6.2)", async () => {
+  it("offers Upgrade in the avatar menu on Free, and Plan & usage on Ultra with no Upgrade anywhere (v1.7)", async () => {
     resetEntitlementsForTests();
     respond("entitlements_get", sampleEntitlements("ultra"));
+    respond("upgrade_request_latest", null);
     respond("account_get", SAM);
     await renderPaired();
     await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
     fireEvent.click(await screen.findByRole("button", { name: "Account menu: Sam" }));
+    expect(screen.queryByRole("menuitem", { name: "Upgrade" })).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("menuitem", { name: "Plan & usage" }));
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
-    const region = await screen.findByRole("region", { name: "All features" });
-    expect(within(region).getByTestId("all-features-summary")).toHaveTextContent("Your plan has 15 of 15 features");
-    expect(within(region).queryAllByRole("button")).toHaveLength(0);
-  });
+    expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
+  })
 });
