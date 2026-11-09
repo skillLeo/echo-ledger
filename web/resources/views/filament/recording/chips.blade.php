@@ -55,21 +55,22 @@
         </div>
     @endif
 
+    {{-- Since v1.6.1 these are notices about the recording itself: ×, swipe, no timer, closed until it changes. --}}
     @if ($session->hasNoAudio())
-        <div class="el-banner">
+        <x-notice id="no-audio-{{ $session->id }}" state="no-audio" class="el-banner">
             @svg('heroicon-o-speaker-x-mark', ['aria-hidden' => 'true'])
             <p class="el-banner-body"><strong>No audio.</strong> Nothing was heard in this recording, so there is nothing to play or transcribe. On the phone run Setup → Call capture → Test call capture; then delete this recording.</p>
-        </div>
+        </x-notice>
     @elseif ($final?->status === \App\Enums\TranscriptStatus::Failed)
-        <div class="el-banner el-banner-danger" role="alert">
+        <x-notice id="transcript-failed-{{ $session->id }}" :state="$final->id.':'.($final->updated_at?->getTimestamp() ?? '')" class="el-banner el-banner-danger" role="alert">
             @svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true'])
             <p class="el-banner-body"><strong>Transcription failed.</strong> {{ $final->error ?? 'Try again.' }}</p>
             @if ($session->primaryRecording?->isReady() && ! $readOnly)
                 <button type="button" class="el-text-btn" wire:click="mountAction('retry')">Transcribe again</button>
             @endif
-        </div>
+        </x-notice>
     @elseif ($backup !== null && $backup['backup_engine'])
-        <div class="el-banner" data-backup-engine>
+        <x-notice id="backup-engine-{{ $session->id }}" :state="$final?->id ?? ''" class="el-banner" data-backup-engine>
             @svg('heroicon-o-arrow-path', ['aria-hidden' => 'true'])
             <p class="el-banner-body"><strong>Backup engine — Re-transcribe?</strong>
                 {{ $backup['backup_reason'] === 'rejected'
@@ -78,6 +79,6 @@
             @if ($canRetranscribe && ! $readOnly)
                 <button type="button" class="el-text-btn" wire:click="mountAction('retranscribeBackup')">Re-transcribe</button>
             @endif
-        </div>
+        </x-notice>
     @endif
 </div>
