@@ -53,7 +53,7 @@ import kotlinx.coroutines.launch
 internal fun planColor(hex: String?): Color = runCatching { Color(android.graphics.Color.parseColor(hex)) }.getOrDefault(Brand.AccentText)
 
 /**
- * The one badge for a feature the plan lacks (since v1.6, P1.4): "PRO ✦" in the plan's colour with a small lock; a tap
+ * The one badge for a feature the plan lacks (since v1.6, P1.4): "PRO" plus the plan mark in the plan's colour with a small lock; a tap
  * opens the upgrade sheet.
  */
 @Composable
@@ -65,7 +65,10 @@ fun PlanBadge(lock: PlanState.Lock, onClick: () -> Unit, modifier: Modifier = Mo
             .background(tint.copy(alpha = 0.14f))
             .clickable(role = Role.Button, onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 3.dp)
-            .semantics { contentDescription = "${lock.featureName}: in ${lock.badge.removeSuffix(" ✦")}. Tap to see the plans." },
+            .semantics {
+                contentDescription =
+                    "${lock.featureName}: in ${lock.badge.removeSuffix(" " + PlanState.PLAN_MARK)}. Tap to see the plans."
+            },
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(Icons.Rounded.Lock, contentDescription = null, tint = tint, modifier = Modifier.size(12.dp))
