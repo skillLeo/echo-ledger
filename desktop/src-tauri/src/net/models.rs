@@ -639,8 +639,248 @@ pub struct AuthOptions {
     pub reset_url: Option<String>,
     #[serde(default, alias = "browser_sign_in")]
     pub browser_sign_in: bool,
+    /// Email codes are offered (since v1.6).
+    #[serde(default)]
+    pub code: bool,
 }
 
 fn yes() -> bool {
     true
+}
+
+// ---- Sign-up and sign-in with an email code (since v1.6, P1) -------------------------------------------------------
+
+/// `POST /api/auth/start`: whether the email has an account and what it can sign in with. `account` is `existing`,
+/// `new`, or (made by the app, never sent) `older` for a server without the route.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthStart {
+    #[serde(default)]
+    pub account: String,
+    #[serde(default)]
+    pub methods: Vec<String>,
+    #[serde(default, alias = "sign_up")]
+    pub sign_up: bool,
+}
+
+/// `POST /api/auth/code`: a code is on its way (`sent`), or one went out a moment ago and a new one may be asked for in
+/// `resend_after` seconds (`429 resend_too_soon`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeSent {
+    #[serde(default = "sixty", alias = "resend_after")]
+    pub resend_after: u64,
+    #[serde(default, alias = "expires_in")]
+    pub expires_in: Option<u64>,
+    #[serde(default = "yes")]
+    pub sent: bool,
+}
+
+fn sixty() -> u64 {
+    60
+}
+
+/// The answer to `POST /api/auth/code/verify`: this computer's token (an existing account), the two-factor code first,
+/// or a new email's sign-up token (kept in the core, never shown to the page).
+#[derive(Clone, Debug)]
+pub enum CodeAnswer {
+    SignedIn(Box<RegisterResponse>),
+    OtpRequired,
+    Profile { sign_up_token: String },
+}
+
+/// What a sign-in route sends about this computer besides its own fields (since v1.6 with `install_id`).
+#[derive(Clone, Debug, Default)]
+pub struct ThisDevice {
+    pub name: String,
+    pub platform: &'static str,
+    pub os_version: String,
+}
+
+// ---- Entitlements, the transcription key and upgrade requests (since v1.6, P1) -------------------------------------
+
+/// `GET /api/me/entitlements`, as the windows read it (snake_case, like the server). Each part is read on its own: a
+/// malformed one is left out, never the rest. Colours are `#rrggbb` only; a feature or limit the app does not know is
+/// kept (the server alone decides).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Entitlements {
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<EntitlementPlan>,
+    #[serde(default, deserialize_with = "lenient_map")]
+    pub features: std::collections::BTreeMap<String, FeatureEntitlement>,
+    #[serde(default, deserialize_with = "lenient_map")]
+    pub limits: std::collections::BTreeMap<String, LimitEntitlement>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub engines: Vec<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub transcription_key: Option<TranscriptionKeyState>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub upgrade_request: Option<UpgradeRequest>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub plans: Vec<OfferedPlan>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct EntitlementPlan {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub badge: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub color: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub expires_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub trial_minutes_left: Option<f64>,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FeatureEntitlement {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default, deserialize_with = "lenient")]
+    pub name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub description: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub cost: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub lowest_plan: Option<String>,
+}
+
+/// One limit: `limit: null` is no limit; `used` only where the server counts it.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct LimitEntitlement {
+    #[serde(default, deserialize_with = "lenient")]
+    pub limit: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub used: Option<f64>,
+}
+
+/// The person's own transcription key: whether one is set and its last four characters, never the key.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TranscriptionKeyState {
+    #[serde(default, deserialize_with = "lenient")]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub set: bool,
+    #[serde(default, deserialize_with = "lenient")]
+    pub last4: Option<String>,
+}
+
+/// An upgrade request (`POST /api/upgrade-requests`, `GET /api/upgrade-requests/latest`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UpgradeRequest {
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub plan: String,
+    /// `pending`, `approved` or `declined`.
+    #[serde(default)]
+    pub status: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub message: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub payment_instructions: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub created_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub decided_at: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub reply: Option<String>,
+}
+
+/// A plan on offer, for the comparison sheet (cheapest first).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct OfferedPlan {
+    #[serde(default)]
+    pub key: String,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub badge: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub color: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub price: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub description: Option<String>,
+    #[serde(default, deserialize_with = "lenient_list")]
+    pub features: Vec<String>,
+    /// Each limit's number, `null` for no limit; anything else is left out.
+    #[serde(default, deserialize_with = "limit_numbers")]
+    pub limits: std::collections::BTreeMap<String, Option<f64>>,
+}
+
+/// A badge's text: short, one line ("PRO"), none when there is nothing to show.
+fn badge_text(text: Option<String>) -> Option<String> {
+    text.map(|t| t.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(16).collect::<String>()).filter(|t| !t.is_empty())
+}
+
+fn colour(value: Option<String>) -> Option<String> {
+    value.map(|c| c.trim().to_ascii_lowercase()).filter(|c| crate::settings::is_hex_colour(c))
+}
+
+impl Entitlements {
+    /// Badges cut to one short line, colours that are not `#rrggbb` dropped (the page puts them in styles), plans
+    /// without a key dropped.
+    pub fn checked(mut self) -> Self {
+        if let Some(plan) = self.plan.as_mut() {
+            plan.badge = badge_text(plan.badge.take());
+            plan.color = colour(plan.color.take());
+        }
+        self.plans.retain(|p| !p.key.trim().is_empty());
+        for plan in &mut self.plans {
+            plan.badge = badge_text(plan.badge.take());
+            plan.color = colour(plan.color.take());
+        }
+        self
+    }
+}
+
+/// A list whose entries that do not parse are dropped one by one.
+fn lenient_list<'de, D, T>(deserializer: D) -> Result<Vec<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::Array(items)) => items.into_iter().filter_map(|i| serde_json::from_value(i).ok()).collect(),
+        _ => Vec::new(),
+    })
+}
+
+/// A map whose entries that do not parse are dropped one by one.
+fn lenient_map<'de, D, T>(deserializer: D) -> Result<std::collections::BTreeMap<String, T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::Object(map)) => map.into_iter().filter_map(|(k, v)| serde_json::from_value(v).ok().map(|v| (k, v))).collect(),
+        _ => std::collections::BTreeMap::new(),
+    })
+}
+
+/// A plan's limits: numbers, and `null` for no limit.
+fn limit_numbers<'de, D>(deserializer: D) -> Result<std::collections::BTreeMap<String, Option<f64>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = Option::<serde_json::Value>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(serde_json::Value::Object(map)) => map
+            .into_iter()
+            .filter_map(|(k, v)| match v {
+                serde_json::Value::Null => Some((k, None)),
+                serde_json::Value::Number(n) => n.as_f64().map(|n| (k, Some(n))),
+                _ => None,
+            })
+            .collect(),
+        _ => std::collections::BTreeMap::new(),
+    })
 }

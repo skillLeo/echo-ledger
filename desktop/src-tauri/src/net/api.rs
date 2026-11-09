@@ -16,6 +16,8 @@ pub struct ApiClient {
     base: String,
     http: reqwest::Client,
     token: Option<String>,
+    /// This install's id (since v1.6, P3), sent by every sign-in route so the same computer keeps its row.
+    install_id: Option<String>,
 }
 
 impl ApiClient {
@@ -25,7 +27,21 @@ impl ApiClient {
             return Err(AppError::msg("The server URL must start with https:// (http is only allowed for localhost)."));
         }
         let http = build_http_client(&base, pins).map_err(AppError::Message)?;
-        Ok(Self { base, http, token })
+        Ok(Self { base, http, token, install_id: None })
+    }
+
+    /// The same client sending `install_id` with every sign-in (v1.6, P3); none leaves it out (an older app's body).
+    pub fn with_install_id(mut self, install_id: Option<String>) -> Self {
+        self.install_id = install_id.filter(|id| !id.trim().is_empty());
+        self
+    }
+
+    /// A sign-in body with this install's id, when there is one.
+    fn signing_in(&self, mut body: serde_json::Value) -> serde_json::Value {
+        if let (Some(id), Some(map)) = (&self.install_id, body.as_object_mut()) {
+            map.insert("install_id".into(), json!(id));
+        }
+        body
     }
 
     pub fn base_url(&self) -> &str {
@@ -77,7 +93,7 @@ impl ApiClient {
         let body: serde_json::Value = resp.json().await.unwrap_or_default();
         let code = body.get("code").and_then(|c| c.as_str()).map(str::to_string);
         let message = if code.as_deref() == Some("feature_not_in_plan") {
-            crate::plan::feature_text(body.get("feature").and_then(|f| f.as_str()))
+            crate::plan::feature_text_with(body.get("feature").and_then(|f| f.as_str()), body.get("lowest_plan").and_then(|f| f.as_str()))
         } else {
             body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string()
         };
@@ -100,7 +116,7 @@ impl ApiClient {
             .http
             .post(self.url("devices/register"))
             .header("Accept", "application/json")
-            .json(&json!({ "pairing_code": code, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version }))
+            .json(&self.signing_in(json!({ "pairing_code": code, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version })))
             .send()
             .await?;
         Self::parse(resp).await.map_err(Self::sign_in_throttled)
@@ -113,10 +129,10 @@ impl ApiClient {
             .http
             .post(self.url("auth/password"))
             .header("Accept", "application/json")
-            .json(&json!({
+            .json(&self.signing_in(json!({
                 "email": sign_in.email, "password": sign_in.password, "otp": sign_in.otp, "name": sign_in.name,
                 "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version,
-            }))
+            })))
             .send()
             .await?;
         if !resp.status().is_success() {
@@ -133,7 +149,7 @@ impl ApiClient {
             .http
             .post(self.url("auth/device/token"))
             .header("Accept", "application/json")
-            .json(&json!({ "code": code, "code_verifier": verifier, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version }))
+            .json(&self.signing_in(json!({ "code": code, "code_verifier": verifier, "name": name, "platform": platform, "app_version": env!("CARGO_PKG_VERSION"), "os_version": os_version })))
             .send()
             .await?;
         if !resp.status().is_success() {
@@ -159,6 +175,159 @@ impl ApiClient {
             Ok(options) => Ok(Some(options)),
             Err(e) if e.is_missing_route() => Ok(None),
             Err(e) => Err(e),
+        }
+    }
+
+    /// `POST /api/auth/start` (since v1.6): whether the email has an account and how it can sign in; none from an
+    /// older server (404), which keeps the v1.5 sign-in.
+    pub async fn auth_start(&self, email: &str) -> AppResult<Option<AuthStart>> {
+        let resp = self.http.post(self.url("auth/start")).header("Accept", "application/json").json(&json!({ "email": email })).send().await?;
+        if !resp.status().is_success() {
+            let e = Self::sign_in_throttled(Self::answer_error(resp).await);
+            return if e.is_missing_route() { Ok(None) } else { Err(e) };
+        }
+        Ok(Some(resp.json::<AuthStart>().await?))
+    }
+
+    /// `POST /api/auth/code` (since v1.6): a 6-digit code to the email. Asked again within a minute, the server answers
+    /// `429 resend_too_soon`, read as "not sent, ask again in `Retry-After` seconds".
+    pub async fn send_code(&self, email: &str, purpose: &str) -> AppResult<CodeSent> {
+        let resp = self
+            .http
+            .post(self.url("auth/code"))
+            .header("Accept", "application/json")
+            .json(&json!({ "email": email, "purpose": purpose, "turnstile": null }))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let e = Self::answer_error(resp).await;
+            if e.code() == Some("resend_too_soon") {
+                return Ok(CodeSent { resend_after: e.retry_after_secs().unwrap_or(60).max(1), expires_in: None, sent: false });
+            }
+            return Err(e);
+        }
+        Ok(CodeSent { sent: true, ..resp.json::<CodeSent>().await? })
+    }
+
+    /// `POST /api/auth/code/verify` (since v1.6): the emailed code (and the two-factor code once asked for). A wrong
+    /// code says how many tries are left (`422 invalid_code` with `attempts_left`).
+    pub async fn verify_code(&self, email: &str, code: &str, otp: Option<&str>, device: &ThisDevice) -> AppResult<CodeAnswer> {
+        let resp = self
+            .http
+            .post(self.url("auth/code/verify"))
+            .header("Accept", "application/json")
+            .json(&self.signing_in(json!({
+                "email": email, "code": code, "otp": otp, "name": device.name, "platform": device.platform,
+                "app_version": env!("CARGO_PKG_VERSION"), "os_version": device.os_version,
+            })))
+            .send()
+            .await?;
+        let status = resp.status().as_u16();
+        if status == 201 {
+            return Ok(CodeAnswer::SignedIn(Box::new(resp.json::<RegisterResponse>().await?)));
+        }
+        if resp.status().is_success() {
+            let body: serde_json::Value = resp.json().await?;
+            return match body.get("sign_up_token").and_then(|t| t.as_str()).filter(|t| !t.is_empty()) {
+                Some(token) => Ok(CodeAnswer::Profile { sign_up_token: token.to_string() }),
+                // A 200 with a token instead (a server that answers sign-ins with 200).
+                None => Ok(CodeAnswer::SignedIn(Box::new(serde_json::from_value::<RegisterResponse>(body)?))),
+            };
+        }
+        let retry_after_secs = resp.headers().get(reqwest::header::RETRY_AFTER).and_then(|v| v.to_str().ok()).and_then(|v| v.trim().parse::<u64>().ok());
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        let code = body.get("code").and_then(|c| c.as_str()).map(str::to_string);
+        if code.as_deref() == Some("otp_required") {
+            return Ok(CodeAnswer::OtpRequired);
+        }
+        if code.as_deref() == Some("invalid_code") {
+            let left = body.get("attempts_left").and_then(|n| n.as_u64());
+            return Err(AppError::Message(crate::account::wrong_code_text(left)));
+        }
+        let message = body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string();
+        Err(Self::sign_in_throttled(AppError::Server { status, message, code, retry_after_secs }))
+    }
+
+    /// `POST /api/auth/sign-up` (since v1.6): the new account, its personal workspace on the default plan and this
+    /// computer's token. A used or old sign-up token is `422 invalid_code`.
+    pub async fn sign_up(&self, sign_up_token: &str, name: &str, device: &ThisDevice) -> AppResult<RegisterResponse> {
+        let resp = self
+            .http
+            .post(self.url("auth/sign-up"))
+            .header("Accept", "application/json")
+            .json(&self.signing_in(json!({
+                "sign_up_token": sign_up_token, "name": name, "accept_terms": true, "platform": device.platform,
+                "app_version": env!("CARGO_PKG_VERSION"), "os_version": device.os_version,
+            })))
+            .send()
+            .await?;
+        if !resp.status().is_success() {
+            let e = Self::sign_in_throttled(Self::answer_error(resp).await);
+            return Err(if e.code() == Some("invalid_code") { AppError::msg(crate::account::SIGN_UP_EXPIRED) } else { e });
+        }
+        Ok(resp.json::<RegisterResponse>().await?)
+    }
+
+    /// `GET /api/me/entitlements` (since v1.6): what this person may use; none from an older server (everything on).
+    pub async fn entitlements(&self) -> AppResult<Option<Entitlements>> {
+        let resp = self.authed(self.http.get(self.url("me/entitlements")))?.send().await?;
+        match Self::parse::<Entitlements>(resp).await {
+            Ok(e) => Ok(Some(e.checked())),
+            Err(e) if e.is_missing_route() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `PUT /api/me/transcription-key` (since v1.6): the person's own Groq key, checked by the server once. The key is
+    /// never logged and never comes back (only its last four characters).
+    pub async fn set_transcription_key(&self, provider: &str, key: &str) -> AppResult<TranscriptionKeyState> {
+        let resp = self.authed(self.http.put(self.url("me/transcription-key")))?.json(&json!({ "provider": provider, "key": key })).send().await?;
+        match Self::parse::<TranscriptionKeyState>(resp).await {
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take your own transcription key yet.")),
+            other => other,
+        }
+    }
+
+    /// `DELETE /api/me/transcription-key` (since v1.6).
+    pub async fn delete_transcription_key(&self) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url("me/transcription-key")))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/upgrade-requests` (since v1.6). One pending request at a time: `409 request_pending` answers with the
+    /// pending one, which is returned as if it had just been made.
+    pub async fn request_upgrade(&self, plan: &str, message: Option<&str>) -> AppResult<UpgradeRequest> {
+        let resp = self.authed(self.http.post(self.url("upgrade-requests")))?.json(&json!({ "plan": plan, "message": message })).send().await?;
+        if resp.status().as_u16() == 409 {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let pending = ["request", "upgrade_request", "data"].iter().find_map(|k| body.get(*k)).cloned().unwrap_or_else(|| body.clone());
+            return match serde_json::from_value::<UpgradeRequest>(pending).ok().filter(|r| !r.id.is_empty()) {
+                Some(request) => Ok(request),
+                None => Err(AppError::msg("You already asked for an upgrade. It is waiting for the owner.")),
+            };
+        }
+        match Self::parse::<UpgradeRequest>(resp).await {
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take upgrade requests yet.")),
+            other => other,
+        }
+    }
+
+    /// `GET /api/upgrade-requests/latest` (since v1.6); none when there is none (or on an older server).
+    pub async fn latest_upgrade_request(&self) -> AppResult<Option<UpgradeRequest>> {
+        let resp = self.authed(self.http.get(self.url("upgrade-requests/latest")))?.send().await?;
+        match Self::parse::<UpgradeRequest>(resp).await {
+            Ok(request) => Ok(Some(request)),
+            Err(e) if e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `PATCH /api/devices/{id}` (v1.6, P3, proposed): a new name for one of the account's devices.
+    pub async fn rename_device(&self, id: &str, name: &str) -> AppResult<serde_json::Value> {
+        let resp = self.authed(self.http.patch(self.url(&format!("devices/{id}"))))?.json(&json!({ "name": name })).send().await?;
+        match Self::parse::<serde_json::Value>(resp).await {
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server cannot rename devices yet. Rename it on the console's Devices page.")),
+            other => other,
         }
     }
 

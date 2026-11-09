@@ -27,6 +27,8 @@ import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
 import { improvingView, stepOf, transcribingLine, viewPercent } from "../../lib/progress";
+import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
+import { openSettingsSection } from "../../lib/entitlements";
 import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
@@ -1270,6 +1272,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
                       {/* The server says what happened; the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
+                      {/* The Free plan (v1.6): transcribed with the person's own Groq key, and none is added yet. */}
+                      {transcript.error_code === "needs_transcription_key" && (
+                        <div className="notice-hint needs-key" data-testid="needs-key">
+                          <span>{NEEDS_KEY_TEXT}</span>
+                          <button type="button" className="btn compact" onClick={() => openSettingsSection("transcription-key")}>Add my Groq key</button>
+                        </div>
+                      )}
                     </div>
                   ) : isTranscribing(transcript.status) ? (
                     // The library's progress is the fresher one: live status re-reads it every few seconds.
@@ -1286,6 +1295,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                             ))}
                             <button type="button" aria-pressed={showAs === "original"} onClick={() => { viewPicked.current = true; void chooseView("original"); }}>Original</button>
                           </span>
+                        )}
+                        {/* The views are a paid feature since v1.6: their badge where the switch would be. */}
+                        {transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0 && !readOnly && (
+                          <LockedChip feature="views" label="Roman Urdu · English · اردو" />
                         )}
                       </div>
                       {barView !== null && transcript.kind === "final" && <ImprovingBar view={barView} percent={barPercent} />}

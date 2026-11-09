@@ -25,6 +25,6 @@ describe("the recording-consent notice", () => {
     fireEvent.click(screen.getByRole("button", { name: "Terms" }));
     fireEvent.click(screen.getByRole("button", { name: "Privacy" }));
     await flushAsync();
-    expect(callsOf("server_page_open")).toEqual([{ page: "terms" }, { page: "privacy" }]);
+    expect(callsOf("server_page_open")).toEqual([{ page: "terms", serverUrl: null }, { page: "privacy", serverUrl: null }]);
   });
 });

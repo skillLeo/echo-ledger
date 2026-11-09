@@ -638,6 +638,36 @@ with fakes; these rows prove the system around them.
 | 1C-F2 | Sign in with an account that has two-step sign-in. | The code field appears; after it, Record opens with the Ready check. |
 | 1C-A8 | A 30 s call where the other side plays through a headset that is not the default output (or is muted). | After the call: **Only your voice was recorded**, with the reason and the fix; the banner opens the Ready check. |
 
+### Desktop v1.6: sign-up, plans, devices, updates (what only a real computer can prove)
+
+Use the CI build of `v16-desktop` (Actions → "Desktop (macOS)" or "Desktop (Windows)" → Artifacts), built with the
+repository variable `ECHOLEDGER_DEFAULT_SERVER` set, against the staging server with the v1.6 routes. Tests cover the
+screens and the requests with fakes; these rows prove the system around them.
+
+| # | Check | Expected |
+|---|---|---|
+| 16-S1 | Sign out. Look at the first screen. | Only **Email** and **Continue**, **Continue with Google** (when the server has it), a small **Sign in with QR / code**, **Advanced**, and "Your data is encrypted on this computer." No server field, no "token" or "keychain". |
+| 16-S2 | Type a new email, **Continue**. | An email with a 6-digit code arrives; the app says where it sent it; **Send a new code** counts down from 60 s. |
+| 16-S3 | Type the code, then your name; open **Terms** and **Privacy**; tick the box; **Create account**. | Both pages open in the browser on the server; the account is made on Free; the Record page opens with the Ready check; the device list shows this computer as "Windows 11 PC" / "MacBook Pro" (or "Mac", "iMac"). |
+| 16-S4 | Sign out; sign in with the same email and **Email me a code instead**; then with the password; then on an account with two-step sign-in. | Each reaches the Library; the two-step code is asked after the password or the emailed code. |
+| 16-S5 | Type a wrong code three times; wait 11 minutes and type the right one. | "You can try N more times"; then "This code has expired…", and **Send a new code** works. |
+| 16-S6 | **Advanced → Use a different server**: the staging address; sign in. Sign out. | It signs in to that server; the next sign-in screen shows that server under Advanced, with **Use … again** for the built-in one. |
+| 16-S7 | A build without `ECHOLEDGER_DEFAULT_SERVER` (local). | The first screen asks for the server address as before. |
+| 16-S8 | Against a v1.5 server (no `/api/auth/start`). | Email → Continue shows the v1.5 password and browser sign-in; it works as before. |
+| 16-D1 | Sign in on the same computer three times (signing out between). | Settings → Account → Devices lists this computer once ("Signed in again" on the server), not three times. |
+| 16-D2 | Rename this computer and another device in Account → Devices. | The names change in the list, on the console and in the app's sidebar for this computer. Against a server without the rename route: the app says to rename it on the console. |
+| 16-D3 | Two Windows user accounts on one PC, each signed in. | Two devices (each has its own install id); each keeps its own place on signing in again. |
+| 16-E1 | As the Free account: Record, a finished recording, Settings → Screen moments, a project's Notes. | **BUSINESS ✦** on Live Translate, **PRO ✦** beside the views and on Screen moments, the badge on Notes; one style, the plan's colour, a lock. |
+| 16-E2 | Click a badge; compare the plans; **Request upgrade** with a message. | The sheet explains the feature, shows the plans with prices and limits, then the payment instructions and "We'll activate it once confirmed"; Plan & usage shows the request as pending; a second request shows the pending one. |
+| 16-E3 | Approve the request in the admin panel; bring the app to the front. | Within a moment of the focus the badges are gone and the features work; Plan & usage says approved. |
+| 16-E4 | As Free without a key, record a 1-minute voice note. | The transcript fails with "your plan uses your own free Groq key…" and **Add my Groq key**, which opens Account → Transcription key. |
+| 16-E5 | Transcription key: **Open console.groq.com**, make a key, paste it, **Save**; then paste a wrong key. | The browser opens console.groq.com/keys; "Key added · ending xxxx"; a wrong key says Groq did not accept it. New recordings are transcribed. |
+| 16-E6 | Against a v1.5 server. | No badge anywhere; Settings → Account shows the v1.5 Plan card; everything works as before. |
+| 16-U1 | Install 1.5.x from the CI artifacts on Windows and a Mac; publish a higher signed build on staging (`echoledger:publish-release … --signature=…`); start the app. | Within about a minute **Update ready — Restart**; **Restart** installs and opens the new version; signed in, settings kept. |
+| 16-U2 | The Windows laptop on 1.1.0. | It never offers an update (1.1.0 has no updater): install the new version by hand once, then repeat 16-U1. |
+| 16-U3 | Leave the app running for 7 hours with a newer build published meanwhile. | The update is found without pressing Check for updates. |
+| 16-G1 | Library grouped by Status: click a group's box, then its chevron, then its name. | The box only selects (none, some, all with a dash for some); the chevron and the name only fold and unfold. Windows and Mac. |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |

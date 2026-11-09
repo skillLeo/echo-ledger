@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { api, listenTo, type AfterCall, type AppStatus, type Corner, type Settings, type ShortcutAction, type SiteRule, type TranscriptionLanguage } from "../../lib/ipc";
 import { acceleratorFromEvent, prettyShortcut, sourceAppLabel } from "../../lib/format";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
@@ -10,6 +10,8 @@ import { DictationCard } from "./DictationSettings";
 import { ScreenMomentsCard } from "./ScreenSettings";
 import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./SecuritySettings";
 import { AccountCard, PlanCard, YourDataCard, useAccount } from "./AccountSettings";
+import { PlanUsageCard, TranscriptionKeyCard } from "./Upgrade";
+import { useEntitlements } from "../../lib/entitlements";
 import { ConsentNotice } from "./ConsentNotice";
 import { UpdatesPanel } from "./UpdateSettings";
 import { MacCheckCard } from "./MacCheck";
@@ -159,8 +161,10 @@ function CallSites({ rules, onSave }: { rules: SiteRule[]; onSave: (rules: SiteR
   );
 }
 
-export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
+export function SettingsView({ status, run, onUnpaired, theme, onTheme, section = null }: {
   status: AppStatus;
+  /** A section to open and show (`transcription-key` from a recording that needs the key, say), with a fresh `seq`. */
+  section?: { id: string; seq: number } | null;
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
   onUnpaired: (s: AppStatus) => void;
   /** The theme choice and how to change it (the sidebar's toggle does the same). */
@@ -181,6 +185,24 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
   const [query, setQuery] = useState("");
   // The account (v1.5): none from a server without accounts, and then no Account group.
   const [account, setAccount] = useAccount();
+  // What this person may use (v1.6): Plan & usage and the Free plan's own key; none from an older server.
+  const entitlements = useEntitlements();
+  const showKey = !!entitlements && (entitlements.features.platform_transcription?.enabled === false || !!entitlements.transcription_key?.set
+    || entitlements.engines.includes("own_groq"));
+  // A section asked for from elsewhere: its group, then the section itself in view once it is there.
+  useEffect(() => {
+    if (!section) return;
+    setQuery("");
+    setGroup("account");
+  }, [section]);
+  const shownSection = useRef(0);
+  useEffect(() => {
+    if (!section || shownSection.current === section.seq) return;
+    const element = document.getElementById(`settings-${section.id}`);
+    if (!element) return; // not there yet (the settings or the entitlements are still being read): the next render tries
+    shownSection.current = section.seq;
+    element.scrollIntoView?.({ block: "start" });
+  });
 
   useEffect(() => {
     api.settings().then(setSettings).catch(() => undefined);
@@ -221,8 +243,13 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
     ...(account ? [
       { id: "account", group: "account", title: "Your account", keywords: "account email name workspace role two-factor google sign out everywhere",
         node: <AccountCard account={account} status={status} run={run} onSignedOut={onUnpaired} /> },
-      { id: "plan", group: "account", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
-        node: <PlanCard status={status} /> },
+      entitlements
+        ? { id: "plan", group: "account", title: "Plan & usage", keywords: "plan usage limits minutes storage devices uploads upgrade request pro business badge features",
+          node: <PlanUsageCard e={entitlements} /> }
+        : { id: "plan", group: "account", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
+          node: <PlanCard status={status} /> },
+      ...(entitlements && showKey ? [{ id: "transcription-key", group: "account", title: "Transcription key", keywords: "transcription key groq free own api key",
+        node: <TranscriptionKeyCard e={entitlements} /> }] satisfies SettingsSection[] : []),
       { id: "your-data", group: "account", title: "Your data", keywords: "export my data download zip delete my account",
         node: <YourDataCard account={account} onAccount={setAccount} /> },
     ] satisfies SettingsSection[] : []),
@@ -326,7 +353,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       </div>
     ) },
     { id: "lock", group: "general", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
-    { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
+    // Account → Devices (v1.6, P3) when the server has accounts: rename any, revoke the others.
+    { id: "devices", group: account ? "account" : "general", title: "Devices", keywords: "devices rename revoke signed in paired activity audit", node: <DevicesCard run={run} /> },
     { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>{status.deviceName}</b><div className="small muted" data-testid="signed-in-to">{signedInLine(status.serverUrl)}</div></div><span className="spacer" />
@@ -374,7 +402,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
         <div className="settings-content">
           {visible.length === 0 && <div className="empty">No setting matches “{query}”.</div>}
           {visible.map((s, i) => (
-            <section key={s.id} aria-label={s.title}>
+            <section key={s.id} id={`settings-${s.id}`} aria-label={s.title}>
               {(i === 0 || visible[i - 1].group !== s.group) && <h2 className="settings-group-title">{GROUP_LABEL[s.group]}</h2>}
               {s.node}
             </section>

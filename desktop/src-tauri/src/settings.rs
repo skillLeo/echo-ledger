@@ -210,6 +210,8 @@ pub struct Settings {
     pub pins: Vec<String>,
     pub device_id: Option<String>,
     pub device_name: Option<String>,
+    /// This install's id (v1.6, P3, `identity`): made once, sent with every sign-in; never exported.
+    pub install_id: Option<String>,
     pub shortcuts: HashMap<Action, String>,
     /// Show live captions automatically when a recording starts.
     pub captions_on_record: bool,
@@ -291,6 +293,7 @@ impl Default for Settings {
             pins: vec![],
             device_id: None,
             device_name: None,
+            install_id: None,
             shortcuts: default_map(),
             captions_on_record: true,
             auto_mode: true, // recording calls is the core feature; the recording indicator and tray state stay visible

@@ -23,10 +23,10 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [x] Plan saved locally; the design reference copied to docs/design/reference/ and excluded locally (and guarded by tools/repo-policy). Phase 1C items that overlap (progress, group by, sign-in, notifications screen) are redone here; widgets, Quick Settings tile and the tap-count audit continue after P5.
 
 ## P1 — Sign-up, Free plan, entitlements
-- [ ] P1.1 One sign-in flow (email → code for a new email → name → Terms → account on the default plan; password or "Email me a code" → 2FA; Google; no server address, Advanced → another server; QR a small link; plain words) on web, phone and desktop. **Phone done** 2026-11-09 (SignInFlow, SignInScreen; the server from the build: `echoledger.defaultServer` in the user's gradle.properties, never in the repo; install_id on every sign-in; PairingScreenTest 15, SignInFlowTest). The instrumented e2e tests use the new sign-in through `SignInScreen.otherWays()` (compiled; to run in the next emulator window, together with their older stale labels such as the "Settings" tab).
+- [ ] P1.1 One sign-in flow (email → code for a new email → name → Terms → account on the default plan; password or "Email me a code" → 2FA; Google; no server address, Advanced → another server; QR a small link; plain words) on web, phone and desktop. **Phone done** 2026-11-09 (SignInFlow, SignInScreen; the server from the build: `echoledger.defaultServer` in the user's gradle.properties, never in the repo; install_id on every sign-in; PairingScreenTest 15, SignInFlowTest). The instrumented e2e tests use the new sign-in through `SignInScreen.otherWays()` (compiled; to run in the next emulator window, together with their older stale labels such as the "Settings" tab). **Desktop done** (merged 2026-11-09, `049164b`, `ca1a680`; server from `ECHOLEDGER_DEFAULT_SERVER` at build time).
 - [ ] P1.2 Entitlements engine: features registry, plans with features and limits, per-user overrides and plan expiry, every API checks, `GET /api/me/entitlements`; provider keys never leave the server. **Phone done** 2026-11-09: `GET /api/me/entitlements` read on every refresh into the saved PlanState (works offline; an older server keeps everything on).
 - [ ] P1.3 Default plans Free / Pro / Business; the super admin on Business unlimited; Free transcribes only with the user's own Groq key (encrypted per user) or on-device.
-- [ ] P1.4 One badge style, the upgrade sheet, "Request upgrade", payment instructions. **Phone done** 2026-11-09 (PlanBadge "PRO ✦" in the plan colour with a lock; UpgradeSheet with the plans, Request upgrade, the payment instructions; locks on the views and Live Translate; You → Plan & usage and Transcription key with the 3 steps; EntitlementsTest, PlanUiTest).
+- [ ] P1.4 One badge style, the upgrade sheet, "Request upgrade", payment instructions. **Phone done** 2026-11-09 (PlanBadge "PRO ✦" in the plan colour with a lock; UpgradeSheet with the plans, Request upgrade, the payment instructions; locks on the views and Live Translate; You → Plan & usage and Transcription key with the 3 steps; EntitlementsTest, PlanUiTest). **Desktop done** (`356776c`: badges on Live Translate, views, screen moments, AI notes; Plan & usage; Transcription key).
 - [ ] P1.5 Abuse protection: Turnstile, disposable-email blocklist, sign-ups per IP a day, device limits, unusual-usage alert, suspend.
 
 ## P2 — Admin panel
@@ -39,14 +39,14 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [ ] P2.7 System: sign-up settings, app versions, announcement, maintenance, audit log.
 
 ## P3 — Devices
-- [ ] P3.1 Stable per-install identity, one row per device (duplicates merged), readable names, statuses, rename / sign out / sign in again / remove, live QR status, device limit, new sign-in alert.
-- [ ] P3.2 Installed desktops update themselves (needs V1).
+- [ ] P3.1 Stable per-install identity, one row per device (duplicates merged), readable names, statuses, rename / sign out / sign in again / remove, live QR status, device limit, new sign-in alert. **Desktop done** (install id = SHA-256 of the machine id and data folder, "Windows 11 PC" / "MacBook Pro", Rename).
+- [ ] P3.2 Installed desktops update themselves (needs V1). **Desktop part done** (`856d4df`: checks 45 s after start and every 6 h, "Update ready — Restart"). Still needed: V1 (the key as a CI secret), a publish step (`echoledger:publish-release`), a version above the installed one; the laptop's 1.1.0 has no updater and needs one manual install (desktop/RELEASE.md).
 
 ## P4 — App shell (web + desktop)
 - [ ] P4.1 Sidebar · P4.2 nested column · P4.3 top bar · P4.4 page pattern · P4.5 Account tabs · P4.6 phone web · P4.7 screenshot review.
 
 ## P5 — Library, progress, sharing
-- [ ] P5.1 Group header: checkbox only selects, chevron/label only folds (web, desktop, phone). **Phone done** 2026-11-09 (GroupHeader: name and arrow fold, the tri-state box only selects, a long press selects the group; LibraryScreenTest).
+- [ ] P5.1 Group header: checkbox only selects, chevron/label only folds (web, desktop, phone). **Phone done** 2026-11-09 (GroupHeader: name and arrow fold, the tri-state box only selects, a long press selects the group; LibraryScreenTest). **Desktop done** (`584e504`).
 - [ ] P5.2 Web Library decluttered.
 - [ ] P5.3 Auto titles backfilled; failed uploads explained.
 - [ ] P5.4 Progress everywhere, Continue in background, Notify me when ready. **Phone: shared notes done** 2026-11-09 (Library rows and the share page since Phase 1C; Continue in background goes back to the app it came from while a quiet notification shows Uploading % / Transcribing / Improving and opens the note, replaced by the ready notice; SharedNotesWorkerTest). Recording page and desktop/web next.

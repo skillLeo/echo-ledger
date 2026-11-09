@@ -3,7 +3,8 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { LibraryView } from "./LibraryView";
 import type { LibraryItem, Segment, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeTranscript } from "../../test/fixtures";
+import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -237,6 +238,28 @@ describe("LibraryView list", () => {
     expect(screen.getByText("3 selected")).toBeInTheDocument();
     fireEvent.click(box);
     expect(screen.getByText("Select recordings")).toBeInTheDocument();
+  });
+
+  it("ticking a header's box selects its group and never folds it (P5.1)", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    fireEvent.click(screen.getByRole("checkbox", { name: "Select all in Ready" }));
+    expect(screen.getByText("3 selected")).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(titlesInList()).toHaveLength(5);
+  });
+
+  it("folding a group from its chevron or name never selects it (P5.1)", async () => {
+    await renderLibrary();
+    choose("Group by", "Status");
+    const toggle = screen.getByRole("button", { name: /^Ready/ });
+    fireEvent.click(toggle.querySelector(".group-caret")!);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(toggle.querySelector(".group-label")!);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
+    expect((screen.getByRole("checkbox", { name: "Select all in Ready" }) as HTMLInputElement).checked).toBe(false);
   });
 
   it("remembers Group by and Sort by per view", async () => {
@@ -477,6 +500,39 @@ describe("LibraryView transcript", () => {
     const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
     expect(notice).toHaveTextContent("No audio was captured in this recording.");
     expect(within(notice).getByText("Check your microphone and the audio device, then try again.")).toBeInTheDocument();
+  });
+
+  // v1.6: the Free plan transcribes with the person's own Groq key; without one the transcript fails and says where to add it.
+  it("says a recording needs the person's own key and opens Account → Transcription key", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Add your free Groq key in Account → Transcription key", error_code: "needs_transcription_key" });
+    const opened = vi.fn();
+    const listener = (e: Event) => opened((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_SECTION_EVENT, listener);
+    try {
+      await renderLibrary();
+      await selectItem("Google Meet standup");
+      const hint = await within(detail()).findByTestId("needs-key");
+      expect(hint).toHaveTextContent("your plan uses your own free Groq key, and none is added yet");
+      fireEvent.click(within(hint).getByRole("button", { name: "Add my Groq key" }));
+      expect(opened).toHaveBeenCalledWith("transcription-key");
+      expect(within(detail()).queryByText(/Check your microphone/)).not.toBeInTheDocument();
+    } finally {
+      window.removeEventListener(OPEN_SECTION_EVENT, listener);
+    }
+  });
+
+  it("puts the views' badge where Show as would be when the plan leaves the views out (v1.6)", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    try {
+      await renderLibrary();
+      await selectItem("Zoom with Acme");
+      const chip = await within(detail()).findByTestId("locked-views");
+      expect(chip).toHaveTextContent("Roman Urdu · English · اردو");
+      expect(within(chip).getByRole("button", { name: /is in the Pro plan/ })).toHaveTextContent("PRO ✦");
+    } finally {
+      act(() => resetEntitlementsForTests());
+    }
+    expect(within(detail()).queryByTestId("locked-views")).not.toBeInTheDocument();
   });
 
   it.each([null, undefined, "budget_exceeded", "provider_error"])("adds no hint for error_code %s", async (code) => {

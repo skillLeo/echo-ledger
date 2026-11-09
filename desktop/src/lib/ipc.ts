@@ -68,6 +68,81 @@ export interface AuthOptions {
   signUpUrl: string | null;
   resetUrl: string | null;
   browserSignIn: boolean;
+  /** Email codes are offered (since v1.6). */
+  code: boolean;
+}
+
+/** "Email → Continue" (since v1.6): `older` is a server without the route (the v1.5 sign-in then). */
+export interface AuthStart {
+  account: "existing" | "new" | "older";
+  methods: string[];
+  signUp: boolean;
+}
+/** A code on its way, or (`sent: false`) one went out a moment ago and another may be asked for in `resendAfter` s. */
+export interface CodeSent {
+  resendAfter: number;
+  expiresIn: number | null;
+  sent: boolean;
+}
+export type CodeResult = "signed_in" | "otp_required" | "profile";
+export interface CodeOutcome {
+  result: CodeResult;
+  status: AppStatus | null;
+}
+
+/** `GET /api/me/entitlements` (since v1.6), as the server writes it; the core drops malformed parts and odd colours. */
+export interface Entitlements {
+  plan: EntitlementPlan | null;
+  features: Record<string, FeatureEntitlement>;
+  limits: Record<string, LimitEntitlement>;
+  engines: string[];
+  transcription_key: TranscriptionKeyState | null;
+  upgrade_request: UpgradeRequest | null;
+  plans: OfferedPlan[];
+}
+export interface EntitlementPlan {
+  key: string;
+  name: string;
+  badge: string | null;
+  color: string | null;
+  expires_at: string | null;
+  trial_minutes_left: number | null;
+}
+export interface FeatureEntitlement {
+  enabled: boolean;
+  name: string | null;
+  description: string | null;
+  cost: string | null;
+  lowest_plan: string | null;
+}
+export interface LimitEntitlement {
+  limit: number | null;
+  used: number | null;
+}
+export interface TranscriptionKeyState {
+  provider: string | null;
+  set: boolean;
+  last4: string | null;
+}
+export interface UpgradeRequest {
+  id: string;
+  plan: string;
+  status: "pending" | "approved" | "declined" | string;
+  message: string | null;
+  payment_instructions: string | null;
+  created_at: string | null;
+  decided_at: string | null;
+  reply: string | null;
+}
+export interface OfferedPlan {
+  key: string;
+  name: string;
+  badge: string | null;
+  color: string | null;
+  price: string | null;
+  description: string | null;
+  features: string[];
+  limits: Record<string, number | null>;
 }
 
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
@@ -167,6 +242,7 @@ export interface Settings {
   pins: string[];
   deviceId: string | null;
   deviceName: string | null;
+  installId: string | null; // since v1.6: sent with every sign-in, never exported
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
@@ -1161,6 +1237,22 @@ export const api = {
   authOptions: (serverUrl: string) => invoke<AuthOptions | null>("auth_options", { serverUrl }),
   /** Create account or Forgot password: the server's own page in the browser. */
   openAuthPage: (serverUrl: string, url: string) => invoke<void>("auth_page_open", { serverUrl, url }),
+  // Sign-up and sign-in with an email code (since v1.6). A new email's sign-up token stays in the core.
+  authStart: (serverUrl: string, email: string) => invoke<AuthStart>("auth_start", { serverUrl, email }),
+  sendCode: (serverUrl: string, email: string, purpose: "sign_in" | "sign_up") => invoke<CodeSent>("auth_code_send", { serverUrl, email, purpose }),
+  verifyCode: (serverUrl: string, email: string, code: string, otp: string | null, deviceName: string) =>
+    invoke<CodeOutcome>("auth_code_verify", { serverUrl, email, code, otp, deviceName }),
+  signUp: (name: string, acceptTerms: boolean) => invoke<AppStatus>("auth_sign_up", { name, acceptTerms }),
+  // What this person may use, their own key, upgrades (since v1.6); null entitlements from an older server.
+  entitlements: () => invoke<Entitlements | null>("entitlements_get"),
+  setTranscriptionKey: (key: string) => invoke<TranscriptionKeyState>("transcription_key_set", { key }),
+  deleteTranscriptionKey: () => invoke<void>("transcription_key_delete"),
+  /** console.groq.com's API keys page in the browser, where the free key is made. */
+  openGroqConsole: () => invoke<void>("groq_console_open"),
+  requestUpgrade: (plan: string, message: string | null) => invoke<UpgradeRequest>("upgrade_request_create", { plan, message }),
+  latestUpgradeRequest: () => invoke<UpgradeRequest | null>("upgrade_request_latest"),
+  /** Account → Devices → Rename (since v1.6); the new name. */
+  renameDevice: (id: string, name: string) => invoke<string>("device_rename", { id, name }),
   /** null on a server without accounts. */
   account: () => invoke<Account | null>("account_get"),
   /** Every device and console session of the account, this computer too: the answer is the signed-out status. */
@@ -1170,12 +1262,12 @@ export const api = {
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),
-  /** The server's Terms, Privacy, account deletion or downloads page in the browser. */
-  openServerPage: (page: ServerPage) => invoke<void>("server_page_open", { page }),
+  /** The server's Terms, Privacy, account deletion or downloads page in the browser; `serverUrl` before signing in. */
+  openServerPage: (page: ServerPage, serverUrl: string | null = null) => invoke<void>("server_page_open", { page, serverUrl }),
   // Updates (since v1.5): checked every 12 hours and on request; `update:status` follows the check and the download.
   updateStatus: () => invoke<UpdateStatus>("update_status"),
   checkForUpdates: () => invoke<UpdateStatus>("update_check"),
-  /** "Restart now": installs the ready update and starts the new version. */
+  /** "Restart": installs the ready update and starts the new version. */
   installUpdate: () => invoke<void>("update_install"),
   settings: () => invoke<Settings>("get_settings"),
   updateSettings: (patch: SettingsPatch) => invoke<Settings>("update_settings", { patch }),

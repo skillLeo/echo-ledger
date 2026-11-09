@@ -1,6 +1,6 @@
 // Updates (since v1.5): Settings → About's "Check for updates" and the prompt once an update is downloaded. The core
-// checks the signed-in server every 12 hours, verifies the package's signature, and installs it the next time
-// EchoLedger starts, or at once on "Restart now" (never while recording).
+// checks the signed-in server soon after EchoLedger starts and every 6 hours (v1.6), verifies the package's signature,
+// and installs it the next time EchoLedger starts, or at once on "Restart" (never while recording).
 import { useEffect, useState } from "react";
 import { api, errorMessage, listenTo, type AppStatus, type UpdateStatus } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
@@ -29,19 +29,19 @@ export function updateLine(status: UpdateStatus): string {
     case "downloading":
       return `Downloading EchoLedger ${status.version ?? ""}${status.progress !== null ? ` · ${status.progress}%` : "…"}`;
     case "ready":
-      return `EchoLedger ${status.version} is ready. It installs the next time EchoLedger starts.`;
+      return `Update ready — EchoLedger ${status.version}. Restart to install it, or it installs the next time EchoLedger starts.`;
     case "up_to_date":
     case "failed":
     case "unavailable":
       return status.message ?? "";
     default:
-      return "EchoLedger looks for updates on your server every 12 hours.";
+      return "EchoLedger looks for updates when it starts and every 6 hours.";
   }
 }
 
 const RECORDING_BLOCKS = "Stop the recording first: EchoLedger restarts to install the update.";
 
-/** Settings → About: the version, Check for updates, and Restart now once an update is ready. */
+/** Settings → About: the version, Check for updates, and Restart once an update is ready. */
 export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
   const [status, setStatus] = useUpdateStatus();
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +73,7 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
         <span className="spacer" />
         {status.phase === "ready" ? (
           <button type="button" className="btn primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>
-            Restart now
+            Restart
           </button>
         ) : (
           <button type="button" className="btn ghost" disabled={working} onClick={() => void check()}><DownloadIcon size={15} />Check for updates</button>
@@ -86,7 +86,7 @@ export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {
   );
 }
 
-/** The prompt across the top of the window once an update is downloaded: Restart now, or Later (the next start). */
+/** "Update ready — Restart" across the top of the window once an update is downloaded, or Later (the next start). */
 export function UpdateBanner({ appStatus, notify }: { appStatus: AppStatus; notify: (text: string, error?: boolean) => void }) {
   const [status] = useUpdateStatus();
   const [later, setLater] = useState<string | null>(null);
@@ -101,8 +101,8 @@ export function UpdateBanner({ appStatus, notify }: { appStatus: AppStatus; noti
   return (
     <div className="banner update-banner" data-testid="update-banner" role="status">
       <DownloadIcon size={16} />
-      <span>EchoLedger {status.version} is ready to install.</span>
-      <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart now</button>
+      <span><b>Update ready</b> — EchoLedger {status.version}</span>
+      <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart</button>
       <button type="button" className="btn compact ghost" onClick={() => { setLater(status.version); notify("The update installs the next time EchoLedger starts."); }}>Later</button>
     </div>
   );

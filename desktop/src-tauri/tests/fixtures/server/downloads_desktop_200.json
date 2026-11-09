@@ -1,0 +1,19 @@
+{
+  "version": "1.6.0",
+  "notes": "Sign in with your email, plans and badges, devices that keep their place.",
+  "pub_date": "2026-11-20T09:00:00Z",
+  "platforms": {
+    "windows-x86_64": {
+      "url": "https://ledger.example.test/downloads/files/EchoLedger-1.6.0-setup.exe",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYW1wbGVPbmx5Tm90QVJlYWxTaWduYXR1cmUK"
+    },
+    "darwin-aarch64": {
+      "url": "https://ledger.example.test/downloads/files/EchoLedger-1.6.0-mac-apple-silicon.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYW1wbGVPbmx5Tm90QVJlYWxTaWduYXR1cmUK"
+    },
+    "darwin-x86_64": {
+      "url": "https://ledger.example.test/downloads/files/EchoLedger-1.6.0-mac-intel.app.tar.gz",
+      "signature": "dW50cnVzdGVkIGNvbW1lbnQ6IHNpZ25hdHVyZSBmcm9tIHRhdXJpIHNlY3JldCBrZXkKUlVTYW1wbGVPbmx5Tm90QVJlYWxTaWduYXR1cmUK"
+    }
+  }
+}

@@ -72,14 +72,33 @@ const ROLES: [&str; 4] = ["owner", "admin", "member", "viewer"];
 
 /// What the app says for `403 feature_not_in_plan`, by the answer's `feature`.
 pub fn feature_text(feature: Option<&str>) -> String {
+    feature_text_with(feature, None)
+}
+
+/// The same with the answer's `lowest_plan` (since v1.6): which plan has it and where to ask for it.
+pub fn feature_text_with(feature: Option<&str>, lowest_plan: Option<&str>) -> String {
     let what = match feature {
         Some("live_translate") => "Live Translate is",
         Some("screen_moments") => "Screen moments are",
         Some("ai_notes") => "Call notes, memory and Ask are",
         Some("connector") => "The Claude and ChatGPT connector is",
+        Some("views") => "Roman Urdu and the other transcript views are",
+        Some("double_check") => "Double-check is",
+        Some("platform_transcription") => "Transcription on EchoLedger is",
+        Some("team") => "A team workspace is",
+        Some("premium_engines") => "The premium engines are",
         _ => "This is",
     };
-    format!("{what} not in your workspace's plan. The workspace owner can change the plan in the console.")
+    match lowest_plan.map(str::trim).filter(|p| !p.is_empty() && p.len() <= 32) {
+        Some(plan) => format!("{what} in the {} plan. Open Settings → Account → Plan & usage to ask for it.", plan_name(plan)),
+        None => format!("{what} not in your workspace's plan. The workspace owner can change the plan in the console."),
+    }
+}
+
+/// "pro" → "Pro", "business" → "Business" (a plan key as a name, when the answer gives only the key).
+fn plan_name(key: &str) -> String {
+    let mut chars = key.chars();
+    chars.next().map(|c| c.to_uppercase().chain(chars.flat_map(|c| c.to_lowercase())).collect()).unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -160,5 +179,9 @@ mod tests {
         assert_eq!(feature_text(Some("live_translate")), "Live Translate is not in your workspace's plan. The workspace owner can change the plan in the console.");
         assert!(feature_text(Some("screen_moments")).starts_with("Screen moments are not in your workspace's plan."));
         assert!(feature_text(None).starts_with("This is not in your workspace's plan."));
+        // Since v1.6 the answer names the lowest plan that has it.
+        assert_eq!(feature_text_with(Some("views"), Some("pro")), "Roman Urdu and the other transcript views are in the Pro plan. Open Settings → Account → Plan & usage to ask for it.");
+        assert!(feature_text_with(Some("live_translate"), Some("BUSINESS")).contains("in the Business plan"));
+        assert!(feature_text_with(Some("views"), Some("  ")).contains("not in your workspace's plan"));
     }
 }

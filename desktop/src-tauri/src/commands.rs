@@ -136,10 +136,10 @@ pub async fn pair_device(app: AppHandle, server_url: String, code: String, devic
     } else {
         (server_url, code, Vec::<String>::new())
     };
-    let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
+    let name = device_name_or_default(&device_name);
 
     // Pairing uses the pins from the QR (when scanned); typed codes rely on WebPKI until the server sends pins.
-    let api = ApiClient::new(&server_url, &pins, None)?;
+    let api = ApiClient::new(&server_url, &pins, None)?.with_install_id(Some(app.state::<AppState>().install_id()));
     let registered = api.register(code.trim(), &name, this_platform(), &os_version()).await?;
     adopt_registration(&app, &api, registered, pins).await
 }
@@ -211,9 +211,9 @@ fn known_pins(state: &AppState, server_url: &str) -> Vec<String> {
 #[tauri::command]
 pub async fn sign_in_password(app: AppHandle, server_url: String, email: String, password: String, otp: Option<String>, device_name: String) -> AppResult<SignInOutcome> {
     let state = app.state::<AppState>();
-    let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
+    let name = device_name_or_default(&device_name);
     let pins = known_pins(&state, &server_url);
-    let api = ApiClient::new(&server_url, &pins, None)?;
+    let api = ApiClient::new(&server_url, &pins, None)?.with_install_id(Some(state.install_id()));
     let otp = otp.map(|o| o.trim().replace(' ', "")).filter(|o| !o.is_empty());
     let sign_in = crate::net::models::PasswordSignIn { email: email.trim(), password: &password, otp: otp.as_deref(), name: &name };
     match api.sign_in_password(&sign_in, this_platform(), &os_version()).await {
@@ -225,6 +225,98 @@ pub async fn sign_in_password(app: AppHandle, server_url: String, email: String,
         Err(e) if e.is_missing_route() => Ok(SignInOutcome { result: SignInResult::PairingOnly, status: None }),
         Err(e) => Err(e),
     }
+}
+
+// ---- Sign-up and sign-in with an email code (v1.6, P1) ------------------------------------------------------------
+
+/// "Email → Continue": whether the email has an account and what it signs in with. A server without the route says
+/// `older`, and the screen shows the v1.5 sign-in (password, browser).
+#[tauri::command]
+pub async fn auth_start(app: AppHandle, server_url: String, email: String) -> AppResult<crate::net::models::AuthStart> {
+    let state = app.state::<AppState>();
+    let api = ApiClient::new(&server_url, &known_pins(&state, &server_url), None)?;
+    let email = crate::account::checked_email(&email).map_err(AppError::Message)?;
+    Ok(api.auth_start(&email).await?.unwrap_or_else(|| crate::net::models::AuthStart { account: "older".into(), methods: vec!["password".into()], sign_up: false }))
+}
+
+/// Sends the 6-digit code (`purpose`: `sign_in` or `sign_up`); `sent: false` with the seconds to wait when one went out
+/// a moment ago.
+#[tauri::command]
+pub async fn auth_code_send(app: AppHandle, server_url: String, email: String, purpose: String) -> AppResult<crate::net::models::CodeSent> {
+    let state = app.state::<AppState>();
+    let api = ApiClient::new(&server_url, &known_pins(&state, &server_url), None)?;
+    let email = crate::account::checked_email(&email).map_err(AppError::Message)?;
+    let purpose = if purpose == "sign_up" { "sign_up" } else { "sign_in" };
+    api.send_code(&email, purpose).await
+}
+
+/// What an emailed code came to: signed in, the two-factor code first, or a new email's profile step (its sign-up
+/// token stays in the core).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CodeResult {
+    SignedIn,
+    OtpRequired,
+    Profile,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeOutcome {
+    pub result: CodeResult,
+    pub status: Option<AppStatus>,
+}
+
+#[tauri::command]
+pub async fn auth_code_verify(app: AppHandle, server_url: String, email: String, code: String, otp: Option<String>, device_name: String) -> AppResult<CodeOutcome> {
+    let state = app.state::<AppState>();
+    let pins = known_pins(&state, &server_url);
+    let api = ApiClient::new(&server_url, &pins, None)?.with_install_id(Some(state.install_id()));
+    let email = crate::account::checked_email(&email).map_err(AppError::Message)?;
+    let code = crate::account::checked_code(&code).map_err(AppError::Message)?;
+    let otp = otp.map(|o| o.trim().replace(' ', "")).filter(|o| !o.is_empty());
+    let device = crate::net::models::ThisDevice { name: device_name_or_default(&device_name), platform: this_platform(), os_version: os_version() };
+    match api.verify_code(&email, &code, otp.as_deref(), &device).await? {
+        crate::net::models::CodeAnswer::SignedIn(registered) => {
+            *state.pending_sign_up.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            let status = adopt_registration(&app, &api, *registered, pins).await?;
+            Ok(CodeOutcome { result: CodeResult::SignedIn, status: Some(status) })
+        }
+        crate::net::models::CodeAnswer::OtpRequired => Ok(CodeOutcome { result: CodeResult::OtpRequired, status: None }),
+        crate::net::models::CodeAnswer::Profile { sign_up_token } => {
+            let pending = crate::account::PendingSignUp::new(api.base_url(), pins, &email, sign_up_token, device.name.clone(), std::time::Instant::now());
+            *state.pending_sign_up.lock().unwrap_or_else(|p| p.into_inner()) = Some(pending);
+            Ok(CodeOutcome { result: CodeResult::Profile, status: None })
+        }
+    }
+}
+
+/// The new account's last step: the name and "I accept the Terms and Privacy", then this computer is signed in.
+#[tauri::command]
+pub async fn auth_sign_up(app: AppHandle, name: String, accept_terms: bool) -> AppResult<AppStatus> {
+    let state = app.state::<AppState>();
+    let name = name.trim().to_string();
+    if name.is_empty() || name.chars().count() > 100 {
+        return Err(AppError::msg("Type your name (up to 100 characters)."));
+    }
+    if !accept_terms {
+        return Err(AppError::msg("Tick “I accept the Terms and Privacy” to create your account."));
+    }
+    let pending = state.pending_sign_up.lock().unwrap_or_else(|p| p.into_inner()).clone();
+    let pending = pending.filter(|p| !p.expired(std::time::Instant::now())).ok_or_else(|| AppError::msg(crate::account::SIGN_UP_EXPIRED))?;
+    let api = ApiClient::new(&pending.server, &pending.pins, None)?.with_install_id(Some(state.install_id()));
+    let device = crate::net::models::ThisDevice { name: pending.device_name.clone(), platform: this_platform(), os_version: os_version() };
+    let registered = match api.sign_up(&pending.token, &name, &device).await {
+        Ok(registered) => registered,
+        Err(e) => {
+            if e.to_string() == crate::account::SIGN_UP_EXPIRED {
+                *state.pending_sign_up.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            }
+            return Err(e);
+        }
+    };
+    *state.pending_sign_up.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    adopt_registration(&app, &api, registered, pending.pins.clone()).await
 }
 
 /// What the sign-in screen offers on this server (Phase 1C): none from an older server, which shows the screen as before.
@@ -253,7 +345,7 @@ pub fn auth_page_open(app: AppHandle, server_url: String, url: String) -> AppRes
 pub async fn sign_in_browser(app: AppHandle, server_url: String, device_name: String) -> AppResult<bool> {
     use tauri_plugin_opener::OpenerExt;
     let state = app.state::<AppState>();
-    let name = if device_name.trim().is_empty() { default_device_name() } else { device_name.trim().to_string() };
+    let name = device_name_or_default(&device_name);
     let pins = known_pins(&state, &server_url);
     let api = ApiClient::new(&server_url, &pins, None)?;
     if !api.offers_account_sign_in().await? {
@@ -300,7 +392,7 @@ pub async fn finish_browser_sign_in(app: &AppHandle, link: crate::account::Callb
             return;
         }
         Err(refused) => Err(AppError::msg(refused.text())),
-        Ok((sign_in, code)) => match ApiClient::new(&sign_in.server, &sign_in.pins, None) {
+        Ok((sign_in, code)) => match ApiClient::new(&sign_in.server, &sign_in.pins, None).map(|api| api.with_install_id(Some(state.install_id()))) {
             Ok(api) => match api.device_token(&code, &sign_in.verifier, &sign_in.name, this_platform(), &os_version()).await {
                 Ok(registered) => adopt_registration(app, &api, registered, sign_in.pins.clone()).await,
                 Err(e) => Err(e),
@@ -396,15 +488,85 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
 const SERVER_PAGES: [&str; 4] = ["terms", "privacy", "account/delete", "downloads"];
 
+/// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
+/// signed-in server.
 #[tauri::command]
-pub fn server_page_open(app: AppHandle, page: String) -> AppResult<()> {
+pub fn server_page_open(app: AppHandle, page: String, server_url: Option<String>) -> AppResult<()> {
     use tauri_plugin_opener::OpenerExt;
     if !SERVER_PAGES.contains(&page.as_str()) {
         return Err(AppError::msg("That is not one of the server's pages."));
     }
-    let server = app.state::<AppState>().settings().server_url.ok_or(AppError::NotPaired)?;
+    let server = match server_url.map(|s| s.trim().to_string()).filter(|s| !s.is_empty()) {
+        Some(url) if url.starts_with("https://") || crate::net::pinning::is_local_dev(&url) => url,
+        Some(_) => return Err(AppError::msg("The server address must start with https://.")),
+        None => app.state::<AppState>().settings().server_url.ok_or(AppError::NotPaired)?,
+    };
     let url = format!("{}/{page}", server.trim().trim_end_matches('/'));
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
+}
+
+// ---- Entitlements, your own transcription key, upgrade requests (v1.6, P1) ----------------------------------------
+
+/// What this person may use (`GET /api/me/entitlements`); none from an older server, where everything stays on.
+#[tauri::command]
+pub async fn entitlements_get(app: AppHandle) -> AppResult<Option<crate::net::models::Entitlements>> {
+    app.state::<AppState>().api()?.entitlements().await
+}
+
+/// Account → Transcription key: the person's own Groq key, checked by the server. Never logged, never kept here.
+#[tauri::command]
+pub async fn transcription_key_set(app: AppHandle, key: String) -> AppResult<crate::net::models::TranscriptionKeyState> {
+    let key = crate::account::checked_groq_key(&key).map_err(AppError::Message)?;
+    app.state::<AppState>().api()?.set_transcription_key("groq", &key).await
+}
+
+#[tauri::command]
+pub async fn transcription_key_delete(app: AppHandle) -> AppResult<()> {
+    app.state::<AppState>().api()?.delete_transcription_key().await
+}
+
+/// Groq's API keys page, where the person makes their free key (the one address this opens).
+pub const GROQ_KEYS_PAGE: &str = "https://console.groq.com/keys";
+
+#[tauri::command]
+pub fn groq_console_open(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(GROQ_KEYS_PAGE, None::<&str>).map_err(|e| AppError::msg(format!("The browser could not be opened: {e}")))
+}
+
+/// "Request upgrade" with an optional message; the pending request when one is waiting already.
+#[tauri::command]
+pub async fn upgrade_request_create(app: AppHandle, plan: String, message: Option<String>) -> AppResult<crate::net::models::UpgradeRequest> {
+    let plan = plan.trim().to_string();
+    if plan.is_empty() || plan.len() > 32 || !plan.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err(AppError::msg("That plan is not one of the server's."));
+    }
+    let message = message.map(|m| m.trim().chars().take(1000).collect::<String>()).filter(|m| !m.is_empty());
+    app.state::<AppState>().api()?.request_upgrade(&plan, message.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn upgrade_request_latest(app: AppHandle) -> AppResult<Option<crate::net::models::UpgradeRequest>> {
+    app.state::<AppState>().api()?.latest_upgrade_request().await
+}
+
+/// Account → Devices → Rename (v1.6, P3).
+#[tauri::command]
+pub async fn device_rename(app: AppHandle, id: String, name: String) -> AppResult<String> {
+    let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    if name.is_empty() || name.chars().count() > 64 {
+        return Err(AppError::msg("Type a name of up to 64 characters."));
+    }
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric()) {
+        return Err(AppError::msg("That device is not one of the server's."));
+    }
+    let state = app.state::<AppState>();
+    state.api()?.rename_device(&id, &name).await?;
+    if state.settings().device_id.as_deref() == Some(id.as_str()) {
+        state.update_settings(|s| s.device_name = Some(name.clone()))?;
+        crate::actions::emit_status(&app);
+    }
+    Ok(name)
 }
 
 // ---- Updates (v1.5) ----------------------------------------------------------------------------------------------
@@ -423,7 +585,7 @@ pub fn update_check(app: AppHandle) -> crate::updates::UpdateStatus {
     app.state::<AppState>().updates.status()
 }
 
-/// "Restart now": installs the update that is ready and starts the new version (never while recording).
+/// "Restart": installs the update that is ready and starts the new version (never while recording).
 #[tauri::command]
 pub async fn update_install(app: AppHandle) -> AppResult<()> {
     crate::updates::install_now(&app).await
@@ -887,8 +1049,15 @@ pub fn shortcut_defaults() -> HashMap<Action, String> {
     shortcuts::default_map()
 }
 
+/// "Windows 11 PC", "MacBook Pro", "iMac", "Mac" (v1.6, P3): never the raw host name.
 fn default_device_name() -> String {
-    std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_else(|_| "Desktop".into())
+    crate::identity::device_name()
+}
+
+/// The name a sign-in gives this computer: the one typed, else the readable default.
+fn device_name_or_default(typed: &str) -> String {
+    let typed = typed.trim();
+    if typed.is_empty() { default_device_name() } else { typed.chars().take(64).collect() }
 }
 
 fn os_version() -> String {
@@ -1129,7 +1298,8 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.
 /// `consentAcknowledged` stays out too: the recording-laws notice is acknowledged by the person using this install, never by a file.
-pub const NOT_PORTABLE: [&str; 7] = ["serverUrl", "pins", "deviceId", "deviceName", "clientId", "onboardingDone", "consentAcknowledged"];
+/// `installId` (v1.6) is this install's own: another computer that imported it would sign in as this one.
+pub const NOT_PORTABLE: [&str; 8] = ["serverUrl", "pins", "deviceId", "deviceName", "installId", "clientId", "onboardingDone", "consentAcknowledged"];
 /// The `format` marker of an exported settings file.
 pub const SETTINGS_FORMAT: &str = "echoledger-settings";
 

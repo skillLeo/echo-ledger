@@ -175,6 +175,68 @@ pub fn wait_text(seconds: u64) -> String {
     }
 }
 
+// ---- Sign-up and sign-in with an email code (v1.6, P1) ------------------------------------------------------------
+
+/// How long a new email's sign-up token is good for (the server's is 15 minutes, one use).
+pub const SIGN_UP_WAIT: Duration = Duration::from_secs(15 * 60);
+
+/// A new email's sign-up between the code and the name: in memory only, like the browser sign-in. The token never
+/// reaches the page.
+#[derive(Clone, Debug)]
+pub struct PendingSignUp {
+    pub server: String,
+    pub pins: Vec<String>,
+    pub email: String,
+    pub token: String,
+    pub device_name: String,
+    pub started: Instant,
+}
+
+impl PendingSignUp {
+    pub fn new(server: &str, pins: Vec<String>, email: &str, token: String, device_name: String, now: Instant) -> Self {
+        Self { server: server.trim().trim_end_matches('/').to_string(), pins, email: email.to_string(), token, device_name, started: now }
+    }
+
+    pub fn expired(&self, now: Instant) -> bool {
+        now.saturating_duration_since(self.started) > SIGN_UP_WAIT
+    }
+}
+
+/// An email worth sending: trimmed, one `@` with something on each side and a dot after it, no spaces (pure).
+pub fn checked_email(email: &str) -> Result<String, String> {
+    let email = email.trim();
+    let ok = email.len() <= 254
+        && !email.chars().any(char::is_whitespace)
+        && email.split_once('@').is_some_and(|(name, domain)| !name.is_empty() && !domain.contains('@') && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.'));
+    if ok { Ok(email.to_string()) } else { Err("Type your email address, like name@example.com.".into()) }
+}
+
+/// The 6-digit code as typed ("123 456", "123-456"): its digits, or why not (pure).
+pub fn checked_code(code: &str) -> Result<String, String> {
+    let digits: String = code.chars().filter(|c| !c.is_whitespace() && *c != '-').collect();
+    if digits.len() == 6 && digits.chars().all(|c| c.is_ascii_digit()) { Ok(digits) } else { Err("Type the 6-digit code from the email.".into()) }
+}
+
+/// A pasted Groq key: trimmed, starting `gsk_`, plain characters only (pure). The server checks it with Groq.
+pub fn checked_groq_key(key: &str) -> Result<String, String> {
+    let key = key.trim();
+    let ok = key.starts_with("gsk_") && (20..=200).contains(&key.len()) && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if ok { Ok(key.to_string()) } else { Err("That does not look like a Groq key. It starts with gsk_ — copy the whole key from console.groq.com → API Keys.".into()) }
+}
+
+/// A wrong email code (v1.6, `422 invalid_code` with `attempts_left`), in plain words.
+pub fn wrong_code_text(attempts_left: Option<u64>) -> String {
+    match attempts_left {
+        Some(0) => "That code is not right, and it cannot be tried again. Choose “Send a new code”.".into(),
+        Some(1) => "That code is not right. You can try once more, or choose “Send a new code”.".into(),
+        Some(n) => format!("That code is not right. You can try {n} more times, or choose “Send a new code”."),
+        None => "That code is not right. Check the latest email from EchoLedger, or choose “Send a new code”.".into(),
+    }
+}
+
+/// A sign-up that waited too long between the code and the name (its token lives 15 minutes, one use).
+pub const SIGN_UP_EXPIRED: &str = "This sign-up took too long. Start again with your email: a new code is sent.";
+
 /// The sentence a viewer's app shows instead of recording (docs/API.md "Workspaces, roles and privacy").
 pub fn viewer_sentence(workspace: Option<&str>) -> String {
     let workspace = workspace.map(str::trim).filter(|w| !w.is_empty()).unwrap_or("this workspace");
@@ -309,6 +371,41 @@ mod tests {
         assert_eq!(check(Some(&p), &link(None, &p.state), now), Err(Refused::BadCode));
         let declined = Callback { code: Some("c".into()), state: p.state.clone(), error: Some("access_denied".into()) };
         assert_eq!(check(Some(&p), &declined, now), Err(Refused::Declined));
+    }
+
+    #[test]
+    fn emails_codes_and_keys_are_checked_before_they_are_sent() {
+        assert_eq!(checked_email("  Sam@Example.com ").as_deref(), Ok("Sam@Example.com"));
+        for bad in ["", "sam", "sam@", "@example.com", "sam@example", "sam @example.com", "sam@@example.com", "sam@example.com.", "sam@.com"] {
+            assert!(checked_email(bad).is_err(), "{bad}");
+        }
+        assert_eq!(checked_code(" 123 456 ").as_deref(), Ok("123456"));
+        assert_eq!(checked_code("123-456").as_deref(), Ok("123456"));
+        for bad in ["", "12345", "1234567", "12345a", "١٢٣٤٥٦"] {
+            assert!(checked_code(bad).is_err(), "{bad}");
+        }
+        let key = format!("gsk_{}", "A1b2".repeat(12));
+        assert_eq!(checked_groq_key(&format!("  {key}\n")).as_deref(), Ok(key.as_str()));
+        for bad in ["", "sk-abc", "gsk_short", "gsk_has space inside and more", &format!("gsk_{}\"", "x".repeat(30))] {
+            assert!(checked_groq_key(bad).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn a_sign_up_waits_15_minutes_for_its_name() {
+        let now = Instant::now();
+        let p = PendingSignUp::new("https://ledger.example.test/", vec![], "new@example.test", "tok".into(), "MacBook Pro".into(), now);
+        assert_eq!(p.server, "https://ledger.example.test");
+        assert!(!p.expired(now + Duration::from_secs(14 * 60)));
+        assert!(p.expired(now + SIGN_UP_WAIT + Duration::from_secs(1)));
+    }
+
+    #[test]
+    fn a_wrong_email_code_says_how_many_tries_are_left() {
+        assert_eq!(wrong_code_text(Some(3)), "That code is not right. You can try 3 more times, or choose “Send a new code”.");
+        assert!(wrong_code_text(Some(1)).contains("once more"));
+        assert!(wrong_code_text(Some(0)).contains("cannot be tried again"));
+        assert!(wrong_code_text(None).contains("latest email"));
     }
 
     #[test]

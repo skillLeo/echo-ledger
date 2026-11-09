@@ -3,9 +3,13 @@
 //! minisign public key is in tauri.conf.json, the private key never in the repo). Its requests go through the server's
 //! pins, the package must come from the same server, and its signature must name the version the manifest announces.
 //!
-//! A quiet check runs every 12 hours (and on "Check for updates"). A new version is downloaded, verified and kept in
-//! the data folder; the person is asked to restart, and it installs the next time EchoLedger starts either way. It is
-//! never installed while a recording runs.
+//! A quiet check runs soon after EchoLedger starts and then every 6 hours (v1.6; and on "Check for updates"). A new
+//! version is downloaded, verified and kept in the data folder; "Update ready — Restart" asks the person to restart,
+//! and it installs the next time EchoLedger starts either way. It is never installed while a recording runs.
+//!
+//! The manifest is Tauri's static format (docs/API.md "Public pages and app downloads"): `version`, `notes`,
+//! `pub_date` and `platforms` keyed `windows-x86_64` (the NSIS installer), `darwin-aarch64` and `darwin-x86_64` (the
+//! `.app.tar.gz`), each with its `url` and `signature`. `offer_for` reads it with the updater's own type.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -15,12 +19,12 @@ use std::time::Duration;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// How often the quiet check runs.
-pub const CHECK_EVERY: Duration = Duration::from_secs(12 * 60 * 60);
+/// How often the quiet check runs (v1.6: every few hours, so an installed app is never long behind).
+pub const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 /// A failed quiet check is tried again after this long.
 pub const RETRY_AFTER: Duration = Duration::from_secs(60 * 60);
-/// The first quiet check waits for the start-up to settle.
-pub const FIRST_CHECK_AFTER: Duration = Duration::from_secs(2 * 60);
+/// The first quiet check, on start, waits for the start-up to settle.
+pub const FIRST_CHECK_AFTER: Duration = Duration::from_secs(45);
 /// The manifest's path under the server.
 pub const MANIFEST: &str = "downloads/desktop.json";
 
@@ -40,6 +44,38 @@ pub fn same_origin(endpoint: &reqwest::Url, download: &reqwest::Url) -> bool {
         && download.password().is_none()
         && download.host_str() == endpoint.host_str()
         && download.port_or_known_default() == endpoint.port_or_known_default()
+}
+
+/// The manifest key this build's package is listed under: the installed app's OS and chip.
+pub fn this_target() -> &'static str {
+    if cfg!(windows) {
+        if cfg!(target_arch = "aarch64") { "windows-aarch64" } else { "windows-x86_64" }
+    } else if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") { "darwin-aarch64" } else { "darwin-x86_64" }
+    } else {
+        "linux-x86_64"
+    }
+}
+
+/// What a manifest from `endpoint` offers the app at `current` on `target`, read with the updater's own type (pure):
+/// the newer version and its package, none when it is not newer, or why it cannot be used (not the static format,
+/// no package for this computer, no signature, a package on another server).
+pub fn offer_for(manifest: &serde_json::Value, target: &str, current: &str, endpoint: &reqwest::Url) -> Result<Option<(String, reqwest::Url)>, String> {
+    use tauri_plugin_updater::RemoteRelease;
+    let release: RemoteRelease = serde_json::from_value(manifest.clone()).map_err(|e| format!("not an update manifest: {e}"))?;
+    let installed: RemoteRelease = serde_json::from_value(serde_json::json!({ "version": current, "platforms": {} })).map_err(|e| format!("not a version: {e}"))?;
+    if release.version <= installed.version {
+        return Ok(None);
+    }
+    let url = release.download_url(target).map_err(|_| format!("no package for {target}"))?;
+    let signature = release.signature(target).map_err(|_| format!("no signature for {target}"))?;
+    if signature.trim().is_empty() {
+        return Err(format!("an empty signature for {target}"));
+    }
+    if !same_origin(endpoint, url) {
+        return Err("the package is not on the server that sent the manifest".into());
+    }
+    Ok(Some((release.version.to_string(), url.clone())))
 }
 
 /// Whether the quiet check is due: never checked, or the last check (a failed one counts `RETRY_AFTER` before it) is
@@ -384,13 +420,13 @@ async fn run_check(app: &AppHandle, quiet: bool) -> UpdateStatus {
             app,
             crate::notifications::Category::AppUpdates,
             &format!("EchoLedger {} is ready", update.version),
-            "It installs the next time EchoLedger starts, or now from Settings → About → Restart now.",
+            "Restart EchoLedger to install it, or it installs the next time EchoLedger starts.",
         );
     }
     status
 }
 
-/// "Restart now": installs the update that is ready and starts the new version. Never while a recording runs.
+/// "Restart": installs the update that is ready and starts the new version. Never while a recording runs.
 pub async fn install_now(app: &AppHandle) -> crate::error::AppResult<()> {
     use crate::error::AppError;
     let state = app.state::<crate::AppState>();
@@ -495,8 +531,8 @@ pub fn install_kept(app: &AppHandle) {
     });
 }
 
-/// The quiet check: two minutes after the start, then whenever 12 hours passed since the last one (looked at every
-/// half hour, so a computer that slept checks soon after it wakes).
+/// The quiet check: on start (once it settled), then whenever 6 hours passed since the last one (looked at every half
+/// hour, so a computer that slept checks soon after it wakes).
 pub fn spawn_quiet_checks(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(FIRST_CHECK_AFTER).await;
@@ -551,17 +587,63 @@ mod tests {
     }
 
     #[test]
-    fn the_quiet_check_runs_every_12_hours_and_soon_after_a_failure() {
+    fn the_quiet_check_runs_on_start_every_6_hours_and_soon_after_a_failure() {
         let now = Utc::now();
+        assert!(FIRST_CHECK_AFTER <= Duration::from_secs(60), "on start, once it settled");
         assert!(due(None, now), "never checked");
-        assert!(!due(Some(now - chrono::Duration::hours(11)), now));
-        assert!(due(Some(now - chrono::Duration::hours(12)), now));
+        assert!(!due(Some(now - chrono::Duration::hours(5)), now));
+        assert!(due(Some(now - chrono::Duration::hours(6)), now));
         assert!(due(Some(now + chrono::Duration::hours(1)), now), "a clock that went back");
         // A failure is stored so that the next check is due an hour later.
         let failed = Checked::after(now, true).at.unwrap();
         assert!(!due(Some(failed), now + chrono::Duration::minutes(59)));
         assert!(due(Some(failed), now + chrono::Duration::minutes(60)));
         assert_eq!(Checked::after(now, false).at, Some(now));
+    }
+
+    /// The manifest `GET /downloads/desktop.json` serves (docs/API.md "Public pages and app downloads").
+    fn manifest() -> serde_json::Value {
+        serde_json::from_str(include_str!("../tests/fixtures/server/downloads_desktop_200.json")).unwrap()
+    }
+
+    #[test]
+    fn the_manifest_offers_each_installed_app_its_own_package() {
+        let endpoint = url("https://ledger.example.test/downloads/desktop.json");
+        for (target, file) in [
+            ("windows-x86_64", "EchoLedger-1.6.0-setup.exe"),
+            ("darwin-aarch64", "EchoLedger-1.6.0-mac-apple-silicon.app.tar.gz"),
+            ("darwin-x86_64", "EchoLedger-1.6.0-mac-intel.app.tar.gz"),
+        ] {
+            let (version, package) = offer_for(&manifest(), target, "1.1.0", &endpoint).unwrap().expect(target);
+            assert_eq!(version, "1.6.0");
+            assert!(package.as_str().ends_with(file), "{package}");
+        }
+        assert!(["windows-x86_64", "darwin-aarch64", "darwin-x86_64"].contains(&this_target()) || cfg!(not(any(windows, target_os = "macos"))));
+        assert!(manifest()["platforms"].get(this_target()).is_some() || cfg!(not(any(windows, target_os = "macos"))), "this build's own key is in the manifest");
+    }
+
+    #[test]
+    fn an_app_already_on_that_version_or_newer_is_offered_nothing() {
+        let endpoint = url("https://ledger.example.test/downloads/desktop.json");
+        assert_eq!(offer_for(&manifest(), "windows-x86_64", "1.6.0", &endpoint), Ok(None));
+        assert_eq!(offer_for(&manifest(), "windows-x86_64", "1.7.0-beta.1", &endpoint), Ok(None));
+        // A pre-release is older than its release.
+        assert!(offer_for(&manifest(), "windows-x86_64", "1.6.0-beta.3", &endpoint).unwrap().is_some());
+        assert!(offer_for(&manifest(), "windows-x86_64", env!("CARGO_PKG_VERSION"), &endpoint).is_ok());
+    }
+
+    #[test]
+    fn a_manifest_the_updater_cannot_use_says_why() {
+        let endpoint = url("https://ledger.example.test/downloads/desktop.json");
+        let mut no_linux = manifest();
+        assert!(offer_for(&no_linux, "linux-x86_64", "1.1.0", &endpoint).unwrap_err().contains("no package for linux-x86_64"));
+        no_linux["platforms"]["windows-x86_64"]["signature"] = serde_json::json!(" ");
+        assert!(offer_for(&no_linux, "windows-x86_64", "1.1.0", &endpoint).unwrap_err().contains("empty signature"));
+        let mut elsewhere = manifest();
+        elsewhere["platforms"]["darwin-aarch64"]["url"] = serde_json::json!("https://cdn.example.test/EchoLedger.app.tar.gz");
+        assert!(offer_for(&elsewhere, "darwin-aarch64", "1.1.0", &endpoint).unwrap_err().contains("not on the server"));
+        assert!(offer_for(&serde_json::json!({"version": "1.6.0"}), "windows-x86_64", "1.1.0", &endpoint).is_err(), "no platforms");
+        assert!(offer_for(&serde_json::json!({"platforms": {}}), "windows-x86_64", "1.1.0", &endpoint).is_err(), "no version");
     }
 
     #[test]

@@ -3,6 +3,7 @@ import type {
   AfterCallState,
   AppStatus,
   AskPayload,
+  Entitlements,
   LibraryItem,
   MicUser,
   NavigatePayload,
@@ -86,6 +87,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     pins: ["sha256/abc"],
     deviceId: "dev-1",
     deviceName: "Work laptop",
+    installId: null,
     shortcuts: {
       record_now: "CommandOrControl+Alt+R",
       toggle_captions: "CommandOrControl+Shift+Space",
@@ -306,6 +308,43 @@ export function makeScreen(index: number, at_ms: number, overrides: Partial<Scre
   return {
     id: `sc${index}`, index, at_ms, width: 1920, height: 1080, trigger: "change", ocr_text: null, description: null,
     image_url: `https://ledger.example.test/screens/${index}.webp?sig=1`, thumb_url: `https://ledger.example.test/screens/${index}-thumb.webp?sig=1`,
+    ...overrides,
+  };
+}
+
+/** `GET /api/me/entitlements` (v1.6) for a Free account: views, screens, Live Translate and the rest locked. */
+export function makeEntitlements(overrides: Partial<Entitlements> = {}): Entitlements {
+  const paid = (enabled: boolean, lowest: string, name: string | null = null) => ({ enabled, name, description: null, cost: "paid", lowest_plan: lowest });
+  return {
+    plan: { key: "free", name: "Free", badge: "FREE", color: "#64748b", expires_at: null, trial_minutes_left: 0 },
+    features: {
+      record: { enabled: true, name: null, description: null, cost: "free", lowest_plan: null },
+      platform_transcription: paid(false, "pro", "Transcription on EchoLedger"),
+      views: { enabled: false, name: "Transcript views", description: "Read any transcript in Roman Urdu, English or Urdu script.", cost: "paid", lowest_plan: "pro" },
+      double_check: paid(false, "pro"),
+      screen_moments: paid(false, "pro"),
+      connector: paid(false, "pro"),
+      live_translate: paid(false, "business"),
+      ai_notes: paid(false, "business"),
+      team: paid(false, "business"),
+      premium_engines: paid(false, "business"),
+    },
+    limits: {
+      monthly_minutes: { limit: 0, used: 0 },
+      devices: { limit: 2, used: 1 },
+      storage_bytes: { limit: 1073741824, used: 52428800 },
+      retention_days: { limit: 30, used: null },
+    },
+    engines: ["own_groq"],
+    transcription_key: { provider: "groq", set: false, last4: null },
+    upgrade_request: null,
+    plans: [
+      { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed", price: "Rs 2,000 a month", description: "For one person who records a lot.",
+        features: ["platform_transcription", "views", "double_check", "screen_moments", "connector"], limits: { monthly_minutes: 600, devices: 5, storage_bytes: 21474836480 } },
+      { key: "business", name: "Business", badge: "BUSINESS", color: "#0f766e", price: "Rs 6,000 a month", description: "For a team.",
+        features: ["platform_transcription", "views", "double_check", "screen_moments", "connector", "team", "premium_engines", "live_translate", "ai_notes"],
+        limits: { monthly_minutes: null, devices: 20, storage_bytes: 107374182400 } },
+    ],
     ...overrides,
   };
 }

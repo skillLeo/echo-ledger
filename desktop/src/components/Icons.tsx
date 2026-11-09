@@ -95,6 +95,14 @@ export const CopyIcon = (p: IconProps) => (
 export const TrashIcon = (p: IconProps) => (
   <Svg {...p}><path d="M4 7h16M10 11v6M14 11v6M5 7l1 13h12l1-13M9 7V4h6v3" /></Svg>
 );
+/** A paid feature the plan leaves out (v1.6): the small lock on its badge. */
+export const LockIcon = (p: IconProps) => (
+  <Svg {...p}><rect x="5" y="10.5" width="14" height="10" rx="2" /><path d="M8 10.5V7.5a4 4 0 0 1 8 0v3" /></Svg>
+);
+/** Your own transcription key (v1.6). */
+export const KeyIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="8" cy="15" r="4.5" /><path d="m11.2 11.8 8.3-8.3M16.5 6.5l2.5 2.5M14 9l2 2" /></Svg>
+);
 export const ShieldIcon = (p: IconProps) => (
   <Svg {...p}><path d="M12 3 4.5 6v6c0 4.5 3.2 8.2 7.5 9 4.3-.8 7.5-4.5 7.5-9V6L12 3z" /><path d="m9 12 2 2 4-4" /></Svg>
 );

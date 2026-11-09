@@ -169,4 +169,34 @@ describe("privacy & security settings", () => {
     fireEvent.click(screen.getByRole("button", { name: "Lock now" }));
     await waitFor(() => expect(callsOf("lock_now")).toHaveLength(1));
   });
+
+  it("names platforms plainly and renames a device in place (v1.6)", async () => {
+    respond("lock_status", lockStatus({ locked: false }));
+    respond("device_rename", "Studio PC");
+    render(<SecurityCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run} />);
+    const list = await screen.findByRole("list", { name: "Signed-in devices" });
+    expect(list).toHaveTextContent("Windows");
+    expect(list).toHaveTextContent("Android phone");
+    fireEvent.click(within(list).getByRole("button", { name: "Rename Work laptop" }));
+    const field = within(list).getByLabelText("New name for Work laptop") as HTMLInputElement;
+    expect(field).toHaveFocus();
+    expect(within(list).getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(field, { target: { value: " Studio PC " } });
+    fireEvent.click(within(list).getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(callsOf("device_rename")).toEqual([{ id: "d1", name: "Studio PC" }]));
+    await waitFor(() => expect(callsOf("security_overview")).toHaveLength(2));
+    expect(within(list).queryByLabelText("New name for Work laptop")).not.toBeInTheDocument();
+  });
+
+  it("leaves a rename with Escape or Cancel without sending anything", async () => {
+    respond("lock_status", lockStatus({ locked: false }));
+    render(<SecurityCard settings={makeSettings()} patch={vi.fn(async () => true)} run={run} />);
+    const list = await screen.findByRole("list", { name: "Signed-in devices" });
+    fireEvent.click(within(list).getByRole("button", { name: "Rename Old phone" }));
+    fireEvent.keyDown(within(list).getByLabelText("New name for Old phone"), { key: "Escape" });
+    expect(within(list).queryByLabelText("New name for Old phone")).not.toBeInTheDocument();
+    fireEvent.click(within(list).getByRole("button", { name: "Rename Old phone" }));
+    fireEvent.click(within(list).getByRole("button", { name: "Cancel" }));
+    expect(callsOf("device_rename")).toHaveLength(0);
+  });
 });

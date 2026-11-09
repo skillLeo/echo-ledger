@@ -14,7 +14,7 @@ pub enum AppError {
     Server { status: u16, message: String, code: Option<String>, retry_after_secs: Option<u64> },
     #[error("Audio error: {0}")]
     Audio(String),
-    #[error("Keychain error: {0}")]
+    #[error("This computer's secure storage did not answer, so the sign-in could not be kept: {0}")]
     Keychain(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
@@ -30,14 +30,14 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 
 /// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
 /// client workspace's AI budget and key, docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 11] = [
+const PLAIN_CODES: [&str; 12] = [
     "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client",
-    "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached",
+    "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached",
 ];
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 10] = [
+const CODE_TEXT: [(&str, &str); 17] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -49,6 +49,14 @@ const CODE_TEXT: [(&str, &str); 10] = [
     ("email_not_verified", "Your email address is not verified yet. Open the link in the email EchoLedger sent you, then sign in again."),
     ("invalid_code", "The browser sign-in did not finish: its code was wrong, already used or expired. Choose “Sign in in the browser” to start again."),
     ("owner_of_team", "You own a workspace that has other members. Hand it over to one of them on the console's Workspace page first, then delete your account."),
+    // Sign-up and email codes, your own key and upgrades (since v1.6).
+    ("sign_up_closed", "New accounts are not open on this server. Ask its owner for an invitation."),
+    ("email_not_allowed", "This email address can't be used for an account here. Use another address."),
+    ("sign_up_limit", "Too many new accounts were made from this network today. Try again tomorrow."),
+    ("code_expired", "This code has expired or was tried too often. Choose “Send a new code”."),
+    ("turnstile_failed", "The sign-up check did not pass. Try again in a moment."),
+    ("invalid_key", "Groq did not accept this key. Copy it again from console.groq.com → API Keys, then paste it here."),
+    ("request_pending", "You already asked for an upgrade. It is waiting for the owner to confirm it."),
 ];
 
 /// The app's own sentence for a v1.5 error code, when it has one.

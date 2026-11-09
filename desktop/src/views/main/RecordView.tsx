@@ -9,6 +9,7 @@ import { fillWidth } from "../../lib/motion";
 import { AlertIcon, CaptionsIcon, CopyIcon, MicIcon, RecordIcon } from "../../components/Icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
 import { LiveTranslateCard } from "./LiveTranslateCard";
+import { LockedFeatureCard, useLocked } from "./Upgrade";
 import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { ReadyCheckCard } from "./ReadyCheck";
@@ -103,6 +104,7 @@ export function RecordView({ status, run, onImport }: {
   onImport?: () => void;
 }) {
   const recording = status.recording;
+  const liveTranslateLocked = useLocked("live_translate");
   const paused = !!recording && status.paused;
   const [mic, sys] = status.levels;
   const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
@@ -121,7 +123,7 @@ export function RecordView({ status, run, onImport }: {
           <p className="small">{viewerSentence(status.plan.workspace)}</p>
           <p className="small muted">An owner or admin of the workspace can change your role in the console.</p>
         </div>
-        {status.plan.liveTranslate && <LiveTranslateCard run={run} />}
+        {liveTranslateLocked ? <LockedFeatureCard feature="live_translate" /> : status.plan.liveTranslate && <LiveTranslateCard run={run} />}
       </>
     );
   }
@@ -199,8 +201,8 @@ export function RecordView({ status, run, onImport }: {
           </div>
         </div>
       </div>
-      {/* Live Translate is hidden when the workspace's plan leaves it out (v1.5). */}
-      {status.plan.liveTranslate && <LiveTranslateCard run={run} />}
+      {/* Live Translate when the plan has it; its badge when the entitlements (v1.6) leave it out; hidden by an older plan. */}
+      {liveTranslateLocked ? <LockedFeatureCard feature="live_translate" /> : status.plan.liveTranslate && <LiveTranslateCard run={run} />}
       <div className="card dropzone" style={{ marginTop: 14 }}>
         Drop voice notes, audio or video files anywhere in this window to transcribe them (OPUS, OGG, MP3, M4A, AAC, WAV, MP4 or WEBM).
         {onImport && <div className="card-actions dropzone-actions"><button type="button" className="btn" onClick={onImport}>Choose files…</button></div>}

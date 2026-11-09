@@ -11,6 +11,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..");
+// The sign-in screens show a build with its server built in (v1.6), never a real address: vite.config.ts reads this.
+process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 const out = join(desktop, "..", "docs", "design", "screens", "desktop");
 
 /** Screen name, fixture screen, and what to do before the picture. */
@@ -99,10 +101,39 @@ const SCREENS = [
     await page.waitForSelector(".group-head");
   }],
   // v1.5: signing in, the account and plan, a viewer's Record page, an update ready to install.
+  // v1.6: the email first; a new email's code, then its name and the Terms.
   ["sign-in", "sign-in", async (page) => {
     await page.waitForSelector("#sign-in-title");
-    await page.getByRole("textbox", { name: "Server address" }).fill("https://ledger.example.com");
     await page.getByRole("button", { name: "Continue with Google" }).waitFor();
+  }],
+  ["sign-in-code", "sign-in-code", async (page) => {
+    await page.getByRole("textbox", { name: "Email" }).fill("new@example.com");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.waitForSelector("text=Check your email");
+  }],
+  ["sign-in-profile", "sign-in-profile", async (page) => {
+    await page.getByRole("textbox", { name: "Email" }).fill("new@example.com");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("textbox", { name: "Code from the email" }).fill("123456");
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await page.getByRole("textbox", { name: "Your name" }).fill("Sara Ahmed");
+    await page.getByRole("checkbox", { name: "I accept the Terms and Privacy" }).check();
+  }],
+  // v1.6: a Free account: the badges, the upgrade sheet, Plan & usage and the own Groq key.
+  ["record-free", "record-free", async (page) => page.waitForSelector("[data-testid=locked-live_translate] .plan-badge")],
+  ["upgrade-free", "record-free", async (page) => {
+    await page.locator("[data-testid=locked-live_translate] .plan-badge").click();
+    await page.waitForSelector(".upgrade-sheet .plan-compare");
+  }],
+  ["settings-plan-free", "settings-free", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: /^Account/ }).click();
+    await page.waitForSelector("[data-testid=plan-usage]");
+  }],
+  ["settings-key-free", "settings-free", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: /^Account/ }).click();
+    await page.locator("[data-testid=transcription-key]").scrollIntoViewIfNeeded();
   }],
   ["settings-account", "settings-account", async (page) => {
     await page.waitForSelector(".settings-row");

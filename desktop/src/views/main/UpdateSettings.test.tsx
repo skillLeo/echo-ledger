@@ -25,7 +25,7 @@ describe("Settings → About: updates", () => {
   it("checks on request and follows the check and the download", async () => {
     respond("update_check", update({ phase: "checking" }));
     await panel(update());
-    expect(screen.getByRole("status")).toHaveTextContent("EchoLedger looks for updates on your server every 12 hours.");
+    expect(screen.getByRole("status")).toHaveTextContent("EchoLedger looks for updates when it starts and every 6 hours.");
 
     fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
     await flushAsync();
@@ -38,9 +38,9 @@ describe("Settings → About: updates", () => {
 
     respond("update_install", undefined);
     await emitEvent("update:status", update({ phase: "ready", version: "1.5.1", notes: "Faster sign-in." }));
-    expect(screen.getByRole("status")).toHaveTextContent("EchoLedger 1.5.1 is ready. It installs the next time EchoLedger starts.");
+    expect(screen.getByRole("status")).toHaveTextContent("Update ready — EchoLedger 1.5.1. Restart to install it, or it installs the next time EchoLedger starts.");
     expect(screen.getByText("Faster sign-in.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Restart now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     await flushAsync();
     expect(callsOf("update_install")).toHaveLength(1);
   });
@@ -60,14 +60,14 @@ describe("Settings → About: updates", () => {
 
   it("never restarts while a recording runs", async () => {
     await panel(update({ phase: "ready", version: "1.5.1" }), true);
-    expect(screen.getByRole("button", { name: "Restart now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restart" })).toBeDisabled();
     expect(screen.getByText("Stop the recording first: EchoLedger restarts to install the update.")).toBeInTheDocument();
   });
 
-  it("shows why Restart now did not work", async () => {
+  it("shows why Restart did not work", async () => {
     fail("update_install", "The downloaded update is missing. Check for updates again.");
     await panel(update({ phase: "ready", version: "1.5.1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Restart now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("The downloaded update is missing.");
   });
 
@@ -93,13 +93,13 @@ describe("the update prompt", () => {
     await banner(update({ phase: "downloading", version: "1.5.1" }));
     expect(screen.queryByTestId("update-banner")).not.toBeInTheDocument();
     await emitEvent("update:status", update({ phase: "ready", version: "1.5.1" }));
-    expect(screen.getByTestId("update-banner")).toHaveTextContent("EchoLedger 1.5.1 is ready to install.");
+    expect(screen.getByTestId("update-banner")).toHaveTextContent("Update ready — EchoLedger 1.5.1");
   });
 
   it("restarts now, or waits for the next start on Later", async () => {
     respond("update_install", undefined);
     const notify = await banner(update({ phase: "ready", version: "1.5.1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Restart now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     await waitFor(() => expect(callsOf("update_install")).toHaveLength(1));
 
     fireEvent.click(screen.getByRole("button", { name: "Later" }));
@@ -112,14 +112,14 @@ describe("the update prompt", () => {
 
   it("cannot restart in the middle of a recording, and reports a failed install", async () => {
     const recordingNotify = await banner(update({ phase: "ready", version: "1.5.1" }), true);
-    expect(screen.getByRole("button", { name: "Restart now" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Restart" })).toBeDisabled();
     expect(recordingNotify).not.toHaveBeenCalled();
   });
 
-  it("tells when Restart now failed", async () => {
+  it("tells when Restart failed", async () => {
     fail("update_install", "macOS did not allow EchoLedger to replace itself. Install the update from the downloads page instead.");
     const notify = await banner(update({ phase: "ready", version: "1.5.1" }));
-    fireEvent.click(screen.getByRole("button", { name: "Restart now" }));
+    fireEvent.click(screen.getByRole("button", { name: "Restart" }));
     await waitFor(() => expect(notify).toHaveBeenCalledWith(expect.stringContaining("macOS did not allow EchoLedger"), true));
   });
 });
