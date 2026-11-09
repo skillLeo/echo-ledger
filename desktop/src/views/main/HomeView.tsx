@@ -82,7 +82,7 @@ export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, 
   ].filter(Boolean);
   return (
     <div className="home-page">
-      <PageHeader title="Home" subtitle={viewer ? "What is shared with you is under Shared." : "Record calls and voice notes, and pick up where you left off."}
+      <PageHeader crumbs={[{ label: "Home" }]} title="Home" subtitle={viewer ? "What is shared with you is under Shared." : "Record calls and voice notes, and pick up where you left off."}
         actions={!viewer && onImport && <button type="button" className="btn" onClick={onImport}><ImportIcon size={16} />Upload</button>} />
       {cards.length > 0 && (
         <section aria-labelledby="home-needs" className="home-section">

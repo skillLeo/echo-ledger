@@ -78,7 +78,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   const loading = (list: unknown[] | null) => list === null && !error && <div className="empty" aria-busy="true">Loading…</div>;
   return (
     <div className="shared-page">
-      <PageHeader title="Shared" subtitle="What teammates sent you, the links you made, and links people use to send you files."
+      <PageHeader crumbs={[{ label: "Shared" }]} title="Shared" subtitle="What teammates sent you, the links you made, and links people use to send you files."
         actions={<button type="button" className="btn primary" onClick={() => setNewRequest(true)}><PlusIcon size={16} />New request link</button>}>
         <PageTabs label="Shared" value={tab} onChange={onTab} tabs={SHARED_TABS.map(([id, label]) => ({ id, label, count: counts[id] }))} />
       </PageHeader>

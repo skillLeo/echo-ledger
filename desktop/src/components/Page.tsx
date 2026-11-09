@@ -67,7 +67,7 @@ export function PageTabs<T extends string>({ tabs, value, onChange, label }: { t
       {tabs.map((t, i) => (
         <button key={t.id} type="button" role="tab" aria-selected={t.id === value} tabIndex={t.id === value ? 0 : -1} className={`page-tab ${t.id === value ? "active" : ""}`}
           onClick={() => onChange(t.id)} onKeyDown={(e) => move(e, i)}>
-          {t.label}{typeof t.count === "number" && <span className="tab-count">{t.count}</span>}
+          {t.label}{typeof t.count === "number" && <span className="tab-count" aria-hidden="true">{t.count}</span>}
         </button>
       ))}
     </div>

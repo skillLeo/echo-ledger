@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ActivityView } from "./ActivityCentre";
+import { activitySubtitle, ActivityView } from "./ActivityCentre";
 import { NOTIFICATION_CATEGORIES, NOT_SHOWN, NotificationsCard } from "./SecuritySettings";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -32,6 +32,22 @@ describe("activity page (B18)", () => {
     expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
     expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
     expect(onItems).toHaveBeenCalledWith(ITEMS);
+  });
+
+  it("has the page header: breadcrumbs, the title and one line that says what needs you (v1.6, P4.4)", async () => {
+    respond("activity_list", { data: [...ITEMS, { id: "n3", kind: "transcript_failed", title: "Transcription failed", body: "Call", session_id: null, read: false, at: "2026-10-28T09:00:00Z" }], unread_count: 2 });
+    renderPage(makeStatus({ pendingDecisions: 1 }));
+    expect(await screen.findByText("2 things need you. Your other notifications follow, newest first.")).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Breadcrumbs" })).getByText("Activity")).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("heading", { level: 1, name: "Activity" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark all read" })).toBeInTheDocument();
+  });
+
+  it("words the line for each case", () => {
+    expect(activitySubtitle(1, 3)).toBe("1 thing needs you. Your other notifications follow, newest first.");
+    expect(activitySubtitle(0, 1)).toBe("Nothing needs you. 1 notification you have not read yet.");
+    expect(activitySubtitle(0, 4)).toBe("Nothing needs you. 4 notifications you have not read yet.");
+    expect(activitySubtitle(0, 0)).toBe("Nothing needs you. Finished transcripts, problems, devices and shares show up here.");
   });
 
   it("opens a recording from its notification and marks it read", async () => {

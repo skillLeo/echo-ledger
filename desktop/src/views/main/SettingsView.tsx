@@ -445,7 +445,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
 
   return (
     <>
-      <PageHeader crumbs={current !== "all" && !q ? [{ label: "Account", onOpen: () => { setGroup("all"); setQuery(""); } }, { label: GROUP_LABEL[current] }] : []}
+      <PageHeader crumbs={current !== "all" && !q ? [{ label: "Account", onOpen: () => { setGroup("all"); setQuery(""); } }, { label: GROUP_LABEL[current] }] : [{ label: "Account" }]}
         title={title} subtitle={`${signedInLine(status.serverUrl)} ${status.pinned ? "· secure connection" : "· connection not verified"}`}
         actions={<SavedIndicator at={savedAt} />} />
       <div className="settings-layout">

@@ -1081,7 +1081,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
-      <PageHeader crumbs={place ? [{ label: "Library", onOpen: onSmartFolder ? () => onSmartFolder(null) : undefined }, { label: place }] : []}
+      <PageHeader crumbs={place ? [{ label: "Library", onOpen: onSmartFolder ? () => onSmartFolder(null) : undefined }, { label: place }] : [{ label: "Library" }]}
         title={place ?? "Library"}
         subtitle={smartView ? `${filtered.length} recording${filtered.length === 1 ? "" : "s"} ${VIEW_LINE[smartView]}`
           : smartFolder ? (shared ? "Recordings and projects teammates sent you." : `${filtered.length} recording${filtered.length === 1 ? "" : "s"} in this smart folder of your Library.`)

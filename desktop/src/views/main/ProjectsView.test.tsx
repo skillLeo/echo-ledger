@@ -14,6 +14,10 @@ import { forgetPictures } from "../../lib/screens";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
+/** A tab's words without its count (v1.6: the count is shown, not read as part of the name). */
+const tabName = (tab: HTMLElement) => [...tab.childNodes].filter((n) => !(n instanceof HTMLElement && n.classList.contains("tab-count"))).map((n) => n.textContent).join("");
+const tabCount = (name: string) => screen.getByRole("tab", { name }).querySelector(".tab-count")?.textContent ?? null;
+
 const PROJECTS: ClientFolder[] = [
   { id: "c1", name: "Acme Holdings", session_count: 2, ai_notes: true, parent_id: null, path: [], children_count: 1, nested_session_count: 3 },
   { id: "c3", name: "Invoices", session_count: 1, ai_notes: true, parent_id: "c1", path: [{ id: "c1", name: "Acme Holdings" }], children_count: 0, nested_session_count: 1 },
@@ -156,14 +160,24 @@ describe("the Projects page", () => {
 describe("a project's page", () => {
   it("has the tabs Recordings, Files, Notes, Screens and AI notes, and opens on Recordings", async () => {
     await renderProjects();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "Screens", "AI notes"]);
+    expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "Screens", "AI notes"]);
     expect(screen.getByRole("tab", { name: "Recordings" })).toHaveAttribute("aria-selected", "true");
     expect(callsOf("client_workspace")).toEqual([{ id: "c1" }]);
   });
 
+  it("counts what the Recordings, Files and Screens tabs list, not Notes (v1.6, P4.4)", async () => {
+    respond("client_screens", { data: [], next_cursor: "more" });
+    await renderProjects();
+    expect(tabCount("Recordings")).toBe("2");
+    expect(tabCount("Files")).toBe(String(workspace().files.length));
+    expect(tabCount("Notes")).toBeNull();
+    expect(tabCount("AI notes")).toBeNull();
+    expect(tabCount("Screens")).toBe("0+");
+  });
+
   it("shows AI notes only while they are on for the project", async () => {
     await renderProjects({ ws: workspace({ client: { id: "c1", name: "Acme Holdings", ai_notes: false } }) });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "Screens"]);
+    expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "Screens"]);
   });
 
   it("says there are no screen moments yet when the project has none", async () => {
@@ -369,7 +383,7 @@ describe("Notes", () => {
 
   it("hides the AI notes tab, the switch, Ask and Make again when the plan leaves AI notes out, and keeps the brief and memory", async () => {
     await renderProjects({ aiNotesInPlan: false });
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "Screens"]);
+    expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "Screens"]);
     tab("Notes");
     expect(screen.getByTestId("ai-not-in-plan")).toHaveTextContent("Call notes, memory and Ask are not in your workspace's plan. The workspace owner can change the plan in the console.");
     expect(screen.queryByRole("switch", { name: "AI notes" })).not.toBeInTheDocument();
@@ -700,7 +714,7 @@ describe("a project's Screens tab (since v1.5)", () => {
   it("is hidden on a server without screen moments", async () => {
     respond("client_screens", null);
     await renderProjects();
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Recordings", "Files", "Notes", "AI notes"]);
+    expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "AI notes"]);
   });
 
   it("says when the screens could not be read and tries again", async () => {
