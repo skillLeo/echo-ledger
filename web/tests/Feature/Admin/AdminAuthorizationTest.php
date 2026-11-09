@@ -91,7 +91,9 @@ it('lists the console pages in the navigation for a super admin', function () {
     expect($labels)->toContain('Library', 'Projects', 'Activity', 'Upload', 'Devices')->not->toContain('API Credentials', 'Settings', 'Plans');
 
     $html = (string) $this->get('/admin')->assertOk()->getContent();
-    preg_match_all('/fi-sidebar-item-label[^>]*>\s*([^<]+?)\s*</', $html, $items);
+    // The admin panel's own navigation in the app shell's sidebar (since v1.6, P4).
+    $nav = (string) preg_replace('/^.*?<nav class="el-sb-nav"|<\/nav>.*$/s', '', $html);
+    preg_match_all('/<span class="el-sb-label">\s*([^<]+?)\s*</', $nav, $items);
     expect($items[1])->toBe(['Overview', 'Customers', 'Plans', 'Upgrade requests', 'Server usage', 'API Credentials', 'Settings', 'Staff', 'Sign-up', 'Device reports', 'Accuracy Lab', 'App versions', 'Announcement', 'Activity log']);
 });
 

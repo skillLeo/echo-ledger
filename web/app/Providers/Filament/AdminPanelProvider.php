@@ -7,9 +7,12 @@ namespace App\Providers\Filament;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
+use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\AuthenticateStaff;
 use App\Http\Middleware\EnsureStaffTwoFactor;
+use App\Livewire\Shell\Sidebar;
+use App\Livewire\Shell\Topbar;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Enums\ThemeMode;
@@ -59,11 +62,17 @@ class AdminPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::FOOTER, self::here(fn (): View => view('filament.legal-links')))
             ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.announcement')))
             ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view('filament.offline-banner')))
+            // Since v1.6 (P4): the app's frame (sidebar beside the top bar), with this panel's own navigation.
+            ->topbar(false)
+            ->sidebarLivewireComponent(Sidebar::class)
+            ->topbarLivewireComponent(Topbar::class)
+            // (The top bar, the shell's script and Help & shortcuts: registered once for both panels, AppPanelProvider::boot.)
             ->userMenuItems([
                 Action::make('openApp')->label('Back to the app')->icon(Heroicon::OutlinedArrowUturnLeft)
                     ->url(fn (): string => Filament::getPanel('app')->getUrl() ?? '/app'),
-                Action::make('profile')->label('Your profile')->icon(Heroicon::OutlinedUserCircle)
+                Action::make('account')->label('Account')->icon(Heroicon::OutlinedUserCircle)
                     ->url(fn (): string => Filament::getPanel('app')->getProfileUrl() ?? '/app/profile'),
+                'logout' => fn (Action $action): Action => $action->label('Sign out'),
             ])
             ->defaultThemeMode(ThemeMode::System)
             ->viteTheme('resources/css/filament/admin/theme.css')
@@ -78,7 +87,8 @@ class AdminPanelProvider extends PanelProvider
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
             ->sidebarCollapsibleOnDesktop()
-            ->sidebarWidth('16rem')
+            ->sidebarWidth(fn (): string => Shell::sidebarWidth())
+            ->collapsedSidebarWidth(Shell::RAIL_WIDTH.'px')
             ->navigationGroups([
                 NavigationGroup::make('Customers'),
                 NavigationGroup::make('Plans'),

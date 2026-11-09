@@ -100,7 +100,10 @@ for (const theme of themes) {
         await context.addInitScript(() => localStorage.setItem('filament:theme:mode', 'system'));
         const page = await context.newPage();
         await page.goto(`${base}/app/login`);
+        // Since v1.6 the sign-in asks for the email first, then the password.
         await page.fill('input[type=email]', email);
+        await page.click('button[type=submit]');
+        await page.waitForSelector('input[type=password]');
         await page.fill('input[type=password]', password);
         await Promise.all([page.waitForURL((url) => !url.pathname.endsWith('/login')), page.click('button[type=submit]')]);
 
