@@ -19,6 +19,7 @@ import com.echoledger.mobile.e2e.support.Library
 import com.echoledger.mobile.e2e.support.RecordPage
 import com.echoledger.mobile.e2e.support.SeedData
 import com.echoledger.mobile.e2e.support.Sharing
+import com.echoledger.mobile.e2e.support.SignInScreen
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
@@ -38,7 +39,7 @@ class ServerSideChangesTest : E2eTest() {
         Backend.revokeAllDevices()
         Library.sync()
         Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
-        assertTrue("the cached library stays readable", Ui.has(SeedData.SILENT) || Ui.has("Sign in to EchoLedger"))
+        assertTrue("the cached library stays readable", Ui.has(SeedData.SILENT) || Ui.has(SignInScreen.TITLE))
     }
 
     @Ignore("A6.M8: a 401 does not return the phone to the unpaired state")
@@ -50,7 +51,7 @@ class ServerSideChangesTest : E2eTest() {
         Backend.revokeAllDevices()
         Library.sync()
         Ui.awaitText("This phone was signed out on the server. Sign in again.", Ui.LONG)
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.awaitText(SignInScreen.TITLE, Ui.NORMAL)
     }
 
     @Test

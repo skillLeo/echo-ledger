@@ -15,6 +15,7 @@ import com.echoledger.mobile.e2e.support.E2eTest
 import com.echoledger.mobile.e2e.support.Library
 import com.echoledger.mobile.e2e.support.SeedData
 import com.echoledger.mobile.e2e.support.Shell
+import com.echoledger.mobile.e2e.support.SignInScreen
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -50,7 +51,7 @@ class ThemeTest : E2eTest() {
     fun theAppKeepsItsDarkPaletteInTheLightSystemTheme() {
         Shell.setNightMode(false)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         assertTrue("canvas is dark in the light system theme", backgroundLuminance() < 60)
     }
 
@@ -58,7 +59,7 @@ class ThemeTest : E2eTest() {
     fun theAppKeepsItsDarkPaletteInTheDarkSystemTheme() {
         Shell.setNightMode(true)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         assertTrue("canvas is dark in the dark system theme", backgroundLuminance() < 60)
     }
 
@@ -66,7 +67,7 @@ class ThemeTest : E2eTest() {
     fun statusBarClockAndIconsAreReadableWhenThePhoneUsesTheDarkSystemTheme() {
         Shell.setNightMode(true)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         Thread.sleep(800)
         val contrast = clockContrast()
         assertTrue("status bar content contrast is $contrast / 255", contrast >= 100)
@@ -77,7 +78,7 @@ class ThemeTest : E2eTest() {
     fun statusBarClockAndIconsAreReadableWhenThePhoneUsesTheLightSystemTheme() {
         Shell.setNightMode(false)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         Thread.sleep(800)
         val contrast = clockContrast()
         assertTrue("status bar content contrast is $contrast / 255 (the app draws a dark canvas behind the bar)", contrast >= 100)
@@ -86,11 +87,11 @@ class ThemeTest : E2eTest() {
     @Test
     fun switchingTheSystemThemeWhileTheAppIsOpenKeepsTheScreenAndItsState() {
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         Ui.fillField("Sign-in code", "ABCD-EFGH")
         Shell.setNightMode(true)
         Thread.sleep(2_500)
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         assertEquals("ABCD-EFGH", Ui.field("Sign-in code").text)
     }
 }
@@ -101,13 +102,13 @@ class RotationTest : E2eTest() {
     @Test
     fun theTypedPairingCodeSurvivesRotation() {
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", "http://10.0.2.2:8113")
+        Ui.awaitText(SignInScreen.TITLE)
+        SignInScreen.otherWays(server = "http://10.0.2.2:8113")
         Ui.fillField("Sign-in code", "ABCD-EFGH")
         Ui.hideKeyboard()
         Ui.device.setOrientationLeft()
         Thread.sleep(2_500)
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         assertEquals("http://10.0.2.2:8113", Ui.field("Server address").text)
         Ui.scrollDownTo("Sign-in code")
         assertEquals("ABCD-EFGH", Ui.field("Sign-in code").text)

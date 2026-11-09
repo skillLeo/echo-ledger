@@ -14,6 +14,7 @@ import androidx.test.uiautomator.By
 import com.echoledger.mobile.e2e.support.AppState
 import com.echoledger.mobile.e2e.support.Backend
 import com.echoledger.mobile.e2e.support.E2eTest
+import com.echoledger.mobile.e2e.support.SignInScreen
 import com.echoledger.mobile.e2e.support.Ui
 import java.io.File
 import java.util.regex.Pattern
@@ -30,17 +31,17 @@ import org.junit.runner.RunWith
 class PairingTest : E2eTest() {
     private fun submit() {
         Ui.hideKeyboard()
-        Ui.clickText("Sign in with code")
+        Ui.clickText("Sign in with the code")
     }
 
     @Test
     fun firstLaunchShowsThePairingScreenWithoutAnyPermissionPrompt() {
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        listOf("Scan QR code", "Server address", "Sign-in code", "Name for this phone (optional)").forEach {
+        Ui.awaitText(SignInScreen.TITLE)
+        listOf("Email", "Continue", SignInScreen.OTHER_WAYS).forEach {
             assertTrue("missing \"$it\"", Ui.has(it))
         }
-        assertTrue(Ui.hasContaining("Your access token is encrypted with the Android Keystore"))
+        assertTrue(Ui.hasContaining("Your recordings are encrypted on this phone"))
         Ui.snapshot("pairing-form")
         assertFalse("no permission dialog at first launch", Ui.device.hasObject(By.pkg(Pattern.compile(".*permissioncontroller"))))
         assertFalse(AppState.settings().paired)
@@ -50,14 +51,14 @@ class PairingTest : E2eTest() {
     @Test
     fun pairButtonStaysDisabledUntilACodeIsEntered() {
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        assertFalse(Ui.isButtonEnabled("Sign in with code"))
-        Ui.fillField("Sign-in code", "ABCD-EFGH")
+        SignInScreen.otherWays()
+        assertFalse(Ui.isButtonEnabled("Sign in with the code"))
+        Ui.fillField("One-time sign-in code", "ABCD-EFGH")
         Ui.hideKeyboard()
-        assertTrue(Ui.isButtonEnabled("Sign in with code"))
-        Ui.field("Sign-in code").text = ""
+        assertTrue(Ui.isButtonEnabled("Sign in with the code"))
+        Ui.field("One-time sign-in code").text = ""
         Ui.hideKeyboard()
-        assertFalse(Ui.isButtonEnabled("Sign in with code"))
+        assertFalse(Ui.isButtonEnabled("Sign in with the code"))
     }
 
     @Test
@@ -66,15 +67,13 @@ class PairingTest : E2eTest() {
         Backend.awaitPairingBudget()
         val code = Backend.pairingCode()
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", code.url)
-        Ui.fillField("Sign-in code", code.display)
-        Ui.fillField("Name for this phone (optional)", "Emulator typed pairing")
+        SignInScreen.otherWays(server = code.url)
+        Ui.fillField("One-time sign-in code", code.display)
         submit()
         Backend.notePairingAttempt()
         Ui.awaitTextContaining("Paired with", Ui.LONG)
         Ui.awaitText("No recordings yet", Ui.LONG)
-        assertTrue(Backend.deviceNames().contains("Emulator typed pairing"))
+        assertTrue(Backend.deviceNames().isNotEmpty())
         val settings = AppState.settings()
         assertTrue(settings.paired)
         assertEquals(code.url, settings.serverUrl)
@@ -87,9 +86,9 @@ class PairingTest : E2eTest() {
         Backend.awaitPairingBudget()
         val code = Backend.pairingCode(viaFlaky = true)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Sign-in code", code.payload)
-        Ui.awaitTextGone("Server address")
+        Ui.awaitText(SignInScreen.TITLE)
+        Ui.fillField("One-time sign-in code", code.payload)
+        Ui.awaitTextGone(SignInScreen.OTHER_WAYS)
         submit()
         Ui.awaitDescription("Settings", Ui.LONG)
         assertEquals(code.url, AppState.settings().serverUrl)
@@ -101,13 +100,13 @@ class PairingTest : E2eTest() {
         Backend.awaitPairingBudget()
         val before = Backend.deviceNames().size
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", Backend.flakyServerUrl)
-        Ui.fillField("Sign-in code", "ZZZZ-ZZZZ")
+        Ui.awaitText(SignInScreen.TITLE)
+        SignInScreen.otherWays(server = Backend.flakyServerUrl)
+        Ui.fillField("One-time sign-in code", "ZZZZ-ZZZZ")
         submit()
         Ui.awaitText("This code is invalid, expired, or already used.", Ui.LONG)
         Ui.snapshot("pairing-wrong-code")
-        assertTrue(Ui.has("Sign in to EchoLedger"))
+        assertTrue(Ui.has(SignInScreen.TITLE))
         assertEquals(before, Backend.deviceNames().size)
         assertFalse(AppState.settings().paired)
         assertNull(AppState.token())
@@ -118,17 +117,17 @@ class PairingTest : E2eTest() {
         Backend.awaitPairingBudget()
         val code = Backend.pairingCode(viaFlaky = true)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", code.url)
-        Ui.fillField("Sign-in code", code.display)
+        Ui.awaitText(SignInScreen.TITLE)
+        SignInScreen.otherWays(server = code.url)
+        Ui.fillField("One-time sign-in code", code.display)
         submit()
         Ui.awaitDescription("Settings", Ui.LONG)
         AppState.reset()
         Backend.awaitPairingBudget()
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", code.url)
-        Ui.fillField("Sign-in code", code.display)
+        Ui.awaitText(SignInScreen.TITLE)
+        SignInScreen.otherWays(server = code.url)
+        Ui.fillField("One-time sign-in code", code.display)
         submit()
         Ui.awaitText("This code is invalid, expired, or already used.", Ui.LONG)
         assertFalse(AppState.settings().paired)
@@ -145,9 +144,9 @@ class PairingTest : E2eTest() {
         )
         val before = Backend.deviceNames().size
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         payloads.forEach { payload ->
-            Ui.fillField("Sign-in code", payload)
+            Ui.fillField("One-time sign-in code", payload)
             submit()
             Ui.awaitText(notACode, Ui.NORMAL)
             Ui.awaitTextGone(notACode, Ui.LONG)
@@ -161,15 +160,15 @@ class PairingTest : E2eTest() {
         val message = "The server address must use https://"
         val before = Backend.deviceNames().size
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Sign-in code", "ABCD-EFGH")
+        Ui.awaitText(SignInScreen.TITLE)
+        Ui.fillField("One-time sign-in code", "ABCD-EFGH")
         submit()
         Ui.awaitText(message)
         Ui.awaitTextGone(message, Ui.LONG)
-        Ui.fillField("Server address", "http://ledger.example.com")
+        SignInScreen.otherWays(server = "http://ledger.example.com")
         submit()
         Ui.awaitText(message)
-        assertTrue("still on the pairing screen", Ui.has("Sign in to EchoLedger"))
+        assertTrue("still on the pairing screen", Ui.has(SignInScreen.TITLE))
         assertFalse(AppState.settings().paired)
         assertEquals(before, Backend.deviceNames().size)
     }
@@ -179,16 +178,16 @@ class PairingTest : E2eTest() {
         Backend.awaitPairingBudget()
         val code = Backend.pairingCode(viaFlaky = true)
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
-        Ui.fillField("Server address", code.url)
-        Ui.fillField("Sign-in code", code.display)
+        Ui.awaitText(SignInScreen.TITLE)
+        SignInScreen.otherWays(server = code.url)
+        Ui.fillField("One-time sign-in code", code.display)
         submit()
         Ui.awaitDescription("Settings", Ui.LONG)
         val token = checkNotNull(AppState.token())
         Ui.launchApp()
         Ui.awaitText("Library")
         Ui.snapshot("library-after-pairing")
-        assertFalse("restart must not show the pairing form", Ui.has("Sign in to EchoLedger"))
+        assertFalse("restart must not show the pairing form", Ui.has(SignInScreen.TITLE))
         val secret = token.substringAfter('|')
         val roots = listOf(Ui.context.filesDir.parentFile!!, Ui.context.noBackupFilesDir.parentFile!!).distinct()
         val leaks = roots.flatMap { it.walkTopDown().filter(File::isFile).toList() }

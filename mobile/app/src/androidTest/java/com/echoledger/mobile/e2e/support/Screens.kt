@@ -91,3 +91,20 @@ object RecordPage {
     const val UPLOADING = "Uploading 1 recording(s)…"
     const val FAILED = "1 recording(s) could not be uploaded"
 }
+
+/** The v1.6 sign-in screen: the email first; QR and one-time codes under "Other ways", another server under Advanced. */
+object SignInScreen {
+    const val TITLE = "Sign in or create an account"
+    const val OTHER_WAYS = "Other ways to sign in (QR code, one-time code)"
+
+    /** Opens "Other ways", after typing [server] as the server to use (Advanced, when the build has its own). */
+    fun otherWays(server: String? = null) {
+        Ui.awaitText(TITLE)
+        if (server != null) {
+            if (Ui.has("Advanced")) Ui.clickText("Advanced")
+            Ui.fillField(if (Ui.has("Use a different server")) "Use a different server" else "Server address", server)
+            Ui.hideKeyboard()
+        }
+        Ui.clickText(OTHER_WAYS)
+    }
+}

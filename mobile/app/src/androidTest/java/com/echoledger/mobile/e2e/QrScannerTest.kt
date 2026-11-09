@@ -17,6 +17,7 @@ import com.echoledger.mobile.e2e.support.AppState
 import com.echoledger.mobile.e2e.support.Backend
 import com.echoledger.mobile.e2e.support.E2eTest
 import com.echoledger.mobile.e2e.support.Shell
+import com.echoledger.mobile.e2e.support.SignInScreen
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -39,7 +40,7 @@ class QrScannerTest : E2eTest() {
 
     private fun openPairingScreen() {
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        SignInScreen.otherWays()
     }
 
     private fun answerCameraPrompt(vararg labels: String) {
@@ -56,8 +57,8 @@ class QrScannerTest : E2eTest() {
         openPairingScreen()
         Ui.clickText("Scan QR code")
         answerCameraPrompt("Don't allow", "Deny")
-        Ui.awaitText("Camera access is needed to scan. You can still enter the server address and code by hand.", Ui.NORMAL)
-        assertTrue(Ui.has("Sign in to EchoLedger") && Ui.has("Sign-in code"))
+        Ui.awaitText("Camera access is needed to scan. You can still type the code.", Ui.NORMAL)
+        assertTrue(Ui.has("Other ways to sign in") && Ui.has("One-time sign-in code"))
         assertFalse(cameraGranted())
         assertFalse("no scanner without permission", Ui.has("Scan the sign-in QR code"))
     }
@@ -82,7 +83,7 @@ class QrScannerTest : E2eTest() {
         assertTrue(Ui.has("Cancel"))
         Ui.awaitCondition("the camera to open", Ui.NORMAL) { cameraInUseByTheApp() }
         Ui.device.pressBack()
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.awaitText("Other ways to sign in", Ui.NORMAL)
         Ui.awaitCondition("the camera to be released", Ui.NORMAL) { !cameraInUseByTheApp() }
         assertFalse(AppState.settings().paired)
     }
@@ -94,7 +95,7 @@ class QrScannerTest : E2eTest() {
         Ui.clickText("Scan QR code")
         Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Ui.clickText("Cancel")
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.awaitText("Other ways to sign in", Ui.NORMAL)
         Ui.awaitCondition("the camera to be released", Ui.NORMAL) { !cameraInUseByTheApp() }
     }
 
@@ -108,7 +109,7 @@ class QrScannerTest : E2eTest() {
         assertFalse("no confirmation without a pairing code in view", Ui.has("Sign in to this server?"))
         assertFalse(Ui.has("That isn't an EchoLedger sign-in code"))
         Ui.device.pressBack()
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.awaitText("Other ways to sign in", Ui.NORMAL)
     }
 
     @Test
@@ -120,10 +121,10 @@ class QrScannerTest : E2eTest() {
         Ui.clickText("Scan QR code")
         Ui.awaitText("Scan the sign-in QR code", Ui.NORMAL)
         Ui.clickText("Cancel")
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
-        Ui.fillField("Sign-in code", code.payload)
+        Ui.awaitText("Other ways to sign in", Ui.NORMAL)
+        Ui.fillField("One-time sign-in code", code.payload)
         Ui.hideKeyboard()
-        Ui.clickText("Sign in with code")
+        Ui.clickText("Sign in with the code")
         Ui.awaitDescription("Settings", Ui.LONG)
         assertEquals(code.url, AppState.settings().serverUrl)
     }

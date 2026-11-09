@@ -15,6 +15,7 @@ import com.echoledger.mobile.e2e.support.Backend
 import com.echoledger.mobile.e2e.support.E2eTest
 import com.echoledger.mobile.e2e.support.Library
 import com.echoledger.mobile.e2e.support.SeedData
+import com.echoledger.mobile.e2e.support.SignInScreen
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -104,11 +105,11 @@ class SettingsTest : E2eTest() {
         Ui.openTab("Settings")
         Ui.clickText("Devices")
         Ui.clickText("Sign out")
-        Ui.awaitText("Sign in to EchoLedger", Ui.NORMAL)
+        Ui.awaitText(SignInScreen.TITLE, Ui.NORMAL)
         assertNull(AppState.token())
         assertEquals(0, AppState.cachedLibrarySize())
         Ui.launchApp()
-        Ui.awaitText("Sign in to EchoLedger")
+        Ui.awaitText(SignInScreen.TITLE)
         assertFalse(AppState.settings().paired)
     }
 }
