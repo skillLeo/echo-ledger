@@ -206,10 +206,15 @@ words. One request waits at a time per person.
 
 ## 5. Usage and costs
 
-- **Admin panel → Server usage** (super admin): minutes and tokens per provider (Groq, AssemblyAI, ElevenLabs, Soniox,
-  Anthropic with its uses, Gemini), per workspace and per person, the dollars from the price table on the same page
-  (edit a price when a provider changes theirs), the share of each plan used, the last six months, date and workspace
-  filters, and **CSV**.
+- **Admin panel → Server usage** (staff who see usage): minutes, tokens and the estimated cost at the top, each
+  compared with the period just before (**Compare with the period before**); a bar per day; per plan; the **Top
+  customers** by cost (each opens their page); per provider (Groq, AssemblyAI, ElevenLabs, Soniox, Anthropic with its
+  uses, Gemini), per workspace and per person; the last six months; **Period** (this month, last month, the last 7 or
+  30 days, this year, or your own dates) and a workspace filter; **Download CSV**. The dollars come from **Prices** on
+  the same page (edit one when a provider changes theirs).
+- **Budget alert** (since v1.6): a monthly budget in US$. Staff who see usage get a notice in the bell and an email when
+  this month's estimated cost passes 80% of it, and again at 100%, once each a month. It only warns; the monthly limit
+  in Settings is what stops transcription.
 - **Usage** (owners and admins): their workspace per person. A member sees only their own.
 - Activity shows "at 80 %" and "reached" once a month for minutes, storage and AI credits.
 

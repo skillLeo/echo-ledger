@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Entitlements\UnusualUsage;
+use App\Services\Usage\CostAlerts;
 use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
@@ -51,7 +52,7 @@ final class ActivityFeed
 
     /** Since v1.6 also the person's upgrade request decided, the super admin's new request and unusual use. */
     public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
-        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage'];
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -76,6 +77,8 @@ final class ActivityFeed
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));
         Device::created(fn (Device $d) => $feed()->post($d->user, 'device_paired', "{$d->readableName()} signed in", 'It can now record, sync and see the library.', null, $d->sourceDevice() === SourceDevice::Desktop ? 'heroicon-o-computer-desktop' : 'heroicon-o-device-phone-mobile'));
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
+        // Since v1.6 (P2.6): the server's monthly budget alert for staff.
+        UsageLedgerEntry::created(fn () => app(CostAlerts::class)->check());
     }
 
     public function transcriptChanged(Transcript $transcript, bool $created): void

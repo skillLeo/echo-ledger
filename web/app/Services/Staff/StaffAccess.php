@@ -61,7 +61,11 @@ final class StaffAccess
         if ($user->staff_role_id === null) {
             return null;
         }
-        $role = $user->staffRole;
+        // Read once per model, also when it came in a list (lazy loading is off outside production).
+        if (! $user->relationLoaded('staffRole') || $user->getRelation('staffRole')?->getKey() !== $user->staff_role_id) {
+            $user->setRelation('staffRole', StaffRole::query()->find($user->staff_role_id));
+        }
+        $role = $user->getRelation('staffRole');
 
         return $role instanceof StaffRole && $role->id === $user->staff_role_id ? $role : null;
     }

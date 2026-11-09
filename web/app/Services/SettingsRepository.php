@@ -85,6 +85,8 @@ final class SettingsRepository
         'signup.allowed_domains' => [],              // since v1.6: empty = any domain (throwaway addresses never)
         'signup.per_ip_day' => 5,                    // since v1.6: new accounts a day from one IP address
         'abuse.hours_per_day' => 6,                  // since v1.6: alert the super admin above these hours a day per person
+        'usage.alert_usd' => null,                   // since v1.6 (P2.6): the month's budget alert in US$; null = none
+        'usage.alert_sent' => null,                  // since v1.6: "YYYY-MM:80,100", the levels already told this month
         'upgrade.payment_instructions' => null,      // since v1.6: shown after "Request upgrade" (System → Plans)
         'console.members' => true,                   // since v1.5: members and viewers get the small read-only console
         // Since v1.5: the SMTP server emails go through (the password is in the credential vault, as `mail.password`).
