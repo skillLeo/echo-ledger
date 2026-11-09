@@ -1270,10 +1270,34 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         if (!h.bindShizuku()) say("Could not start the capture helper through Shizuku.", com.echoledger.mobile.core.NoticeTarget.Ready)
     }
 
+    /** What a promo code does (since v1.6.2), for the upgrade sheet. */
+    sealed interface PromoResult {
+        data class Valid(val promo: com.echoledger.mobile.data.PromoCheckDto) : PromoResult
+        data class OtherPlan(val plan: String, val text: String) : PromoResult
+        data class Invalid(val text: String) : PromoResult
+
+        /** An older server has no promo codes: the sheet hides the field. */
+        data object Unsupported : PromoResult
+    }
+
+    suspend fun checkPromo(code: String, plan: String?): PromoResult = try {
+        withContext(Dispatchers.IO) { graph.api()?.checkPromo(code, plan) }?.let { PromoResult.Valid(it) }
+            ?: PromoResult.Invalid("Sign in again to use a promo code.")
+    } catch (e: ApiException) {
+        when {
+            e.status == 404 || e.status == 405 -> PromoResult.Unsupported
+            e.code == "promo_other_plan" -> PromoResult.OtherPlan(e.planKey.orEmpty(), e.message ?: "This code is for another plan.")
+            e.status == 429 -> PromoResult.Invalid("Too many tries. Wait a minute, then try again.")
+            else -> PromoResult.Invalid(e.message ?: "That promo code does not work.")
+        }
+    } catch (e: Exception) {
+        PromoResult.Invalid("Can't reach the server. Try again.")
+    }
+
     /** "Request upgrade" (since v1.6): asks for [plan]; the answer carries the owner's payment instructions. */
-    suspend fun requestUpgrade(plan: String, message: String?): com.echoledger.mobile.data.UpgradeRequestDto? {
+    suspend fun requestUpgrade(plan: String, message: String?, promoCode: String? = null): com.echoledger.mobile.data.UpgradeRequestDto? {
         val answer = try {
-            withContext(Dispatchers.IO) { graph.api()?.requestUpgrade(plan, message) }
+            withContext(Dispatchers.IO) { graph.api()?.requestUpgrade(plan, message, promoCode) }
         } catch (e: ApiException) {
             _message.value = if (e.code == "request_pending") "You have already asked. We'll let you know." else e.message
             null
@@ -1282,6 +1306,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             null
         } ?: return null
         graph.settings.update { it.copy(plan = it.plan.copy(upgrade = answer)) }
+        // A 100 % promo code switches the plan on at once: read the new plan now.
+        if (answer.status == "approved") refresh()
         return answer
     }
 

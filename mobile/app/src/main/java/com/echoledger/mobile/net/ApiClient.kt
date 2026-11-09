@@ -70,7 +70,14 @@ const val UNREADABLE_ANSWER = "Your server sent an answer this app cannot read. 
     "or update EchoLedger."
 
 /** A server answer other than 2xx/401: `code` is the machine-readable reason, `retryAfterSeconds` the `Retry-After` delay. */
-class ApiException(val status: Int, message: String, val code: String? = null, val retryAfterSeconds: Long? = null) : IOException(message)
+class ApiException(
+    val status: Int,
+    message: String,
+    val code: String? = null,
+    val retryAfterSeconds: Long? = null,
+    /** The plan an answer names (since v1.6.2: `promo_other_plan`). */
+    val planKey: String? = null
+) : IOException(message)
 
 /**
  * Typed client for docs/API.md over a pinned OkHttp client (pins apply to the server host only).
@@ -127,7 +134,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         // A 401 means the token is gone, except signing in's "otp_required" (since v1.5): ask for the code instead.
         if (resp.code == 401 && code != "otp_required") throw NotPairedException()
         val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter)
+        val plan = json?.get("plan")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan)
     }
 
     private val jsonType = "application/json".toMediaType()
@@ -262,12 +270,22 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("me/entitlements").get().build(), com.echoledger.mobile.data.EntitlementsDto.serializer())!!
 
     /** `POST /api/upgrade-requests` (since v1.6): asks the server's owner for [plan]; one pending at a time. */
-    suspend fun requestUpgrade(plan: String, message: String?): com.echoledger.mobile.data.UpgradeRequestDto {
+    suspend fun requestUpgrade(plan: String, message: String?, promoCode: String? = null): com.echoledger.mobile.data.UpgradeRequestDto {
         val body = buildJsonObject {
             put("plan", plan)
             message?.takeIf { it.isNotBlank() }?.let { put("message", it.take(1000)) }
+            promoCode?.trim()?.takeIf { it.isNotEmpty() }?.let { put("promo_code", it) }
         }.toString().toRequestBody(jsonType)
         return call(request("upgrade-requests").post(body).build(), com.echoledger.mobile.data.UpgradeRequestDto.serializer())!!
+    }
+
+    /** `POST /api/promo-codes/check` (since v1.6.2): `422 invalid_promo_code` or `promo_other_plan` (with `plan`) are ApiExceptions. */
+    suspend fun checkPromo(code: String, plan: String?): com.echoledger.mobile.data.PromoCheckDto {
+        val body = buildJsonObject {
+            put("code", code.trim())
+            plan?.let { put("plan", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("promo-codes/check").post(body).build(), com.echoledger.mobile.data.PromoCheckDto.serializer())!!
     }
 
     /** `PUT /api/me/transcription-key` (since v1.6, the Free plan): this person's own Groq key, checked by the server. */

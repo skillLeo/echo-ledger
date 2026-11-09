@@ -753,6 +753,17 @@ fun SessionScreen(
                         CallNotesSection(vm, item.id, onSeek = { pendingSeek = it })
                     }
                 }
+            } else if (item.client != null && t?.status == "completed") {
+                // Since v1.6.2: shown locked with its badge rather than left out.
+                item(key = "call-notes-locked") {
+                    LockedFeature(
+                        vm,
+                        appSettings.plan,
+                        "ai_notes",
+                        "Call notes",
+                        Modifier.padding(horizontal = Space.screen).padding(top = Space.s5)
+                    )
+                }
             }
             // The tools come after the transcript: reading it is the main job of this page.
             if (!noAudio) {

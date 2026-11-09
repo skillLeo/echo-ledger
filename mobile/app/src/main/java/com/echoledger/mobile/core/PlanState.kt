@@ -29,6 +29,12 @@ data class PlanState(
     val transcriptionKey: com.echoledger.mobile.data.TranscriptionKeyDto? = null,
     val upgrade: com.echoledger.mobile.data.UpgradeRequestDto? = null
 ) {
+    /** Every feature in the server's order (since v1.6.2, "All features"): included ones and locked ones alike. */
+    val allFeatures: List<Pair<String, com.echoledger.mobile.data.FeatureDto>> get() = features.entries.map { it.key to it.value }
+
+    /** How many of [allFeatures] this plan has. */
+    val includedCount: Int get() = features.values.count { it.enabled }
+
     /** Whether the plan includes [feature]; a server older than v1.6 says nothing, so everything is on. */
     fun allows(feature: String): Boolean = features[feature]?.enabled ?: true
 

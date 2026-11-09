@@ -24,6 +24,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -46,6 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -285,15 +287,44 @@ private fun androidx.compose.foundation.layout.ColumnScope.EmailStep(
         enabled = !busy && SignInFlow.validEmail(state.email) && server.isNotBlank(),
         modifier = Modifier.fillMaxWidth().height(52.dp)
     ) { Text(if (busy) "One moment…" else "Continue", fontSize = 16.sp) }
-    if (google) {
-        OutlinedButton(
-            onClick = {
-                val page = vm.browserSignInUrl(server, "")
-                runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)).addCategory(Intent.CATEGORY_BROWSABLE)) }
-            },
-            enabled = !busy,
-            modifier = Modifier.fillMaxWidth().height(52.dp)
-        ) { Text("Continue with Google") }
+    // Since v1.6.2: "or", then Google (its own "G", as Google's guidelines ask) and Passkey side by side; both finish in the
+    // browser, where Google and passkeys work.
+    fun openBrowserSignIn() {
+        val page = vm.browserSignInUrl(server, "")
+        runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(page)).addCategory(Intent.CATEGORY_BROWSABLE)) }
+    }
+    if (server.isNotBlank()) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            androidx.compose.material3.HorizontalDivider(Modifier.weight(1f), color = Brand.Muted.copy(alpha = 0.3f))
+            Text("or", color = Brand.Muted, fontSize = 13.sp, modifier = Modifier.padding(horizontal = 12.dp))
+            androidx.compose.material3.HorizontalDivider(Modifier.weight(1f), color = Brand.Muted.copy(alpha = 0.3f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (google) {
+                OutlinedButton(
+                    onClick = { openBrowserSignIn() },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Continue with Google" }
+                ) {
+                    androidx.compose.foundation.Image(
+                        androidx.compose.ui.res.painterResource(com.echoledger.mobile.R.drawable.ic_google_g),
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text("Google", color = Brand.Text, maxLines = 1)
+                }
+            }
+            OutlinedButton(
+                onClick = { openBrowserSignIn() },
+                enabled = !busy,
+                modifier = Modifier.weight(1f).height(52.dp).semantics { contentDescription = "Sign in with a passkey" }
+            ) {
+                Icon(androidx.compose.material.icons.Icons.Rounded.Key, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Passkey", color = Brand.Text, maxLines = 1)
+            }
+        }
     }
     // The server: the build's own (production) unless another is typed here; a build without one always asks.
     if (MainViewModel.defaultServer.isNotBlank()) {

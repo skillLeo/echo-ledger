@@ -398,7 +398,26 @@ data class UpgradeRequestDto(
     @SerialName("payment_instructions") val paymentInstructions: String? = null,
     val reply: String? = null,
     @SerialName("created_at") val createdAt: String? = null,
-    @SerialName("decided_at") val decidedAt: String? = null
+    @SerialName("decided_at") val decidedAt: String? = null,
+    @SerialName("approved_plan") val approvedPlan: String? = null,
+    @SerialName("approved_until") val approvedUntil: String? = null,
+    /** Since v1.6.2: the promo code used, its discount and what is left to pay. */
+    @SerialName("promo_code") val promoCode: String? = null,
+    val percent: Int? = null,
+    @SerialName("amount_due") val amountDue: String? = null
+)
+
+/** `POST /api/promo-codes/check` (since v1.6.2): what a promo code does for its one plan. */
+@Serializable
+data class PromoCheckDto(
+    val code: String,
+    val plan: String,
+    @SerialName("plan_name") val planName: String = "",
+    val percent: Int = 0,
+    val price: String? = null,
+    @SerialName("final_price") val finalPrice: String? = null,
+    val free: Boolean = false,
+    val months: Int = 1
 )
 
 @Serializable
