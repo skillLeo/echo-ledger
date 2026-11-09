@@ -1,13 +1,12 @@
-// Settings → Screen moments (since v1.5): on or off, the meeting window or the whole screen, the apps never captured,
-// and what this computer and the server allow: the yellow border of Windows 10, the macOS Screen Recording permission
-// (asked again about once a month from macOS 15), the plan and an older server.
+// Settings › Recording › Screen moments (since v1.5; rows of v1.7): on or off, the meeting window or the whole screen,
+// the apps never captured (a sub-page), and what this computer and the server allow: the yellow border of Windows 10,
+// the macOS Screen Recording permission (asked again about once a month from macOS 15), the plan and an older server.
 import { useEffect, useId, useState } from "react";
 import { api, type ScreensStatus, type ScreenTarget, type Settings, type SettingsPatch } from "../../lib/ipc";
-import { CloseIcon } from "../../components/Icons";
-import { LockedToggle, PlanBadge, useLocked } from "./Upgrade";
-import { SelectRow, Toggle } from "./SettingsControls";
+import { setting } from "../../lib/settingsRegistry";
+import { useLockedTag, useLocked } from "./Upgrade";
+import { EntityRow, InfoRow, LinkRow, ResetRow, Section, SelectRow, SwitchRow } from "./SettingsControls";
 
-const TARGETS: readonly (readonly [ScreenTarget, string])[] = [["meeting_window", "The meeting window"], ["whole_screen", "The whole screen"]];
 const TARGET_HINT: Record<ScreenTarget, string> = {
   meeting_window: "Only the meeting app's window: nothing else on your screen is kept.",
   whole_screen: "The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.",
@@ -22,115 +21,104 @@ export function comparableApp(name: string): string {
   return name.trim().toLowerCase().replace(/\.exe$/, "").replace(/[\s_-]/g, "");
 }
 
-/** What the card says about this computer, the plan and the server; null when nothing stops screen moments. */
+/** What the page says about this computer, the plan and the server; null when nothing stops screen moments. */
 export function screensBlocked(status: ScreensStatus): string | null {
-  if (!status.onServer) return "Your server does not have screen moments yet. Nothing is kept until it is updated.";
-  if (!status.inPlan) return "Screen moments are not in your workspace's plan, so nothing is captured or kept. The workspace owner can change the plan in the console.";
-  if (!status.supported) return "This computer cannot capture the screen: screen moments need Windows 10 (version 1903) or later, or macOS 14.4 or later.";
+  if (!status.onServer) return "Your server doesn't have screen moments yet. Nothing is kept until it's updated.";
+  if (!status.inPlan) return "Screen moments aren't in your workspace's plan, so nothing is captured or kept.";
+  if (!status.supported) return "This computer can't capture the screen: screen moments need Windows 10 (version 1903) or later, or macOS 14.4 or later.";
   return null;
 }
 
-export function ScreenMomentsCard({ settings, patch }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean> }) {
+export function ScreenMomentsPage({ settings, patch, onExcluded }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean>; onExcluded: () => void }) {
   const [status, setStatus] = useState<ScreensStatus | null>(null);
-  const [name, setName] = useState("");
   const [asked, setAsked] = useState(false);
-  const inputId = useId();
-  const listId = useId();
   useEffect(() => {
     api.screensStatus().then(setStatus).catch(() => undefined);
   }, []);
-  const apps = settings.screenExcludedApps;
+  const locked = useLocked("screen_moments");
+  const tag = useLockedTag("screen_moments");
   const blocked = status ? screensBlocked(status) : null;
-  const screensLocked = useLocked("screen_moments");
+  const apps = settings.screenExcludedApps;
+  const on = settings.screenMoments && !locked && status?.inPlan !== false;
+  const allow = async () => {
+    const granted = await api.screensPermission().catch(() => false);
+    setAsked(!granted);
+    setStatus((s) => (s ? { ...s, permission: granted } : s));
+  };
+  const footer = [
+    blocked,
+    setting("screen.enabled").description,
+    on ? TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? WINDOWS_WHOLE_SCREEN : "") : null,
+    on && status?.platform === "windows" ? (status.borderless
+      ? "Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings."
+      : "Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it.") : null,
+    on && status?.platform === "macos" ? (status.permission ? MONTHLY_NOTE : asked
+      ? "Turn on EchoLedger in System Settings › Privacy & Security › Screen & System Audio Recording, then open EchoLedger again."
+      : `macOS asks once for the Screen Recording permission. ${MONTHLY_NOTE}`) : null,
+  ].filter(Boolean) as string[];
+  return (
+    <div data-testid="screen-moments-card">
+      <p className="set-intro">
+        During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says “look at
+        this page”, so the transcript knows what was on screen. Screens are stored encrypted on this computer until they
+        reach your server, and deleted here once they did.
+      </p>
+      <Section footer={<>{footer.map((line) => <p key={line} data-testid={line === blocked ? "screens-blocked" : undefined}>{line}</p>)}</>}>
+        {/* A plan without screen moments keeps the row in view with its plan's tag (v1.6.2); nothing is captured. */}
+        <SwitchRow id="screen.enabled" on={on} locked={locked ? tag : null} disabled={status?.inPlan === false}
+          onChange={(v) => void patch({ screenMoments: v })} />
+        {!locked && status?.inPlan !== false && (
+          <>
+            {on && <SelectRow id="screen.target" value={settings.screenTarget}
+              options={(setting("screen.target").options ?? []).map((o) => [o.value as ScreenTarget, o.label] as const)} onChange={(v) => void patch({ screenTarget: v })} />}
+            {on && status?.platform === "windows" && (
+              <InfoRow id="screen.border" value={status.borderless ? "Off on Windows 11" : "Shown on Windows 10"}>
+                {status.borderless && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Windows Settings</button>}
+              </InfoRow>
+            )}
+            {on && status?.platform === "macos" && (
+              <InfoRow id="screen.permission" value={status.permission ? "Allowed" : "Not allowed"}>
+                {!status.permission && <button type="button" className="btn compact" onClick={() => void allow()}>Allow Screen Recording</button>}
+                {!status.permission && asked && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open System Settings</button>}
+              </InfoRow>
+            )}
+            <LinkRow id="screen.excluded" value={apps.length === 1 ? "1 app" : `${apps.length} apps`} onOpen={onExcluded} chevron />
+          </>
+        )}
+      </Section>
+      <ResetRow page="Screen moments" onReset={() => void patch({ screenMoments: true, screenTarget: "meeting_window" })} />
+    </div>
+  );
+}
 
+/** Screen moments › Never capture these apps. */
+export function ExcludedAppsPage({ settings, patch, platform }: { settings: Settings; patch: (p: SettingsPatch) => Promise<boolean>; platform: string }) {
+  const [name, setName] = useState("");
+  const inputId = useId();
+  const apps = settings.screenExcludedApps;
   const add = async () => {
     const app = name.trim();
     if (!app) return;
     if (apps.some((a) => comparableApp(a) === comparableApp(app)) || (await patch({ screenExcludedApps: [...apps, app] }))) setName("");
   };
   const remove = (app: string) => void patch({ screenExcludedApps: apps.filter((a) => a !== app) });
-  const allow = async () => {
-    const granted = await api.screensPermission().catch(() => false);
-    setAsked(!granted);
-    setStatus((s) => (s ? { ...s, permission: granted } : s));
-  };
-
   return (
-    <div className="card" data-testid="screen-moments-card">
-      <div className="row"><b>Screen moments</b><span className="spacer" /><PlanBadge feature="screen_moments" /></div>
-      <p className="small muted">
-        During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says
-        “look at this page”, so the transcript and an AI reading it know what was on screen. Screens are stored
-        encrypted on this computer until they reach your server, and deleted here once they did.
-      </p>
-      {blocked && <div className="notice" role="status">{blocked}</div>}
-      {/* A plan without screen moments keeps the switch in view, off, with its badge (v1.6.2); an older server's plan
-          without them (v1.5) hides the capture's controls. Either way nothing is captured or kept. */}
-      {screensLocked && <LockedToggle feature="screen_moments" label="Keep screen moments" hint="The recording pill shows when screens are on; one click there pauses them." />}
-      {!screensLocked && status?.inPlan !== false && (
-        <>
-          <Toggle label="Keep screen moments" hint="The recording pill shows when screens are on; one click there pauses them." on={settings.screenMoments} onChange={(v) => void patch({ screenMoments: v })} />
-          {settings.screenMoments && (
-            <>
-              <SelectRow label="Capture" value={settings.screenTarget} options={TARGETS} width={200} onChange={(v) => void patch({ screenTarget: v })}
-                hint={TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? WINDOWS_WHOLE_SCREEN : "")} />
-              {status?.platform === "windows" && (
-                <div className="toggle">
-                  <div>
-                    <div>Capture border</div>
-                    <div className="small muted" data-testid="screens-border-note">
-                      {status.borderless
-                        ? "Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings."
-                        : "Windows 10 draws a yellow border around the meeting window while screens are on. Windows 11 captures without it."}
-                    </div>
-                  </div>
-                  {status.borderless && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Windows Settings</button>}
-                </div>
-              )}
-              {status?.platform === "macos" && (
-                <div className="toggle">
-                  <div>
-                    <div>Screen Recording</div>
-                    <div className="small muted" data-testid="screens-permission-note">
-                      {status.permission
-                        ? MONTHLY_NOTE
-                        : asked
-                          ? "Turn on EchoLedger in System Settings → Privacy & Security → Screen & System Audio Recording, then open EchoLedger again."
-                          : `macOS asks once for the Screen Recording permission. ${MONTHLY_NOTE}`}
-                    </div>
-                  </div>
-                  {!status.permission && <button type="button" className="btn compact" onClick={() => void allow()}>Allow Screen Recording</button>}
-                  {!status.permission && asked && <button type="button" className="btn ghost compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open System Settings</button>}
-                </div>
-              )}
-              <div className="excluded-apps">
-                <div>
-                  <div id={listId}>Never capture these apps</div>
-                  <div className="small muted">
-                    By app or process name{status?.platform === "windows" ? " (Signal.exe)" : status?.platform === "macos" ? " (Signal)" : ""}. Screens pause
-                    while one shows; password managers are on the list from the start.
-                  </div>
-                </div>
-                <div className="excluded-list" role="list" aria-labelledby={listId}>
-                  {apps.length === 0 && <span className="small muted">No apps: every window can be captured.</span>}
-                  {apps.map((app) => (
-                    <span role="listitem" className="chip small excluded-app" key={app}>
-                      {app}
-                      <button type="button" className="chip-remove" aria-label={`Remove ${app}`} title={`Remove ${app}`} onClick={() => remove(app)}><CloseIcon size={12} /></button>
-                    </span>
-                  ))}
-                </div>
-                <div className="row">
-                  <label htmlFor={inputId} className="sr-only">App to exclude</label>
-                  <input id={inputId} className="input" placeholder="App or process name" value={name} maxLength={100} style={{ width: 220 }}
-                    onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void add(); }} />
-                  <button type="button" className="btn compact" disabled={!name.trim()} onClick={() => void add()}>Exclude</button>
-                </div>
-              </div>
-            </>
-          )}
-        </>
-      )}
-    </div>
+    <>
+      <Section footer={<p>By app or process name{platform === "windows" ? " (Signal.exe)" : platform === "macos" ? " (Signal)" : ""}. Screens pause while one shows. Password managers are on the list from the start.</p>}>
+        <div role="list" aria-label="Never capture these apps">
+          {apps.length === 0 && <div className="set-row"><span className="set-title muted">No apps: every window can be captured.</span></div>}
+          {apps.map((app) => (
+            <EntityRow key={app} title={app}>
+              <button type="button" className="btn ghost compact" aria-label={`Remove ${app}`} onClick={() => remove(app)}>Remove</button>
+            </EntityRow>
+          ))}
+        </div>
+        <form className="set-row set-form" onSubmit={(e) => { e.preventDefault(); void add(); }}>
+          <label htmlFor={inputId} className="sr-only">App or process name</label>
+          <input id={inputId} className="input" placeholder="App or process name" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} />
+          <button type="submit" className="btn compact" disabled={!name.trim()}>Exclude</button>
+        </form>
+      </Section>
+    </>
   );
 }

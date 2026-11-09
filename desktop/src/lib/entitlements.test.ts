@@ -26,11 +26,12 @@ describe("what the plan allows (v1.6)", () => {
     const e = makeEntitlements();
     expect(lowestPlan(e, "views")?.name).toBe("Pro");
     expect(lowestPlan(e, "live_translate")?.color).toBe("#0f766e");
-    expect(badgeText(lowestPlan(e, "views")!)).toBe("PRO ✦");
-    expect(badgeText(lowestPlan(e, "ai_notes")!)).toBe("BUSINESS ✦");
+    expect(badgeText(lowestPlan(e, "views")!)).toBe("Pro");
+    expect(badgeText(lowestPlan(e, "views")!)).not.toMatch(/✦|[A-Z]{3}/);
+    expect(badgeText(lowestPlan(e, "ai_notes")!)).toBe("Business");
     // A lowest plan that is not on offer still gets a badge from its key.
     const offerless = makeEntitlements({ plans: [] });
-    expect(badgeText(lowestPlan(offerless, "views")!)).toBe("PRO ✦");
+    expect(badgeText(lowestPlan(offerless, "views")!)).toBe("Pro");
     expect(lowestPlan(offerless, "record")).toBeNull();
   });
 

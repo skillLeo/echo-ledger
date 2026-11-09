@@ -303,3 +303,107 @@ export function AppTileIcon({ app, size = 22, ...rest }: IconProps & { app?: str
 export function DeviceBadgeIcon({ source, size = 12 }: { source?: string; size?: number }) {
   return <SourceDeviceIcon source={source} size={size} />;
 }
+
+// ---- Settings (v1.7): Lucide's outline glyphs (ISC licence, lucide.dev) on the same base ---------------------------
+// One family, one weight, one neutral colour (currentColor, which the rows set to the muted text), on the root rows and
+// the left list only, never on a tile.
+
+const L = (paths: string[], extra?: (p: IconProps) => ReactNode) => (p: IconProps) => (
+  <Svg {...p}>{paths.map((d) => <path key={d} d={d} />)}{extra?.(p)}</Svg>
+);
+const dot = (cx: number, cy: number) => <circle key={`${cx}-${cy}`} cx={cx} cy={cy} r={0.5} fill="currentColor" />;
+
+export const LucidePhoneIcon = L(["M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"]);
+export const LucideMicIcon = L(["M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z", "M19 10v2a7 7 0 0 1-14 0v-2", "M12 19v3"]);
+export const LucideCaptionsIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="14" x="3" y="5" rx="2" ry="2" /><path d="M7 15h4M15 15h2M7 11h2M13 11h4" /></Svg>
+);
+export const LucideMonitorIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="20" height="14" x="2" y="3" rx="2" /><path d="M8 21h8" /><path d="M12 17v4" /></Svg>
+);
+export const LucideAudioLinesIcon = L(["M2 10v3", "M6 6v11", "M10 3v18", "M14 8v7", "M18 5v13", "M22 10v3"]);
+export const LucideLanguagesIcon = L(["m5 8 6 6", "m4 14 6-6 2-3", "M2 5h12", "M7 2h1", "m22 22-5-10-5 10", "M14 18h6"]);
+export const LucideBookAIcon = L(["M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20", "m8 13 4-7 4 7", "M9.1 11h5.7"]);
+export const LucideKeyRoundIcon = L(["M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z"], () => dot(16.5, 7.5));
+export const LucidePaletteIcon = L(["M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"],
+  () => [dot(13.5, 6.5), dot(17.5, 10.5), dot(8.5, 7.5), dot(6.5, 12.5)]);
+export const LucideBellIcon = L(["M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9", "M10.3 21a1.94 1.94 0 0 0 3.4 0"]);
+export const LucideLockIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Svg>
+);
+export const LucideHardDriveIcon = L(["M22 12H2", "M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z", "M6 16h.01", "M10 16h.01"]);
+export const LucideKeyboardIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M10 8h.01M12 12h.01M14 8h.01M16 12h.01M18 8h.01M6 8h.01M7 16h10M8 12h.01" /><rect width="20" height="16" x="2" y="4" rx="2" /></Svg>
+);
+export const LucidePowerIcon = L(["M12 2v10", "M18.4 6.6a9 9 0 1 1-12.77.04"]);
+export const LucideUserIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></Svg>
+);
+export const LucideCreditCardIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="20" height="14" x="2" y="5" rx="2" /><path d="M2 10h20" /></Svg>
+);
+export const LucideShieldIcon = L(["M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"]);
+export const LucideMonitorSmartphoneIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M18 8V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h8" /><path d="M10 19v-3.96 3.15" /><path d="M7 19h5" /><rect width="6" height="10" x="16" y="12" rx="2" /></Svg>
+);
+export const LucideDatabaseIcon = (p: IconProps) => (
+  <Svg {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></Svg>
+);
+export const LucideCircleHelpIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></Svg>
+);
+export const LucideInfoIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M12 16v-4" /><path d="M12 8h.01" /></Svg>
+);
+export const LucideSmartphoneIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="14" height="20" x="5" y="2" rx="2" ry="2" /><path d="M12 18h.01" /></Svg>
+);
+export const LucideLaptopIcon = L(["M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"]);
+export const LucideSearchIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Svg>
+);
+export const LucideCopyIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></Svg>
+);
+export const LucideCheckIcon = L(["M20 6 9 17l-5-5"]);
+export const LucideFileTextIcon = L(["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]);
+export const LucideXIcon = L(["M18 6 6 18", "m6 6 12 12"]);
+export const LucideExternalLinkIcon = L(["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]);
+export const LucideChevronRightIcon = L(["m9 18 6-6-6-6"]);
+export const LucideChevronLeftIcon = L(["m15 18-6-6 6-6"]);
+export const LucideTriangleAlertIcon = L(["m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3", "M12 9v4", "M12 17h.01"]);
+export const LucideCircleAlertIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></Svg>
+);
+export const LucideClockIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></Svg>
+);
+export const LucideCalendarIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M8 2v4" /><path d="M16 2v4" /><rect width="18" height="18" x="3" y="4" rx="2" /><path d="M3 10h18" /></Svg>
+);
+export const LucideCircleCheckIcon = (p: IconProps) => (
+  <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="m9 12 2 2 4-4" /></Svg>
+);
+export const LucideImageIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="18" x="3" y="3" rx="2" ry="2" /><circle cx="9" cy="9" r="2" /><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" /></Svg>
+);
+export const LucideSettingsIcon = (p: IconProps) => (
+  <Svg {...p}>
+    <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+    <circle cx="12" cy="12" r="3" />
+  </Svg>
+);
+export const LucideUserPlusIcon = (p: IconProps) => (
+  <Svg {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M19 8v6M22 11h-6" /></Svg>
+);
+export const LucideUploadIcon = L(["M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4", "m17 8-5-5-5 5", "M12 3v12"]);
+export const LucideLogOutIcon = L(["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m16 17 5-5-5-5", "M21 12H9"]);
+
+/** The icon of each root row and page (3.3 of the settings spec). */
+export const ROOT_ICONS: Record<string, (p: IconProps) => ReactNode> = {
+  calls: LucidePhoneIcon, mic: LucideMicIcon, captions: LucideCaptionsIcon, screen: LucideMonitorIcon, voice: LucideAudioLinesIcon,
+  "transcription.language": LucideLanguagesIcon, words: LucideBookAIcon, key: LucideKeyRoundIcon,
+  appearance: LucidePaletteIcon, notifications: LucideBellIcon, lock: LucideLockIcon, storage: LucideHardDriveIcon, shortcuts: LucideKeyboardIcon, "app.autostart": LucidePowerIcon,
+  profile: LucideUserIcon, plan: LucideCreditCardIcon, security: LucideShieldIcon, devices: LucideMonitorSmartphoneIcon, privacy: LucideDatabaseIcon,
+  help: LucideCircleHelpIcon, about: LucideInfoIcon,
+};

@@ -219,7 +219,7 @@ export const REQUESTS: RequestLink[] = [
 
 /** Settings → Account (v1.5). */
 export const ACCOUNT = {
-  name: "Hassam",
+  name: "Hassam Ali",
   email: "hassam@example.test",
   email_verified: true,
   two_factor: true,

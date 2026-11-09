@@ -1,30 +1,22 @@
-// Paid features and the plan (v1.6, P1.2/P1.4, docs/API.md "Entitlements", "Upgrade requests", "Your own
-// transcription key"): ONE badge style ("PRO ✦", the plan's colour, a small lock) on a feature the plan leaves out;
-// tapping it opens the one upgrade sheet (what the feature does, the plans side by side, Request upgrade with an
-// optional message, then the payment instructions and "We'll activate it once confirmed"). Account → Plan & usage and
-// Account → Transcription key (the Free plan's own Groq key, in three steps). An older server sends no entitlements:
-// no badge, no sheet, and the v1.5 plan card stays.
-import { useEffect, useId, useState, type CSSProperties } from "react";
-import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type PromoCheck, type UpgradeRequest } from "../../lib/ipc";
-// The sheet is opened through the store (lib/entitlements), so a badge anywhere opens the one sheet MainApp holds.
+// Plans and paid features (v1.6, rebuilt in v1.7, docs/API.md "Entitlements", "Upgrade requests", "Payment receipts"):
+// the neutral tag a feature the plan leaves out wears ("Pro", no colour, sparkle or lock), Settings › Plan & usage (the
+// current plan, the request, this month's meters, what the plan includes, the plans above it, payments) and Settings ›
+// Transcription key (the Free plan's own Groq key). The upgrade flow itself is UpgradeFlow.tsx. An older server sends no
+// entitlements: no tag, no flow, and Plan & usage is not offered.
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type UpgradeRequest } from "../../lib/ipc";
 import {
-  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lockedBadge, lowestPlan, notePromoCodesMissing, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
-  pendingRequest, promoCodesMissing, promoPriceLine, refreshEntitlements, useEntitlements, useUpgradeSheet,
+  featureWords, isLocked, isTopPlan, lowestPlan, noteUpgradeRequest, openRequest, openUpgradeSheet, planName, plansAbove, priceText, refreshEntitlements, refreshUpgradeRequest,
+  requestStage, useEntitlements,
 } from "../../lib/entitlements";
-import { fileSize } from "../../lib/format";
+import { count, fileSize, formatTime, rowDate, rowDateWithYear, rupees, sentenceDate } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
-import { KeyIcon, LockIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
-import { Sheet } from "./ProjectDialogs";
+import { ActionRow, ConfirmDialog, InfoRow, LinkRow, Section, Tag, rowAttrs } from "./SettingsControls";
 
-export const ACTIVATE_ONCE_CONFIRMED = "We'll activate it once confirmed.";
+export { UpgradeSheet } from "./UpgradeFlow";
 
-/** The badge's colour as a style (only `#rrggbb` reaches the page; the core drops anything else). */
-function badgeStyle(color: string | null | undefined): CSSProperties | undefined {
-  return color && /^#[0-9a-f]{6}$/i.test(color) ? ({ "--badge": color } as CSSProperties) : undefined;
-}
-
-/** The one badge for a paid feature the plan leaves out ("PRO ✦"); nothing when the plan has it or the server is older. */
+/** The neutral tag for a paid feature the plan leaves out ("Pro"); a click opens the upgrade flow (or the open request). */
 export function PlanBadge({ feature, onOpen }: { feature: string; onOpen?: (feature: string) => void }) {
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
@@ -33,45 +25,34 @@ export function PlanBadge({ feature, onOpen }: { feature: string; onOpen?: (feat
   const open = (ev: React.MouseEvent) => {
     ev.preventDefault();
     ev.stopPropagation();
-    (onOpen ?? openSheet)(feature);
+    (onOpen ?? openForFeature)(feature);
   };
   return (
-    <button type="button" className="plan-badge" style={badgeStyle(plan?.color)} onClick={open}
-      aria-label={`${name} is in the ${plan?.name ?? "paid"} plan. See what it does`} title={`${name}: ${plan?.name ?? "a paid"} plan`}>
-      <LockIcon size={11} /><span>{plan ? badgeText(plan) : "UPGRADE ✦"}</span>
+    <button type="button" className="plan-badge" onClick={open} aria-label={`${name}, in ${plan ? planName(plan) : "a paid plan"}`} title={`${name} is in ${plan ? planName(plan) : "a paid plan"}`}>
+      {plan ? planName(plan) : "Paid"}
     </button>
   );
 }
 
-/**
- * The same badge as words only, inside something that is itself the button (a project's locked tab, a menu item, a
- * palette row): that control opens the upgrade sheet.
- */
-export function BadgeMark({ feature }: { feature: string }) {
-  const badge = lockedBadge(useEntitlements(), feature);
-  if (!badge) return null;
-  return <span className="plan-badge static mark" style={badgeStyle(badge.color)} aria-hidden="true"><LockIcon size={11} /><span>{badge.text}</span></span>;
+/** The flow for a locked feature: its plan preselected, or the open request when there is one. */
+export function openForFeature(feature: string): void {
+  openUpgradeSheet(feature);
 }
 
-/**
- * A setting's switch for a feature the plan leaves out (v1.6.2): in view, off, with the badge; a click opens the
- * upgrade sheet and changes nothing.
- */
-export function LockedToggle({ feature, label, hint }: { feature: string; label: string; hint?: string }) {
+/** The same tag as words only, inside something that is itself the button (a locked tab, a menu item, a palette row). */
+export function BadgeMark({ feature }: { feature: string }) {
   const e = useEntitlements();
-  const hintId = useId();
   if (!isLocked(e, feature)) return null;
-  const plan = lowestPlan(e, feature)?.name ?? "paid";
-  return (
-    <div className="toggle locked-toggle" data-testid={`locked-toggle-${feature}`}>
-      <div><div>{label}</div>{hint && <div id={hintId} className="small muted">{hint}</div>}</div>
-      <span className="locked-toggle-end">
-        <BadgeMark feature={feature} />
-        <button type="button" className="switch" role="switch" aria-checked={false} aria-disabled="true" aria-label={`${label}, in the ${plan} plan`}
-          aria-describedby={hint ? hintId : undefined} onClick={() => openSheet(feature)} />
-      </span>
-    </div>
-  );
+  const plan = lowestPlan(e, feature);
+  return <span className="plan-badge static mark" aria-hidden="true">{plan ? planName(plan) : "Paid"}</span>;
+}
+
+/** The tag a locked row shows instead of its switch, and what a click on it does; none when the plan has it. */
+export function useLockedTag(feature: string): { tag: string; onOpen: () => void } | null {
+  const e = useEntitlements();
+  if (!isLocked(e, feature)) return null;
+  const plan = lowestPlan(e, feature);
+  return { tag: plan ? planName(plan) : "Paid", onOpen: () => openForFeature(feature) };
 }
 
 /** Whether the plan leaves `feature` out (an older server: never). */
@@ -79,7 +60,7 @@ export function useLocked(feature: string): boolean {
   return isLocked(useEntitlements(), feature);
 }
 
-/** A paid feature's place when the plan leaves it out: its name, what it does, and the badge. */
+/** A paid feature's place when the plan leaves it out: its name, what it does, and the tag. */
 export function LockedFeatureCard({ feature }: { feature: string }) {
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
@@ -92,319 +73,423 @@ export function LockedFeatureCard({ feature }: { feature: string }) {
   );
 }
 
-/** A locked feature's name with its badge, where the feature would be (the transcript's Show as views, say). */
+/** A locked feature's name with its tag, where the feature would be (the transcript's Show as views, say). */
 export function LockedChip({ feature, label }: { feature: string; label: string }) {
   const e = useEntitlements();
   if (!isLocked(e, feature)) return null;
   return <span className="locked-chip small muted" data-testid={`locked-${feature}`}><span>{label}</span><PlanBadge feature={feature} /></span>;
 }
 
-/** A plan's limit for the comparison ("600 minutes", "No limit"). */
+// ---- Words and numbers of Plan & usage -------------------------------------------------------------------------------
+
+/** "3 hours", "30 days", "1 year", "Up to 50": a plan's limits as people read them. */
 export function limitText(key: string, value: number | null | undefined): string {
   if (value === null) return "No limit";
-  if (value === undefined) return "—";
-  switch (LIMIT_LABELS.find(([k]) => k === key)?.[2]) {
-    case "bytes":
+  if (value === undefined) return "";
+  switch (key) {
+    case "storage_bytes":
       return fileSize(value);
-    case "minutes":
-      return value >= 120 && value % 60 === 0 ? `${value / 60} hours` : `${Math.round(value).toLocaleString("en-US")} minutes`;
-    case "days":
-      return `${value} days`;
-    case "usd":
-      return `$${value.toFixed(2)}`;
+    case "monthly_minutes":
+      return `${count(value)} minutes`;
+    case "max_file_minutes":
+      return value >= 60 && value % 60 === 0 ? (value === 60 ? "1 hour" : `${value / 60} hours`) : `${count(value)} minutes`;
+    case "retention_days":
+      return value >= 365 && value % 365 === 0 ? (value === 365 ? "1 year" : `${value / 365} years`) : value === 1 ? "1 day" : `${count(value)} days`;
+    case "uploads_per_day":
+      return `Up to ${count(value)}`;
+    case "seats":
+      return value <= 1 ? "Just you" : `Up to ${count(value)} people`;
     default:
-      return Math.round(value).toLocaleString("en-US");
+      return count(value);
   }
 }
 
-/** The plans side by side: price, what each has of the paid features, the main limits. */
-function PlanComparison({ e, plans, feature, chosen, onChoose, promo = null }: {
-  e: Entitlements;
-  plans: OfferedPlan[];
-  feature: string | null;
-  chosen: string | null;
-  onChoose: (key: string) => void;
-  /** An applied promo code (v1.6.2): its plan's price line shows the price after it. */
-  promo?: PromoCheck | null;
+/** "230 of 600 min": used and limit in the same unit. */
+export function usageText(key: string, limit: LimitEntitlement): string {
+  const used = limit.used ?? 0;
+  if (key === "storage_bytes") return limit.limit ? `${fileSize(used)} of ${fileSize(limit.limit)}` : fileSize(used);
+  if (key === "monthly_minutes") return limit.limit ? `${count(used)} of ${count(limit.limit)} min` : `${count(used)} min`;
+  return limit.limit ? `${count(used)} of ${count(limit.limit)}` : count(used);
+}
+
+/** How full a limit is (0–100), none without a limit. */
+export function percentOf(limit: LimitEntitlement | undefined): number | null {
+  if (!limit || !limit.limit || limit.limit <= 0 || limit.used === null) return null;
+  return Math.min(100, Math.round((limit.used / limit.limit) * 100));
+}
+
+/** Whether the person may change the plan: the owner (or admin) of the workspace, or one's own workspace. */
+export function canUpgrade(role: string | null | undefined): boolean {
+  return role !== "member" && role !== "viewer";
+}
+
+/** The first plan above the current one ("Free → Pro", "Pro → Ultra"). */
+export function nextPlan(e: Entitlements | null | undefined): OfferedPlan | null {
+  return plansAbove(e)[0] ?? null;
+}
+
+const METERS: readonly (readonly [string, string, string])[] = [
+  ["monthly_minutes", "Transcription", "plan.usage.minutes"],
+  ["storage_bytes", "Storage", "plan.usage.storage"],
+  ["devices", "Devices", "plan.usage.devices"],
+  ["seats", "Team members", "plan.usage.members"],
+];
+
+/** One meter of "This month": title, "230 of 600 min", the bar (neutral, then amber from 80 %, red when full) and its line. */
+export function Meter({ id, label, limitKey, limit, quiet, onUpgrade }: {
+  id: string;
+  label: string;
+  limitKey: string;
+  limit: LimitEntitlement;
+  /** No "Upgrade" in the line (a member, or while a request is open). */
+  quiet: boolean;
+  onUpgrade?: () => void;
 }) {
-  const rows = feature ? [feature, ...PAID_FEATURES.map(([k]) => k).filter((k) => k !== feature)] : PAID_FEATURES.map(([k]) => k);
-  const limits = ["monthly_minutes", "devices", "storage_bytes", "retention_days"].filter((k) => plans.some((p) => k in p.limits));
-  return (
-    <div className="plan-compare" role="radiogroup" aria-label="Plans">
-      {plans.map((p) => (
-        <button key={p.key} type="button" role="radio" aria-checked={chosen === p.key} className={`plan-option ${chosen === p.key ? "chosen" : ""}`}
-          style={badgeStyle(p.color)} onClick={() => onChoose(p.key)}>
-          <span className="plan-option-head"><span className="plan-badge static">{badgeText(p)}</span>
-            {promo?.plan === p.key ? <span className="small promo-price" data-testid={`promo-price-${p.key}`}>{promoPriceLine(promo)}</span> : p.price && <span className="small">{p.price}</span>}
-          </span>
-          {p.description && <span className="small muted">{p.description}</span>}
-          <span className="plan-option-list">
-            {rows.filter((k) => p.features.includes(k) || k === feature).slice(0, 6).map((k) => (
-              <span key={k} className={`small ${p.features.includes(k) ? "" : "muted"}`}>
-                {p.features.includes(k) ? <CheckIcon size={12} /> : <LockIcon size={12} />}{featureWords(e, k).name}
-              </span>
-            ))}
-            {limits.map((k) => (
-              <span key={k} className="small muted">{LIMIT_LABELS.find(([l]) => l === k)?.[1]}: {limitText(k, p.limits[k])}</span>
-            ))}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** What a sent (or pending) request says: the plan, the payment instructions, and that it is activated once confirmed. */
-function RequestSent({ request, plans }: { request: UpgradeRequest; plans: OfferedPlan[] }) {
-  const name = plans.find((p) => p.key === request.plan)?.name ?? request.plan;
-  // A 100 % promo code (v1.6.2): approved at once, nothing to pay.
-  if (request.status === "approved") {
-    const on = plans.find((p) => p.key === (request.approved_plan || request.plan))?.name ?? request.approved_plan ?? name;
-    return (
-      <div className="upgrade-sent approved" role="status" data-testid="upgrade-approved">
-        <b>Your {on} plan is on{request.approved_until ? ` until ${dateOf(request.approved_until)}` : ""}</b>
-        {request.promo_code && <p className="small">With {request.promo_code}: nothing to pay.</p>}
-      </div>
-    );
+  const percent = percentOf(limit) ?? 0;
+  // A team of one member out of one is never red (it blocks nothing here).
+  const blocks = limitKey !== "seats";
+  const tone = percent >= 100 && blocks ? "full" : percent >= 80 ? "warn" : "";
+  const text = usageText(limitKey, limit);
+  const resets = limitKey === "monthly_minutes" && limit.resets_at ? limit.resets_at : null;
+  const words = limitKey === "monthly_minutes" ? "minutes" : limitKey === "storage_bytes" ? "storage" : limitKey === "devices" ? "devices" : "team members";
+  let line: ReactNode = resets ? `Resets ${rowDate(resets)}` : null;
+  if (percent >= 100 && blocks) {
+    line = limitKey === "monthly_minutes" ? `Transcription is paused${resets ? ` until ${rowDate(resets)}` : ""}.`
+      : limitKey === "storage_bytes" ? (quiet ? "New recordings can't upload until you free up space." : <>New recordings can't upload until you free up space or <button type="button" className="btn inline-link" onClick={onUpgrade}>upgrade</button>.</>)
+        : limitKey === "devices" ? "Sign out a device to add another." : null;
+  } else if (percent >= 80 && blocks) {
+    line = quiet || !onUpgrade
+      ? `You've used ${percent}% of your ${words}.${resets ? ` They reset on ${rowDate(resets)}.` : ""}`
+      : <>You've used {percent}% of your {words}. <button type="button" className="btn inline-link" onClick={onUpgrade}>Upgrade</button>{resets ? ` or wait until ${rowDate(resets)}.` : "."}</>;
   }
+  const spoken = `${label}, ${text.replace(" min", " minutes")} used${resets ? `, resets ${sentenceDate(resets).replace(/ \d{4}$/, "")}` : ""}.`;
   return (
-    <div className="upgrade-sent" role="status">
-      <b>{request.status === "pending" ? `Your request for ${name} is pending` : `Request for ${name} sent`}</b>
-      {request.amount_due && <p className="small" data-testid="amount-due">To pay: {request.amount_due}{request.promo_code ? ` with ${request.promo_code}` : ""}</p>}
-      {request.payment_instructions && <p className="small upgrade-payment">{request.payment_instructions}</p>}
-      <p className="small">{ACTIVATE_ONCE_CONFIRMED}</p>
+    <div className="set-row set-meter-row" {...rowAttrs(id)} data-testid={`meter-${limitKey}`}>
+      <span className="set-line"><span className="set-title">{label}</span><span className={`set-value ${tone}`}>{text}</span></span>
+      <span className={`set-meter ${tone}`} role="meter" aria-label={spoken} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={fillWidth(percent / 100)} /></span>
+      {line && <span className={`set-sub ${tone}`}>{line}</span>}
     </div>
   );
 }
 
-/** The one upgrade sheet, held by MainApp and opened by any badge (or Plan & usage → See plans). */
-export function UpgradeSheet() {
-  const request = useUpgradeSheet();
-  const e = useEntitlements();
-  if (!request || !e) return null;
-  return <UpgradeSheetBody key={request.seq} e={e} feature={request.feature} />;
+/** "This month": the minutes (or, on Free, the own key), storage, devices and a team's members. */
+export function ThisMonth({ e, quiet, onKey, onUpgrade, footer = true }: { e: Entitlements; quiet: boolean; onKey: () => void; onUpgrade?: () => void; footer?: boolean }) {
+  const minutes = e.limits.monthly_minutes;
+  const ownKey = isLocked(e, "platform_transcription") || !minutes || minutes.limit === 0;
+  const uploads = e.limits.uploads_per_day;
+  return (
+    <Section title="This month" footer={footer && !ownKey ? <p>Minutes reset on the 1st of each month. Unused minutes don't carry over.</p> : undefined}>
+      {ownKey ? (
+        <div className="set-row set-meter-row" {...rowAttrs("plan.usage.minutes")} data-testid="meter-own-key">
+          <span className="set-line"><span className="set-title">Transcription</span><span className="set-value">Your Groq key</span></span>
+          <span className="set-sub">{e.transcription_key?.set ? "Key added" : <>Not added. <button type="button" className="btn inline-link" onClick={onKey}>Add key</button></>}</span>
+        </div>
+      ) : <Meter id="plan.usage.minutes" label="Transcription" limitKey="monthly_minutes" limit={minutes} quiet={quiet} onUpgrade={onUpgrade} />}
+      {METERS.slice(1).map(([key, label, id]) => {
+        const limit = e.limits[key];
+        if (!limit || limit.limit === null || limit.limit === undefined) return null;
+        if (key === "seats" && (limit.limit ?? 0) <= 1) return null;
+        return <Meter key={key} id={id} label={label} limitKey={key} limit={limit} quiet={quiet} onUpgrade={onUpgrade} />;
+      })}
+      {uploads && (percentOf(uploads) ?? 0) >= 80 && <Meter id="plan.usage.uploads" label="Uploads in the last 24 hours" limitKey="uploads_per_day" limit={uploads} quiet={quiet} onUpgrade={onUpgrade} />}
+    </Section>
+  );
 }
 
-function UpgradeSheetBody({ e, feature }: { e: Entitlements; feature: string | null }) {
-  const plans = e.plans.filter((p) => p.key !== e.plan?.key);
-  const lowest = feature ? lowestPlan(e, feature) : null;
-  const [chosen, setChosen] = useState<string | null>(lowest?.key ?? plans[0]?.key ?? null);
-  const [message, setMessage] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<string | null>(null);
-  const [sent, setSent] = useState<UpgradeRequest | null>(pendingRequest(e));
-  const messageId = useId();
-  const promoId = useId();
-  const words = feature ? featureWords(e, feature) : null;
-  // A promo code (v1.6.2): typed, checked for the plan shown, then sent with the request.
-  const [promoOpen, setPromoOpen] = useState(false);
-  const [promoText, setPromoText] = useState("");
-  const [promo, setPromo] = useState<PromoCheck | null>(null);
-  const [promoProblem, setPromoProblem] = useState<string | null>(null);
-  const [otherPlan, setOtherPlan] = useState<{ plan: string; message: string } | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [promoGone, setPromoGone] = useState(promoCodesMissing());
+/** The lines of a plan card: the server's highlights, else what the plan adds (its minutes, its team, its features). */
+export function planHighlights(e: Entitlements, plan: OfferedPlan, below: OfferedPlan | null): string[] {
+  const own = (plan.highlights ?? []).map((h) => h.trim()).filter(Boolean);
+  if (own.length > 0) return own.slice(0, 5);
+  const lines: string[] = [];
+  const minutes = plan.limits.monthly_minutes;
+  if (typeof minutes === "number" && minutes > 0) lines.push(`${count(minutes)} transcription minutes a month${below ? "" : ", no key needed"}`);
+  const seats = plan.limits.seats;
+  if (typeof seats === "number" && seats > 1) lines.push(`A team of up to ${count(seats)} people`);
+  const before = new Set(below?.features ?? Object.keys(e.features).filter((k) => e.features[k].cost !== "paid" || e.features[k].enabled));
+  for (const key of plan.features) {
+    if (lines.length >= 5) break;
+    if (before.has(key) || key === "platform_transcription" || key === "team") continue;
+    lines.push(featureWords(e, key).name);
+  }
+  return lines.slice(0, 5);
+}
 
-  const choose = (key: string) => {
-    setChosen(key);
-    setOtherPlan(null);
-    if (promo && promo.plan !== key) setPromo(null);
+/** The request's card (stage by stage): what happened, what to do next, its one main button. */
+export function RequestCard({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain, onDismiss, inFlow = false }: {
+  e: Entitlements;
+  request: UpgradeRequest;
+  onOpen?: () => void;
+  onPay?: () => void;
+  onReceipt?: () => void;
+  onCancel?: () => void;
+  onAgain?: () => void;
+  onDismiss?: () => void;
+  /** Inside the request's own status: no "View request". */
+  inFlow?: boolean;
+}) {
+  const stage = requestStage(request);
+  const name = planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" });
+  const amount = request.amount_due_pkr ? rupees(request.amount_due_pkr) : request.amount_due ?? null;
+  const until = request.approved_until ?? e.plan?.expires_at ?? null;
+  const paidAt = request.payment?.paid_at ?? request.timeline?.find((t) => t.step === "receipt_sent")?.at ?? null;
+  type Card = { title: string; tag: string; tone?: "warning" | "success"; body: ReactNode; primary?: [string, (() => void) | undefined]; secondary?: [string, (() => void) | undefined, boolean?] };
+  const cards: Record<string, Card> = {
+    awaiting_payment: {
+      title: `${name} requested`, tag: "Waiting for payment",
+      body: <p>Send {amount ?? "the amount"} to our bank account, then add a screenshot of the receipt.{request.reference_code ? <> Reference <span className="mono">{request.reference_code}</span>.</> : ""}</p>,
+      primary: ["Payment details", onPay], secondary: ["Cancel request", onCancel, true],
+    },
+    in_review: {
+      title: "Checking your payment", tag: "In review",
+      body: <p>{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt))}. ` : ""}{request.payment?.review_hours ?? "We check receipts every day."}</p>,
+      primary: inFlow ? undefined : ["View request", onOpen],
+    },
+    needs_receipt: {
+      title: "We need another receipt", tag: "Action needed", tone: "warning",
+      body: <>{request.payment?.proof_request?.note && <p className="pre-line">{request.payment.proof_request.note}</p>}<p>Your request is still open. You don't need to pay again.</p></>,
+      primary: ["Add receipt", onReceipt], secondary: ["Payment details", onPay],
+    },
+    declined: {
+      title: "We couldn't confirm your payment", tag: "Not approved",
+      body: <>{request.reply && <p className="pre-line">{request.reply}</p>}<p>If you've paid, reply to our email with your transaction ID and we'll look again.</p></>,
+      primary: onAgain ? ["Request again", onAgain] : undefined, secondary: onDismiss ? ["Dismiss", onDismiss] : undefined,
+    },
+    approved: {
+      title: `You're on ${name}`, tag: "Approved", tone: "success",
+      body: <p>Thank you. {name} is on{until ? ` until ${sentenceDate(until)}` : ""}.</p>,
+      secondary: onDismiss ? ["Dismiss", onDismiss] : undefined,
+    },
   };
-  const apply = async (plan: string | null = chosen) => {
-    const code = promoText.trim();
-    if (!code) return;
-    setChecking(true);
-    setPromoProblem(null);
-    setOtherPlan(null);
-    try {
-      const answer = await api.checkPromoCode(code, plan);
-      setPromo(answer.result === "valid" ? answer.check : null);
-      if (answer.result === "valid" && answer.check.plan !== plan && plans.some((p) => p.key === answer.check.plan)) setChosen(answer.check.plan);
-      if (answer.result === "invalid") setPromoProblem(answer.message);
-      if (answer.result === "other_plan") setOtherPlan({ plan: answer.plan, message: answer.message });
-      if (answer.result === "unsupported") {
-        notePromoCodesMissing();
-        setPromoGone(true);
-      }
-    } catch (err) {
-      setPromo(null);
-      setPromoProblem(errorMessage(err));
-    } finally {
-      setChecking(false);
-    }
-  };
-  const switchTo = (plan: string) => {
-    setChosen(plan);
-    void apply(plan);
-  };
-  const otherPlanName = otherPlan ? plans.find((p) => p.key === otherPlan.plan)?.name ?? null : null;
-
-  const send = async () => {
-    if (!chosen) return;
-    setBusy(true);
-    setProblem(null);
-    try {
-      const made = await api.requestUpgrade(chosen, message.trim() || null, promo?.plan === chosen ? promo.code : null);
-      setSent(made);
-      noteUpgradeRequest(made);
-      // A 100 % code switched the plan on: the badges go as soon as the plan is read again.
-      if (made.status === "approved") void refreshEntitlements();
-    } catch (err) {
-      setProblem(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
+  const card = stage ? cards[stage] : undefined;
+  if (!card) return null;
   return (
-    <Sheet title={words ? words.name : "Plans"} onClose={closeUpgradeSheet} busy={busy} className="upgrade-sheet">
-      {words?.description && <p className="small">{words.description}</p>}
-      {words && lowest && <p className="small muted">In the {lowest.name} plan{plans.length > 1 ? " and above" : ""}. You are on {e.plan?.name ?? "your plan"}.</p>}
-      {!words && e.plan && <p className="small muted">You are on {e.plan.name}.</p>}
-      {plans.length > 0 && <PlanComparison e={e} plans={plans} feature={feature} chosen={chosen} onChoose={choose} promo={sent ? null : promo} />}
-      {sent ? <RequestSent request={sent} plans={e.plans} /> : (
-        <>
-          {!promoGone && (promoOpen ? (
-            <div className="promo-field" data-testid="promo-field">
-              <label className="field" htmlFor={promoId}>Promo code</label>
-              <div className="row promo-row">
-                <input id={promoId} className="input" value={promoText} maxLength={24} spellCheck={false} autoComplete="off" autoCapitalize="characters"
-                  onChange={(ev) => setPromoText(ev.target.value.toUpperCase())}
-                  onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); void apply(); } }} />
-                <button type="button" className="btn" disabled={checking || !promoText.trim()} onClick={() => void apply()}>{checking ? "Checking…" : "Apply"}</button>
-              </div>
-              {promo && <p className="small promo-applied" role="status">{promo.code} applied{promo.percent ? `: ${promo.percent} % off` : ""}{promo.plan_name ? ` ${promo.plan_name}` : ""}.</p>}
-              {promoProblem && <div className="notice error small" role="alert">{promoProblem}</div>}
-              {otherPlan && (
-                <div className="notice small row promo-other" role="status">
-                  <span>{otherPlan.message}</span><span className="spacer" />
-                  {otherPlanName && <button type="button" className="btn compact" onClick={() => switchTo(otherPlan.plan)}>Switch to {otherPlanName}</button>}
-                </div>
-              )}
-            </div>
-          ) : (
-            <button type="button" className="btn text compact promo-link" onClick={() => setPromoOpen(true)}>Have a promo code?</button>
-          ))}
-          <label className="field" htmlFor={messageId}>Message for the owner (optional)
-            <textarea id={messageId} className="input" rows={2} maxLength={1000} value={message} onChange={(ev) => setMessage(ev.target.value)}
-              placeholder="Anything they should know, like who it is for" />
-          </label>
-          {problem && <div className="notice error small" role="alert">{problem}</div>}
-        </>
-      )}
-      <div className="sheet-actions row">
-        <span className="spacer" />
-        <button type="button" className="btn ghost" onClick={closeUpgradeSheet} disabled={busy}>{sent ? "Done" : "Not now"}</button>
-        {!sent && (
-          <button type="button" className="btn primary" disabled={busy || !chosen} onClick={() => void send()}>
-            {busy ? "Sending…" : "Request upgrade"}
+    <div className="set-section request-card" data-testid="upgrade-request" data-stage={stage}>
+      <div className="set-group set-card" role="status">
+        {onOpen && !inFlow ? (
+          <button type="button" className="request-head as-link" onClick={onOpen} aria-label={`${card.title}, ${card.tag}. Opens the request`}>
+            <span className="request-title">{card.title}</span><Tag tone={card.tone}>{card.tag}</Tag>
           </button>
+        ) : (
+          <div className="request-head"><span className="request-title">{card.title}</span><Tag tone={card.tone}>{card.tag}</Tag></div>
+        )}
+        <div className="request-body">{card.body}</div>
+        {(card.primary || card.secondary) && (
+          <div className="request-actions">
+            {card.primary?.[1] && <button type="button" className="btn primary" onClick={card.primary[1]}>{card.primary[0]}</button>}
+            {card.secondary?.[1] && <button type="button" className={`btn text ${card.secondary[2] ? "danger" : ""}`.trim()} onClick={card.secondary[1]}>{card.secondary[0]}</button>}
+          </div>
         )}
       </div>
-    </Sheet>
-  );
-}
-
-/** One limit with its meter: used next to what the plan allows. */
-function LimitLine({ id, label, limit }: { id: string; label: string; limit: LimitEntitlement }) {
-  const used = limit.used;
-  const percent = limit.limit && limit.limit > 0 && used !== null ? Math.min(100, Math.round((used / limit.limit) * 100)) : null;
-  const text = limit.limit === 0 ? "Not in your plan"
-    : used === null ? limitText(id, limit.limit) : limit.limit === null ? `${limitText(id, used)} (no limit)` : `${limitText(id, used)} of ${limitText(id, limit.limit)}`;
-  return (
-    <div className="plan-limit">
-      <div className="row"><span>{label}</span><span className="spacer" /><span className="small muted">{text}</span></div>
-      {percent !== null && (
-        <div className={`flow-bar ${percent >= 100 ? "full" : percent >= 80 ? "warn" : ""}`} role="meter" aria-label={`${label} used`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
-          <span style={fillWidth(percent / 100)} />
-        </div>
-      )}
     </div>
   );
 }
 
-function dateOf(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const at = new Date(iso);
-  return Number.isNaN(at.getTime()) ? iso : at.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
+const DISMISSED_KEY = "echoledger-request-dismissed";
+function dismissedIds(): string[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(DISMISSED_KEY) ?? "[]");
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+/** Hides a decided request's card and state row (stored per request id). */
+export function dismissRequest(id: string): void {
+  try {
+    localStorage.setItem(DISMISSED_KEY, JSON.stringify([...dismissedIds().filter((x) => x !== id), id].slice(-20)));
+  } catch {
+    // Storage is off: it shows again next time.
+  }
 }
 
-/** Account → Plan & usage (v1.6): the plan with its badge, the limits used, the paid features and the latest request. */
-export function PlanUsageCard({ e }: { e: Entitlements }) {
-  const plan = e.plan;
-  const request = e.upgrade_request;
-  const requestName = request ? e.plans.find((p) => p.key === request.plan)?.name ?? request.plan : null;
-  const limits = LIMIT_LABELS.filter(([key]) => e.limits[key]);
+/** Whether a request's card is shown: open, or declined in the last 14 days, or approved in the last 7, not dismissed. */
+export function requestShown(request: UpgradeRequest | null | undefined, now: number = Date.now()): boolean {
+  const stage = requestStage(request);
+  if (!request || !stage || stage === "cancelled") return false;
+  if (stage === "awaiting_payment" || stage === "in_review" || stage === "needs_receipt") return true;
+  if (dismissedIds().includes(request.id)) return false;
+  const at = Date.parse(request.decided_at ?? request.created_at ?? "");
+  const days = Number.isNaN(at) ? 0 : (now - at) / 86_400_000;
+  return stage === "declined" ? days <= 14 : days <= 7;
+}
+
+/** The full table of features: Free | Pro | Ultra, a tick where a plan has one, limits as values. */
+function FeatureMatrix({ e }: { e: Entitlements }) {
+  const freeName = e.plan?.key === "free" ? planName(e.plan) : "Free";
+  const columns: { key: string; name: string; has: (f: string) => boolean; limits: Record<string, number | null | undefined> }[] = [
+    { key: "free", name: freeName, has: (f) => e.features[f]?.cost !== "paid", limits: e.plan?.key === "free" ? Object.fromEntries(Object.entries(e.limits).map(([k, v]) => [k, v.limit])) : {} },
+    ...e.plans.filter((p) => p.key !== "free").map((p) => ({ key: p.key, name: planName(p), has: (f: string) => p.features.includes(f) || e.features[f]?.cost !== "paid", limits: p.limits })),
+  ];
+  const features = Object.keys(e.features);
+  const limits = ["storage_bytes", "retention_days", "devices", "max_file_minutes", "uploads_per_day"].filter((k) => columns.some((c) => c.limits[k] !== undefined));
+  const head = (c: (typeof columns)[number]) => (c.key === e.plan?.key ? <>{c.name} <span className="small muted">(yours)</span></> : c.name);
   return (
-    <div className="card plan-card" data-testid="plan-usage">
-      <div className="row">
-        <b>Plan &amp; usage</b><span className="spacer" />
-        {plan && <span className="plan-badge static" style={badgeStyle(plan.color)}>{plan.badge || plan.name}</span>}
+    <div className="set-section">
+      <div className="set-group feature-matrix-wrap">
+        <table className="feature-matrix" aria-label="Every feature" data-testid="all-features">
+          <thead><tr><th scope="col"><span className="sr-only">Feature</span></th>{columns.map((c) => <th key={c.key} scope="col">{head(c)}</th>)}</tr></thead>
+          <tbody>
+            {features.map((f) => (
+              <tr key={f} data-testid={`feature-${f}`}>
+                <th scope="row">{featureWords(e, f).name}</th>
+                {columns.map((c) => <td key={c.key}>{c.has(f) ? <span role="img" aria-label="Included"><CheckIcon size={15} /></span> : <span className="sr-only">Not included</span>}</td>)}
+              </tr>
+            ))}
+            {limits.map((k) => (
+              <tr key={k}>
+                <th scope="row">{k === "storage_bytes" ? "Storage" : k === "retention_days" ? "Recordings kept" : k === "devices" ? "Devices" : k === "max_file_minutes" ? "Longest recording" : "Uploads a day"}</th>
+                {columns.map((c) => <td key={c.key} className="tabular">{c.limits[k] === undefined ? "" : limitText(k, c.limits[k] ?? null)}</td>)}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      {plan && (
-        <p className="small muted">
-          You are on {plan.name}{plan.expires_at ? ` until ${dateOf(plan.expires_at)}` : ""}.
-          {plan.trial_minutes_left ? ` ${Math.round(plan.trial_minutes_left)} trial minutes left.` : ""}
-        </p>
-      )}
-      {limits.map(([key, label]) => <LimitLine key={key} id={key} label={label} limit={e.limits[key]} />)}
-      {Object.keys(e.features).length > 0 && (
-        <div className="row plan-features-summary" data-testid="plan-features-summary">
-          <span className="small">{featuresSummary(e)}.</span><span className="spacer" />
-          <button type="button" className="btn compact ghost" onClick={() => openSettingsSection("all-features")}>See all features</button>
+    </div>
+  );
+}
+
+/** Account › Plan & usage (v1.7): see the settings spec, section 4. */
+export function PlanUsagePage({ e, role, workspace, onKey }: { e: Entitlements; role: string | null; workspace: string | null; onKey: () => void }) {
+  const [matrix, setMatrix] = useState(false);
+  const [, rerender] = useState(0);
+  const request = e.upgrade_request;
+  const open = openRequest(e);
+  const stage = requestStage(request);
+  // Each time the page opens while a request is open, the request is read in full (the bank details, the receipts).
+  useEffect(() => {
+    if (open) void refreshUpgradeRequest();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open?.id, stage]);
+  const plan = e.plan;
+  const name = plan ? planName(plan) : "Your";
+  const isFree = !plan || plan.key === "free";
+  const top = isTopPlan(e);
+  const above = plansAbove(e);
+  const allowed = canUpgrade(role);
+  const quiet = !!open || !allowed;
+  const current = e.plans.find((p) => p.key === plan?.key) ?? null;
+  const price = current ? priceText(current) : null;
+  const next = above[0] ?? null;
+  const flow = (planKey: string | null) => openUpgradeSheet(null, { plan: planKey });
+  const status = (step: "status" | "pay" | "receipt") => openUpgradeSheet(null, { step });
+  const scrollToPlans = () => document.getElementById("plans-above")?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  const included: [string, string][] = [
+    ["retention_days", "Recordings kept"], ["max_file_minutes", "Longest recording"], ["uploads_per_day", "Uploads a day"], ["seats", "Team members"],
+  ];
+  const [cancelling, setCancelling] = useState<"ask" | "busy" | null>(null);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const cancel = async () => {
+    if (!open) return;
+    setCancelling("busy");
+    setCancelError(null);
+    try {
+      noteUpgradeRequest(await api.cancelUpgradeRequest(open.id));
+      setCancelling(null);
+      void refreshEntitlements();
+    } catch (err) {
+      setCancelError(errorMessage(err));
+      setCancelling("ask");
+      void refreshUpgradeRequest();
+    }
+  };
+  return (
+    <div data-testid="plan-usage">
+      <div className="set-section" {...rowAttrs("plan.current")}>
+        <div className="set-group set-card plan-current">
+          <div className="plan-name">{isFree ? "Free plan" : `${name} plan`}</div>
+          {!allowed && workspace && <p className="muted">{workspace} is on {name}. Its owner manages the plan.</p>}
+          {isFree && allowed && <p className="muted">Transcripts use your own free Groq key.</p>}
+          {!isFree && price && <p className="muted tabular">{price}</p>}
+          {!isFree && <p className="muted">{plan?.expires_at ? `Paid until ${rowDateWithYear(plan.expires_at)}` : "No end date"}</p>}
+          {plan?.trial_minutes_left ? <p className="muted">{count(plan.trial_minutes_left)} trial minutes left</p> : null}
+          {allowed && !open && next && (
+            <div className="plan-actions" {...rowAttrs("plan.upgrade")}>
+              <button type="button" className="btn primary wide" onClick={() => flow(next.key)}>{isFree ? "Upgrade" : `Upgrade to ${planName(next)}`}</button>
+              {isFree && above.length > 0 && <button type="button" className="btn text" onClick={scrollToPlans}>Compare plans</button>}
+            </div>
+          )}
+          {allowed && !open && top && <p className="muted">You're on our top plan.</p>}
+        </div>
+        {!isFree && plan?.expires_at && <div className="set-foot"><p>Your plan stops on {sentenceDate(plan.expires_at)}. There is nothing to cancel.</p></div>}
+      </div>
+      {request && requestShown(request) && (
+        <div {...rowAttrs("plan.request")}>
+          <RequestCard e={e} request={request} onOpen={() => status("status")} onPay={() => status("pay")} onReceipt={() => status("receipt")} onCancel={() => setCancelling("ask")}
+            onAgain={allowed && above.length > 0 ? () => flow(request.plan) : undefined}
+            onDismiss={() => { dismissRequest(request.id); rerender((n) => n + 1); }} />
         </div>
       )}
-      {request && (
-        <div className={`notice small upgrade-request ${request.status}`} role="status" data-testid="upgrade-request">
-          {request.status === "pending" && <>Your request for {requestName} is pending. {ACTIVATE_ONCE_CONFIRMED}</>}
-          {request.status === "approved" && <>Your request for {requestName} was approved{request.decided_at ? ` on ${dateOf(request.decided_at)}` : ""}.</>}
-          {request.status === "declined" && <>Your request for {requestName} was declined{request.reply ? `: ${request.reply}` : "."}</>}
-          {request.status === "pending" && request.payment_instructions && <p className="upgrade-payment">{request.payment_instructions}</p>}
-        </div>
+      <ThisMonth e={e} quiet={quiet} onKey={onKey} onUpgrade={next ? () => flow(next.key) : undefined} />
+      <Section title="Included in your plan" footer={isFree ? <p>Every plan can record, organise, search, share links and export.</p> : undefined}>
+        {included.map(([key, label]) => {
+          const value = e.limits[key]?.limit;
+          if (value === undefined) return null;
+          return <InfoRow key={key} id={`plan.included.${key}`} title={label} value={limitText(key, value)} />;
+        })}
+        <LinkRow id="plan.compare" value={matrix ? "Shown below" : undefined} onOpen={() => setMatrix((m) => !m)} chevron />
+      </Section>
+      {matrix && <FeatureMatrix e={e} />}
+      {allowed && above.length > 0 && (
+        <section className="set-section" id="plans-above" aria-labelledby="plans-head">
+          <h3 id="plans-head" className="set-head">Plans</h3>
+          {above.map((p, i) => {
+            const below = i > 0 ? above[i - 1] : current;
+            const lines = planHighlights(e, p, below);
+            return (
+              <div key={p.key} className="set-group set-card plan-card-above" data-testid={`plan-${p.key}`}>
+                <div className="plan-card-line"><span className="plan-card-name">{planName(p)}</span>{priceText(p) && <span className="muted tabular">{priceText(p)}</span>}</div>
+                <div className="plan-lines">
+                  {i > 0 && <p className="muted">Everything in {planName(above[i - 1])}, plus:</p>}
+                  {lines.map((l) => <p key={l}>{l}</p>)}
+                </div>
+                {!open && <button type="button" className="btn outline wide" onClick={() => flow(p.key)}>Choose {planName(p)}</button>}
+              </div>
+            );
+          })}
+        </section>
       )}
-      {e.plans.some((p) => p.key !== plan?.key) && (
-        <div className="row organise-field"><span className="spacer" /><button type="button" className="btn" onClick={() => openSheet(null)}>See plans</button></div>
+      {cancelling && (
+        <ConfirmDialog title="Cancel this request?" body="If you've already paid, add your receipt instead. Cancelling doesn't refund a payment."
+          cancel="Keep request" confirm="Cancel request" busy={cancelling === "busy"} error={cancelError}
+          onConfirm={() => void cancel()} onClose={() => { setCancelling(null); setCancelError(null); }} />
+      )}
+      {allowed && (request || above.length > 0) && (
+        <Section title="Payments" footer={<p>Payments are by bank transfer. We switch your plan on after we see the money in our account.</p>}>
+          {request && stage !== null && (
+            <button type="button" className="set-row set-link set-two" {...rowAttrs("plan.history")} onClick={() => status("status")}>
+              <span className="set-main">
+                <span className="set-title">{planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" })}, 1 month</span>
+                <span className="set-sub">{historyLine(request)}</span>
+              </span>
+              {(request.amount_due_pkr || request.amount_due) && <span className="set-end"><span className="set-value tabular">{request.amount_due_pkr ? rupees(request.amount_due_pkr) : request.amount_due}</span></span>}
+            </button>
+          )}
+          {!open && above.length > 0 && <ActionRow id="plan.promo" value="Add" onClick={() => openUpgradeSheet(null, { plan: next?.key ?? null, step: "choose" })} />}
+        </Section>
       )}
     </div>
   );
 }
 
-/**
- * Account → Plan & usage → All features (v1.6.2): every feature the server names, in its registry's order, with what
- * it does; a tick when the plan has it, otherwise the one badge, which opens the upgrade sheet for that feature (never
- * the feature: the server still refuses it with `feature_not_in_plan`).
- */
-export function AllFeaturesCard({ e }: { e: Entitlements }) {
-  const { keys } = allFeatures(e);
-  return (
-    <div className="card all-features" data-testid="all-features">
-      <div className="row"><b>All features</b></div>
-      <p className="small muted" data-testid="all-features-summary">{featuresSummary(e)}</p>
-      <ul className="feature-list" aria-label="All features">
-        {keys.map((key) => {
-          const included = e.features[key].enabled;
-          const words = featureWords(e, key);
-          return (
-            <li key={key} className={included ? "included" : "locked"} data-testid={`feature-${key}`}>
-              <span className="feature-words">
-                <span className="feature-name">{words.name}</span>
-                {words.description && <span className="small muted">{words.description}</span>}
-              </span>
-              {included
-                ? <span className="feature-included" role="img" aria-label={`${words.name} is in your plan`} title="In your plan"><CheckIcon size={15} /></span>
-                : <PlanBadge feature={key} />}
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+/** "Approved on 9 Nov 2026", "In review since 9 Nov". */
+function historyLine(request: UpgradeRequest): string {
+  const stage = requestStage(request);
+  const decided = rowDateWithYear(request.decided_at);
+  const since = rowDate(request.payment?.paid_at ?? request.created_at);
+  switch (stage) {
+    case "approved": return decided ? `Approved on ${decided}` : "Approved";
+    case "declined": return decided ? `Not approved on ${decided}` : "Not approved";
+    case "cancelled": return "Cancelled by you";
+    case "in_review": return since ? `In review since ${since}` : "In review";
+    case "needs_receipt": return "New receipt asked for";
+    default: return since ? `Waiting for payment since ${since}` : "Waiting for payment";
+  }
 }
 
 const GROQ_KEYS = "console.groq.com";
 
-/** Account → Transcription key (v1.6, the Free plan): the person's own free Groq key in three steps. */
-export function TranscriptionKeyCard({ e }: { e: Entitlements }) {
+/** Transcription › Transcription key (the Free plan): the person's own free Groq key in three steps. */
+export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
   const key = e.transcription_key;
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -416,7 +501,6 @@ export function TranscriptionKeyCard({ e }: { e: Entitlements }) {
     const timer = window.setTimeout(() => setSaved(false), 4000);
     return () => window.clearTimeout(timer);
   }, [saved]);
-
   const save = async (ev: React.FormEvent) => {
     ev.preventDefault();
     setBusy(true);
@@ -433,7 +517,7 @@ export function TranscriptionKeyCard({ e }: { e: Entitlements }) {
     }
   };
   const remove = async () => {
-    if (!window.confirm("Remove your Groq key? New recordings are not transcribed until you add a key again.")) return;
+    if (!window.confirm("Remove your Groq key? New recordings won't be transcribed until you add a key or upgrade.")) return;
     setBusy(true);
     setProblem(null);
     try {
@@ -445,35 +529,37 @@ export function TranscriptionKeyCard({ e }: { e: Entitlements }) {
       setBusy(false);
     }
   };
-
+  const paid = !isLocked(e, "platform_transcription");
   return (
-    <div className="card transcription-key" data-testid="transcription-key">
-      <div className="row"><KeyIcon size={18} /><b>Transcription key</b><span className="spacer" />
-        {key?.set && <span className="chip small">Key added · ending {key.last4 ?? "…"}</span>}
-      </div>
-      <p className="small muted">Your plan transcribes with your own free Groq key. It is kept encrypted on the server, only for your recordings, and never shown again.</p>
-      <ol className="key-steps">
-        <li>
-          <span>Open <b>{GROQ_KEYS}</b> and sign in (it is free).</span>
-          <button type="button" className="btn compact" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>Open {GROQ_KEYS}</button>
-        </li>
-        <li><span>Choose <b>API Keys</b>, then <b>Create API key</b>, and copy it.</span></li>
-        <li>
-          <span>Paste it here and press <b>Save</b>.</span>
-          <form className="row key-paste" onSubmit={(ev) => void save(ev)}>
-            <label htmlFor={fieldId} className="sr-only">Paste your Groq key</label>
-            <input id={fieldId} className="input" type="password" autoComplete="off" spellCheck={false} placeholder={key?.set ? "Paste a new key to replace it" : "Paste your key (gsk_…)"}
-              value={value} onChange={(ev) => setValue(ev.target.value)} />
-            <button type="submit" className="btn primary" disabled={busy || !value.trim()}>{busy ? "Checking…" : "Save"}</button>
-          </form>
-        </li>
-      </ol>
-      {saved && <div className="notice small" role="status">Key saved. New recordings are transcribed with it.</div>}
-      {problem && <div className="notice error small" role="alert">{problem}</div>}
-      {key?.set && <div className="row"><span className="spacer" /><button type="button" className="btn ghost danger small" disabled={busy} onClick={() => void remove()}>Remove key</button></div>}
+    <div className="transcription-key" data-testid="transcription-key">
+      {key?.set ? (
+        <Section footer={paid ? <p>Your plan transcribes for you. Your own key is used only if you choose it on a recording.</p> : undefined}>
+          <InfoRow id="key.saved" value={`Ending in ${key.last4 ?? "…"}`} />
+          <button type="button" className="set-row set-link set-danger" disabled={busy} onClick={() => void remove()}><span className="set-title">Remove key</span></button>
+        </Section>
+      ) : <p className="set-intro">Transcripts on Free use your own free Groq key. It takes about 2 minutes.</p>}
+      <Section title={key?.set ? "Replace the key" : "Add your key"}>
+        <ol className="key-steps set-block">
+          <li>
+            <span>Open <b>{GROQ_KEYS}</b> and sign in. It's free.</span>
+            <button type="button" className="btn compact" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>Open {GROQ_KEYS}</button>
+          </li>
+          <li><span>Choose <b>API Keys</b>, then <b>Create API key</b>, and copy it.</span></li>
+          <li>
+            <span>Paste it here and choose <b>Save</b>.</span>
+            <form className="row key-paste" onSubmit={(ev) => void save(ev)}>
+              <label htmlFor={fieldId} className="sr-only">Groq key</label>
+              <input id={fieldId} className="input" type="password" autoComplete="off" spellCheck={false} placeholder="Groq key (gsk_…)" value={value} onChange={(ev) => setValue(ev.target.value)} />
+              <button type="submit" className="btn primary" disabled={busy || value.trim().length < 20}>{busy ? "Checking…" : "Save"}</button>
+            </form>
+            {problem && <p className="small error-text" role="alert">{problem}</p>}
+            {saved && <p className="small" role="status">Key saved. New recordings are transcribed with it.</p>}
+          </li>
+        </ol>
+      </Section>
     </div>
   );
 }
 
 /** A recording whose transcript failed because there is no key yet (`needs_transcription_key`). */
-export const NEEDS_KEY_TEXT = "This recording was not transcribed: your plan uses your own free Groq key, and none is added yet.";
+export const NEEDS_KEY_TEXT = "This recording wasn't transcribed. Add your Groq key in Settings › Transcription key.";

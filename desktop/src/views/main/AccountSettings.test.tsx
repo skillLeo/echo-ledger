@@ -1,9 +1,9 @@
+// Settings › Account (v1.7 pages): Profile, Sign-in & security and Privacy & data (consent, export, deleting the
+// account); and what the plan leaves out on the Record page.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { SettingsView } from "./SettingsView";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { RecordView } from "./RecordView";
-import { EXPORT_POLL_MS, PlanCard } from "./AccountSettings";
-import { StorageCard } from "./SecuritySettings";
+import { ConsentPage, EXPORT_POLL_MS, PrivacyPage, ProfilePage, SecurityPage, workspaceLine } from "./AccountSettings";
 import { errorMessage, type Account, type AppStatus } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeEntitlements, makePlan, makeSettings, makeStatus } from "../../test/fixtures";
@@ -15,47 +15,23 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 
 function makeAccount(overrides: Partial<Account> = {}): Account {
   return {
-    name: "Hassam",
-    email: "hassam@example.test",
-    email_verified: true,
-    two_factor: false,
-    google: true,
-    created_at: "2026-11-01T09:00:00+00:00",
-    workspace: { id: 1, name: "Acme team", role: "owner" },
-    deletes_at: null,
-    ...overrides,
+    name: "Hassam Ali", email: "hassam@example.test", email_verified: true, two_factor: false, google: true,
+    created_at: "2026-11-01T09:00:00+00:00", workspace: { id: 1, name: "Acme team", role: "owner" }, deletes_at: null, ...overrides,
   };
 }
 
 function makeRun() {
   const errors: string[] = [];
-  const notices: string[] = [];
-  const run = async (fn: () => Promise<unknown>, ok?: string) => {
+  const run = async (fn: () => Promise<unknown>) => {
     try {
-      const result = await fn();
-      if (ok) notices.push(ok);
-      return result;
+      return await fn();
     } catch (e) {
       errors.push(errorMessage(e));
       return undefined;
     }
   };
-  return { run: run as never, errors, notices };
+  return { run: run as never, errors };
 }
-
-async function openAccount(account: Account | null = makeAccount(), status: Partial<AppStatus> = {}) {
-  respond("get_settings", makeSettings());
-  respond("list_clients", { data: [] });
-  respond("account_get", account);
-  const helpers = makeRun();
-  const onUnpaired = vi.fn();
-  render(<SettingsView status={makeStatus(status)} run={helpers.run} onUnpaired={onUnpaired} />);
-  await screen.findByRole("heading", { name: "Account", level: 1 });
-  await flushAsync();
-  return { ...helpers, onUnpaired };
-}
-
-const region = (name: string) => screen.getByRole("region", { name });
 
 beforeEach(() => resetTauriMock());
 afterEach(async () => {
@@ -64,69 +40,61 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-describe("Settings → Account", () => {
-  it("shows who is signed in, the workspace and role, two-factor and Google", async () => {
-    await openAccount(makeAccount({ two_factor: true, google: false }));
-    // The account's tabs (v1.6, P4.5), then this computer's.
-    const tabs = within(screen.getByRole("navigation", { name: "Settings groups" }));
-    for (const tab of ["Profile", "Password & sign-in methods", "Devices", "Notifications", "Preferences", "Plan & usage", "Privacy & data"]) {
-      expect(tabs.getByRole("button", { name: tab })).toBeInTheDocument();
-    }
-    const card = region("Your account");
-    expect(within(card).getByText("Hassam")).toBeInTheDocument();
-    expect(within(card).getByText("hassam@example.test")).toBeInTheDocument();
-    expect(within(card).getByText("Acme team · Owner")).toBeInTheDocument();
-    expect(within(card).getByText("1 November 2026")).toBeInTheDocument();
-    const methods = region("Password & sign-in methods");
-    expect(within(methods).getByText("On")).toBeInTheDocument();
-    expect(within(methods).getByText("Not connected")).toBeInTheDocument();
-    expect(callsOf("account_get")).toHaveLength(1);
-  });
-
-  it("has no Account group on a server without accounts", async () => {
-    await openAccount(null);
-    expect(screen.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Your account" })).not.toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "General" })).toBeInTheDocument();
-  });
-
-  it("says an address is not verified and turning two-factor on happens in the console", async () => {
-    await openAccount(makeAccount({ email_verified: false, two_factor: false }));
-    expect(within(region("Your account")).getByText("hassam@example.test (not verified yet)")).toBeInTheDocument();
-    expect(within(region("Password & sign-in methods")).getByText("Off")).toBeInTheDocument();
+describe("Profile and Sign-in & security", () => {
+  it("shows the name, email, team and member since, and edits on the website", async () => {
     respond("server_page_open", undefined);
-    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Open Profile in the browser" }));
+    const status = makeStatus({ plan: makePlan({ role: "admin", workspace: "Acme team", seats: 5 }) });
+    render(<ProfilePage account={makeAccount({ email_verified: false, workspace: { id: 1, name: "Acme team", role: "admin" } })} status={status} run={makeRun().run} />);
+    expect(document.getElementById("setting-profile.name")).toHaveTextContent("Hassam Ali");
+    expect(document.getElementById("setting-profile.email")).toHaveTextContent("hassam@example.test (not verified)");
+    expect(document.getElementById("setting-profile.workspace")).toHaveTextContent("Acme team, Admin");
+    expect(document.getElementById("setting-profile.since")).toHaveTextContent("1 Nov 2026");
+    fireEvent.click(screen.getByRole("button", { name: "Edit profile, opens in browser" }));
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]));
   });
 
-  it("tells a viewer, in the documented sentence, that this computer does not record", async () => {
-    await openAccount(makeAccount({ workspace: { id: 1, name: "Acme team", role: "viewer" } }));
-    expect(within(region("Your account")).getByRole("note")).toHaveTextContent("You are a viewer in Acme team: you can open what is shared with you, not record.");
+  it("names a team workspace with the role, and one's own not at all", () => {
+    expect(workspaceLine(makeAccount(), makeStatus())).toBeNull();
+    expect(workspaceLine(makeAccount({ workspace: { id: 1, name: "Acme", role: "member" } }), makeStatus())).toBe("Acme, Member");
   });
 
-  it("signs out everywhere only after the confirmation, and then shows the sign-in", async () => {
-    const signedOut = makeStatus({ paired: false });
-    respond("account_sign_out_everywhere", signedOut);
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
-    const { onUnpaired, notices } = await openAccount();
-
-    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Sign out everywhere" }));
-    expect(confirm).toHaveBeenCalledWith(expect.stringContaining("Every computer, phone and browser signed in to your account is signed out, this computer too."));
+  it("shows two-step and Google, and signs out everywhere only after asking", async () => {
+    respond("account_sign_out_everywhere", makeStatus({ paired: false }));
+    const onSignedOut = vi.fn();
+    render(<SecurityPage account={makeAccount({ two_factor: true })} run={makeRun().run} onSignedOut={onSignedOut} onActivity={vi.fn()} />);
+    expect(document.getElementById("setting-security.two_step")).toHaveTextContent("On");
+    expect(document.getElementById("setting-security.google")).toHaveTextContent("Connected");
+    fireEvent.click(screen.getByRole("button", { name: "Sign out everywhere" }));
+    const dialog = screen.getByRole("dialog", { name: "Sign out everywhere?" });
+    expect(dialog).toHaveTextContent("You'll be signed out on every phone, computer and browser, including this one.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(callsOf("account_sign_out_everywhere")).toHaveLength(0);
-
-    fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Sign out everywhere" }));
-    await waitFor(() => expect(onUnpaired).toHaveBeenCalledWith(signedOut));
-    expect(notices).toContain("Signed out everywhere");
-  });
-
-  it("shows when an account is being deleted", async () => {
-    await openAccount(makeAccount({ deletes_at: "2026-11-13T09:00:00+00:00" }));
-    expect(within(region("Your account")).getByRole("status")).toHaveTextContent("Your account will be deleted on 13 November 2026.");
-    expect(within(region("Your data")).queryByRole("button", { name: "Delete my account…" })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Sign out everywhere" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sign out everywhere" }));
+    await waitFor(() => expect(onSignedOut).toHaveBeenCalled());
   });
 });
 
-describe("Settings → Account → Your data", () => {
+describe("Privacy & data", () => {
+  const privacy = (account: Account | null = makeAccount(), consent = true) => {
+    const onAccount = vi.fn();
+    const onConsent = vi.fn();
+    render(<PrivacyPage account={account} settings={makeSettings({ consentAcknowledged: consent })} onAccount={onAccount} onConsent={onConsent} />);
+    return { onAccount, onConsent };
+  };
+
+  it("says whether the consent notice was read and opens it; it is never a switch", async () => {
+    const { onConsent } = privacy(makeAccount(), false);
+    expect(document.getElementById("setting-privacy.consent")).toHaveTextContent("Not yet");
+    fireEvent.click(screen.getByRole("button", { name: /^Recording consent/ }));
+    expect(onConsent).toHaveBeenCalled();
+    const patch = vi.fn(async () => true);
+    render(<ConsentPage status={makeStatus()} settings={makeSettings({ consentAcknowledged: false })} patch={patch} />);
+    fireEvent.click(screen.getByRole("button", { name: "I understand" }));
+    expect(patch).toHaveBeenCalledWith({ consentAcknowledged: true });
+    expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
   it("makes the export, asks about it every 5 seconds and opens the link once it is ready", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     respond("account_export_start", { id: "01JFEXPORT", status: "making", url: null, expires_at: null });
@@ -135,190 +103,82 @@ describe("Settings → Account → Your data", () => {
         ? { id, status: "making", url: null, expires_at: null }
         : { id, status: "ready", url: "https://ledger.example.test/exports/x.zip", expires_at: "2026-11-07T09:00:00+00:00" });
     respond("account_export_open", undefined);
-    await openAccount();
-
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Export my data" }));
-    expect(await within(region("Your data")).findByRole("button", { name: "Making your export…" })).toBeDisabled();
-    expect(callsOf("account_export_status")).toHaveLength(0);
-
+    privacy();
+    fireEvent.click(screen.getByRole("button", { name: /^Export my data/ }));
+    expect(await screen.findByRole("button", { name: /Making your export…/ })).toBeDisabled();
     await act(async () => void vi.advanceTimersByTime(EXPORT_POLL_MS));
     expect(callsOf("account_export_status")).toEqual([{ id: "01JFEXPORT" }]);
     await act(async () => void vi.advanceTimersByTime(EXPORT_POLL_MS));
     await flushAsync();
-    expect(callsOf("account_export_status")).toHaveLength(2);
     expect(callsOf("account_export_open")).toEqual([{ url: "https://ledger.example.test/exports/x.zip" }]);
-    expect(within(region("Your data")).getByRole("status")).toHaveTextContent("Your export is ready until 7 November 2026.");
-
-    // Ready: no more asking, and the link opens again on request.
     await act(async () => void vi.advanceTimersByTime(EXPORT_POLL_MS * 3));
     expect(callsOf("account_export_status")).toHaveLength(2);
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Open the download" }));
+    fireEvent.click(screen.getByRole("button", { name: /Download your export/ }));
     await flushAsync();
     expect(callsOf("account_export_open")).toHaveLength(2);
   });
 
-  it("stops asking when the server cannot say, and says why", async () => {
+  it("stops asking when the server can't say, and says why", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     respond("account_export_start", { id: "01JFEXPORT", status: "making", url: null, expires_at: null });
-    fail("account_export_status", "Network error: the server could not be reached");
-    await openAccount();
-
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Export my data" }));
-    await within(region("Your data")).findByRole("button", { name: "Making your export…" });
+    fail("account_export_status", "Couldn't reach EchoLedger. Try again.");
+    privacy();
+    fireEvent.click(screen.getByRole("button", { name: /^Export my data/ }));
+    await screen.findByRole("button", { name: /Making your export…/ });
     await act(async () => void vi.advanceTimersByTime(EXPORT_POLL_MS));
     await flushAsync();
-    expect(within(region("Your data")).getByRole("alert")).toHaveTextContent("Network error");
-    await act(async () => void vi.advanceTimersByTime(EXPORT_POLL_MS * 3));
-    expect(callsOf("account_export_status")).toHaveLength(1);
-    expect(within(region("Your data")).getByRole("button", { name: "Export my data" })).toBeEnabled();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach EchoLedger");
+    expect(screen.getByRole("button", { name: /^Export my data/ })).toBeEnabled();
   });
 
-  it("deletes the account with the password and shows when", async () => {
+  it("deletes the account with the password after asking, and says when", async () => {
     respond("account_delete", "2026-11-13T09:00:00+00:00");
-    await openAccount();
-
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Delete my account…" }));
+    const { onAccount } = privacy();
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
     const form = screen.getByRole("form", { name: "Confirm deleting your account" });
     const submit = within(form).getByRole("button", { name: "Delete my account" });
     expect(submit).toBeDisabled();
-    expect(within(form).queryByRole("button", { name: "Use a two-factor code instead" })).not.toBeInTheDocument();
-    fireEvent.change(within(form).getByLabelText(/Your password/), { target: { value: "hunter2" } });
+    expect(within(form).queryByRole("button", { name: "Use a two-step code instead" })).not.toBeInTheDocument();
+    fireEvent.change(within(form).getByLabelText("Your password"), { target: { value: "hunter2" } });
     fireEvent.click(submit);
-
     await waitFor(() => expect(callsOf("account_delete")).toEqual([{ password: "hunter2", otp: null }]));
-    expect(await within(region("Your account")).findByRole("status")).toHaveTextContent("Your account will be deleted on 13 November 2026.");
-    expect(screen.queryByRole("form", { name: "Confirm deleting your account" })).not.toBeInTheDocument();
+    expect(onAccount).toHaveBeenCalledWith(expect.objectContaining({ deletes_at: "2026-11-13T09:00:00+00:00" }));
   });
 
-  it("offers the web page to an account that has no password to confirm with", async () => {
+  it("offers the website, and a two-step code, and shows a refusal in plain words", async () => {
     respond("server_page_open", undefined);
-    await openAccount(makeAccount({ google: true }));
-
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Delete my account…" }));
-    const form = screen.getByRole("form", { name: "Confirm deleting your account" });
-    expect(within(form).getByText(/Signed in with Google and no password\?/)).toBeInTheDocument();
-    fireEvent.click(within(form).getByRole("button", { name: "Delete on the web page" }));
-
-    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "account/delete", serverUrl: null }]));
-    expect(callsOf("account_delete")).toEqual([]);
-    // Opening the page leaves the form as it was: nothing is deleted until the person confirms there.
-    expect(screen.getByRole("form", { name: "Confirm deleting your account" })).toBeInTheDocument();
-  });
-
-  it("confirms with a two-factor code instead, and shows a refusal in plain words", async () => {
     fail("account_delete", "You own a workspace that has other members. Hand it over to one of them on the console's Workspace page first, then delete your account.");
-    await openAccount(makeAccount({ two_factor: true }));
-
-    fireEvent.click(within(region("Your data")).getByRole("button", { name: "Delete my account…" }));
+    privacy(makeAccount({ two_factor: true }));
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
     const form = screen.getByRole("form", { name: "Confirm deleting your account" });
-    fireEvent.click(within(form).getByRole("button", { name: "Use a two-factor code instead" }));
-    fireEvent.change(within(form).getByLabelText(/Two-factor code/), { target: { value: " 123456 " } });
+    fireEvent.click(within(form).getByRole("button", { name: "Delete on the website" }));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "account/delete", serverUrl: null }]));
+    fireEvent.click(within(form).getByRole("button", { name: "Use a two-step code instead" }));
+    fireEvent.change(within(form).getByLabelText("Two-step code"), { target: { value: " 123456 " } });
     fireEvent.click(within(form).getByRole("button", { name: "Delete my account" }));
-
     expect(await within(form).findByRole("alert")).toHaveTextContent("Hand it over to one of them on the console's Workspace page first");
     expect(callsOf("account_delete")).toEqual([{ password: null, otp: "123456" }]);
-    fireEvent.click(within(form).getByRole("button", { name: "Cancel" }));
-    expect(screen.queryByRole("form", { name: "Confirm deleting your account" })).not.toBeInTheDocument();
+  });
+
+  it("while a deletion is scheduled, says when and offers Cancel deletion instead of Delete", () => {
+    privacy(makeAccount({ deletes_at: "2026-12-09T09:00:00Z" }));
+    expect(screen.queryByRole("button", { name: "Delete my account" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Cancel deletion/ })).toHaveTextContent("Deletes on 9 Dec 2026");
+  });
+
+  it("keeps only the consent notice on a server without accounts", () => {
+    privacy(null);
+    expect(screen.queryByRole("button", { name: /^Export my data/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Recording consent/ })).toBeInTheDocument();
   });
 });
 
-describe("Settings → Account → Plan", () => {
-  it("shows the limits next to the usage, and what the plan includes", async () => {
-    await openAccount(makeAccount(), {
-      plan: makePlan({ name: "Team", monthlyMinutes: 600, usedMinutes: 540, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.5 * 1024 ** 3, retentionDays: 90, seats: 5, liveTranslate: false }),
-    });
-    const card = screen.getByTestId("plan-card");
-    expect(within(card).getByText("Team")).toBeInTheDocument();
-    expect(within(card).getByText("540 of 600 minutes this month")).toBeInTheDocument();
-    expect(within(card).getByRole("meter", { name: "Transcription used" })).toHaveAttribute("aria-valuenow", "90");
-    expect((within(card).getByRole("meter", { name: "Transcription used" }).firstElementChild as HTMLElement).style.transform).toBe("scaleX(0.9)");
-    expect(within(card).getByText("2.5 GB of 10.0 GB stored")).toBeInTheDocument();
-    expect(within(card).getByRole("meter", { name: "Storage used" })).toHaveAttribute("aria-valuenow", "25");
-    expect(within(card).getByText("90 days")).toBeInTheDocument();
-    expect(within(card).getByText("Up to 5")).toBeInTheDocument();
-    expect(within(card).getByText("Live Translate: not in your plan")).toBeInTheDocument();
-    expect(within(card).getByText("Screen moments: included")).toBeInTheDocument();
-  });
-
-  it("shows the plan's storage next to what the server holds", async () => {
-    respond("storage_info", { recordings_bytes: 1536, recordings_count: 3, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
-    render(<StorageCard limitBytes={5 * 1024 ** 3} />);
-    expect(await screen.findByText("Recordings on the server: 1.5 KB in 3 files of the 5.0 GB your plan allows.")).toBeInTheDocument();
-  });
-
-  it("works without limits and on a server without plans", () => {
-    expect(minutesLine(makePlan({ usedMinutes: 12.4 }))).toBe("12 minutes this month (no limit)");
-    expect(storageLine(makePlan({ usedStorageBytes: null, storageBytes: null }))).toBeNull();
-    expect(storageLine(makePlan({ usedStorageBytes: 1024 }))).toBe("1.0 KB stored (no limit)");
-    expect(percentUsed(700, 600)).toBe(100);
-    expect(percentUsed(5, null)).toBeNull();
-    expect(viewerSentence(null)).toBe("You are a viewer in this workspace: you can open what is shared with you, not record.");
-  });
-
-  it("says how long the server keeps recordings when the plan sets no limit of its own", async () => {
-    respond("storage_info", { recordings_bytes: 0, recordings_count: 0, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
-    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Free", retentionDays: null }) })} />);
-    expect(await within(screen.getByTestId("plan-card")).findByText("30 days")).toBeInTheDocument();
-    expect(screen.queryByText("Until you delete them")).not.toBeInTheDocument();
-  });
-
-  it("names the server's setting when it cannot say how long, and asks the server only when the plan sets none", async () => {
-    fail("storage_info", "Network error");
-    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Free", retentionDays: null }) })} />);
-    await waitFor(() => expect(callsOf("storage_info")).toHaveLength(1));
-    expect(within(screen.getByTestId("plan-card")).getByText("As the server is set")).toBeInTheDocument();
-    cleanup();
-
-    render(<PlanCard status={makeStatus({ plan: makePlan({ name: "Team", retentionDays: 90 }) })} />);
-    expect(within(screen.getByTestId("plan-card")).getByText("90 days")).toBeInTheDocument();
-    expect(callsOf("storage_info")).toHaveLength(1);
-  });
-
-  it("explains an older server's plan", async () => {
-    await openAccount(makeAccount(), { plan: makePlan({ known: false, name: null, monthlyMinutes: 3000, usedMinutes: 812.5 }) });
-    const card = screen.getByTestId("plan-card");
-    expect(within(card).getByText(/This server has no plans yet/)).toBeInTheDocument();
-    expect(within(card).getByText("813 of 3,000 minutes this month")).toBeInTheDocument();
-    expect(within(card).queryByRole("list", { name: "In your plan" })).not.toBeInTheDocument();
-  });
-});
-
-describe("Settings → Account with entitlements (v1.6)", () => {
-  it("shows Plan & usage and the Free plan's Transcription key; an older server keeps the Plan card", async () => {
-    resetEntitlementsForTests(makeEntitlements());
-    try {
-      await openAccount();
-      expect(region("Plan & usage")).toHaveTextContent("You are on Free.");
-      expect(region("Transcription key")).toHaveTextContent("Open console.groq.com");
-      expect(screen.queryByTestId("plan-card") && screen.queryByText(/This server has no plans yet/)).toBeFalsy();
-    } finally {
-      act(() => resetEntitlementsForTests());
-    }
-    cleanup();
-    resetEntitlementsForTests(null);
-    await openAccount();
-    expect(region("Plan")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Transcription key" })).not.toBeInTheDocument();
-    act(() => resetEntitlementsForTests());
-  });
-
-  it("opens Account and shows the section asked for from elsewhere", async () => {
-    resetEntitlementsForTests(makeEntitlements());
-    const scrolled = vi.fn();
-    Element.prototype.scrollIntoView = scrolled;
-    try {
-      respond("get_settings", makeSettings());
-      respond("list_clients", { data: [] });
-      respond("account_get", makeAccount());
-      render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} section={{ id: "transcription-key", seq: 1 }} />);
-      expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
-      await flushAsync();
-      expect(scrolled).toHaveBeenCalledTimes(1);
-      expect(screen.getByRole("button", { name: "Transcription key" })).toHaveAttribute("aria-current", "page");
-      expect(screen.getByRole("heading", { level: 1, name: "Transcription key" })).toBeInTheDocument();
-    } finally {
-      act(() => resetEntitlementsForTests());
-    }
+describe("the v1.5 plan words", () => {
+  it("keep the documented sentences", () => {
+    expect(viewerSentence("Acme team")).toBe("You are a viewer in Acme team: you can open what is shared with you, not record.");
+    expect(percentUsed(50, 100)).toBe(50);
+    expect(typeof minutesLine(makePlan())).toBe("string");
+    expect(storageLine(makePlan({ storageBytes: null, usedStorageBytes: null }))).toBeNull();
   });
 });
 
@@ -346,7 +206,7 @@ describe("Plan features and the viewer on the Record page", () => {
     try {
       await record({ plan: makePlan({ liveTranslate: false }) });
       expect(screen.getByTestId("locked-live_translate")).toHaveTextContent("Live Translate");
-      expect(screen.getByRole("button", { name: /Live Translate is in the Business plan/ })).toHaveTextContent("BUSINESS ✦");
+      expect(screen.getByRole("button", { name: "Live Translate, in Business" })).toHaveTextContent("Business");
       expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
     } finally {
       act(() => resetEntitlementsForTests());

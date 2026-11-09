@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { DictationCard, withEntry } from "./DictationSettings";
+import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage, withEntry } from "./DictationSettings";
 import { callsOf, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 import type { Settings, SettingsPatch } from "../../lib/ipc";
@@ -17,9 +17,12 @@ beforeEach(() => {
   respond("dictation_history", []);
 });
 
-function renderCard(overrides: Partial<Settings> = {}) {
+function renderCard(overrides: Partial<Settings> = {}, page: "voice" | "replacements" | "snippets" | "history" = "voice") {
   const patch = vi.fn((_p: SettingsPatch) => Promise.resolve(true));
-  render(<DictationCard settings={makeSettings(overrides)} patch={patch} />);
+  const settings = makeSettings(overrides);
+  render(page === "voice" ? <VoicePage settings={settings} patch={patch} onOpen={vi.fn()} />
+    : page === "replacements" ? <ReplacementsPage settings={settings} patch={patch} />
+      : page === "snippets" ? <SnippetsPage settings={settings} patch={patch} /> : <HistoryPage />);
   return patch;
 }
 
@@ -46,7 +49,7 @@ describe("dictation settings (B14)", () => {
   });
 
   it("adds and removes replacements", async () => {
-    const patch = renderCard({ dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }] });
+    const patch = renderCard({ dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }] }, "replacements");
     expect(within(screen.getByRole("list", { name: "Replacements" })).getByText("echo ledger → EchoLedger")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("When I say"), { target: { value: " asap " } });
     fireEvent.change(screen.getByLabelText("Write"), { target: { value: "as soon as possible" } });
@@ -58,7 +61,7 @@ describe("dictation settings (B14)", () => {
   });
 
   it("adds a snippet only with both a phrase and text", async () => {
-    const patch = renderCard();
+    const patch = renderCard({}, "snippets");
     const add = screen.getByRole("button", { name: "Add snippet" });
     fireEvent.change(screen.getByLabelText("Phrase"), { target: { value: "insert signature" } });
     expect(add).toBeDisabled();
@@ -69,7 +72,8 @@ describe("dictation settings (B14)", () => {
 
   it("lists recent dictations, copies one and clears them", async () => {
     respond("dictation_history", [{ at: "2026-10-25T10:00:00Z", text: "Send the invoice." }, { at: "2026-10-25T09:00:00Z", text: "Call Farah." }]);
-    renderCard();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderCard({}, "history");
     const list = await screen.findByRole("list", { name: "Recent dictations" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);
     fireEvent.click(within(list).getAllByRole("button", { name: "Copy" })[1]);
@@ -83,7 +87,17 @@ describe("dictation settings (B14)", () => {
 
   it("shows why the history could not be read", async () => {
     fail("dictation_history", "Could not read the history");
-    renderCard();
+    renderCard({}, "history");
     expect(await screen.findByText("Could not read the history")).toBeInTheDocument();
+  });
+});
+
+describe("the Voice notes & dictation page", () => {
+  it("shows how many replacements and snippets there are and opens their pages", () => {
+    const onOpen = vi.fn();
+    render(<VoicePage settings={makeSettings({ dictationReplacements: [{ from: "a", to: "b" }], dictationSnippets: [] })} patch={vi.fn(async () => true)} onOpen={onOpen} />);
+    expect(screen.getByRole("button", { name: /^Replacements/ })).toHaveTextContent("Replacements1");
+    fireEvent.click(screen.getByRole("button", { name: /^Snippets/ }));
+    expect(onOpen).toHaveBeenCalledWith("voice.snippets");
   });
 });

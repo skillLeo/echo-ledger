@@ -611,7 +611,7 @@ describe("LibraryView transcript", () => {
       await renderLibrary();
       await selectItem("Google Meet standup");
       const hint = await within(detail()).findByTestId("needs-key");
-      expect(hint).toHaveTextContent("your plan uses your own free Groq key, and none is added yet");
+      expect(hint).toHaveTextContent("Add your Groq key in Settings › Transcription key.");
       fireEvent.click(within(hint).getByRole("button", { name: "Add my Groq key" }));
       expect(opened).toHaveBeenCalledWith("transcription-key");
       expect(within(detail()).queryByText(/Check your microphone/)).not.toBeInTheDocument();
@@ -627,7 +627,7 @@ describe("LibraryView transcript", () => {
       await selectItem("Zoom with Acme");
       const chip = await within(detail()).findByTestId("locked-views");
       expect(chip).toHaveTextContent("Roman Urdu · English · اردو");
-      expect(within(chip).getByRole("button", { name: /is in the Pro plan/ })).toHaveTextContent("PRO ✦");
+      expect(within(chip).getByRole("button", { name: /, in Pro$/ })).toHaveTextContent("Pro");
     } finally {
       act(() => resetEntitlementsForTests());
     }
@@ -642,10 +642,10 @@ describe("LibraryView transcript", () => {
       await selectItem("Zoom with Acme");
       await within(detail()).findByTestId("locked-views");
       const chips: [string, string, string][] = [
-        ["double_check", "Double-check", "PRO ✦"],
-        ["screen_moments", "Screens", "PRO ✦"],
-        ["connector", "Ask Claude or ChatGPT", "PRO ✦"],
-        ["premium_engines", "ElevenLabs · Gemini", "ULTRA ✦"],
+        ["double_check", "Double-check", "Pro"],
+        ["screen_moments", "Screens", "Pro"],
+        ["connector", "Ask Claude or ChatGPT", "Pro"],
+        ["premium_engines", "ElevenLabs · Gemini", "Ultra"],
       ];
       for (const [feature, label, badge] of chips) {
         const chip = within(detail()).getByTestId(`locked-${feature}`);

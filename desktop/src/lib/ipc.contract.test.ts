@@ -6,6 +6,11 @@ import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
 import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
+import captureSettingsTsx from "../views/main/CaptureSettings.tsx?raw";
+import dictationSettingsTsx from "../views/main/DictationSettings.tsx?raw";
+import securitySettingsTsx from "../views/main/SecuritySettings.tsx?raw";
+import appSettingsTsx from "../views/main/AppSettings.tsx?raw";
+import accountSettingsTsx from "../views/main/AccountSettings.tsx?raw";
 import commandsRs from "../../src-tauri/src/commands.rs?raw";
 import libRs from "../../src-tauri/src/lib.rs?raw";
 import errorRs from "../../src-tauri/src/error.rs?raw";
@@ -295,7 +300,7 @@ describe("wire types", () => {
   );
 
   it("every setting the UI patches is a field the Rust SettingsPatch accepts", () => {
-    const sources = [settingsViewTsx, recordViewTsx, screenSettingsTsx].join("\n");
+    const sources = [settingsViewTsx, recordViewTsx, screenSettingsTsx, captureSettingsTsx, dictationSettingsTsx, securitySettingsTsx, appSettingsTsx, accountSettingsTsx].join("\n");
     const sent = new Set([...sources.matchAll(/(?:patch|updateSettings)\(\{\s*(\w+):/g)].map((m) => m[1]));
     expect(sent.size).toBeGreaterThanOrEqual(6);
     for (const key of sent) expect(settingsPatchKeys, `"${key}" is not in SettingsPatch`).toContain(key);
