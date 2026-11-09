@@ -40,6 +40,7 @@ pub mod translate;
 pub mod tray;
 pub mod updates;
 pub mod whatsapp;
+pub mod server_notice;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -81,6 +82,8 @@ pub struct AppState {
     api_cache: net::api::ApiClientCache,
     /// Set by a `403 budget_exceeded`; cleared by the next config fetch (`AppStatus.budget`).
     pub budget_blocked: AtomicBool,
+    /// The server holds the upload queue for now (v1.6, P2.7): maintenance, or this version refused.
+    pub upload_hold: Mutex<Option<server_notice::UploadHold>>,
     /// Where a captions server session belongs while a recording runs and stops (A5.1).
     pub session_link: Mutex<pending::SessionLink>,
     /// The recording pill is hidden by the user; the recording continues (A3.3).
@@ -169,6 +172,7 @@ impl AppState {
             detect: detect::DetectState::default(),
             api_cache: net::api::ApiClientCache::default(),
             budget_blocked: AtomicBool::new(false),
+            upload_hold: Mutex::new(None),
             session_link: Mutex::new(pending::SessionLink::default()),
             pill_hidden: AtomicBool::new(false),
             captions_on_resume: AtomicBool::new(false),
@@ -275,7 +279,29 @@ impl AppState {
         }
         self.budget_blocked.store(false, std::sync::atomic::Ordering::SeqCst);
         self.screens.note_config(&config);
+        // The config is never refused, so it says whether the queue still waits: in maintenance or refused it holds
+        // again, otherwise a hold from an earlier answer is over.
+        *self.upload_hold.lock().unwrap_or_else(|p| p.into_inner()) = server_notice::hold_from_config(&config, std::time::Instant::now());
         *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
+    }
+
+    /// Notes an answer that holds the queue (maintenance, a refused version); true when it was one.
+    pub fn note_hold(&self, e: &error::AppError) -> bool {
+        let Some(hold) = server_notice::hold_from_error(e, std::time::Instant::now()) else { return false };
+        *self.upload_hold.lock().unwrap_or_else(|p| p.into_inner()) = Some(hold);
+        true
+    }
+
+    /// Whether the upload queue waits now (the server is in maintenance or refuses this version).
+    pub fn uploads_held(&self) -> bool {
+        self.upload_hold.lock().unwrap_or_else(|p| p.into_inner()).is_some_and(|h| h.active(std::time::Instant::now()))
+    }
+
+    /// What the main window shows at its top (v1.6, P2.7).
+    pub fn server_notices(&self) -> server_notice::ServerNotices {
+        let config = self.server_config.lock().unwrap_or_else(|p| p.into_inner());
+        let hold = *self.upload_hold.lock().unwrap_or_else(|p| p.into_inner());
+        server_notice::notices(config.as_ref(), hold.as_ref(), std::time::Instant::now())
     }
 
     /// What the workspace's plan and the person's role allow, from the last server config (v1.5).

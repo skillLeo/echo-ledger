@@ -661,3 +661,22 @@ fn data_directory_layout() {
     assert_eq!(paths::usage(base), base.join("usage.json"));
     assert_eq!(paths::discards(base), base.join("discards.json"));
 }
+
+#[tokio::test]
+async fn maintenance_or_a_refused_version_leaves_the_library_and_its_sync_position_as_they_were() {
+    for reply in [
+        Reply::json(503, json!({"message": "In maintenance", "code": "maintenance", "until": null})).header("Retry-After", "60"),
+        Reply::json(426, json!({"message": "Please update", "code": "update_required", "minimum": "1.6.0", "url": "https://x.test/downloads"})),
+    ] {
+        let server = MockServer::start(Router::new().fixed("GET", "/api/library", reply));
+        let mut cache = LibraryCache::default();
+        cache.items.push(item("a", "2026-10-24T08:00:00+00:00", "2026-10-24T08:00:00+00:00", "kept"));
+        cache.since = Some("2026-10-24T08:00:00+00:00".into());
+        let error = cache.refresh(&client(&server)).await.unwrap_err();
+        // The app's sync (refresh_library_inner) turns exactly these into a quiet hold, never an error to show.
+        assert!(error.hold().is_some(), "{error:?}");
+        assert!(!error.is_permanent());
+        assert_eq!(ids(&cache.items), ["a"]);
+        assert_eq!(cache.since.as_deref(), Some("2026-10-24T08:00:00+00:00"));
+    }
+}

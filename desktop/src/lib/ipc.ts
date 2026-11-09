@@ -58,6 +58,34 @@ export interface AppStatus {
   /** The last Ready check (Phase 1C): null before the first one. */
   callsReady?: boolean | null;
   readyProblems?: number;
+  /** What the server says to every app (v1.6, P2.7); missing from an older core. */
+  server?: ServerNotices;
+}
+
+/** `config.app_update`: this version is below the server's minimum; `refused`: its other requests are refused. */
+export interface AppUpdateNotice {
+  minimum: string;
+  required: boolean;
+  refused: boolean;
+  message: string;
+  url: string | null;
+}
+/** `config.announcement`: a banner until `until` (none: until it is taken down). */
+export interface AnnouncementNotice {
+  text: string;
+  level: "info" | "warning" | string;
+  until: string | null;
+}
+export interface MaintenanceNotice {
+  message: string;
+  until: string | null;
+}
+/** The update, the announcement, maintenance, and why uploads wait (none: they go as usual). */
+export interface ServerNotices {
+  appUpdate: AppUpdateNotice | null;
+  announcement: AnnouncementNotice | null;
+  maintenance: MaintenanceNotice | null;
+  waiting: "maintenance" | "update_required" | null;
 }
 
 /** `GET /api/auth/options` (Phase 1C): what this server's sign-in offers; links only on the server's own address. */
@@ -1224,6 +1252,9 @@ export type AppEvent = keyof EventPayloads;
 /** The server's public pages the app opens in the browser (since v1.5). */
 /** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
 export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "admin/workspace" | "admin/profile";
+/** The words the core uses while the server holds this computer's work (error.rs: MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT). */
+export const MAINTENANCE_TEXT = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
+export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";
 
 export const api = {
   status: () => invoke<AppStatus>("app_status"),

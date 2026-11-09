@@ -65,6 +65,56 @@ pub struct ServerConfig {
     /// The device's workspace and its person's role there (since v1.5).
     #[serde(default, deserialize_with = "lenient")]
     pub workspace: Option<WorkspaceDto>,
+    /// This version is below the minimum the admin set (since v1.6, P2.7); `null` when it is not.
+    #[serde(default, deserialize_with = "lenient")]
+    pub app_update: Option<AppUpdateDto>,
+    /// A banner the admin put up for everyone (since v1.6, P2.7).
+    #[serde(default, deserialize_with = "lenient")]
+    pub announcement: Option<AnnouncementDto>,
+    /// The server is in maintenance (since v1.6, P2.7): uploads wait.
+    #[serde(default, deserialize_with = "lenient")]
+    pub maintenance: Option<MaintenanceDto>,
+}
+
+/// `config.app_update` (docs/API.md "Updates, announcements and maintenance"). `refused`: the server answers this
+/// version's other requests with `426 update_required` until it is updated.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AppUpdateDto {
+    #[serde(default)]
+    pub minimum: String,
+    #[serde(default)]
+    pub required: bool,
+    #[serde(default)]
+    pub refused: bool,
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub url: Option<String>,
+}
+
+/// `config.announcement`: `level` is `info` or `warning`; the banner stays until `until` (none: until it is taken down).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct AnnouncementDto {
+    pub text: String,
+    #[serde(default = "AnnouncementDto::default_level")]
+    pub level: String,
+    #[serde(default)]
+    pub until: Option<String>,
+}
+
+impl AnnouncementDto {
+    fn default_level() -> String {
+        "info".into()
+    }
+}
+
+/// `config.maintenance`: the server's message and when it should be back (none: not said).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct MaintenanceDto {
+    #[serde(default)]
+    pub message: String,
+    #[serde(default)]
+    pub until: Option<String>,
 }
 
 /// `config.unsure` (docs/API.md "GET /api/config"): `[?word]` (brackets), `word(?)` (suffix) or plain (off) in copies,

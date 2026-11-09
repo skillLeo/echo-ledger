@@ -44,6 +44,7 @@ export function makeStatus(overrides: Partial<AppStatus> = {}): AppStatus {
     trayState: "idle",
     budget: "ok",
     plan: makePlan(),
+    server: { appUpdate: null, announcement: null, maintenance: null, waiting: null },
     ...overrides,
   };
 }

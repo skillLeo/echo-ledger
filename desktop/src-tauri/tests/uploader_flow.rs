@@ -1968,3 +1968,70 @@ async fn a_recording_made_under_one_account_is_not_sent_after_another_signs_in()
     assert_eq!(queue.ui_items(Some(&hassam))[0].held_for, None);
     assert_eq!(upload(&api(&server), &queue.items[0]).await.unwrap(), SESSION_ID);
 }
+
+// ---- The server holds the work (v1.6, P2.7) --------------------------------------------------------------------
+
+/// `503 maintenance` with `Retry-After`, as docs/API.md "Updates, announcements and maintenance" sends it.
+fn maintenance_reply() -> Reply {
+    Reply::json(503, json!({"message": "EchoLedger is in maintenance until 11:00.", "code": "maintenance", "until": "2026-11-09T11:00:00+00:00"})).header("Retry-After", "120")
+}
+
+#[tokio::test]
+async fn maintenance_during_an_upload_stops_at_once_and_the_recording_waits_unfailed() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = write_file(dir.path(), "recording.flac", 2_500, 41);
+    let flow = Flow::new(1_000, vec![Slot::fresh("primary", 2_500)]).inject(|index, _| (index == 1).then(maintenance_reply));
+    let (server, _) = flow.start();
+    let started = std::time::Instant::now();
+    let mut item = pending(dir.path(), primary);
+    let result = upload(&api(&server), &item).await.map(|session_id| UploadOutcome::Ready { session_id });
+    let error = result.as_ref().unwrap_err();
+    assert_eq!(error.hold(), Some(desktop_lib::error::ServerHold::Maintenance));
+    assert_eq!(error.retry_after_secs(), Some(120));
+    assert_eq!(chunk_requests(&server, "primary").len(), 2, "chunk 0, then chunk 1 once: no retries during maintenance");
+    assert!(started.elapsed() < Duration::from_secs(2), "no back-off waits: the queue holds instead");
+    assert!(!is_final_failure(error));
+    assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Keep);
+    assert_eq!(item.state, states::QUEUED, "it waits, it did not fail");
+    assert!(!item.is_failed());
+    assert_eq!(item.attempts, 0, "maintenance is not a try");
+    assert_eq!(item.last_error, None, "nothing to show as an error");
+}
+
+#[tokio::test]
+async fn a_refused_version_keeps_the_recording_waiting_and_sends_no_audio() {
+    let dir = tempfile::tempdir().unwrap();
+    let primary = write_file(dir.path(), "recording.flac", 2_000, 42);
+    let mut flow = Flow::new(1_000, vec![Slot::fresh("primary", 2_000)]);
+    flow.session_reply = Some(Reply::json(426, json!({"message": "Please update EchoLedger to 1.6.0 or later.", "code": "update_required", "minimum": "1.6.0", "url": "https://x.test/downloads"})));
+    let (server, _) = flow.start();
+    let mut item = pending(dir.path(), primary);
+    let result = upload(&api(&server), &item).await.map(|session_id| UploadOutcome::Ready { session_id });
+    let error = result.as_ref().unwrap_err();
+    assert_eq!(error.hold(), Some(desktop_lib::error::ServerHold::UpdateRequired));
+    assert!(!error.is_permanent(), "the same upload goes through after the update");
+    assert!(chunk_requests(&server, "primary").is_empty());
+    assert_eq!(after_attempt(&mut item, false, &result), AfterAttempt::Keep);
+    assert_eq!((item.state.as_str(), item.attempts, item.last_error.as_deref()), (states::QUEUED, 0, None));
+    // The same answer to an upload that was verifying keeps it verifying.
+    let mut verifying = item.clone();
+    verifying.state = states::VERIFYING.into();
+    after_attempt(&mut verifying, true, &result);
+    assert_eq!(verifying.state, states::VERIFYING);
+}
+
+#[tokio::test]
+async fn maintenance_stops_the_usage_and_discard_drains_without_dropping_anything() {
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", "/api/usage", maintenance_reply())
+            .fixed("DELETE", "/api/sessions/S1", Reply::json(426, json!({"message": "Update", "code": "update_required"}))),
+    );
+    let drain = drain_usage(&api(&server), &[report("r1"), report("r2")]).await;
+    assert!(drain.done.is_empty() && drain.dropped == 0, "nothing is dropped while the server holds");
+    assert_eq!(drain.stopped.as_ref().and_then(AppError::hold), Some(desktop_lib::error::ServerHold::Maintenance));
+    assert_eq!(server.requests_to("POST", "/api/usage").len(), 1, "r2 waits too");
+    let discards = drain_discards(&api(&server), &["S1".to_string(), "S2".to_string()]).await;
+    assert!(discards.done.is_empty(), "a refused version deletes nothing yet, and forgets nothing");
+    assert_eq!(discards.stopped.as_ref().and_then(AppError::hold), Some(desktop_lib::error::ServerHold::UpdateRequired));
+}

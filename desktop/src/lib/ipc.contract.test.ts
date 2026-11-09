@@ -2,11 +2,14 @@
 // argument, enum value or struct field on either side fails here instead of at runtime inside the webview.
 import { describe, expect, it } from "vitest";
 import ipcTs from "./ipc.ts?raw";
+import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
 import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
 import commandsRs from "../../src-tauri/src/commands.rs?raw";
 import libRs from "../../src-tauri/src/lib.rs?raw";
+import errorRs from "../../src-tauri/src/error.rs?raw";
+import serverNoticeRs from "../../src-tauri/src/server_notice.rs?raw";
 import settingsRs from "../../src-tauri/src/settings.rs?raw";
 import audioRs from "../../src-tauri/src/audio/mod.rs?raw";
 import audioTypesRs from "../../src-tauri/src/audio/types.rs?raw";
@@ -169,6 +172,15 @@ describe("command names and arguments", () => {
 
 describe("wire types", () => {
   const settingsPatchKeys = rustFields(commandsRs, "SettingsPatch");
+
+  it("says a held request in the core's own words (error.rs, v1.6 P2.7)", () => {
+    expect(errorRs).toContain(`pub const MAINTENANCE_TEXT: &str = "${MAINTENANCE_TEXT}";`);
+    expect(errorRs).toContain(`pub const UPDATE_REQUIRED_TEXT: &str = "${UPDATE_REQUIRED_TEXT}";`);
+  });
+
+  it("ServerNotices fields match the Rust struct", () => {
+    expect(sorted(tsInterfaceKeys("ServerNotices"))).toEqual(sorted(rustFields(serverNoticeRs, "ServerNotices")));
+  });
 
   it("AppStatus fields match the Rust struct", () => {
     expect(sorted(tsInterfaceKeys("AppStatus"))).toEqual(sorted(rustFields(commandsRs, "AppStatus")));
