@@ -117,6 +117,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   auth_code_send: () => ({ resendAfter: 60, expiresIn: 600, sent: true }),
   auth_code_verify: () => ({ result: "profile", status: null }),
   entitlements_get: () => (free ? sampleEntitlements("free") : ultra ? sampleEntitlements("ultra") : null),
+  // v1.6.2: a promo code for Pro, at half price.
+  promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,

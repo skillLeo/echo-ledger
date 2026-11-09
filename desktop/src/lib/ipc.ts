@@ -161,7 +161,32 @@ export interface UpgradeRequest {
   created_at: string | null;
   decided_at: string | null;
   reply: string | null;
+  /** Since v1.6.2: the promo code on the request, its discount and the price after it. */
+  promo_code?: string | null;
+  percent?: number | null;
+  amount_due?: string | null;
+  /** Since v1.6.2: a 100 % code approves at once; the plan switched on and until when. */
+  approved_plan?: string | null;
+  approved_until?: string | null;
 }
+/** `POST /api/promo-codes/check` (since v1.6.2): a code that applies to the plan asked. */
+export interface PromoCheck {
+  code: string;
+  plan: string;
+  plan_name: string | null;
+  percent: number | null;
+  price: string | null;
+  final_price: string | null;
+  /** A 100 % code: nothing to pay, the plan switches on at once. */
+  free: boolean;
+  months: number | null;
+}
+/** What the sheet hears about a promo code; `unsupported` is an older server without them. */
+export type PromoAnswer =
+  | { result: "valid"; check: PromoCheck }
+  | { result: "invalid"; message: string }
+  | { result: "other_plan"; plan: string; message: string }
+  | { result: "unsupported" };
 export interface OfferedPlan {
   key: string;
   name: string;
@@ -1286,7 +1311,8 @@ export const api = {
   deleteTranscriptionKey: () => invoke<void>("transcription_key_delete"),
   /** console.groq.com's API keys page in the browser, where the free key is made. */
   openGroqConsole: () => invoke<void>("groq_console_open"),
-  requestUpgrade: (plan: string, message: string | null) => invoke<UpgradeRequest>("upgrade_request_create", { plan, message }),
+  requestUpgrade: (plan: string, message: string | null, promoCode: string | null = null) => invoke<UpgradeRequest>("upgrade_request_create", { plan, message, promoCode }),
+  checkPromoCode: (code: string, plan: string | null) => invoke<PromoAnswer>("promo_code_check", { code, plan }),
   latestUpgradeRequest: () => invoke<UpgradeRequest | null>("upgrade_request_latest"),
   /** Account → Devices → Rename (since v1.6); the new name. */
   renameDevice: (id: string, name: string) => invoke<string>("device_rename", { id, name }),

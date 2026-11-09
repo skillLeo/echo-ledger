@@ -770,6 +770,11 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
   project's Notes, and in Plan & usage. Click it to see what the feature does and the plans side by side. **Request
   upgrade** (with a message if you like) sends the request to the owner; the app then shows how to pay and says
   "We'll activate it once confirmed". A pending request shows as pending until the owner decides.
+- **Promo codes** (since v1.6.2): in the upgrade sheet choose **Have a promo code?**, type the code and press **Apply**.
+  The plan's price shows the discount ("Rs 2,999 → Rs 1,500 / month with SAVE50") and **Request upgrade** sends the code
+  with your request. A code for another plan says so ("This code is for Pro") and offers **Switch to Pro**. A 100 %
+  code switches the plan on at once ("Your Pro plan is on until …"), with nothing to pay. A server without promo codes
+  does not show the field.
 - **All features** (since v1.6.2; under Plan & usage, or **Ctrl+K → All features**, **⌘K** on a Mac) lists every
   feature, in the same order as the server, with a line on what it does: a tick when your plan has it, otherwise its
   badge. The line at the top says how many your plan has ("Your plan has 6 of 15 features"). Locked features stay in

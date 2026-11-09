@@ -462,6 +462,7 @@ pub fn run() {
             commands::transcription_key_delete,
             commands::groq_console_open,
             commands::upgrade_request_create,
+            commands::promo_code_check,
             commands::upgrade_request_latest,
             commands::device_rename,
             commands::auth_page_open,

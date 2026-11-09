@@ -3,7 +3,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { AllFeaturesCard, LockedFeatureCard, PlanBadge, PlanUsageCard, TranscriptionKeyCard, UpgradeSheet } from "./Upgrade";
-import { OPEN_SECTION_EVENT, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
+import { OPEN_SECTION_EVENT, promoCodesMissing, promoPriceLine, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { callsOf, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { FEATURE_REGISTRY, makeEntitlements, sampleEntitlements } from "../../test/fixtures";
 import type { Entitlements } from "../../lib/ipc";
@@ -64,7 +64,7 @@ describe("the one badge (v1.6)", () => {
     fireEvent.change(within(sheet).getByLabelText(/Message for the owner/), { target: { value: " For my calls " } });
     fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
     expect(await within(sheet).findByText("Your request for Pro is pending")).toBeInTheDocument();
-    expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: "For my calls" }]);
+    expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: "For my calls", promoCode: null }]);
     expect(sheet).toHaveTextContent("Pay Rs 2,000 to Example Bank 0000-1111.");
     expect(sheet).toHaveTextContent("We'll activate it once confirmed.");
     expect(within(sheet).queryByRole("button", { name: "Request upgrade" })).not.toBeInTheDocument();
@@ -81,7 +81,7 @@ describe("the one badge (v1.6)", () => {
     fireEvent.click(within(sheet).getByRole("radio", { name: /BUSINESS ✦/ }));
     fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
     expect(await within(sheet).findByRole("alert")).toHaveTextContent("does not take upgrade requests yet");
-    expect(callsOf("upgrade_request_create")[0]).toEqual({ plan: "business", message: null });
+    expect(callsOf("upgrade_request_create")[0]).toEqual({ plan: "business", message: null, promoCode: null });
   });
 
   it("shows a pending request at once instead of asking again", () => {
@@ -284,5 +284,116 @@ describe("Account → Plan & usage → All features (v1.6.2)", () => {
     fireEvent.click(screen.getByRole("button", { name: "See all features" }));
     window.removeEventListener(OPEN_SECTION_EVENT, opened);
     expect((opened.mock.calls[0][0] as CustomEvent).detail).toBe("all-features");
+  });
+});
+
+describe("the upgrade sheet's promo code (v1.6.2)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+  });
+
+  // From docs/API.md "Promo codes"; docs/api-samples/promo_check.json once the server's test writes it.
+  const SAVE50 = { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 };
+  const FREEPRO = { ...SAVE50, code: "FREEPRO", percent: 100, final_price: "Rs 0 / month", free: true, months: 3 };
+
+  function openSheet(feature = "views") {
+    const e = makeEntitlements();
+    e.plans[0].price = "Rs 2,999 / month";
+    withEntitlements(e);
+    render(<><PlanBadge feature={feature} /><UpgradeSheet /></>);
+    fireEvent.click(screen.getAllByRole("button", { name: /is in the/ })[0]);
+    return screen.getByRole("dialog");
+  }
+  function typeCode(sheet: HTMLElement, code: string) {
+    fireEvent.click(within(sheet).getByRole("button", { name: "Have a promo code?" }));
+    fireEvent.change(within(sheet).getByLabelText("Promo code"), { target: { value: code } });
+    fireEvent.click(within(sheet).getByRole("button", { name: "Apply" }));
+  }
+
+  it("checks the code for the plan shown, shows the new price, and sends the code with the request", async () => {
+    respondWith("promo_code_check", () => ({ result: "valid", check: SAVE50 }));
+    respond("upgrade_request_create", { ...PENDING, plan: "pro", promo_code: "SAVE50", percent: 50, amount_due: "Rs 1,500 / month" });
+    const sheet = openSheet();
+    expect(within(sheet).queryByLabelText("Promo code")).not.toBeInTheDocument();
+    typeCode(sheet, "save50");
+    expect(await within(sheet).findByTestId("promo-price-pro")).toHaveTextContent("Rs 2,999 → Rs 1,500 / month with SAVE50");
+    expect(callsOf("promo_code_check")).toEqual([{ code: "SAVE50", plan: "pro" }]);
+    expect(within(sheet).getByRole("status")).toHaveTextContent("SAVE50 applied: 50 % off Pro.");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
+    expect(await within(sheet).findByText("Your request for Pro is pending")).toBeInTheDocument();
+    expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: null, promoCode: "SAVE50" }]);
+    expect(within(sheet).getByTestId("amount-due")).toHaveTextContent("To pay: Rs 1,500 / month with SAVE50");
+    expect(sheet).toHaveTextContent("We'll activate it once confirmed.");
+  });
+
+  it("says plainly when a code does not work, and sends no code", async () => {
+    respond("promo_code_check", { result: "invalid", message: "This promo code does not work: it is not known, it has ended or been used up, or you have used it already." });
+    respond("upgrade_request_create", PENDING);
+    const sheet = openSheet();
+    typeCode(sheet, "NOPE-2026");
+    expect(await within(sheet).findByRole("alert")).toHaveTextContent("This promo code does not work: it is not known, it has ended or been used up, or you have used it already.");
+    expect(within(sheet).getByRole("radio", { name: /PRO ✦/ })).toHaveTextContent("Rs 2,999 / month");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
+    await within(sheet).findByText("Your request for Pro is pending");
+    expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: null, promoCode: null }]);
+  });
+
+  it("offers the plan a code is for, switches the sheet to it and checks again", async () => {
+    respondWith("promo_code_check", ({ plan }) => (plan === "pro"
+      ? { result: "valid", check: SAVE50 }
+      : { result: "other_plan", plan: "pro", message: "This code is for Pro." }));
+    const sheet = openSheet("live_translate");
+    expect(within(sheet).getByRole("radio", { name: /BUSINESS ✦/ })).toHaveAttribute("aria-checked", "true");
+    typeCode(sheet, "SAVE50");
+    const other = await within(sheet).findByText("This code is for Pro.");
+    fireEvent.click(within(other.parentElement!).getByRole("button", { name: "Switch to Pro" }));
+    expect(await within(sheet).findByTestId("promo-price-pro")).toHaveTextContent("Rs 2,999 → Rs 1,500 / month with SAVE50");
+    expect(within(sheet).getByRole("radio", { name: /PRO ✦/ })).toHaveAttribute("aria-checked", "true");
+    expect(callsOf("promo_code_check")).toEqual([{ code: "SAVE50", plan: "business" }, { code: "SAVE50", plan: "pro" }]);
+    // Choosing another plan by hand drops the code: it is for Pro only.
+    fireEvent.click(within(sheet).getByRole("radio", { name: /BUSINESS ✦/ }));
+    expect(within(sheet).queryByTestId("promo-price-pro")).not.toBeInTheDocument();
+  });
+
+  it("switches the plan on at once with a 100 % code: no payment instructions, and the plan is read again", async () => {
+    respond("promo_code_check", { result: "valid", check: FREEPRO });
+    respond("upgrade_request_create", {
+      id: "01JG", plan: "pro", status: "approved", message: null, payment_instructions: null, created_at: "2026-11-09T12:00:00+00:00", decided_at: "2026-11-09T12:00:00+00:00",
+      reply: null, promo_code: "FREEPRO", percent: 100, amount_due: "Rs 0 / month", approved_plan: "pro", approved_until: "2027-02-09T12:00:00+00:00",
+    });
+    respond("entitlements_get", makeEntitlements({ plan: { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed", expires_at: "2027-02-09T12:00:00+00:00", trial_minutes_left: null } }));
+    const sheet = openSheet();
+    typeCode(sheet, "FREEPRO");
+    expect(await within(sheet).findByTestId("promo-price-pro")).toHaveTextContent("Rs 2,999 / month → Free for 3 months with FREEPRO");
+    fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
+    expect(await within(sheet).findByTestId("upgrade-approved")).toHaveTextContent("Your Pro plan is on until 9 February 2027");
+    expect(sheet).not.toHaveTextContent("We'll activate it once confirmed.");
+    expect(sheet).not.toHaveTextContent("Pay ");
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+  });
+
+  it("hides the field on an older server (no promo codes) and keeps the request working", async () => {
+    respond("promo_code_check", { result: "unsupported" });
+    respond("upgrade_request_create", PENDING);
+    const sheet = openSheet();
+    typeCode(sheet, "SAVE50");
+    await waitFor(() => expect(within(sheet).queryByLabelText("Promo code")).not.toBeInTheDocument());
+    expect(within(sheet).queryByRole("button", { name: "Have a promo code?" })).not.toBeInTheDocument();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Request upgrade" }));
+    await within(sheet).findByText("Your request for Pro is pending");
+    expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: null, promoCode: null }]);
+    // Until sign-out the sheet no longer offers it.
+    expect(promoCodesMissing()).toBe(true);
+  });
+});
+
+describe("the price with a promo code (v1.6.2)", () => {
+  it.each([
+    [{ price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, percent: 50, months: 1 }, "Rs 2,999 → Rs 1,500 / month with SAVE50"],
+    [{ price: "Rs 30,000 a year", final_price: "Rs 15,000 a year", free: false, percent: 50, months: 12 }, "Rs 30,000 a year → Rs 15,000 a year with SAVE50"],
+    [{ price: null, final_price: null, free: false, percent: 20, months: 1 }, "20 % off with SAVE50"],
+    [{ price: "Rs 2,999 / month", final_price: "Rs 0 / month", free: true, percent: 100, months: 1 }, "Rs 2,999 / month → Free for 1 month with SAVE50"],
+  ])("%#", (prices, line) => {
+    expect(promoPriceLine({ code: "SAVE50", plan: "pro", plan_name: "Pro", ...prices })).toBe(line);
   });
 });

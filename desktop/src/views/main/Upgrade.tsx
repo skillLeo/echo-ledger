@@ -5,11 +5,11 @@
 // Account → Transcription key (the Free plan's own Groq key, in three steps). An older server sends no entitlements:
 // no badge, no sheet, and the v1.5 plan card stays.
 import { useEffect, useId, useState, type CSSProperties } from "react";
-import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type UpgradeRequest } from "../../lib/ipc";
+import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type PromoCheck, type UpgradeRequest } from "../../lib/ipc";
 // The sheet is opened through the store (lib/entitlements), so a badge anywhere opens the one sheet MainApp holds.
 import {
-  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lockedBadge, lowestPlan, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
-  pendingRequest, refreshEntitlements, useEntitlements, useUpgradeSheet,
+  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lockedBadge, lowestPlan, notePromoCodesMissing, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
+  pendingRequest, promoCodesMissing, promoPriceLine, refreshEntitlements, useEntitlements, useUpgradeSheet,
 } from "../../lib/entitlements";
 import { fileSize } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
@@ -118,12 +118,14 @@ export function limitText(key: string, value: number | null | undefined): string
 }
 
 /** The plans side by side: price, what each has of the paid features, the main limits. */
-function PlanComparison({ e, plans, feature, chosen, onChoose }: {
+function PlanComparison({ e, plans, feature, chosen, onChoose, promo = null }: {
   e: Entitlements;
   plans: OfferedPlan[];
   feature: string | null;
   chosen: string | null;
   onChoose: (key: string) => void;
+  /** An applied promo code (v1.6.2): its plan's price line shows the price after it. */
+  promo?: PromoCheck | null;
 }) {
   const rows = feature ? [feature, ...PAID_FEATURES.map(([k]) => k).filter((k) => k !== feature)] : PAID_FEATURES.map(([k]) => k);
   const limits = ["monthly_minutes", "devices", "storage_bytes", "retention_days"].filter((k) => plans.some((p) => k in p.limits));
@@ -132,7 +134,9 @@ function PlanComparison({ e, plans, feature, chosen, onChoose }: {
       {plans.map((p) => (
         <button key={p.key} type="button" role="radio" aria-checked={chosen === p.key} className={`plan-option ${chosen === p.key ? "chosen" : ""}`}
           style={badgeStyle(p.color)} onClick={() => onChoose(p.key)}>
-          <span className="plan-option-head"><span className="plan-badge static">{badgeText(p)}</span>{p.price && <span className="small">{p.price}</span>}</span>
+          <span className="plan-option-head"><span className="plan-badge static">{badgeText(p)}</span>
+            {promo?.plan === p.key ? <span className="small promo-price" data-testid={`promo-price-${p.key}`}>{promoPriceLine(promo)}</span> : p.price && <span className="small">{p.price}</span>}
+          </span>
           {p.description && <span className="small muted">{p.description}</span>}
           <span className="plan-option-list">
             {rows.filter((k) => p.features.includes(k) || k === feature).slice(0, 6).map((k) => (
@@ -153,9 +157,20 @@ function PlanComparison({ e, plans, feature, chosen, onChoose }: {
 /** What a sent (or pending) request says: the plan, the payment instructions, and that it is activated once confirmed. */
 function RequestSent({ request, plans }: { request: UpgradeRequest; plans: OfferedPlan[] }) {
   const name = plans.find((p) => p.key === request.plan)?.name ?? request.plan;
+  // A 100 % promo code (v1.6.2): approved at once, nothing to pay.
+  if (request.status === "approved") {
+    const on = plans.find((p) => p.key === (request.approved_plan || request.plan))?.name ?? request.approved_plan ?? name;
+    return (
+      <div className="upgrade-sent approved" role="status" data-testid="upgrade-approved">
+        <b>Your {on} plan is on{request.approved_until ? ` until ${dateOf(request.approved_until)}` : ""}</b>
+        {request.promo_code && <p className="small">With {request.promo_code}: nothing to pay.</p>}
+      </div>
+    );
+  }
   return (
     <div className="upgrade-sent" role="status">
       <b>{request.status === "pending" ? `Your request for ${name} is pending` : `Request for ${name} sent`}</b>
+      {request.amount_due && <p className="small" data-testid="amount-due">To pay: {request.amount_due}{request.promo_code ? ` with ${request.promo_code}` : ""}</p>}
       {request.payment_instructions && <p className="small upgrade-payment">{request.payment_instructions}</p>}
       <p className="small">{ACTIVATE_ONCE_CONFIRMED}</p>
     </div>
@@ -179,16 +194,61 @@ function UpgradeSheetBody({ e, feature }: { e: Entitlements; feature: string | n
   const [problem, setProblem] = useState<string | null>(null);
   const [sent, setSent] = useState<UpgradeRequest | null>(pendingRequest(e));
   const messageId = useId();
+  const promoId = useId();
   const words = feature ? featureWords(e, feature) : null;
+  // A promo code (v1.6.2): typed, checked for the plan shown, then sent with the request.
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoText, setPromoText] = useState("");
+  const [promo, setPromo] = useState<PromoCheck | null>(null);
+  const [promoProblem, setPromoProblem] = useState<string | null>(null);
+  const [otherPlan, setOtherPlan] = useState<{ plan: string; message: string } | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [promoGone, setPromoGone] = useState(promoCodesMissing());
+
+  const choose = (key: string) => {
+    setChosen(key);
+    setOtherPlan(null);
+    if (promo && promo.plan !== key) setPromo(null);
+  };
+  const apply = async (plan: string | null = chosen) => {
+    const code = promoText.trim();
+    if (!code) return;
+    setChecking(true);
+    setPromoProblem(null);
+    setOtherPlan(null);
+    try {
+      const answer = await api.checkPromoCode(code, plan);
+      setPromo(answer.result === "valid" ? answer.check : null);
+      if (answer.result === "valid" && answer.check.plan !== plan && plans.some((p) => p.key === answer.check.plan)) setChosen(answer.check.plan);
+      if (answer.result === "invalid") setPromoProblem(answer.message);
+      if (answer.result === "other_plan") setOtherPlan({ plan: answer.plan, message: answer.message });
+      if (answer.result === "unsupported") {
+        notePromoCodesMissing();
+        setPromoGone(true);
+      }
+    } catch (err) {
+      setPromo(null);
+      setPromoProblem(errorMessage(err));
+    } finally {
+      setChecking(false);
+    }
+  };
+  const switchTo = (plan: string) => {
+    setChosen(plan);
+    void apply(plan);
+  };
+  const otherPlanName = otherPlan ? plans.find((p) => p.key === otherPlan.plan)?.name ?? null : null;
 
   const send = async () => {
     if (!chosen) return;
     setBusy(true);
     setProblem(null);
     try {
-      const made = await api.requestUpgrade(chosen, message.trim() || null);
+      const made = await api.requestUpgrade(chosen, message.trim() || null, promo?.plan === chosen ? promo.code : null);
       setSent(made);
       noteUpgradeRequest(made);
+      // A 100 % code switched the plan on: the badges go as soon as the plan is read again.
+      if (made.status === "approved") void refreshEntitlements();
     } catch (err) {
       setProblem(errorMessage(err));
     } finally {
@@ -201,9 +261,30 @@ function UpgradeSheetBody({ e, feature }: { e: Entitlements; feature: string | n
       {words?.description && <p className="small">{words.description}</p>}
       {words && lowest && <p className="small muted">In the {lowest.name} plan{plans.length > 1 ? " and above" : ""}. You are on {e.plan?.name ?? "your plan"}.</p>}
       {!words && e.plan && <p className="small muted">You are on {e.plan.name}.</p>}
-      {plans.length > 0 && <PlanComparison e={e} plans={plans} feature={feature} chosen={chosen} onChoose={setChosen} />}
+      {plans.length > 0 && <PlanComparison e={e} plans={plans} feature={feature} chosen={chosen} onChoose={choose} promo={sent ? null : promo} />}
       {sent ? <RequestSent request={sent} plans={e.plans} /> : (
         <>
+          {!promoGone && (promoOpen ? (
+            <div className="promo-field" data-testid="promo-field">
+              <label className="field" htmlFor={promoId}>Promo code</label>
+              <div className="row promo-row">
+                <input id={promoId} className="input" value={promoText} maxLength={24} spellCheck={false} autoComplete="off" autoCapitalize="characters"
+                  onChange={(ev) => setPromoText(ev.target.value.toUpperCase())}
+                  onKeyDown={(ev) => { if (ev.key === "Enter") { ev.preventDefault(); void apply(); } }} />
+                <button type="button" className="btn" disabled={checking || !promoText.trim()} onClick={() => void apply()}>{checking ? "Checking…" : "Apply"}</button>
+              </div>
+              {promo && <p className="small promo-applied" role="status">{promo.code} applied{promo.percent ? `: ${promo.percent} % off` : ""}{promo.plan_name ? ` ${promo.plan_name}` : ""}.</p>}
+              {promoProblem && <div className="notice error small" role="alert">{promoProblem}</div>}
+              {otherPlan && (
+                <div className="notice small row promo-other" role="status">
+                  <span>{otherPlan.message}</span><span className="spacer" />
+                  {otherPlanName && <button type="button" className="btn compact" onClick={() => switchTo(otherPlan.plan)}>Switch to {otherPlanName}</button>}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button type="button" className="btn text compact promo-link" onClick={() => setPromoOpen(true)}>Have a promo code?</button>
+          ))}
           <label className="field" htmlFor={messageId}>Message for the owner (optional)
             <textarea id={messageId} className="input" rows={2} maxLength={1000} value={message} onChange={(ev) => setMessage(ev.target.value)}
               placeholder="Anything they should know, like who it is for" />

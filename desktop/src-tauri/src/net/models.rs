@@ -964,7 +964,7 @@ pub struct TranscriptionKeyState {
 }
 
 /// An upgrade request (`POST /api/upgrade-requests`, `GET /api/upgrade-requests/latest`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UpgradeRequest {
     #[serde(default)]
     pub id: String,
@@ -983,6 +983,51 @@ pub struct UpgradeRequest {
     pub decided_at: Option<String>,
     #[serde(default, deserialize_with = "lenient")]
     pub reply: Option<String>,
+    /// A promo code on the request (since v1.6.2), its discount and the price after it, as the server shows it.
+    #[serde(default, deserialize_with = "lenient")]
+    pub promo_code: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub percent: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub amount_due: Option<String>,
+    /// A 100 % code approves the request at once (since v1.6.2): the plan switched on, and until when.
+    #[serde(default, deserialize_with = "lenient")]
+    pub approved_plan: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub approved_until: Option<String>,
+}
+
+/// `POST /api/promo-codes/check` (since v1.6.2): a valid code for the plan asked, its discount and the prices before
+/// and after it as the server writes them. `free` is a 100 % code: nothing to pay, the plan switches on at once.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PromoCheck {
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub plan: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub percent: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub price: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub final_price: Option<String>,
+    #[serde(default)]
+    pub free: bool,
+    #[serde(default, deserialize_with = "lenient")]
+    pub months: Option<u32>,
+}
+
+/// What the upgrade sheet hears about a promo code: it applies, it does not, it is for another plan (which the sheet
+/// offers), or the server has no promo codes yet (an older one: the field goes).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum PromoAnswer {
+    Valid { check: PromoCheck },
+    Invalid { message: String },
+    OtherPlan { plan: String, message: String },
+    Unsupported,
 }
 
 /// A plan on offer, for the comparison sheet (cheapest first).

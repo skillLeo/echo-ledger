@@ -1469,3 +1469,11 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .tab.locked:hover { color: var(--text); }
 .locked-toggle-end { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; }
 .locked-toggle .switch { opacity: 0.55; }
+/* Promo codes in the upgrade sheet (v1.6.2). */
+.promo-link { align-self: flex-start; padding-inline: 0; }
+.promo-field { display: grid; gap: var(--space-2); }
+.promo-row { gap: var(--space-2); }
+.promo-row .input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 0.04em; }
+.promo-price { font-weight: 600; color: var(--success); }
+.promo-applied { color: var(--success); }
+.upgrade-sent.approved b { color: var(--success); }
