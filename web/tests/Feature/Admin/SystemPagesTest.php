@@ -136,3 +136,14 @@ it('lists the whole platform\'s activity with filters, for staff who may see it'
     Livewire::test(ActivityLog::class)->filterTable('event', ['plan_created'])->assertCanNotSeeTableRecords($passwords)
         ->resetTableFilters()->searchTable('Ana')->assertCanSeeTableRecords($passwords);
 });
+
+it('never shows staff the title of a recording or project in the activity log, nor finds it by search', function () {
+    $ana = Fx::user(['email' => 'ana@example.test']);
+    $session = Fx::session($ana, null, ['title' => 'Divorce lawyer call']);
+    app(AuditLog::class)->record('session_deleted', $ana->id, $session, 'Recording deleted: Divorce lawyer call');
+    onAdminAsStaff();
+
+    $this->get('/admin/activity-log')->assertOk()->assertSee('Recording deleted')->assertDontSee('Divorce lawyer call');
+    $this->get('/admin/customers/'.$ana->id)->assertOk()->assertDontSee('Divorce lawyer call');
+    Livewire::test(ActivityLog::class)->searchTable('Divorce')->assertCountTableRecords(0);
+});

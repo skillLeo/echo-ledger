@@ -28,7 +28,7 @@ use UnitEnum;
  * Admin panel → Activity log (since v1.6, P2.7): everything the audit log keeps, for the whole platform: sign-ins,
  * devices, sharing, settings, plans, staff and support actions, with who did it, from where and when. Filters by
  * what happened, who did it (a person, an app or the server), by person and by date. Summaries name things, never
- * what was said in a recording.
+ * what was said in a recording, and an event that names a recording or a project by its title shows only what happened.
  */
 class ActivityLog extends Page implements HasTable
 {
@@ -64,7 +64,10 @@ class ActivityLog extends Page implements HasTable
             ->columns([
                 TextColumn::make('created_at')->label('When')->dateTime('M j, Y H:i')->sortable(),
                 TextColumn::make('event')->label('What')->badge()->color('gray')->formatStateUsing(fn (string $state): string => AuditLog::EVENTS[$state] ?? $state),
-                TextColumn::make('summary')->wrap()->searchable(),
+                // Titles of recordings and projects are content: their events show what happened instead.
+                TextColumn::make('summary')->wrap()->formatStateUsing(fn (AuditEvent $record): string => AuditLog::forStaff($record))
+                    ->searchable(query: fn (Builder $query, string $search): Builder => $query->whereNotIn('event', AuditLog::NAMES_CONTENT)
+                        ->where('summary', 'like', '%'.str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $search).'%')),
                 TextColumn::make('user.email')->label('Account')->placeholder('—')->searchable()
                     ->url(fn (AuditEvent $record): ?string => $record->user_id !== null && StaffAccess::can('customers.view') ? ViewCustomer::getUrl(['record' => $record->user_id]) : null),
                 TextColumn::make('actor')->label('By')->formatStateUsing(fn (string $state): string => self::ACTORS[$state] ?? $state),

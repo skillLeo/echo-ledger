@@ -114,7 +114,7 @@
         <table style="width:100%;font-size:.85rem;border-collapse:collapse">
             <tbody>
                 @forelse ($audit as $event)
-                    <tr><td style="{{ $cell }}white-space:nowrap">{{ $event->created_at->format('M j, H:i') }}</td><td style="{{ $cell }}">{{ $event->summary }}</td><td style="{{ $cell }}opacity:.7">{{ $event->actor }}</td></tr>
+                    <tr><td style="{{ $cell }}white-space:nowrap">{{ $event->created_at->format('M j, H:i') }}</td><td style="{{ $cell }}">{{ \App\Services\AuditLog::forStaff($event) }}</td><td style="{{ $cell }}opacity:.7">{{ $event->actor }}</td></tr>
                 @empty
                     <tr><td style="{{ $cell }}">Nothing yet.</td></tr>
                 @endforelse

@@ -108,6 +108,18 @@ final class AuditLog
         'connector_tool_call' => 'Read by a connected app',
     ];
 
+    /** Events whose summary names a recording or a project (its title): staff read the event's name instead. */
+    public const NAMES_CONTENT = ['session_deleted', 'share_created', 'share_revoked', 'sent_to_teammate', 'support_content_viewed'];
+
+    /**
+     * How the admin panel shows an event (since v1.6, P2.2): metadata only, so an event that names a recording or a
+     * project by its title shows what happened, not the title.
+     */
+    public static function forStaff(AuditEvent $event): string
+    {
+        return in_array($event->event, self::NAMES_CONTENT, true) ? self::EVENTS[$event->event] : $event->summary;
+    }
+
     /**
      * @param  array<string, mixed>  $meta
      */

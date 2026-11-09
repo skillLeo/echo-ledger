@@ -11,6 +11,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Models\CaptureSession;
 use App\Models\Transcript;
+use App\Services\ActivityFeed;
 use Filament\Facades\Filament;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -61,7 +62,7 @@ describe('navigation', function () {
             'kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'segments' => []]);
         expect($this->get(Activity::getUrl())->assertOk()->getContent())->not->toContain('el-bottom-nav-badge');
 
-        app(App\Services\ActivityFeed::class)->post($this->admin, 'transcript_failed', 'Transcription failed', 'Call', null, 'heroicon-o-exclamation-triangle');
+        app(ActivityFeed::class)->post($this->admin, 'transcript_failed', 'Transcription failed', 'Call', null, 'heroicon-o-exclamation-triangle');
         $html = $this->get(Activity::getUrl())->assertOk()->getContent();
 
         expect($html)->toContain('el-bottom-nav-badge')->toMatch('/aria-current="page"[^>]*>\s*<span class="el-bottom-nav-icon">/');
