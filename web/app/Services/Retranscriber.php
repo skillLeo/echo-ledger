@@ -23,7 +23,8 @@ use RuntimeException;
  */
 final class Retranscriber
 {
-    public function start(CaptureSession $session, SttProviderKey $provider, ?string $language = null): Transcript
+    /** @param  array<string, mixed>  $meta  kept on the new run before its job starts */
+    public function start(CaptureSession $session, SttProviderKey $provider, ?string $language = null, array $meta = []): Transcript
     {
         $final = $session->finalTranscript;
         if (! $final instanceof Transcript || $final->status !== TranscriptStatus::Completed) {
@@ -41,6 +42,7 @@ final class Retranscriber
             'provider' => $provider->value,
             'status' => TranscriptStatus::Pending,
             'language' => LanguageChoice::normalize($language),
+            ...($meta !== [] ? ['meta' => $meta] : []),
         ]);
         TranscribeFinalJob::dispatch($alternate->id);
 
@@ -65,8 +67,9 @@ final class Retranscriber
             return app(FinalTranscriptCoordinator::class)->start($session->refresh(), $final);
         }
         $route = app(LanguageRouter::class)->final($language ?? LanguageChoice::normalize($session->client?->language), FinalTranscriptCoordinator::useCaseFor($session), $session);
-        $alternate = $this->start($session, $route->provider, $language);
-        $alternate->update(['meta' => ['promote_when_done' => true, 'route' => $route->toArray()]]);
+        // The run's choices are kept before its job starts (a job that runs at once would otherwise lose them; since
+        // v1.6 it adds whether the person's own key made it).
+        $alternate = $this->start($session, $route->provider, $language, ['promote_when_done' => true, 'route' => $route->toArray()]);
 
         return $alternate->refresh();
     }

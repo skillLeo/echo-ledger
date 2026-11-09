@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Auth\EditProfile;
 use App\Jobs\TranscribeFinalJob;
@@ -190,4 +191,34 @@ it('sets up the key on Profile → Transcription key in three steps, and refuses
         ->assertNotified('Your Groq key is saved');
     expect($this->user->fresh()->transcription_key)->toBe(OWN_KEY);
     expect($this->get('/admin/profile')->assertOk()->assertSee('ending in 3f9a')->getContent())->not->toContain(OWN_KEY);
+});
+
+describe('re-transcribing a Free recording', function () {
+    beforeEach(function () {
+        app(CredentialVault::class)->put('groq', 'api_key', SERVER_KEY);
+        app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_server_key_1234567890');
+    });
+
+    it('uses the person\'s own key exactly like the first run, and fails again without one', function () {
+        $session = $this->makeReadySession($this->device, Fixtures::audio(4000), ['language' => 'en']);
+        $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Completed, 'text' => 'Old.', 'segments' => []]);
+
+        $run = $this->asToken($this->token)->postJson("/api/sessions/{$session->id}/retranscribe", ['language' => 'ur'])->assertSuccessful()->json();
+        $failed = Transcript::query()->findOrFail($run['transcript']['id']);
+        expect($failed->status)->toBe(TranscriptStatus::Failed)->and($failed->error_code)->toBe('needs_transcription_key');
+
+        $this->user->forceFill(['transcription_key' => OWN_KEY, 'transcription_key_provider' => 'groq', 'transcription_key_last4' => '3f9a'])->save();
+        $sent = [];
+        Http::fake(['api.groq.com/openai/v1/audio/transcriptions' => function (HttpRequest $r) use (&$sent) {
+            $sent[] = $r->header('Authorization')[0] ?? '';
+
+            return Http::response(['task' => 'transcribe', 'language' => 'urdu', 'text' => 'سلام', 'segments' => [
+                ['id' => 0, 'start' => 0.0, 'end' => 1.0, 'text' => 'سلام', 'avg_logprob' => -0.2, 'compression_ratio' => 1.2, 'no_speech_prob' => 0.01],
+            ], 'words' => []], 200);
+        }]);
+        $again = $this->asToken($this->token)->postJson("/api/sessions/{$session->id}/retranscribe", ['language' => 'ur'])->assertSuccessful()->json();
+        $made = Transcript::query()->findOrFail($again['transcript']['id']);
+        expect($made->status)->toBe(TranscriptStatus::Completed)->and($made->meta['own_key'] ?? false)->toBeTrue()
+            ->and($sent)->not->toBeEmpty()->each->toBe('Bearer '.OWN_KEY);
+    });
 });
