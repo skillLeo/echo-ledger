@@ -29,6 +29,12 @@ function secDeviceGuardedRoutes(): array
         'POST upgrade-requests' => ['POST', '/api/upgrade-requests', 'sessions:write'],
         'PATCH devices/{id}' => ['PATCH', '/api/devices/'.Fx::MISSING_ID, 'sessions:write'],
         'GET upgrade-requests/latest' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
+        // Since v1.7: payment receipts.
+        'POST upgrade-requests/{id}/proofs' => ['POST', '/api/upgrade-requests/'.Fx::MISSING_ID.'/proofs', 'sessions:write'],
+        'GET upgrade-requests/{id}/proofs/{proof}' => ['GET', '/api/upgrade-requests/'.Fx::MISSING_ID.'/proofs/'.Fx::MISSING_ID, 'config:read'],
+        'DELETE upgrade-requests/{id}/proofs/{proof}' => ['DELETE', '/api/upgrade-requests/'.Fx::MISSING_ID.'/proofs/'.Fx::MISSING_ID, 'sessions:write'],
+        'POST upgrade-requests/{id}/paid' => ['POST', '/api/upgrade-requests/'.Fx::MISSING_ID.'/paid', 'sessions:write'],
+        'POST upgrade-requests/{id}/cancel' => ['POST', '/api/upgrade-requests/'.Fx::MISSING_ID.'/cancel', 'sessions:write'],
         'POST promo-codes/check' => ['POST', '/api/promo-codes/check', 'config:read'],
         'GET clients' => ['GET', '/api/clients', 'library:read'],
         'DELETE clients/{id}' => ['DELETE', '/api/clients/'.Fx::MISSING_ID, 'sessions:write'],
@@ -165,7 +171,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(98);
+    expect($guarded)->toBe(103);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

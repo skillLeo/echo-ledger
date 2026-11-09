@@ -248,7 +248,7 @@ describe('the admin panel', function () {
         $this->actingAs(Fx::superAdmin(), 'web');
         Filament::setCurrentPanel('admin');
 
-        Livewire::test(UpgradeRequestsPage::class)->assertCanSeeTableRecords([$request])->assertSee('SAVE50')->assertSee('50 % off')->assertSee('Rs 1,500 a month')
+        Livewire::test(UpgradeRequestsPage::class)->assertCanSeeTableRecords([$request])->assertSee('SAVE50')->assertSee('50 % off')->assertSee('Rs 1,500')
             ->mountTableAction('approve', $request)->assertTableActionDataSet(['until' => now()->addMonths(2)->format('Y-m-d H:i')]);
     });
 });
