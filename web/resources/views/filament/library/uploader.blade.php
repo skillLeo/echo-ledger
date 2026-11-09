@@ -8,12 +8,15 @@
 <div wire:ignore @class(['el-uploader', 'el-uploader-compact' => $compact ?? false]) data-uploader
     x-data="elUploader(@js(\Illuminate\Support\Arr::except($config, ['clients', 'languages'])))"
     x-on:el-upload-pick.window="pick()"
+    x-on:el-upload-record.window="$refs.recorder.click()"
     x-on:dragenter.window="dragEnter($event)"
     x-on:dragover.window="dragOver($event)"
     x-on:dragleave.window="dragLeave($event)"
     x-on:drop.window="drop($event)">
     <input type="file" hidden multiple x-ref="input" x-on:change="add($event.target.files)"
         accept="{{ collect($config['extensions'])->map(fn (string $e): string => '.'.$e)->push('audio/*', 'video/mp4', 'video/webm')->implode(',') }}">
+    {{-- Since v1.6 (P4.6): Record on a phone opens its voice recorder; the note comes back here to be uploaded. --}}
+    <input type="file" hidden x-ref="recorder" accept="audio/*" capture x-on:change="add($event.target.files)">
 
     <button type="button" class="el-drop" x-on:click="pick()" x-bind:data-dragging="dragging ? '' : null">
         <x-filament::icon icon="heroicon-o-arrow-up-tray" class="el-drop-icon" />

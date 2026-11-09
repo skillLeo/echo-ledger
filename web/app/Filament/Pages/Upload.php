@@ -38,6 +38,8 @@ class Upload extends Page
     public function content(Schema $schema): Schema
     {
         return $schema->components([
+            // Since v1.6 (P4.6): Record from the phone's bottom bar, and Record now in Ctrl/⌘+K, come here.
+            View::make('filament.library.record-here')->viewData(fn (): array => ['asked' => request()->boolean('record')]),
             View::make('filament.library.uploader')->viewData(fn (): array => ['config' => ListCaptureSessions::uploaderConfig(), 'compact' => false]),
         ]);
     }

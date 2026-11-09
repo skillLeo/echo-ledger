@@ -3,8 +3,10 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Pages\GetTheApps;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\ViewClient;
+use App\Filament\Support\CommandPalette;
 use App\Filament\Support\Shell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
@@ -247,5 +249,68 @@ describe('the nested column (P4.2)', function () {
         $this->actingAs($a, 'web');
 
         expect(Livewire::test(ListCaptureSessions::class)->html())->toMatch('/class="el-row" data-recording="[0-9A-Za-z]{26}"\s+draggable="true"/');
+    });
+});
+
+describe('the top bar (P4.3)', function () {
+    it('has the workspace with your role, search and commands, +, the bell, help and the avatar menu', function () {
+        $this->actingAs(Fx::user(), 'web');
+        $html = (string) $this->get('/app')->assertOk()->getContent();
+
+        expect($html)->toContain('el-tb-workspace-name')->toContain('>Owner<')
+            ->toContain('placeholder="Search recordings, transcripts, pages… or type a command"')
+            ->toContain('aria-label="Create"')->toContain('data-create="upload"')->toContain('data-create="project"')->toContain('data-create="request"')
+            ->toContain('fi-topbar-database-notifications-btn')->toContain('aria-label="Help &amp; shortcuts"')
+            ->toContain('>Account<')->toContain('Plan &amp; usage')->toContain('Sign out')
+            ->not->toContain('>Admin panel<');
+    });
+
+    it('gives staff the admin panel in the avatar menu, and the admin panel a way back', function () {
+        $this->actingAs(Fx::superAdmin(), 'web');
+        expect((string) $this->get('/app')->getContent())->toContain('>Admin panel<');
+        Filament::setCurrentPanel('admin');
+        $admin = (string) $this->get('/admin')->assertOk()->getContent();
+        expect($admin)->toContain('Back to the app')->toContain('el-tb-admin-label')->not->toContain('el-tb-workspace-btn')->not->toContain('aria-label="Create"');
+    });
+
+    it('offers the read-only console no + menu', function () {
+        $owner = Fx::user();
+        $viewer = withoutWorkspace(Fx::user());
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($owner->current_workspace_id), $viewer, WorkspaceRole::Viewer);
+        $this->actingAs($viewer->fresh(), 'web');
+
+        expect((string) $this->get('/app/sessions')->assertOk()->getContent())->not->toContain('aria-label="Create"');
+    });
+
+    it('answers commands in Ctrl/⌘+K: Record now (the apps\' page without a device), Upload, New project, Invite', function () {
+        $owner = Fx::user();
+        $this->actingAs($owner, 'web');
+        $palette = app(CommandPalette::class);
+
+        $record = $palette->getResults('record')->getCategories()['Commands'][0];
+        expect($record->title)->toBe('Record now')->and($record->url)->toBe(GetTheApps::getUrl(panel: 'app'));
+        expect($palette->getResults('upload')->getCategories()['Commands'][0]->title)->toBe('Upload')
+            ->and($palette->getResults('new project')->getCategories()['Commands'][0]->title)->toBe('New project')
+            ->and(collect($palette->getResults('devices')->getCategories()['Go to'])->pluck('title')->all())->toContain('Devices')
+            ->and(collect($palette->getResults('preferences')->getCategories()['Go to'])->pluck('title')->all())->toContain('Preferences');
+
+        Fx::device($owner);
+        expect(app(CommandPalette::class)->getResults('record')->getCategories()['Commands'][0]->url)->toContain('/app/upload?record=1');
+    });
+
+    it('offers a viewer no command that changes anything', function () {
+        $owner = Fx::user();
+        $viewer = withoutWorkspace(Fx::user());
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($owner->current_workspace_id), $viewer, WorkspaceRole::Viewer);
+        $this->actingAs($viewer->fresh(), 'web');
+
+        expect(CommandPalette::actions())->toBe([]);
+    });
+
+    it('shows Record a voice note on the Upload page, for a phone\'s own recorder', function () {
+        $this->actingAs(Fx::user(), 'web');
+
+        expect((string) $this->get('/app/upload?record=1')->assertOk()->getContent())
+            ->toContain('data-record-here')->toContain('el-record-asked')->toContain('Record a voice note')->toContain('accept="audio/*" capture');
     });
 });
