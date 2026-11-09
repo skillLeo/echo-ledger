@@ -211,6 +211,11 @@ account in the console (Profile → Devices → "Sign in a device", the QR of `P
 - `GET /api/account` — `config:read` → `200 {"name", "email", "email_verified": true, "two_factor": true,
   "google": true, "created_at", "workspace": {"id", "name", "role": "owner" | "admin" | "member" | "viewer"},
   "deletes_at": null}`.
+- Since v1.6 (P4) it also has `"super_admin": false` (true for platform staff who may open the admin panel: the apps
+  then show **Admin panel** in the avatar menu, which opens the console's `/admin` in the browser) and `"workspaces":
+  [{"id", "name", "role", "current": true}]`, every workspace this person belongs to (the switcher; the current one is
+  the device's). Missing on an older server: no Admin panel item, and the switcher shows only `workspace`. Switching
+  opens the console for now (a device token belongs to one workspace).
 - `POST /api/account/sign-out-everywhere` — `sessions:write`: signs out every device and console session of the
   account, this device included → `204`.
 - `DELETE /api/account` — `sessions:write`: `{"password": "…"}` or `{"otp": "123456"}` (one of them, to confirm it is
