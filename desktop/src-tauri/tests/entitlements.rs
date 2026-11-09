@@ -116,3 +116,28 @@ async fn a_feature_outside_the_plan_names_the_lowest_plan_that_has_it() {
     let error = authed(&server).make_transcript_views("01JT").await.unwrap_err();
     assert_eq!(error.to_string(), "Roman Urdu and the other transcript views are in the Pro plan. Open Settings → Account → Plan & usage to ask for it.");
 }
+
+#[tokio::test]
+async fn the_features_keep_the_order_the_server_sends_them_in() {
+    let server = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{
+        "features": {
+            "record": {"enabled": true, "cost": "free"},
+            "views": {"enabled": false, "cost": "paid", "lowest_plan": "pro"},
+            "broken": 3,
+            "ai_notes": {"enabled": false, "cost": "paid", "lowest_plan": "business"},
+            "connector": {"enabled": false, "cost": "paid", "lowest_plan": "pro"}
+        }
+    }"#)));
+    let entitlements = authed(&server).entitlements().await.unwrap().expect("a v1.6 server");
+    assert_eq!(entitlements.features.keys().collect::<Vec<_>>(), ["record", "views", "ai_notes", "connector"], "the registry's order, not sorted");
+    let wire = serde_json::to_string(&entitlements).unwrap();
+    let at = |k: &str| wire.find(&format!("\"{k}\":{{")).unwrap();
+    assert!(at("record") < at("views") && at("views") < at("ai_notes") && at("ai_notes") < at("connector"), "and the page gets them so: {wire}");
+
+    let none = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{"features": null}"#)));
+    assert!(authed(&none).entitlements().await.unwrap().unwrap().features.is_empty());
+    let list = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{"features": ["views"], "engines": ["own_groq"]}"#)));
+    let read = authed(&list).entitlements().await.unwrap().unwrap();
+    assert!(read.features.is_empty(), "anything but an object is no features, never a failed answer");
+    assert_eq!(read.engines, ["own_groq"]);
+}
