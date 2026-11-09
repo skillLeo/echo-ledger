@@ -4303,3 +4303,195 @@ html[data-density='compact'] .el-library .fi-ta-cell {
     font-weight: 400;
     color: var(--text-muted);
 }
+
+/* ================================================================== notices (since v1.6.1, DESIGN_SYSTEM "Notices") */
+
+/* A toast: the whole card opens its target (the title's link covers it), × and the actions stay above it, and a thin
+   bar along the bottom edge shows the time left. It follows a sideways swipe; vertical scrolling stays the page's. */
+.el-toast {
+    position: relative;
+    touch-action: pan-y;
+}
+
+.el-toast.el-has-target {
+    cursor: pointer;
+}
+
+.el-toast.el-has-target:hover .fi-no-notification-title {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.el-toast-link {
+    color: inherit;
+    -webkit-user-drag: none;
+}
+
+.el-toast-link::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+}
+
+.el-toast-link:focus-visible {
+    outline: none;
+}
+
+.el-toast:has(.el-toast-link:focus-visible) {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.el-toast .fi-no-notification-close-btn,
+.el-toast .fi-no-notification-actions,
+.el-toast .fi-no-notification-body a {
+    position: relative;
+    z-index: 1;
+}
+
+.el-toast.el-dragging,
+.el-notice.el-dragging {
+    user-select: none;
+    cursor: grabbing;
+    transition: none !important;
+}
+
+.el-toast-timer {
+    position: absolute;
+    inset-inline: 0;
+    bottom: 0;
+    height: 3px;
+    overflow: hidden;
+    pointer-events: none;
+}
+
+.el-toast-timer-bar {
+    display: block;
+    height: 100%;
+    background-color: currentColor;
+    color: var(--accent);
+    opacity: 0.55;
+    transform-origin: left center;
+    animation-name: el-toast-time;
+    animation-timing-function: linear;
+    animation-fill-mode: forwards;
+}
+
+.el-toast.fi-status-danger .el-toast-timer-bar {
+    color: var(--danger-strong);
+}
+
+.el-toast.fi-status-warning .el-toast-timer-bar {
+    color: var(--warning-fill);
+}
+
+.el-toast.fi-status-success .el-toast-timer-bar {
+    color: var(--success);
+}
+
+.el-toast-timer-bar.el-paused {
+    animation-play-state: paused;
+}
+
+@keyframes el-toast-time {
+    from {
+        transform: scaleX(1);
+    }
+
+    to {
+        transform: scaleX(0);
+    }
+}
+
+/* Reduced motion: the bar stays still (the time still runs) and toasts come and go without sliding. */
+@media (prefers-reduced-motion: reduce) {
+    .el-toast-timer-bar {
+        animation: none;
+    }
+
+    .el-toast,
+    .el-notice {
+        transition: none !important;
+    }
+}
+
+/* In the bell's list a card opens its notification and marks it read. */
+.el-toast.fi-inline.el-has-target:hover {
+    background-color: var(--surface-2);
+}
+
+/* ---------- inline banners about something still true: click → its page, ×, swipe; no timer ---------- */
+.el-notice {
+    position: relative;
+    touch-action: pan-y;
+}
+
+.el-notice.el-has-target {
+    cursor: pointer;
+}
+
+.el-notice .el-stretch::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    border-radius: inherit;
+}
+
+.el-notice-close {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    margin-inline-start: var(--space-1);
+    border-radius: var(--radius-full);
+    color: inherit;
+    opacity: 0.7;
+}
+
+.el-notice-close:hover,
+.el-notice-close:focus-visible {
+    opacity: 1;
+    background-color: color-mix(in oklab, currentColor 12%, transparent);
+}
+
+.el-notice-close svg {
+    width: 16px;
+    height: 16px;
+}
+
+.el-notice :is(button, a:not(.el-stretch), input, select) {
+    position: relative;
+    z-index: 1;
+}
+
+.el-notice-box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0 0 1rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 0.6rem;
+    font-size: 0.9rem;
+}
+
+.el-notice-box > .el-notice-text {
+    flex: 1;
+    min-width: 0;
+}
+
+/* A section a notice opens (#two-step-sign-in): clear of the top bar. */
+.el-anchor {
+    scroll-margin-top: calc(56px + var(--space-4));
+}
+
+/* A closed line leaves no gap where it was. */
+.fi-wi-widget:has(> .el-notice[style*='display: none']) {
+    display: none;
+}

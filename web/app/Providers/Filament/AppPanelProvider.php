@@ -67,6 +67,8 @@ class AppPanelProvider extends PanelProvider
         $shell = fn (Closure $view): Closure => fn (): View|string => in_array(Filament::getCurrentPanel()?->getId(), ['app', 'admin'], true) && auth()->check() ? $view() : '';
         FilamentView::registerRenderHook(PanelsRenderHook::CONTENT_BEFORE, $shell(fn (): View => view('filament.shell.topbar-slot')));
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, $shell(fn (): View => view('filament.shell.head')));
+        // Since v1.6.1: the notices' behaviour (toasts, banners), on every page of both panels, the sign-in pages too.
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => in_array(Filament::getCurrentPanel()?->getId(), ['app', 'admin'], true) ? view('filament.shell.notices') : '');
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
         // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));

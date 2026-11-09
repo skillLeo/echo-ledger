@@ -6,6 +6,8 @@ namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
 use App\Filament\Pages\GetTheApps;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Models\User;
 use App\Models\WorkspaceInvitation;
 use App\Services\Accounts\EmailCodes;
@@ -22,7 +24,6 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
@@ -166,7 +167,7 @@ class Login extends BaseLogin
                 $this->data['turnstile'] = null;
                 $this->dispatch('turnstile-reset');
             }
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }
@@ -264,7 +265,7 @@ class Login extends BaseLogin
         } catch (ApiError $e) {
             $this->signUpToken = null;
             $this->step = self::STEP_EMAIL;
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return null;
         }

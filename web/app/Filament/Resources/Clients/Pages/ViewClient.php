@@ -12,6 +12,8 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
@@ -37,9 +39,9 @@ use App\Support\UrduText;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
+use Filament\Facades\Filament;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\View;
@@ -233,7 +235,7 @@ class ViewClient extends ViewRecord
         try {
             app(ClientWorkspace::class)->assertCanWriteNotes($client->workspace_id);
         } catch (ApiError $e) {
-            Notification::make()->title($e->getMessage())->warning()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
 
             return;
         }
@@ -250,7 +252,7 @@ class ViewClient extends ViewRecord
         ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
         $client = $this->client();
         if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
-            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->warning()->send();
+            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->url((Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=plan')->warning()->send();
 
             return;
         }

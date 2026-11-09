@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Support\Notice as Notification;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
@@ -12,7 +13,6 @@ use App\Stt\GroqPacer;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;

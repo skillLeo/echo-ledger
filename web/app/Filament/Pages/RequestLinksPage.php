@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
+use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SharingActions;
 use App\Models\Client;
 use App\Models\RequestLink;
@@ -16,7 +17,6 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;

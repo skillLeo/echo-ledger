@@ -12,6 +12,7 @@ use App\Enums\UploadStatus;
 use App\Enums\WorkspaceRole;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\Notice as Notification;
 use App\Mail\TranscriptReadyMail;
 use App\Models\CaptureSession;
 use App\Models\Device;
@@ -30,7 +31,6 @@ use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
 use Carbon\Carbon;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Facades\DB;
@@ -212,10 +212,11 @@ final class ActivityFeed
             ->contains(fn (DatabaseNotification $n): bool => self::kindOf($n) === $kind && ($n->data['viewData']['limit'] ?? null) === $limit);
     }
 
-    public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon, ?string $limit = null): void
+    /** [$url]: where the bell's card opens (since v1.6.1), when the kind alone does not say (NoticeTargets). */
+    public function post(User $user, string $kind, string $title, string $body, ?CaptureSession $session, string $icon, ?string $limit = null, ?string $url = null): void
     {
         try {
-            $notification = self::make($title, $body, $kind, $session?->id, $limit)->icon($icon);
+            $notification = self::make($title, $body, $kind, $session?->id, $limit, $url)->icon($icon);
             if ($session !== null) {
                 $notification->actions([Action::make('open')->label('Open')->url(CaptureSessionResource::getUrl('view', ['record' => $session]), shouldOpenInNewTab: false)->markAsRead()]);
             }
@@ -253,10 +254,10 @@ final class ActivityFeed
      * what people typed (titles, notes, names; since v1.5 from anyone on the server): they are stored escaped, so the
      * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed.
      */
-    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null): Notification
+    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null): Notification
     {
         return Notification::make()->title(e($title))->body(e($body))
-            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : [])]);
+            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : []), ...($url !== null ? ['url' => $url] : [])]);
     }
 
     /** @return array<string, mixed> */

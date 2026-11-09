@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Entitlements;
 
+use App\Filament\Admin\Resources\Customers\Pages\ViewCustomer;
 use App\Mail\UnusualUsageMail;
 use App\Models\AuditEvent;
 use App\Models\CaptureSession;
@@ -61,7 +62,8 @@ final class UnusualUsage
                 ->filter(fn (User $u): bool => StaffAccess::can('customers.manage', $u));
             foreach ($staff as $admin) {
                 Mail::to($admin->email)->queue(new UnusualUsageMail($user->name, $user->email, $rounded, $limit, url('/admin/customers/'.$user->id)));
-                app(ActivityFeed::class)->post($admin, 'unusual_usage', 'Unusual use', "{$user->name} ({$user->email}) recorded {$rounded} hours in a day.", null, 'heroicon-o-exclamation-triangle');
+                app(ActivityFeed::class)->post($admin, 'unusual_usage', 'Unusual use', "{$user->name} ({$user->email}) recorded {$rounded} hours in a day.", null, 'heroicon-o-exclamation-triangle',
+                    url: ViewCustomer::getUrl(['record' => $user], panel: 'admin', isAbsolute: false));
             }
         } catch (Throwable $e) {
             report($e);

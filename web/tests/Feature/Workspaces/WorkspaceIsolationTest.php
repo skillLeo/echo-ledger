@@ -10,6 +10,7 @@ use App\Models\Screen;
 use App\Models\SessionMarker;
 use App\Models\ShareLink;
 use App\Models\User;
+use App\Services\ActivityFeed;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
@@ -87,6 +88,8 @@ it('never lets workspace A read, change or delete workspace B through the API', 
 it('answers 404 to workspace A on every console route outside Filament that takes an id', function () {
     $b = isoWorld();
     $upload = $b['upload']->id;
+    app(ActivityFeed::class)->post($b['bob'], 'transcript_ready', 'BOB-SECRET-TITLE is ready', 'BOBSECRETNOTE', $b['session'], 'heroicon-o-check-circle');
+    $bobNotice = (string) $b['bob']->notifications()->latest()->value('id');
     // [method, url, body, status]
     $cases = [
         'admin.recordings.stream' => ['GET', route('admin.recordings.stream', $b['recording']), [], 404],
@@ -101,6 +104,8 @@ it('answers 404 to workspace A on every console route outside Filament that take
         'admin.uploads.destroy' => ['DELETE', route('admin.uploads.destroy', $upload), [], 404],
         // The switcher only knows the person's own workspaces.
         'admin.workspaces.switch' => ['POST', route('admin.workspaces.switch', (int) $b['bob']->current_workspace_id), [], 404],
+        // Since v1.6.1: a notification of the bell opened; B's is not A's to open (nor to mark read).
+        'notices.open' => ['GET', route('notices.open', $bobNotice), [], 404],
     ];
     $named = collect(Route::getRoutes()->getRoutes())->map(fn (RouteDefinition $r): ?string => $r->getName())->filter()
         ->reject(fn (string $n): bool => str_starts_with($n, 'filament.') || str_starts_with($n, 'livewire.') || str_starts_with($n, 'default-livewire.') || str_starts_with($n, 'api.')
@@ -112,7 +117,8 @@ it('answers 404 to workspace A on every console route outside Filament that take
         $response = $method === 'GET' ? $this->get($url) : $this->json($method, $url, $body);
         expect($response->status())->toBe($status, $name)->and(isoLeaks((string) $response->getContent(), $b))->toBe([], $name);
     }
-    expect(unscoped(fn (): int => CaptureSession::query()->where('user_id', $b['alice']->id)->where('source_device', 'web')->count()))->toBe(0);
+    expect(unscoped(fn (): int => CaptureSession::query()->where('user_id', $b['alice']->id)->where('source_device', 'web')->count()))->toBe(0)
+        ->and($b['bob']->notifications()->whereKey($bobNotice)->value('read_at'))->toBeNull();
 });
 
 it('never shows workspace B in any console resource, page, widget or global search, and 404s its records', function () {

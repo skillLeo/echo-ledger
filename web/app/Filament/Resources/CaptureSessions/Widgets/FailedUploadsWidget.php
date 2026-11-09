@@ -10,6 +10,7 @@ use App\Models\CaptureSession;
 use App\Services\LibraryOrganiser;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Widgets\Widget;
+use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\Reactive;
 
 /**
@@ -35,13 +36,15 @@ class FailedUploadsWidget extends Widget
         return self::count() > 0;
     }
 
-    /** @return array{count: int, label: string, url: string, hidden: bool} */
+    /** @return array{count: int, label: string, url: string, hidden: bool, state: string} */
     protected function getViewData(): array
     {
         $count = self::count();
 
         return [
             'count' => $count,
+            // Closed, the line comes back when another recording fails (the ids that failed, not just how many).
+            'state' => self::state(),
             'label' => 'Failed uploads ('.number_format($count).')',
             'url' => CaptureSessionResource::getUrl('index', ['tab' => 'failed']),
             'hidden' => $this->activeTab === 'failed',
@@ -51,8 +54,20 @@ class FailedUploadsWidget extends Widget
     /** Counted like the Library lists them: a recording still running only shows under Waiting. */
     public static function count(): int
     {
+        return self::query()->count();
+    }
+
+    /** What the line is about now: a short name for the recordings that failed. */
+    public static function state(): string
+    {
+        return substr(md5(self::query()->reorder()->orderBy('capture_sessions.id')->limit(500)->pluck('capture_sessions.id')->implode(',')), 0, 12);
+    }
+
+    /** @return Builder<CaptureSession> */
+    private static function query(): Builder
+    {
         $query = CaptureSession::query()->where('workspace_id', CurrentWorkspace::id())->ofPerson()->where('status', '!=', SessionStatus::Recording->value);
 
-        return app(LibraryOrganiser::class)->applyView($query, 'failed')->count();
+        return app(LibraryOrganiser::class)->applyView($query, 'failed');
     }
 }

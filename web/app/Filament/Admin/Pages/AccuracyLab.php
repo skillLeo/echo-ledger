@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Support\Notice as Notification;
 use App\Services\Accuracy\AccuracyLab as Lab;
 use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
@@ -54,7 +54,8 @@ class AccuracyLab extends Page
                 ->action(function (): void {
                     $changed = app(Lab::class)->useWinners((int) CurrentWorkspace::id());
                     Notification::make()->title($changed === [] ? 'Nothing to change yet.' : 'First engine now: '.implode(', ', array_map(
-                        fn (array $c): string => $c['language'].' → '.$c['provider'], $changed)))->success()->send();
+                        fn (array $c): string => $c['language'].' → '.$c['provider'], $changed)))
+                        ->url($changed !== [] && Settings::canAccess() ? Settings::getUrl(panel: 'admin') : null)->success()->send();
                 }),
         ];
     }

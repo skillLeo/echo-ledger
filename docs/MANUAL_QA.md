@@ -494,6 +494,24 @@ browser and a person's eyes. Screenshots of every page are in docs/design/screen
 | 16-WS9 | Admin panel at 1440 px: the sidebar, Customers → click a row, Esc. | The admin frame with ADMIN and its own groups; the quick look slides in from the right with the numbers and Open; Esc closes it. |
 | 16-WS10 | Admin → Sign-up with no Turnstile keys, then with them. | The switch is greyed out with "Off until its keys are saved…"; once saved it turns the check off and on, and the web sign-up asks for it only while on. |
 
+### Web console v1.6.1 notices (what only a real browser and a person's hands can prove)
+
+The tests prove the targets, the labels, the timers' lengths, who may open which notification and the decisions (Node
+tests of resources/js/notice-core.cjs); these need a real screen.
+
+| # | Check | Expected |
+|---|---|---|
+| 16-WN1 | Phone browser (Chrome on Android, Safari on iPhone): drop a recording on Pinned from the desktop, then on the phone pin one from a recording page; swipe the toast left, then another right, slowly and then with a flick. | It follows the finger and fades; past a third of its width or on a flick it leaves; a short swipe springs back; the page does not scroll sideways and vertical scrolling still works over it. |
+| 16-WN2 | Laptop trackpad (MacBook and a Windows precision touchpad): a two-finger swipe sideways over a toast; then a click-and-drag with the trackpad and with a mouse. | Each follows and leaves the same way; a drag never opens the toast's target; a plain click on the card opens it and the toast closes. |
+| 16-WN3 | Hover a toast, then tab to its link, then hold a finger on it (phone). | The thin bar along the bottom stops and goes on when the pointer, focus or finger leaves; an error stays 10 s, a message 6 s. |
+| 16-WN4 | Turn on Reduce motion (macOS Accessibility → Display; Android Remove animations) and repeat 16-WN1 and 16-WN3. | Toasts come and go without sliding, a swipe past the threshold closes at once, the bar does not move but the toast still hides on time. |
+| 16-WN5 | Two toasts at once (rename two recordings quickly), press Esc twice; then press Esc in the search box. | The newest closes first, then the other; Esc in a text box only clears it. |
+| 16-WN6 | Staff without two-step sign-in: open /admin. | The app's Account opens at Password & sign-in methods, scrolled to two-step sign-in; the notice stays (no timer) and a click on it lands on the same place. |
+| 16-WN7 | Library with a failed upload and a waiting call: tap each line, then close each with × and with a swipe, reload, then open a new window. | A tap opens Failed uploads or Waiting; closed lines stay closed after the reload and come back in the new window or when another upload fails or another call waits. |
+| 16-WN8 | An announcement (Admin → Announcement): close it, reload, change its text. | It stays closed for that text, even in a new window; the new text shows again. |
+| 16-WN9 | The bell: click a "Transcript ready" card, a "Device signed in" card, swipe one away, × another. | Each opens its recording or Devices and is read; swiped and ×'d cards leave the list. |
+| 16-WN10 | A screen reader (VoiceOver or TalkBack) with a success toast and an error toast. | The success is read politely, the error at once; × is read as "Dismiss". |
+
 ### macOS 14.4+ (only if you have a Mac)
 
 | # | Check | Expected |

@@ -8,6 +8,7 @@ use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
+use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\SendsToWhatsApp;
@@ -324,7 +325,7 @@ class ListCaptureSessions extends ListRecords
      */
     protected function getHeaderWidgets(): array
     {
-        return [WaitingDecisionsWidget::class, FailedUploadsWidget::class];
+        return [WaitingDecisionsWidget::class, FailedUploadsWidget::class, PlanLimitWidget::class];
     }
 
     /** The smart view, so the Failed uploads line hides while that view is open. */

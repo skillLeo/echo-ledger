@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Providers;
 
+use App\Filament\Support\Notice;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
@@ -41,6 +42,7 @@ use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
 use Filament\Actions\Action;
+use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\PasswordReset;
@@ -69,6 +71,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Since v1.6.1 every toast is a Notice: a target to open, Dismiss, the timer bar, swipe (docs/DESIGN_SYSTEM.md
+        // "Notices"). Filament makes its notifications through the container, so every Notification::make() is one.
+        $this->app->bind(FilamentNotification::class, Notice::class);
         // Scoped = fresh per request and per queued job (no stale settings/secrets across jobs).
         $this->app->scoped(SettingsRepository::class);
         $this->app->scoped(CredentialVault::class);

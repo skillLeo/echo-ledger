@@ -10,6 +10,8 @@ use App\Exceptions\ApiError;
 use App\Filament\Admin\Resources\Customers\CustomerResource;
 use App\Filament\Admin\Support\OverridesForm;
 use App\Filament\Admin\Widgets\CustomerUsageChart;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Models\AdminNote;
 use App\Models\AuditEvent;
 use App\Models\CaptureSession;
@@ -29,7 +31,6 @@ use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
@@ -167,7 +168,7 @@ class ViewCustomer extends ViewRecord
                             $when = app(Customers::class)->delete($this->customer(), $this->staff());
                             Notification::make()->title('Erased on '.$when->format('M j, Y'))->success()->send();
                         } catch (ApiError $e) {
-                            Notification::make()->title($e->getMessage())->danger()->send();
+                            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
                         }
                     }),
             ])->label('Support')->icon(Heroicon::OutlinedLifebuoy)->button()->color('gray'),

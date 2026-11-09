@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace App\Filament\Concerns;
 
+use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\Shell;
 use App\Models\Client;
 use App\Models\User;
 use App\Services\LibraryOrganiser;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
-use Filament\Notifications\Notification;
 
 /**
  * Recordings dragged onto a place (since v1.6, P4.2): onto a project they move there, onto the Inbox they leave their
@@ -43,7 +45,11 @@ trait DropsRecordings
             'pinned' => 'Pinned '.$what,
             default => 'Moved '.$what.' to '.(Client::query()->whereKey($clientId)->value('name') ?? 'the project'),
         };
-        Notification::make()->title($where)->success()->send();
+        Notification::make()->title($where)->url(match (true) {
+            $target === 'inbox' => CaptureSessionResource::getUrl('index', ['folder' => 'inbox'], panel: 'app'),
+            $target === 'pinned' => CaptureSessionResource::getUrl('index', ['tab' => 'pinned'], panel: 'app'),
+            default => ClientResource::getUrl('view', ['record' => (string) $clientId], panel: 'app'),
+        })->success()->send();
         $this->dispatch('el-library-changed');
         $this->dispatch('refresh-sidebar');
     }

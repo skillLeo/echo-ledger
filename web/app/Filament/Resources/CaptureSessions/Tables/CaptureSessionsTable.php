@@ -9,10 +9,13 @@ use App\Enums\SourceApp;
 use App\Enums\SourceDevice;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Filament\Support\FailedUpload;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
@@ -33,7 +36,6 @@ use Filament\Actions\ViewAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Enums\Size;
 use Filament\Support\Icons\Heroicon;
@@ -225,7 +227,8 @@ final class CaptureSessionsTable
                         return;
                     }
                     $coordinator->start($record, $record->finalTranscript()->first());
-                    Notification::make()->title('Transcription queued')->body('It leaves Failed uploads while it is transcribed.')->success()->send();
+                    Notification::make()->title('Transcription queued')->body('It leaves Failed uploads while it is transcribed.')
+                        ->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
                 }),
             Action::make('retryUpload')->label('Retry')->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
                 ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_UPLOAD)
@@ -308,7 +311,7 @@ final class CaptureSessionsTable
                 $changed = app(LibraryOrganiser::class)->bulk((int) CurrentWorkspace::id(), self::ids($records), $action, $client, $label, auth()->user());
                 Notification::make()->title($changed === 1 ? '1 recording updated' : "{$changed} recordings updated")->success()->send();
             } catch (ApiError $e) {
-                Notification::make()->title($e->getMessage())->danger()->send();
+                Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
             }
         };
 
@@ -349,7 +352,7 @@ final class CaptureSessionsTable
                     try {
                         $file = app(LibraryOrganiser::class)->exportZip((int) CurrentWorkspace::id(), self::ids($records), (string) $data['format'], $view);
                     } catch (ApiError $e) {
-                        Notification::make()->title($e->getMessage())->warning()->send();
+                        Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
 
                         return null;
                     }
@@ -382,7 +385,7 @@ final class CaptureSessionsTable
             ->modalSubmitActionLabel('Save')
             ->action(function (CaptureSession $record, array $data): void {
                 app(LibraryOrganiser::class)->update($record, ['title' => $data['title'] ?? null]);
-                Notification::make()->title('Renamed to “'.$record->displayTitle().'”')->success()->send();
+                Notification::make()->title('Renamed to “'.$record->displayTitle().'”')->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
             });
     }
 

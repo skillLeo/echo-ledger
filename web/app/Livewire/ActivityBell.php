@@ -4,18 +4,33 @@ declare(strict_types=1);
 
 namespace App\Livewire;
 
+use App\Filament\Support\Notice;
 use App\Models\User;
 use App\Services\ActionBadge;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Livewire\DatabaseNotifications;
+use Filament\Notifications\Notification;
 use Illuminate\Contracts\View\View;
+use Illuminate\Notifications\DatabaseNotification;
 
 /**
  * The app's bell (since v1.6, P6): the same list of notifications, with a number that counts only what needs the person
- * (App\Services\ActionBadge), "9+" above nine.
+ * (App\Services\ActionBadge), "9+" above nine. Since v1.6.1 each card opens where it is about and marks itself read
+ * (the notices.open route), and × or a swipe takes it off the list.
  */
 class ActivityBell extends DatabaseNotifications
 {
+    public function getNotification(DatabaseNotification $notification): Notification
+    {
+        $notice = parent::getNotification($notification);
+        if (! $notice instanceof Notice) {
+            return $notice;
+        }
+
+        // The whole card opens it, so its own Open button goes.
+        return Notice::withoutOpenAction($notice)->url(route('notices.open', ['notification' => $notification->getKey()], absolute: false));
+    }
+
     public function getTrigger(): ?View
     {
         $user = $this->getUser();
