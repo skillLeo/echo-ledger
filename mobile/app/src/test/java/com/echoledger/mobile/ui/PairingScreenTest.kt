@@ -13,9 +13,11 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onLast
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
@@ -108,7 +110,7 @@ class PairingScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Password").assertCountEquals(0)
         compose.onAllNodesWithText("Server address").assertCountEquals(0)
         compose.onAllNodesWithText("Scan QR code").assertCountEquals(0)
-        compose.onAllNodesWithText("Continue with Google").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Continue with Google").assertCountEquals(0)
         compose.onAllNodesWithText("Keystore", substring = true).assertCountEquals(0)
         compose.onNodeWithText(
             "Your recordings are encrypted on this phone and on the way to the server."
@@ -116,6 +118,14 @@ class PairingScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Advanced").performClick()
         compose.onNodeWithText("Use a different server").assertIsDisplayed()
+    }
+
+    @Test
+    fun `Google and Passkey sit side by side under or, and Passkey opens the browser sign-in (v1_6_2)`() {
+        showPairing()
+        compose.onNodeWithText("or").assertExists()
+        compose.onNodeWithContentDescription("Sign in with a passkey").assertExists()
+        compose.onAllNodesWithText("Sign in in the browser (passkey)").assertCountEquals(0)
     }
 
     @Test
@@ -129,7 +139,7 @@ class PairingScreenTest : ScreenTest() {
 
         pumpUntil("the Google button") {
             compose.waitForIdle()
-            compose.onAllNodesWithText("Continue with Google").fetchSemanticsNodes().isNotEmpty()
+            compose.onAllNodesWithContentDescription("Continue with Google").fetchSemanticsNodes().isNotEmpty()
         }
     }
 
