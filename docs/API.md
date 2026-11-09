@@ -371,6 +371,8 @@ for the plan (then the default plan). Every route checks them; the apps only sho
 | `provider_error` | 502 | Groq could not be asked about the key (try again) |
 | `request_pending` | 409 | An upgrade request is already waiting (`request` holds it) |
 | `account_suspended` | 403 | The account is suspended: every call of its devices |
+| `invalid_promo_code` | 422 | A promo code that is unknown, ended, used up or already used by this person |
+| `promo_other_plan` | 422 | A valid promo code for another plan (`plan` names it) |
 | `update_required` | 426 | The app is older than the minimum and the server refuses older apps |
 | `maintenance` | 503 | The server is in maintenance (`until`, `Retry-After`) |
 
@@ -406,6 +408,25 @@ for the plan (then the default plan). Every route checks them; the apps only sho
   and try again after `Retry-After`; it is not an error to show as a failure.
 - Activity kind `cost_alert` (staff only: the month's provider spend at 80 % and 100 % of the budget).
 - `GET /api/upgrade-requests/latest`: `reply` is also set on an approval when the admin wrote a message.
+
+### Promo codes (since v1.6.2)
+Staff make promo codes in the admin panel (Promo codes): a code (6–24 characters `A-Z 0-9 -`, matched without case), **one
+plan** it is for, a **discount of 1–100 %**, and optionally an end date, a maximum number of uses, one use per person (the
+default) and how many months the plan lasts once switched on (default 1). Only staff with the Plans permission see or
+make codes; customers can never list them. Every use is in the activity log.
+- `POST /api/promo-codes/check` — `config:read`, throttled (10/min per person, 30/hour per IP): `{"code", "plan": "pro" |
+  null}` → `200 {"code": "SAVE50", "plan": "pro", "plan_name": "Pro", "percent": 50, "price": "Rs 2,999 / month",
+  "final_price": "Rs 1,500 / month", "free": false, "months": 1}`. `free` is true at 100 %. Unknown, ended, used up or
+  already used by this person: `422 {"message", "code": "invalid_promo_code"}`. Valid but for another plan than the
+  one asked: `422 {"message": "This code is for Pro.", "code": "promo_other_plan", "plan": "pro"}` (the apps then offer
+  that plan). The answer never says how many uses are left or who else used it.
+- `POST /api/upgrade-requests` accepts `"promo_code": "SAVE50"` (optional), checked as above for the request's plan; a
+  code for another plan is the same `422 promo_other_plan`. The answer gains `"promo_code"`, `"percent"` and
+  `"amount_due"` (the price after the discount, as shown). **At 100 %** nothing is paid: the request is approved at once
+  (`status: "approved"`, `approved_plan`, `approved_until` = now + the code's months) and the person's plan switches on;
+  `payment_instructions` is then null. Below 100 % it waits for the staff's approval as before, with the code and the
+  amount on the request in the inbox.
+- `GET /api/upgrade-requests/latest` carries the same three fields.
 
 ### Signing a device in again (since v1.6, P3)
 - In the console a device row that is signed out, revoked or expired has **Sign in again**: a one-time pairing code
