@@ -90,7 +90,7 @@ final class SettingsTourSeeder extends Seeder
             $proofs->requestNewReceipt($request->fresh(), $staff, 'The screenshot is cut off at the amount. Please send one that shows the whole receipt.');
         }
         match ($stage) {
-            'declined' => $request->forceFill(['status' => UpgradeRequest::DECLINED, 'decided_at' => now()->subDay(), 'reply' => 'We could not find this transfer in our account.'])->save(),
+            'declined' => $request->forceFill(['status' => UpgradeRequest::DECLINED, 'decided_at' => now()->subHour(), 'reply' => 'We could not find this transfer in our account.'])->save(),
             'approved' => $request->forceFill(['status' => UpgradeRequest::APPROVED, 'approved_plan' => 'pro', 'approved_until' => now()->addMonth()->startOfDay(),
                 'decided_at' => now()->subHour(), 'paid_at' => now()->subHours(2), 'payment_reference' => 'FT26313ABC7781'])->save(),
             default => null,
