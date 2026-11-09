@@ -32,7 +32,7 @@ data class PlanState(
     /** Whether the plan includes [feature]; a server older than v1.6 says nothing, so everything is on. */
     fun allows(feature: String): Boolean = features[feature]?.enabled ?: true
 
-    /** The badge of the cheapest plan with [feature] ("PRO ✦"), or null when this plan has it. */
+    /** The badge of the cheapest plan with [feature] (its name and [PLAN_MARK]), or null when this plan has it. */
     fun lockFor(feature: String): Lock? {
         val f = features[feature] ?: return null
         if (f.enabled) return null
@@ -86,8 +86,14 @@ data class PlanState(
             usedMinutes = plan?.used?.minutes
         )
 
-        /** "PRO" → "PRO ✦": one badge style for every plan. */
-        fun badgeText(name: String): String = "${name.trim().uppercase()} ✦"
+        /**
+         * The mark after a plan's name on its badge (v1.6 P1.4, Hassam's design: "PRO" followed by a four-pointed star),
+         * the one symbol the copy rules allow, and only here.
+         */
+        const val PLAN_MARK = "\u2726"
+
+        /** "PRO" → the badge text (the name and [PLAN_MARK]): one badge style for every plan. */
+        fun badgeText(name: String): String = name.trim().uppercase() + " " + PLAN_MARK
 
         /** The v1.6 entitlements on top of what the config said (an older server's answer keeps [base]). */
         fun withEntitlements(base: PlanState, e: com.echoledger.mobile.data.EntitlementsDto): PlanState {
