@@ -72,6 +72,9 @@ final class AuditLog
         'entitlements_changed' => 'Features and limits changed for a person',
         'transcription_key_set' => 'Own transcription key saved',
         'transcription_key_removed' => 'Own transcription key removed',
+        'upgrade_requested' => 'Upgrade asked for',
+        'upgrade_approved' => 'Upgrade approved',
+        'upgrade_declined' => 'Upgrade declined',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',

@@ -48,7 +48,9 @@ final class ActivityFeed
 
     public const LIMIT_AI_CREDITS = 'ai_credits';
 
-    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you'];
+    /** Since v1.6 also the person's upgrade request decided, the super admin's new request and unusual use. */
+    public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;

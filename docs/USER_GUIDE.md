@@ -169,6 +169,10 @@ We check the key with Groq once, keep it locked, never show it again (only its l
 your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
 key". **Pro** and **Business** transcribe for you, with no key of your own.
 
+**Upgrading.** Tap a badge (or **Profile → Your plan → Compare plans**): you see what the feature does and the plans
+side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
+confirmed, and you get an email and a notification.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.

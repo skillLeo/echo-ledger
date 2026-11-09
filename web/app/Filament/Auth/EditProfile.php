@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
+use App\Filament\Support\PlanLock;
 use App\Models\ConnectedApp;
 use App\Models\Device;
 use App\Models\KnownBrowser;
+use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\AccountExports;
@@ -16,7 +18,9 @@ use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
+use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\TranscriptionKeys;
+use App\Services\Entitlements\UpgradeRequests;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
@@ -37,6 +41,8 @@ use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\HtmlString;
 
 /**
  * The profile (since v1.5): name, email, password and two-step sign-in as before, and below them the account's own
@@ -59,6 +65,7 @@ class EditProfile extends BaseEditProfile
         return $schema->components([
             $this->getFormContentComponent(),
             ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
+            $this->planSection(),
             $this->googleSection(),
             $this->transcriptionKeySection(),
             $this->devicesSection(),
@@ -69,6 +76,25 @@ class EditProfile extends BaseEditProfile
             $this->emailsSection(),
             $this->dataSection(),
         ]);
+    }
+
+    /** Profile → Your plan (since v1.6): the plan with its badge, until when, and the plans side by side. */
+    private function planSection(): Section
+    {
+        return Section::make('Your plan')
+            ->schema([
+                Text::make(function (): HtmlString {
+                    $workspace = (int) ($this->account()->current_workspace_id ?? 0);
+                    $plan = app(Entitlements::class)->plan($workspace);
+                    $until = Workspace::query()->whereKey($workspace)->value('plan_expires_at');
+                    $request = app(UpgradeRequests::class)->latestFor($this->account());
+
+                    return new HtmlString(PlanLock::badgeFor($plan, locked: false)->toHtml().' '.e($plan->name)
+                        .($until !== null ? e(' until '.Carbon::parse((string) $until)->setTimezone(app(SettingsRepository::class)->displayTimezone())->format('M j, Y')) : '')
+                        .($request?->status === UpgradeRequest::PENDING ? e(' · your request for '.$request->plan.' is waiting') : ''));
+                }),
+                Actions::make([PlanLock::sheet('comparePlans', null, 'Compare plans')])->key('plan-actions'),
+            ]);
     }
 
     /**

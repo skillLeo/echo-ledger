@@ -11,6 +11,7 @@ use App\Mail\ResetPasswordMail;
 use App\Mail\ShareReceivedMail;
 use App\Mail\TestMail;
 use App\Mail\TranscriptReadyMail;
+use App\Mail\UpgradeDecidedMail;
 use App\Mail\VerifyEmailMail;
 use Illuminate\Mail\Mailable;
 
@@ -35,6 +36,8 @@ function everyMail(): array
         'transcript' => new TranscriptReadyMail('Call with Omar', "$u/s/1"),
         'test' => new TestMail('smtp.example.test'),
         'email code' => new EmailCodeMail('123456', 'sign_up', 10),
+        'upgrade approved' => new UpgradeDecidedMail(true, 'Pro', 'Dec 9, 2026', null, "$u/admin"),
+        'upgrade declined' => new UpgradeDecidedMail(false, 'Pro', null, 'Payment not received yet.', "$u/admin"),
     ];
 }
 

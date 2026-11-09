@@ -128,6 +128,15 @@ their name and the Terms (no password needed; they can set one later with **Forg
 - What a plan leaves out shows a lock in the apps, and its routes answer "… is not in your plan" with the plan that
   has it. At a limit people see a message in plain words (apps of v1.6 and later get one code for every limit).
 - Retention of a plan applies only to recordings made after it was set; older recordings are never deleted by it.
+- **Payment instructions** (since v1.6): the text people read after **Request upgrade** (bank or JazzCash details and
+  what to write as the reference), followed by "We'll activate it once confirmed".
+
+### Upgrade requests (since v1.6)
+
+**System → Upgrade requests** lists who asked for which plan, with their message (the badge counts the waiting ones;
+the bell tells you too). Once the payment is confirmed press **Approve**: choose the plan and, if you like, until when
+(then it goes back to the default plan). **Decline** needs a reply. Either way the person gets an email and a
+notification in the apps. One request waits at a time per person.
 
 ## 5. Usage and costs
 

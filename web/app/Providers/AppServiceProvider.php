@@ -231,6 +231,12 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perHour(10)->by('transcription-key:'.($device instanceof Device ? $device->user_id : $request->ip()));
         });
+        // Since v1.6: upgrade requests, 5 a day per person (whichever device asks).
+        RateLimiter::for('upgrade-request', function (Request $request) {
+            $device = $request->user();
+
+            return Limit::perDay(5)->by('upgrade-request:'.($device instanceof Device ? $device->user_id : $request->ip()));
+        });
         RateLimiter::for('auth-sign-up', fn (Request $request) => Limit::perMinute(10)->by('auth-sign-up:'.$request->ip()));
         RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
         // The public account pages (since v1.5): /account/delete and the export download.

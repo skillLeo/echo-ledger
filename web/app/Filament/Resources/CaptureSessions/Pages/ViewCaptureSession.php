@@ -12,6 +12,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
@@ -535,13 +536,19 @@ class ViewCaptureSession extends ViewRecord
     /** "Show as…": makes the Roman Urdu and English views with Claude (on the queue); the player then offers them. */
     private function showAsAction(): Action
     {
-        return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
-            ->visible(function (): bool {
-                $transcript = $this->editableTranscript();
+        $visible = function (): bool {
+            $transcript = $this->editableTranscript();
 
-                return $transcript !== null && TranscriptViews::available($transcript) !== []
-                    && ! in_array(app(TranscriptViews::class)->state($transcript)['status'], ['ready'], true);
-            })
+            return $transcript !== null && TranscriptViews::available($transcript) !== []
+                && ! in_array(app(TranscriptViews::class)->state($transcript)['status'], ['ready'], true);
+        };
+        // Since v1.6 the views are a paid feature: without it the button carries the plan's badge and opens the sheet.
+        if (! PlanLock::allows('views')) {
+            return PlanLock::sheet('show_as', 'views', 'Show as…')->labeledFrom('sm')->visible($visible);
+        }
+
+        return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
+            ->visible($visible)
             ->action(function (): void {
                 $transcript = $this->editableTranscript();
                 if ($transcript === null) {

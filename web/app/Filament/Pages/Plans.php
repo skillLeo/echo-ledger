@@ -10,6 +10,7 @@ use App\Models\Workspace;
 use App\Services\AuditLog;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
+use App\Services\SettingsRepository;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -97,6 +98,18 @@ class Plans extends Page implements HasTable
                 TextColumn::make('workspaces_count')->label('Workspaces')->numeric(),
             ])
             ->headerActions([
+                // Since v1.6: what people read after "Request upgrade" (bank or JazzCash details, what to write).
+                Action::make('paymentInstructions')->label('Payment instructions')->icon(Heroicon::OutlinedBanknotes)->color('gray')
+                    ->modalDescription('Shown after someone presses "Request upgrade", in the apps and the console, with "We\'ll activate it once confirmed".')
+                    ->fillForm(fn (): array => ['text' => app(SettingsRepository::class)->get('upgrade.payment_instructions')])
+                    ->schema([Textarea::make('text')->label('Payment instructions')->rows(6)->maxLength(2000)
+                        ->placeholder('Bank: … · Account name: … · Account number: … · Reference: your email')])
+                    ->action(function (array $data): void {
+                        $text = trim((string) ($data['text'] ?? ''));
+                        app(SettingsRepository::class)->set('upgrade.payment_instructions', $text !== '' ? $text : null);
+                        app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, 'Payment instructions changed');
+                        Notification::make()->title('Payment instructions saved')->success()->send();
+                    }),
                 // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
                 Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
                     ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says. Retention counts for the workspaces the person owns.')

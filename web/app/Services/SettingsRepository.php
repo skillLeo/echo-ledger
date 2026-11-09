@@ -84,6 +84,7 @@ final class SettingsRepository
         'signup.mode' => 'nobody',                   // nobody | anyone | invited
         'signup.allowed_domains' => [],              // since v1.6: empty = any domain (throwaway addresses never)
         'signup.per_ip_day' => 5,                    // since v1.6: new accounts a day from one IP address
+        'upgrade.payment_instructions' => null,      // since v1.6: shown after "Request upgrade" (System → Plans)
         'console.members' => true,                   // since v1.5: members and viewers get the small read-only console
         // Since v1.5: the SMTP server emails go through (the password is in the credential vault, as `mail.password`).
         // No host = the mailer of the server's .env file.

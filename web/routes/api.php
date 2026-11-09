@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TeammateController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
+use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\EnsureCanRecord;
@@ -78,6 +79,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
+        // Upgrade requests (v1.6): the newest one of this device's person.
+        Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 
@@ -120,6 +123,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
             // Your own transcription key (v1.6, the Free plan): checked with Groq once, kept encrypted, never sent back.
             Route::put('me/transcription-key', [EntitlementsController::class, 'putKey'])->middleware('throttle:transcription-key')->name('api.me.transcription-key.put');
             Route::delete('me/transcription-key', [EntitlementsController::class, 'deleteKey'])->name('api.me.transcription-key.delete');
+            // Upgrade requests (v1.6): ask for a plan, one waiting at a time.
+            Route::post('upgrade-requests', [UpgradeRequestController::class, 'store'])->middleware('throttle:upgrade-request')->name('api.upgrade-requests.store');
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');

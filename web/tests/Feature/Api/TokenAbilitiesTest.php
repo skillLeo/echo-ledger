@@ -112,6 +112,8 @@ function abilityRoutes(): array
         'your entitlements' => ['GET', '/api/me/entitlements', 'config:read'],
         'set your transcription key' => ['PUT', '/api/me/transcription-key', 'sessions:write'],
         'remove your transcription key' => ['DELETE', '/api/me/transcription-key', 'sessions:write'],
+        'ask for a plan' => ['POST', '/api/upgrade-requests', 'sessions:write'],
+        'your latest upgrade request' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],

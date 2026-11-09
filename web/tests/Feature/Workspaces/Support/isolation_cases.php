@@ -252,6 +252,9 @@ function isoApiCases(array $b): array
         'api.me.transcription-key.put' => ['PUT', '/api/me/transcription-key', ['provider' => 'groq', 'key' => 'short'],
             fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_key'],
         'api.me.transcription-key.delete' => ['DELETE', '/api/me/transcription-key', [], fn (TestResponse $r): bool => $r->status() === 204],
+        // B's upgrade request is never A's: A has none, whatever B asked for.
+        'api.upgrade-requests.latest' => ['GET', '/api/upgrade-requests/latest', [], 404],
+        'api.upgrade-requests.store' => ['POST', '/api/upgrade-requests', ['plan' => 'no-such-plan'], fn (TestResponse $r): bool => $r->status() === 422],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],

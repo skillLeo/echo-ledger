@@ -84,7 +84,6 @@ function registeredApiRoutes(): array
  */
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 const NOT_SERVED_YET = [
-    'POST /api/upgrade-requests', 'GET /api/upgrade-requests/latest',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
