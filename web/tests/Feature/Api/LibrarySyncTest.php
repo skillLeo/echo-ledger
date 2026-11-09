@@ -180,7 +180,8 @@ describe('paging', function () {
 
         $this->asToken($this->token)->getJson('/api/library?limit=30')->assertOk();
 
-        expect(count(DB::getQueryLog()))->toBeLessThan(12);
+        // Since v1.6 one more, whatever the size: the suspend switch reads the device's person.
+        expect(count(DB::getQueryLog()))->toBeLessThan(13);
     });
 });
 

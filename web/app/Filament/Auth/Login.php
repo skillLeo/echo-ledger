@@ -70,6 +70,17 @@ class Login extends BaseLogin
     #[Locked]
     public ?string $confirmedEmail = null;
 
+    public function mount(): void
+    {
+        parent::mount();
+        if (session()->pull('account.suspended') === true) {
+            Notification::make()->title('This account is suspended')->body(self::SUSPENDED)->danger()->persistent()->send();
+        }
+    }
+
+    /** What a suspended account is told when it tries to sign in (since v1.6). */
+    public const SUSPENDED = 'This account is suspended. Write to the owner of this server to ask why.';
+
     public function authenticate(): ?LoginResponse
     {
         $this->resetErrorBag();
@@ -91,6 +102,9 @@ class Login extends BaseLogin
     private function withPassword(): ?LoginResponse
     {
         $email = $this->email();
+        if (User::query()->where('email', $email)->whereNotNull('suspended_at')->exists()) {
+            throw ValidationException::withMessages(['data.email' => self::SUSPENDED]);
+        }
         $guard = app(SignInGuard::class);
         $locked = $guard->lockedFor($email);
         if ($locked > 0) {
@@ -118,6 +132,9 @@ class Login extends BaseLogin
             $answer = app(EmailCodes::class)->start($email);
         } catch (ApiError $e) {
             throw ValidationException::withMessages(['data.email' => $e->getMessage()]);
+        }
+        if ($answer['account'] === 'existing' && User::query()->where('email', $email)->whereNotNull('suspended_at')->exists()) {
+            throw ValidationException::withMessages(['data.email' => self::SUSPENDED]);
         }
         $this->confirmedEmail = $email;
         $this->data['email'] = $email;
@@ -267,6 +284,9 @@ class Login extends BaseLogin
 
     private function signInAs(User $user): LoginResponse
     {
+        if ($user->isSuspended()) {
+            throw ValidationException::withMessages(['data.code' => self::SUSPENDED]);
+        }
         if (! $this->isUserAllowedToAccessPanel($user)) {
             throw ValidationException::withMessages(['data.code' => 'This account cannot use the console. Ask a workspace owner to add you.']);
         }

@@ -50,6 +50,7 @@ final class SettingsTransfer
         'signup.mode',
         'signup.allowed_domains',
         'signup.per_ip_day',
+        'abuse.hours_per_day',
         'console.members',
         'mail.host',
         'mail.port',

@@ -22,6 +22,7 @@ use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Entitlements\UnusualUsage;
 use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
@@ -66,8 +67,10 @@ final class ActivityFeed
                 $feed()->uploadFailed($r);
             }
             if ($r->wasChanged('upload_status') && $r->upload_status === UploadStatus::Ready) {
-                $workspace = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->value('workspace_id');
-                $workspace === null || $feed()->planLimitChanged((int) $workspace, self::LIMIT_STORAGE);
+                $session = CaptureSession::acrossPeople()->withTrashed()->whereKey($r->capture_session_id)->first(['id', 'workspace_id', 'user_id']);
+                $session === null || $feed()->planLimitChanged((int) $session->workspace_id, self::LIMIT_STORAGE);
+                // Since v1.6: more hours in a day than the super admin's alert (UnusualUsage).
+                $session === null || app(UnusualUsage::class)->check((int) $session->user_id);
             }
         });
         Screen::created(fn (Screen $s) => $feed()->planLimitChanged($s->workspace_id, self::LIMIT_STORAGE));

@@ -105,6 +105,13 @@ their name and the Terms (no password needed; they can set one later with **Forg
   saved in **API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
   Without them it is skipped. The apps do not show it; the limits per address and network protect them.
 - Codes: 10 minutes, 5 tries, a new one after 60 seconds, at most 5 an hour per address and 20 an hour per network.
+- **Tell me when one person records more than … hours a day** (default 6): an email and a notification to you, at
+  most once a day per person. Only the lengths are counted.
+- **Suspend or restore a person** (System → Plans): a suspended person cannot sign in anywhere (the console and the
+  apps say "This account is suspended"), and their phones and computers are refused on every call. They stay signed
+  in, so lifting the suspension brings them straight back.
+- **Device limit:** each plan's devices per person; one more is refused with "Your plan signs in 2 devices. Sign one
+  out (Account → Devices), or upgrade."
 
 ## 4. Plans (super admin)
 

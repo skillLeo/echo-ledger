@@ -75,6 +75,9 @@ final class AuditLog
         'upgrade_requested' => 'Upgrade asked for',
         'upgrade_approved' => 'Upgrade approved',
         'upgrade_declined' => 'Upgrade declined',
+        'unusual_usage' => 'Unusual use',
+        'account_suspended' => 'Account suspended',
+        'account_unsuspended' => 'Account suspension lifted',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',

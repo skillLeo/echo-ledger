@@ -76,7 +76,7 @@ final class PairingService
             // Since v1.5 an account in its deletion grace signs nothing in, nor someone no longer in the code's workspace
             // (their codes are dropped then; this covers a race).
             $owner = $pairing === null ? null : User::query()->find($pairing->user_id);
-            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted()
+            if ($pairing === null || $pairing->used_at !== null || $pairing->expires_at->isPast() || ! $owner instanceof User || $owner->isBeingDeleted() || $owner->isSuspended()
                 || app(Workspaces::class)->roleOf($owner, $pairing->workspace_id) === null) {
                 throw ValidationException::withMessages(['pairing_code' => 'This code is invalid, expired, or already used.']);
             }

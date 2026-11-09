@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Accounts;
 
 use App\Exceptions\ApiError;
+use App\Http\Middleware\EnsureNotSuspended;
 use App\Models\Device;
 use App\Models\DeviceSignInCode;
 use App\Models\User;
@@ -173,6 +174,10 @@ final class DeviceSignIn
      */
     public function assertCanSignIn(User $user): int
     {
+        // Since v1.6: the super admin's suspend switch.
+        if ($user->isSuspended()) {
+            throw new ApiError(403, 'account_suspended', EnsureNotSuspended::MESSAGE);
+        }
         if (! $user->hasVerifiedEmail()) {
             throw new ApiError(403, 'email_not_verified', 'Confirm your email first: open the link in the email the console sent you.');
         }

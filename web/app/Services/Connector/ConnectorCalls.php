@@ -80,6 +80,9 @@ final class ConnectorCalls
             throw new ToolError('Too many requests: at most '.self::PER_MINUTE.' a minute. Try again in '.RateLimiter::availableIn($key).' seconds.');
         }
         RateLimiter::hit($key, 60);
+        if ($person->isSuspended()) {
+            throw new ToolError('This account is suspended. Write to the owner of the server to ask why.');
+        }
         if ($person->isBeingDeleted()) {
             throw new ToolError('This account is being deleted. Sign in on the console and choose "Keep my account" to use it again.');
         }

@@ -53,6 +53,8 @@ use Laravel\Passport\HasApiTokens;
  * @property string|null $transcription_key_provider
  * @property string|null $transcription_key_last4
  * @property Carbon|null $transcription_key_checked_at
+ * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
+ * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
@@ -89,6 +91,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     public function isBeingDeleted(): bool
     {
         return $this->deletes_at !== null;
+    }
+
+    /** Suspended by the super admin (since v1.6): no sign-in anywhere, every API call of its devices refused. */
+    public function isSuspended(): bool
+    {
+        return $this->suspended_at !== null;
     }
 
     public function hasTwoFactor(): bool
@@ -156,6 +164,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'entitlement_overrides' => 'array',
             'transcription_key' => 'encrypted',
             'transcription_key_checked_at' => 'datetime',
+            'suspended_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
         ];
     }

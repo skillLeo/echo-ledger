@@ -17,6 +17,7 @@ use App\Services\Accounts\SignUp;
 use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
+use App\Services\Entitlements\UnusualUsage;
 use App\Services\MailSettings;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
@@ -164,6 +165,7 @@ class Settings extends Page
             'signup_mode' => isset(SignUp::MODES[$all['signup.mode'] ?? '']) ? $all['signup.mode'] : SignUp::NOBODY,
             'signup_allowed_domains' => EmailGate::cleanDomains((array) ($all['signup.allowed_domains'] ?? [])),
             'signup_per_ip_day' => app(EmailCodes::class)->signUpsPerIpDay(),
+            'abuse_hours_per_day' => app(UnusualUsage::class)->hoursPerDay(),
             'console_members' => (bool) ($all['console.members'] ?? true),
             'mail_host' => $all['mail.host'] ?? null,
             'mail_port' => (int) ($all['mail.port'] ?? 587) ?: 587,
@@ -436,6 +438,8 @@ class Settings extends Page
                             ->helperText('Empty: any address. Otherwise only addresses of these domains (and their subdomains) can make an account. Throwaway addresses are always refused.'),
                         TextInput::make('signup_per_ip_day')->label('New accounts a day from one network')->integer()->minValue(1)->maxValue(1000)->required()
                             ->helperText('Slows down someone making many accounts. Default 5.'),
+                        TextInput::make('abuse_hours_per_day')->label('Tell me when one person records more than (hours a day)')->integer()->minValue(1)->maxValue(168)->required()
+                            ->helperText('An email and a notification, at most once a day per person. Default 6.'),
                         Toggle::make('console_members')->label('Members can use the console')
                             ->helperText('On: members and viewers open their own library, Shared with me, their profile and devices here, to read. Off: the console shows them the apps instead. Owners and admins always have it.'),
                     ]),
@@ -788,6 +792,7 @@ class Settings extends Page
             'signup.mode' => isset(SignUp::MODES[$state['signup_mode'] ?? '']) ? $state['signup_mode'] : SignUp::NOBODY,
             'signup.allowed_domains' => EmailGate::cleanDomains((array) ($state['signup_allowed_domains'] ?? [])),
             'signup.per_ip_day' => max(1, min(1000, (int) ($state['signup_per_ip_day'] ?? EmailCodes::DEFAULT_SIGN_UPS_PER_IP_DAY))),
+            'abuse.hours_per_day' => max(1, min(168, (int) ($state['abuse_hours_per_day'] ?? UnusualUsage::DEFAULT_HOURS))),
             'console.members' => (bool) ($state['console_members'] ?? true),
             'mail.host' => filled($state['mail_host'] ?? null) ? mb_strtolower(trim((string) $state['mail_host'])) : null,
             'mail.port' => (int) ($state['mail_port'] ?? 587) ?: 587,

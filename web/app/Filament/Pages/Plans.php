@@ -110,6 +110,32 @@ class Plans extends Page implements HasTable
                         app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, 'Payment instructions changed');
                         Notification::make()->title('Payment instructions saved')->success()->send();
                     }),
+                // The suspend switch (since v1.6): signs the person in nowhere; their devices are refused on every call.
+                Action::make('suspend')->label('Suspend or restore a person')->icon(Heroicon::OutlinedNoSymbol)->color('gray')
+                    ->modalDescription('A suspended person cannot sign in anywhere, and their phones and computers are refused on every call (they stay signed in, so lifting it brings them back).')
+                    ->schema(fn (): array => [
+                        Select::make('user_id')->label('Person')->required()->searchable()->live()
+                            ->getSearchResultsUsing(fn (string $search): array => User::query()->where('email', 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%')
+                                ->where('is_super_admin', false)->orderBy('email')->limit(20)->pluck('email', 'id')->all())
+                            ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('email'))
+                            ->afterStateUpdated(function ($state, $set): void {
+                                $user = User::query()->find($state);
+                                $set('suspended', $user?->isSuspended() ?? false);
+                                $set('reason', $user?->suspended_reason);
+                            }),
+                        Toggle::make('suspended')->label('Suspended'),
+                        TextInput::make('reason')->label('Why (for you)')->maxLength(500),
+                    ])
+                    ->action(function (array $data): void {
+                        $user = User::query()->find((int) $data['user_id']);
+                        if (! $user instanceof User || $user->is_super_admin) {
+                            return;
+                        }
+                        $on = (bool) ($data['suspended'] ?? false);
+                        $user->forceFill(['suspended_at' => $on ? ($user->suspended_at ?? now()) : null, 'suspended_reason' => $on ? (filled($data['reason'] ?? null) ? trim((string) $data['reason']) : null) : null])->save();
+                        app(AuditLog::class)->record($on ? 'account_suspended' : 'account_unsuspended', (int) auth()->id(), $user, ($on ? 'Suspended ' : 'Suspension lifted for ').Str::limit($user->email, 120, ''));
+                        Notification::make()->title(e(($on ? 'Suspended: ' : 'Restored: ').$user->email))->success()->send();
+                    }),
                 // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
                 Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
                     ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says. Retention counts for the workspaces the person owns.')
