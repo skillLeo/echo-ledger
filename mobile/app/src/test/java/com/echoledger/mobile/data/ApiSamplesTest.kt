@@ -139,6 +139,15 @@ class ApiSamplesTest {
         // A request just made has no answer yet: the latest request carries it.
         "upgrade_request.reply",
         "upgrade_request.decided_at",
+        "upgrade_request.approved_plan",
+        "upgrade_request.approved_until",
+        // Promo codes (v1.6.2): only on a request made with one, until the server's samples carry them.
+        "upgrade_request.promo_code",
+        "upgrade_request.percent",
+        "upgrade_request.amount_due",
+        "upgrade_request_latest.promo_code",
+        "upgrade_request_latest.percent",
+        "upgrade_request_latest.amount_due",
         "auth_password.config.providers.live_captions.required_artifacts",
         "auth_password.config.providers.live_captions.preferred_primary",
         "auth_password.config.providers.dictation.required_artifacts",

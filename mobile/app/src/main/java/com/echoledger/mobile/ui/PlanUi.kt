@@ -90,7 +90,21 @@ fun UpgradeSheet(vm: MainViewModel, plan: PlanState, lock: PlanState.Lock?, onDi
     var sending by remember { mutableStateOf(false) }
     var sent by remember { mutableStateOf<UpgradeRequestDto?>(null) }
     val pending = sent ?: plan.upgrade?.takeIf { it.status == "pending" }
-    val target = lock?.planKey?.takeIf { it.isNotBlank() } ?: plan.offers.firstOrNull { it.key != plan.key }?.key.orEmpty()
+    val first = lock?.planKey?.takeIf { it.isNotBlank() } ?: plan.offers.firstOrNull { it.key != plan.key }?.key.orEmpty()
+    // Since v1.6.2 a plan card can be picked, and a promo code for another plan switches to that plan.
+    var target by remember { mutableStateOf(first) }
+    var promoOpen by remember { mutableStateOf(false) }
+    var promoCode by remember { mutableStateOf("") }
+    var promo by remember { mutableStateOf<MainViewModel.PromoResult?>(null) }
+    var checking by remember { mutableStateOf(false) }
+    fun checkPromo() {
+        checking = true
+        scope.launch {
+            promo = vm.checkPromo(promoCode, target.ifBlank { null })
+            checking = false
+        }
+    }
+    val validPromo = (promo as? MainViewModel.PromoResult.Valid)?.promo?.takeIf { it.plan == target }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(
             Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5),
@@ -110,6 +124,7 @@ fun UpgradeSheet(vm: MainViewModel, plan: PlanState, lock: PlanState.Lock?, onDi
                 Column(
                     Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                         .background(if (offer.key == target) planColor(offer.color).copy(alpha = 0.08f) else Brand.Background)
+                        .then(if (current || pending != null) Modifier else Modifier.clickable { target = offer.key })
                         .padding(Space.s3)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,13 +137,78 @@ fun UpgradeSheet(vm: MainViewModel, plan: PlanState, lock: PlanState.Lock?, onDi
                 }
             }
             when {
+                // A 100 % promo code: the plan is on at once, nothing to pay (since v1.6.2).
+                pending?.status == "approved" -> {
+                    val name = plan.offers.firstOrNull { it.key == (pending.approvedPlan ?: pending.plan) }?.name ?: "new"
+                    Text(
+                        "Your $name plan is on${pending.approvedUntil?.let {
+                            " until ${it.take(10)}"
+                        }.orEmpty()}.",
+                        fontWeight = FontWeight.SemiBold,
+                        color = Brand.Text
+                    )
+                }
+
                 pending != null -> {
                     Text("Upgrade requested", fontWeight = FontWeight.SemiBold, color = Brand.Text)
+                    pending.amountDue?.let { due ->
+                        Text("To pay: $due${pending.promoCode?.let { " (with $it)" }.orEmpty()}", color = Brand.Text)
+                    }
                     pending.paymentInstructions?.takeIf { it.isNotBlank() }?.let { Text(it, color = Brand.Text) }
                     Text("We'll activate it once confirmed.", color = Brand.Muted)
                 }
 
                 target.isNotBlank() -> {
+                    if (promo !is MainViewModel.PromoResult.Unsupported) {
+                        if (!promoOpen) {
+                            EchoButton("Have a promo code?", { promoOpen = true }, kind = ButtonKind.Text)
+                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                OutlinedTextField(
+                                    promoCode,
+                                    {
+                                        promoCode = it.uppercase().filter { c -> c.isLetterOrDigit() || c == '-' }.take(24)
+                                        promo = null
+                                    },
+                                    label = { Text("Promo code") },
+                                    singleLine = true,
+                                    modifier = Modifier.weight(1f)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                EchoButton("Apply", {
+                                    checkPromo()
+                                }, enabled = promoCode.length >= 4, loading = checking, kind = ButtonKind.Secondary)
+                            }
+                            when (val r = promo) {
+                                is MainViewModel.PromoResult.Valid -> Text(
+                                    if (r.promo.free) {
+                                        "${r.promo.planName.ifBlank {
+                                            r.promo.plan
+                                        }} free for ${r.promo.months} month${if (r.promo.months == 1) "" else "s"} with ${r.promo.code}"
+                                    } else {
+                                        "${r.promo.planName}: ${r.promo.price.orEmpty()} → ${r.promo.finalPrice.orEmpty()} with ${r.promo.code}"
+                                    },
+                                    color = Brand.Success,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                is MainViewModel.PromoResult.OtherPlan -> {
+                                    Text(r.text, color = Brand.Text)
+                                    val other = plan.offers.firstOrNull { it.key == r.plan }
+                                    if (other != null) {
+                                        EchoButton("Use it for ${other.name}", {
+                                            target = other.key
+                                            checkPromo()
+                                        }, kind = ButtonKind.Secondary)
+                                    }
+                                }
+
+                                is MainViewModel.PromoResult.Invalid -> Text(r.text, color = Brand.Danger)
+
+                                else -> Unit
+                            }
+                        }
+                    }
                     OutlinedTextField(
                         message,
                         { message = it.take(1000) },
@@ -136,11 +216,11 @@ fun UpgradeSheet(vm: MainViewModel, plan: PlanState, lock: PlanState.Lock?, onDi
                         modifier = Modifier.fillMaxWidth()
                     )
                     EchoButton(
-                        "Request upgrade",
+                        if (validPromo?.free == true) "Switch on" else "Request upgrade",
                         {
                             sending = true
                             scope.launch {
-                                sent = vm.requestUpgrade(target, message)
+                                sent = vm.requestUpgrade(target, message, validPromo?.code)
                                 sending = false
                             }
                         },
