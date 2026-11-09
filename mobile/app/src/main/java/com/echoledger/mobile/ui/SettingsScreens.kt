@@ -421,7 +421,9 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
 
         "app-lock" -> AppLockSection(vm, settings)
 
-        "devices" -> SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
+        "devices" -> SecuritySection(load = {
+            vm.security()
+        }, revoke = { vm.revokeDevice(it) }, rename = { id, name -> vm.renameDevice(id, name) })
 
         "plan" -> PlanSection(vm, settings.plan)
 

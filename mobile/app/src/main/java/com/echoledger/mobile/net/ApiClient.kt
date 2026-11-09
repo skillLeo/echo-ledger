@@ -892,6 +892,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     /** `GET /api/security` (since v1.1): paired devices and the recent audit log. */
     suspend fun security(): SecurityResponse = call(request("security").get().build(), SecurityResponse.serializer())!!
 
+    /** `PATCH /api/devices/{id}` (since v1.6): a new name for one of this person's devices. */
+    suspend fun renameDevice(id: String, name: String) {
+        val body = buildJsonObject { put("name", name.trim().take(60)) }.toString().toRequestBody(jsonType)
+        call(request("devices/$id").patch(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
     /** `DELETE /api/devices/{id}` (since v1.1): revokes another paired device. */
     suspend fun revokeDevice(id: String) {
         call(request("devices/$id").delete().build(), null as KSerializer<Unit>?)

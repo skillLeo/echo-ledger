@@ -969,6 +969,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Paired devices and the recent audit log; null when offline or unpaired. */
     suspend fun security(): SecurityResponse? = withContext(Dispatchers.IO) { runCatching { graph.api()?.security() }.getOrNull() }
 
+    /** Renames a device (since v1.6); an older server has no rename: it says to rename it in the console. */
+    suspend fun renameDevice(id: String, name: String): Boolean = withContext(Dispatchers.IO) {
+        try {
+            graph.api()?.renameDevice(id, name) ?: error("Not signed in")
+            _message.value = "Renamed"
+            true
+        } catch (e: ApiException) {
+            _message.value = if (e.status == 404 || e.status == 405) "Rename it in the console: Account → Devices." else e.message
+            false
+        } catch (e: Exception) {
+            _message.value = "Can't reach the server. Try again."
+            false
+        }
+    }
+
     /** Revokes another paired device; false (with the server's reason) when it was refused. */
     suspend fun revokeDevice(id: String): Boolean = withContext(Dispatchers.IO) {
         runCatching { graph.api()?.revokeDevice(id) ?: error("Not signed in") }

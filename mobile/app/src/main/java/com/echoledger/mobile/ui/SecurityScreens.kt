@@ -33,8 +33,15 @@ fun eventLine(e: SecurityEventDto): String {
 
 /** Settings → Devices and activity (B16): the paired devices (revoke the others) and the recent audit log. */
 @Composable
-fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (String) -> Boolean) {
+fun SecuritySection(
+    load: suspend () -> SecurityResponse?,
+    revoke: suspend (String) -> Boolean,
+    rename: suspend (String, String) -> Boolean = { _, _ -> false }
+) {
     var overview by remember { mutableStateOf<SecurityResponse?>(null) }
+    // Since v1.6 (P3): the device being renamed and the name typed.
+    var renaming by remember { mutableStateOf<String?>(null) }
+    var newName by remember { mutableStateOf("") }
     var loaded by remember { mutableStateOf(false) }
     var confirming by remember { mutableStateOf<String?>(null) }
     var attempt by remember { mutableStateOf(0) }
@@ -56,6 +63,24 @@ fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (Stri
 
             else -> {
                 current.devices.forEach { d ->
+                    if (renaming == d.id) {
+                        // Since v1.6 (P3): renamed in place.
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.OutlinedTextField(
+                                newName,
+                                { newName = it.take(60) },
+                                label = { Text("Name") },
+                                singleLine = true,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TextButton(onClick = {
+                                renaming = null
+                                scope.launch { if (rename(d.id, newName)) overview = load() }
+                            }, enabled = newName.isNotBlank()) { Text("Save") }
+                            TextButton(onClick = { renaming = null }) { Text("Cancel") }
+                        }
+                        return@forEach
+                    }
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(d.name + if (d.current) " · this phone" else "")
@@ -70,21 +95,25 @@ fun SecuritySection(load: suspend () -> SecurityResponse?, revoke: suspend (Stri
                                 fontSize = 12.sp
                             )
                         }
+                        TextButton(onClick = {
+                            renaming = d.id
+                            newName = d.name
+                        }) { Text("Rename") }
                         if (!d.current) {
                             if (confirming == d.id) {
                                 TextButton(onClick = {
                                     confirming = null
                                     scope.launch { if (revoke(d.id)) overview = load() }
-                                }) { Text("Revoke now", color = Brand.Danger) }
+                                }) { Text("Sign out now", color = Brand.Danger) }
                             } else {
                                 TextButton(
                                     onClick = { confirming = d.id },
                                     modifier = Modifier.semantics {
                                         contentDescription =
-                                            "Revoke ${d.name}"
+                                            "Sign out ${d.name}"
                                     }
                                 ) {
-                                    Text("Revoke")
+                                    Text("Sign out")
                                 }
                             }
                         }

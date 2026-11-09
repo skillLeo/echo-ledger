@@ -1,8 +1,10 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextReplacement
 import com.echoledger.mobile.data.SecurityDeviceDto
 import com.echoledger.mobile.data.SecurityEventDto
 import com.echoledger.mobile.data.SecurityResponse
@@ -93,9 +95,26 @@ class SecurityCentreTest : ScreenTest() {
         }
         pumpUntil("the devices to show") { runCatching { compose.onNodeWithText("Pixel 9 · this phone").assertExists() }.isSuccess }
         compose.onNodeWithText("Recording deleted: Acme kickoff · Work laptop").assertExists()
-        compose.onNodeWithContentDescription("Revoke Work laptop").performClick()
+        compose.onNodeWithContentDescription("Sign out Work laptop").performClick()
         assertTrue(revoked.isEmpty())
-        compose.onNodeWithText("Revoke now").performClick()
+        compose.onNodeWithText("Sign out now").performClick()
         pumpUntil("the device to be revoked") { revoked == listOf("d2") && loads == 2 }
+    }
+
+    @Test
+    fun `a device can be renamed, this phone too (v1_6 P3)`() {
+        val renamed = mutableListOf<Pair<String, String>>()
+        show {
+            SecuritySection(load = { overview }, revoke = { true }, rename = { id, name ->
+                renamed += id to name
+                true
+            })
+        }
+        pumpUntil("the devices to show") { runCatching { compose.onNodeWithText("Pixel 9 · this phone").assertExists() }.isSuccess }
+        compose.onAllNodesWithText("Rename")[0].performClick()
+        compose.onNodeWithText("Name").performTextReplacement("Galaxy S25 Ultra")
+        compose.onNodeWithText("Save").performClick()
+        pumpUntil("the rename") { renamed.isNotEmpty() }
+        assertEquals("Galaxy S25 Ultra", renamed.single().second)
     }
 }

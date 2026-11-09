@@ -39,7 +39,7 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [ ] P2.7 System: sign-up settings, app versions, announcement, maintenance, audit log.
 
 ## P3 — Devices
-- [ ] P3.1 Stable per-install identity, one row per device (duplicates merged), readable names, statuses, rename / sign out / sign in again / remove, live QR status, device limit, new sign-in alert. **Desktop done** (install id = SHA-256 of the machine id and data folder, "Windows 11 PC" / "MacBook Pro", Rename).
+- [ ] P3.1 Stable per-install identity, one row per device (duplicates merged), readable names, statuses, rename / sign out / sign in again / remove, live QR status, device limit, new sign-in alert. **Desktop done** (install id = SHA-256 of the machine id and data folder, "Windows 11 PC" / "MacBook Pro", Rename). **Phone done** (install id since `b8523fc`; You → Devices: Rename in place, "Sign out" instead of "Revoke"; SecurityCentreTest).
 - [ ] P3.2 Installed desktops update themselves (needs V1). **Desktop part done** (`856d4df`: checks 45 s after start and every 6 h, "Update ready — Restart"). Still needed: V1 (the key as a CI secret), a publish step (`echoledger:publish-release`), a version above the installed one; the laptop's 1.1.0 has no updater and needs one manual install (desktop/RELEASE.md).
 
 ## P4 — App shell (web + desktop)
