@@ -230,6 +230,32 @@ plan (archived plans are not offered), if you like until when (then it goes back
 word to them. **Decline** needs a reply. Either way the person gets an email and a notification in the apps, with your
 words. One request waits at a time per person.
 
+**Receipts (since v1.7).** Each request has a reference code (EL-7K2Q9M) the customer writes in the bank transfer's
+note, and the amount due in rupees (the plan's **Price by bank transfer**, after a promo code). After paying, the
+customer adds up to 3 screenshots or PDFs of the receipt and/or the bank's transaction ID and presses Send; the request
+is then **In review** and staff with the upgrade-requests permission get a notice in the bell. Requests in review are at
+the top of the list, the oldest receipt first, with the reference, the amount, the transaction ID, the name the money
+came from and the receipts as small pictures: a picture opens full size in a new tab, a PDF always downloads (opening
+a receipt in full is written in the activity log). Pictures are stored again without their metadata, a PDF with a
+password or scripts is refused, and everything is encrypted on the server. Check the money in the bank or wallet app,
+then:
+- **Approve** as before (it works at every stage, also before a receipt arrives).
+- **Decline** with a reason the person reads; a promo code comes back to them.
+- **Ask for a new receipt** with a note ("The receipt is cut off, so we can't see the amount and the date."): the
+  request stays open, the person gets an email and a notice with the note, and can send up to 3 more files. Sent
+  files stay with the request; at most 10 on one request.
+
+A customer may also cancel a request that is still open ("Cancelled by you"; a promo code comes back). Receipts are
+seen only by the person and staff with the upgrade-requests permission, never by a workspace's owners or support
+staff, and erased 90 days after the request is decided or cancelled (the request itself stays; the list then says
+"Receipts deleted on …"). The daily `echoledger:prune-payment-proofs` does that.
+
+**Payment details (since v1.7).** Admin panel → Plans → **Payment details** (staff who may change server settings):
+the bank, branch, account title (exactly as the bank shows it), account number, IBAN (PK and 22 letters and digits,
+checked) and an optional note, where `{reference}` becomes the request's code. The apps and the console show them with
+each request; apps older than v1.7 get the same as text. While all of them are empty, the older **Payment
+instructions** text is shown instead, as before.
+
 ## 5. Usage and costs
 
 - **Admin panel → Server usage** (staff who see usage): minutes, tokens and the estimated cost at the top, each
