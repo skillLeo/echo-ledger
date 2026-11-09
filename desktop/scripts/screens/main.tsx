@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeEntitlements, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, sampleEntitlements } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -60,6 +60,8 @@ const plan = makePlan({
 const opened = screen === "library-backup" ? "r2" : "r5";
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
 const free = screen.endsWith("-free");
+// v1.6.2: "-ultra" is an account on the top plan (All features all ticked).
+const ultra = screen.endsWith("-ultra");
 const signedOut = screen.startsWith("sign-in");
 // Acme Holdings shows its folders in the trees.
 localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
@@ -114,7 +116,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   auth_start: ({ email }) => (String(email).startsWith("new") ? { account: "new", methods: ["code", "google"], signUp: true } : { account: "existing", methods: ["password", "code", "google"], signUp: true }),
   auth_code_send: () => ({ resendAfter: 60, expiresIn: 600, sent: true }),
   auth_code_verify: () => ({ result: "profile", status: null }),
-  entitlements_get: () => (free ? makeEntitlements() : null),
+  entitlements_get: () => (free ? sampleEntitlements("free") : ultra ? sampleEntitlements("ultra") : null),
+  // v1.6.2: a promo code for Pro, at half price.
+  promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,

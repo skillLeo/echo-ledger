@@ -12,8 +12,8 @@ import { DevicesCard, LockCard, NotificationsCard, StorageCard } from "./Securit
 import { AccountCard, PlanCard, SignInMethodsCard, YourDataCard, useAccount } from "./AccountSettings";
 import { PageHeader, SavedIndicator } from "../../components/Page";
 import { CLOCKS, DENSITIES, loadPreferences, PREFERENCES_EVENT, savePreferences, SIDEBAR_STYLES, type Preferences } from "../../lib/shell";
-import { PlanUsageCard, TranscriptionKeyCard } from "./Upgrade";
-import { useEntitlements } from "../../lib/entitlements";
+import { AllFeaturesCard, PlanUsageCard, TranscriptionKeyCard } from "./Upgrade";
+import { featureWords, useEntitlements } from "../../lib/entitlements";
 import { ConsentNotice } from "./ConsentNotice";
 import { UpdatesPanel } from "./UpdateSettings";
 import { MacCheckCard } from "./MacCheck";
@@ -49,7 +49,7 @@ const ACCOUNT_GROUPS: ReadonlySet<Group> = new Set(["profile", "sign-in", "devic
 /** The tabs "Find a page" and the palette open (`section` ids). */
 /** Sections other parts of the app open by id, and the tab each is in. */
 const SECTION_GROUP: Record<string, Group> = {
-  "transcription-key": "key", plan: "plan", devices: "devices", shortcuts: "preferences", "your-data": "privacy", general: "computer", about: "computer",
+  "transcription-key": "key", plan: "plan", "all-features": "plan", devices: "devices", shortcuts: "preferences", "your-data": "privacy", general: "computer", about: "computer",
 };
 export const ACCOUNT_TABS: readonly (readonly [Group, string])[] = GROUPS.map((g) => [g, GROUP_LABEL[g]] as const);
 const GROUP_ICON: Record<Group | "all", typeof SettingsIcon> = {
@@ -287,6 +287,9 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
           node: <PlanUsageCard e={entitlements} /> }
         : { id: "plan", group: "plan", title: "Plan", keywords: "plan limits minutes storage usage retention seats features live translate screen moments",
           node: <PlanCard status={status} /> },
+      ...(entitlements && Object.keys(entitlements.features).length > 0 ? [{ id: "all-features", group: "plan", title: "All features",
+        keywords: `all features plan pro included locked upgrade ${Object.keys(entitlements.features).map((k) => featureWords(entitlements, k).name).join(" ")}`,
+        node: <AllFeaturesCard e={entitlements} /> }] satisfies SettingsSection[] : []),
       ...(entitlements && showKey ? [{ id: "transcription-key", group: "key", title: "Transcription key", keywords: "transcription key groq free own api key",
         node: <TranscriptionKeyCard e={entitlements} /> }] satisfies SettingsSection[] : []),
       { id: "your-data", group: "privacy", title: "Your data", keywords: "export my data download zip delete my account",

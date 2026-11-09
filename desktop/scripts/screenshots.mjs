@@ -130,10 +130,35 @@ const SCREENS = [
     await page.locator("[data-testid=locked-live_translate] .plan-badge").click();
     await page.waitForSelector(".upgrade-sheet .plan-compare");
   }],
+  // v1.6.2: a promo code applied in the sheet.
+  ["upgrade-promo-free", "record-free", async (page) => {
+    await page.locator("[data-testid=locked-live_translate] .plan-badge").click();
+    await page.getByRole("radio", { name: /PRO ✦/ }).click();
+    await page.getByRole("button", { name: "Have a promo code?" }).click();
+    await page.getByLabel("Promo code").fill("SAVE50");
+    await page.getByRole("button", { name: "Apply" }).click();
+    await page.waitForSelector("[data-testid=promo-price-pro]");
+  }],
   ["settings-plan-free", "settings-free", async (page) => {
     await page.waitForSelector(".settings-row");
     await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
     await page.waitForSelector("[data-testid=plan-usage]");
+  }],
+  // v1.6.2: All features under Plan & usage, for Free (six of fifteen, the badges) and the top plan (all ticked).
+  ["settings-features-free", "settings-free", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
+  }],
+  ["settings-plan-ultra", "settings-ultra", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.waitForSelector("[data-testid=plan-usage]");
+  }],
+  ["settings-features-ultra", "settings-ultra", async (page) => {
+    await page.waitForSelector(".settings-row");
+    await page.getByRole("button", { name: "Plan & usage", exact: true }).click();
+    await page.locator("[data-testid=all-features]").scrollIntoViewIfNeeded();
   }],
   ["settings-key-free", "settings-free", async (page) => {
     await page.waitForSelector(".settings-row");

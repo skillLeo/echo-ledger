@@ -101,6 +101,21 @@ fn plan_name(key: &str) -> String {
     chars.next().map(|c| c.to_uppercase().chain(chars.flat_map(|c| c.to_lowercase())).collect()).unwrap_or_default()
 }
 
+/// A plan's key as the server writes them (`pro`, `business`).
+pub fn is_plan_key(plan: &str) -> bool {
+    !plan.is_empty() && plan.len() <= 32 && plan.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// A promo code as typed, the way the server matches it: 6–24 of `A-Z 0-9 -`, without case or spaces around it.
+pub fn promo_code_of(typed: &str) -> crate::error::AppResult<String> {
+    let code = typed.trim().to_ascii_uppercase();
+    if (6..=24).contains(&code.len()) && code.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '-') {
+        Ok(code)
+    } else {
+        Err(crate::error::AppError::msg("A promo code is 6 to 24 letters, digits or dashes. Check it and try again."))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

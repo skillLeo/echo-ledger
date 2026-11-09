@@ -2,13 +2,14 @@
 // project's page with its breadcrumbs, folders and menu (new folder, rename, move, delete), and its tabs Recordings,
 // Files, Notes, Screens and AI notes, driven through the same commands the Rust core exposes.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { useState } from "react";
 import { deletedText, ProjectsView } from "./ProjectsView";
 import { budgetLine, citationLabel, workspaceBusy } from "./ClientWorkspace";
 import type { ClientFolder, ClientWorkspace, LibraryItem, ProjectScreen, ProjectScreensPage } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeScreen, anyTarget } from "../../test/fixtures";
+import { makeItem, makeScreen, anyTarget, sampleEntitlements } from "../../test/fixtures";
+import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { forgetPictures } from "../../lib/screens";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -395,6 +396,54 @@ describe("Notes", () => {
     expect(screen.getByText("An online shop")).toBeInTheDocument();
     expect(screen.getByText("Launch on November 15")).toBeInTheDocument();
     expect(callsOf("client_brief_refresh")).toEqual([]);
+  });
+
+  it("keeps AI notes, Ask and Screens in view with their badges on a Free plan; each opens the upgrade sheet, never the feature (v1.6.2)", async () => {
+    resetEntitlementsForTests(sampleEntitlements("free"));
+    const sheet = renderHook(() => useUpgradeSheet());
+    try {
+      respond("client_screens", null);
+      await renderProjects({ aiNotesInPlan: false });
+      expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "ScreensPRO ✦", "AI notesULTRA ✦"]);
+      const ai = screen.getByTestId("locked-tab-ai_notes");
+      expect(ai).toHaveAccessibleName("AI notes, AI notes is in the Ultra plan");
+      expect(ai).toHaveTextContent("AI notesULTRA ✦");
+      expect(ai).toHaveAttribute("aria-selected", "false");
+      const screens = screen.getByTestId("locked-tab-screens");
+      expect(screens).toHaveTextContent("ScreensPRO ✦");
+      fireEvent.click(ai);
+      expect(sheet.result.current?.feature).toBe("ai_notes");
+      expect(screen.getByRole("tab", { name: "Recordings" })).toHaveAttribute("aria-selected", "true");
+      fireEvent.click(screens);
+      expect(sheet.result.current?.feature).toBe("screen_moments");
+      expect(screen.getByRole("tab", { name: "Recordings" })).toHaveAttribute("aria-selected", "true");
+      tab("Notes");
+      const ask = screen.getByRole("region", { name: "Ask" });
+      expect(ask).toHaveTextContent("Ask: answers about this project, from its recordings and files");
+      fireEvent.click(within(ask).getByRole("button", { name: /AI notes is in the Ultra plan/ }));
+      expect(sheet.result.current?.feature).toBe("ai_notes");
+      expect(screen.queryByRole("textbox", { name: "Question" })).not.toBeInTheDocument();
+      expect(callsOf("client_ask")).toEqual([]);
+    } finally {
+      act(() => {
+        resetEntitlementsForTests();
+        closeUpgradeSheet();
+      });
+      sheet.unmount();
+    }
+  });
+
+  it("keeps the tabs as they were when the plan has the features or the server sends no entitlements", async () => {
+    resetEntitlementsForTests(sampleEntitlements("ultra"));
+    try {
+      await renderProjects();
+      expect(screen.queryByTestId("locked-tab-ai_notes")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("locked-tab-screens")).not.toBeInTheDocument();
+      tab("AI notes");
+      expect(screen.getByRole("tab", { name: "AI notes" })).toHaveAttribute("aria-selected", "true");
+    } finally {
+      act(() => resetEntitlementsForTests());
+    }
   });
 
   it("edits the brief, one line per item", async () => {

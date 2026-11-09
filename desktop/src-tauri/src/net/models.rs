@@ -780,13 +780,14 @@ pub struct ThisDevice {
 
 /// `GET /api/me/entitlements`, as the windows read it (snake_case, like the server). Each part is read on its own: a
 /// malformed one is left out, never the rest. Colours are `#rrggbb` only; a feature or limit the app does not know is
-/// kept (the server alone decides).
+/// kept (the server alone decides). The features keep the order the server sent: its registry's, which Plan & usage
+/// lists them in.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Entitlements {
     #[serde(default, deserialize_with = "lenient")]
     pub plan: Option<EntitlementPlan>,
-    #[serde(default, deserialize_with = "lenient_map")]
-    pub features: std::collections::BTreeMap<String, FeatureEntitlement>,
+    #[serde(default)]
+    pub features: Features,
     #[serde(default, deserialize_with = "lenient_map")]
     pub limits: std::collections::BTreeMap<String, LimitEntitlement>,
     #[serde(default, deserialize_with = "lenient_list")]
@@ -829,6 +830,119 @@ pub struct FeatureEntitlement {
     pub lowest_plan: Option<String>,
 }
 
+/// The features by key, in the order the server sent them (its registry's). Sent on as a JSON object in that same
+/// order, which the page keeps. An entry that does not parse is left out on its own; anything but an object is none.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Features(Vec<(String, FeatureEntitlement)>);
+
+impl Features {
+    pub fn get(&self, key: &str) -> Option<&FeatureEntitlement> {
+        self.0.iter().find(|(k, _)| k == key).map(|(_, f)| f)
+    }
+
+    pub fn contains_key(&self, key: &str) -> bool {
+        self.get(key).is_some()
+    }
+
+    /// The keys in the server's order.
+    pub fn keys(&self) -> impl Iterator<Item = &str> {
+        self.0.iter().map(|(k, _)| k.as_str())
+    }
+
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    fn insert(&mut self, key: String, feature: FeatureEntitlement) {
+        match self.0.iter_mut().find(|(k, _)| *k == key) {
+            Some(entry) => entry.1 = feature,
+            None => self.0.push((key, feature)),
+        }
+    }
+}
+
+impl std::ops::Index<&str> for Features {
+    type Output = FeatureEntitlement;
+
+    fn index(&self, key: &str) -> &FeatureEntitlement {
+        self.get(key).unwrap_or_else(|| panic!("no feature {key}"))
+    }
+}
+
+impl Serialize for Features {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeMap;
+        let mut map = serializer.serialize_map(Some(self.0.len()))?;
+        for (key, feature) in &self.0 {
+            map.serialize_entry(key, feature)?;
+        }
+        map.end()
+    }
+}
+
+impl<'de> Deserialize<'de> for Features {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        struct InOrder;
+
+        impl<'de> serde::de::Visitor<'de> for InOrder {
+            type Value = Features;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("the features by key")
+            }
+
+            fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Features, A::Error> {
+                let mut features = Features::default();
+                while let Some((key, value)) = map.next_entry::<String, serde_json::Value>()? {
+                    if let Ok(feature) = serde_json::from_value(value) {
+                        features.insert(key, feature);
+                    }
+                }
+                Ok(features)
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Features, A::Error> {
+                while seq.next_element::<serde::de::IgnoredAny>()?.is_some() {}
+                Ok(Features::default())
+            }
+
+            fn visit_unit<E>(self) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_none<E>(self) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_bool<E>(self, _: bool) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_i64<E>(self, _: i64) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_u64<E>(self, _: u64) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_f64<E>(self, _: f64) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+
+            fn visit_str<E>(self, _: &str) -> Result<Features, E> {
+                Ok(Features::default())
+            }
+        }
+
+        deserializer.deserialize_any(InOrder)
+    }
+}
+
 /// One limit: `limit: null` is no limit; `used` only where the server counts it.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct LimitEntitlement {
@@ -850,7 +964,7 @@ pub struct TranscriptionKeyState {
 }
 
 /// An upgrade request (`POST /api/upgrade-requests`, `GET /api/upgrade-requests/latest`).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct UpgradeRequest {
     #[serde(default)]
     pub id: String,
@@ -869,6 +983,51 @@ pub struct UpgradeRequest {
     pub decided_at: Option<String>,
     #[serde(default, deserialize_with = "lenient")]
     pub reply: Option<String>,
+    /// A promo code on the request (since v1.6.2), its discount and the price after it, as the server shows it.
+    #[serde(default, deserialize_with = "lenient")]
+    pub promo_code: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub percent: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub amount_due: Option<String>,
+    /// A 100 % code approves the request at once (since v1.6.2): the plan switched on, and until when.
+    #[serde(default, deserialize_with = "lenient")]
+    pub approved_plan: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub approved_until: Option<String>,
+}
+
+/// `POST /api/promo-codes/check` (since v1.6.2): a valid code for the plan asked, its discount and the prices before
+/// and after it as the server writes them. `free` is a 100 % code: nothing to pay, the plan switches on at once.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PromoCheck {
+    #[serde(default)]
+    pub code: String,
+    #[serde(default)]
+    pub plan: String,
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan_name: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub percent: Option<f64>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub price: Option<String>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub final_price: Option<String>,
+    #[serde(default)]
+    pub free: bool,
+    #[serde(default, deserialize_with = "lenient")]
+    pub months: Option<u32>,
+}
+
+/// What the upgrade sheet hears about a promo code: it applies, it does not, it is for another plan (which the sheet
+/// offers), or the server has no promo codes yet (an older one: the field goes).
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(tag = "result", rename_all = "snake_case")]
+pub enum PromoAnswer {
+    Valid { check: PromoCheck },
+    Invalid { message: String },
+    OtherPlan { plan: String, message: String },
+    Unsupported,
 }
 
 /// A plan on offer, for the comparison sheet (cheapest first).

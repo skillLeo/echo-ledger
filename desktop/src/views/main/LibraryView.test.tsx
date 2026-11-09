@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { LibraryView } from "./LibraryView";
 import type { LibraryItem, Segment, TranscriptDetail } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
-import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
+import { makeEntitlements, makeItem, makeTranscript, anyTarget, sampleEntitlements } from "../../test/fixtures";
+import { OPEN_SECTION_EVENT, closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -632,6 +632,38 @@ describe("LibraryView transcript", () => {
       act(() => resetEntitlementsForTests());
     }
     expect(within(detail()).queryByTestId("locked-views")).not.toBeInTheDocument();
+  });
+
+  it("keeps a recording's paid parts in view with their badges on a Free plan: double-check, screens, Claude and ChatGPT, premium engines (v1.6.2)", async () => {
+    resetEntitlementsForTests(sampleEntitlements("free"));
+    const sheet = renderHook(() => useUpgradeSheet());
+    try {
+      await renderLibrary();
+      await selectItem("Zoom with Acme");
+      await within(detail()).findByTestId("locked-views");
+      const chips: [string, string, string][] = [
+        ["double_check", "Double-check", "PRO ✦"],
+        ["screen_moments", "Screens", "PRO ✦"],
+        ["connector", "Ask Claude or ChatGPT", "PRO ✦"],
+        ["premium_engines", "ElevenLabs · Gemini", "ULTRA ✦"],
+      ];
+      for (const [feature, label, badge] of chips) {
+        const chip = within(detail()).getByTestId(`locked-${feature}`);
+        expect(chip).toHaveTextContent(`${label}${badge}`);
+        fireEvent.click(within(chip).getByRole("button"));
+        expect(sheet.result.current?.feature).toBe(feature);
+      }
+    } finally {
+      act(() => {
+        resetEntitlementsForTests(sampleEntitlements("ultra"));
+        closeUpgradeSheet();
+      });
+    }
+    for (const feature of ["views", "double_check", "screen_moments", "connector", "premium_engines"]) {
+      expect(within(detail()).queryByTestId(`locked-${feature}`)).not.toBeInTheDocument();
+    }
+    act(() => resetEntitlementsForTests());
+    sheet.unmount();
   });
 
   it.each([null, undefined, "budget_exceeded", "provider_error"])("adds no hint for error_code %s", async (code) => {

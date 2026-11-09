@@ -92,9 +92,9 @@ async fn an_upgrade_request_is_made_once_and_the_pending_one_comes_back() {
             .fixed("GET", "/api/upgrade-requests/latest", Reply::json(200, json!({"id": "01JF", "plan": "pro", "status": "declined", "decided_at": "2026-11-10T09:00:00+00:00", "reply": "Not yet"}))),
     );
     let api = authed(&server);
-    let made = api.request_upgrade("pro", Some("For my team")).await.unwrap();
+    let made = api.request_upgrade("pro", Some("For my team"), None).await.unwrap();
     assert_eq!((made.status.as_str(), made.payment_instructions.as_deref()), ("pending", Some("Bank: Example Bank, account 0000.")));
-    let pending = api.request_upgrade("business", None).await.unwrap();
+    let pending = api.request_upgrade("business", None, None).await.unwrap();
     assert_eq!((pending.id.as_str(), pending.plan.as_str()), ("01JF", "pro"), "409 answers with the pending one");
     let latest = api.latest_upgrade_request().await.unwrap().unwrap();
     assert_eq!((latest.status.as_str(), latest.reply.as_deref()), ("declined", Some("Not yet")));
@@ -103,7 +103,7 @@ async fn an_upgrade_request_is_made_once_and_the_pending_one_comes_back() {
     // None yet (404 not_found), or an older server: nothing to show.
     let none = MockServer::start(Router::new().fixed("GET", "/api/upgrade-requests/latest", Reply::json(404, json!({"message": "None", "code": "not_found"}))));
     assert_eq!(authed(&none).latest_upgrade_request().await.unwrap(), None);
-    assert!(authed(&MockServer::start(Router::new())).request_upgrade("pro", None).await.unwrap_err().to_string().contains("does not take upgrade requests yet"));
+    assert!(authed(&MockServer::start(Router::new())).request_upgrade("pro", None, None).await.unwrap_err().to_string().contains("does not take upgrade requests yet"));
 }
 
 #[tokio::test]
@@ -115,4 +115,108 @@ async fn a_feature_outside_the_plan_names_the_lowest_plan_that_has_it() {
     ));
     let error = authed(&server).make_transcript_views("01JT").await.unwrap_err();
     assert_eq!(error.to_string(), "Roman Urdu and the other transcript views are in the Pro plan. Open Settings → Account → Plan & usage to ask for it.");
+}
+
+#[tokio::test]
+async fn the_features_keep_the_order_the_server_sends_them_in() {
+    let server = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{
+        "features": {
+            "record": {"enabled": true, "cost": "free"},
+            "views": {"enabled": false, "cost": "paid", "lowest_plan": "pro"},
+            "broken": 3,
+            "ai_notes": {"enabled": false, "cost": "paid", "lowest_plan": "business"},
+            "connector": {"enabled": false, "cost": "paid", "lowest_plan": "pro"}
+        }
+    }"#)));
+    let entitlements = authed(&server).entitlements().await.unwrap().expect("a v1.6 server");
+    assert_eq!(entitlements.features.keys().collect::<Vec<_>>(), ["record", "views", "ai_notes", "connector"], "the registry's order, not sorted");
+    let wire = serde_json::to_string(&entitlements).unwrap();
+    let at = |k: &str| wire.find(&format!("\"{k}\":{{")).unwrap();
+    assert!(at("record") < at("views") && at("views") < at("ai_notes") && at("ai_notes") < at("connector"), "and the page gets them so: {wire}");
+
+    let none = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{"features": null}"#)));
+    assert!(authed(&none).entitlements().await.unwrap().unwrap().features.is_empty());
+    let list = MockServer::start(Router::new().fixed("GET", "/api/me/entitlements", Reply::raw_json(200, r#"{"features": ["views"], "engines": ["own_groq"]}"#)));
+    let read = authed(&list).entitlements().await.unwrap().unwrap();
+    assert!(read.features.is_empty(), "anything but an object is no features, never a failed answer");
+    assert_eq!(read.engines, ["own_groq"]);
+}
+
+// ---- Promo codes (v1.6.2, docs/API.md "Promo codes") ----------------------------------------------------------------
+
+fn promo_server() -> MockServer {
+    MockServer::start(
+        Router::new()
+            .route("POST", "/api/promo-codes/check", |request, _| {
+                let body = request.json();
+                match (body["code"].as_str(), body["plan"].as_str()) {
+                    (Some("SAVE50"), Some("pro")) => Reply::json(200, json!({"code": "SAVE50", "plan": "pro", "plan_name": "Pro", "percent": 50, "price": "Rs 2,999 / month", "final_price": "Rs 1,500 / month", "free": false, "months": 1})).into(),
+                    (Some("SAVE50"), _) => Reply::json(422, json!({"message": "This code is for Pro.", "code": "promo_other_plan", "plan": "pro"})).into(),
+                    (Some("FREEPRO"), _) => Reply::json(200, json!({"code": "FREEPRO", "plan": "pro", "plan_name": "Pro", "percent": 100, "price": "Rs 2,999 / month", "final_price": "Rs 0 / month", "free": true, "months": 3})).into(),
+                    (Some("SLOWDOWN"), _) => Reply::json(429, json!({"message": "Too Many Attempts."})).into(),
+                    _ => Reply::json(422, json!({"message": "This promo code is not valid.", "code": "invalid_promo_code"})).into(),
+                }
+            })
+            .route("POST", "/api/upgrade-requests", |request, _| match request.json()["promo_code"].as_str() {
+                Some("FREEPRO") => Reply::json(201, json!({"id": "01JG", "plan": "pro", "status": "approved", "promo_code": "FREEPRO", "percent": 100, "amount_due": "Rs 0 / month",
+                    "approved_plan": "pro", "approved_until": "2027-02-09T12:00:00+00:00", "payment_instructions": null, "created_at": "2026-11-09T12:00:00+00:00"})).into(),
+                Some("SAVE50") => Reply::json(201, json!({"id": "01JH", "plan": "pro", "status": "pending", "promo_code": "SAVE50", "percent": 50, "amount_due": "Rs 1,500 / month",
+                    "payment_instructions": "Pay Rs 1,500 to Example Bank 0000.", "created_at": "2026-11-09T12:00:00+00:00"})).into(),
+                _ => Reply::json(422, json!({"message": "This code is for Business.", "code": "promo_other_plan", "plan": "business"})).into(),
+            }),
+    )
+}
+
+#[tokio::test]
+async fn a_promo_code_is_checked_for_the_plan_shown_and_its_refusals_are_answers() {
+    let server = promo_server();
+    let api = authed(&server);
+    let valid = serde_json::to_value(api.check_promo("SAVE50", Some("pro")).await.unwrap()).unwrap();
+    assert_eq!(valid["result"], "valid");
+    assert_eq!(valid["check"]["final_price"], "Rs 1,500 / month");
+    assert_eq!(valid["check"]["percent"], 50.0);
+    assert_eq!(valid["check"]["free"], false);
+    assert_eq!(server.requests_to("POST", "/api/promo-codes/check")[0].json(), json!({"code": "SAVE50", "plan": "pro"}));
+
+    let other = serde_json::to_value(api.check_promo("SAVE50", Some("business")).await.unwrap()).unwrap();
+    assert_eq!(other, json!({"result": "other_plan", "plan": "pro", "message": "This code is for Pro."}));
+
+    let invalid = serde_json::to_value(api.check_promo("NOPE-1234", Some("pro")).await.unwrap()).unwrap();
+    assert_eq!(invalid["result"], "invalid");
+    assert_eq!(invalid["message"], desktop_lib::error::INVALID_PROMO_TEXT, "said plainly, in the app's words");
+
+    let slow = api.check_promo("SLOWDOWN", Some("pro")).await.unwrap_err();
+    assert!(slow.to_string().starts_with("Too many promo codes tried."), "{slow}");
+
+    // An older server has no route: the sheet hides the field.
+    let older = authed(&MockServer::start(Router::new())).check_promo("SAVE50", Some("pro")).await.unwrap();
+    assert_eq!(serde_json::to_value(older).unwrap(), json!({"result": "unsupported"}));
+}
+
+#[tokio::test]
+async fn a_request_carries_the_code_and_a_100_percent_code_switches_the_plan_on_at_once() {
+    let server = promo_server();
+    let api = authed(&server);
+    let free = api.request_upgrade("pro", None, Some("FREEPRO")).await.unwrap();
+    assert_eq!(free.status, "approved");
+    assert_eq!((free.approved_plan.as_deref(), free.approved_until.as_deref()), (Some("pro"), Some("2027-02-09T12:00:00+00:00")));
+    assert_eq!(free.payment_instructions, None, "nothing to pay");
+    assert_eq!(free.percent, Some(100.0));
+    assert_eq!(server.requests_to("POST", "/api/upgrade-requests")[0].json(), json!({"plan": "pro", "message": null, "promo_code": "FREEPRO"}));
+
+    let half = api.request_upgrade("pro", Some("For my calls"), Some("SAVE50")).await.unwrap();
+    assert_eq!((half.status.as_str(), half.amount_due.as_deref(), half.promo_code.as_deref()), ("pending", Some("Rs 1,500 / month"), Some("SAVE50")));
+
+    let other = api.request_upgrade("pro", None, Some("BIZ-ONLY")).await.unwrap_err();
+    assert_eq!(other.to_string(), "This code is for Business.");
+}
+
+#[test]
+fn a_typed_promo_code_is_read_the_way_the_server_matches_it() {
+    use desktop_lib::plan::promo_code_of;
+    assert_eq!(promo_code_of("  save50 ").unwrap(), "SAVE50");
+    assert_eq!(promo_code_of("eid-2026").unwrap(), "EID-2026");
+    for bad in ["SAVE", "SAVE 50", "SAVE_50", "ÜBER-SAVE", "A-VERY-LONG-PROMO-CODE-2026"] {
+        assert!(promo_code_of(bad).unwrap_err().to_string().starts_with("A promo code is 6 to 24"), "{bad}");
+    }
 }

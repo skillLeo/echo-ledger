@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { SignInView } from "./SignInView";
 import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeStatus, anyTarget } from "../../test/fixtures";
@@ -261,7 +264,8 @@ describe("SignInView: an older server (no email codes)", () => {
     const { onSignedIn } = setup({ builtIn: "", serverUrl: "https://old.example.test" });
     await continueWith("sam@example.test");
     expect(await screen.findByLabelText(/^Password/)).toBeInTheDocument();
-    expect(button("Sign in in the browser (Google, passkeys)")).toBeInTheDocument();
+    expect(button("Continue with Google")).toBeInTheDocument();
+    expect(button("Sign in with a passkey")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Email me a code instead" })).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/^Password/), { target: { value: "pw" } });
     fireEvent.click(button("Sign in"));
@@ -303,6 +307,60 @@ describe("SignInView: Google in the browser, and QR / code", () => {
     expect(notify).toHaveBeenCalledWith("Signed in. Your library will sync now.", false, anyTarget);
   });
 
+  it("puts an or line under Continue, then Google with its own G and Passkey side by side in one row (v1.6.2)", async () => {
+    setup();
+    const google = await screen.findByRole("button", { name: "Continue with Google" });
+    const passkey = button("Sign in with a passkey");
+    const row = screen.getByTestId("sign-in-alt");
+    expect(row).toHaveClass("sign-in-alt");
+    expect([...row.children]).toEqual([google, passkey]);
+    // The "or" line sits between the email's Continue and the row.
+    const or = row.previousElementSibling!;
+    expect(or).toHaveClass("sign-in-or");
+    expect(or).toHaveTextContent("or");
+    expect(button("Continue").compareDocumentPosition(or) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // Google's mark, unchanged: its four colours, beside the words.
+    const mark = within(google).getByTestId("google-mark");
+    expect([...mark.querySelectorAll("path")].map((p) => p.getAttribute("fill"))).toEqual(["#EA4335", "#4285F4", "#FBBC05", "#34A853"]);
+    expect(mark).toHaveAttribute("aria-hidden", "true");
+    expect(google).toHaveTextContent("Continue with Google");
+    expect(passkey).toHaveTextContent("Passkey");
+    expect(passkey.querySelector("svg")).not.toBeNull();
+    expect(document.querySelector("[data-icon=fingerprint], .fingerprint")).toBeNull();
+  });
+
+  it("lays the row out as one line of equal buttons, the height of the others, neutral in light and dark (the stylesheet; jsdom lays nothing out)", () => {
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../styles.css"), "utf8");
+    const rule = (selector: string) => css.match(new RegExp(`^${selector.replace(/[.[\]="]/g, (c) => `\\${c}`)} \\{([^}]*)\\}`, "m"))?.[1] ?? "";
+    expect(rule(".sign-in-alt")).toMatch(/display: flex; flex-wrap: wrap;/);
+    const buttons = rule(".sign-in-alt .btn");
+    expect(buttons).toMatch(/flex: 1 1 0;/);
+    expect(buttons).toMatch(/min-width: 168px;/); // two fit the 440 px card; they stack only below about 350 px
+    expect(buttons).not.toMatch(/height:/); // the .btn height, like Continue
+    expect(buttons).toMatch(/background: var\(--google-bg\); border-color: var\(--google-border\); color: var\(--google-text\);/);
+    expect(css).toContain(":root { --google-bg: #131314; --google-border: #8e918f; --google-text: #e3e3e3; }");
+    expect(css).toContain(':root[data-theme="light"] { --google-bg: #ffffff; --google-border: #747775; --google-text: #1f1f1f; }');
+  });
+
+  it("starts the browser sign-in from Passkey too", async () => {
+    setup();
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with a passkey" }));
+    expect(await screen.findByText(/Finish signing in in your browser/)).toBeInTheDocument();
+    expect(callsOf("sign_in_browser")).toEqual([{ serverUrl: BUILT_IN, deviceName: "" }]);
+  });
+
+  it("shows only what the server offers: Google alone fills the row, and neither leaves no or line", async () => {
+    respond("auth_options", { ...OPTIONS, browserSignIn: false });
+    setup();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Sign in with a passkey" })).not.toBeInTheDocument());
+    expect(button("Continue with Google")).toBeInTheDocument();
+    cleanup();
+    respond("auth_options", { ...OPTIONS, google: false, browserSignIn: false });
+    setup();
+    await waitFor(() => expect(screen.queryByTestId("sign-in-alt")).not.toBeInTheDocument());
+    expect(document.querySelector(".sign-in-or")).toBeNull();
+  });
+
   it("keeps waiting for an earlier sign-in's link, says why a link failed, and stops on Cancel", async () => {
     setup();
     fireEvent.click(await screen.findByRole("button", { name: "Continue with Google" }));
@@ -337,10 +395,12 @@ describe("SignInView: Google in the browser, and QR / code", () => {
   it("asks the server what it offers once its address rests, and leaves out what it does not", async () => {
     respondWith("auth_options", ({ serverUrl }) => (serverUrl === "https://other.example.test" ? { ...OPTIONS, google: false } : OPTIONS));
     setup();
+    await waitFor(() => expect(callsOf("auth_options")).toHaveLength(1));
     expect(await screen.findByRole("button", { name: "Continue with Google" })).toBeInTheDocument();
     fireEvent.click(button("Advanced"));
     fireEvent.change(screen.getByLabelText(/Use a different server/), { target: { value: "https://other.example.test" } });
-    expect(await screen.findByRole("button", { name: "Sign in in the browser (passkeys)" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Continue with Google" })).not.toBeInTheDocument());
+    expect(button("Sign in with a passkey")).toBeInTheDocument();
     expect(callsOf("auth_options").map((c) => c.serverUrl)).toEqual([BUILT_IN, "https://other.example.test"]);
   });
 });

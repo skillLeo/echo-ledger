@@ -4,7 +4,7 @@
 import { useEffect, useId, useState } from "react";
 import { api, type ScreensStatus, type ScreenTarget, type Settings, type SettingsPatch } from "../../lib/ipc";
 import { CloseIcon } from "../../components/Icons";
-import { PlanBadge } from "./Upgrade";
+import { LockedToggle, PlanBadge, useLocked } from "./Upgrade";
 import { SelectRow, Toggle } from "./SettingsControls";
 
 const TARGETS: readonly (readonly [ScreenTarget, string])[] = [["meeting_window", "The meeting window"], ["whole_screen", "The whole screen"]];
@@ -41,6 +41,7 @@ export function ScreenMomentsCard({ settings, patch }: { settings: Settings; pat
   }, []);
   const apps = settings.screenExcludedApps;
   const blocked = status ? screensBlocked(status) : null;
+  const screensLocked = useLocked("screen_moments");
 
   const add = async () => {
     const app = name.trim();
@@ -63,8 +64,10 @@ export function ScreenMomentsCard({ settings, patch }: { settings: Settings; pat
         encrypted on this computer until they reach your server, and deleted here once they did.
       </p>
       {blocked && <div className="notice" role="status">{blocked}</div>}
-      {/* A plan without screen moments (v1.5) hides the capture's controls: nothing is captured or kept. */}
-      {status?.inPlan !== false && (
+      {/* A plan without screen moments keeps the switch in view, off, with its badge (v1.6.2); an older server's plan
+          without them (v1.5) hides the capture's controls. Either way nothing is captured or kept. */}
+      {screensLocked && <LockedToggle feature="screen_moments" label="Keep screen moments" hint="The recording pill shows when screens are on; one click there pauses them." />}
+      {!screensLocked && status?.inPlan !== false && (
         <>
           <Toggle label="Keep screen moments" hint="The recording pill shows when screens are on; one click there pauses them." on={settings.screenMoments} onChange={(v) => void patch({ screenMoments: v })} />
           {settings.screenMoments && (

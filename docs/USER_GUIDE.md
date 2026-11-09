@@ -157,7 +157,8 @@ recordings unless they are shared with them.
   **Create account**. Your account starts on the **Free** plan, and the **Record** page opens with the **Ready check**.
 - **An account you already have:** type your password, or press **Email me a code instead**. If your account has
   two-step sign-in, the code from your authenticator app is asked for next.
-- **Continue with Google** opens your browser when the server offers Google; the app continues by itself.
+- Under **or**, **Continue with Google** (with Google's own "G") and **Passkey** sit side by side (since v1.6.2), each when
+  the server offers it. Both open your browser, where Google and passkeys work; the app continues by itself.
 - **Sign in with QR / code** (the small link) uses a one-time code from the web console, as below.
 - The app knows its server. **Advanced → Use a different server** is only for another EchoLedger server, and holds the
   optional name for this computer. Your sign-in is kept encrypted on this computer.
@@ -774,6 +775,18 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
   project's Notes, and in Plan & usage. Click it to see what the feature does and the plans side by side. **Request
   upgrade** (with a message if you like) sends the request to the owner; the app then shows how to pay and says
   "We'll activate it once confirmed". A pending request shows as pending until the owner decides.
+- **Promo codes** (since v1.6.2): in the upgrade sheet choose **Have a promo code?**, type the code and press **Apply**.
+  The plan's price shows the discount ("Rs 2,999 → Rs 1,500 / month with SAVE50") and **Request upgrade** sends the code
+  with your request. A code for another plan says so ("This code is for Pro") and offers **Switch to Pro**. A 100 %
+  code switches the plan on at once ("Your Pro plan is on until …"), with nothing to pay. A server without promo codes
+  does not show the field.
+- **All features** (since v1.6.2; under Plan & usage, or **Ctrl+K → All features**, **⌘K** on a Mac) lists every
+  feature, in the same order as the server, with a line on what it does: a tick when your plan has it, otherwise its
+  badge. The line at the top says how many your plan has ("Your plan has 6 of 15 features"). Locked features stay in
+  view where they would be: the **AI notes** and **Screens** tabs of a project and **Ask** on its Notes, the **Keep
+  screen moments** switch, **Double-check**, **Screens**, **Ask Claude or ChatGPT** and the premium engines on a
+  recording, **Invite people** in the workspace menu and the command palette, and **Live Translate**. Clicking one opens
+  the plans for that feature, never the feature itself.
 - **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Account →
   Transcription key** and follow the three steps: open console.groq.com and sign in, choose **API Keys → Create API
   key** and copy it, paste it and press **Save**. The server checks it once and keeps it encrypted, only for your

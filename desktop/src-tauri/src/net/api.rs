@@ -296,8 +296,13 @@ impl ApiClient {
 
     /// `POST /api/upgrade-requests` (since v1.6). One pending request at a time: `409 request_pending` answers with the
     /// pending one, which is returned as if it had just been made.
-    pub async fn request_upgrade(&self, plan: &str, message: Option<&str>) -> AppResult<UpgradeRequest> {
-        let resp = self.authed(self.http.post(self.url("upgrade-requests")))?.json(&json!({ "plan": plan, "message": message })).send().await?;
+    /// Since v1.6.2 it carries an applied promo code; a 100 % code answers `approved` at once.
+    pub async fn request_upgrade(&self, plan: &str, message: Option<&str>, promo_code: Option<&str>) -> AppResult<UpgradeRequest> {
+        let mut body = json!({ "plan": plan, "message": message });
+        if let Some(code) = promo_code {
+            body["promo_code"] = json!(code);
+        }
+        let resp = self.authed(self.http.post(self.url("upgrade-requests")))?.json(&body).send().await?;
         if resp.status().as_u16() == 409 {
             let body: serde_json::Value = resp.json().await.unwrap_or_default();
             let pending = ["request", "upgrade_request", "data"].iter().find_map(|k| body.get(*k)).cloned().unwrap_or_else(|| body.clone());
@@ -309,6 +314,33 @@ impl ApiClient {
         match Self::parse::<UpgradeRequest>(resp).await {
             Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take upgrade requests yet.")),
             other => other,
+        }
+    }
+
+    /// `POST /api/promo-codes/check` (since v1.6.2) for the plan the sheet shows. The server's two refusals are answers
+    /// the sheet shows (not errors); an older server without the route is `Unsupported`.
+    pub async fn check_promo(&self, code: &str, plan: Option<&str>) -> AppResult<PromoAnswer> {
+        let resp = self.authed(self.http.post(self.url("promo-codes/check")))?.json(&json!({ "code": code, "plan": plan })).send().await?;
+        match resp.status().as_u16() {
+            422 => {
+                let body: serde_json::Value = resp.json().await.unwrap_or_default();
+                let message = body.get("message").and_then(|m| m.as_str()).map(str::trim).filter(|m| !m.is_empty()).map(str::to_string);
+                let other = body.get("plan").and_then(|p| p.as_str()).map(str::trim).filter(|p| crate::plan::is_plan_key(p));
+                match (body.get("code").and_then(|c| c.as_str()), other) {
+                    (Some("promo_other_plan"), Some(plan)) => Ok(PromoAnswer::OtherPlan {
+                        message: message.unwrap_or_else(|| format!("This code is for {plan}.")),
+                        plan: plan.to_string(),
+                    }),
+                    _ => Ok(PromoAnswer::Invalid { message: crate::error::INVALID_PROMO_TEXT.to_string() }),
+                }
+            }
+            429 => Err(AppError::msg("Too many promo codes tried. Wait a minute, then try again.")),
+            _ => match Self::parse::<PromoCheck>(resp).await {
+                Ok(check) if crate::plan::is_plan_key(&check.plan) => Ok(PromoAnswer::Valid { check }),
+                Ok(_) => Ok(PromoAnswer::Invalid { message: crate::error::INVALID_PROMO_TEXT.to_string() }),
+                Err(e) if e.is_missing_route() => Ok(PromoAnswer::Unsupported),
+                Err(e) => Err(e),
+            },
         }
     }
 

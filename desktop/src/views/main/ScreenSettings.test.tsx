@@ -1,12 +1,13 @@
 // Settings → Screen moments (since v1.5): on or off, the meeting window or the whole screen, the excluded apps, and the
 // notes about the Windows border, the macOS permission, the plan and an older server.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, within } from "@testing-library/react";
 import { SettingsView } from "./SettingsView";
 import { comparableApp, screensBlocked } from "./ScreenSettings";
 import { errorMessage, type ScreensStatus, type Settings } from "../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeSettings, makeStatus } from "../../test/fixtures";
+import { makeSettings, makeStatus, sampleEntitlements } from "../../test/fixtures";
+import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -130,6 +131,30 @@ describe("Settings → Screen moments", () => {
     expect(screensBlocked(status({ onServer: false }))).toMatch(/does not have screen moments yet/);
     expect(screensBlocked(status({ supported: false }))).toMatch(/cannot capture the screen/);
     expect(screensBlocked(status())).toBeNull();
+  });
+
+  it("keeps the switch in view, off, with its badge when the plan leaves screen moments out; a click opens the upgrade sheet and changes nothing (v1.6.2)", async () => {
+    resetEntitlementsForTests(sampleEntitlements("free"));
+    const sheet = renderHook(() => useUpgradeSheet());
+    try {
+      const { card } = await setup({ screenMoments: true }, status({ inPlan: false }));
+      const locked = within(card()).getByTestId("locked-toggle-screen_moments");
+      expect(locked).toHaveTextContent("Keep screen moments");
+      expect(locked).toHaveTextContent("PRO ✦");
+      const keep = within(card()).getByRole("switch", { name: "Keep screen moments, in the Pro plan" });
+      expect(keep).toHaveAttribute("aria-checked", "false");
+      fireEvent.click(keep);
+      await flushAsync();
+      expect(sheet.result.current?.feature).toBe("screen_moments");
+      expect(callsOf("update_settings")).toEqual([]);
+      expect(within(card()).queryByRole("combobox", { name: "Capture" })).not.toBeInTheDocument();
+    } finally {
+      act(() => {
+        resetEntitlementsForTests();
+        closeUpgradeSheet();
+      });
+      sheet.unmount();
+    }
   });
 
   it("compares app names the way the core does", () => {

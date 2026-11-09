@@ -3,7 +3,7 @@
 // none: then nothing is locked here and every feature stays as it is today (the v1.5 plan in the config still hides
 // what its plan leaves out).
 import { useSyncExternalStore } from "react";
-import { api, type Entitlements, type OfferedPlan, type UpgradeRequest } from "./ipc";
+import { api, type Entitlements, type OfferedPlan, type PromoCheck, type UpgradeRequest } from "./ipc";
 
 /** undefined: not read yet; null: an older server (or signed out). */
 let current: Entitlements | null | undefined = undefined;
@@ -26,7 +26,32 @@ export function refreshEntitlements(): Promise<void> {
 
 /** Signed out: nothing is known about the next account. */
 export function forgetEntitlements(): void {
+  promoMissing = false;
   set(undefined);
+}
+
+// An older server answered the promo check with 404 (v1.6.2): the sheet stops offering the field until sign-out.
+let promoMissing = false;
+export function promoCodesMissing(): boolean {
+  return promoMissing;
+}
+export function notePromoCodesMissing(): void {
+  promoMissing = true;
+}
+
+/**
+ * The plan's price with a promo code, from the server's own prices: "Rs 2,999 → Rs 1,500 / month with SAVE50", and
+ * "Rs 2,999 / month → Free for 3 months with FREEPRO" at 100 %.
+ */
+export function promoPriceLine(check: PromoCheck): string {
+  const before = check.price?.trim() || null;
+  const after = check.final_price?.trim() || null;
+  const months = check.months && check.months > 0 ? check.months : 1;
+  if (check.free) return `${before ? `${before} → ` : ""}Free for ${months === 1 ? "1 month" : `${months} months`} with ${check.code}`;
+  if (!before || !after) return `${check.percent ?? 0} % off with ${check.code}`;
+  const per = after.match(/\s\/\s.+$/)?.[0] ?? "";
+  const head = per && before.endsWith(per) ? before.slice(0, -per.length) : before;
+  return `${head} → ${after} with ${check.code}`;
 }
 
 /** A request just made (or found pending): shown at once, before the next read. */
@@ -37,6 +62,7 @@ export function noteUpgradeRequest(request: UpgradeRequest): void {
 /** Tests start from nothing. */
 export function resetEntitlementsForTests(value: Entitlements | null | undefined = undefined): void {
   reading = null;
+  promoMissing = false;
   set(value);
 }
 
@@ -85,6 +111,13 @@ export function badgeText(plan: Pick<OfferedPlan, "badge" | "name" | "key">): st
   return `${(plan.badge || plan.name || plan.key).toUpperCase()} ✦`;
 }
 
+/** The badge a feature the plan leaves out wears ("PRO ✦", in the plan's colour); none when the plan has it or the server is older. */
+export function lockedBadge(e: Entitlements | null | undefined, feature: string): { text: string; color: string | null; plan: string | null } | null {
+  if (!isLocked(e, feature)) return null;
+  const plan = lowestPlan(e, feature);
+  return { text: plan ? badgeText(plan) : "UPGRADE ✦", color: plan?.color ?? null, plan: plan?.name ?? null };
+}
+
 /** A feature's name and what it does: the server's words, else the app's. */
 export function featureWords(e: Entitlements | null | undefined, feature: string): { name: string; description: string } {
   const known = PAID_FEATURES.find(([key]) => key === feature);
@@ -93,6 +126,18 @@ export function featureWords(e: Entitlements | null | undefined, feature: string
     name: fromServer?.name?.trim() || known?.[1] || titleCase(feature.replace(/_/g, " ")),
     description: fromServer?.description?.trim() || known?.[2] || "",
   };
+}
+
+/** Every feature the answer names, in the server's (the registry's) order, and how many of them the plan has. */
+export function allFeatures(e: Entitlements): { keys: string[]; included: number } {
+  const keys = Object.keys(e.features);
+  return { keys, included: keys.filter((key) => e.features[key].enabled).length };
+}
+
+/** "Your plan has 6 of 15 features". */
+export function featuresSummary(e: Entitlements): string {
+  const { keys, included } = allFeatures(e);
+  return `Your plan has ${included} of ${keys.length} ${keys.length === 1 ? "feature" : "features"}`;
 }
 
 /** The pending upgrade request, if there is one. */

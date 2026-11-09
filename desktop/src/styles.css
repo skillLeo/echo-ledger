@@ -1245,7 +1245,16 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
 .sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 /* The v1.6 sign-in: one primary action per step, the email it is for, the code, Terms, and Advanced kept small. */
-.sign-in-primary, .sign-in-google, .sign-in-secondary { width: 100%; justify-content: center; }
+.sign-in-primary, .sign-in-secondary { width: 100%; justify-content: center; }
+/* Under "or" (v1.6.2): Google and Passkey side by side, equal width, the same height as the other buttons; they stack only
+   when the card is very narrow. Google's button is neutral (Google's light and dark colours, a 1 px border) around its
+   own "G"; Passkey wears the same frame. */
+:root { --google-bg: #131314; --google-border: #8e918f; --google-text: #e3e3e3; }
+:root[data-theme="light"] { --google-bg: #ffffff; --google-border: #747775; --google-text: #1f1f1f; }
+.sign-in-alt { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sign-in-alt .btn { flex: 1 1 0; min-width: 168px; padding: 0 var(--space-3); background: var(--google-bg); border-color: var(--google-border); color: var(--google-text); }
+.sign-in-alt .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--google-bg), var(--google-text) 8%); }
+.sign-in-alt .btn svg { flex: none; }
 .sign-in-primary { margin-top: var(--space-3); }
 .sign-in-secondary { margin-top: var(--space-2); }
 .sign-in-email { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-3); }
@@ -1453,3 +1462,27 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
   .notice-timer > span { animation: none !important; }
   .notice-shell.settling { transition: none; }
 }
+
+/* All features (v1.6.2): every feature in the registry's order, a tick or the plan's badge. */
+.plan-features-summary { margin-top: var(--space-2); gap: var(--space-2); }
+.feature-list { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: grid; }
+.feature-list li { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) 0; border-top: 1px solid var(--border); }
+.feature-list li:first-child { border-top: 0; }
+.feature-words { display: grid; gap: 1px; min-width: 0; flex: 1; }
+.feature-name { font-size: var(--text-sm); font-weight: 600; }
+.feature-list li.locked .feature-name { color: var(--text-muted); }
+.feature-included { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 22px; height: 22px; border-radius: var(--radius-full); color: var(--success, var(--accent)); background: color-mix(in srgb, var(--success, var(--accent)) 14%, transparent); }
+/* A locked feature in place (v1.6.2): a project's tab, a menu item, a palette row or a setting, with its badge. */
+.plan-badge.mark { margin-inline-start: var(--space-2); cursor: inherit; }
+.tab.locked { color: var(--text-muted); display: inline-flex; align-items: center; }
+.tab.locked:hover { color: var(--text); }
+.locked-toggle-end { display: inline-flex; align-items: center; gap: var(--space-2); flex: none; }
+.locked-toggle .switch { opacity: 0.55; }
+/* Promo codes in the upgrade sheet (v1.6.2). */
+.promo-link { align-self: flex-start; padding-inline: 0; }
+.promo-field { display: grid; gap: var(--space-2); }
+.promo-row { gap: var(--space-2); }
+.promo-row .input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 0.04em; }
+.promo-price { font-weight: 600; color: var(--success); }
+.promo-applied { color: var(--success); }
+.upgrade-sent.approved b { color: var(--success); }

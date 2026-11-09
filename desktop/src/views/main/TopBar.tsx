@@ -10,6 +10,8 @@ import { BellIcon, ExternalIcon, FolderIcon, HelpIcon, ImportIcon, MicIcon, Moni
 import { ChevronDownIcon } from "../../components/ControlIcons";
 import { Menu } from "../../components/Menu";
 import { ReadyChip } from "./ReadyCheck";
+import { BadgeMark } from "./Upgrade";
+import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { formatDuration, sourceAppLabel } from "../../lib/format";
 
 /** The workspaces the switcher lists: the server's list when it sends one, else the one this computer works in. */
@@ -54,6 +56,8 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
   /** A viewer records and uploads nothing. */
   canRecord: boolean;
 }) {
+  const entitlements = useEntitlements();
+  const teamLocked = isLocked(entitlements, "team");
   const workspaces = workspacesOf(account, status);
   const here = workspaces.find((w) => w.current) ?? workspaces[0];
   const name = account?.name || status.deviceName || "You";
@@ -72,6 +76,12 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
           ...workspaces.map((w) => ({ id: `ws-${w.key}`, label: <>{w.name}{roleText(w.role) && <span className="small muted"> · {roleText(w.role)}</span>}</>, name: w.name, checked: w.current,
             onPick: () => (w.current ? undefined : onWorkspaces()) })),
           "separator",
+          // Team workspaces (v1.6.2): a plan without them still shows Invite, with its badge, and opens the upgrade sheet.
+          (teamLocked || here.role === "owner" || here.role === "admin") && {
+            id: "ws-invite", label: <>Invite people<BadgeMark feature="team" /></>, icon: <UserIcon size={16} />,
+            name: teamLocked ? `Invite people, ${featureWords(entitlements, "team").name} is in the ${lowestPlan(entitlements, "team")?.name ?? "paid"} plan` : "Invite people",
+            onPick: teamLocked ? () => openUpgradeSheet("team") : onWorkspaces,
+          },
           { id: "ws-manage", label: "Switch or manage workspaces in the browser", icon: <ExternalIcon size={16} />, onPick: onWorkspaces },
         ]} />
       <button type="button" className="topbar-search" onClick={onPalette} aria-label={`Search and commands (${paletteKeys(status.platform)})`}>

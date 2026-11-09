@@ -30,14 +30,14 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 
 /// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
 /// client workspace's AI budget and key, docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 12] = [
+const PLAIN_CODES: [&str; 13] = [
     "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client",
-    "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached",
+    "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached", "promo_other_plan",
 ];
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 19] = [
+const CODE_TEXT: [(&str, &str); 20] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -57,10 +57,15 @@ const CODE_TEXT: [(&str, &str); 19] = [
     ("turnstile_failed", "The sign-up check did not pass. Try again in a moment."),
     ("invalid_key", "Groq did not accept this key. Copy it again from console.groq.com → API Keys, then paste it here."),
     ("request_pending", "You already asked for an upgrade. It is waiting for the owner to confirm it."),
+    // Promo codes (since v1.6.2).
+    ("invalid_promo_code", INVALID_PROMO_TEXT),
     // The server holds this computer's work for now (v1.6, P2.7): nothing failed, everything waits.
     ("maintenance", MAINTENANCE_TEXT),
     ("update_required", UPDATE_REQUIRED_TEXT),
 ];
+
+/// What the app says about a promo code the server does not take (`422 invalid_promo_code`).
+pub const INVALID_PROMO_TEXT: &str = "This promo code does not work: it is not known, it has ended or been used up, or you have used it already.";
 
 /// What the app says while the server is in maintenance (`503 maintenance`).
 pub const MAINTENANCE_TEXT: &str = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";

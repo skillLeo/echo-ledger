@@ -543,13 +543,22 @@ pub fn groq_console_open(app: AppHandle) -> AppResult<()> {
 
 /// "Request upgrade" with an optional message; the pending request when one is waiting already.
 #[tauri::command]
-pub async fn upgrade_request_create(app: AppHandle, plan: String, message: Option<String>) -> AppResult<crate::net::models::UpgradeRequest> {
+pub async fn upgrade_request_create(app: AppHandle, plan: String, message: Option<String>, promo_code: Option<String>) -> AppResult<crate::net::models::UpgradeRequest> {
     let plan = plan.trim().to_string();
-    if plan.is_empty() || plan.len() > 32 || !plan.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+    if !crate::plan::is_plan_key(&plan) {
         return Err(AppError::msg("That plan is not one of the server's."));
     }
     let message = message.map(|m| m.trim().chars().take(1000).collect::<String>()).filter(|m| !m.is_empty());
-    app.state::<AppState>().api()?.request_upgrade(&plan, message.as_deref()).await
+    let promo_code = promo_code.filter(|c| !c.trim().is_empty()).map(|c| crate::plan::promo_code_of(&c)).transpose()?;
+    app.state::<AppState>().api()?.request_upgrade(&plan, message.as_deref(), promo_code.as_deref()).await
+}
+
+/// "Have a promo code?" → Apply (v1.6.2): checked by the server for the plan the sheet shows.
+#[tauri::command]
+pub async fn promo_code_check(app: AppHandle, code: String, plan: Option<String>) -> AppResult<crate::net::models::PromoAnswer> {
+    let code = crate::plan::promo_code_of(&code)?;
+    let plan = plan.map(|p| p.trim().to_string()).filter(|p| crate::plan::is_plan_key(p));
+    app.state::<AppState>().api()?.check_promo(&code, plan.as_deref()).await
 }
 
 #[tauri::command]

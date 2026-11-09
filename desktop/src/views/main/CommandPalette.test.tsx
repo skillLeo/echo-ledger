@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor } from "@testing-library/react";
 import { CommandPalette, paletteCommands, paletteMatches } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
-import { makeItem, makeRecording, makeStatus } from "../../test/fixtures";
+import { makeItem, makeRecording, makeStatus, sampleEntitlements } from "../../test/fixtures";
+import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -79,6 +80,11 @@ describe("command palette (B9)", () => {
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
     expect(extra.account).toHaveBeenCalledWith("devices");
     cleanup();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "all features" } });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(extra.account).toHaveBeenCalledWith("all-features");
+    cleanup();
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
       pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "acme" } });
@@ -94,6 +100,48 @@ describe("command palette (B9)", () => {
     expect(extra.upload).toHaveBeenCalled();
     expect(extra.requestLink).toHaveBeenCalled();
     expect(extra.invite).toHaveBeenCalled();
+  });
+
+  it("keeps Invite and Live Translate in the palette with their badges on a Free plan, opening the upgrade sheet instead (v1.6.2)", () => {
+    resetEntitlementsForTests(sampleEntitlements("free"));
+    const sheet = renderHook(() => useUpgradeSheet());
+    try {
+      const extra = { invite: vi.fn() };
+      const onGo = vi.fn();
+      let view: ReturnType<typeof render> | null = null;
+      const show = (q: string) => {
+        view?.unmount();
+        view = render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={onGo} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra} />);
+        fireEvent.change(screen.getByRole("combobox"), { target: { value: q } });
+      };
+      show("invite");
+      const invite = screen.getByRole("option", { name: /^Invite people to the workspace/ });
+      expect(invite).toHaveTextContent("Invite people to the workspaceULTRA ✦");
+      expect(invite).toHaveAccessibleName("Invite people to the workspace, Team workspace is in the Ultra plan");
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(sheet.result.current?.feature).toBe("team");
+      expect(extra.invite).not.toHaveBeenCalled();
+      show("live translate");
+      expect(screen.getByRole("option", { name: /^Live Translate/ })).toHaveTextContent("Live TranslateULTRA ✦");
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(sheet.result.current?.feature).toBe("live_translate");
+      expect(onGo).not.toHaveBeenCalled();
+
+      act(() => resetEntitlementsForTests(sampleEntitlements("ultra")));
+      show("invite");
+      expect(screen.getByRole("option", { name: "Invite people to the workspace" })).not.toHaveTextContent("✦");
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(extra.invite).toHaveBeenCalled();
+      show("live translate");
+      fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+      expect(onGo).toHaveBeenCalledWith("record");
+    } finally {
+      act(() => {
+        resetEntitlementsForTests();
+        closeUpgradeSheet();
+      });
+      sheet.unmount();
+    }
   });
 
   it("runs app actions through the shared runner", () => {
