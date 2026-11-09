@@ -57,18 +57,21 @@ it('shows the three steps with their numbers while a recording uploads, is trans
     Recording::query()->create(['capture_session_id' => $uploading->id, 'role' => RecordingRole::Primary, 'mime' => 'audio/mp4', 'declared_size_bytes' => 4_000_000,
         'sha256' => str_repeat('a', 64), 'chunk_size_bytes' => 1_000_000, 'total_chunks' => 4, 'received_chunks' => [0, 1, 2], 'upload_status' => UploadStatus::Pending]);
     $progress = RecordingProgress::for($uploading->fresh());
-    expect($progress['active'])->toBe('upload')->and($progress['summary'])->toBe('Uploading 75 %')
+    expect($progress['active'])->toBe('upload')->and($progress['summary'])->toBe('Uploading 75%')
         ->and(array_column($progress['steps'], 'state'))->toBe(['active', 'waiting', 'waiting'])
+        ->and(array_column($progress['steps'], 'label'))->toBe(['Uploading', 'Transcribe', 'Improve'])
         ->and($progress['steps'][2]['detail'])->toBe('Roman Urdu');
 
     $parts = progressRecording($this, SessionStatus::Processing, ['status' => TranscriptStatus::Processing, 'submitted_at' => now(), 'meta' => ['progress' => ['chunks_done' => 1, 'chunks_total' => 3]]]);
     $progress = RecordingProgress::for($parts);
-    expect($progress['active'])->toBe('transcribe')->and($progress['summary'])->toBe('Transcribing · Part 2 of 3')
+    expect($progress['active'])->toBe('transcribe')->and($progress['summary'])->toBe('Transcribing · part 2 of 3')
+        ->and(array_column($progress['steps'], 'label'))->toBe(['Uploaded', 'Transcribing', 'Improve'])
         ->and($progress['steps'][1]['percent'])->toBe(33);
 
     $improving = improvingRecording($this, 6);
-    expect(RecordingProgress::for($improving))->toMatchArray(['active' => 'improve', 'summary' => 'Improving Roman Urdu… 60 %'])
-        ->and(RecordingProgress::improvingBar($improving))->toBe(['label' => 'Improving Roman Urdu… 60 %', 'percent' => 60]);
+    expect(RecordingProgress::for($improving))->toMatchArray(['active' => 'improve', 'summary' => 'Improving Roman Urdu… 60%'])
+        ->and(RecordingProgress::improvingBar($improving))->toBe(['label' => 'Improving Roman Urdu… 60%', 'percent' => 60])
+        ->and(array_column(RecordingProgress::for($improving)['steps'], 'label'))->toBe(['Uploaded', 'Transcribed', 'Improving']);
 
     $done = progressRecording($this, SessionStatus::Completed, ['status' => TranscriptStatus::Completed, 'text' => 'x', 'segments' => []]);
     expect(RecordingProgress::for($done))->toBeNull();
@@ -80,26 +83,29 @@ it('gives the time left once the engine has a measure on this server', function 
     $parts = progressRecording($this, SessionStatus::Processing, ['status' => TranscriptStatus::Processing, 'submitted_at' => now(), 'meta' => ['progress' => ['chunks_done' => 1, 'chunks_total' => 3]]]);
 
     // 3 s of audio a second: 200 s of audio left is about 67 s.
-    expect(RecordingProgress::for($parts)['summary'])->toBe('Transcribing · Part 2 of 3 · about 2 min left')
-        ->and(RecordingProgress::timeLeft(45))->toBe('about 50 s left')
-        ->and(RecordingProgress::timeLeft(5))->toBe('almost done');
+    expect(RecordingProgress::for($parts)['summary'])->toBe('Transcribing · part 2 of 3 · about 1 min left')
+        // The phone's rounding: to 5 s under a minute, then whole minutes.
+        ->and(RecordingProgress::timeLeft(45))->toBe('about 45 s left')->and(RecordingProgress::timeLeft(17))->toBe('about 20 s left')
+        ->and(RecordingProgress::timeLeft(2))->toBe('about 5 s left')->and(RecordingProgress::timeLeft(150))->toBe('about 3 min left')
+        ->and(RecordingProgress::timeLeft(null))->toBeNull();
 });
 
 it('puts the moving step in the Library row and keeps the list polling while the view is made', function () {
     improvingRecording($this, 3);
 
     $html = $this->panelComponent(ListCaptureSessions::class)->html();
-    expect($html)->toContain('el-steps-compact')->toContain('Improving Roman Urdu… 30 %')->toContain('wire:poll.5s');
+    expect($html)->toContain('el-steps-compact')->toContain('Improving Roman Urdu… 30%')->toContain('wire:poll.5s');
 });
 
 it('shows the steps on the recording page, then the readable transcript with a slim bar that stays in place when the view is in', function () {
     $session = progressRecording($this, SessionStatus::Processing, ['status' => TranscriptStatus::Processing, 'submitted_at' => now()]);
     $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id]);
-    expect($page->html())->toContain('el-steps')->toContain('Transcribing')->toContain('Improving')->toContain('Transcribing. This page updates by itself');
+    expect($page->html())->toContain('el-steps')->toContain('Uploaded')->toContain('Transcribing')->toContain('Improve')->toContain('aria-current="step"')
+        ->toContain('Transcribing. This page updates by itself')->toContain('Notify me when ready');
 
     $improving = improvingRecording($this, 6);
     $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $improving->id]);
-    expect($page->html())->toContain('Improving Roman Urdu… 60 %')->toContain('wire:poll.5s="refreshWork"')->toContain('aria-valuenow="60"');
+    expect($page->html())->toContain('Improving Roman Urdu… 60%')->toContain('wire:poll.5s="refreshWork"')->toContain('aria-valuenow="60"');
 
     // The view is made: the bar says so in the same place and the player gets the view.
     $final = $improving->finalTranscript;

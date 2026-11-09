@@ -417,6 +417,12 @@ the same way. The transcript shows as soon as it is ready, with a slim **Improvi
 in where you are reading when it is made (unless you chose Original). **Notify me when ready** on the recording page
 sends a notification when the transcript is ready, even if Transcription notifications are off.
 
+**In the web console (since v1.6)** the Library row and the recording page say it with the same words: **Uploading
+40%**, **Transcribing · part 2 of 3 · about 20 s left**, **Improving Roman Urdu… 60%**. The recording page shows the
+three steps (**Upload · Transcribe · Improve**, each named for where it is: Uploading, Uploaded…), that line and a bar,
+and updates by itself. **Notify me when ready** sends you one email for that recording when its transcript is ready (or
+if it could not be made), even if transcript emails are off in your profile; the bell shows it as always.
+
 ### Rename
 
 Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the

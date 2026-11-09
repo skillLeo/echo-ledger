@@ -2659,31 +2659,35 @@ textarea.el-field-input {
 }
 
 .el-steps {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: var(--space-3);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2) var(--space-4);
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
 .el-step {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    min-width: 0;
-}
-
-.el-step-head {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
+    min-width: 0;
     font-size: 14px;
     font-weight: 600;
     color: var(--text);
 }
 
-.el-step[data-state='waiting'] .el-step-head {
+/* A short line between the steps, as on the desktop. */
+.el-step + .el-step::before {
+    content: '';
+    width: 24px;
+    height: 1px;
+    margin-inline-end: var(--space-2);
+    background-color: var(--border-strong);
+}
+
+.el-step[data-state='waiting'] {
     color: var(--text-muted);
     font-weight: 500;
 }
@@ -2710,13 +2714,32 @@ textarea.el-field-input {
     color: var(--on-accent);
 }
 
-.el-step-detail {
+.el-steps-line {
     font-size: 13px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+}
+
+.el-live-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2) var(--space-3);
+}
+
+.el-live-asked {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--accent-text);
+}
+
+.el-live-asked svg {
+    width: 16px;
+    height: 16px;
 }
 
 .el-step-bar,
