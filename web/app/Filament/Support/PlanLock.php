@@ -47,9 +47,12 @@ final class PlanLock
     /** The badge of the lowest plan that has [$feature], or null when the person has it (or no plan on offer does). */
     public static function badge(string $feature): ?HtmlString
     {
-        if (self::allows($feature)) {
-            return null;
-        }
+        return self::allows($feature) ? null : self::lowestBadge($feature);
+    }
+
+    /** The badge of the lowest plan that has [$feature], whoever has it (a recording's owner's plan decides there). */
+    public static function lowestBadge(string $feature): ?HtmlString
+    {
         $plan = app(Entitlements::class)->lowestPlan($feature);
 
         return $plan === null ? null : self::badgeFor($plan);

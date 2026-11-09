@@ -37,6 +37,14 @@
         @media (max-width: 640px) { .el-screens-tab .el-screen-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .el-screens-tab .el-shot { padding: 12px; } }
     </style>
 
+    {{-- Since v1.6.2: without screen moments in the plan, the plan's badge and the upgrade sheet (screens kept before stay). --}}
+    @if ($screensLocked ?? false)
+        <div class="el-card" role="note" data-screens-locked style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3)">
+            <p style="margin: 0; font-size: 14px">{!! $screensBadge?->toHtml() !!} Screen moments are not in your plan: what was on the screen during a meeting, next to the words that were said.</p>
+            <button type="button" class="el-text-btn" wire:click="mountAction('upgradeScreens')">See plans</button>
+        </div>
+    @endif
+
     @if ($groups === [])
         <div class="el-empty">
             <span class="el-empty-icon">@svg('heroicon-o-computer-desktop', ['aria-hidden' => 'true'])</span>

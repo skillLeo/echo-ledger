@@ -49,6 +49,7 @@ use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\ConsoleAccess;
+use App\Services\Workspaces\PlanLimits;
 use App\Stt\ChannelLanguage;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
@@ -330,6 +331,12 @@ class ViewCaptureSession extends ViewRecord
         if ($transcript === null) {
             return null;
         }
+        // Since v1.6.2 a view not in the plan opens the upgrade sheet; nothing is made (the server refuses it as well).
+        if (! TranscriptViews::entitled($transcript) && app(TranscriptViews::class)->state($transcript)['status'] !== 'ready') {
+            $this->mountAction('upgradeViews');
+
+            return app(TranscriptViews::class)->state($transcript);
+        }
         try {
             $state = app(TranscriptViews::class)->request($transcript);
         } catch (RuntimeException $e) {
@@ -358,11 +365,29 @@ class ViewCaptureSession extends ViewRecord
         }
     }
 
+    /** The upgrade sheet for the Show as views (since v1.6.2), from the player's Roman Urdu · اردو · English. */
+    public function upgradeViewsAction(): Action
+    {
+        return PlanLock::sheet('upgradeViews', 'views', 'Show as…');
+    }
+
+    /** The upgrade sheet for AI notes (since v1.6.2), from Write notes when the plan leaves them out. */
+    public function upgradeAiNotesAction(): Action
+    {
+        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', 'AI notes');
+    }
+
     /** "Write notes" in English or Roman Urdu: like POST /api/sessions/{id}/notes, done on the queue. */
     public function writeNotes(string $language = 'en'): void
     {
         $this->assertCanChange();
         $session = $this->session();
+        // Since v1.6.2 without AI notes in the plan the button opens the upgrade sheet (the server refuses the notes too).
+        if (! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes', $session->user_id)) {
+            $this->mountAction('upgradeAiNotes');
+
+            return;
+        }
         $project = app(ClientWorkspace::class)->projectOf($session);
         if ($project === null) {
             Notification::make()->title('File this recording under a project first.')->warning()->send();

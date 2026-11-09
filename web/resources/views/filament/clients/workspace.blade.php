@@ -6,7 +6,7 @@
     <nav class="el-tabbar" role="tablist" aria-label="{{ $client->name }}">
         @foreach ($tabs as $key => $label)
             <button type="button" role="tab" id="tab-{{ $key }}" aria-controls="panel-{{ $key }}" aria-selected="{{ $tab === $key ? 'true' : 'false' }}"
-                wire:click="setTab('{{ $key }}')" wire:key="client-tab-{{ $key }}">{{ $label }}@if (($tabCounts[$key] ?? 0) > 0)<span class="el-tab-count" aria-label=", {{ $tabCounts[$key] }}">{{ number_format($tabCounts[$key]) }}</span>@endif</button>
+                wire:click="setTab('{{ $key }}')" wire:key="client-tab-{{ $key }}">{{ $label }}@if ($key === 'ask' && $aiLocked) {!! $aiBadge?->toHtml() !!}@elseif ($key === 'screens' && $screensLocked) {!! $screensBadge?->toHtml() !!}@endif@if (($tabCounts[$key] ?? 0) > 0)<span class="el-tab-count" aria-label=", {{ $tabCounts[$key] }}">{{ number_format($tabCounts[$key]) }}</span>@endif</button>
         @endforeach
     </nav>
 

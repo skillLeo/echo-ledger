@@ -44,7 +44,7 @@ class TranscriptPlayerEntry extends Entry
      *
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
      *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
-     *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, duration_ms: int, audio_bytes: int|null,
+     *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, views_locked: bool, duration_ms: int, audio_bytes: int|null,
      *     suggestions: list<array{id: int, line: int, from: string, to: string, reason: string}>, client: string|null,
      *     screens: list<array{id: string, index: int, at_ms: int, thumb: string, image: string, description: string|null}>}
      */
@@ -52,7 +52,7 @@ class TranscriptPlayerEntry extends Entry
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
-                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'duration_ms' => 1,
+                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'views_locked' => false, 'duration_ms' => 1,
                 'audio_bytes' => null, 'suggestions' => [], 'client' => null, 'screens' => []];
         }
         $record->loadMissing(['primaryRecording', 'client']);
@@ -105,6 +105,8 @@ class TranscriptPlayerEntry extends Entry
             'pauses' => $record->pauses ?? [],
             // Show as: the Roman Urdu and English views of the final transcript, when they are made (labelled as views).
             'views' => $final !== null && $shown === $final && $final->status === TranscriptStatus::Completed ? app(TranscriptViews::class)->state($final) : null,
+            // Since v1.6.2: views the plan leaves out keep their buttons, with the plan's badge beside them, and open the upgrade sheet.
+            'views_locked' => $final !== null && ! TranscriptViews::entitled($final),
             'duration_ms' => max(1, (int) ($record->duration_ms ?? 0), ...array_map(fn (array $s): int => $s['end_ms'], $segments ?: [['end_ms' => 0]])),
             // The waveform is drawn from the audio itself only when the file is small enough to fetch twice.
             'audio_bytes' => $primary?->isReady() ? (int) ($primary->stored_size_bytes ?? $primary->declared_size_bytes) : null,
