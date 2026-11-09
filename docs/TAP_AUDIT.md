@@ -61,6 +61,35 @@ scrolling), **Devices** is one search away (**Ctrl/⌘+K** "devices", or **Find 
 Settings → Account and scrolling), **Shared with me** is 1 (the sidebar's Shared → With me), a request link and a new
 project are 2 from any page (**+**), and **Help & shortcuts** is 1 (**?**).
 
-## Console
+## Console (counted 2026-11-09, v1.6 P5, before the console shell)
 
-To be counted in its v1.6 P4 pass, with the same 15 tasks.
+Before: the console at `fe9a1a3` (three rows of chips, the Bulk actions menu, no WhatsApp). After: branch
+`v16-web-library` (P5.2–P5.5: one Library toolbar, the selection bar, Failed uploads explained, Send to WhatsApp). The
+console's app shell (sidebar, top bar) comes in a later pass and is not counted here. Clicks from the Library page;
+choosing a file in the browser's file dialog is not counted.
+
+| # | Task | Before | After | How |
+|---|---|---|---|---|
+| 1 | Record a voice note now | — | — | The console does not record: the phone or the computer does. Its nearest is **Upload** (1, then the file); an empty Library offers **Upload a voice note** too (new). |
+| 2 | Stop a recording | — | — | On the device that records. |
+| 3 | Open the latest recording | 1 | 1 | Its row (on a wide screen it shows beside the list; **Open** there is 2). |
+| 4 | Read it in Roman Urdu or English | 1 | 1 | Open: the default view opens by itself. Another view: the player's **Show as** (2). |
+| 5 | Copy the transcript | 2 | 2 | Open → **Copy text** (or **Copy for AI**). |
+| 6 | Send it to WhatsApp | 4 | **3** | The row's **More** → **Send to WhatsApp…** → Text only, Text and voice, or Link (7 days); from the open recording, **WhatsApp** → the choice (2). Before (a share link): open → **Share** → **Make the link** → copy it from the notice, then open WhatsApp yourself. |
+| 7 | Find a recording by a word in it | 2 | 2 | **Search** → (type) → the result; **Ctrl/⌘+K** → (type) → the result is 1. The Library's own search box looks at titles and projects. |
+| 8 | Keep or discard after a call (Ask me) | — | — | The phone or computer that recorded it decides; the Library's "2 calls waiting · Review" shows them. |
+| 9 | Retry a failed transcription | 4 | **2** | **Failed uploads (2) · See why** → **Retry** (new). Before: open → **⋮** → **Transcribe again** → confirm. |
+| 10 | Fix "Not ready" | — | — | On the device (its Ready check). |
+| 11 | Rename a recording | 3 | 3 | Open → the pencil by the title → (type) → **Save**; or the row's **More** → **Rename** → **Save**. |
+| 12 | Move a recording to a project | 5 | **4** | Its box → **Move** in the selection bar → the project → **Move** (before: its box → **Bulk actions** → **Move to project** → the project → confirm). On the recording page **File under** is 4 too. |
+| 13 | Delete a recording | 3 | 3 | The row's **More** → **Delete** → confirm (Recently deleted keeps it 48 hours); in Failed uploads **Delete** → confirm (2). |
+| 14 | Play from a line | 2 | 2 | Open → the line (it plays from there). |
+| 15 | Group or sort the Library | 2 | 2 | **Group by** or **Sort by** in the toolbar → the choice (the phone's and the desktop's names). |
+
+Of the top 10, the console does 6 itself (the others happen on the device that records), and 5 of those take 2 clicks or
+fewer. The exception is **Send to WhatsApp** (3 from the Library, 2 from the open recording), as on the phone and the
+desktop: the three ways of sending are different things, so the console asks rather than guesses.
+
+What the declutter cost: a smart view or folder is now 2 clicks (the **All recordings** or **All folders** menu → the
+choice) where its chip was 1. In return the list starts three rows higher, the toolbar is one line on a phone, and
+**Failed uploads** says itself above the list when something failed (1 click to see why).

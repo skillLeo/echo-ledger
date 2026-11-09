@@ -65,6 +65,11 @@ it('keeps the bulk actions in a bar that shows only while something is selected'
     // The bar is the table's selection indicator (x-show while selected) with the actions inside it.
     expect($html)->toMatch('/x-show="getSelectedRecordsCount\(\)"[^>]*class="fi-ta-selection-indicator"/s')
         ->toContain('el-bulk-actions')->toContain('1 selected|:count selected')->toContain('Clear');
+    // Drawn inside the bar, in order: Move, Label, Export, Delete.
+    $bar = substr($html, (int) strpos($html, 'class="el-bulk-actions"'));
+    $at = fn (string $name): int|false => strpos($bar, "mountAction('{$name}', {}, JSON.parse('{\\u0022table\\u0022:true,\\u0022bulk\\u0022:true}')");
+    expect($at('move'))->toBeInt()->and($at('label'))->toBeGreaterThan($at('move'))
+        ->and($at('export'))->toBeGreaterThan($at('label'))->and($at('delete'))->toBeGreaterThan($at('export'));
 
     $bar = CaptureSessionsTable::bulkBar();
     $labels = array_map(fn ($a): string => (string) $a->getLabel(), $bar);
