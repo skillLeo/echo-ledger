@@ -47,7 +47,7 @@ final class NoticeTargets
             'shared_with_you' => SharedWithMe::getUrl(panel: 'app'),
             'device_paired' => DeviceResource::canAccess() ? DeviceResource::getUrl('index', panel: 'app') : $account.'?tab=devices',
             'budget_warn', 'budget_reached' => Usage::canAccess() ? Usage::getUrl(panel: 'app') : $account.'?tab=plan',
-            'upgrade_approved', 'upgrade_declined' => $account.'?tab=plan',
+            'upgrade_approved', 'upgrade_declined', 'upgrade_receipt_requested' => $account.'?tab=plan',
             'upgrade_requested' => $staff('upgrades.manage') ? UpgradeRequestsPage::getUrl(panel: 'admin') : null,
             'unusual_usage' => $staff('customers.view') ? ($stored ?? CustomerResource::getUrl('index', panel: 'admin')) : null,
             'cost_alert' => $staff('usage.view') ? ServerUsage::getUrl(panel: 'admin') : null,

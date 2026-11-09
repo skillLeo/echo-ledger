@@ -94,6 +94,13 @@ final class SettingsRepository
         'announcement' => null,                      // since v1.6: {"text", "level": info|warning, "until"}
         'maintenance' => null,                       // since v1.6: {"on": true, "message", "until"}
         'upgrade.payment_instructions' => null,      // since v1.6: shown after "Request upgrade" (System → Plans)
+        // Since v1.7: the account customers pay into (Admin → Plans → Payment details); empty = the text above.
+        'payment.bank' => null,
+        'payment.branch' => null,
+        'payment.account_title' => null,
+        'payment.account_number' => null,
+        'payment.iban' => null,                      // PK + 22 letters and digits, mod-97 checked
+        'payment.note' => null,                      // what to write in the transfer; {reference} = the request's code
         'console.members' => true,                   // since v1.5: members and viewers get the small read-only console
         // Since v1.5: the SMTP server emails go through (the password is in the credential vault, as `mail.password`).
         // No host = the mailer of the server's .env file.

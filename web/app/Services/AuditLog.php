@@ -75,6 +75,13 @@ final class AuditLog
         'upgrade_requested' => 'Upgrade asked for',
         'upgrade_approved' => 'Upgrade approved',
         'upgrade_declined' => 'Upgrade declined',
+        // Since v1.7: payment receipts.
+        'upgrade_paid' => 'Payment receipt sent',
+        'upgrade_cancelled' => 'Upgrade request cancelled',
+        'upgrade_receipt_requested' => 'New payment receipt asked for',
+        'payment_proof_added' => 'Payment receipt added',
+        'payment_proof_viewed' => 'Payment receipt opened by staff',
+        'payment_details_changed' => 'Payment details changed',
         // Since v1.6.2: promo codes.
         'promo_code_used' => 'Promo code used',
         'promo_code_created' => 'Promo code made',
