@@ -13,6 +13,7 @@ use App\Models\Recording;
 use App\Services\ChunkedUploadService;
 use App\Services\Data\CompleteOutcome;
 use App\Services\Storage\RecordingFiles;
+use App\Services\Workspaces\PlanLimits;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -56,6 +57,14 @@ final class RecordingController extends Controller
     public function complete(Request $request, string $id, ChunkedUploadService $uploads): JsonResponse
     {
         $recording = $this->findRecording($request, $id);
+        // Since v1.6 the plan's longest recording is checked when a recording is finished too.
+        if (! $recording->isReady()) {
+            /** @var Device $device */
+            $device = $request->user();
+            $session = CaptureSession::acrossPeople()->withTrashed()->find($recording->capture_session_id);
+            $longest = max((int) ($recording->duration_ms ?? 0), (int) ($session->duration_ms ?? 0));
+            app(PlanLimits::class)->assertFileMinutes($device->workspace_id, $longest > 0 ? $longest : null, $device->user_id);
+        }
         $outcome = $uploads->markComplete($recording);
 
         return match ($outcome->state) {

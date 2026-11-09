@@ -11,6 +11,7 @@ use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\StopsSharing;
@@ -168,6 +169,12 @@ class ViewClient extends ViewRecord
     }
 
     // ---- Overview ----------------------------------------------------------------------------------------------
+
+    /** The upgrade sheet for AI notes (since v1.6): what they do, the plans side by side, Request upgrade. */
+    public function upgradeAiNotesAction(): Action
+    {
+        return PlanLock::sheet('upgradeAiNotes', 'ai_notes', 'AI notes');
+    }
 
     /** AI notes on or off: off means no Claude request is made for this client. */
     public function toggleAiNotes(): void
@@ -391,6 +398,9 @@ class ViewClient extends ViewRecord
             'pending' => $this->hasPending(),
             'poll' => self::POLL,
             'zone' => $zone,
+            // Since v1.6 (P1.4): the plan's badge and the upgrade sheet when the plan leaves AI notes out.
+            'aiLocked' => ! PlanLock::allows('ai_notes'),
+            'aiBadge' => PlanLock::badge('ai_notes'),
         ];
 
         return $data + match ($this->tab) {

@@ -15,6 +15,9 @@
                 <div>{{ $device['name'] }} <span class="muted">· {{ $device['platform'] }}</span> <span class="badge">{{ $device['status_label'] }}</span></div>
                 <div class="muted">{{ $device['workspace'] }} · @if ($device['signed_out']) signed out {{ $device['signed_out'] }} @else {{ $device['last_seen'] ? 'last seen '.$device['last_seen'] : 'never seen' }} @endif @if ($device['country']) · {{ $device['country'] }}@endif</div>
             </div>
+            @if ($device['status'] !== \App\Models\Device::ACTIVE)
+                <x-filament::button size="sm" color="gray" wire:click="mountAction('signInAgain', { device: '{{ $device['id'] }}' })">Sign in again</x-filament::button>
+            @endif
             @if ($device['signed_out'])
                 <x-filament::button size="sm" color="gray" wire:click="removeDevice('{{ $device['id'] }}')">Remove from list</x-filament::button>
             @else

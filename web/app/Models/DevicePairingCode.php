@@ -19,13 +19,14 @@ use Illuminate\Support\Carbon;
  * @property string $code_hash
  * @property Carbon $expires_at
  * @property Carbon|null $used_at
- * @property string|null $device_id
+ * @property string|null $device_id the device that used it
+ * @property string|null $bound_device_id since v1.6: the signed-out device this code signs in again ("Sign in again")
  */
 class DevicePairingCode extends Model
 {
     use BelongsToWorkspace, Prunable;
 
-    protected $fillable = ['workspace_id', 'user_id', 'code_hash', 'expires_at', 'used_at', 'device_id'];
+    protected $fillable = ['workspace_id', 'user_id', 'code_hash', 'expires_at', 'used_at', 'device_id', 'bound_device_id'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo

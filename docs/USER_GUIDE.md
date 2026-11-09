@@ -172,6 +172,10 @@ again on the same phone or computer uses the same row. **Rename** gives it your 
 once (its recordings stay) and keeps it in the list until you **Remove from list**; the **Show** filter shows the
 signed-out ones. While the **Sign in a device** code is open, it says **Waiting for the app…**, then "✓ Galaxy S25
 Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
+**Sign in again** on a device that is signed out, revoked or expired shows a code and a QR code for that device only
+(10 minutes, once): scan it in the app on that phone or computer and it comes back on the same row, with its name and
+recordings. Where your plan leaves something out (a project's AI notes and Ask, Claude and ChatGPT under **Connected
+apps**), the plan's badge shows with **See plans**.
 
 **Your devices (computer, since v1.6).** **Settings → Account → Devices** lists every phone and computer signed in to
 your account, with when each was last active. **Rename** gives any of them a name of your own; **Revoke** signs another

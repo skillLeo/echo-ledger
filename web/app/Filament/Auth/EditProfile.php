@@ -45,6 +45,7 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The profile (since v1.5): name, email, password and two-step sign-in as before, and below them the account's own
@@ -295,6 +296,36 @@ class EditProfile extends BaseEditProfile
             ]);
     }
 
+    /**
+     * Profile → Devices → Sign in again (since v1.6, docs/API.md "Signing a device in again"): a one-time code bound to
+     * one of the person's own signed-out, revoked or expired devices; the app redeems it like any code and comes back on
+     * the same row. Only the person's own devices (another's id is 404).
+     */
+    public function signInAgainAction(): Action
+    {
+        return Action::make('signInAgain')
+            ->modalHeading(fn (array $arguments): string => 'Sign in '.$this->ownDevice($arguments)->readableName().' again')
+            ->modalDescription('Open the EchoLedger app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
+            ->fillForm(function (array $arguments, PairingService $pairing): array {
+                try {
+                    $code = $pairing->createBoundCode($this->account(), $this->ownDevice($arguments)->id);
+                } catch (ApiError|ValidationException $e) {
+                    return ['pairing' => ['error' => $e->getMessage()]];
+                }
+                $this->watchPairing($code);
+
+                return ['pairing' => ['code' => $code, 'qr' => (new QRCode)->render($pairing->qrPayload($code)), 'url' => rtrim((string) config('app.url'), '/')]];
+            })
+            ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
+            ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md');
+    }
+
+    /** @param  array<string, mixed>  $arguments */
+    private function ownDevice(array $arguments): Device
+    {
+        return Device::query()->withoutGlobalScopes()->where('user_id', $this->account()->id)->whereKey((string) ($arguments['device'] ?? ''))->firstOrFail();
+    }
+
     /** @return array<string, mixed> */
     public function devicesData(): array
     {
@@ -362,6 +393,11 @@ class EditProfile extends BaseEditProfile
         return Section::make('Connected apps')
             ->description('Apps you allowed to read your recordings. They only read; Disconnect ends their access at once.')
             ->schema([
+                // Since v1.6 (P1.4): the plan's badge and the upgrade sheet when the plan leaves the connector out.
+                Text::make(fn (): HtmlString => new HtmlString((PlanLock::badge('connector')?->toHtml() ?? '').' '.e('Asking Claude or ChatGPT about your recordings is not in your plan.')))
+                    ->visible(fn (): bool => ! PlanLock::allows('connector')),
+                Actions::make([PlanLock::sheet('upgradeConnector', 'connector', 'Claude and ChatGPT')])->key('connector-actions')
+                    ->visible(fn (): bool => ! PlanLock::allows('connector')),
                 View::make('filament.profile.connected-apps')->viewData(fn (): array => $this->connectedAppsData()),
             ]);
     }

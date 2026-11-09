@@ -155,6 +155,8 @@ final class ConsoleUploads
         // The transcript would fail at once: say so before the file is sent, in the words the plan limit uses.
         app(PlanLimits::class)->assertMinutes($workspaceId, $user->id);
         app(PlanLimits::class)->assertUploadsToday($workspaceId, $user->id);
+        // Since v1.6: the plan's longest recording, when the browser could tell the length.
+        app(PlanLimits::class)->assertFileMinutes($workspaceId, isset($file['duration_ms']) ? (int) $file['duration_ms'] : null, $user->id);
         $this->assertOpenUploadCapacity($user, $workspaceId);
 
         $recording = DB::transaction(function () use ($user, $workspaceId, $file, $client, $mime, $size, $sha, $chunkSize): Recording {
@@ -277,6 +279,14 @@ final class ConsoleUploads
     /** Assembles, verifies and encrypts the file once every chunk is in; the final transcript then starts. */
     public function complete(Recording $recording): CompleteOutcome
     {
+        // Since v1.6 the plan's longest recording is checked when the upload is finished too.
+        if (! $recording->isReady()) {
+            $session = CaptureSession::acrossPeople()->withTrashed()->find($recording->capture_session_id);
+            $longest = max((int) ($recording->duration_ms ?? 0), (int) ($session->duration_ms ?? 0));
+            if ($session instanceof CaptureSession) {
+                app(PlanLimits::class)->assertFileMinutes($session->workspace_id, $longest > 0 ? $longest : null, $session->user_id);
+            }
+        }
         if (! in_array($recording->upload_status, [UploadStatus::Assembling, UploadStatus::Ready], true)
             && Storage::disk('recordings')->exists($recording->partsDirectory().'/0.part')) {
             $this->assertMedia($recording);

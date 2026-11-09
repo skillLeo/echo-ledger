@@ -187,6 +187,10 @@ final class RequestLinks
             throw new ApiError(413, 'too_large', 'Documents and images can be at most '.intdiv(ClientWorkspace::MAX_FILE_BYTES, 1024 * 1024).' MB.');
         }
         $this->assertRoom($link, $size);
+        // Since v1.6 a recording sent to the link counts as one of the owner's recordings a day.
+        if ($audioMime !== null) {
+            app(PlanLimits::class)->assertUploadsToday($link->workspace_id, $link->user_id);
+        }
         // The last part of a path, without control or direction-changing characters (they can make a name read as another).
         $name = (string) preg_replace('/\p{C}+/u', '', basename(str_replace('\\', '/', $file['name'])));
         $name = mb_substr(trim($name), 0, 255) ?: 'File';

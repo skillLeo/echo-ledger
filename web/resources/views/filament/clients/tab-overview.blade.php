@@ -6,6 +6,7 @@
 @endphp
 <div class="el-workspace-grid">
     <div style="display: flex; flex-direction: column; gap: var(--space-5); min-width: 0">
+        @include('filament.clients.ai-locked')
         {{-- AI notes, the month's budget and Copy for AI --}}
         <section class="el-card" aria-labelledby="ai-heading">
             <div class="el-setting-row">

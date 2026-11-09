@@ -1,5 +1,6 @@
 {{-- Ask: a short answer from the brief, memory, files and transcripts, with the moments and pages it comes from. --}}
 <div style="display: flex; flex-direction: column; gap: var(--space-5); max-width: 880px">
+        @include('filament.clients.ai-locked')
     <form class="el-card" wire:submit="ask" style="display: flex; flex-direction: column; gap: var(--space-3)">
         <label for="ask-question" class="el-card-title">Ask about {{ $client->name }}</label>
         <textarea id="ask-question" class="el-field-input" rows="3" wire:model="question" maxlength="500"
