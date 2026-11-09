@@ -91,7 +91,7 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
         ]} />
       <button type="button" className="topbar-search" onClick={onPalette} aria-label={`Search and commands (${paletteKeys(status.platform)})`}>
         <SearchIcon size={16} />
-        <span className="topbar-search-text">Search recordings, transcripts, pages… or type a command</span>
+        <span className="topbar-search-text">Search recordings, settings, pages… or type a command</span>
         <span className="kbd" aria-hidden="true">{paletteKeys(status.platform)}</span>
       </button>
       <span className="spacer" />
@@ -126,7 +126,7 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
             <span className="menu-who-text"><b>{name}</b>{account?.email && <span className="small muted">{account.email}</span>}{plan && <PlanChip name={plan} />}</span>
           </button>
         }
-        footer={
+        footer={<>
           <div className="menu-theme">
             <span className="small" id="menu-theme-label">Appearance</span>
             <span className="segmented" role="radiogroup" aria-labelledby="menu-theme-label">
@@ -135,6 +135,11 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
               ))}
             </span>
           </div>
+          <div className="menu-sep" role="separator" />
+          <button type="button" role="menuitem" className="btn ghost small menu-item danger" data-menu-close onClick={onSignOut}>
+            <span className="menu-icon" aria-hidden="true"><SignOutIcon size={16} /></span><span className="menu-label">Sign out</span>
+          </button>
+          </>
         }
         items={[
           upgradeOffered
@@ -142,8 +147,6 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
             : entitlements && { id: "plan", label: "Plan & usage", icon: <LucideCreditCardIcon size={16} />, onPick: onPlan },
           { id: "account", label: "Settings", icon: <LucideSettingsIcon size={16} />, onPick: onAccount },
           account?.super_admin === true && { id: "admin", label: "Admin panel", icon: <ExternalIcon size={16} />, onPick: onAdmin },
-          "separator",
-          { id: "sign-out", label: "Sign out", icon: <SignOutIcon size={16} />, danger: true, onPick: onSignOut },
         ]} />
     </header>
   );

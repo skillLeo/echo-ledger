@@ -195,7 +195,7 @@ function ChooseStep({ e, feature, plan, guard, onDirty, onMade }: {
   const words = feature ? featureWords(e, feature) : null;
   const proToUltra = e.plan && e.plan.key !== "free" && e.plan.expires_at;
   const footer = (
-    <div className="flow-bar">
+    <div className="flow-actions">
       <div className="flow-pay">
         <span className="small muted">To pay</span>
         <span className="flow-amount tabular">
@@ -310,7 +310,7 @@ function PayStep({ e, request, name, guard, onReceipt, onBack }: { e: Entitlemen
   const title = accounts.find((a) => a.title)?.title ?? null;
   const open = ["awaiting_payment", "needs_receipt"].includes(requestStage(request) ?? "");
   const footer = (
-    <div className="flow-bar">
+    <div className="flow-actions">
       {open && <p className="small muted flow-caption">Paid? Add a screenshot of the receipt so we can check it.</p>}
       <div className="flow-go">
         {open && <button type="button" className="btn text" onClick={() => closeUpgradeSheet()}>I'll pay later</button>}
@@ -574,7 +574,7 @@ function ReceiptStep({ request, guard, onDirty, onUpdate, onSent }: {
   type Tile = { proof?: Proof; local?: LocalReceipt; removable?: boolean };
   const tiles: Tile[] = [...sentProofs.map((p) => ({ proof: p })), ...round.map((p) => ({ proof: p, removable: true })), ...local.map((l) => ({ local: l }))];
   const footer = (
-    <div className="flow-bar">
+    <div className="flow-actions">
       {problem && <p className="small error-text flow-under" role="alert">{problem}</p>}
       <div className="flow-go"><button type="button" className="btn primary" disabled={sending || !ready} onClick={() => void submit()}>{sending ? "Sending…" : "Send receipt"}</button></div>
     </div>
@@ -678,7 +678,7 @@ function StatusStep({ e, request, name, onPay, onReceipt, onUpdate, onAgain }: {
   const reduced = reducedMotion();
   return (
     <FlowSheet title={`${name} request`} onClose={closeUpgradeSheet} guard={() => true}
-      footer={<div className="flow-bar"><div className="flow-go">
+      footer={<div className="flow-actions"><div className="flow-go">
         {open && <button type="button" className="btn text danger" onClick={() => setCancelling("ask")}>Cancel request</button>}
         <button type="button" className="btn ghost" onClick={() => closeUpgradeSheet()}>Done</button>
       </div></div>}>
@@ -739,7 +739,7 @@ function ApprovedStep({ e, request }: { e: Entitlements; request: UpgradeRequest
   const until = request.approved_until ?? null;
   return (
     <FlowSheet title={`You're on ${on}`} onClose={closeUpgradeSheet} guard={() => true}
-      footer={<div className="flow-bar"><div className="flow-go"><button type="button" className="btn primary" onClick={() => closeUpgradeSheet()}>Done</button></div></div>}>
+      footer={<div className="flow-actions"><div className="flow-go"><button type="button" className="btn primary" onClick={() => closeUpgradeSheet()}>Done</button></div></div>}>
       <div className="approved" role="status" data-testid="upgrade-approved">
         <span className="approved-mark" aria-hidden="true"><CheckIcon size={22} /></span>
         <p>Thank you. {on} is on{until ? ` until ${sentenceDate(until)}` : ""}.</p>

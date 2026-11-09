@@ -86,7 +86,7 @@ export function Menu({ button, label, items, header, footer, align = "right", cl
               {item.checked && <span className="menu-check" aria-hidden="true"><CheckIcon size={14} /></span>}
             </button>
           )))}
-          {footer && <div className="menu-foot">{footer}</div>}
+          {footer && <div className="menu-foot" onClick={(e) => { if ((e.target as HTMLElement).closest("[data-menu-close]")) setOpen(false); }}>{footer}</div>}
         </div>
       )}
     </div>
