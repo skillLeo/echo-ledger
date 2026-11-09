@@ -23,6 +23,14 @@ class ApiSamplesTest {
         "activity" to ActivityResponse.serializer(),
         "activity_read" to UnreadAnswer.serializer(),
         "auth_options" to AuthOptionsDto.serializer(),
+        "auth_start" to AuthStartDto.serializer(),
+        "auth_start_new" to AuthStartDto.serializer(),
+        "auth_code" to CodeSentDto.serializer(),
+        "auth_code_verify_new" to SignUpNextDto.serializer(),
+        "entitlements" to EntitlementsDto.serializer(),
+        "transcription_key" to TranscriptionKeyDto.serializer(),
+        "upgrade_request" to UpgradeRequestDto.serializer(),
+        "upgrade_request_latest" to UpgradeRequestDto.serializer(),
         "auth_password" to RegisterResponse.serializer(),
         "bin" to BinResponse.serializer(),
         "client_brief" to BriefResponse.serializer(),
@@ -75,7 +83,7 @@ class ApiSamplesTest {
     )
 
     /** Answers the phone sends for and does not read (only whether the call worked). */
-    private val notRead = setOf("recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
+    private val notRead = setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
     private val everyField = Json {
         encodeDefaults = true
@@ -124,6 +132,12 @@ class ApiSamplesTest {
 
     /** What the real answers leave out on purpose: fields of another kind of item, or only in another answer. */
     private val notInEveryAnswer = setOf(
+        // Limits that are not used up (how long recordings are kept, the longest recording) have no "used".
+        "entitlements.limits.retention_days.used",
+        "entitlements.limits.max_file_minutes.used",
+        // A request just made has no answer yet: the latest request carries it.
+        "upgrade_request.reply",
+        "upgrade_request.decided_at",
         "auth_password.config.providers.live_captions.required_artifacts",
         "auth_password.config.providers.live_captions.preferred_primary",
         "auth_password.config.providers.dictation.required_artifacts",
