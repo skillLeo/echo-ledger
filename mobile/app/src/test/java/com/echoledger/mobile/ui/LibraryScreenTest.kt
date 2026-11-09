@@ -11,6 +11,7 @@ import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -156,6 +157,45 @@ class LibraryScreenTest : ScreenTest() {
 
         compose.onNodeWithText(" · 2", substring = true).performTouchInput { longClick() }
         compose.onNodeWithText("2 selected").assertIsDisplayed()
+    }
+
+    @Test
+    fun `the View sheet groups by project, remembers it for this view, and None has no headers (Phase 1C D1 D4)`() {
+        seed(item("a", title = "Call with Acme", client = "Acme Holdings"), item("b", title = "Call with Zed"))
+        showLibrary()
+
+        compose.onNodeWithContentDescription("View: group, sort and density").performClick()
+        // The Library has a Project filter chip too; the sheet's chip is the last one.
+        compose.onAllNodesWithText("Project").onLast().performClick()
+        compose.waitForIdle()
+
+        compose.onNodeWithText("Acme Holdings · 1").assertExists()
+        compose.onNodeWithText("No project · 1").assertExists()
+        pumpUntil("the choice to be kept") { runBlocking { app.graph.settings.current() }.libraryViews["all"]?.group == "project" }
+
+        compose.onNodeWithText("None").performClick()
+        compose.waitForIdle()
+        compose.onAllNodesWithText("No project · 1").assertCountEquals(0)
+        compose.onAllNodesWithText("Acme Holdings · 1").assertCountEquals(0)
+        compose.onNodeWithText("Call with Zed").assertExists()
+    }
+
+    @Test
+    fun `Sort by Name A to Z and Density Compact are one tap each`() {
+        seed(item("a", title = "Zed call"), item("b", title = "Acme call"))
+        showLibrary()
+
+        compose.onNodeWithContentDescription("View: group, sort and density").performClick()
+        compose.onNodeWithText("Name A–Z").performClick()
+        compose.onNodeWithText("Compact").performClick()
+
+        pumpUntil("the choice to be kept") {
+            runBlocking { app.graph.settings.current() }.libraryViews["all"] ==
+                com.echoledger.mobile.core.LibraryViewChoice("date", "title", "compact")
+        }
+        val acme = compose.onNodeWithText("Acme call").fetchSemanticsNode().positionInRoot.y
+        val zed = compose.onNodeWithText("Zed call").fetchSemanticsNode().positionInRoot.y
+        assertTrue("Acme above Zed", acme < zed)
     }
 
     @Test

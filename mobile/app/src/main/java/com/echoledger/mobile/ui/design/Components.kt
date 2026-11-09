@@ -361,16 +361,19 @@ fun RecordingRow(
     badge: (@Composable () -> Unit)? = null,
     stateLabel: String? = null,
     sharedKey: String? = null,
-    divider: Boolean = true
+    divider: Boolean = true,
+    /** 56 dp with a smaller tile (since v1.6, the Library's Density Compact). */
+    compact: Boolean = false
 ) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
     val haptics = LocalHapticFeedback.current
+    val tileSize = if (compact) 36.dp else 44.dp
     Column(modifier.fillMaxWidth().background(if (selected) c.accentSoft else Color.Transparent)) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .heightIn(min = 72.dp)
+                .heightIn(min = if (compact) 56.dp else 72.dp)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = {
@@ -382,11 +385,11 @@ fun RecordingRow(
                     this.selected = selected
                     stateLabel?.let { stateDescription = it }
                 }
-                .padding(horizontal = Space.screen, vertical = Space.s3),
+                .padding(horizontal = Space.screen, vertical = if (compact) Space.s2 else Space.s3),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier.size(44.dp).then(
+                Modifier.size(tileSize).then(
                     if (sharedKey !=
                         null
                     ) {
@@ -402,7 +405,7 @@ fun RecordingRow(
                     label = "tile"
                 ) { checked ->
                     if (checked) {
-                        Box(Modifier.size(44.dp).clip(CircleShape).background(c.accentStrong), contentAlignment = Alignment.Center) {
+                        Box(Modifier.size(tileSize).clip(CircleShape).background(c.accentStrong), contentAlignment = Alignment.Center) {
                             Icon(Icons.Rounded.Check, contentDescription = null, tint = c.onAccent, modifier = Modifier.size(24.dp))
                         }
                     } else {

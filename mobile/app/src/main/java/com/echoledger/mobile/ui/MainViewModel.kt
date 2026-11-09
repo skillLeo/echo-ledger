@@ -925,6 +925,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Opening a recording (since v1.3): the dot goes away here at once, and the server is told. */
     fun markOpened(item: LibraryItem) {
+        // Since v1.6: every opening counts for Sort by Recently opened (this phone only).
+        val at = System.currentTimeMillis()
+        updateSettings { s ->
+            s.copy(
+                libraryOpened = (s.libraryOpened - item.id + (item.id to at)).entries.sortedBy {
+                    it.value
+                }.takeLast(OPENED_KEEP).associate {
+                    it.key to
+                        it.value
+                }
+            )
+        }
         if (item.opened != false) return
         viewModelScope.launch(Dispatchers.IO) {
             graph.library.markOpenedLocally(item.id)
@@ -1391,6 +1403,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** Recordings remembered for Sort by Recently opened. */
+        private const val OPENED_KEEP = 300
+
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
 

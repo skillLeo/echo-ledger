@@ -92,15 +92,15 @@ Notifications:
 
 Clear progress:
 - [ ] C1 Sharing several notes at once shows all of them, each with its own status.
-- [ ] C2 Three steps with real progress: Upload (% of bytes), Transcribing (parts done, time left), Improving (views, % of lines).
-- [ ] C3 The transcript shows as soon as it is ready, with a slim "Improving Roman Urdu… 60%" bar; views swap in without jumping.
-- [ ] C4 "Notify me when ready"; the same progress in the Library row and in Activity.
+- [ ] C2 Three steps with real progress: Upload (% of bytes), Transcribing (parts done, time left), Improving (views, % of lines). **Phone done** 2026-11-09 (the recording page's three steps, v1.6 P5.4).
+- [ ] C3 The transcript shows as soon as it is ready, with a slim "Improving Roman Urdu… 60%" bar; views swap in without jumping. **Phone done** 2026-11-09 (the page loads the transcript by itself once ready; the Improving bar).
+- [ ] C4 "Notify me when ready"; the same progress in the Library row and in Activity. **Phone done** 2026-11-09 (ReadyWatchWorker; the Library row since I3).
 
 Group by and sort by:
-- [ ] D1 Group by Date (default), App/Type, Project, Language, Status, Device, None; sort by Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened; remembered per view.
+- [ ] D1 Group by Date (default), App/Type, Project, Language, Status, Device, None; sort by Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened; remembered per view. **Phone done** 2026-11-09 (v1.6: LibraryGrouping, the choice per smart view in the phone's settings, never exported; Recently opened from the openings on this phone; LibraryGroupingTest).
 - [ ] D2 Group headers with name and count, collapse and expand, sticky.
 - [ ] D3 A tri-state select box on each header selects the whole group (phone: in selection mode or by long-pressing a header).
-- [ ] D4 Phone: a View sheet (Group by, Sort by, Density); desktop and web: toolbar menus.
+- [ ] D4 Phone: a View sheet (Group by, Sort by, Density); desktop and web: toolbar menus. **Phone done** 2026-11-09 (LibraryViewSheet; Compact rows 56 dp; two quick taps both count; LibraryScreenTest).
 
 Fixes from the screenshots:
 - [x] E1 The player shows the real length in every view (Roman Urdu showed 0:00 / 0:00). **Done** 2026-11-08 (phone): the library's length is shown until the file reports its own; an Ogg file without an index reported 0 (RecordingPlayerLengthTest).

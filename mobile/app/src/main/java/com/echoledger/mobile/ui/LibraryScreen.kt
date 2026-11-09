@@ -66,10 +66,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.core.Bookmarks
+import com.echoledger.mobile.core.Density
 import com.echoledger.mobile.core.ItemStatus
 import com.echoledger.mobile.core.LibraryFilters
+import com.echoledger.mobile.core.LibraryGrouping
 import com.echoledger.mobile.core.LibraryQuery
-import com.echoledger.mobile.core.LibrarySort
+import com.echoledger.mobile.core.LibraryViewChoice
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.Readiness
 import com.echoledger.mobile.core.ReadyChip
@@ -138,10 +140,25 @@ fun LibraryScreen(
     val offline by vm.offline.collectAsState()
     val clients by vm.clients.collectAsState()
     var filters by remember { mutableStateOf(LibraryFilters()) }
-    var sort by remember { mutableStateOf(LibrarySort.NEWEST) }
+    // Since v1.6 (Phase 1C D1/D4): Group by, Sort by and Density from the View sheet, remembered per view on this phone.
+    val appSettings by vm.settings.collectAsState()
+    val viewKey = LibraryGrouping.viewKey(filters)
+    val choice = appSettings.libraryViews[viewKey] ?: LibraryViewChoice.DEFAULT
+    val sort = choice.sortBy
+    val opened = appSettings.libraryOpened
+    var viewOpen by remember { mutableStateOf(false) }
+    if (viewOpen) {
+        LibraryViewSheet(choice, onChoose = { change ->
+            vm.updateSettings {
+                it.copy(
+                    libraryViews =
+                        it.libraryViews + (viewKey to change(it.libraryViews[viewKey] ?: LibraryViewChoice.DEFAULT))
+                )
+            }
+        }, onDismiss = { viewOpen = false })
+    }
     var binOpen by remember { mutableStateOf(false) }
     var menuOpen by remember { mutableStateOf(false) }
-    var sortOpen by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selecting by remember { mutableStateOf(false) }
     // Since v1.6 (P5.1): groups folded away by their name or arrow (this visit only).
@@ -149,7 +166,7 @@ fun LibraryScreen(
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     // The last five searches, kept on this phone across restarts (never in a settings export).
-    val recent = vm.settings.collectAsState().value.recentSearches
+    val recent = appSettings.recentSearches
     fun keepSearch(words: String) {
         vm.updateSettings { s ->
             s.copy(recentSearches = (listOf(words) + s.recentSearches.filterNot { it.equals(words, ignoreCase = true) }).take(5))
@@ -176,7 +193,11 @@ fun LibraryScreen(
     // Worked out again only when what they depend on changes, not on every recomposition (since 1.3.2: less lag).
     val folders = remember(items, clients) { Organise.folders(items, clients) }
     val labels = remember(items) { Organise.labels(items) }
-    val visible = remember(items, filters, query, sort) { LibraryQuery.apply(items, filters, query, sort) }
+    val visible = remember(items, filters, query, sort, opened) { LibraryQuery.apply(items, filters, query, sort, opened = opened) }
+    val grouped = remember(visible, choice.groupBy, sort, today) {
+        LibraryGrouping.groups(visible, choice.groupBy, sort) { dateGroup(it.startedAt, today) }
+    }
+    val compact = choice.densityOf == Density.COMPACT
     val ticked = remember(picked, visible) { visible.mapTo(HashSet()) { it.id }.let { ids -> picked.filter { it in ids }.toSet() } }
     val inSelection = selecting && ticked.isNotEmpty()
     LaunchedEffect(inSelection) { onSelecting(inSelection) }
@@ -268,20 +289,7 @@ fun LibraryScreen(
                         }
                     },
                     trailing = {
-                        Box {
-                            BarIcon(Icons.Rounded.Sort, "Sort", { sortOpen = true })
-                            DropdownMenu(expanded = sortOpen, onDismissRequest = { sortOpen = false }) {
-                                LibrarySort.entries.forEach { s ->
-                                    DropdownMenuItem(
-                                        text = { Text(s.label, color = if (s == sort) Brand.AccentText else Brand.Text) },
-                                        onClick = {
-                                            sort = s
-                                            sortOpen = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
+                        BarIcon(Icons.Rounded.Sort, "View: group, sort and density", { viewOpen = true })
                     }
                 )
                 if (!searching && items.any { !it.deleted }) {
@@ -393,27 +401,26 @@ fun LibraryScreen(
                                     )
                                 }
                             }
-                            val grouped = if (sort == LibrarySort.NEWEST || sort == LibrarySort.OLDEST) {
-                                LibraryGroups.byDate(visible) { dateGroup(it.startedAt, today) }
-                            } else {
-                                mapOf(sort.label to visible)
-                            }
-                            grouped.forEach { (group, all) ->
+                            grouped.forEach { g ->
                                 // Since v1.6 (P5.1): the box only selects the group (in selection, or a long press);
-                                // the name and the arrow only fold it.
+                                // the name and the arrow only fold it. Group by None has no header.
+                                val group = g.key
+                                val all = g.items
                                 val ids = all.map { it.id }
-                                stickyHeader(key = "h-$group") {
-                                    GroupHeader(
-                                        name = group,
-                                        count = all.size,
-                                        folded = group in folded,
-                                        selection = if (inSelection) GroupSelection.of(ids, ticked) else null,
-                                        onFold = { folded = if (group in folded) folded - group else folded + group },
-                                        onSelect = {
-                                            selecting = true
-                                            picked = GroupSelection.toggle(ids, picked)
-                                        }
-                                    )
+                                if (g.label.isNotEmpty()) {
+                                    stickyHeader(key = "h-$group") {
+                                        GroupHeader(
+                                            name = g.label,
+                                            count = all.size,
+                                            folded = group in folded,
+                                            selection = if (inSelection) GroupSelection.of(ids, ticked) else null,
+                                            onFold = { folded = if (group in folded) folded - group else folded + group },
+                                            onSelect = {
+                                                selecting = true
+                                                picked = GroupSelection.toggle(ids, picked)
+                                            }
+                                        )
+                                    }
                                 }
                                 val rows = if (group in folded) emptyList() else all
                                 itemsIndexed(rows, key = { _, it -> it.id }, contentType = { _, _ -> "recording" }) { i, item ->
@@ -433,7 +440,8 @@ fun LibraryScreen(
                                             onToggle = { toggle(item) },
                                             selecting = inSelection,
                                             selected = item.id in ticked,
-                                            divider = i < rows.lastIndex
+                                            divider = i < rows.lastIndex,
+                                            compact = compact
                                         )
                                     }
                                 }

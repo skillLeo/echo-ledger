@@ -86,6 +86,9 @@ object SettingsTransfer {
         "dynamicColour",
         "phoneFont",
         "recentSearches",
+        // How this phone shows the Library, and what was opened on it (since v1.6).
+        "libraryViews",
+        "libraryOpened",
         // The server says what the plan allows and the role (since v1.5).
         "plan",
         // Whose waiting recordings these are (since v1.5): this phone's sign-in, never another's.

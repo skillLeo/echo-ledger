@@ -182,7 +182,9 @@ fun LibraryItemRow(
     onToggle: () -> Unit,
     selecting: Boolean = false,
     selected: Boolean = false,
-    divider: Boolean = true
+    divider: Boolean = true,
+    /** Density Compact in the View sheet (since v1.6): a shorter row, more of them on the screen. */
+    compact: Boolean = false
 ) {
     val c = LocalEchoColors.current
     val status = ItemStatus.of(item)
@@ -200,7 +202,7 @@ fun LibraryItemRow(
         title = item.title?.takeIf { it.isNotBlank() } ?: untitled(app),
         time = rowTime(item.startedAt, today),
         meta = meta,
-        tile = { SourceAppTile(app) },
+        tile = { SourceAppTile(app, if (compact) 36.dp else 44.dp) },
         onClick = { if (selecting) onToggle() else onOpen() },
         onLongClick = onToggle,
         onTileClick = onToggle,
@@ -218,7 +220,8 @@ fun LibraryItemRow(
         },
         badge = { DeviceBadge(SourceDevice.from(item.sourceDevice)) },
         stateLabel = status.label,
-        divider = divider
+        divider = divider,
+        compact = compact
     )
 }
 

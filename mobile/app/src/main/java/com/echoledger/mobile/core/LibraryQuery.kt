@@ -4,11 +4,19 @@ import com.echoledger.mobile.data.LibraryItem
 import java.time.ZonedDateTime
 
 /** How the library list is ordered (the Sort menu). */
-enum class LibrarySort(val label: String) {
-    NEWEST("Newest first"),
-    OLDEST("Oldest first"),
-    LONGEST("Longest first"),
-    TITLE("Title A–Z")
+enum class LibrarySort(val key: String, val label: String) {
+    NEWEST("newest", "Newest"),
+    OLDEST("oldest", "Oldest"),
+    LONGEST("longest", "Longest"),
+
+    /** Since v1.6 (Phase 1C D1), with Recently opened: the desktop's and the console's orders. */
+    SHORTEST("shortest", "Shortest"),
+    TITLE("title", "Name A–Z"),
+    OPENED("opened", "Recently opened");
+
+    companion object {
+        fun of(key: String?): LibrarySort = entries.firstOrNull { it.key == key } ?: NEWEST
+    }
 }
 
 /** What a recording's status dot means. */
@@ -67,7 +75,9 @@ object LibraryQuery {
         filters: LibraryFilters,
         query: String,
         sort: LibrarySort,
-        now: ZonedDateTime = ZonedDateTime.now()
+        now: ZonedDateTime = ZonedDateTime.now(),
+        /** When each recording was last opened on this phone (ms), for Recently opened. */
+        opened: Map<String, Long> = emptyMap()
     ): List<LibraryItem> {
         val q = query.trim().lowercase()
         val shown = items.filter { item ->
@@ -93,7 +103,20 @@ object LibraryQuery {
 
             LibrarySort.LONGEST -> shown.sortedWith(compareByDescending<LibraryItem> { it.pinned }.thenByDescending { it.durationMs ?: 0L })
 
+            LibrarySort.SHORTEST -> shown.sortedWith(
+                compareByDescending<LibraryItem> {
+                    it.pinned
+                }.thenBy { it.durationMs ?: Long.MAX_VALUE }
+            )
+
             LibrarySort.TITLE -> shown.sortedWith(compareByDescending<LibraryItem> { it.pinned }.thenBy { (it.title ?: "").lowercase() })
+
+            // Opened on this phone, latest first; the rest follow, newest first.
+            LibrarySort.OPENED -> shown.sortedWith(
+                compareByDescending<LibraryItem> { it.pinned }
+                    .thenByDescending { opened[it.id] ?: 0L }
+                    .thenByDescending { it.startedAt.orEmpty() }
+            )
         }
     }
 }

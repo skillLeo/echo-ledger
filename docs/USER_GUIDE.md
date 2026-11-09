@@ -325,6 +325,11 @@ Each view remembers its own choice (the whole Library, the Inbox and every smart
 and how many recordings it holds, stays at the top while you scroll through it, and folds away with a click. Its box
 selects the whole group for **Move**, **Label**, **Export** or **Delete**; it shows a dash when only some are selected.
 
+**On the phone (since v1.6)** the same choices are in the Library's **View** sheet (the sort button next to search):
+**Group by**, **Sort by** and **Density** (**Compact** fits more recordings on the screen). Each smart view remembers its
+own choice on this phone. Tap a header's name or arrow to fold it; while selecting, its box selects the whole group, and a
+long press on a header starts selecting with that group.
+
 ## 10. Import, rename, export and share
 
 ### Import files

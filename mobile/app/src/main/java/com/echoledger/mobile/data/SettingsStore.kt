@@ -102,6 +102,10 @@ data class AppSettings(
     val phoneFont: Boolean = false,
     /** The last five Library searches (since v1.3), newest first; this phone only. */
     val recentSearches: List<String> = emptyList(),
+    /** Group by, Sort by and Density per Library view (since v1.6, Phase 1C D1/D4); this phone only. */
+    val libraryViews: Map<String, com.echoledger.mobile.core.LibraryViewChoice> = emptyMap(),
+    /** When each recording was last opened on this phone (ms), the latest 300, for Sort by Recently opened. */
+    val libraryOpened: Map<String, Long> = emptyMap(),
     /** Game and Watch translate (since v1.3, Phase B). */
     val liveTranslate: com.echoledger.mobile.translate.LiveTranslatePrefs = com.echoledger.mobile.translate.LiveTranslatePrefs(),
     /** The workspace plan's features and this person's role (since v1.5, from the server's config; this phone only). */
