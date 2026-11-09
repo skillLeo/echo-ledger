@@ -57,9 +57,9 @@ describe("activity page (B18)", () => {
     const { onOpenRecording, onItems } = renderPage();
     fireEvent.click(await screen.findByText("Acme kickoff"));
     await waitFor(() => expect(onOpenRecording).toHaveBeenCalledWith("s1"));
-    expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]);
-    expect(onItems.mock.lastCall?.[0].every((i: { read: boolean }) => i.read)).toBe(true);
-    expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread");
+    await waitFor(() => expect(callsOf("activity_read")).toEqual([{ ids: ["n2"] }]));
+    await waitFor(() => expect(onItems.mock.lastCall?.[0].every((i: { read: boolean }) => i.read)).toBe(true));
+    await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).not.toHaveClass("unread"));
   });
 
   it("marks everything read", async () => {
