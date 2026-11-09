@@ -135,6 +135,40 @@ class LibraryScreenTest : ScreenTest() {
     // ---- rows -------------------------------------------------------------------------------------------------------------
 
     @Test
+    fun `a group's name only folds it, its box only selects it, and a long press selects the group (v1_6 P5_1)`() {
+        seed(item("a", title = "Call with Acme"), item("d", title = "Desktop call", startedAt = "2026-10-20T09:00:00+00:00"))
+        showLibrary()
+        val header = compose.onNodeWithText(" · 2", substring = true)
+
+        header.performClick()
+        compose.onNodeWithText("Call with Acme").assertDoesNotExist()
+        compose.onAllNodesWithText("selected", substring = true).assertCountEquals(0)
+        header.performClick()
+        compose.onNodeWithText("Call with Acme").assertIsDisplayed()
+
+        compose.onNodeWithText("Call with Acme").performTouchInput { longClick() }
+        compose.onNodeWithText("1 selected").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Select all in", substring = true).performClick()
+        compose.onNodeWithText("2 selected").assertIsDisplayed()
+        compose.onNodeWithText("Desktop call").assertIsDisplayed() // selecting did not fold the group
+        compose.onNodeWithContentDescription("Select all in", substring = true).performClick()
+        compose.onAllNodesWithText("selected", substring = true).assertCountEquals(0)
+
+        compose.onNodeWithText(" · 2", substring = true).performTouchInput { longClick() }
+        compose.onNodeWithText("2 selected").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a group's box is none, some or all, and a tap selects the rest or clears it`() {
+        val ids = listOf("a", "b", "c")
+        assertEquals(GroupSelection.NONE, GroupSelection.of(ids, setOf("x")))
+        assertEquals(GroupSelection.SOME, GroupSelection.of(ids, setOf("a")))
+        assertEquals(GroupSelection.ALL, GroupSelection.of(ids, setOf("a", "b", "c", "x")))
+        assertEquals(setOf("x", "a", "b", "c"), GroupSelection.toggle(ids, setOf("x", "a")))
+        assertEquals(setOf("x"), GroupSelection.toggle(ids, setOf("x", "a", "b", "c")))
+    }
+
+    @Test
     fun `a recording row shows title time duration client and its app, and long-press selects it`() {
         seed(
             item("a", title = "Call with Acme", client = "Acme Holdings", preview = "Thanks for calling about the invoice"),

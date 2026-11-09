@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,9 +24,11 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.History
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.Search
@@ -141,6 +144,8 @@ fun LibraryScreen(
     var sortOpen by remember { mutableStateOf(false) }
     var picked by remember { mutableStateOf<Set<String>>(emptySet()) }
     var selecting by remember { mutableStateOf(false) }
+    // Since v1.6 (P5.1): groups folded away by their name or arrow (this visit only).
+    var folded by rememberSaveable { mutableStateOf(emptySet<String>()) }
     var query by rememberSaveable { mutableStateOf("") }
     var searching by rememberSaveable { mutableStateOf(false) }
     // The last five searches, kept on this phone across restarts (never in a settings export).
@@ -393,8 +398,24 @@ fun LibraryScreen(
                             } else {
                                 mapOf(sort.label to visible)
                             }
-                            grouped.forEach { (group, rows) ->
-                                stickyHeader(key = "h-$group") { SectionHeader(group) }
+                            grouped.forEach { (group, all) ->
+                                // Since v1.6 (P5.1): the box only selects the group (in selection, or a long press);
+                                // the name and the arrow only fold it.
+                                val ids = all.map { it.id }
+                                stickyHeader(key = "h-$group") {
+                                    GroupHeader(
+                                        name = group,
+                                        count = all.size,
+                                        folded = group in folded,
+                                        selection = if (inSelection) GroupSelection.of(ids, ticked) else null,
+                                        onFold = { folded = if (group in folded) folded - group else folded + group },
+                                        onSelect = {
+                                            selecting = true
+                                            picked = GroupSelection.toggle(ids, picked)
+                                        }
+                                    )
+                                }
+                                val rows = if (group in folded) emptyList() else all
                                 itemsIndexed(rows, key = { _, it -> it.id }, contentType = { _, _ -> "recording" }) { i, item ->
                                     SwipeRow(
                                         item = item,
@@ -606,4 +627,65 @@ object LibraryGroups {
     }
 
     const val PINNED = "Pinned"
+}
+
+/** A group's box (since v1.6, P5.1): none, some or all of its recordings selected. Pure; unit-tested. */
+enum class GroupSelection {
+    NONE,
+    SOME,
+    ALL;
+
+    companion object {
+        fun of(ids: List<String>, selected: Set<String>): GroupSelection {
+            val n = ids.count { it in selected }
+            return when {
+                n == 0 -> NONE
+                n == ids.size -> ALL
+                else -> SOME
+            }
+        }
+
+        /** A tap on the box: all of the group selected, unless all already were, then none of it. */
+        fun toggle(ids: List<String>, selected: Set<String>): Set<String> =
+            if (of(ids, selected) == ALL) selected - ids.toSet() else selected + ids
+    }
+}
+
+/**
+ * A Library group's sticky header (since v1.6, P5.1): its name and count, an arrow that folds it, and while selecting a
+ * tri-state box that selects the whole group. A long press on the header starts selecting with that group.
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun GroupHeader(name: String, count: Int, folded: Boolean, selection: GroupSelection?, onFold: () -> Unit, onSelect: () -> Unit) {
+    val c = LocalEchoColors.current
+    Row(
+        Modifier.fillMaxWidth().background(Brand.Background)
+            .combinedClickable(onClick = onFold, onLongClick = onSelect, onClickLabel = if (folded) "Show $name" else "Hide $name")
+            .padding(horizontal = Space.screen).padding(top = Space.s3, bottom = Space.s1),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        if (selection != null) {
+            androidx.compose.material3.TriStateCheckbox(
+                state = when (selection) {
+                    GroupSelection.ALL -> androidx.compose.ui.state.ToggleableState.On
+                    GroupSelection.SOME -> androidx.compose.ui.state.ToggleableState.Indeterminate
+                    GroupSelection.NONE -> androidx.compose.ui.state.ToggleableState.Off
+                },
+                onClick = onSelect,
+                modifier = Modifier.semantics { contentDescription = "Select all in $name" }
+            )
+        }
+        Text(
+            "$name · $count",
+            style = LocalEchoType.current.labelM.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold),
+            color = Brand.Muted,
+            modifier = Modifier.weight(1f)
+        )
+        androidx.compose.material3.Icon(
+            if (folded) Icons.AutoMirrored.Rounded.KeyboardArrowRight else Icons.Rounded.KeyboardArrowDown,
+            contentDescription = null,
+            tint = c.textMuted
+        )
+    }
 }
