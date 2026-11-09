@@ -58,6 +58,9 @@ describe('GET /api/account', function () {
             'created_at' => $user->created_at->toAtomString(),
             'workspace' => ['id' => $device->workspace_id, 'name' => 'Personal', 'role' => 'owner'],
             'deletes_at' => null,
+            // Since v1.6.
+            'super_admin' => false,
+            'workspaces' => [['id' => $device->workspace_id, 'name' => 'Personal', 'role' => 'owner', 'current' => true]],
         ]);
     });
 });
