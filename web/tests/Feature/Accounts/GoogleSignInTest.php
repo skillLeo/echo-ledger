@@ -24,7 +24,7 @@ beforeEach(function () {
 });
 
 it('offers nothing until API Credentials has a Google client', function () {
-    expect($this->get('/app/login')->getContent())->not->toContain('Sign in with Google');
+    expect($this->get('/app/login')->getContent())->not->toContain('Continue with Google');
     $this->get('/auth/google/redirect')->assertNotFound();
     $this->get('/auth/google/callback')->assertNotFound();
 });
@@ -32,7 +32,7 @@ it('offers nothing until API Credentials has a Google client', function () {
 it('shows the button once configured and sends the browser to Google', function () {
     fakeGoogle();
 
-    expect($this->get('/app/login')->getContent())->toContain('Sign in with Google')->toContain(route('auth.google.redirect'));
+    expect($this->get('/app/login')->getContent())->toContain('Continue with Google')->toContain(route('auth.google.redirect'));
     $this->get('/auth/google/redirect')->assertRedirect('https://accounts.google.com/o/oauth2/auth?client_id=1234-test');
 });
 

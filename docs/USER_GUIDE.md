@@ -298,6 +298,10 @@ The console in the browser has the computer app's frame.
   (sidebar style, density, 12- or 24-hour times, List or Table, the language your uploads start in, the keys; each
   choice says **Saved · just now**), **Plan & usage**, **Transcription key** (Free plan) and **Privacy & data**
   (export your data, delete your account, Support access).
+- **Signing in (since v1.6.2):** type your email and press **Continue**, or use **Continue with Google** or
+  **Passkey** under "or". A passkey saved in your browser is offered in the email box itself (Safari, Chrome, Edge),
+  with no button to press. Creating an account shows Cloudflare's quick check under the email when the server uses
+  it.
 - **Notices (since v1.6.1)** all behave the same: click one to go where it is about (the recording, the setting, the
   page that fixes it), **×** closes it, and a swipe left or right closes it too (a finger, a trackpad, or a mouse
   drag). A message hides by itself after 6 seconds (an error after 10), with a thin bar showing the time left; it waits

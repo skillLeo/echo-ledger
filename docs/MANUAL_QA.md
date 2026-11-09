@@ -512,6 +512,18 @@ tests of resources/js/notice-core.cjs); these need a real screen.
 | 16-WN9 | The bell: click a "Transcript ready" card, a "Device signed in" card, swipe one away, × another. | Each opens its recording or Devices and is read; swiped and ×'d cards leave the list. |
 | 16-WN10 | A screen reader (VoiceOver or TalkBack) with a success toast and an error toast. | The success is read politely, the error at once; × is read as "Dismiss". |
 
+### Web console v1.6.2 sign-in and sign-up pages (a real browser, a real passkey, the live keys)
+
+| # | Check | Expected |
+|---|---|---|
+| 16-WA1 | Mac, Safari 17+: with a passkey saved for the console (Account → Password & sign-in methods → Security → Add a passkey), sign out, open /app/login and click into the email box. | Safari offers the passkey in the box's autofill with no click on Passkey and no dialog on load; choosing it signs in (Touch ID), straight to the Library. |
+| 16-WA2 | Mac, Chrome: the same as 16-WA1; then press Passkey. | Chrome offers it in the autofill too; Passkey opens the passkey dialog (the quiet request stops first, no "a request is already pending" error). |
+| 16-WA3 | Android, Chrome: a passkey saved in Google Password Manager, /app/login. | The keyboard's suggestion strip or the autofill offers the passkey for the email box; choosing it signs in with the fingerprint. On a phone without conditional UI, Passkey still works. |
+| 16-WA4 | Production /app/register with Turnstile's keys saved and the switch on. | The Cloudflare check shows under the email with "Protected by Cloudflare Turnstile"; Continue emails the code at once; an expired check (wait 5 min) asks again. |
+| 16-WA5 | The same with the switch off (Admin → Sign-up), and with the keys removed. | No check and no Cloudflare request (the browser's network tab shows none). |
+| 16-WA6 | Continue with Google, light and dark, and at 360 px wide. | The multicolour G on white with a grey border (dark: dark grey), the whole label "Continue with Google", the same height as Continue; Passkey beside it in one row, both stacked only below 360 px. |
+| 16-WA7 | Every auth page in light and dark: the sign-in, the code, the name and Terms, two-step, Forgot password and the new password, an invitation, /account/delete, Sign in in the browser (from the desktop app). | One card of the same width, the same type and 40 px controls; the primary button full width; the quiet links under it. |
+
 ### macOS 14.4+ (only if you have a Mac)
 
 | # | Check | Expected |
