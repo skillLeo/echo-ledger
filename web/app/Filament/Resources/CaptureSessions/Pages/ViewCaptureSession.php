@@ -15,8 +15,10 @@ use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
+use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\StopsSharing;
+use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
@@ -31,9 +33,11 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\EngineComparison;
 use App\Services\EngineWait;
 use App\Services\FinalTranscriptCoordinator;
+use App\Services\Library\ReadyNotices;
 use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
 use App\Services\SettingsRepository;
+use App\Services\Sharing\WhatsAppMessage;
 use App\Services\TextReplacements;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
@@ -63,12 +67,14 @@ use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\HtmlString;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
 {
+    use SendsToWhatsApp;
     use StopsSharing;
 
     protected static string $resource = CaptureSessionResource::class;
@@ -106,6 +112,8 @@ class ViewCaptureSession extends ViewRecord
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
         $this->viewsBar = RecordingProgress::improvingBar($this->session());
+        // Send to WhatsApp sends the view being read: the one the player opens in, until it says otherwise.
+        $this->readingView = WhatsAppMessage::defaultView($this->session()) ?? 'original';
     }
 
     public function getTitle(): string
@@ -144,7 +152,8 @@ class ViewCaptureSession extends ViewRecord
         return $schema->components([
             ViewComponent::make('filament.library.live-status')
                 ->visible(fn (): bool => CaptureSessionsTable::isPending($this->session()))
-                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage(), 'progress' => RecordingProgress::for($this->session())]),
+                ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'message' => $this->liveMessage(), 'progress' => RecordingProgress::for($this->session()),
+                    'notify' => ['asked' => $this->notifyAsked()]]),
             ViewComponent::make('filament.recording.work-poll')
                 ->visible(fn (): bool => ! CaptureSessionsTable::isPending($this->session()) && ($this->hasWorkInProgress() || $this->viewsBar !== null))
                 ->viewData(fn (): array => ['interval' => CaptureSessionsTable::LIVE_POLL, 'bar' => $this->viewsBar]),
@@ -173,6 +182,40 @@ class ViewCaptureSession extends ViewRecord
             TranscriptStatus::Failed => Notification::make()->title('The transcript could not be made')->body('See the error on this page, then try again.')->danger()->send(),
             default => null,
         };
+    }
+
+    /**
+     * "Notify me when ready" (since v1.6, P5.4): one email when this recording's transcript is ready, or could not be
+     * made, whatever the email settings say. The recording is this person's (the page only opens their own).
+     */
+    public function notifyWhenReady(): void
+    {
+        $user = auth()->user();
+        if (! $user instanceof User) {
+            return;
+        }
+        $key = 'notify-ready:'.$user->getAuthIdentifier();
+        if (RateLimiter::tooManyAttempts($key, 20)) {
+            Notification::make()->title('Too many requests. Try again in a minute.')->warning()->send();
+
+            return;
+        }
+        RateLimiter::hit($key, 60);
+        if (! CaptureSessionsTable::isPending($this->session())) {
+            Notification::make()->title('It is ready already')->success()->send();
+
+            return;
+        }
+        if (app(ReadyNotices::class)->ask($user, $this->session())) {
+            Notification::make()->title('You will get an email when it is ready')->success()->send();
+        }
+    }
+
+    private function notifyAsked(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User && app(ReadyNotices::class)->asked($user, $this->session());
     }
 
     private function liveMessage(): string
@@ -443,6 +486,9 @@ class ViewCaptureSession extends ViewRecord
             $this->wrongScriptAction(),
             $this->showAsAction(),
             $this->shareAction(),
+            // Since v1.6 (P5.5): next to Share, as on the desktop.
+            WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)
+                ->label('WhatsApp')->labeledFrom('sm')->button(),
             ActionGroup::make([
                 CaptureSessionsTable::renameAction(),
                 SharingActions::send(fn (): CaptureSession => $this->session()),

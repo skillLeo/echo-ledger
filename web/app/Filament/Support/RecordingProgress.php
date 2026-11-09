@@ -26,6 +26,13 @@ final class RecordingProgress
 
     public const IMPROVE = 'improve';
 
+    /** Each step's name while it waits, while it runs and once it is done. */
+    public const WORDS = [
+        self::UPLOAD => ['Upload', 'Uploading', 'Uploaded'],
+        self::TRANSCRIBE => ['Transcribe', 'Transcribing', 'Transcribed'],
+        self::IMPROVE => ['Improve', 'Improving', 'Improved'],
+    ];
+
     /**
      * @return array{active: string, steps: list<array{key: string, label: string, state: string, detail: string|null, percent: int|null}>, summary: string}|null
      */
@@ -49,27 +56,27 @@ final class RecordingProgress
         }
         $view = self::improvingView($session, $final, $views);
 
-        $upload = ['key' => self::UPLOAD, 'label' => 'Upload', 'state' => $uploading ? 'active' : 'done', 'detail' => null, 'percent' => null];
+        // Since v1.6 (P5.4) the phone's and the desktop's words: three steps, each named for its state, and one line.
+        $upload = ['key' => self::UPLOAD, 'label' => self::word(self::UPLOAD, $uploading ? 'active' : 'done'), 'state' => $uploading ? 'active' : 'done', 'detail' => null, 'percent' => null];
         if ($uploading) {
             $upload['percent'] = self::uploadPercent($session);
-            $upload['detail'] = $upload['percent'].' %';
+            $upload['detail'] = $upload['percent'].'%';
         }
-        $transcribe = ['key' => self::TRANSCRIBE, 'label' => 'Transcribing', 'state' => $uploading ? 'waiting' : ($transcribing ? 'active' : 'done'), 'detail' => null, 'percent' => null];
+        $transcribeState = $uploading ? 'waiting' : ($transcribing ? 'active' : 'done');
+        $transcribe = ['key' => self::TRANSCRIBE, 'label' => self::word(self::TRANSCRIBE, $transcribeState), 'state' => $transcribeState, 'detail' => null, 'percent' => null];
         if ($transcribing) {
             $progress = TranscriptResource::progress($final);
             $transcribe['detail'] = self::transcribeDetail($progress);
             $transcribe['percent'] = $progress !== null && $progress['total'] > 1 ? (int) floor($progress['done'] * 100 / $progress['total']) : null;
         }
-        $steps = [$upload, $transcribe];
-        if ($view !== null) {
-            $improve = ['key' => self::IMPROVE, 'label' => 'Improving', 'state' => $improving ? 'active' : 'waiting', 'detail' => TranscriptViews::VIEWS[$view], 'percent' => null];
-            if ($improving) {
-                $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
-                $improve['percent'] = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : 0;
-                $improve['detail'] = TranscriptViews::VIEWS[$view].' '.$improve['percent'].' %';
-            }
-            $steps[] = $improve;
+        $improveState = $improving ? 'active' : 'waiting';
+        $improve = ['key' => self::IMPROVE, 'label' => self::word(self::IMPROVE, $improveState), 'state' => $improveState, 'detail' => $view !== null ? TranscriptViews::VIEWS[$view] : null, 'percent' => null];
+        if ($improving && $view !== null) {
+            $lines = is_array($views['progress']) ? ($views['progress'][$view] ?? null) : null;
+            $improve['percent'] = is_array($lines) && $lines['total'] > 0 ? (int) floor($lines['done'] * 100 / $lines['total']) : 0;
+            $improve['detail'] = TranscriptViews::VIEWS[$view].'… '.$improve['percent'].'%';
         }
+        $steps = [$upload, $transcribe, $improve];
         $active = $uploading ? self::UPLOAD : ($transcribing ? self::TRANSCRIBE : self::IMPROVE);
         $current = collect($steps)->firstWhere('key', $active);
 
@@ -77,15 +84,27 @@ final class RecordingProgress
             'active' => $active,
             'steps' => $steps,
             'summary' => match ($active) {
-                self::UPLOAD => 'Uploading '.$upload['percent'].' %',
+                self::UPLOAD => 'Uploading '.$upload['percent'].'%',
                 self::TRANSCRIBE => 'Transcribing'.($current['detail'] !== null ? ' · '.$current['detail'] : ''),
-                default => 'Improving '.TranscriptViews::VIEWS[(string) $view].'… '.$current['percent'].' %',
+                default => $view !== null ? 'Improving '.TranscriptViews::VIEWS[$view].'… '.$current['percent'].'%' : 'Improving…',
             },
         ];
     }
 
+    /** "Upload", "Uploading" or "Uploaded" (and the same for Transcribe and Improve), as the phone and the desktop say it. */
+    public static function word(string $step, string $state): string
+    {
+        $words = self::WORDS[$step];
+
+        return match ($state) {
+            'active' => $words[1],
+            'done' => $words[2],
+            default => $words[0],
+        };
+    }
+
     /**
-     * "Improving Roman Urdu… 60 %" while the view the recording opens in is made; null otherwise.
+     * "Improving Roman Urdu… 60%" while the view the recording opens in is made; null otherwise.
      *
      * @return array{label: string, percent: int}|null
      */
@@ -117,7 +136,7 @@ final class RecordingProgress
     }
 
     /**
-     * "Part 2 of 3 · about 1 min left", "About 40 s left" or null.
+     * "part 2 of 3 · about 1 min left", "about 40 s left" or null: the phone's words after "Transcribing · ".
      *
      * @param  array{done: int, total: int, eta_seconds: int|null}|null  $progress
      */
@@ -126,26 +145,23 @@ final class RecordingProgress
         if ($progress === null) {
             return null;
         }
-        $parts = $progress['total'] > 1 ? 'Part '.min($progress['total'], $progress['done'] + 1).' of '.$progress['total'] : null;
+        $parts = $progress['total'] > 1 ? 'part '.min($progress['total'], $progress['done'] + 1).' of '.$progress['total'] : null;
         $left = self::timeLeft($progress['eta_seconds']);
+        $detail = implode(' · ', array_filter([$parts, $left]));
 
-        return match (true) {
-            $parts !== null && $left !== null => $parts.' · '.$left,
-            $parts !== null => $parts,
-            $left !== null => ucfirst($left),
-            default => null,
-        };
+        return $detail === '' ? null : $detail;
     }
 
+    /** "about 20 s left" (to 5 s) under a minute, then "about 3 min left", as the phone rounds it; null without a measure. */
     public static function timeLeft(?int $seconds): ?string
     {
-        return match (true) {
-            $seconds === null => null,
-            $seconds < 10 => 'almost done',
-            $seconds < 60 => 'about '.(int) (ceil($seconds / 10) * 10).' s left',
-            $seconds < 3600 => 'about '.(int) ceil($seconds / 60).' min left',
-            default => 'about '.round($seconds / 3600, 1).' h left',
-        };
+        if ($seconds === null) {
+            return null;
+        }
+        $seconds = max(0, $seconds);
+        $amount = $seconds < 60 ? intdiv(max(5, $seconds) + 4, 5) * 5 .' s' : intdiv($seconds + 30, 60).' min';
+
+        return 'about '.$amount.' left';
     }
 
     /**

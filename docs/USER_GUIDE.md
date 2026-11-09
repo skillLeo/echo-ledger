@@ -380,6 +380,20 @@ selects the whole group for **Move**, **Label**, **Export** or **Delete**; it sh
 own choice on this phone. Tap a header's name or arrow to fold it; while selecting, its box selects the whole group, and a
 long press on a header starts selecting with that group.
 
+**In the web console (since v1.6)** the Library has one toolbar under the search box: **All recordings** (or the smart
+view you chose: Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned, each with its count),
+**All folders** (Inbox, WhatsApp, Zoom, Phone, Voice notes, Imported and the others that hold recordings, and Shared
+with me), then **Group by** and **Sort by** with the same choices as the phone and the computer. A header's box only
+selects its group (a dash when only some are selected); its name and arrow fold it. Select recordings and one bar shows
+what you can do with them: **8 selected · Move · Label · Export · Delete · More · Clear** (**More** pins, unpins, keeps
+forever or stops keeping). An empty view says why it is empty and offers **Show all recordings**.
+
+**Failed uploads (console, since v1.6).** While something did not upload or could not be transcribed, a line above the
+Library says **Failed uploads (2) · See why**. In that view each recording says what went wrong and what happens next, in
+plain words: an upload from a phone or computer is sent again by that device the next time EchoLedger is open there and
+online; **Retry** carries on an upload from this browser (choose the same file again) or transcribes a recording again
+(after a busy engine, the monthly limit, or adding your own Groq key); **Delete** puts it in Recently deleted for 48 hours.
+
 ## 10. Import, rename, export and share
 
 ### Import files
@@ -403,6 +417,12 @@ the same way. The transcript shows as soon as it is ready, with a slim **Improvi
 in where you are reading when it is made (unless you chose Original). **Notify me when ready** on the recording page
 sends a notification when the transcript is ready, even if Transcription notifications are off.
 
+**In the web console (since v1.6)** the Library row and the recording page say it with the same words: **Uploading
+40%**, **Transcribing · part 2 of 3 · about 20 s left**, **Improving Roman Urdu… 60%**. The recording page shows the
+three steps (**Upload · Transcribe · Improve**, each named for where it is: Uploading, Uploaded…), that line and a bar,
+and updates by itself. **Notify me when ready** sends you one email for that recording when its transcript is ready (or
+if it could not be made), even if transcript emails are off in your profile; the bell shows it as always.
+
 ### Rename
 
 Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the
@@ -411,7 +431,9 @@ recording page. The new name shows on all your devices. A call waiting for Keep 
 
 **Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
 "Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
-the title field to have the automatic one again. The player always shows the recording's real length, in every view
+the title field to have the automatic one again. Since v1.6 a title nobody chose counts as none: "Voice note",
+"WhatsApp call" or a shared voice note's file name such as "PTT-20261108-WA0012" is replaced by an automatic title too,
+and older recordings got theirs from the first words of their transcript. The player always shows the recording's real length, in every view
 (Original, Roman Urdu, English and Urdu), also for a voice note whose length the server does not know yet.
 
 ### Export and share
@@ -444,6 +466,14 @@ WhatsApp…** on its row, offers three ways, as on the phone:
   file in WhatsApp**: in the chat click **+** (or the paper clip), then **Document**, and choose the file.
 - **Link (works for 7 days):** a link anyone can open for a week (with the audio when the recording has it); WhatsApp
   opens with the title and the link, and the link is copied.
+
+**Send to WhatsApp (web console, since v1.6).** On a recording, the **WhatsApp** button next to **Share**, or **More →
+Send to WhatsApp…** on its row in the Library, offers the same three ways: **Text only** (the view you are reading on the
+recording page; from the Library, the view it opens in), **Text and voice** (the text in the message, and the audio saved
+in your browser's downloads: **Attach the saved voice file in WhatsApp** with **+** or the paper clip, then **Document**)
+and **Link (works for 7 days)**. WhatsApp, or WhatsApp Web, opens in a new tab with the message ready; the whole text is
+copied too, because a long transcript only fits in part. **Copy text** is there as well, and on the recording page
+**Copy for AI**.
 
 **Send to a teammate** puts a recording or a project in the **Shared with me** folder of someone with an account on
 your server. Type their email and, if you like, a note. People without an account here will not receive it, and nothing

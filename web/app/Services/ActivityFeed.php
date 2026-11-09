@@ -23,6 +23,7 @@ use App\Models\User;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Entitlements\UnusualUsage;
+use App\Services\Library\ReadyNotices;
 use App\Services\Usage\UsagePeriod;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
@@ -104,6 +105,8 @@ final class ActivityFeed
         if (EmailPreferences::wants($session->user, EmailPreferences::TRANSCRIPTION)) {
             Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/admin/sessions/'.$session->id)));
         }
+        // Since v1.6: the one email asked for with "Notify me when ready".
+        app(ReadyNotices::class)->deliver($session, ready: true);
     }
 
     /** True when a failure of this final transcript is handed to another engine before anyone is told. */
@@ -118,6 +121,7 @@ final class ActivityFeed
         $session ??= $transcript->captureSession()->first();
         if ($session instanceof CaptureSession && ! $session->trashed()) {
             $this->post($session->user, 'transcript_failed', 'Transcription failed', $session->displayTitle().': '.($transcript->error ?? 'try again from the recording.'), $session, 'heroicon-o-exclamation-triangle');
+            app(ReadyNotices::class)->deliver($session, ready: false);
         }
     }
 

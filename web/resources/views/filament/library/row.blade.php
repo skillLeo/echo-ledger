@@ -3,6 +3,8 @@
     of opening it (Ctrl, Cmd, Shift and middle clicks still open it in the usual way).
 --}}
 @php($row = \App\Filament\Support\RecordingRow::for($getRecord()))
+{{-- Since v1.6 (P5.3): in Failed uploads each row says what went wrong and what happens next. --}}
+@php($problem = property_exists($this, 'activeTab') && (string) $this->activeTab === 'failed' ? \App\Filament\Support\FailedUpload::for($getRecord()) : null)
 <div class="el-row" data-recording="{{ $row['id'] }}"
     x-on:click="if (window.matchMedia('(min-width: 1280px)').matches && ! ($event.ctrlKey || $event.metaKey || $event.shiftKey || $event.button !== 0) && typeof $wire.selectRecording === 'function') { $event.preventDefault(); $wire.selectRecording('{{ $row['id'] }}') }">
     @include('filament.library.tile', ['row' => $row])
@@ -20,5 +22,11 @@
                 @include('filament.library.status', ['status' => $row['status']])
             @endif
         </span>
+        @if ($problem !== null)
+            <span class="el-row-problem" data-problem>
+                <strong>{{ $problem['title'] }}.</strong>
+                <span>{{ $problem['detail'] }}</span>
+            </span>
+        @endif
     </span>
 </div>

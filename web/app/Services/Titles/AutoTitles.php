@@ -31,10 +31,13 @@ final class AutoTitles
 
     public function __construct(private readonly TitleWriter $writer, private readonly CredentialVault $vault) {}
 
-    /** Whether [$session] has no title of its own and nothing better to show. */
+    /**
+     * Whether [$session] has no title of its own and nothing better to show. Since v1.6 a title nobody chose ("Voice
+     * note", a file's name such as "PTT-20261108-WA0012") counts as none (GenericTitles).
+     */
     public static function wanted(CaptureSession $session): bool
     {
-        return ($session->title === null || trim($session->title) === '') && ($session->caller_name === null || trim($session->caller_name) === '');
+        return GenericTitles::is($session->title) && ($session->caller_name === null || trim($session->caller_name) === '');
     }
 
     /** Queues the title of [$transcript]'s recording when it is a finished final transcript of an untitled one. Never throws. */
@@ -85,9 +88,15 @@ final class AutoTitles
         if ($title === '') {
             return;
         }
-        // Only while still untitled: a person who named it meanwhile wins.
+        // Only while still untitled (or still the title nobody chose): a person who named it meanwhile wins.
+        $before = $session->title;
         $saved = CaptureSession::withTrashed()->withoutGlobalScopes()->whereKey($session->id)
-            ->where(fn ($q) => $q->whereNull('title')->orWhere('title', ''))
+            ->where(function ($q) use ($before): void {
+                $q->whereNull('title')->orWhere('title', '');
+                if ($before !== null && $before !== '') {
+                    $q->orWhere('title', $before);
+                }
+            })
             ->update(['title' => $title, 'title_auto' => true, 'updated_at' => now()]);
         if ($saved > 0) {
             $session->forceFill(['title' => $title, 'title_auto' => true]);

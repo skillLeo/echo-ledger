@@ -462,6 +462,20 @@ Run these when the change touches the area, or before a release.
 | L-7 | Add Soniox and ElevenLabs keys, then **⋯ → Compare engines** with Urdu + English and three engines. | Three runs with text and cost; **Make default for Urdu + English** moves that engine to first place in Settings → Engine per language. |
 | R-5 | Console dashboard, desktop Settings and phone Settings. | The storage meter shows the recordings' size and the server disk; the retention days match the console. |
 
+### Web console v1.6 Library, progress and WhatsApp (what only a real browser can prove; P5.2–P5.5)
+
+| # | Check | Expected |
+|---|---|---|
+| 16-C1 | Library at 1440 px and at 360 px, light and dark. | One toolbar line under the search (All recordings · All folders · Group by · Sort by); at 360 px it scrolls sideways, no rows of chips, no second "Sort by –". |
+| 16-C2 | Group by Date; click a day header's box, then its name, then its arrow. | The box selects the whole day (a dash when only some are), without folding; the name and the arrow fold and unfold it. |
+| 16-C3 | Select 8 recordings, scroll down. | One bar "8 selected · Move · Label · Export · Delete · More · Select all · Clear" stays under the top bar; **Clear** empties it and the bar goes. |
+| 16-C4 | Make a transcription fail (no key on a Free plan), then open the Library. | "Failed uploads (1) · See why"; See why lists it with what went wrong in plain words and **Retry** / **Delete**; Retry after adding the key transcribes it. |
+| 16-C5 | Upload a long file and watch its row and its page. | Row: "Uploading 40%", then "Transcribing · part 2 of 3 · about 1 min left", then "Improving Roman Urdu… 60%"; the page shows Upload · Transcribe · Improve with the running one named and a bar. |
+| 16-C6 | On that page press **Notify me when ready**, close the tab. | "You will get an email when it is ready."; one email when the transcript is ready (even with transcript emails off), none twice. |
+| 16-C7 | On a recording read in Roman Urdu: **WhatsApp → Text only** (Chrome on Windows with WhatsApp Desktop; Safari on a Mac with WhatsApp Web). | WhatsApp opens in a new tab or the app with the Roman Urdu text ready; a long transcript shows its start and pastes whole from the clipboard. |
+| 16-C8 | **WhatsApp → Text and voice**. | The audio downloads; the panel says "Attach the saved voice file in WhatsApp" with the steps; the text is in the message. |
+| 16-C9 | **WhatsApp → Link (works for 7 days)**, with a popup blocker on. | WhatsApp opens with the title and the link (no blocked-popup warning); the link is copied; Shares lists it, expiring in 7 days. |
+
 ### macOS 14.4+ (only if you have a Mac)
 
 | # | Check | Expected |

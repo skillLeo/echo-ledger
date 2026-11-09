@@ -7,6 +7,7 @@
         x-on:keydown="onKey($event)"
         x-on:el-transcript-updated.window="load($event.detail)"
         x-on:el-seek.window="seekTo($event.detail.ms)"
+        x-on:el-copy-for-ai.window="copy(false, true)"
         x-data="{
             d: @js($data), active: -1, word: -1, raf: null, playing: false, now: 0, rate: 1, skipSilence: false, follow: true,
             editing: false, saving: null, error: null, copied: null, view: 'original', find: '', hitAt: 0, peaks: null,
@@ -14,6 +15,8 @@
             init() {
                 // Show as: open in the default view (Settings) when it is made for this recording.
                 if (this.d.views && this.d.views.status === 'ready' && this.d.views.default && this.d.views[this.d.views.default]) this.view = this.d.views.default;
+                // Since v1.6 (P5.5): Send to WhatsApp sends the view being read; the page learns it with its next request.
+                if (this.d.tells_view) { const tell = (v) => $wire.$set('readingView', v, false); tell(this.view); this.$watch('view', tell); }
                 const a = this.$refs.audio;
                 if (!a) return;
                 a.addEventListener('play', () => { this.playing = true; this.tick(); });

@@ -33,7 +33,10 @@ class TranscriptPlayerEntry extends Entry
     {
         $record = $this->getRecord();
 
-        return $record instanceof CaptureSession ? self::payload($record) : self::payload(null);
+        $data = $record instanceof CaptureSession ? self::payload($record) : self::payload(null);
+
+        // Since v1.6 (P5.5): the page wants the view being read (Send to WhatsApp → Text only).
+        return [...$data, 'tells_view' => property_exists($this->getLivewire(), 'readingView')];
     }
 
     /**
