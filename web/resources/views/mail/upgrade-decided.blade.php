@@ -3,6 +3,12 @@
 # You are on {{ $plan }} now
 
 Thank you! Everything in {{ $plan }} is on in your apps and the console{{ $until ? ' until '.$until : '' }}. Open the app again if it still shows a lock.
+
+@if ($reply)
+<x-mail::panel>
+{{ $reply }}
+</x-mail::panel>
+@endif
 @else
 # About your request for {{ $plan }}
 

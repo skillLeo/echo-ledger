@@ -177,10 +177,12 @@ reports.
 
 ### Upgrade requests (since v1.6)
 
-**Admin panel → Upgrade requests** lists who asked for which plan, with their message (the badge counts the waiting ones;
-the bell tells you too). Once the payment is confirmed press **Approve**: choose the plan and, if you like, until when
-(then it goes back to the default plan). **Decline** needs a reply. Either way the person gets an email and a
-notification in the apps. One request waits at a time per person.
+**Admin panel → Upgrade requests** lists the waiting requests first: who asked, the plan they are **On now**, the plan
+they ask for and their message (the badge counts the waiting ones; the bell tells you too; **Status** shows the
+approved and declined ones). **Customer** opens their page. Once the payment is confirmed press **Approve**: choose the
+plan (archived plans are not offered), if you like until when (then it goes back to the default plan), and an optional
+word to them. **Decline** needs a reply. Either way the person gets an email and a notification in the apps, with your
+words. One request waits at a time per person.
 
 ## 5. Usage and costs
 
