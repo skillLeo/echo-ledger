@@ -64,7 +64,7 @@ final class ChunkedUploadService
         if ($size > (int) config('echoledger.max_recording_bytes')) {
             throw ValidationException::withMessages(['artifacts' => 'Recording exceeds the maximum allowed size.']);
         }
-        app(PlanLimits::class)->assertStorage($session->workspace_id, $size);
+        app(PlanLimits::class)->assertStorage($session->workspace_id, $size, $session->user_id);
 
         return $session->recordings()->create([
             'role' => $artifact['role'],

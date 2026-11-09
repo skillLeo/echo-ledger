@@ -30,6 +30,8 @@ final class TranscriptViewsController extends Controller
         $transcript = $this->transcript($request, $id);
         try {
             $state = $views->request($transcript);
+        } catch (ApiError $e) {
+            throw $e; // since v1.6: 403 feature_not_in_plan
         } catch (RuntimeException $e) {
             throw new ApiError(409, 'views_unavailable', $e->getMessage());
         }

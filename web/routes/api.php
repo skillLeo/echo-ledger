@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\ClientWorkspaceController;
 use App\Http\Controllers\Api\ConfigController;
 use App\Http\Controllers\Api\DeviceController;
 use App\Http\Controllers\Api\DeviceReportController;
+use App\Http\Controllers\Api\EntitlementsController;
 use App\Http\Controllers\Api\ExportController;
 use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
@@ -75,6 +76,8 @@ Route::middleware(['auth:sanctum', TouchDevice::class])->group(function (): void
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
+        // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
+        Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 

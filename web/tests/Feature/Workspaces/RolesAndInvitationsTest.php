@@ -620,6 +620,6 @@ describe('sign-up', function () {
             ->and($plan->retention_days)->toBe(30)
             ->and($plan->seats)->toBe(1)
             ->and($plan->aiCredits())->toBe(1.0)
-            ->and($plan->featureMap())->toBe(['live_translate' => false, 'screen_moments' => true, 'ai_notes' => false, 'connector' => true]);
+            ->and(array_intersect_key($plan->featureMap(), array_flip(Plan::V15_FEATURES)))->toBe(['screen_moments' => true, 'connector' => true, 'live_translate' => false, 'ai_notes' => false]);
     });
 });

@@ -79,7 +79,7 @@ final class ClientWorkspaceController extends Controller
     public function storeMemory(Request $request, string $id): JsonResponse
     {
         $client = $this->client($request, $id);
-        app(PlanLimits::class)->assertFeature($client->workspace_id, 'ai_notes');
+        app(PlanLimits::class)->assertFeature($client->workspace_id, 'ai_notes', $client->user_id);
         $data = $request->validate([
             'kind' => ['required', Rule::in(ClientMemoryItem::KINDS)],
             'text' => ['required', 'string', 'max:500'],

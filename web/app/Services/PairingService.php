@@ -32,7 +32,7 @@ final class PairingService
         }
 
         // The device joins the workspace the user is working in when they make the code (B20).
-        app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id);
+        app(PlanLimits::class)->assertDevices((int) $user->current_workspace_id, $user->id);
         DevicePairingCode::query()->create([
             'workspace_id' => $user->current_workspace_id,
             'user_id' => $user->id,
@@ -97,7 +97,7 @@ final class PairingService
      */
     public function createDevice(int $workspaceId, int $userId, array $attributes, ?string $ip, ?string $country = null, ?string $signedInWith = null): array
     {
-        app(PlanLimits::class)->assertDevices($workspaceId);
+        app(PlanLimits::class)->assertDevices($workspaceId, $userId);
 
         $device = new Device([
             'workspace_id' => $workspaceId,

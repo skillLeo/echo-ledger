@@ -302,7 +302,8 @@ class WorkspaceSettings extends Page implements HasTable
     {
         $workspace = $this->workspaceOrFail();
         try {
-            app(PlanLimits::class)->assertSeat($workspace->id);
+            app(PlanLimits::class)->assertFeature($workspace->id, 'team', $this->user()->id);
+            app(PlanLimits::class)->assertSeat($workspace->id, null, $this->user()->id);
         } catch (ApiError $e) {
             Notification::make()->title($e->getMessage())->danger()->send();
 

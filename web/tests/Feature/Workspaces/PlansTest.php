@@ -14,6 +14,7 @@ use App\Models\Workspace;
 use App\Services\Accounts\Invitations;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
+use App\Services\Entitlements\Features;
 use App\Services\RetentionPolicy;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\PlanLimits;
@@ -195,12 +196,14 @@ describe('features on their routes', function () {
         expect(unscoped(fn () => $session->fresh()->callNote))->toBeNull();
     });
 
-    it('never switches off transcript views or suggested fixes', function () {
+    it('never switches off suggested fixes, nor the free features; since v1.6 views are a paid feature', function () {
         $plan = Plan::free();
 
-        expect($plan->allows('views'))->toBeTrue()->and($plan->allows('suggestions'))->toBeTrue();
-        // Not features at all: a plan cannot name them on the Plans page.
-        expect(Plan::FEATURES)->toBe(['live_translate', 'screen_moments', 'ai_notes', 'connector']);
+        expect($plan->allows('suggestions'))->toBeTrue()->and($plan->allows('record'))->toBeTrue()->and($plan->allows('export'))->toBeTrue();
+        // Suggested fixes are no feature at all: a plan cannot name them on the Plans page. Every paid feature it can.
+        expect(Plan::FEATURES)->toBe(Features::paid())->and(Plan::FEATURES)->toContain('views')->not->toContain('suggestions');
+        $plan->update(['features' => ['record' => false]]);
+        expect($plan->fresh()->allows('record'))->toBeTrue();
     });
 });
 

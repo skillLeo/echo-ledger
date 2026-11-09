@@ -68,6 +68,8 @@ final class AuditLog
         'workspace_renamed' => 'Workspace renamed',
         'settings_changed' => 'Settings changed',
         'test_email_sent' => 'Test email sent',
+        // Since v1.6: plans and a person's own features and limits.
+        'entitlements_changed' => 'Features and limits changed for a person',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',

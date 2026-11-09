@@ -109,6 +109,7 @@ function abilityRoutes(): array
         'meeting pack' => ['GET', "/api/sessions/{$id}/pack", 'library:read'],
         'sign out everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
         'your account' => ['GET', '/api/account', 'config:read'],
+        'your entitlements' => ['GET', '/api/me/entitlements', 'config:read'],
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],

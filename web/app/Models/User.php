@@ -48,6 +48,7 @@ use Laravel\Passport\HasApiTokens;
  * @property array<string, bool>|null $email_preferences Profile → Emails per category (since v1.5, Phase 1C; App\Services\Accounts\EmailPreferences)
  * @property array<string, mixed>|null $console_preferences the console's Library group and sort per view (since v1.5, Phase 1C)
  * @property bool $has_password whether its owner chose a password (since v1.6: an account made with a code or Google has none)
+ * @property array{features?: array<string, bool>, limits?: array<string, int|float|null>}|null $entitlement_overrides the super admin's own settings for this person (since v1.6)
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
@@ -148,6 +149,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'email_preferences' => 'array',
             'console_preferences' => 'array',
             'has_password' => 'boolean',
+            'entitlement_overrides' => 'array',
             'terms_accepted_at' => 'datetime',
         ];
     }

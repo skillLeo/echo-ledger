@@ -173,7 +173,7 @@ final class ClientWorkspace
                 return;
             }
             // Since v1.5 a plan may leave the notes out, never the suggested fixes that otherwise come with them.
-            if (! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes')) {
+            if (! app(PlanLimits::class)->allows($session->workspace_id, 'ai_notes', $session->user_id)) {
                 MakeSuggestedFixesJob::dispatch($session->id);
 
                 return;
@@ -565,7 +565,7 @@ final class ClientWorkspace
     {
         $brief = ClientBrief::query()->withoutGlobalScopes()->where('client_id', $client->id)->first();
         // Without AI notes in the plan the brief stays as it is, rather than showing a failed remake nobody asked for.
-        if ($brief?->edited !== true && app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
+        if ($brief?->edited !== true && app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes', $client->user_id)) {
             RefreshClientBriefJob::dispatch($client->id);
         }
     }

@@ -98,7 +98,7 @@ final class TranscribeFinalJob implements ShouldQueue
         $provider = SttProviderKey::from($transcript->provider);
         // Monthly limit (A5 server cap or the workspace plan, B20): nothing is sent to a paid provider once it is reached
         // (Retry from the console after raising it).
-        if (UsageLedger::isBillable($provider) && (app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id))) {
+        if (UsageLedger::isBillable($provider) && (app(BudgetGuard::class)->limitReached() || app(PlanLimits::class)->minutesReached($session->workspace_id, $session->user_id))) {
             $store->failWith($transcript, TranscriptErrorCode::BudgetExceeded);
 
             return;

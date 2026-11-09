@@ -8,9 +8,15 @@ use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditLog;
+use App\Services\Entitlements\Entitlements;
+use App\Services\Entitlements\Features;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\ColorPicker;
+use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
@@ -19,11 +25,15 @@ use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Schema;
+use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Table;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Unique;
 use UnitEnum;
@@ -70,8 +80,10 @@ class Plans extends Page implements HasTable
             ->query(fn () => Plan::query()->withCount('workspaces'))
             ->defaultSort('id')
             ->columns([
-                TextColumn::make('name')->description(fn (Plan $record): string => $record->key),
-                TextColumn::make('price_usd')->label('Price')->formatStateUsing(fn ($state): string => '$'.number_format((float) $state, 2)),
+                TextColumn::make('name')->description(fn (Plan $record): string => $record->key.($record->is_default ? ' · default for sign-ups' : '').($record->on_offer ? ' · on offer' : '')),
+                TextColumn::make('badge')->label('Badge')->state(fn (Plan $record): string => $record->badgeText())->badge()
+                    ->color(fn (Plan $record): array => Color::hex($record->colorOrDefault())),
+                TextColumn::make('price_usd')->label('Price')->state(fn (Plan $record): string => Entitlements::planCard($record)['price']),
                 TextColumn::make('monthly_minutes')->label('Minutes')->numeric()->placeholder('No limit'),
                 TextColumn::make('storage_bytes')->label('Storage')->formatStateUsing(fn ($state): string => round((int) $state / 1024 ** 3, 1).' GB')->placeholder('No limit'),
                 TextColumn::make('max_devices')->label('Devices')->placeholder('No limit'),
@@ -85,6 +97,31 @@ class Plans extends Page implements HasTable
                 TextColumn::make('workspaces_count')->label('Workspaces')->numeric(),
             ])
             ->headerActions([
+                // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
+                Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
+                    ->modalDescription('For one person, on top of the plan of the workspace they work in. "The plan\'s" keeps what the plan says.')
+                    ->schema(fn (): array => [
+                        Select::make('user_id')->label('Person')->required()->searchable()->live()
+                            ->getSearchResultsUsing(fn (string $search): array => User::query()->where('email', 'like', '%'.str_replace(['%', '_'], ['\\%', '\\_'], $search).'%')
+                                ->orderBy('email')->limit(20)->pluck('email', 'id')->all())
+                            ->getOptionLabelUsing(fn ($value): ?string => User::query()->whereKey($value)->value('email'))
+                            ->afterStateUpdated(fn ($state, $set) => collect(self::overridesToForm(User::query()->find($state)))->each(fn ($v, $k) => $set($k, $v))),
+                        Grid::make(['default' => 2])->schema(array_map(fn (string $f): Select => Select::make("override_feature_{$f}")->label(Plan::FEATURE_LABELS[$f])
+                            ->options(['plan' => 'The plan\'s', 'on' => 'On', 'off' => 'Off'])->default('plan')->selectablePlaceholder(false), Plan::FEATURES)),
+                        Grid::make(['default' => 2])->schema(array_map(fn (string $l): TextInput => TextInput::make("override_limit_{$l}")->label(Features::LIMIT_LABELS[$l])
+                            ->placeholder('The plan\'s')->helperText($l === 'storage_bytes' ? 'In GB. "none" for no limit.' : '"none" for no limit.')
+                            ->regex('/^(none|\d+(\.\d+)?)$/i'), array_values(array_diff(array_keys(Features::LIMITS), ['retention_days'])))),
+                    ])
+                    ->action(function (array $data): void {
+                        $user = User::query()->find((int) $data['user_id']);
+                        if (! $user instanceof User) {
+                            return;
+                        }
+                        $user->forceFill(['entitlement_overrides' => self::overridesFromForm($data)])->save();
+                        app(Entitlements::class)->forget();
+                        app(AuditLog::class)->record('entitlements_changed', (int) auth()->id(), $user, 'Features and limits changed for '.Str::limit($user->email, 120, ''));
+                        Notification::make()->title(e("Saved for {$user->email}"))->success()->send();
+                    }),
                 Action::make('create')->label('New plan')->icon(Heroicon::OutlinedPlus)
                     ->schema(fn (): array => [
                         TextInput::make('key')->required()->maxLength(32)->regex('/^[a-z0-9][a-z0-9_-]*$/')
@@ -92,10 +129,12 @@ class Plans extends Page implements HasTable
                             ->rule(fn (): Unique => Rule::unique('plans', 'key')),
                         ...$this->planFields(),
                     ])
-                    // In-app AI is off in a new plan until someone switches it on (it costs money on every call).
-                    ->fillForm(fn (): array => ['price_usd' => 0, ...array_fill_keys(array_map(fn (string $f): string => "feature_{$f}", Plan::FEATURES), true), 'feature_ai_notes' => false])
+                    // A new plan grants no paid feature until someone switches it on (each costs money to run).
+                    ->fillForm(fn (): array => ['price_usd' => 0, 'trial_minutes' => 0, 'sort_order' => 50, 'color' => '#64748b', 'engines' => Features::OWN_ENGINES,
+                        ...array_fill_keys(array_map(fn (string $f): string => "feature_{$f}", Plan::FEATURES), false)])
                     ->action(function (array $data): void {
                         $plan = Plan::query()->create(['key' => $data['key'], ...self::fromForm($data)]);
+                        self::keepOneDefault($plan);
                         app(AuditLog::class)->record('plan_created', (int) auth()->id(), $plan, "Plan {$plan->name} made");
                         Notification::make()->title("Plan {$plan->name} made")->success()->send();
                     }),
@@ -106,23 +145,28 @@ class Plans extends Page implements HasTable
                     ->fillForm(fn (Plan $record): array => self::toForm($record))
                     ->action(function (Plan $record, array $data): void {
                         $record->update(self::fromForm($data));
+                        self::keepOneDefault($record);
                         app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, "Plan {$record->name} changed");
                         Notification::make()->title("Plan {$record->name} saved")->success()->send();
                     }),
                 Action::make('assign')->label('Assign')->icon(Heroicon::OutlinedArrowRightCircle)->color('gray')
-                    ->modalDescription('The workspace is on this plan from now on: its limits and features apply at once.')
-                    ->schema([Select::make('workspace_id')->label('Workspace')->required()->searchable()
-                        ->options(fn (): array => Workspace::query()->orderBy('name')->limit(1000)->pluck('name', 'id')->all())])
+                    ->modalDescription('The workspace is on this plan from now on: its limits and features apply at once. With an end date it goes back to the default plan then.')
+                    ->schema([
+                        Select::make('workspace_id')->label('Workspace')->required()->searchable()->options(fn (): array => self::workspaceOptions()),
+                        DateTimePicker::make('until')->label('Until (optional)')->minDate(now())->seconds(false),
+                    ])
                     ->action(function (Plan $record, array $data): void {
                         $workspace = Workspace::query()->find((int) $data['workspace_id']);
                         if ($workspace instanceof Workspace) {
-                            $workspace->forceFill(['plan_id' => $record->id])->save();
-                            app(AuditLog::class)->record('plan_assigned', (int) auth()->id(), $workspace, "{$workspace->name} is now on the {$record->name} plan");
-                            Notification::make()->title("{$workspace->name} is now on {$record->name}")->success()->send();
+                            $until = filled($data['until'] ?? null) ? Carbon::parse((string) $data['until']) : null;
+                            $workspace->forceFill(['plan_id' => $record->id, 'plan_expires_at' => $until])->save();
+                            app(Entitlements::class)->forget();
+                            app(AuditLog::class)->record('plan_assigned', (int) auth()->id(), $workspace, "{$workspace->name} is now on the {$record->name} plan".($until !== null ? ' until '.$until->toDateString() : ''));
+                            Notification::make()->title(e("{$workspace->name} is now on {$record->name}"))->success()->send();
                         }
                     }),
                 Action::make('delete')->label('Delete')->icon(Heroicon::OutlinedTrash)->color('danger')
-                    ->visible(fn (Plan $record): bool => ! in_array($record->key, [Plan::PERSONAL, Plan::FREE], true) && (int) $record->getAttribute('workspaces_count') === 0)
+                    ->visible(fn (Plan $record): bool => ! in_array($record->key, [Plan::PERSONAL, Plan::FREE], true) && ! $record->is_default && (int) $record->getAttribute('workspaces_count') === 0)
                     ->requiresConfirmation()
                     ->action(function (Plan $record): void {
                         // Checked again: a workspace may have moved to it since the list was drawn (the key restricts too).
@@ -146,16 +190,112 @@ class Plans extends Page implements HasTable
         return [
             TextInput::make('name')->required()->maxLength(80),
             Grid::make(['default' => 2])->schema([
+                TextInput::make('badge')->label('Badge')->maxLength(16)->helperText('Shown on locked features, e.g. PRO.'),
+                ColorPicker::make('color')->label('Badge colour')->regex('/^#[0-9a-fA-F]{6}$/'),
+                TextInput::make('price_label')->label('Price as shown')->maxLength(80)->placeholder('Rs 2,000 a month'),
                 TextInput::make('price_usd')->label('Price (US$ a month)')->numeric()->minValue(0)->maxValue(100000)->required(),
+                TextInput::make('sort_order')->label('Order on the comparison')->integer()->minValue(0)->maxValue(1000)->required(),
+                TextInput::make('trial_minutes')->label('Trial minutes')->integer()->minValue(0)->maxValue(100000)->required()
+                    ->helperText('Transcription on EchoLedger a person may try once without that feature.'),
+            ]),
+            Textarea::make('description')->maxLength(500)->rows(2),
+            Grid::make(['default' => 2])->schema([
+                Toggle::make('on_offer')->label('On offer')->helperText('Listed in the apps\' plan comparison.'),
+                Toggle::make('is_default')->label('Default for sign-ups')->helperText('New accounts get it, and a plan that ends falls back to it.'),
+            ]),
+            Grid::make(['default' => 2])->schema([
                 TextInput::make('monthly_minutes')->label('Minutes a month')->integer()->minValue(0)->maxValue(100000000),
                 TextInput::make('storage_gb')->label('Storage (GB)')->numeric()->minValue(0)->maxValue(1000000),
-                TextInput::make('max_devices')->label('Devices')->integer()->minValue(0)->maxValue(100000),
-                TextInput::make('retention_days')->label('Retention (days)')->integer()->minValue(1)->maxValue(3650),
+                TextInput::make('max_devices')->label('Devices per person')->integer()->minValue(0)->maxValue(100000),
+                TextInput::make('retention_days')->label('Retention (days)')->integer()->minValue(1)->maxValue(3650)
+                    ->helperText('Applies to recordings made after it is set; older ones are never deleted by it.'),
                 TextInput::make('seats')->integer()->minValue(1)->maxValue(100000),
                 TextInput::make('ai_credits_usd')->label('AI credits (US$ a month)')->numeric()->minValue(0)->maxValue(100000),
+                TextInput::make('max_file_minutes')->label('Longest recording (minutes)')->integer()->minValue(1)->maxValue(100000),
+                TextInput::make('uploads_per_day')->label('Recordings a day')->integer()->minValue(1)->maxValue(100000),
             ]),
-            ...array_map(fn (string $feature): Toggle => Toggle::make("feature_{$feature}")->label(Plan::FEATURE_LABELS[$feature]), Plan::FEATURES),
+            CheckboxList::make('engines')->label('Engines')->columns(2)
+                ->options(self::ENGINE_LABELS)
+                ->helperText('Leave every box ticked for every engine. Premium engines also need the Premium engines feature.'),
+            ...array_map(fn (string $feature): Toggle => Toggle::make("feature_{$feature}")->label(Plan::FEATURE_LABELS[$feature])
+                ->helperText(Features::ALL[$feature]['description']), Plan::FEATURES),
         ];
+    }
+
+    /** What the engines are called on the Plans page. */
+    private const ENGINE_LABELS = [
+        'own_groq' => 'The person\'s own Groq key', 'on_device' => 'On the computer (desktop)', 'assemblyai' => 'AssemblyAI', 'groq' => 'Groq (the server\'s key)',
+        'soniox' => 'Soniox', 'azure_mai' => 'Azure Speech', 'elevenlabs' => 'ElevenLabs (premium)', 'gemini' => 'Gemini (premium)',
+    ];
+
+    /** @return array<int, string> workspaces as "Name · owner's email", for the Assign list */
+    private static function workspaceOptions(): array
+    {
+        $owners = DB::table('workspace_user')->join('users', 'users.id', '=', 'workspace_user.user_id')->where('workspace_user.role', 'owner')
+            ->pluck('users.email', 'workspace_user.workspace_id');
+
+        return Workspace::query()->orderBy('name')->limit(1000)->get(['id', 'name'])
+            ->mapWithKeys(fn (Workspace $w): array => [$w->id => $w->name.(isset($owners[$w->id]) ? ' · '.$owners[$w->id] : '')])->all();
+    }
+
+    /** @return array<string, string|null> */
+    private static function overridesToForm(?User $user): array
+    {
+        $raw = $user === null ? [] : ($user->entitlement_overrides ?? []);
+        $form = [];
+        foreach (Plan::FEATURES as $feature) {
+            $value = $raw['features'][$feature] ?? null;
+            $form["override_feature_{$feature}"] = $value === true ? 'on' : ($value === false ? 'off' : 'plan');
+        }
+        foreach (array_keys(Features::LIMITS) as $limit) {
+            if (! is_array($raw['limits'] ?? null) || ! array_key_exists($limit, $raw['limits'])) {
+                $form["override_limit_{$limit}"] = null;
+
+                continue;
+            }
+            $value = $raw['limits'][$limit];
+            $form["override_limit_{$limit}"] = $value === null ? 'none' : (string) ($limit === 'storage_bytes' ? round((int) $value / 1024 ** 3, 2) : $value);
+        }
+
+        return $form;
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{features: array<string, bool>, limits: array<string, int|float|null>}|null
+     */
+    private static function overridesFromForm(array $data): ?array
+    {
+        $features = [];
+        foreach (Plan::FEATURES as $feature) {
+            $choice = $data["override_feature_{$feature}"] ?? 'plan';
+            if ($choice === 'on' || $choice === 'off') {
+                $features[$feature] = $choice === 'on';
+            }
+        }
+        $limits = [];
+        foreach (array_keys(Features::LIMITS) as $limit) {
+            $value = trim((string) ($data["override_limit_{$limit}"] ?? ''));
+            if ($value === '' || $limit === 'retention_days') {
+                continue;
+            }
+            $limits[$limit] = strtolower($value) === 'none' ? null : match ($limit) {
+                'storage_bytes' => (int) round((float) $value * 1024 ** 3),
+                'ai_usd_month' => (float) $value,
+                default => (int) $value,
+            };
+        }
+
+        return $features === [] && $limits === [] ? null : ['features' => $features, 'limits' => $limits];
+    }
+
+    /** One plan is the default for sign-ups: marking another one moves it. */
+    private static function keepOneDefault(Plan $plan): void
+    {
+        if ($plan->is_default) {
+            Plan::query()->whereKeyNot($plan->id)->where('is_default', true)->update(['is_default' => false]);
+        }
+        app(Entitlements::class)->forget();
     }
 
     /** @return array<string, mixed> */
@@ -163,6 +303,17 @@ class Plans extends Page implements HasTable
     {
         return [
             'name' => $plan->name,
+            'badge' => $plan->badge,
+            'color' => $plan->colorOrDefault(),
+            'price_label' => $plan->price_label,
+            'sort_order' => $plan->sort_order,
+            'trial_minutes' => $plan->trial_minutes,
+            'description' => $plan->description,
+            'on_offer' => $plan->on_offer,
+            'is_default' => $plan->is_default,
+            'max_file_minutes' => $plan->max_file_minutes,
+            'uploads_per_day' => $plan->uploads_per_day,
+            'engines' => $plan->engineList(),
             'price_usd' => $plan->price_usd,
             'monthly_minutes' => $plan->monthly_minutes,
             'storage_gb' => $plan->storage_bytes === null ? null : round($plan->storage_bytes / 1024 ** 3, 2),
@@ -182,8 +333,21 @@ class Plans extends Page implements HasTable
     {
         $number = fn (string $key): ?int => filled($data[$key] ?? null) ? (int) $data[$key] : null;
 
+        $engines = array_values(array_intersect(Features::ENGINES, (array) ($data['engines'] ?? [])));
+
         return [
             'name' => trim((string) $data['name']),
+            'badge' => filled($data['badge'] ?? null) ? mb_strtoupper(trim((string) $data['badge'])) : null,
+            'color' => is_string($data['color'] ?? null) && preg_match('/^#[0-9a-fA-F]{6}$/', $data['color']) === 1 ? strtolower($data['color']) : null,
+            'price_label' => filled($data['price_label'] ?? null) ? trim((string) $data['price_label']) : null,
+            'sort_order' => max(0, (int) ($data['sort_order'] ?? 0)),
+            'trial_minutes' => max(0, (int) ($data['trial_minutes'] ?? 0)),
+            'description' => filled($data['description'] ?? null) ? trim((string) $data['description']) : null,
+            'on_offer' => (bool) ($data['on_offer'] ?? false),
+            'is_default' => (bool) ($data['is_default'] ?? false),
+            'max_file_minutes' => $number('max_file_minutes'),
+            'uploads_per_day' => $number('uploads_per_day'),
+            'engines' => count($engines) === count(Features::ENGINES) ? null : $engines,
             'price_usd' => (float) ($data['price_usd'] ?? 0),
             'monthly_minutes' => $number('monthly_minutes'),
             'storage_bytes' => filled($data['storage_gb'] ?? null) ? (int) round((float) $data['storage_gb'] * 1024 ** 3) : null,

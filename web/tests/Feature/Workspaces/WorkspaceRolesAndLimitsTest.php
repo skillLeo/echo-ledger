@@ -220,7 +220,7 @@ describe('plan limits', function () {
             ->and($plan->retention_days)->toBeNull()
             ->and($plan->seats)->toBeNull()
             ->and($plan->aiCredits())->toBeNull()
-            ->and($plan->featureMap())->toBe(['live_translate' => true, 'screen_moments' => true, 'ai_notes' => true, 'connector' => true]);
+            ->and($plan->featureMap())->toBe(['platform_transcription' => true, 'views' => true, 'double_check' => true, 'screen_moments' => true, 'connector' => true, 'team' => true, 'premium_engines' => true, 'live_translate' => true, 'ai_notes' => true]);
     });
 
     it('refuses streaming tokens once the workspace used its monthly minutes, and only for that workspace', function () {
@@ -246,15 +246,21 @@ describe('plan limits', function () {
     it('refuses pairing past the device limit, in the console and at redeem time', function () {
         $t = team(); // two devices
         $code = app(PairingService::class)->createCode($t['owner']);
-        Plan::personal()->update(['max_devices' => 2]);
+        // Since v1.6 a person's own devices count (the member's do not take the owner's): one each is the limit here.
+        Plan::personal()->update(['max_devices' => 1]);
 
-        expect(fn () => app(PairingService::class)->createCode($t['owner']))->toThrow(ApiError::class, PlanLimits::DEVICES_MESSAGE);
+        expect(fn () => app(PairingService::class)->createCode($t['owner']))->toThrow(ApiError::class, PlanLimits::devicesMessage(1));
         $this->api()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'Third', 'platform' => 'android'])
-            ->assertForbidden()->assertJson(['code' => 'device_limit_reached', 'message' => PlanLimits::DEVICES_MESSAGE]);
+            ->assertForbidden()->assertJson(['code' => 'device_limit_reached', 'message' => PlanLimits::devicesMessage(1), 'limit' => 'devices']);
+        // A v1.6 app gets the one code for every limit.
+        $this->api()->postJson('/api/devices/register', ['pairing_code' => $code, 'name' => 'Third', 'platform' => 'android', 'app_version' => '1.6.0'])
+            ->assertForbidden()->assertJson(['code' => 'limit_reached', 'limit' => 'devices']);
 
         $this->actingAs($t['owner'], 'web');
         Filament::setCurrentPanel('admin');
-        Livewire::test(ListDevices::class)->mountAction('pair')->assertActionDataSet(['pairing' => ['error' => PlanLimits::DEVICES_MESSAGE]]);
+        Livewire::test(ListDevices::class)->mountAction('pair')->assertActionDataSet(['pairing' => ['error' => PlanLimits::devicesMessage(1)]]);
+        Plan::personal()->update(['max_devices' => 2]);
+        expect(app(PairingService::class)->createCode($t['owner']))->toBeString();
     });
 
     it('alerts every owner of the workspace at 80 % and 100 % of the plan minutes, once each, and nobody else', function () {

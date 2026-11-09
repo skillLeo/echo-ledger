@@ -87,7 +87,7 @@ final class ConnectorCalls
         if ($workspace === null) {
             throw new ToolError('Your account is in no workspace.');
         }
-        if (! $this->plans->allows($workspace->id, 'connector')) {
+        if (! $this->plans->allows($workspace->id, 'connector', $person->id)) {
             throw new ToolError(self::NOT_IN_PLAN);
         }
 

@@ -8,6 +8,7 @@ use App\Enums\WorkspaceRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Support\Carbon;
 
 /**
  * The tenant boundary (B20): every device, pairing code, client, recording and usage row belongs to one workspace;
@@ -17,11 +18,18 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property int $id
  * @property string $name
  * @property int $plan_id
+ * @property Carbon|null $plan_expires_at since v1.6: the plan lasts until then, then the default plan
  * @property-read Plan $plan
  */
 class Workspace extends Model
 {
     protected $fillable = ['name', 'plan_id'];
+
+    /** @return array<string, string> */
+    protected function casts(): array
+    {
+        return ['plan_expires_at' => 'datetime'];
+    }
 
     /** @return BelongsTo<Plan, $this> */
     public function plan(): BelongsTo

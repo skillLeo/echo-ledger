@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Enums\SttUseCase;
 use App\Models\Device;
+use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\Usage\UsageSummary;
@@ -103,16 +104,22 @@ final class DeviceConfigPayload
     {
         $limits = app(PlanLimits::class);
         $plan = $limits->plan($device->workspace_id);
+        // Since v1.6 made from the person's entitlements (overrides included), with the four features v1.5 apps read.
+        $features = [];
+        foreach (Plan::V15_FEATURES as $feature) {
+            $features[$feature] = $limits->allows($device->workspace_id, $feature, $device->user_id);
+        }
+        $limit = fn (string $key): int|float|null => $limits->limit($device->workspace_id, $key, $device->user_id);
 
         return [
             'key' => $plan->key,
             'name' => $plan->name,
-            'features' => $plan->featureMap(),
+            'features' => $features,
             'limits' => [
-                'monthly_minutes' => $plan->monthly_minutes,
-                'storage_bytes' => $plan->storage_bytes,
-                'retention_days' => $plan->retention_days,
-                'seats' => $plan->seats,
+                'monthly_minutes' => $limit('monthly_minutes'),
+                'storage_bytes' => $limit('storage_bytes'),
+                'retention_days' => $limit('retention_days'),
+                'seats' => $limit('seats'),
             ],
             'used' => [
                 'minutes' => (int) round($limits->minutesUsed($device->workspace_id)),

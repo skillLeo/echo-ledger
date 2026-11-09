@@ -32,6 +32,7 @@ use App\Services\SessionMarkers;
 use App\Services\Sharing\Teammates;
 use App\Services\TranscriptEditor;
 use App\Services\TranscriptStore;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\Data\NormalizedTranscript;
 use App\Stt\Data\Segment;
@@ -132,6 +133,11 @@ final class SessionController extends Controller
             }
         }
 
+        // Since v1.6 the plan's recordings a day and longest recording (403 limit_reached, older apps their old code).
+        $limits = app(PlanLimits::class);
+        $limits->assertUploadsToday($device->workspace_id, $device->user_id);
+        $limits->assertFileMinutes($device->workspace_id, self::longestOf($data), $device->user_id);
+
         try {
             $session = $withArtifacts ? $lifecycle->createWithArtifacts($device, $data) : $lifecycle->open($device, $data);
         } catch (UniqueConstraintViolationException $e) {
@@ -191,8 +197,22 @@ final class SessionController extends Controller
             ...CallerMatcher::rules(),
         ]);
         $this->assertArtifactRoles($data['artifacts']);
+        app(PlanLimits::class)->assertFileMinutes($device->workspace_id, self::longestOf($data), $device->user_id);
 
         return $this->sessionCreatedResponse($lifecycle->finish($device, $session, $data), $stt, 200);
+    }
+
+    /**
+     * The longest duration a create or finish names (the recording's, or its longest file's), for the plan's longest
+     * recording.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private static function longestOf(array $data): ?int
+    {
+        $durations = array_filter([$data['duration_ms'] ?? null, ...array_map(fn ($a) => is_array($a) ? ($a['duration_ms'] ?? null) : null, (array) ($data['artifacts'] ?? []))], 'is_numeric');
+
+        return $durations === [] ? null : (int) max($durations);
     }
 
     /**

@@ -246,6 +246,8 @@ function isoApiCases(array $b): array
         // Your account (v1.5): only the device's own person, never workspace B. Signing out everywhere ends this
         // device's token too, so it comes last.
         'api.account' => ['GET', '/api/account', [], 'list'],
+        // Entitlements (v1.6): only the device's own person in its own workspace, never B's numbers or names.
+        'api.me.entitlements' => ['GET', '/api/me/entitlements', [], 'list'],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
