@@ -250,6 +250,14 @@ const SCREENS = [
     await page.getByRole("button", { name: "Text and voice" }).click();
     await page.waitForSelector(".whatsapp-done");
   }],
+  // v1.6.1 (Notices): a toast that goes somewhere, with × and its timer bar (reduced motion keeps the bar still).
+  ["toast", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.keyboard.press("Control+k");
+    await page.locator(".palette-input").fill("sync the library");
+    await page.keyboard.press("Enter");
+    await page.waitForSelector(".toast .notice-timer");
+  }],
   ["palette", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.keyboard.press("Control+k");

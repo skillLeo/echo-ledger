@@ -730,6 +730,21 @@ or Urdu text cut at a word, and a saved file's free name (16-W1, 16-W2: `whatsap
 | 16-N2 | Put up an announcement (info, then warning, with an end time a few minutes away); close it; restart the app. | It shows within a minute; closed stays closed after the restart; a new text shows again; it goes by itself at its end time. |
 | 16-N3 | Turn maintenance on for 5 minutes (Retry-After 60) while two recordings wait to upload; open the Library; then turn it off. | A quiet maintenance line, no error toast, no failed upload, the Library as saved; within a minute of the end both recordings upload by themselves. |
 
+### Desktop v1.6.1 notices (what only a real trackpad, mouse and touch screen can prove)
+
+The gestures' rules (a third of the width, a flick, springing back, a drag never a click), the timer and its pauses,
+Esc and every toast's target are tested (`lib/notice.test.ts`, `components/Notice.test.tsx`, `notices.test.ts`); these
+rows prove the real input devices. Make a toast with **Ctrl+K → Sync the library**, a banner by turning the Wi-Fi off and
+pressing **Sync** in the Library.
+
+| # | Check | Expected |
+|---|---|---|
+| 161-N1 | MacBook trackpad: two-finger swipe left on a toast, then right on another; then a short slow swipe. | It follows the fingers and fades; a full or quick swipe sends it off that side; a short slow one springs back and it stays. The page underneath does not go back or scroll sideways. |
+| 161-N2 | Windows precision touchpad, then a mouse: the same, and drag a toast with the left button. | The same with the touchpad's two fingers and with a mouse drag; letting go after a drag never opens what the toast is about. |
+| 161-N3 | A Windows laptop with a touch screen: drag a toast and a banner with a finger; press and hold a toast for 10 s. | Each follows the finger and leaves past a third of its width or on a flick, else springs back; holding it stops its timer bar, which goes on when the finger lifts. A plain tap opens what it is about. |
+| 161-N4 | Point at a toast for 10 s; Tab to its × and wait; press Esc; turn on Windows "Animation effects" off / macOS "Reduce motion". | The bar stops while pointed at or focused and goes on after; Esc closes it; with reduced motion it appears and goes without sliding and the bar stands still while the time still runs. |
+| 161-N5 | With Narrator (Windows) or VoiceOver (Mac): a success toast, then an error toast. | The success is read politely when the reader is idle; the error at once. × is read as "Dismiss". |
+
 ## Appendix B — Accessibility
 
 | # | Check | Expected |
