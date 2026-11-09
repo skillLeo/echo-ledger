@@ -93,7 +93,7 @@ impl ApiClient {
         let body: serde_json::Value = resp.json().await.unwrap_or_default();
         let code = body.get("code").and_then(|c| c.as_str()).map(str::to_string);
         let message = if code.as_deref() == Some("feature_not_in_plan") {
-            crate::plan::feature_text(body.get("feature").and_then(|f| f.as_str()))
+            crate::plan::feature_text_with(body.get("feature").and_then(|f| f.as_str()), body.get("lowest_plan").and_then(|f| f.as_str()))
         } else {
             body.get("message").and_then(|m| m.as_str()).unwrap_or("request failed").to_string()
         };
@@ -266,6 +266,60 @@ impl ApiClient {
             return Err(if e.code() == Some("invalid_code") { AppError::msg(crate::account::SIGN_UP_EXPIRED) } else { e });
         }
         Ok(resp.json::<RegisterResponse>().await?)
+    }
+
+    /// `GET /api/me/entitlements` (since v1.6): what this person may use; none from an older server (everything on).
+    pub async fn entitlements(&self) -> AppResult<Option<Entitlements>> {
+        let resp = self.authed(self.http.get(self.url("me/entitlements")))?.send().await?;
+        match Self::parse::<Entitlements>(resp).await {
+            Ok(e) => Ok(Some(e.checked())),
+            Err(e) if e.is_missing_route() => Ok(None),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// `PUT /api/me/transcription-key` (since v1.6): the person's own Groq key, checked by the server once. The key is
+    /// never logged and never comes back (only its last four characters).
+    pub async fn set_transcription_key(&self, provider: &str, key: &str) -> AppResult<TranscriptionKeyState> {
+        let resp = self.authed(self.http.put(self.url("me/transcription-key")))?.json(&json!({ "provider": provider, "key": key })).send().await?;
+        match Self::parse::<TranscriptionKeyState>(resp).await {
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take your own transcription key yet.")),
+            other => other,
+        }
+    }
+
+    /// `DELETE /api/me/transcription-key` (since v1.6).
+    pub async fn delete_transcription_key(&self) -> AppResult<()> {
+        let resp = self.authed(self.http.delete(self.url("me/transcription-key")))?.send().await?;
+        Self::ok_empty(resp).await
+    }
+
+    /// `POST /api/upgrade-requests` (since v1.6). One pending request at a time: `409 request_pending` answers with the
+    /// pending one, which is returned as if it had just been made.
+    pub async fn request_upgrade(&self, plan: &str, message: Option<&str>) -> AppResult<UpgradeRequest> {
+        let resp = self.authed(self.http.post(self.url("upgrade-requests")))?.json(&json!({ "plan": plan, "message": message })).send().await?;
+        if resp.status().as_u16() == 409 {
+            let body: serde_json::Value = resp.json().await.unwrap_or_default();
+            let pending = ["request", "upgrade_request", "data"].iter().find_map(|k| body.get(*k)).cloned().unwrap_or_else(|| body.clone());
+            return match serde_json::from_value::<UpgradeRequest>(pending).ok().filter(|r| !r.id.is_empty()) {
+                Some(request) => Ok(request),
+                None => Err(AppError::msg("You already asked for an upgrade. It is waiting for the owner.")),
+            };
+        }
+        match Self::parse::<UpgradeRequest>(resp).await {
+            Err(e) if e.is_missing_route() => Err(AppError::msg("This server does not take upgrade requests yet.")),
+            other => other,
+        }
+    }
+
+    /// `GET /api/upgrade-requests/latest` (since v1.6); none when there is none (or on an older server).
+    pub async fn latest_upgrade_request(&self) -> AppResult<Option<UpgradeRequest>> {
+        let resp = self.authed(self.http.get(self.url("upgrade-requests/latest")))?.send().await?;
+        match Self::parse::<UpgradeRequest>(resp).await {
+            Ok(request) => Ok(Some(request)),
+            Err(e) if e.status() == Some(404) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     /// `PATCH /api/devices/{id}` (v1.6, P3, proposed): a new name for one of the account's devices.

@@ -28,6 +28,8 @@ import { enterView, isConfirmation, MotionGroup, viewDirection } from "../../lib
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { ReadyChip } from "./ReadyCheck";
 import type { OneSided } from "../../lib/ipc";
+import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../../lib/entitlements";
+import { UpgradeSheet } from "./Upgrade";
 
 type Tab = MainTab;
 const TABS: readonly Tab[] = ["library", "projects", "record", "activity", "settings"];
@@ -330,6 +332,38 @@ export default function MainApp() {
   }, [ready, loadProjects, loadViews]);
   const changeProjects = useCallback((change: (list: ClientFolder[]) => ClientFolder[]) => setProjects((list) => change(list ?? [])), []);
 
+  // What this person may use (v1.6): read once signed in and whenever the window comes to the front; forgotten on
+  // signing out. An older server answers none, and nothing is locked.
+  useEffect(() => {
+    if (!paired) {
+      forgetEntitlements();
+      return;
+    }
+    if (!ready) return;
+    void refreshEntitlements();
+    const again = () => {
+      if (document.visibilityState !== "hidden") void refreshEntitlements();
+    };
+    window.addEventListener("focus", again);
+    document.addEventListener("visibilitychange", again);
+    return () => {
+      window.removeEventListener("focus", again);
+      document.removeEventListener("visibilitychange", again);
+    };
+  }, [paired, ready]);
+  // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
+  const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
+  useEffect(() => {
+    const open = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      if (typeof id !== "string") return;
+      setTab("settings");
+      setSettingsSection({ id, seq: ++navigations.current });
+    };
+    window.addEventListener(OPEN_SECTION_EVENT, open);
+    return () => window.removeEventListener(OPEN_SECTION_EVENT, open);
+  }, []);
+
   // An app link (docs/API.md "Links in the apps"): the server says what it is in this workspace, and the window opens
   // the recording, the project, the item of Shared with me or the request link. A link the app cannot open in place
   // (someone else's, revoked, expired, or another server's) opens its web page in the browser instead.
@@ -572,7 +606,7 @@ export default function MainApp() {
           <ActivityView status={status} notify={notify} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
             onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
         )}
-        {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} />}
+        {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
       </main>
       {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
@@ -584,6 +618,7 @@ export default function MainApp() {
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
+      <UpgradeSheet />
       {toastView}
     </div>
   );

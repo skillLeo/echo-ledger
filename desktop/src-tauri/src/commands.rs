@@ -505,7 +505,50 @@ pub fn server_page_open(app: AppHandle, page: String, server_url: Option<String>
     app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))
 }
 
-// ---- Devices (v1.6, P3) -----------------------------------------------------------------------------------------
+// ---- Entitlements, your own transcription key, upgrade requests (v1.6, P1) ----------------------------------------
+
+/// What this person may use (`GET /api/me/entitlements`); none from an older server, where everything stays on.
+#[tauri::command]
+pub async fn entitlements_get(app: AppHandle) -> AppResult<Option<crate::net::models::Entitlements>> {
+    app.state::<AppState>().api()?.entitlements().await
+}
+
+/// Account → Transcription key: the person's own Groq key, checked by the server. Never logged, never kept here.
+#[tauri::command]
+pub async fn transcription_key_set(app: AppHandle, key: String) -> AppResult<crate::net::models::TranscriptionKeyState> {
+    let key = crate::account::checked_groq_key(&key).map_err(AppError::Message)?;
+    app.state::<AppState>().api()?.set_transcription_key("groq", &key).await
+}
+
+#[tauri::command]
+pub async fn transcription_key_delete(app: AppHandle) -> AppResult<()> {
+    app.state::<AppState>().api()?.delete_transcription_key().await
+}
+
+/// Groq's API keys page, where the person makes their free key (the one address this opens).
+pub const GROQ_KEYS_PAGE: &str = "https://console.groq.com/keys";
+
+#[tauri::command]
+pub fn groq_console_open(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener().open_url(GROQ_KEYS_PAGE, None::<&str>).map_err(|e| AppError::msg(format!("The browser could not be opened: {e}")))
+}
+
+/// "Request upgrade" with an optional message; the pending request when one is waiting already.
+#[tauri::command]
+pub async fn upgrade_request_create(app: AppHandle, plan: String, message: Option<String>) -> AppResult<crate::net::models::UpgradeRequest> {
+    let plan = plan.trim().to_string();
+    if plan.is_empty() || plan.len() > 32 || !plan.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-') {
+        return Err(AppError::msg("That plan is not one of the server's."));
+    }
+    let message = message.map(|m| m.trim().chars().take(1000).collect::<String>()).filter(|m| !m.is_empty());
+    app.state::<AppState>().api()?.request_upgrade(&plan, message.as_deref()).await
+}
+
+#[tauri::command]
+pub async fn upgrade_request_latest(app: AppHandle) -> AppResult<Option<crate::net::models::UpgradeRequest>> {
+    app.state::<AppState>().api()?.latest_upgrade_request().await
+}
 
 /// Account → Devices → Rename (v1.6, P3).
 #[tauri::command]

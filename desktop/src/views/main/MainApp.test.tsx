@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import type { AppStatus } from "../../lib/ipc";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
 
@@ -724,5 +725,38 @@ describe("motion and the brand in the main window (v1.5)", () => {
     expect(document.querySelector(".toast [data-testid=success-check]")).toBeNull();
     await emitEvent("app:error", "Saved nothing: the server is offline");
     expect(document.querySelector(".toast [data-testid=success-check]")).toBeNull();
+  });
+});
+
+describe("MainApp and what the plan allows (v1.6)", () => {
+  it("reads the entitlements once signed in and again when the window comes to the front", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", makeEntitlements());
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(2));
+  });
+
+  it("keeps working with an older server that has no entitlements", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", null);
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    expect(document.querySelector(".plan-badge")).toBeNull();
+  });
+
+  it("opens Settings → Account → Transcription key when a recording asks for the key", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", makeEntitlements());
+    respond("account_get", { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
+    await renderPaired();
+    await act(async () => {
+      window.dispatchEvent(new CustomEvent(OPEN_SECTION_EVENT, { detail: "transcription-key" }));
+    });
+    expect(await screen.findByRole("heading", { name: "Settings" })).toBeInTheDocument();
+    expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
   });
 });

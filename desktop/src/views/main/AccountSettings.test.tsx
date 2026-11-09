@@ -6,7 +6,8 @@ import { EXPORT_POLL_MS, PlanCard } from "./AccountSettings";
 import { StorageCard } from "./SecuritySettings";
 import { errorMessage, type Account, type AppStatus } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makePlan, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makePlan, makeSettings, makeStatus } from "../../test/fixtures";
+import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { minutesLine, percentUsed, storageLine, viewerSentence } from "../../lib/plan";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -274,6 +275,44 @@ describe("Settings → Account → Plan", () => {
   });
 });
 
+describe("Settings → Account with entitlements (v1.6)", () => {
+  it("shows Plan & usage and the Free plan's Transcription key; an older server keeps the Plan card", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    try {
+      await openAccount();
+      expect(region("Plan & usage")).toHaveTextContent("You are on Free.");
+      expect(region("Transcription key")).toHaveTextContent("Open console.groq.com");
+      expect(screen.queryByTestId("plan-card") && screen.queryByText(/This server has no plans yet/)).toBeFalsy();
+    } finally {
+      act(() => resetEntitlementsForTests());
+    }
+    cleanup();
+    resetEntitlementsForTests(null);
+    await openAccount();
+    expect(region("Plan")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Transcription key" })).not.toBeInTheDocument();
+    act(() => resetEntitlementsForTests());
+  });
+
+  it("opens Account and shows the section asked for from elsewhere", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
+    try {
+      respond("get_settings", makeSettings());
+      respond("list_clients", { data: [] });
+      respond("account_get", makeAccount());
+      render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} section={{ id: "transcription-key", seq: 1 }} />);
+      expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
+      await flushAsync();
+      expect(scrolled).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole("button", { name: /^Account/ })).toHaveAttribute("aria-current", "page");
+    } finally {
+      act(() => resetEntitlementsForTests());
+    }
+  });
+});
+
 describe("Plan features and the viewer on the Record page", () => {
   async function record(status: Partial<AppStatus>) {
     respond("mic_users", []);
@@ -291,6 +330,18 @@ describe("Plan features and the viewer on the Record page", () => {
   it("shows Live Translate when the plan has it", async () => {
     await record({ plan: makePlan({ liveTranslate: true }) });
     expect(screen.getByText("Live Translate")).toBeInTheDocument();
+  });
+
+  it("puts Live Translate's badge on the Record page when the entitlements leave it out (v1.6)", async () => {
+    resetEntitlementsForTests(makeEntitlements());
+    try {
+      await record({ plan: makePlan({ liveTranslate: false }) });
+      expect(screen.getByTestId("locked-live_translate")).toHaveTextContent("Live Translate");
+      expect(screen.getByRole("button", { name: /Live Translate is in the Business plan/ })).toHaveTextContent("BUSINESS ✦");
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+    } finally {
+      act(() => resetEntitlementsForTests());
+    }
   });
 
   it("offers a viewer no recording, only the documented sentence", async () => {

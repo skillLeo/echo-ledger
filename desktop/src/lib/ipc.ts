@@ -90,6 +90,60 @@ export interface CodeOutcome {
   status: AppStatus | null;
 }
 
+/** `GET /api/me/entitlements` (since v1.6), as the server writes it; the core drops malformed parts and odd colours. */
+export interface Entitlements {
+  plan: EntitlementPlan | null;
+  features: Record<string, FeatureEntitlement>;
+  limits: Record<string, LimitEntitlement>;
+  engines: string[];
+  transcription_key: TranscriptionKeyState | null;
+  upgrade_request: UpgradeRequest | null;
+  plans: OfferedPlan[];
+}
+export interface EntitlementPlan {
+  key: string;
+  name: string;
+  badge: string | null;
+  color: string | null;
+  expires_at: string | null;
+  trial_minutes_left: number | null;
+}
+export interface FeatureEntitlement {
+  enabled: boolean;
+  name: string | null;
+  description: string | null;
+  cost: string | null;
+  lowest_plan: string | null;
+}
+export interface LimitEntitlement {
+  limit: number | null;
+  used: number | null;
+}
+export interface TranscriptionKeyState {
+  provider: string | null;
+  set: boolean;
+  last4: string | null;
+}
+export interface UpgradeRequest {
+  id: string;
+  plan: string;
+  status: "pending" | "approved" | "declined" | string;
+  message: string | null;
+  payment_instructions: string | null;
+  created_at: string | null;
+  decided_at: string | null;
+  reply: string | null;
+}
+export interface OfferedPlan {
+  key: string;
+  name: string;
+  badge: string | null;
+  color: string | null;
+  price: string | null;
+  description: string | null;
+  features: string[];
+  limits: Record<string, number | null>;
+}
 
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
 export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
@@ -1189,6 +1243,14 @@ export const api = {
   verifyCode: (serverUrl: string, email: string, code: string, otp: string | null, deviceName: string) =>
     invoke<CodeOutcome>("auth_code_verify", { serverUrl, email, code, otp, deviceName }),
   signUp: (name: string, acceptTerms: boolean) => invoke<AppStatus>("auth_sign_up", { name, acceptTerms }),
+  // What this person may use, their own key, upgrades (since v1.6); null entitlements from an older server.
+  entitlements: () => invoke<Entitlements | null>("entitlements_get"),
+  setTranscriptionKey: (key: string) => invoke<TranscriptionKeyState>("transcription_key_set", { key }),
+  deleteTranscriptionKey: () => invoke<void>("transcription_key_delete"),
+  /** console.groq.com's API keys page in the browser, where the free key is made. */
+  openGroqConsole: () => invoke<void>("groq_console_open"),
+  requestUpgrade: (plan: string, message: string | null) => invoke<UpgradeRequest>("upgrade_request_create", { plan, message }),
+  latestUpgradeRequest: () => invoke<UpgradeRequest | null>("upgrade_request_latest"),
   /** Account → Devices → Rename (since v1.6); the new name. */
   renameDevice: (id: string, name: string) => invoke<string>("device_rename", { id, name }),
   /** null on a server without accounts. */

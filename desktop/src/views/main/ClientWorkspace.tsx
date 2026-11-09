@@ -21,6 +21,7 @@ import { PlayIcon } from "../../components/ControlIcons";
 import { NotesSections } from "./CallNotes";
 import { ClientAvatar, clientSummary } from "./ClientAvatar";
 import { MenuButton, type MenuItem } from "./MenuButton";
+import { PlanBadge } from "./Upgrade";
 import { ProjectScreens } from "./ScreenMoments";
 
 type Notify = (text: string, error?: boolean) => void;
@@ -271,7 +272,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
     return (
       <>
         <section className="ws-section" aria-label="AI">
-          <div className="card small muted" data-testid="ai-not-in-plan">{NO_AI_NOTES}</div>
+          <div className="card small muted row" data-testid="ai-not-in-plan"><span>{NO_AI_NOTES}</span><span className="spacer" /><PlanBadge feature="ai_notes" /></div>
         </section>
         <Brief ws={ws} clientId={client.id} notify={notify} onChange={onChange} onReload={onReload} canMake={false} />
         <Memory ws={ws} clientId={client.id} notify={notify} onChange={onChange} onOpenRecording={onOpenRecording} />

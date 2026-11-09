@@ -4,6 +4,7 @@
 import { useEffect, useId, useState } from "react";
 import { api, type ScreensStatus, type ScreenTarget, type Settings, type SettingsPatch } from "../../lib/ipc";
 import { CloseIcon } from "../../components/Icons";
+import { PlanBadge } from "./Upgrade";
 import { SelectRow, Toggle } from "./SettingsControls";
 
 const TARGETS: readonly (readonly [ScreenTarget, string])[] = [["meeting_window", "The meeting window"], ["whole_screen", "The whole screen"]];
@@ -55,7 +56,7 @@ export function ScreenMomentsCard({ settings, patch }: { settings: Settings; pat
 
   return (
     <div className="card" data-testid="screen-moments-card">
-      <b>Screen moments</b>
+      <div className="row"><b>Screen moments</b><span className="spacer" /><PlanBadge feature="screen_moments" /></div>
       <p className="small muted">
         During a call recording EchoLedger keeps what the meeting shows each time it changes, or when someone says
         “look at this page”, so the transcript and an AI reading it know what was on screen. Screens are stored

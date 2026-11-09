@@ -1180,6 +1180,33 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .plan-limit .flow-bar.full > span { background: var(--danger); }
 .plan-features { margin: var(--space-2) 0; padding-inline-start: var(--space-4); display: grid; gap: 2px; font-size: var(--text-sm); }
 .plan-features li.off { color: var(--text-muted); }
+/* Paid features (v1.6): ONE badge style, "PRO ✦" in the plan's colour with a small lock; the same pill names a plan. */
+.plan-badge { --badge: var(--accent); display: inline-flex; align-items: center; gap: 4px; flex: none; height: 20px; padding: 0 7px; border-radius: var(--radius-full); border: 1px solid color-mix(in srgb, var(--badge) 45%, transparent); background: color-mix(in srgb, var(--badge) 14%, transparent); color: color-mix(in srgb, var(--badge) 72%, var(--text)); font: inherit; font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; line-height: 1; white-space: nowrap; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out); }
+.plan-badge:hover { background: color-mix(in srgb, var(--badge) 24%, transparent); }
+.plan-badge:focus-visible { outline: 2px solid var(--badge); outline-offset: 2px; }
+.plan-badge.static { cursor: default; }
+.plan-badge.static:hover { background: color-mix(in srgb, var(--badge) 14%, transparent); }
+.plan-features { list-style: none; padding-inline-start: 0; }
+.plan-features li { display: flex; align-items: center; gap: var(--space-2); min-height: 26px; }
+.locked-chip { display: inline-flex; align-items: center; gap: var(--space-2); }
+.locked-feature .row { gap: var(--space-2); }
+.upgrade-sheet { width: min(640px, 100%); }
+.plan-compare { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: var(--space-2); }
+.plan-option { --badge: var(--accent); display: grid; align-content: start; gap: var(--space-2); padding: var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-field); background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; transition: border-color var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
+.plan-option:hover { background: var(--surface-3); }
+.plan-option.chosen { border-color: var(--badge); background: color-mix(in srgb, var(--badge) 8%, transparent); }
+.plan-option-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); }
+.plan-option-list { display: grid; gap: 4px; }
+.plan-option-list > span { display: flex; align-items: center; gap: 6px; }
+.upgrade-sent { display: grid; gap: var(--space-1); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
+.upgrade-payment { white-space: pre-line; margin: var(--space-1) 0 0; }
+.upgrade-request.declined { border-color: var(--danger); }
+.transcription-key .row { gap: var(--space-2); }
+.key-steps { margin: var(--space-2) 0; padding-inline-start: var(--space-5); display: grid; gap: var(--space-2); font-size: var(--text-sm); }
+.key-steps li { display: grid; gap: var(--space-1); justify-items: start; }
+.key-paste { width: 100%; gap: var(--space-2); }
+.key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); }
+.needs-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 .account-delete { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--danger-soft); }
 /* The recording-consent notice (since v1.5): the setup's last step and Settings → Privacy & consent. */
 .consent-notice { display: grid; gap: var(--space-1); }

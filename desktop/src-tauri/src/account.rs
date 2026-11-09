@@ -217,6 +217,13 @@ pub fn checked_code(code: &str) -> Result<String, String> {
     if digits.len() == 6 && digits.chars().all(|c| c.is_ascii_digit()) { Ok(digits) } else { Err("Type the 6-digit code from the email.".into()) }
 }
 
+/// A pasted Groq key: trimmed, starting `gsk_`, plain characters only (pure). The server checks it with Groq.
+pub fn checked_groq_key(key: &str) -> Result<String, String> {
+    let key = key.trim();
+    let ok = key.starts_with("gsk_") && (20..=200).contains(&key.len()) && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    if ok { Ok(key.to_string()) } else { Err("That does not look like a Groq key. It starts with gsk_ — copy the whole key from console.groq.com → API Keys.".into()) }
+}
+
 /// A wrong email code (v1.6, `422 invalid_code` with `attempts_left`), in plain words.
 pub fn wrong_code_text(attempts_left: Option<u64>) -> String {
     match attempts_left {
@@ -376,6 +383,11 @@ mod tests {
         assert_eq!(checked_code("123-456").as_deref(), Ok("123456"));
         for bad in ["", "12345", "1234567", "12345a", "١٢٣٤٥٦"] {
             assert!(checked_code(bad).is_err(), "{bad}");
+        }
+        let key = format!("gsk_{}", "A1b2".repeat(12));
+        assert_eq!(checked_groq_key(&format!("  {key}\n")).as_deref(), Ok(key.as_str()));
+        for bad in ["", "sk-abc", "gsk_short", "gsk_has space inside and more", &format!("gsk_{}\"", "x".repeat(30))] {
+            assert!(checked_groq_key(bad).is_err(), "{bad}");
         }
     }
 
