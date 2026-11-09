@@ -20,6 +20,8 @@ pub enum Category {
     Sharing,
     Account,
     Usage,
+    /// Plan & payments (v1.7): upgrade requests, receipts and a plan that ends.
+    PlanPayments,
     LiveTranslate,
     AppUpdates,
     Other,
@@ -27,7 +29,7 @@ pub enum Category {
 
 impl Category {
     /// In the order Settings lists them (the phone's channel order).
-    pub const ALL: [Category; 11] = [
+    pub const ALL: [Category; 12] = [
         Category::Recording,
         Category::Transcription,
         Category::Enhancement,
@@ -36,6 +38,7 @@ impl Category {
         Category::Sharing,
         Category::Account,
         Category::Usage,
+        Category::PlanPayments,
         Category::LiveTranslate,
         Category::AppUpdates,
         Category::Other,
@@ -51,6 +54,7 @@ impl Category {
             Category::Sharing => "sharing",
             Category::Account => "account",
             Category::Usage => "usage",
+            Category::PlanPayments => "plan_payments",
             Category::LiveTranslate => "live_translate",
             Category::AppUpdates => "app_updates",
             Category::Other => "other",
@@ -71,6 +75,7 @@ impl Category {
             Category::Sharing => "Sharing",
             Category::Account => "Account & security",
             Category::Usage => "Usage & limits",
+            Category::PlanPayments => "Plan & payments",
             Category::LiveTranslate => "Live Translate",
             Category::AppUpdates => "App updates",
             Category::Other => "Other",
@@ -84,6 +89,9 @@ impl Category {
 
     /// What the Test button shows.
     pub fn test_text(self) -> (String, String) {
+        if self == Category::PlanPayments {
+            return ("Checking your payment for Pro".to_string(), "This is how a payment update looks. Nothing was sent.".to_string());
+        }
         (format!("Test: {}", self.label()), "Notifications of this kind look like this.".to_string())
     }
 
@@ -96,6 +104,7 @@ impl Category {
             "device_paired" | "sign_in" | "security" => Category::Account,
             "budget_warn" | "budget_reached" | "storage_warn" => Category::Usage,
             "shared_with_you" | "share_viewed" => Category::Sharing,
+            k if k.starts_with("upgrade_") || k == "plan_ending" || k == "plan_ended" => Category::PlanPayments,
             _ => Category::Other,
         }
     }
@@ -164,7 +173,7 @@ mod tests {
         let labels: Vec<&str> = Category::ALL.iter().map(|c| c.label()).collect();
         assert_eq!(
             labels,
-            ["Recording", "Transcription", "Enhancement", "Uploads", "Call capture & readiness", "Sharing", "Account & security", "Usage & limits", "Live Translate", "App updates", "Other"]
+            ["Recording", "Transcription", "Enhancement", "Uploads", "Call capture & readiness", "Sharing", "Account & security", "Usage & limits", "Plan & payments", "Live Translate", "App updates", "Other"]
         );
         for c in Category::ALL {
             assert_eq!(Category::from_wire(c.as_str()), Some(c));
@@ -180,6 +189,10 @@ mod tests {
         assert_eq!(Category::of_activity(Some("budget_reached")), Category::Usage);
         assert_eq!(Category::of_activity(Some("shared_with_you")), Category::Sharing);
         assert_eq!(Category::of_activity(Some("device_paired")), Category::Account);
+        assert_eq!(Category::of_activity(Some("upgrade_approved")), Category::PlanPayments);
+        assert_eq!(Category::of_activity(Some("upgrade_receipt_requested")), Category::PlanPayments);
+        assert_eq!(Category::of_activity(Some("plan_ending")), Category::PlanPayments);
+        assert_eq!(Category::PlanPayments.test_text().0, "Checking your payment for Pro");
         assert_eq!(Category::of_activity(Some("something_new")), Category::Other);
         assert_eq!(Category::of_activity(None), Category::Other);
     }
