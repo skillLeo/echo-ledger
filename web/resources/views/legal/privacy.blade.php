@@ -6,7 +6,27 @@
     <div class="legal">
         @include('legal.draft')
         <h1>Privacy Policy</h1>
-        <p class="muted">Last changed {{ \Illuminate\Support\Carbon::parse('2026-11-06')->format('F j, Y') }}</p>
+        <p class="muted">Last changed {{ \Illuminate\Support\Carbon::parse('2026-11-09')->format('F j, Y') }}</p>
+
+        <p>EchoLedger keeps a complete written record of your meetings, interviews and voice notes. Those conversations are often confidential, so protecting them is the most important thing we do. This policy explains, in plain words, what we keep, how it is protected, who processes it and what you control. EchoLedger is provided by SkillLeo SMC Private Limited, Pakistan.</p>
+
+        <h2>Our promises</h2>
+        <ul>
+            <li><strong>Your recordings are yours.</strong> We use them only to provide the service to you.</li>
+            <li><strong>We never sell your data</strong> and never use it for advertising.</li>
+            <li><strong>Nobody sees your recordings unless you share them</strong>: not other people in your workspace, not its owners or admins, not our staff.</li>
+            <li><strong>They are encrypted at every step</strong>: on your phone, on the way to our server, and in storage.</li>
+            <li><strong>You can export or delete everything</strong> at any time.</li>
+        </ul>
+
+        <h2>How your recordings are protected</h2>
+        <ul>
+            <li><strong>On your phone:</strong> a recording is stored encrypted until it has been uploaded.</li>
+            <li><strong>On the way:</strong> the apps and the website talk to our server only over encrypted connections (TLS), and the apps check that it really is our server (certificate pinning), so nobody in between can read or change what is sent.</li>
+            <li><strong>In storage:</strong> the audio is encrypted on our server with a key kept separately from the server's own login details; transcripts, notes and project files are kept on the same server behind your account.</li>
+            <li><strong>Access:</strong> only you, and the people you choose to share a recording with, can open it. The admin panel of EchoLedger shows how much each account uses, never what it recorded. If you ask for help with a recording, you can let support look for a limited time (Account → Privacy & data → Support access); every look is logged and shown to you.</li>
+            <li><strong>Your sign-in:</strong> passwords are stored only as a one-way hash, two-step sign-in is available for every account, and each phone or computer has its own sign-in that you can end at any time.</li>
+        </ul>
 
         <h2>What we keep</h2>
         <ul>
@@ -15,6 +35,9 @@
             <li><strong>Devices and sign-ins:</strong> the phones and computers signed in to your account, the browsers you sign in from, their addresses, and an audit log of sign-ins, shares, deletions and settings changes, kept for a year.</li>
             <li><strong>Usage:</strong> how many minutes each engine transcribed and what it cost, per workspace.</li>
         </ul>
+
+        <h2>Transcription and translation</h2>
+        <p>A transcript is made by sending the recording's audio to a speech-recognition engine; the readable versions in Roman Urdu, Urdu and English, the notes and the summaries are made by sending the transcript's text to a language engine. Live Translate for games and videos sends the sound your phone plays directly from your phone to the translation engine, with a key that works for a few minutes. These engines are the only ones that receive your recordings, and only for the task you asked for.</p>
 
         <h2>Who processes recordings</h2>
         <p>To transcribe and work with your recordings, the server sends them to the engines below. Which ones are used depends on the language and on what the server's operator set up. Each receives only what is listed, only for that task, under its own terms; the server asks each to delete its copy once it has answered, where the engine allows it.</p>
@@ -58,6 +81,9 @@
 
         <h2>Recording other people</h2>
         <p>{{ \App\Support\RecordingConsent::TEXT }} {{ \App\Support\RecordingConsent::APPS }}</p>
+
+        <h2>Questions</h2>
+        <p>Write to <a href="mailto:hassam.dev.571@gmail.com">hassam.dev.571@gmail.com</a> about anything in this policy or about your data. When this policy changes, the date above changes and signed-in people are told in the app.</p>
 
         <p class="muted">See also the <a href="{{ route('legal.terms') }}">Terms of Service</a>.</p>
     </div>

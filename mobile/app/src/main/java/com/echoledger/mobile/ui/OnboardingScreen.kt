@@ -286,7 +286,7 @@ private fun ColumnScope.DoneStep(onFinish: (Boolean) -> Unit) {
     var consent by rememberSaveable { mutableStateOf(false) }
     StepLayout(
         title = "You are set",
-        body = "Call-recording laws differ by country. Tell participants you are recording where required. " +
+        body = "Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. " +
             "A recording notification is always shown.",
         primary = "Start using EchoLedger",
         onPrimary = { onFinish(consent) },

@@ -10,7 +10,7 @@ namespace App\Support;
  */
 final class RecordingConsent
 {
-    public const TEXT = 'Call-recording laws differ by country. Tell participants you are recording where required.';
+    public const TEXT = 'Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it.';
 
     public const APPS = 'While EchoLedger records, the phone always shows a recording notification and the computer a red indicator.';
 

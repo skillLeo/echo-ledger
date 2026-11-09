@@ -155,7 +155,7 @@ describe("first-run wizard (B19)", () => {
     expect(await screen.findByText("Your microphone is working.")).toBeInTheDocument();
     expect(callsOf("test_capture")).toEqual([{ seconds: 10 }]);
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Call-recording laws differ by country. Tell participants you are recording where required.");
+    expect(screen.getByTestId("consent-notice")).toHaveTextContent("Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it.");
     fireEvent.click(screen.getByRole("checkbox", { name: "I understand and will get consent where required" }));
     fireEvent.click(screen.getByRole("button", { name: "Start using EchoLedger" }));
     await waitFor(() => expect(onFinished).toHaveBeenCalled());

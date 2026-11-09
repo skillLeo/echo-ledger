@@ -154,6 +154,8 @@ describe('the word for a folder', function () {
             'app/Filament/Admin/Pages/ApiCredentials.php' => ['An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '],
             // Words a search answers to, never shown: someone may still type the old word.
             'app/Filament/Support/CommandPalette.php' => ['clients customers folders keyterms vocabulary corrections'],
+            // The Terms speak of the clients people meet, not of folders.
+            'resources/views/legal/terms.blade.php' => '*',
             // The prompts sent to the AI: nobody reads them, and their JSON input calls it client.
             'app/Services/ClientAi/ClaudeClientAi.php' => '*',
             'app/Services/Screens/ClaudeScreenDescriber.php' => '*',

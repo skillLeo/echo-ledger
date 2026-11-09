@@ -886,7 +886,7 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
         SectionCard {
             Text("4 · Consent", fontWeight = FontWeight.SemiBold)
             Text(
-                "Call-recording laws differ by country. Tell participants you are recording where required. A recording notification is always shown.",
+                "Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.",
                 color = Brand.Muted,
                 fontSize = 13.sp
             )

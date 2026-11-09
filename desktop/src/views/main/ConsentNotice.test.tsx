@@ -11,7 +11,7 @@ describe("the recording-consent notice", () => {
   beforeEach(() => resetTauriMock());
 
   it("uses the phone's words (OnboardingScreen.kt and SettingsScreens.kt)", () => {
-    expect(CONSENT_NOTICE).toBe("Call-recording laws differ by country. Tell participants you are recording where required.");
+    expect(CONSENT_NOTICE).toBe("Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it.");
     expect(CONSENT_TICK).toBe("I understand and will get consent where required");
     expect(CONSENT_SWITCH).toBe("I understand");
     render(<ConsentNotice legal={false} />);

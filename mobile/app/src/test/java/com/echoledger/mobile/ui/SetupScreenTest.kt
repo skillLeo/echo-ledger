@@ -228,7 +228,7 @@ class SetupScreenTest : ScreenTest() {
         showSetup()
 
         compose.onNodeWithText(
-            "Call-recording laws differ by country. Tell participants you are recording where required. A recording notification is always shown."
+            "Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown."
         ).assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
 

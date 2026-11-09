@@ -9,4 +9,4 @@
     .legal .table { overflow-x: auto; }
     .draft { border: 1px dashed #AB6400; background: rgba(255, 197, 61, .12); border-radius: 12px; padding: 12px 16px; margin: 0 0 20px; }
 </style>
-<p class="draft" role="note"><strong>Draft — for review.</strong> This page is not final and is not legal advice. It describes EchoLedger as of version 1.5.</p>
+<p class="draft" role="note"><strong>Draft — for review.</strong> This page is not final and is not legal advice. It describes EchoLedger as of version 1.6.</p>
