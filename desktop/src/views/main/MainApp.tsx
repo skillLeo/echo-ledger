@@ -3,7 +3,8 @@ import { listen } from "@tauri-apps/api/event";
 import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryItem, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
 import { activityReporter, LockScreen } from "./LockScreen";
-import { ActivityView, useActivityUnread } from "./ActivityCentre";
+import { ActivityView, useActivityItems } from "./ActivityCentre";
+import { actionCount, badgeLabel, badgeSpoken } from "../../lib/badge";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
 import { AlertIcon, BellIcon, CaptionsIcon, CloseIcon, FolderIcon, LibraryIcon, MonitorIcon, MoonIcon, RecordIcon, SettingsIcon, SidebarIcon, SunIcon } from "../../components/Icons";
@@ -88,7 +89,8 @@ export default function MainApp() {
       return !c;
     });
   };
-  const [unread, setUnread] = useActivityUnread();
+  // The Activity badge (v1.6, P6): only what needs the person (lib/badge.ts), never every unread notification.
+  const [activityItems, setActivityItems] = useActivityItems();
   // Projects (since v1.5): the list the sidebar tree, the Projects page and the pickers share, and the open project.
   const [projects, setProjects] = useState<ClientFolder[] | null>(null);
   const [projectsError, setProjectsError] = useState<string | null>(null);
@@ -497,6 +499,7 @@ export default function MainApp() {
     );
   }
 
+  const needsYou = actionCount(activityItems, status.pendingDecisions);
   /** The Library on a smart folder (null: every recording). */
   const openFolder = (folder: SmartFolder | null) => {
     setTab("library");
@@ -535,7 +538,7 @@ export default function MainApp() {
                 title={collapsed ? label : undefined} onClick={() => goTo(id)}>
                 <Icon size={20} filled={tab === id} /><span className="nav-label">{label}</span>
                 {id === "record" && status.recording && <span className="status-dot live" aria-hidden="true" />}
-                {id === "activity" && unread > 0 && <><span className="nav-count" aria-hidden="true">{unread > 99 ? "99+" : unread}</span><span className="sr-only">, {unread} unread</span></>}
+                {id === "activity" && needsYou > 0 && <><span className="nav-count" aria-hidden="true">{badgeLabel(needsYou)}</span><span className="sr-only">, {badgeSpoken(needsYou)}</span></>}
               </button>
               {/* The smart folders (since v1.5): views of the Library, each with its count; the Inbox takes dropped recordings. */}
               {id === "library" && !collapsed && (
@@ -603,7 +606,7 @@ export default function MainApp() {
         )}
         {tab === "record" && <RecordView status={status} run={run} onImport={() => void pickImport()} />}
         {tab === "activity" && (
-          <ActivityView status={status} notify={notify} onUnread={setUnread} onOpenRecording={(id) => openRecording(id)}
+          <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
             onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
         )}
         {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
