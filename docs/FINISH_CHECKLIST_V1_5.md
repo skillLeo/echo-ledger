@@ -117,7 +117,7 @@ Sign-in and people:
 - [ ] F6 USER_GUIDE: family and friends have their own private accounts, teammates are invited, nobody sees another's recordings unless shared.
 
 Ease of use:
-- [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported.
+- [ ] G The 15 most common tasks counted in taps and clicks on phone and desktop; the top 10 at 2 or fewer; before and after reported. **Phone counted** 2026-11-09 (docs/TAP_AUDIT.md: 9 of the top 10 at 2 or fewer; a voice note 3 → 2 with Record now on the New sheet; Send to WhatsApp stays 3 from the Library, 2 from the recording, because its choice cannot be guessed). Desktop and console with their v1.6 P4 passes.
 
 Urgent accuracy bug (2026-11-08):
 - [x] U1 A shared 18.7 s Urdu voice note came back as nonsense and as a loop. Cause: on Auto, Whisper wrote Hindi letters, the forced Urdu retry carried our style prompt, and Whisper wrote the prompt's last sentence back («ٹھیک ہے، میں email بھیج دوں گا۔»). The audio path was right (the converted chunk is 18.50 s, gives the same text as the original file). Fixed: Whisper's prompt holds names only; WhisperChecks refuses a prompt echo, a loop, far too few words for the speech and a wrong length, asks once more without a prompt, else the next engine writes it; two engines that disagree altogether mark every line unsure and start a second version. CER against the reference 76-91% before, 27% after (16% without the opening clause TurboScribe left out). **Done**, deploy below.

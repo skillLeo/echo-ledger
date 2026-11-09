@@ -95,6 +95,17 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
+    fun `the sheet's Record now starts at once (v1_6 tap audit)`() {
+        var started = 0
+        show { RecordSheet(caps(), autoRecordOn = false, onPick = {}, onDismiss = {}, onRecordNow = { started++ }) }
+        awaitText("Record now")
+
+        compose.onNodeWithText("Record now").performClick()
+
+        assertEquals(1, started)
+    }
+
+    @Test
     fun `a plan without Live Translate offers neither Game nor Watch translate`() {
         show { RecordSheet(caps(), autoRecordOn = false, onPick = {}, onDismiss = {}, liveTranslate = false) }
         awaitText("Voice & files")

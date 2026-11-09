@@ -455,7 +455,14 @@ class MainActivity : FragmentActivity() {
                     recordMode = it
                     tab = TAB_RECORD
                     recordSheet = false
-                }, onDismiss = { recordSheet = false }, liveTranslate = settings.plan.liveTranslate)
+                }, onDismiss = { recordSheet = false }, liveTranslate = settings.plan.liveTranslate, onRecordNow = {
+                    // Since v1.6 (tap audit): straight to recording; without the microphone allowed, the voice page asks.
+                    recordSheet = false
+                    if (!toggleRecording("record sheet")) {
+                        recordMode = RecordMode.VOICE
+                        tab = TAB_RECORD
+                    }
+                })
             }
             Scaffold(
                 containerColor = Brand.Background,

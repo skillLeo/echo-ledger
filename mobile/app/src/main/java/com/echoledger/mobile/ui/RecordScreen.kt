@@ -103,7 +103,8 @@ enum class RecordMode { VOICE, CALLS, GAME, WATCH }
 
 /**
  * The Record sheet (since v1.3), from the centre button: four modes in a 2×2 grid, each with a one-line status.
- * Game and Watch translate (Phase B) say whether they are on.
+ * Game and Watch translate (Phase B) say whether they are on. Since v1.6 (tap audit): Record now on top starts at once,
+ * so a voice note is two taps (a call going on is recorded on both sides).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -117,13 +118,23 @@ fun RecordSheet(
     onReady: () -> Unit = {},
     /** Since v1.6: Live Translate not in the plan shows its badge; a tap opens the plans instead of the mode. */
     liveTranslateLock: com.echoledger.mobile.core.PlanState.Lock? = null,
-    onLocked: (com.echoledger.mobile.core.PlanState.Lock) -> Unit = {}
+    onLocked: (com.echoledger.mobile.core.PlanState.Lock) -> Unit = {},
+    onRecordNow: (() -> Unit)? = null
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
             Row(Modifier.fillMaxWidth().padding(bottom = Space.s4), verticalAlignment = Alignment.CenterVertically) {
                 Text("New", style = LocalEchoType.current.titleM, color = Brand.Text, modifier = Modifier.weight(1f))
                 ReadyChipView(readyChip, onReady)
+            }
+            if (onRecordNow != null) {
+                EchoButton("Record now", onRecordNow, Modifier.fillMaxWidth())
+                Text(
+                    "A call going on is recorded on both sides, anything else as a voice note. Tap the centre button again to stop.",
+                    style = LocalEchoType.current.labelM,
+                    color = Brand.Muted,
+                    modifier = Modifier.padding(top = Space.s1, bottom = Space.s4)
+                )
             }
             val calls = when (capabilities.appCalls) {
                 AppCallCapture.NOT_IN_THIS_BUILD -> "Calls: website version only"

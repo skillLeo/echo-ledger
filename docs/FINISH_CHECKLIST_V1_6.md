@@ -53,7 +53,7 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [ ] P5.5 Share to WhatsApp: text, text + voice, link. **Phone done** 2026-11-09 (Send to WhatsApp on a recording: Text only (the view being read) · Text and voice (Ogg; the text also on the clipboard with "Text copied — paste it", since WhatsApp may drop it) · Link (7 days); WhatsApp, else WhatsApp Business, else the share sheet; WhatsAppShareTest). Whether WhatsApp keeps the caption with audio: to check on the S25.
 
 ## P6 — Flow audit
-- [ ] P6 Every listed item fixed, more searched for; the 15 common tasks counted on web, desktop and phone. Found so far: the phone's Activity badge already counts only unread problems and calls waiting (capped "9+"), so the 21–22 badge is the console's or the desktop's (for their pass). Setup surviving a reinstall: an uninstall removes Shizuku's permission for the app, so it cannot survive one; an update keeps it, and the Ready check now names each step to redo.
+- [ ] P6 Every listed item fixed, more searched for; the 15 common tasks counted on web, desktop and phone. **Phone counted** (docs/TAP_AUDIT.md; Record now on the New sheet). Found so far: the phone's Activity badge already counts only unread problems and calls waiting (capped "9+"), so the 21–22 badge is the console's or the desktop's (for their pass). Setup surviving a reinstall: an uninstall removes Shizuku's permission for the app, so it cannot survive one; an update keeps it, and the Ready check now names each step to redo.
 
 ## P7 — Release and verify
 - [ ] P7 Migrations (existing data → Hassam's workspace, super admin on Business unlimited), deploy, installers, phone build, the end-to-end Free-user test, guides, tag v1.6.0.

@@ -138,6 +138,7 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithContentDescription("Record").performClick()
         awaitText("Voice & files")
         compose.onNodeWithText("Calls: set up first", substring = true).assertExists()
+        compose.onNodeWithText("Record now").assertExists()
         compose.onNodeWithText("Voice & files").performClick()
         awaitText("Not recording")
         pumpUntil("the library to leave") {
