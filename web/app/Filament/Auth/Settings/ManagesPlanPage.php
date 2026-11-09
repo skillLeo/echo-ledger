@@ -46,7 +46,7 @@ trait ManagesPlanPage
         $cards = [];
         $below = $plan;
         foreach ($higher as $p) {
-            $cards[] = ['key' => $p->key, 'name' => $p->name, 'price' => UpgradeFlow::priceText($p), 'everything' => $below->is($plan) ? null : $below->name,
+            $cards[] = ['key' => $p->key, 'name' => $p->name, 'price' => UpgradeFlow::priceText($p), 'everything' => $below->key === Plan::FREE || ! $below->allows('platform_transcription') ? null : $below->name,
                 'lines' => UpgradeFlow::highlights($p, $below), 'url' => UpgradeFlow::chooseUrl($p->key)];
             $below = $p;
         }

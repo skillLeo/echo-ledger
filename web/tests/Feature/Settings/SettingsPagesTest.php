@@ -2,16 +2,19 @@
 
 declare(strict_types=1);
 
+use App\Enums\WorkspaceRole;
 use App\Filament\Auth\EditProfile;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
 use App\Models\Plan;
 use App\Models\UpgradeRequest;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\SettingsRegistry;
+use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -188,4 +191,41 @@ it('saves a Groq key only from 20 characters and says why under the box', functi
 it('highlights a row on arrival and respects reduced motion', function () {
     $html = settingsHtml(settingsPerson('free'), '/appearance?highlight=appearance.theme');
     expect($html)->toContain('id="setting-appearance.theme"')->toContain('prefers-reduced-motion')->toContain("classList.add('is-highlighted')");
+});
+
+it('shows this month plainly: the own key on Free (never "0 of 0"), amber near the limit, no plans above the top one', function () {
+    $free = settingsHtml(settingsPerson('free'), '/plan');
+    expect($free)->toContain('Free plan')->toContain('Your Groq key')->toContain('Not added.')->toContain('Add key')
+        ->not->toContain('0 of 0')->toContain('data-plan-card="pro"')->toContain('data-plan-card="business"')
+        ->toContain('Everything in Pro, plus:')->toContain('Every plan can record, organise, search, share links and export.')
+        ->not->toContain('✦')->not->toContain('heroicon-o-sparkles');
+
+    $pro = settingsPerson('pro');
+    UsageLedgerEntry::query()->create(['workspace_id' => $pro->current_workspace_id, 'user_id' => $pro->id, 'source' => 'server', 'report_id' => 'near-limit',
+        'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => 500 * 60000, 'channels' => 1, 'billed_ms' => 500 * 60000,
+        'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
+    $html = settingsHtml($pro, '/plan');
+    expect($html)->toContain('500 of 600 min')->toMatch('/el-meter el-set-group is-warning/')->toContain('of your minutes.')
+        ->toContain('Upgrade to Ultra')->not->toContain('data-plan-card="pro"')->toContain('Minutes reset on the 1st of each month.')->not->toContain('Free plan');
+
+    $ultra = settingsHtml(settingsPerson('business'), '/plan');
+    expect($ultra)->toContain('Ultra plan')->toContain('on our top plan.')->not->toContain('<h2 class="el-set-head">Plans</h2>')
+        ->not->toContain('id="setting-plan.upgrade"');
+});
+
+it('tells a member whose plan it is, with no Upgrade anywhere', function () {
+    $owner = settingsPerson('pro', ['name' => 'Sara Khan']);
+    $member = withoutWorkspace(Fx::user(['name' => 'Bilal']));
+    app(Workspaces::class)->addMember(Workspace::query()->findOrFail($owner->current_workspace_id), $member, WorkspaceRole::Member);
+    $html = settingsHtml($member->fresh());
+    expect($html)->toContain('is on Pro. Managed by Sara Khan.')->not->toContain('data-upgrade=');
+    $this->get('/app/settings/plan/upgrade')->assertForbidden();
+});
+
+it('tells Free without a key in the Library to add one, never that 0 minutes are used up', function () {
+    $this->actingAs(settingsPerson('free'), 'web');
+    SettingsContext::forget();
+    $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+    expect($html)->toContain('data-plan-limit="key"')->toContain('Transcripts use your own Groq key.')->toContain('Add key')
+        ->not->toContain('minutes are used up');
 });

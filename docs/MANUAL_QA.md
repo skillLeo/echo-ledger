@@ -497,7 +497,7 @@ browser and a person's eyes. Screenshots of every page are in docs/design/screen
 ### Web console v1.6.2 All features, locked features and promo codes (what only a real browser can prove)
 
 The tests prove the list, the count, which badge each feature gets and that a click opens the upgrade sheet and never
-the feature. Screenshots: docs/design/screens/web/web-account-plan-free-* and web-account-plan-ultra-*.
+the feature. Screenshots: docs/design/screens/web/web-settings-plan-free-* and web-settings-plan-ultra-* (Settings since v1.7).
 
 | # | Check | Expected |
 |---|---|---|

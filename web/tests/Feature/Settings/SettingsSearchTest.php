@@ -96,6 +96,12 @@ it('never fuzzy-matches Roman Urdu: "kaal" finds nothing and Theme is nowhere', 
         ->and(array_column($result['closest'], 'id'))->not->toContain('appearance.theme');
 });
 
+it('matches Roman Urdu and Urdu words whole, never by their start', function () {
+    expect(settingIds('dark'))->not->toContain('plan.request')
+        ->and(settingIds('darkhwast'))->toContain('plan.request')
+        ->and(settingIds('awaz'))->toBe([]);
+});
+
 it('needs two characters, and every word must match', function () {
     expect(settingsSearch('d')['settings'])->toBe([])
         ->and(settingIds('dark nothingness'))->toBe([]);

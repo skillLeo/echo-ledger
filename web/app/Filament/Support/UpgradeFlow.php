@@ -27,6 +27,17 @@ use Illuminate\Support\Carbon;
  */
 final class UpgradeFlow
 {
+    /** A paid feature as one short line on a plan card. */
+    public const HIGHLIGHTS = [
+        'views' => 'Roman Urdu, English and Urdu side by side',
+        'double_check' => 'A second check on words that were unclear',
+        'screen_moments' => 'Screenshots of shared screens, placed in the transcript',
+        'connector' => 'Ask Claude or ChatGPT about your recordings',
+        'premium_engines' => 'More accurate transcription for difficult audio',
+        'live_translate' => 'Live Translate for games and videos',
+        'ai_notes' => 'AI notes for projects',
+    ];
+
     /** The stages of a request still open. */
     public const OPEN = ['awaiting_payment', 'in_review', 'needs_receipt'];
 
@@ -285,7 +296,7 @@ final class UpgradeFlow
      * "This month": the minutes (a meter on a plan with minutes; the person's own key on Free), storage, devices,
      * team members (when the plan has seats) and uploads a day (from 80 %).
      *
-     * @return list<array{id: string, title: string, value: string, percent: int|null, tone: string, line: string|null, link: array{label: string, url: string}|null, label: string}>
+     * @return list<array{id: string, title: string, value: string, percent: int|null, tone: string, line: string|null, link: array{label: string, url: string}|null, after: string|null, label: string}>
      */
     public static function meters(SettingsContext $context): array
     {
@@ -302,20 +313,22 @@ final class UpgradeFlow
         if ($limit === 0 || $limit === 0.0) {
             $key = $context->flag('key');
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => 'Your Groq key', 'percent' => null, 'tone' => 'neutral',
-                'line' => $key ? 'Key added' : 'Not added.', 'link' => $key ? null : ['label' => 'Add key', 'url' => EditProfile::settingsUrl('transcription-key')],
+                'line' => $key ? 'Key added' : 'Not added.', 'link' => $key ? null : ['label' => 'Add key', 'url' => EditProfile::settingsUrl('transcription-key')], 'after' => null,
                 'label' => 'Transcription, with your own Groq key, '.($key ? 'key added' : 'not added')];
         } else {
             $used = (int) ($minutes['used'] ?? 0);
             $meter = self::meter($used, $limit === null ? null : (int) $limit);
             $value = $limit === null ? number_format($used).' min' : number_format($used).' of '.number_format((int) $limit).' min';
+            $day = $resets->format('j M');
+            $near = $meter['percent'] !== null && $meter['percent'] >= 80 && $meter['percent'] < 100;
             $line = match (true) {
-                $meter['percent'] !== null && $meter['percent'] >= 100 => 'Transcription is paused until '.Formats::shortDate($resets).'.',
-                $meter['percent'] !== null && $meter['percent'] >= 80 => "You've used {$meter['percent']}% of your minutes. ".($buyer ? 'Upgrade or wait until '.Formats::shortDate($resets).'.' : 'They reset on '.Formats::shortDate($resets).'.'),
-                default => 'Resets '.Formats::shortDate($resets),
+                $meter['percent'] !== null && $meter['percent'] >= 100 => "Transcription is paused until {$day}.",
+                $near => "You've used {$meter['percent']}% of your minutes.".($buyer ? '' : " They reset on {$day}."),
+                default => "Resets {$day}",
             };
             $out[] = ['id' => 'plan.usage.minutes', 'title' => 'Transcription', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => $line, 'link' => $meter['percent'] !== null && $meter['percent'] >= 80 && $meter['percent'] < 100 && $buyer ? ['label' => 'Upgrade', 'url' => $upgradeUrl] : null,
-                'label' => "Transcription, {$value} used, resets ".Formats::longDate($resets)];
+                'line' => $line, 'link' => $near && $buyer ? ['label' => 'Upgrade', 'url' => $upgradeUrl] : null, 'after' => $near && $buyer ? " or wait until {$day}." : null,
+                'label' => "Transcription, {$value} used, resets ".$resets->format('j F')];
         }
 
         $storage = (array) ($limits['storage_bytes'] ?? []);
@@ -323,20 +336,20 @@ final class UpgradeFlow
         $value = Formats::bytes((int) ($storage['used'] ?? 0)).(isset($storage['limit']) ? ' of '.Formats::bytes((int) $storage['limit']) : '');
         $out[] = ['id' => 'plan.usage.storage', 'title' => 'Storage', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
             'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? ($buyer ? "New recordings can't upload until you free up space or upgrade." : "New recordings can't upload until you free up space.") : null,
-            'link' => null, 'label' => "Storage, {$value} used"];
+            'link' => null, 'after' => null, 'label' => "Storage, {$value} used"];
 
         $devices = (array) ($limits['devices'] ?? []);
         $meter = self::meter((int) ($devices['used'] ?? 0), isset($devices['limit']) ? (int) $devices['limit'] : null);
         $value = number_format((int) ($devices['used'] ?? 0)).(isset($devices['limit']) ? ' of '.number_format((int) $devices['limit']) : '');
         $out[] = ['id' => 'plan.usage.devices', 'title' => 'Devices', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'Sign out a device to add another.' : null, 'link' => null, 'label' => "Devices, {$value} signed in"];
+            'line' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'Sign out a device to add another.' : null, 'link' => null, 'after' => null, 'label' => "Devices, {$value} signed in"];
 
         $seats = (array) ($limits['seats'] ?? []);
         if (! isset($seats['limit']) || (int) $seats['limit'] > 1) {
             $value = number_format((int) ($seats['used'] ?? 1)).(isset($seats['limit']) ? ' of '.number_format((int) $seats['limit']) : '');
             $meter = self::meter((int) ($seats['used'] ?? 1), isset($seats['limit']) ? (int) $seats['limit'] : null);
             $out[] = ['id' => 'plan.usage.members', 'title' => 'Team members', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['percent'] !== null && $meter['percent'] >= 100 ? 'warning' : $meter['tone'],
-                'line' => null, 'link' => null, 'label' => "Team members, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => "Team members, {$value}"];
         }
 
         $uploads = (array) ($limits['uploads_per_day'] ?? []);
@@ -344,7 +357,7 @@ final class UpgradeFlow
             $meter = self::meter((int) $uploads['used'], (int) $uploads['limit']);
             $value = number_format((int) $uploads['used']).' of '.number_format((int) $uploads['limit']);
             $out[] = ['id' => 'plan.usage.uploads', 'title' => 'Uploads in the last 24 hours', 'value' => $value, 'percent' => $meter['percent'], 'tone' => $meter['tone'],
-                'line' => null, 'link' => null, 'label' => "Uploads in the last 24 hours, {$value}"];
+                'line' => null, 'link' => null, 'after' => null, 'label' => "Uploads in the last 24 hours, {$value}"];
         }
 
         return $out;
@@ -365,6 +378,7 @@ final class UpgradeFlow
     public static function resetsAt(mixed $at): Carbon
     {
         if (is_string($at) && $at !== '') {
+            // The day as the server wrote it (the 1st, in its own time zone), not moved to another zone.
             return Carbon::parse($at);
         }
 
@@ -415,7 +429,7 @@ final class UpgradeFlow
             if (in_array($feature, ['platform_transcription', 'team'], true) || ! $plan->allows($feature) || ($below !== null && $below->allows($feature))) {
                 continue;
             }
-            $lines[] = Features::ALL[$feature]['description'];
+            $lines[] = self::HIGHLIGHTS[$feature] ?? Features::ALL[$feature]['description'];
         }
 
         return array_slice($lines, 0, 5);

@@ -80,12 +80,17 @@
         @endif
 
         @if ($open)
-            <x-el.section>
-                <x-el.row title="Payment details" :href="$payUrl" chevron />
-                @if ($canAdd)
-                    <x-el.row title="Add receipt" :href="$receiptUrl" chevron />
-                @endif
-            </x-el.section>
+            @php($primary = $card['primary']['label'] ?? null)
+            @if ($primary !== 'Payment details' || ($canAdd && $primary !== 'Add receipt'))
+                <x-el.section>
+                    @if ($primary !== 'Payment details')
+                        <x-el.row title="Payment details" :href="$payUrl" chevron />
+                    @endif
+                    @if ($canAdd && $primary !== 'Add receipt')
+                        <x-el.row title="Add receipt" :href="$receiptUrl" chevron />
+                    @endif
+                </x-el.section>
+            @endif
             <x-el.section>
                 <x-el.row title="Cancel request" click="mountAction('cancelRequest')" danger />
             </x-el.section>

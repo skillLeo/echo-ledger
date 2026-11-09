@@ -397,10 +397,16 @@ label.el-set-row:hover {
     flex-wrap: wrap;
 }
 
+.el-set-row.is-stacked > .el-set-text {
+    flex: 1 0 auto;
+}
+
 .el-set-row.is-stacked > .el-set-control {
-    flex: 1 1 260px;
+    flex: 0 1 auto;
     display: flex;
     justify-content: flex-end;
+    margin-left: auto;
+    max-width: 100%;
 }
 
 /* ---------- segmented ---------- */
@@ -1051,7 +1057,7 @@ details.el-set-group[open] > summary .el-set-chevron {
 }
 
 .el-flow-bar .el-set-text {
-    flex: 1 1 auto;
+    flex: 1 1 220px;
 }
 
 .el-flow-bar .el-btn {
@@ -1448,4 +1454,20 @@ details.el-set-group[open] > summary .el-set-chevron {
 .el-select:focus-visible {
     outline: none;
     box-shadow: 0 0 0 2px var(--accent-ring);
+}
+
+/* Settings › Profile: the form is the page, in one container like the other pages' rows. */
+.el-set-form {
+    padding: 16px;
+    border-radius: var(--radius-md);
+    background-color: var(--surface);
+}
+
+.dark .el-set-form {
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.el-set-form .fi-fo-field-label-content {
+    font-size: 14px;
+    font-weight: 500;
 }

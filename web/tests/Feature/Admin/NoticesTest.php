@@ -16,6 +16,7 @@ use App\Filament\Support\NoticeTargets;
 use App\Livewire\ActivityBell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ActivityFeed;
@@ -190,14 +191,17 @@ describe('the banners about something still true', function () {
             ->toContain('data-remember="visit"')->toContain('x-cloak')->toContain('window.elBanner');
     });
 
-    it('shows a plan limit line while the month\'s minutes are used up, opening Usage', function () {
+    it('shows a plan limit line while the month\'s minutes are used up (never for a plan with none), opening Plan & usage', function () {
         $a = Fx::user();
         $workspace = Workspace::query()->findOrFail($a->current_workspace_id);
-        $workspace->plan->forceFill(['monthly_minutes' => 0])->save();
+        $workspace->plan->forceFill(['monthly_minutes' => 1])->save();
+        UsageLedgerEntry::query()->create(['workspace_id' => $workspace->id, 'user_id' => $a->id, 'source' => 'server', 'report_id' => 'used-up',
+            'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => 120000, 'channels' => 1, 'billed_ms' => 120000,
+            'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
         $this->actingAs($a, 'web');
 
         $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
-        expect($html)->toContain('data-plan-limit="minutes"')->toContain('This month&#039;s minutes are used up')->toContain('See usage');
+        expect($html)->toContain('data-plan-limit="minutes"')->toContain('This month&#039;s minutes are used up')->toContain('Plan &amp; usage');
     })->skip(fn (): bool => ! method_exists(Workspace::class, 'plan'), 'Plans not on workspaces');
 
     it('remembers the announcement closed per text, and the maintenance reminder per state', function () {

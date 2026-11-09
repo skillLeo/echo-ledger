@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Models\Device;
 use App\Models\Plan;
 use App\Models\UpgradeRequest;
+use App\Models\UpgradeRequestProof;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
@@ -58,6 +60,13 @@ final class SettingsTourSeeder extends Seeder
                     'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => $minutes * 60000, 'channels' => 1, 'billed_ms' => $minutes * 60000,
                     'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
             }
+            Device::query()->withoutGlobalScopes()->where('user_id', $user->id)->delete();
+            $devices = [['Galaxy S25 Ultra', 'android', '16', 5], ['Office PC', 'windows', '11', 180]];
+            foreach (array_slice($devices, 0, $planKey === 'free' ? 1 : 2) as [$device, $platform, $os, $minutes]) {
+                Device::query()->create(['workspace_id' => $workspace->id, 'user_id' => $user->id, 'name' => $device, 'platform' => $platform,
+                    'app_version' => '1.7.0', 'os_version' => $os, 'last_seen_at' => now()->subMinutes($minutes)])->forceFill(['name_chosen' => true])->save();
+            }
+            UpgradeRequestProof::query()->where('user_id', $user->id)->delete();
             UpgradeRequest::query()->where('user_id', $user->id)->delete();
             if ($stage !== null) {
                 $this->request($user, $workspace, $stage);

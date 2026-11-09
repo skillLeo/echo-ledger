@@ -24,6 +24,8 @@
                     </span>
                     @if ($context->tag($entry))
                         <span class="el-tag">{{ $context->tag($entry) }}</span>
+                    @elseif (in_array($entry['id'], ['appearance', 'appearance.theme'], true))
+                        <span class="el-set-value" x-data x-text="({ light: 'Light', dark: 'Dark' })[localStorage.getItem('filament:theme:mode')] ?? 'System'">System</span>
                     @elseif ($value)
                         <span class="el-set-value">{{ $value }}</span>
                     @endif

@@ -21,7 +21,6 @@ use App\Support\Formats;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
-use Filament\Forms\Components\Field;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
@@ -41,9 +40,10 @@ trait ManagesAccountPages
     {
         $name = $this->getNameFormComponent();
         $email = $this->getEmailFormComponent();
-        foreach (['profile.name' => $name, 'profile.email' => $email] as $id => $field) {
-            if ($field instanceof Field) {
-                $field->extraFieldWrapperAttributes(['id' => 'setting-'.$id, 'tabindex' => '-1', 'data-setting' => $id]);
+        foreach (['profile.name' => [$name, 'Name'], 'profile.email' => [$email, 'Email']] as $id => [$field, $label]) {
+            if ($field instanceof TextInput) {
+                $field->label($label)->markAsRequired(false)->autofocus(false)
+                    ->extraFieldWrapperAttributes(['id' => 'setting-'.$id, 'tabindex' => '-1', 'data-setting' => $id]);
             }
         }
 

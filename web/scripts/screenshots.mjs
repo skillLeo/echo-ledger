@@ -89,7 +89,7 @@ const pages = {
     // Settings (since v1.7). Per account: EMAIL=free@echoledger.local SUFFIX=free (php artisan db:seed --class=SettingsTourSeeder).
     'settings-overview': { path: '/app/settings' },
     'settings-plan': { path: '/app/settings/plan' },
-    'settings-plan-compare': { path: '/app/settings/plan', run: "document.querySelector('#setting-plan\\.compare').open = true" },
+    'settings-plan-compare': { path: '/app/settings/plan', run: "document.querySelector('[data-setting=\"plan.compare\"]').open = true" },
     'settings-language': { path: '/app/settings/language' },
     'settings-key': { path: '/app/settings/transcription-key' },
     'settings-appearance': { path: '/app/settings/appearance' },
@@ -293,8 +293,8 @@ for (const theme of themes) {
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
                 await page.waitForTimeout(spec.settle ?? 900);
-                // A whole-page picture: the flow's step bar, sticky on a phone, is drawn where it sits in the page.
-                if (spec.full !== false) await page.addStyleTag({ content: '.el-flow-bar{position:static!important}' });
+                // A whole-page picture: the flow's step bar and the phone's bottom tabs are drawn where they sit in the page.
+                if (spec.full !== false) await page.addStyleTag({ content: '.el-flow-bar,.el-bottom-nav{position:static!important}' });
                 await page.screenshot({ path: file, fullPage: spec.full !== false, animations: 'disabled' });
                 if (spec.after) {
                     await page.evaluate(spec.after);

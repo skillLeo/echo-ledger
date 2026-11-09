@@ -11,8 +11,8 @@ use Normalizer;
  *
  * Matching, in short: the query and every indexed text are normalised (accents, case, Urdu letter forms, punctuation)
  * and split into words; every word of the query must match. A word matches the start of an indexed word, a whole
- * keyword phrase ("dark mode"), or, for words of 4 letters or more, the same word with doubled letters folded
- * ("aawaz" = "awaz"). Only when nothing matches at all is a small typo forgiven (one letter for words of 4 to 7
+ * keyword phrase ("dark mode"), a whole Roman Urdu or Urdu word, or, for words of 4 letters or more, the same word
+ * with doubled letters folded ("aawaz" = "awaz"). Only when nothing matches at all is a small typo forgiven (one letter for words of 4 to 7
  * letters, two from 8), and never against Roman Urdu or Urdu words, so "pro" can never find "probe".
  *
  * Scores: the title (or an alias) starting with the query 1000, every word in the title 800, with an option 650, with
@@ -165,7 +165,9 @@ final class SettingsIndex
                 if ($short && $field !== self::TITLE) {
                     break;
                 }
-                if (($best[$n] === null || $field < $best[$n]) && self::matchesAny($token, $item['fields'][$field])) {
+                $matches = self::matchesAny($token, $item['fields'][$field])
+                    || ($field === self::KEYWORD && self::matchesWhole($token, $item['local']));
+                if (($best[$n] === null || $field < $best[$n]) && $matches) {
                     $best[$n] = $field;
                     break;
                 }
@@ -191,7 +193,7 @@ final class SettingsIndex
         $changed = false;
         foreach ($tokens as $n => $token) {
             $all = array_merge(...array_values($item['fields']));
-            if (self::matchesAny($token, $all)) {
+            if (self::matchesAny($token, $all) || self::matchesWhole($token, $item['local'])) {
                 continue;
             }
             $length = mb_strlen($token);
@@ -279,9 +281,12 @@ final class SettingsIndex
                 self::TITLE => $titleTokens,
                 self::OPTION => $optionTokens,
                 self::DESCRIPTION => self::tokensOf([(string) $entry['description']]),
-                self::KEYWORD => self::tokensOf([...$english, ...$other]),
+                self::KEYWORD => self::tokensOf($english),
                 self::PATH => self::tokensOf(array_slice(self::path($entry), 0, -1)),
             ],
+            // Roman Urdu and Urdu words match whole (or with doubled letters folded), never by their start: "dark" is
+            // not "darkhwast".
+            'local' => self::tokensOf($other),
             'fuzzy' => array_values(array_unique([...$titleTokens, ...$optionTokens, ...self::tokensOf($english)])),
             'near' => array_values(array_unique([...$titleTokens, ...self::tokensOf($english)])),
         ];
@@ -316,6 +321,9 @@ final class SettingsIndex
      */
     public static function breadcrumb(array $entry): string
     {
+        if (($entry['kind'] ?? null) === 'help') {
+            return 'Settings › Help';
+        }
         $path = self::path($entry);
         $path[0] = 'Settings';
         if (count($path) === 2 && $entry['page'] === null) {
@@ -416,6 +424,19 @@ final class SettingsIndex
         $folded = self::fold($query);
         foreach ($tokens as $token) {
             if (str_starts_with($token, $query) || (mb_strlen($query) >= 4 && self::fold($token) === $folded)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /** @param  list<string>  $tokens */
+    private static function matchesWhole(string $query, array $tokens): bool
+    {
+        $folded = self::fold($query);
+        foreach ($tokens as $token) {
+            if ($token === $query || self::fold($token) === $folded) {
                 return true;
             }
         }

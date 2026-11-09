@@ -10,6 +10,6 @@
         <div class="el-meter-bar" aria-hidden="true"><div class="el-meter-fill" style="width: {{ $meter['percent'] }}%"></div></div>
     @endif
     @if ($meter['line'] || $meter['link'])
-        <p class="el-meter-line">{{ $meter['line'] }}@if ($meter['link']) <a class="el-set-link" href="{{ $meter['link']['url'] }}">{{ $meter['link']['label'] }}</a>@endif</p>
+        <p class="el-meter-line">{{ $meter['line'] }}@if ($meter['link']) <a class="el-set-link" href="{{ $meter['link']['url'] }}">{{ $meter['link']['label'] }}</a>{{ $meter['after'] ?? '' }}@endif</p>
     @endif
 </div>

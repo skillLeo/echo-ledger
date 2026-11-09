@@ -199,7 +199,7 @@ class ChoosePlan extends Page
         $below = $context->plan();
         foreach ($plans as $plan) {
             $cards[] = ['key' => $plan->key, 'name' => $plan->name, 'price' => UpgradeFlow::priceText($plan),
-                'everything' => $below->is($context->plan()) ? null : $below->name, 'lines' => UpgradeFlow::highlights($plan, $below)];
+                'everything' => $below->key === Plan::FREE || ! $below->allows('platform_transcription') ? null : $below->name, 'lines' => UpgradeFlow::highlights($plan, $below)];
             $below = $plan;
         }
         $months = $this->promoApplied['months'] ?? 1;
