@@ -296,8 +296,9 @@ they use the production server and keep "Use a different server" under Advanced.
   - a new email: `200 {"next": "profile", "sign_up_token": "…"}` (valid 15 minutes, one use);
   - a wrong code: `422 invalid_code` with `attempts_left`; after 5 wrong codes, or after 10 minutes, `422
     code_expired` (ask for a new one).
-- `POST /api/auth/sign-up` — public, throttled: `{"sign_up_token", "name", "accept_terms": true, "platform",
-  "app_version", "os_version", "install_id"}` → `201` like `POST /api/auth/password`: the account (email verified by
+- `POST /api/auth/sign-up` — public, throttled: `{"sign_up_token", "name", "accept_terms": true, "device_name",
+  "platform", "app_version", "os_version", "install_id"}` (`name` is the person's; `device_name` optional, else the
+  readable name from the platform and OS) → `201` like `POST /api/auth/password`: the account (email verified by
   the code), its personal workspace on the default plan (Free) and the device's token. `accept_terms` must be `true`
   (`422 validation_failed`); a used or old token `422 invalid_code`. The web page `/sign-up` does the same with the
   console session instead of a device token.

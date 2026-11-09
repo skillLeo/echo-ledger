@@ -23,7 +23,7 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [x] Plan saved locally; the design reference copied to docs/design/reference/ and excluded locally (and guarded by tools/repo-policy). Phase 1C items that overlap (progress, group by, sign-in, notifications screen) are redone here; widgets, Quick Settings tile and the tap-count audit continue after P5.
 
 ## P1 — Sign-up, Free plan, entitlements
-- [ ] P1.1 One sign-in flow (email → code for a new email → name → Terms → account on the default plan; password or "Email me a code" → 2FA; Google; no server address, Advanced → another server; QR a small link; plain words) on web, phone and desktop.
+- [ ] P1.1 One sign-in flow (email → code for a new email → name → Terms → account on the default plan; password or "Email me a code" → 2FA; Google; no server address, Advanced → another server; QR a small link; plain words) on web, phone and desktop. **Phone done** 2026-11-09 (SignInFlow, SignInScreen; the server from the build: `echoledger.defaultServer` in the user's gradle.properties, never in the repo; install_id on every sign-in; PairingScreenTest 15, SignInFlowTest). The instrumented e2e tests still use the old labels: to update before the next phone run.
 - [ ] P1.2 Entitlements engine: features registry, plans with features and limits, per-user overrides and plan expiry, every API checks, `GET /api/me/entitlements`; provider keys never leave the server.
 - [ ] P1.3 Default plans Free / Pro / Business; the super admin on Business unlimited; Free transcribes only with the user's own Groq key (encrypted per user) or on-device.
 - [ ] P1.4 One badge style, the upgrade sheet, "Request upgrade", payment instructions.

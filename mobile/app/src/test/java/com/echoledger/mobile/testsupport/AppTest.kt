@@ -55,6 +55,8 @@ abstract class AppTest {
         com.echoledger.mobile.update.SelfUpdate.reset()
         runBlocking { app.resetPersistedState() }
         server = FakeServer()
+        // Since v1.6 the sign-in has a default server (production in builds on the owner's Mac): in tests it is the fake.
+        com.echoledger.mobile.ui.MainViewModel.defaultServer = server.baseUrl
     }
 
     /**

@@ -35,6 +35,16 @@ android {
         // "applinks.invalid" (RFC 2606: never resolves) matches nothing and is still a domain lint accepts.
         manifestPlaceholders["appLinkHost"] =
             (project.findProperty("echoledger.appLinkHost") as String?)?.takeIf { it.isNotBlank() } ?: "applinks.invalid"
+        // Since v1.6: the server the sign-in screen uses without asking (the production one), from the gradle property
+        // echoledger.defaultServer (the user's gradle.properties, -P, or ECHOLEDGER_DEFAULT_SERVER; never in the
+        // repository). Empty: the sign-in screen asks for the server, as before.
+        buildConfigField(
+            "String",
+            "DEFAULT_SERVER",
+            "\"" +
+                ((project.findProperty("echoledger.defaultServer") as String?) ?: System.getenv("ECHOLEDGER_DEFAULT_SERVER") ?: "").trim() +
+                "\""
+        )
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Every instrumented test runs in its own process with cleared app data (a crash fails only that test).
         testInstrumentationRunnerArguments["clearPackageData"] = "true"

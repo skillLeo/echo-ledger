@@ -328,6 +328,22 @@ data class RowViewsDto(val status: String = "none", val default: String = "origi
 @Serializable
 data class ProgressDto(val done: Int = 0, val total: Int = 0, @SerialName("eta_seconds") val etaSeconds: Long? = null)
 
+/** `POST /api/auth/start` (since v1.6): whether the email has an account, and what it can sign in with. */
+@Serializable
+data class AuthStartDto(
+    val account: String = "existing",
+    val methods: List<String> = emptyList(),
+    @SerialName("sign_up") val signUp: Boolean = false
+)
+
+/** `POST /api/auth/code` (since v1.6): a code was emailed; again after [resendAfter] s, valid [expiresIn] s. */
+@Serializable
+data class CodeSentDto(@SerialName("resend_after") val resendAfter: Int = 60, @SerialName("expires_in") val expiresIn: Int = 600)
+
+/** `POST /api/auth/code/verify` for a new email (since v1.6): the name and Terms come next. */
+@Serializable
+data class SignUpNextDto(val next: String = "profile", @SerialName("sign_up_token") val signUpToken: String)
+
 /** `GET /api/auth/options` (since v1.5, Phase 1C): what the sign-in screen offers on this server. */
 @Serializable
 data class AuthOptionsDto(

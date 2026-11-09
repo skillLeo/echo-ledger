@@ -112,11 +112,12 @@ class MainActivityTest : AppTest() {
     fun `an unpaired phone opens on the pairing screen without any tabs`() {
         launch(paired = false)
 
-        awaitText("Sign in to EchoLedger")
+        awaitText("Sign in or create an account")
 
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
         compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
-        assertTrue(server.requests.isEmpty())
+        // Since v1.6 the sign-in screen asks only what the server offers (Google, sign-up): nothing else is sent.
+        assertTrue(server.requests.all { it.url.encodedPath == "/api/auth/options" })
     }
 
     @Test
@@ -186,7 +187,7 @@ class MainActivityTest : AppTest() {
 
         compose.onNodeWithText("Skip setup").performClick()
 
-        awaitText("Sign in to EchoLedger")
+        awaitText("Sign in or create an account")
         assertTrue(runBlocking { app.graph.settings.current().onboardingDone })
         assertTrue(!present("Welcome to EchoLedger"))
     }
@@ -240,8 +241,9 @@ class MainActivityTest : AppTest() {
     @Test
     fun `tapping Scan QR code asks for the camera permission without crashing`() {
         val controller = launch(paired = false)
-        awaitText("Sign in to EchoLedger")
+        awaitText("Sign in or create an account")
 
+        compose.onNodeWithText("Other ways to sign in (QR code, one-time code)").performScrollTo().performClick()
         compose.onNodeWithText("Scan QR code").performClick()
         compose.waitForIdle()
 
@@ -262,7 +264,7 @@ class MainActivityTest : AppTest() {
         compose.onNodeWithText("Sign out").performScrollTo().performClick()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
 
-        awaitText("Sign in to EchoLedger")
+        awaitText("Sign in or create an account")
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
     }
 
@@ -306,14 +308,16 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
-    fun `an unpaired phone never contacts a server when it is opened or resumed`() {
+    fun `an unpaired phone only asks its own server what sign-in offers, once, when it is opened or resumed`() {
         val controller = launch(paired = false)
-        awaitText("Sign in to EchoLedger")
+        awaitText("Sign in or create an account")
 
         controller.pause().resume()
         compose.waitForIdle()
 
-        assertTrue(server.requests.isEmpty())
+        // Since v1.6 the build's server (the fake here) is asked once what its sign-in offers; nothing else is sent.
+        assertTrue(server.requests.all { it.url.encodedPath == "/api/auth/options" && it.method == "GET" })
+        assertTrue(server.requests.size <= 1)
     }
 
     // ---- a cold start: the stored settings arrive after the first frame ----------------------------------------------------------
@@ -382,7 +386,7 @@ class MainActivityTest : AppTest() {
         launchBeforeSettingsLoad()
         compose.waitForIdle()
 
-        assertTrue("the pairing form must not be shown to an already paired phone", !present("Sign in to EchoLedger"))
+        assertTrue("the pairing form must not be shown to an already paired phone", !present("Sign in or create an account"))
     }
 
     @Test
@@ -408,7 +412,7 @@ class MainActivityTest : AppTest() {
 
         pumpUntil("the pairing screen", timeoutMs = 10_000) {
             compose.waitForIdle()
-            present("Sign in to EchoLedger")
+            present("Sign in or create an account")
         }
         compose.onAllNodesWithTag("startup-splash").assertCountEquals(0)
     }

@@ -2,11 +2,13 @@ package com.echoledger.mobile.net
 
 import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.ApiJson
+import com.echoledger.mobile.data.AuthStartDto
 import com.echoledger.mobile.data.BinResponse
 import com.echoledger.mobile.data.BulkAnswer
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.ClientResponse
 import com.echoledger.mobile.data.ClientsResponse
+import com.echoledger.mobile.data.CodeSentDto
 import com.echoledger.mobile.data.CompleteAnswer
 import com.echoledger.mobile.data.CreateSessionRequest
 import com.echoledger.mobile.data.CreateSessionResponse
@@ -34,6 +36,7 @@ import com.echoledger.mobile.data.ShareLinkDto
 import com.echoledger.mobile.data.ShareListResponse
 import com.echoledger.mobile.data.SharedItemDto
 import com.echoledger.mobile.data.SharedResponse
+import com.echoledger.mobile.data.SignUpNextDto
 import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.data.SttTokenResponse
 import com.echoledger.mobile.data.TranscriptDto
@@ -136,7 +139,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         otp: String?,
         name: String,
         appVersion: String,
-        osVersion: String
+        osVersion: String,
+        installId: String? = null
     ): RegisterResponse {
         val body = buildJsonObject {
             put("email", email)
@@ -146,12 +150,20 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             put("platform", "android")
             put("app_version", appVersion)
             put("os_version", osVersion)
+            installId?.let { put("install_id", it) }
         }.toString().toRequestBody(jsonType)
         return call(request("auth/password").post(body).build(), RegisterResponse.serializer())!!
     }
 
     /** `POST /api/auth/device/token` (since v1.5): the browser sign-in's one-time code and the PKCE verifier. */
-    suspend fun deviceToken(code: String, verifier: String, name: String, appVersion: String, osVersion: String): RegisterResponse {
+    suspend fun deviceToken(
+        code: String,
+        verifier: String,
+        name: String,
+        appVersion: String,
+        osVersion: String,
+        installId: String? = null
+    ): RegisterResponse {
         val body = buildJsonObject {
             put("code", code)
             put("code_verifier", verifier)
@@ -159,6 +171,7 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             put("platform", "android")
             put("app_version", appVersion)
             put("os_version", osVersion)
+            installId?.let { put("install_id", it) }
         }.toString().toRequestBody(jsonType)
         return call(request("auth/device/token").post(body).build(), RegisterResponse.serializer())!!
     }
@@ -228,15 +241,92 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return other.scheme == server.scheme && other.host == server.host && other.port == server.port
     }
 
-    suspend fun register(code: String, name: String, appVersion: String, osVersion: String): RegisterResponse {
+    suspend fun register(code: String, name: String, appVersion: String, osVersion: String, installId: String? = null): RegisterResponse {
         val body = buildJsonObject {
             put("pairing_code", code)
             put("name", name)
             put("platform", "android")
             put("app_version", appVersion)
             put("os_version", osVersion)
+            installId?.let { put("install_id", it) }
         }.toString().toRequestBody(jsonType)
         return call(request("devices/register").post(body).build(), RegisterResponse.serializer())!!
+    }
+
+    /** `GET /api/auth/options` (since v1.5, Phase 1C): what the sign-in screen offers here. */
+    suspend fun authOptions(): com.echoledger.mobile.data.AuthOptionsDto =
+        call(request("auth/options").get().build(), com.echoledger.mobile.data.AuthOptionsDto.serializer())!!
+
+    /** `POST /api/auth/start` (since v1.6): the email first; whether it has an account and what it can use. */
+    suspend fun authStart(email: String): AuthStartDto {
+        val body = buildJsonObject { put("email", email) }.toString().toRequestBody(jsonType)
+        return call(request("auth/start").post(body).build(), AuthStartDto.serializer())!!
+    }
+
+    /** `POST /api/auth/code` (since v1.6): emails a 6-digit code ([purpose] `sign_in` or `sign_up`). */
+    suspend fun authCode(email: String, purpose: String): CodeSentDto {
+        val body = buildJsonObject {
+            put("email", email)
+            put("purpose", purpose)
+        }.toString().toRequestBody(jsonType)
+        return call(request("auth/code").post(body).build(), CodeSentDto.serializer())!!
+    }
+
+    /** What `POST /api/auth/code/verify` answers: signed in, or (a new email) the profile step's token. */
+    sealed interface CodeResult {
+        data class SignedIn(val response: RegisterResponse) : CodeResult
+
+        data class NewAccount(val next: SignUpNextDto) : CodeResult
+    }
+
+    /** `POST /api/auth/code/verify` (since v1.6): the emailed code (and the two-factor code once asked). */
+    suspend fun authCodeVerify(
+        email: String,
+        code: String,
+        otp: String?,
+        name: String,
+        appVersion: String,
+        osVersion: String,
+        installId: String?
+    ): CodeResult {
+        val body = buildJsonObject {
+            put("email", email)
+            put("code", code)
+            otp?.takeIf { it.isNotBlank() }?.let { put("otp", it) }
+            put("name", name)
+            put("platform", "android")
+            put("app_version", appVersion)
+            put("os_version", osVersion)
+            installId?.let { put("install_id", it) }
+        }.toString().toRequestBody(jsonType)
+        val answer = call(request("auth/code/verify").post(body).build(), kotlinx.serialization.json.JsonObject.serializer())!!
+        return if (answer.containsKey("token")) {
+            CodeResult.SignedIn(ApiJson.decodeFromJsonElement(RegisterResponse.serializer(), answer))
+        } else {
+            CodeResult.NewAccount(ApiJson.decodeFromJsonElement(SignUpNextDto.serializer(), answer))
+        }
+    }
+
+    /** `POST /api/auth/sign-up` (since v1.6): the new account, on the default plan, and this phone signed in to it. */
+    suspend fun authSignUp(
+        signUpToken: String,
+        name: String,
+        deviceName: String,
+        appVersion: String,
+        osVersion: String,
+        installId: String?
+    ): RegisterResponse {
+        val body = buildJsonObject {
+            put("sign_up_token", signUpToken)
+            put("name", name)
+            put("accept_terms", true)
+            put("device_name", deviceName)
+            put("platform", "android")
+            put("app_version", appVersion)
+            put("os_version", osVersion)
+            installId?.let { put("install_id", it) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("auth/sign-up").post(body).build(), RegisterResponse.serializer())!!
     }
 
     suspend fun config(): ServerConfig = call(request("config").get().build(), ServerConfig.serializer())!!

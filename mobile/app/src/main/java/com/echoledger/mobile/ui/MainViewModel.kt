@@ -148,7 +148,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     payload.url,
                     payload.pins,
                     token = null
-                ).register(payload.code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
+                ).register(payload.code, name, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE, installId())
             }
             finishSignIn(payload.url, payload.pins, response)
             _message.value = "Signed in to ${payload.url.removePrefix("https://")}"
@@ -224,6 +224,179 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ---- The one sign-in flow (since v1.6, P1): email first, then password or an emailed code, new accounts too ----
+
+    private val _signInState = MutableStateFlow(com.echoledger.mobile.core.SignInFlow.State())
+    val signInState: StateFlow<com.echoledger.mobile.core.SignInFlow.State> = _signInState.asStateFlow()
+
+    /** The server the sign-in uses: the build's default (production), unless one was typed under Advanced. */
+    private val _signInServer = MutableStateFlow(defaultServer)
+    val signInServer: StateFlow<String> = _signInServer.asStateFlow()
+
+    fun setSignInServer(typed: String) {
+        _signInServer.value = typed
+    }
+
+    private fun signInUrl(): String = SignIn.serverUrl(_signInServer.value.ifBlank { defaultServer })
+
+    private fun installId(): String = com.echoledger.mobile.core.InstallId.get(getApplication())
+
+    /** What the server's sign-in offers (Google, sign-up), read when the sign-in screen opens; null for an older server. */
+    private val _authOptions = MutableStateFlow<com.echoledger.mobile.data.AuthOptionsDto?>(null)
+    val authOptions: StateFlow<com.echoledger.mobile.data.AuthOptionsDto?> = _authOptions.asStateFlow()
+
+    fun loadAuthOptions() = viewModelScope.launch {
+        val url = signInUrl()
+        if (url.length <= "https://".length) return@launch
+        _authOptions.value = withContext(Dispatchers.IO) {
+            runCatching { ApiClient(url, emptyList(), token = null).authOptions() }.getOrNull()
+        }
+    }
+
+    fun signInEmail(email: String) {
+        _signInState.update { it.copy(email = email, error = null) }
+    }
+
+    fun signInBack() {
+        _signInState.update { com.echoledger.mobile.core.SignInFlow.back(it) }
+    }
+
+    private suspend fun <T> signInStep(block: suspend (ApiClient) -> T): T? {
+        _busy.value = true
+        return try {
+            withContext(Dispatchers.IO) { block(ApiClient(signInUrl(), emptyList(), token = null)) }
+        } catch (e: com.echoledger.mobile.net.ApiException) {
+            if (e.code == "otp_required") {
+                _signInState.update {
+                    it.copy(
+                        otpAfter =
+                            it.step.takeIf { s ->
+                                s != com.echoledger.mobile.core.SignInFlow.Step.OTP
+                            } ?: it.otpAfter,
+                        step = com.echoledger.mobile.core.SignInFlow.Step.OTP,
+                        error = null
+                    )
+                }
+            } else {
+                _signInState.update { it.copy(error = com.echoledger.mobile.core.SignInFlow.message(e.code, e.message)) }
+            }
+            null
+        } catch (e: IllegalArgumentException) {
+            _signInState.update { it.copy(error = e.message ?: "Check the server address.") }
+            null
+        } catch (e: Exception) {
+            _signInState.update { it.copy(error = "Can't reach the server. Check the connection and try again.") }
+            null
+        } finally {
+            _busy.value = false
+        }
+    }
+
+    /** "Continue" after the email. */
+    fun signInContinue() = viewModelScope.launch {
+        val state = _signInState.value
+        if (!com.echoledger.mobile.core.SignInFlow.validEmail(state.email)) {
+            _signInState.update { it.copy(error = "Enter your email address.") }
+            return@launch
+        }
+        _busy.value = true
+        val answer = try {
+            withContext(Dispatchers.IO) { ApiClient(signInUrl(), emptyList(), token = null).authStart(state.email.trim()) }
+        } catch (e: com.echoledger.mobile.net.ApiException) {
+            _busy.value = false
+            // A server older than v1.6 has no auth/start: its password sign-in, as before.
+            if (e.status == 404 || e.status == 405) {
+                _signInState.update { com.echoledger.mobile.core.SignInFlow.olderServer(it) }
+            } else {
+                _signInState.update { it.copy(error = com.echoledger.mobile.core.SignInFlow.message(e.code, e.message)) }
+            }
+            return@launch
+        } catch (e: IllegalArgumentException) {
+            _busy.value = false
+            _signInState.update { it.copy(error = e.message ?: "Check the server address.") }
+            return@launch
+        } catch (e: Exception) {
+            _busy.value = false
+            _signInState.update { it.copy(error = "Can't reach the server. Check the connection and try again.") }
+            return@launch
+        }
+        _busy.value = false
+        val (next, action) = com.echoledger.mobile.core.SignInFlow.afterStart(state, answer)
+        _signInState.value = next
+        sendCodeFor(action)
+    }
+
+    private suspend fun sendCodeFor(action: com.echoledger.mobile.core.SignInFlow.Action) {
+        val purpose = when (action) {
+            com.echoledger.mobile.core.SignInFlow.Action.SEND_SIGN_IN_CODE -> "sign_in"
+            com.echoledger.mobile.core.SignInFlow.Action.SEND_SIGN_UP_CODE -> "sign_up"
+            com.echoledger.mobile.core.SignInFlow.Action.NONE -> return
+        }
+        val email = _signInState.value.email
+        val sent = signInStep { it.authCode(email, purpose) } ?: return
+        _signInState.update { it.copy(resendAtMs = android.os.SystemClock.elapsedRealtime() + sent.resendAfter * 1000L, error = null) }
+    }
+
+    /** "Email me a code" on the password step. */
+    fun signInUseCode() = viewModelScope.launch {
+        val (next, action) = com.echoledger.mobile.core.SignInFlow.useCode(_signInState.value)
+        _signInState.value = next
+        sendCodeFor(action)
+    }
+
+    /** "Send again" on the code step. */
+    fun signInResend() = viewModelScope.launch {
+        sendCodeFor(
+            if (_signInState.value.newAccount) {
+                com.echoledger.mobile.core.SignInFlow.Action.SEND_SIGN_UP_CODE
+            } else {
+                com.echoledger.mobile.core.SignInFlow.Action.SEND_SIGN_IN_CODE
+            }
+        )
+    }
+
+    /** The password (and the two-factor code once asked). */
+    fun signInWithPassword(password: String, otp: String?) = viewModelScope.launch {
+        val email = _signInState.value.email
+        val response = signInStep {
+            it.signInWithPassword(email, password, otp, deviceName(""), BuildConfig.VERSION_NAME, Build.VERSION.RELEASE, installId())
+        } ?: return@launch
+        finishSignIn(signInUrl(), emptyList(), response, email)
+        _signInState.value = com.echoledger.mobile.core.SignInFlow.State()
+        _message.value = "Signed in as $email"
+    }
+
+    /** The emailed code (and the two-factor code once asked). */
+    fun signInWithCode(code: String, otp: String?) = viewModelScope.launch {
+        val email = _signInState.value.email
+        val result = signInStep {
+            it.authCodeVerify(email, code.trim(), otp, deviceName(""), BuildConfig.VERSION_NAME, Build.VERSION.RELEASE, installId())
+        } ?: return@launch
+        when (result) {
+            is ApiClient.CodeResult.SignedIn -> {
+                finishSignIn(signInUrl(), emptyList(), result.response, email)
+                _signInState.value = com.echoledger.mobile.core.SignInFlow.State()
+                _message.value = "Signed in as $email"
+            }
+
+            is ApiClient.CodeResult.NewAccount -> _signInState.update {
+                it.copy(step = com.echoledger.mobile.core.SignInFlow.Step.PROFILE, signUpToken = result.next.signUpToken, error = null)
+            }
+        }
+    }
+
+    /** The new account's name, with the Terms accepted. */
+    fun signInCreateAccount(name: String) = viewModelScope.launch {
+        val state = _signInState.value
+        val token = state.signUpToken ?: return@launch
+        val response = signInStep {
+            it.authSignUp(token, name.trim(), deviceName(""), BuildConfig.VERSION_NAME, Build.VERSION.RELEASE, installId())
+        } ?: return@launch
+        finishSignIn(signInUrl(), emptyList(), response, state.email)
+        _signInState.value = com.echoledger.mobile.core.SignInFlow.State()
+        _message.value = "Welcome to EchoLedger"
+    }
+
     /** The browser sign-in being made (since v1.5): its server, PKCE verifier, state and the phone's name. */
     private var browserSignIn: SignIn.Browser? = null
 
@@ -246,7 +419,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         try {
             val response = withContext(Dispatchers.IO) {
                 ApiClient(started.serverUrl, emptyList(), token = null)
-                    .deviceToken(code, started.verifier, started.deviceName, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE)
+                    .deviceToken(code, started.verifier, started.deviceName, BuildConfig.VERSION_NAME, Build.VERSION.RELEASE, installId())
             }
             finishSignIn(started.serverUrl, emptyList(), response)
             _message.value = "Signed in"
@@ -1132,6 +1305,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     companion object {
+        /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
+        @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
+
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Profile → Devices → Sign in a device."
     }
 }

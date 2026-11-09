@@ -67,7 +67,7 @@ class OnboardingTest : ScreenTest() {
         next("Get started")
         next("Continue")
 
-        compose.onNodeWithText("Sign in to EchoLedger").assertIsDisplayed()
+        compose.onNodeWithText("Sign in or create an account").assertIsDisplayed()
         compose.onNodeWithText("Step 3 of 5").assertIsDisplayed()
 
         next("Skip for now")
@@ -84,7 +84,7 @@ class OnboardingTest : ScreenTest() {
         next("Continue")
 
         compose.onNodeWithText("Try a 10-second test").assertIsDisplayed()
-        compose.onAllNodesWithText("Sign in to EchoLedger").assertCountEquals(0)
+        compose.onAllNodesWithText("Sign in or create an account").assertCountEquals(0)
     }
 
     @Test
