@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +42,16 @@ final class AccountController extends Controller
                 'role' => $workspaces->roleOf($user, $workspace->id)?->value,
             ],
             'deletes_at' => $user->deletes_at?->toAtomString(),
+            // Since v1.6 (P4): platform staff may open the admin panel (any staff role); every workspace of this person,
+            // the device's marked current (only theirs: the person's own memberships).
+            'super_admin' => StaffAccess::isStaff($user),
+            'workspaces' => $user->workspaces()->orderBy('workspaces.id')->get(['workspaces.id', 'workspaces.name'])
+                ->map(fn (Workspace $w): array => [
+                    'id' => $w->id,
+                    'name' => $w->name,
+                    'role' => (string) $w->getRelationValue('pivot')?->getAttribute('role'),
+                    'current' => $w->id === $workspace?->id,
+                ])->values()->all(),
         ]);
     }
 
