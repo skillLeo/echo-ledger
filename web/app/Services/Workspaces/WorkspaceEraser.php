@@ -13,6 +13,7 @@ use App\Models\RequestUpload;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditLog;
+use App\Services\Entitlements\PaymentProofs;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\RequestLinks;
 use Illuminate\Database\Eloquent\Collection;
@@ -71,6 +72,8 @@ final class WorkspaceEraser
         });
         Device::query()->withoutGlobalScopes()->where('workspace_id', $id)->get()->each(fn (Device $device) => $device->delete());
         DevicePairingCode::query()->withoutGlobalScopes()->where('workspace_id', $id)->delete();
+        // Payment receipts (v1.7): the requests go with the workspace by their foreign key, the encrypted files first.
+        app(PaymentProofs::class)->eraseFilesOf(workspaceId: $id);
         // Its usage rows stay, without the workspace (the foreign key sets it to null): costs already paid stay on
         // Server usage.
 

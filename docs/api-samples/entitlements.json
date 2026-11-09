@@ -117,7 +117,8 @@
     "limits": {
         "monthly_minutes": {
             "limit": null,
-            "used": 0
+            "used": 0,
+            "resets_at": "2026-12-01T00:00:00+05:00"
         },
         "devices": {
             "limit": null,
@@ -169,6 +170,8 @@
             "badge": "FREE",
             "color": "#64748b",
             "price": "Free",
+            "price_pkr": null,
+            "price_text": "Free",
             "description": "Record, organise, search and share. Transcripts with your own free Groq key, or on your computer.",
             "features": [],
             "limits": {
@@ -188,6 +191,8 @@
             "badge": "PRO",
             "color": "#7c3aed",
             "price": "Ask for the price",
+            "price_pkr": 2999,
+            "price_text": "Rs 2,999 a month",
             "description": "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and Claude or ChatGPT.",
             "features": [
                 "platform_transcription",
@@ -213,6 +218,8 @@
             "badge": "BUSINESS",
             "color": "#0369a1",
             "price": "Ask for the price",
+            "price_pkr": 12499,
+            "price_text": "Rs 12,499 a month",
             "description": "Everything in Pro, and a team with roles, premium engines, Live Translate and AI notes.",
             "features": [
                 "platform_transcription",

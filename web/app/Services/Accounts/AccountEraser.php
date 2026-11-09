@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
+use App\Services\Entitlements\PaymentProofs;
 use App\Services\Projects\ProjectTree;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Storage\RecordingFiles;
@@ -92,6 +93,13 @@ final class AccountEraser
             self::deleteFile($export->path);
             $export->delete();
         });
+
+        // Payment receipts (v1.7): their rows go with the account by its foreign key; the encrypted files go first.
+        $proofs = app(PaymentProofs::class);
+        $proofs->eraseFilesOf(userId: $user->id);
+        foreach ($solo as $workspaceId) {
+            $proofs->eraseFilesOf(workspaceId: $workspaceId);
+        }
 
         Device::query()->withoutGlobalScopes()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->get()
             ->each(fn (Device $device) => $device->delete());

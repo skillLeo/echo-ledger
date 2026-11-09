@@ -85,6 +85,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Upgrade requests (v1.6): the newest one of this device's person.
         Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
+        // Payment receipts (v1.7): a receipt of the person's own request, decrypted for this answer only.
+        Route::get('upgrade-requests/{id}/proofs/{proof}', [UpgradeRequestController::class, 'showProof'])->middleware('abilities:config:read')->name('api.upgrade-requests.proofs.show');
         // Promo codes (v1.6.2): one code checked for this device's person; codes are never listed.
         Route::post('promo-codes/check', [PromoCodeController::class, 'check'])->middleware(['abilities:config:read', 'throttle:promo-check'])->name('api.promo-codes.check');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
@@ -133,6 +135,13 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
             Route::delete('me/transcription-key', [EntitlementsController::class, 'deleteKey'])->name('api.me.transcription-key.delete');
             // Upgrade requests (v1.6): ask for a plan, one waiting at a time.
             Route::post('upgrade-requests', [UpgradeRequestController::class, 'store'])->middleware('throttle:upgrade-request')->name('api.upgrade-requests.store');
+            // Payment receipts (v1.7): send a receipt, take one back, say it is paid, or cancel; 20 an hour, 60 a day per person.
+            Route::middleware('throttle:upgrade-payment')->group(function (): void {
+                Route::post('upgrade-requests/{id}/proofs', [UpgradeRequestController::class, 'storeProof'])->name('api.upgrade-requests.proofs.store');
+                Route::delete('upgrade-requests/{id}/proofs/{proof}', [UpgradeRequestController::class, 'destroyProof'])->name('api.upgrade-requests.proofs.destroy');
+                Route::post('upgrade-requests/{id}/paid', [UpgradeRequestController::class, 'paid'])->name('api.upgrade-requests.paid');
+                Route::post('upgrade-requests/{id}/cancel', [UpgradeRequestController::class, 'cancel'])->name('api.upgrade-requests.cancel');
+            });
             Route::post('account/sign-out-everywhere', [AccountController::class, 'signOutEverywhere'])->name('api.account.sign-out-everywhere');
             Route::delete('account', [AccountController::class, 'destroy'])->name('api.account.destroy');
             Route::post('sessions/{id}/restore', [BinController::class, 'restore'])->middleware($own)->name('api.sessions.restore');

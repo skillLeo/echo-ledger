@@ -33,6 +33,8 @@ Schedule::command('echoledger:prune-exports')->hourly()->withoutOverlapping(30);
 Schedule::command('model:prune')->daily()->withoutOverlapping(60);
 // Since v1.6: a plan given until a date ends then; the workspace goes back to the default plan.
 Schedule::command('echoledger:end-plans')->hourly()->withoutOverlapping(30);
+// Since v1.7: payment receipts are erased 90 days after their request was decided or cancelled (the rows stay).
+Schedule::command('echoledger:prune-payment-proofs')->daily()->withoutOverlapping(30);
 
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 

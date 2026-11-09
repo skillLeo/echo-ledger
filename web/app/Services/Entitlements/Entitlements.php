@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -235,7 +236,9 @@ final class Entitlements
             ],
             'features' => $features,
             'limits' => [
-                'monthly_minutes' => ['limit' => $limit('monthly_minutes'), 'used' => (int) round($limits->minutesUsed($workspaceId))],
+                // Since v1.7: when the month's minutes start again (the 1st of next month in Pakistan).
+                'monthly_minutes' => ['limit' => $limit('monthly_minutes'), 'used' => (int) round($limits->minutesUsed($workspaceId)),
+                    'resets_at' => Carbon::now('Asia/Karachi')->startOfMonth()->addMonthNoOverflow()->toAtomString()],
                 'devices' => ['limit' => $limit('devices'), 'used' => $limits->devicesUsed($workspaceId, $user->id)],
                 'storage_bytes' => ['limit' => $limit('storage_bytes'), 'used' => $limits->storageUsed($workspaceId)],
                 'retention_days' => ['limit' => $limit('retention_days')],
@@ -265,6 +268,9 @@ final class Entitlements
             'badge' => $plan->badgeText(),
             'color' => $plan->colorOrDefault(),
             'price' => $plan->displayPrice(),
+            // Since v1.7: whole rupees by bank transfer (null when free or not set), and as written.
+            'price_pkr' => $plan->pricePkr(),
+            'price_text' => $plan->priceText(),
             'description' => $plan->description,
             'features' => array_values(array_filter(Features::paid(), fn (string $f): bool => $plan->allows($f))),
             'limits' => $limits,

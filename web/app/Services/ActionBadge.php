@@ -15,7 +15,7 @@ use Illuminate\Notifications\DatabaseNotification;
  */
 final class ActionBadge
 {
-    public const UPGRADE_REPLIES = ['upgrade_approved', 'upgrade_declined'];
+    public const UPGRADE_REPLIES = ['upgrade_approved', 'upgrade_declined', 'upgrade_receipt_requested'];
 
     /** How many unread notifications are read for the number (newest first): more than "9+" ever needs. */
     private const LOOK_AT = 50;

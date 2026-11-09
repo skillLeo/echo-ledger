@@ -41,6 +41,7 @@ use Illuminate\Support\Carbon;
  * @property Carbon|null $archived_at since v1.6 (P2.3): no longer offered or given to anyone new; its workspaces keep it
  * @property string|null $price_amount since v1.6 (P2.3): the display price's amount, with $currency
  * @property string|null $currency ISO 4217, e.g. PKR or USD
+ * @property int|null $price_pkr since v1.7: what a month costs by bank transfer, in whole rupees (null = free or not set)
  */
 class Plan extends Model
 {
@@ -87,7 +88,7 @@ class Plan extends Model
             'team' => false, 'premium_engines' => false, 'live_translate' => false, 'ai_notes' => false]];
 
     protected $fillable = ['key', 'name', 'price_usd', 'monthly_minutes', 'storage_bytes', 'max_devices', 'retention_days', 'seats', 'ai_credits_usd', 'features',
-        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency'];
+        'badge', 'color', 'description', 'price_label', 'sort_order', 'on_offer', 'is_default', 'trial_minutes', 'max_file_minutes', 'uploads_per_day', 'engines', 'retention_from', 'archived_at', 'price_amount', 'currency', 'price_pkr'];
 
     protected static function booted(): void
     {
@@ -136,6 +137,26 @@ class Plan extends Model
         }
 
         return (float) $this->price_usd > 0 ? '$'.number_format((float) $this->price_usd, 2).' a month' : 'Free';
+    }
+
+    /** Since v1.7: the rupees a month costs, or null when the plan is free or has no rupee price. */
+    public function pricePkr(): ?int
+    {
+        return $this->price_pkr !== null && $this->price_pkr > 0 ? $this->price_pkr : null;
+    }
+
+    /** Since v1.7: "Rs 2,999 a month" from the rupee price, else the price as shown. */
+    public function priceText(): string
+    {
+        $pkr = $this->pricePkr();
+
+        return $pkr !== null ? self::rupees($pkr).' a month' : $this->displayPrice();
+    }
+
+    /** Whole rupees as people write them: "Rs 2,999". */
+    public static function rupees(int $amount): string
+    {
+        return 'Rs '.number_format($amount);
     }
 
     public function isArchived(): bool
@@ -211,7 +232,7 @@ class Plan extends Model
             'seats' => 'integer', 'price_usd' => 'decimal:2', 'ai_credits_usd' => 'decimal:2', 'features' => 'array',
             'sort_order' => 'integer', 'on_offer' => 'boolean', 'is_default' => 'boolean', 'trial_minutes' => 'integer',
             'max_file_minutes' => 'integer', 'uploads_per_day' => 'integer', 'engines' => 'array', 'retention_from' => 'datetime',
-            'archived_at' => 'datetime', 'price_amount' => 'decimal:2',
+            'archived_at' => 'datetime', 'price_amount' => 'decimal:2', 'price_pkr' => 'integer',
         ];
     }
 }

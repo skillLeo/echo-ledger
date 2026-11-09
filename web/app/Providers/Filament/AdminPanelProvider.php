@@ -8,6 +8,7 @@ use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
 use App\Filament\Support\Shell;
+use App\Http\Controllers\AdminPaymentProofController;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\AuthenticateStaff;
 use App\Http\Middleware\EnsureStaffTwoFactor;
@@ -31,6 +32,7 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 /**
@@ -109,6 +111,11 @@ class AdminPanelProvider extends PanelProvider
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
             ])
+            // Since v1.7: payment receipts for staff who answer upgrade requests (the controller checks the permission).
+            ->authenticatedRoutes(function (): void {
+                Route::get('upgrade-requests/proofs/{proof}/{variant}', AdminPaymentProofController::class)
+                    ->whereUlid('proof')->whereIn('variant', ['thumb', 'full'])->name('upgrade-proofs');
+            })
             ->authMiddleware([
                 AuthenticateStaff::class,
                 // Since v1.6 (P2.5): every member of staff has two-step sign-in on.

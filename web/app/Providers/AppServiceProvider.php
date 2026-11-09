@@ -252,6 +252,16 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perDay(5)->by('upgrade-request:'.($device instanceof Device ? $device->user_id : $request->ip()));
         });
+        // Since v1.7: payment receipts, "paid" and cancel together, 20 an hour and 60 a day per person.
+        RateLimiter::for('upgrade-payment', function (Request $request) {
+            $device = $request->user();
+            $who = $device instanceof Device ? (string) $device->user_id : $request->ip();
+
+            return [
+                Limit::perHour(20)->by('upgrade-payment:hour:'.$who),
+                Limit::perDay(60)->by('upgrade-payment:day:'.$who),
+            ];
+        });
         RateLimiter::for('auth-sign-up', fn (Request $request) => Limit::perMinute(10)->by('auth-sign-up:'.$request->ip()));
         RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
         // The public account pages (since v1.5): /account/delete and the export download.
