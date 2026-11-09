@@ -272,6 +272,91 @@ suggested fixes and screen descriptions are never switched off by a plan.
   `403 seat_limit_reached` (an invitation past the plan's seats), and `403 ai_budget_reached` now also when the
   plan's AI credits for the month are used (it replaces the v1.4 `client_ai.monthly_usd` budget). The B20 errors (`budget_exceeded`, `storage_limit_reached`, `device_limit_reached`) stay.
 
+### Sign-up and sign-in with an email code (since v1.6, P1)
+One flow in every app and on the web: the email first, then what fits it. The apps no longer ask for a server address:
+they use the production server and keep "Use a different server" under Advanced.
+
+- `POST /api/auth/start` — public, throttled (10/min/IP, 5/min per email): `{"email"}` → `200 {"account": "existing"
+  | "new", "methods": ["password", "code", "google"], "sign_up": true}`. `methods` for an existing account lists what
+  it can use (`password` only if it has one, `google` only when the server offers Google); for a new email `["code",
+  "google"]` when sign-up is open. A new email while sign-up is closed: `403 sign_up_closed` ("Ask the owner for an
+  invitation"); an address on the disposable-email list or outside the allowed domains: `422 email_not_allowed`.
+  Saying whether an account exists is deliberate (the person must know whether they are signing up); the limits make
+  probing many addresses slow.
+- `POST /api/auth/code` — public, throttled: `{"email", "purpose": "sign_in" | "sign_up", "turnstile": "…" | null}` →
+  `202 {"resend_after": 60, "expires_in": 600}` and a 6-digit code by email (valid 10 minutes; a new code replaces the
+  old one). Again before 60 s: `429 resend_too_soon` with `Retry-After`; at most 5 codes an hour per email and 20 per
+  IP (`429 too_many_attempts`); sign-ups per IP a day (Admin → Sign-up, default 5): `429 sign_up_limit`. `turnstile`
+  is required on the web sign-up page when Turnstile is set (`422 turnstile_failed`); the apps send none.
+- `POST /api/auth/code/verify` — public, throttled: `{"email", "code", "otp": null, "name", "platform",
+  "app_version", "os_version", "install_id"}` (the device fields as in `POST /api/auth/password`):
+  - an existing account: `201` exactly like `POST /api/auth/password` (`device`, `token`, `token_expires_at`,
+    `config`), or `401 otp_required` when it has two-factor sign-in (send again with `otp`, the same code is still
+    good for 10 minutes);
+  - a new email: `200 {"next": "profile", "sign_up_token": "…"}` (valid 15 minutes, one use);
+  - a wrong code: `422 invalid_code` with `attempts_left`; after 5 wrong codes, or after 10 minutes, `422
+    code_expired` (ask for a new one).
+- `POST /api/auth/sign-up` — public, throttled: `{"sign_up_token", "name", "accept_terms": true, "platform",
+  "app_version", "os_version", "install_id"}` → `201` like `POST /api/auth/password`: the account (email verified by
+  the code), its personal workspace on the default plan (Free) and the device's token. `accept_terms` must be `true`
+  (`422 validation_failed`); a used or old token `422 invalid_code`. The web page `/sign-up` does the same with the
+  console session instead of a device token.
+- `install_id` (since v1.6, P3): a random id the app makes once per install and keeps (Android: encrypted storage;
+  desktop: a hash of the machine id and the app's data folder). Every sign-in route takes it; a device of the same
+  account with the same `install_id` is signed in again on its own row instead of a new one. Optional for older apps.
+- `GET /api/auth/options` gains `"code": true` (email codes offered) and `"server": "https://…"` (its own address).
+
+### Entitlements (since v1.6, P1)
+The server alone decides what a person may use. Features are in a registry (key, name, description, `cost`: `free`
+or `paid`); plans grant features and limits; the super admin can override any of them for one person, with an expiry
+for the plan (then the default plan). Every route checks them; the apps only show what the answer says.
+
+- `GET /api/me/entitlements` — `config:read`:
+  ```json
+  {"plan": {"key": "free", "name": "Free", "badge": "FREE", "color": "#64748b", "expires_at": null,
+            "trial_minutes_left": 0},
+   "features": {"platform_transcription": {"enabled": false, "name": "Transcription on EchoLedger",
+                  "description": "…", "cost": "paid", "lowest_plan": "pro"},
+                "views": {"enabled": false, "…": "…"}},
+   "limits": {"monthly_minutes": {"limit": 0, "used": 0}, "devices": {"limit": 2, "used": 1},
+              "storage_bytes": {"limit": 1073741824, "used": 52428800}, "retention_days": {"limit": 30},
+              "seats": {"limit": 1, "used": 1}, "max_file_minutes": {"limit": 180},
+              "uploads_per_day": {"limit": 50, "used": 3}, "ai_usd_month": {"limit": 0, "used": 0}},
+   "engines": ["own_groq", "on_device"],
+   "transcription_key": {"provider": "groq", "set": true, "last4": "3f9a"},
+   "upgrade_request": {"id": "01JF…", "plan": "pro", "status": "pending" | "approved" | "declined", "created_at": "…"},
+   "plans": [{"key": "pro", "name": "Pro", "badge": "PRO", "color": "#7c3aed", "price": "Rs 2,000 a month",
+              "description": "…", "features": ["platform_transcription", "views", "…"],
+              "limits": {"monthly_minutes": 600, "devices": 5, "…": "…"}}]}
+  ```
+  `limit: null` = no limit. `upgrade_request` is the newest one or `null`. `plans` are the plans on offer, cheapest
+  first, for the comparison sheet.
+- Feature keys: free — `record`, `organise`, `search`, `share_links`, `export`, `ready_check`; paid —
+  `platform_transcription`, `views` (Roman Urdu, English and Urdu views; until v1.6 never switched off),
+  `double_check`, `screen_moments`, `connector`, `team`, `premium_engines`, `live_translate`, `ai_notes`.
+- Errors: `403 feature_not_in_plan` with `"feature"` and `"lowest_plan"` (the badge the app shows); `403
+  limit_reached` with `"limit"` (a key above), replacing `budget_exceeded`, `storage_limit_reached` and
+  `device_limit_reached` (still sent to apps older than v1.6 by their old codes).
+- `GET /api/config` keeps its `plan` block for older apps, made from the entitlements.
+
+### Your own transcription key (since v1.6, P1 — the Free plan)
+- `PUT /api/me/transcription-key` — `sessions:write`, throttled (10/hour): `{"provider": "groq", "key": "gsk_…"}` →
+  the server checks it with Groq once → `200 {"provider": "groq", "set": true, "last4": "3f9a"}`; a key Groq refuses
+  is `422 invalid_key`. Kept encrypted for that person only, never sent back, used only for their own recordings.
+  `DELETE /api/me/transcription-key` → `204`.
+- A recording of someone without `platform_transcription` is transcribed with their own key; without one, its
+  transcript is `failed` with `error_code: "needs_transcription_key"` ("Add your free Groq key in Account →
+  Transcription key"), and the desktop can send its on-device transcript as before (device-supplied transcripts).
+
+### Upgrade requests (since v1.6, P1)
+- `POST /api/upgrade-requests` — `sessions:write`, throttled (5/day): `{"plan": "pro", "message": "…" | null}` →
+  `201 {"id", "plan", "status": "pending", "message", "payment_instructions": "…", "created_at"}`. One pending
+  request at a time: another is `409 request_pending` with the pending one.
+- `GET /api/upgrade-requests/latest` — `config:read` → the newest request (with `decided_at` and the admin's
+  `reply` once decided) or `404 not_found`.
+- The admin approves (the plan, until a date or not) or declines with a message; the person gets an email and an
+  activity item (`kind`: `upgrade_approved` | `upgrade_declined`).
+
 ### Public pages and app downloads (since v1.5)
 No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
 - `GET /terms`, `GET /privacy` (the processors that handle recordings are listed there), `GET /account/delete` (see
