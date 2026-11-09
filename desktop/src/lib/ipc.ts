@@ -1251,7 +1251,7 @@ export type AppEvent = keyof EventPayloads;
 
 /** The server's public pages the app opens in the browser (since v1.5). */
 /** The server's pages the apps open in the browser (v1.6: the console's admin panel, workspace and profile pages). */
-export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "admin/workspace" | "admin/profile";
+export type ServerPage = "terms" | "privacy" | "account/delete" | "downloads" | "admin" | "app/workspace" | "app/profile";
 /** The words the core uses while the server holds this computer's work (error.rs: MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT). */
 export const MAINTENANCE_TEXT = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
 export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";

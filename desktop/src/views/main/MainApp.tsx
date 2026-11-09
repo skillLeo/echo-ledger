@@ -629,7 +629,7 @@ export default function MainApp() {
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
           onActivity={() => goTo("activity")} onAccount={() => openAccount("profile")} onPlan={() => openAccount("plan")}
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
-          onWorkspaces={() => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true))}
+          onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
           onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
@@ -687,7 +687,7 @@ export default function MainApp() {
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok) => void run(fn, ok)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
-            invite: () => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
+            invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
       {dragging && !importPaths && (

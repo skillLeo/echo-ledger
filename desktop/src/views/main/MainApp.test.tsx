@@ -482,7 +482,7 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     expect(screen.getByRole("menuitemradio", { name: "Acme team" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("menuitemradio", { name: "Personal" })).toHaveAttribute("aria-checked", "false");
     fireEvent.click(screen.getByRole("menuitemradio", { name: "Personal" }));
-    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin/workspace", serverUrl: null }]));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/workspace", serverUrl: null }]));
     fireEvent.click(screen.getByRole("button", { name: "Workspace: Acme team" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Switch or manage workspaces in the browser" }));
     await waitFor(() => expect(callsOf("server_page_open")).toHaveLength(2));
