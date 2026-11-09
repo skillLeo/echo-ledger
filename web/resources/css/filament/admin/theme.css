@@ -980,6 +980,25 @@ thead .fi-ta-selection-cell {
     font-variant-numeric: tabular-nums;
 }
 
+/* Failed uploads (since v1.6, P5.3): what went wrong and what happens next, under the row's second line. */
+.el-row-problem {
+    display: block;
+    margin-top: 2px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-muted);
+    white-space: normal;
+}
+
+.el-row-problem strong {
+    font-weight: 600;
+    color: var(--danger);
+}
+
+.el-failed-chip {
+    margin-top: var(--space-2);
+}
+
 /* The app tile: the app's colour at 12 % with its icon, and a small badge for the device it came from. */
 .el-tile {
     position: relative;

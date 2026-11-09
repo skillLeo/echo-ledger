@@ -11,9 +11,11 @@ use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\FailedUpload;
 use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Services\FinalTranscriptCoordinator;
 use App\Services\LibraryOrganiser;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptViews;
@@ -121,6 +123,8 @@ final class CaptureSessionsTable
             ->poll(fn (HasTable $livewire): ?string => self::showsPending($livewire->getTableRecords()) ? self::LIVE_POLL : null)
             // Since v1.5 members and viewers only open their recordings here (a read-only console).
             ->recordActions(ConsoleAccess::readOnly() ? [ViewAction::make()->label('Open')] : [
+                // Since v1.6 (P5.3): in Failed uploads, Retry where something here can fix it, and Delete.
+                ...self::failedActions(),
                 ActionGroup::make([
                     ViewAction::make()->label('Open'),
                     self::renameAction(),
@@ -155,6 +159,40 @@ final class CaptureSessionsTable
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty')
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
+    }
+
+    /**
+     * The Failed uploads view's buttons on each row (since v1.6, P5.3): Retry transcribes the recording again (its audio
+     * is on the server) or opens the file picker for an upload from this browser; Delete puts it in Recently deleted.
+     *
+     * @return list<Action>
+     */
+    public static function failedActions(): array
+    {
+        $failedView = fn (HasTable $livewire): bool => property_exists($livewire, 'activeTab') && (string) $livewire->activeTab === 'failed';
+        $retry = fn (CaptureSession $record): ?string => FailedUpload::for($record)['retry'] ?? null;
+
+        return [
+            Action::make('retryFailed')->label('Retry')->icon(Heroicon::OutlinedArrowPath)->button()->size(Size::Small)
+                ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_TRANSCRIBE)
+                ->rateLimit(10)
+                ->action(function (CaptureSession $record, FinalTranscriptCoordinator $coordinator): void {
+                    if ($record->primaryRecording()->first()?->isReady() !== true) {
+                        Notification::make()->title('The audio is not on the server yet')->warning()->send();
+
+                        return;
+                    }
+                    $coordinator->start($record, $record->finalTranscript()->first());
+                    Notification::make()->title('Transcription queued')->body('It leaves Failed uploads while it is transcribed.')->success()->send();
+                }),
+            Action::make('retryUpload')->label('Retry')->icon(Heroicon::OutlinedArrowUpTray)->button()->size(Size::Small)
+                ->visible(fn (CaptureSession $record, HasTable $livewire): bool => $failedView($livewire) && $retry($record) === FailedUpload::RETRY_UPLOAD)
+                ->tooltip('Choose the same file again')
+                ->alpineClickHandler("\$dispatch('el-upload-pick')"),
+            DeleteAction::make('deleteFailed')->label('Delete')->button()->size(Size::Small)->color('gray')
+                ->visible(fn (HasTable $livewire): bool => $failedView($livewire))
+                ->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
+        ];
     }
 
     /**

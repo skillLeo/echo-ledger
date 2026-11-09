@@ -180,6 +180,16 @@ Check: `curl -s https://<server>/.well-known/assetlinks.json` returns JSON namin
 Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`. The first
 update to v1.5 with the connector also needs its keys, once: see "Claude and ChatGPT connector" above.
 
+**Automatic titles for older recordings (once, after the v1.6 update).** Recordings named "Voice note", "WhatsApp call",
+after their file ("PTT-20261108-WA0012") or not at all get the first words of their transcript as an automatic title; a
+title a person set is never touched, and a call with a known person shows "Call with …" again. No migration, no AI cost.
+1. `php artisan echoledger:backfill-titles --dry-run` lists what would change (`--show-titles` shows the new titles,
+   `--user=<email>` narrows it to one person, `--limit=` caps it).
+2. `php artisan echoledger:backfill-titles` changes them and prints the log's name (`storage/app/private/title-backfills/`;
+   it keeps each old title and only a hash of the new one).
+3. To undo: `php artisan echoledger:backfill-titles --undo=<log name>`. A title someone changed since is left as it is.
+   Running the backfill again changes nothing.
+
 ## Local development (this repo)
 ```
 php artisan migrate:fresh --seed      # APP_ENV=local: owner@echoledger.local / change-me-now-please + demo library

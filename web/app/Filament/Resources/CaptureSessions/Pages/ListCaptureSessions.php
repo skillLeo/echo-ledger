@@ -6,6 +6,7 @@ namespace App\Filament\Resources\CaptureSessions\Pages;
 
 use App\Filament\Pages\SharedWithMe;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\LibraryView;
 use App\Models\CaptureSession;
@@ -248,10 +249,19 @@ class ListCaptureSessions extends ListRecords
         return app(LibraryOrganiser::class)->applyFolder($query, $this->folder);
     }
 
-    /** The "4 calls waiting · Review" line, only while recordings wait for a decision. */
+    /**
+     * The "4 calls waiting · Review" line while recordings wait for a decision, and since v1.6 "Failed uploads (2) · See
+     * why" while something failed.
+     */
     protected function getHeaderWidgets(): array
     {
-        return [WaitingDecisionsWidget::class];
+        return [WaitingDecisionsWidget::class, FailedUploadsWidget::class];
+    }
+
+    /** The smart view, so the Failed uploads line hides while that view is open. */
+    public function getWidgetData(): array
+    {
+        return ['activeTab' => (string) ($this->activeTab ?: 'all')];
     }
 
     /**

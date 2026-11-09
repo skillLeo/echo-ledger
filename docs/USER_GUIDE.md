@@ -388,6 +388,12 @@ selects its group (a dash when only some are selected); its name and arrow fold 
 what you can do with them: **8 selected · Move · Label · Export · Delete · More · Clear** (**More** pins, unpins, keeps
 forever or stops keeping). An empty view says why it is empty and offers **Show all recordings**.
 
+**Failed uploads (console, since v1.6).** While something did not upload or could not be transcribed, a line above the
+Library says **Failed uploads (2) · See why**. In that view each recording says what went wrong and what happens next, in
+plain words: an upload from a phone or computer is sent again by that device the next time EchoLedger is open there and
+online; **Retry** carries on an upload from this browser (choose the same file again) or transcribes a recording again
+(after a busy engine, the monthly limit, or adding your own Groq key); **Delete** puts it in Recently deleted for 48 hours.
+
 ## 10. Import, rename, export and share
 
 ### Import files
@@ -419,7 +425,9 @@ recording page. The new name shows on all your devices. A call waiting for Keep 
 
 **Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
 "Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
-the title field to have the automatic one again. The player always shows the recording's real length, in every view
+the title field to have the automatic one again. Since v1.6 a title nobody chose counts as none: "Voice note",
+"WhatsApp call" or a shared voice note's file name such as "PTT-20261108-WA0012" is replaced by an automatic title too,
+and older recordings got theirs from the first words of their transcript. The player always shows the recording's real length, in every view
 (Original, Roman Urdu, English and Urdu), also for a voice note whose length the server does not know yet.
 
 ### Export and share
