@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Filament\Support\FailedUpload;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Services\FinalTranscriptCoordinator;
@@ -128,6 +129,8 @@ final class CaptureSessionsTable
                 ActionGroup::make([
                     ViewAction::make()->label('Open'),
                     self::renameAction(),
+                    // Since v1.6 (P5.5): the text of the view it opens in, the text and the voice, or a 7-day link.
+                    WhatsAppActions::send(),
                     DeleteAction::make()->modalDescription('Deletes the recording and transcript on every device. You can restore it from Recently deleted for 48 hours.'),
                 ])->label('More')->tooltip('More')->color('gray'),
             ])

@@ -9,6 +9,7 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\SendsToWhatsApp;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
@@ -38,6 +39,8 @@ use Livewire\Livewire;
 
 class ListCaptureSessions extends ListRecords
 {
+    use SendsToWhatsApp;
+
     protected static string $resource = CaptureSessionResource::class;
 
     protected static ?string $title = 'Library';

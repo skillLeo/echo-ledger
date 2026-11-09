@@ -15,8 +15,10 @@ use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
+use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\StopsSharing;
+use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
@@ -35,6 +37,7 @@ use App\Services\Library\ReadyNotices;
 use App\Services\LibraryOrganiser;
 use App\Services\Retranscriber;
 use App\Services\SettingsRepository;
+use App\Services\Sharing\WhatsAppMessage;
 use App\Services\TextReplacements;
 use App\Services\TranscriptDiff;
 use App\Services\TranscriptEditor;
@@ -71,6 +74,7 @@ use RuntimeException;
 
 class ViewCaptureSession extends ViewRecord
 {
+    use SendsToWhatsApp;
     use StopsSharing;
 
     protected static string $resource = CaptureSessionResource::class;
@@ -108,6 +112,8 @@ class ViewCaptureSession extends ViewRecord
         $transcript = $this->editableTranscript();
         $this->viewsMaking = $transcript !== null && app(TranscriptViews::class)->state($transcript)['status'] === 'making';
         $this->viewsBar = RecordingProgress::improvingBar($this->session());
+        // Send to WhatsApp sends the view being read: the one the player opens in, until it says otherwise.
+        $this->readingView = WhatsAppMessage::defaultView($this->session()) ?? 'original';
     }
 
     public function getTitle(): string
@@ -480,6 +486,9 @@ class ViewCaptureSession extends ViewRecord
             $this->wrongScriptAction(),
             $this->showAsAction(),
             $this->shareAction(),
+            // Since v1.6 (P5.5): next to Share, as on the desktop.
+            WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)
+                ->label('WhatsApp')->labeledFrom('sm')->button(),
             ActionGroup::make([
                 CaptureSessionsTable::renameAction(),
                 SharingActions::send(fn (): CaptureSession => $this->session()),

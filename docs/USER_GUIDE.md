@@ -467,6 +467,14 @@ WhatsApp…** on its row, offers three ways, as on the phone:
 - **Link (works for 7 days):** a link anyone can open for a week (with the audio when the recording has it); WhatsApp
   opens with the title and the link, and the link is copied.
 
+**Send to WhatsApp (web console, since v1.6).** On a recording, the **WhatsApp** button next to **Share**, or **More →
+Send to WhatsApp…** on its row in the Library, offers the same three ways: **Text only** (the view you are reading on the
+recording page; from the Library, the view it opens in), **Text and voice** (the text in the message, and the audio saved
+in your browser's downloads: **Attach the saved voice file in WhatsApp** with **+** or the paper clip, then **Document**)
+and **Link (works for 7 days)**. WhatsApp, or WhatsApp Web, opens in a new tab with the message ready; the whole text is
+copied too, because a long transcript only fits in part. **Copy text** is there as well, and on the recording page
+**Copy for AI**.
+
 **Send to a teammate** puts a recording or a project in the **Shared with me** folder of someone with an account on
 your server. Type their email and, if you like, a note. People without an account here will not receive it, and nothing
 tells you so: check with them if it matters. They can play and read it but not change it, and **Save to my library**

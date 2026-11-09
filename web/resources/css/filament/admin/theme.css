@@ -2971,3 +2971,114 @@ textarea.el-field-input {
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
 }
+
+/* Send to WhatsApp (since v1.6, P5.5): three choices with a line under each, then Copy text and Copy for AI. */
+.el-whatsapp {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+}
+
+.el-whatsapp-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+}
+
+.el-whatsapp-option {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 44px;
+    margin-top: var(--space-2);
+    padding: 0 var(--space-4);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-sm);
+    background-color: var(--surface);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.el-whatsapp-option:hover,
+.el-whatsapp-option:focus-visible {
+    background-color: var(--surface-2);
+}
+
+.el-whatsapp-option[disabled] {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.el-whatsapp-option svg {
+    width: 18px;
+    height: 18px;
+}
+
+.el-whatsapp-primary {
+    border-color: transparent;
+    background-color: var(--accent);
+    color: var(--on-accent);
+}
+
+.el-whatsapp-primary:hover,
+.el-whatsapp-primary:focus-visible {
+    background-color: var(--accent);
+    filter: brightness(1.05);
+}
+
+.el-whatsapp-hint,
+.el-whatsapp-said {
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.el-whatsapp-said:empty {
+    display: none;
+}
+
+.el-whatsapp-error {
+    font-size: 13px;
+    color: var(--danger);
+}
+
+.el-whatsapp-copy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    margin-top: var(--space-3);
+}
+
+.el-whatsapp-link {
+    min-height: 32px;
+    padding: 0 var(--space-2);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--accent-text);
+}
+
+.el-whatsapp-link:hover,
+.el-whatsapp-link:focus-visible {
+    background-color: var(--accent-soft);
+}
+
+.el-whatsapp-done {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    font-size: 14px;
+}
+
+.el-whatsapp-saved {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+}
+
+.el-whatsapp-saved svg {
+    width: 16px;
+    height: 16px;
+    color: var(--accent-text);
+}
