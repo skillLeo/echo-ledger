@@ -94,6 +94,19 @@ const READY_REPORT = {
   ],
 };
 
+// v1.6 (P2.7): "library-maintenance" while the server is in maintenance, "library-refused" when it refuses this version,
+// "library-announcement" with the owner's announcement.
+const inAnHour = new Date(Date.now() + 3_600_000);
+inAnHour.setMinutes(0, 0, 0);
+const SERVER_NOTICES: Record<string, unknown> = {
+  "library-maintenance": { appUpdate: null, announcement: null, maintenance: { message: "Upgrading the server.", until: inAnHour.toISOString() }, waiting: "maintenance" },
+  "library-refused": {
+    appUpdate: { minimum: "1.6.0", required: true, refused: true, message: "Please update EchoLedger to 1.6.0 or later.", url: "https://ledger.example.com/downloads" },
+    announcement: null, maintenance: null, waiting: "update_required",
+  },
+  "library-announcement": { appUpdate: null, announcement: { text: "New in 1.6: send a recording to WhatsApp from its page, as text, with the voice, or as a link.", level: "info", until: null }, maintenance: null, waiting: null },
+};
+
 const commands: Record<string, (args: Args) => unknown> = {
   ready_last: () => READY_REPORT,
   ready_check: () => READY_REPORT,
@@ -113,6 +126,9 @@ const commands: Record<string, (args: Args) => unknown> = {
     serverUrl: signedOut ? null : "https://ledger.example.test",
     platform: mac ? "macos" : "windows",
     systemAudioNote: windows10 ? "This Windows version records all sound playing on this computer, not just the call" : null,
+    // v1.6 (P2.7): what the server says to every app.
+    pendingUploads: screen === "library-maintenance" ? 2 : screen === "library-refused" ? 1 : 0,
+    server: SERVER_NOTICES[screen] ?? { appUpdate: null, announcement: null, maintenance: null, waiting: null },
   }),
   account_get: () => ACCOUNT,
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.

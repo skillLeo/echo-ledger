@@ -33,6 +33,10 @@ const SCREENS = [
     await page.waitForSelector(".queue-item.pending");
   }],
   ["library-empty", "library-empty", async (page) => page.waitForSelector(".empty-state")],
+  // v1.6 (P2.7): maintenance, a refused version and an announcement at the top of the window.
+  ["library-maintenance", "library-maintenance", async (page) => page.waitForSelector("[data-testid=maintenance]")],
+  ["library-refused", "library-refused", async (page) => page.waitForSelector("[data-testid=app-update]")],
+  ["library-announcement", "library-announcement", async (page) => page.waitForSelector("[data-testid=announcement]")],
   // v1.5: a call a backup engine transcribed.
   ["library-backup", "library-backup", async (page) => page.waitForSelector("[data-testid=backup-engine]")],
   // v1.5: Projects with subfolders, the Library's smart folders, moving, sharing and request links.
