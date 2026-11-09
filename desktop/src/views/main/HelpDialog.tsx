@@ -52,7 +52,7 @@ export function HelpDialog({ platform, onClose, onShortcuts }: { platform: strin
         ))}
       </dl>
       <p className="small muted">Change the global shortcuts in Account → Preferences. The user guide is in the console under Help.</p>
-      <div className="sheet-actions">
+      <div className="row sheet-actions">
         <button type="button" className="btn ghost" onClick={() => { onClose(); onShortcuts(); }}>Change shortcuts</button>
         <span className="spacer" />
         <button type="button" className="btn primary" onClick={onClose}>Close</button>

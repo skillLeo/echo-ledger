@@ -103,7 +103,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
         <div className="whatsapp-done" aria-live="polite">
           <p className="whatsapp-saved"><CheckIcon size={16} />Saved in Downloads: <b dir="auto">{fileName(saved)}</b></p>
           <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>
-          <div className="sheet-actions"><span className="spacer" /><button type="button" className="btn primary" onClick={onClose}>Done</button></div>
+          <div className="row sheet-actions"><span className="spacer" /><button type="button" className="btn primary" onClick={onClose}>Done</button></div>
         </div>
       ) : (
         <>
@@ -127,7 +127,7 @@ export function WhatsAppSheet({ sessionId, title, hasAudio, text, notify, onClos
             </button>
             <span className="small muted">Anyone with it can read{hasAudio ? " and listen" : ""} for 7 days.</span>
           </div>
-          <div className="sheet-actions"><span className="spacer" /><button type="button" className="btn ghost" onClick={onClose}>Cancel</button></div>
+          <div className="row sheet-actions"><span className="spacer" /><button type="button" className="btn ghost" onClick={onClose}>Cancel</button></div>
         </>
       )}
     </Sheet>
