@@ -56,9 +56,9 @@ icon opens the window with the reason, and a meeting that cannot be recorded get
 permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so
 once, in one sentence, with the same steps to set it up again.
 
-**Starting at login** is off until you turn it on in **Settings → General**.
+**Starting at login** is off until you turn it on in **Account → This computer**.
 
-**The Mac check.** **Settings → General → Help & diagnostics → Run Mac check** looks at macOS, the permissions, the
+**The Mac check.** **Account → This computer → Help & diagnostics → Run Mac check** looks at macOS, the permissions, the
 microphone, the other side of a call (with one soft tone), your meeting apps, the captions and pill, and screen moments,
 one at a time, and says how to fix what it finds. It does not run during a recording. **Copy report** gives you plain text
 with no names, and **Send to my admin** sends it to your workspace's admins, only when you press it.
@@ -181,7 +181,7 @@ Ultra signed in" and closes by itself. Your plan says how many devices can be si
 **Your devices (phone, since v1.6).** **You → Devices** lists the same devices with their readable names. **Rename**
 works on any of them, this phone too; **Sign out** signs another one out at once.
 
-**Your devices (computer, since v1.6).** **Settings → Account → Devices** lists every phone and computer signed in to
+**Your devices (computer, since v1.6).** **Account → Devices** lists every phone and computer signed in to
 your account, with when each was last active. **Rename** gives any of them a name of your own; **Revoke** signs another
 one out. A computer is named like "Windows 11 PC" or "MacBook Pro" when you sign in, and signing in again on the same
 computer keeps its one place in the list instead of adding another.
@@ -201,7 +201,7 @@ ready. It has 2 devices, 1 GB and keeps recordings 30 days.
 1. Open **console.groq.com** and sign in (with Google is fine).
 2. Open **API Keys**, press **Create API Key**, and copy the key.
 3. In EchoLedger open **Profile → Transcription key** (on the phone **You → Transcription key**, on the computer
-   **Settings → Account → Transcription key**), paste it and press **Save**.
+   **Account → Transcription key**), paste it and press **Save**.
 
 We check the key with Groq once, keep it locked, never show it again (only its last four characters), and use it for
 your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
@@ -212,11 +212,39 @@ plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
+## 3c. Find your way in the computer app (since v1.6)
+
+- **The sidebar** lists **Home** (record, what needs you, your latest recordings), **Library**, **Projects**,
+  **Activity**, **Shared** and **Upload**; **Help & shortcuts**, **Account** and **Collapse sidebar** are at the bottom.
+  Type in **Find a page** at the top to jump to any page, folder, project or Account tab. The arrows next to Library,
+  Projects and Shared show what is inside (the smart folders, your pinned projects, With me · My links · Request links).
+  Drag the sidebar's right edge to make it wider or narrower (double-click it for the usual width); press **[** to fold
+  it to icons and back. **Account → Preferences → Sidebar style** makes it **Light**, **Dark** or **Soft grey**.
+- **The top bar:** your workspace (and the others you belong to); the search box (**Ctrl+K**, **⌘K** on a Mac);
+  **Calls: Ready** (or **Not ready — Fix**, or the recording that is running, with its time); **+** to record, upload,
+  start a project or make a request link; the bell, whose number counts only what needs you (problems, calls waiting for
+  Keep or Discard, an answer to an upgrade request; **9+** above nine); help; and the menu under your initials:
+  **Account**, **Plan & usage**, the **Admin panel** (for the server's operator, in the browser), the theme and
+  **Sign out**.
+- **The Library** has a column on the left when the window is wide enough: **All**, **Waiting**, **Pinned**, **Failed
+  uploads**, the smart folders with their counts, then your projects. Drag recordings onto the Inbox or a project to move
+  them. Above the list: search, **Filters**, project and label, **View** (Group by, Sort by, Density), **List** or
+  **Table** (with **Columns** to choose what the table shows) and **Select**. In the table a recording opens in a panel on
+  the right; **Esc** closes it.
+- **Keys** (never while you type): **J** and **K** move through the list, **Enter** opens, **X** selects, **Esc**
+  closes, **/** searches, **N** starts or stops a voice note, **Space** plays or pauses, **←** and **→** jump 5 seconds
+  (**Shift** with them 10), **?** lists them all.
+- **Account** has tabs: **Profile**, **Password & sign-in methods**, **Devices**, **Notifications**, **Preferences**
+  (theme, sidebar style, density, 12- or 24-hour times, the transcription language, shortcuts), **Plan & usage**,
+  **Transcription key** (Free plan), **Privacy & data** (export your data, delete your account), then this computer's:
+  **Calls & meetings**, **Voice notes & dictation** and **This computer**. **Saved · just now** at the top right says a
+  change was kept.
+
 ## 4. Record automatically
 
 EchoLedger can start recording when a call starts.
 
-- **Windows:** open **Settings → Recording**. Turn on **Record calls automatically**. Under **Auto-record
+- **Windows:** open **Account → Calls & meetings → Recording**. Turn on **Record calls automatically**. Under **Auto-record
   apps**, switch each app on or off (WhatsApp, WhatsApp Business, WhatsApp Web, Zoom, Microsoft Teams, Google Meet).
 - In a browser, only known call sites are recorded. See **Call sites** to add a site or to block one. ChatGPT,
   Claude and Gemini are never recorded.
@@ -243,14 +271,15 @@ next call will be recorded, both sides, by itself: signed in, a microphone conne
 side's sound allowed (on a Mac: macOS 14.2 or later and Screen & System Audio Recording), and meeting detection running
 with **Record calls automatically** on. It ends in **✓ Ready to record calls**, or lists each problem with a button that
 fixes it (**Turn on**, **Open System Settings**, **Open sound settings**…). It runs by itself when the app starts, every few
-seconds and after every change in Settings; **Check again** runs it at once. The sidebar and the tray menu say it in two
+seconds and after every change in Settings; **Check again** runs it at once (on the computer it is on **Home**). The top
+bar and the tray menu say it in two
 words: **Calls: Ready** or **Not ready — Fix** (click it to open the check). The moment it breaks by itself (a permission
 taken away, the microphone unplugged, detection stopped), a notification says so, even in quiet hours.
 
 **Record now.** One button records the right thing: a meeting or call on screen is recorded with both sides, anything
 else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Alt+R** on Windows or
 **⌘⌥R** on a Mac; press it again to stop. On a Mac, Safari uses the same keys to reload a page from the server, so while
-EchoLedger runs they record instead; change or clear the shortcut in **Settings → Shortcuts**. **Ctrl+Alt+Shift+R**
+EchoLedger runs they record instead; change or clear the shortcut in **Account → Preferences → Global shortcuts**. **Ctrl+Alt+Shift+R**
 (start or stop a call recording) stays as before. On the phone, tap **REC**, or use **Record now** from the
 notification, the **Record** Quick Settings tile, the app icon's long-press menu, or the home-screen widget. During a
 call it records both sides (with the capture helper set up), otherwise a voice note.
@@ -276,7 +305,7 @@ Captions show what you and the other person say, while you talk.
 - **Windows:** press **Ctrl+Shift+Space** to show or hide them. They never take the keyboard focus, and clicks
   go through them.
 - **Phone:** captions appear as a small floating bubble.
-- **Settings → Captions** changes the size, the number of lines, the position, the colours and how fast they
+- On the computer, **Account → Calls & meetings → Captions** changes the size, the number of lines, the position, the colours and how fast they
   fade.
 - **Hide from screen sharing** is on by default. The other people on your call cannot see the captions.
 - Press **Ctrl+Alt+Shift+C** to copy the last 2 minutes of captions.
@@ -321,11 +350,11 @@ A bookmark marks an important moment so you can find it later.
 Dictation types what you say into any app. It is never saved as a recording.
 
 - **Windows:** put the cursor where the text should go and press **Ctrl+Shift+D**. Speak. Press it again to
-  insert the text. In **Settings → Dictation** you can choose **Hold to talk** instead.
+  insert the text. In **Account → Voice notes & dictation** you can choose **Hold to talk** instead.
 - **Phone:** in **Settings → Dictation**, tap **Turn on the voice keyboard**. In any app, switch to the
   EchoLedger keyboard and tap the microphone.
 - Say "new line" or "new paragraph" to start a new line.
-- In **Settings → Dictation** you can add **replacements** (fix how a name is spelled) and **voice snippets**
+- In **Account → Voice notes & dictation** you can add **replacements** (fix how a name is spelled) and **voice snippets**
   (say "insert signature" to add a saved text).
 
 ## 9. Search
@@ -333,10 +362,13 @@ Dictation types what you say into any app. It is never saved as a recording.
 - **Windows and phone:** type in the search box of the **Library**. Two letters are enough. Results show the
   matching line. Tap one to play the recording from that moment.
 - **Web console:** open **Search**. You can filter by client, app, device, date, tag, bookmarks and status.
-- Press **Ctrl+K** (**Cmd+K** on a Mac) in the console or the Windows app to jump to a page, a recording or a
-  command.
+- Press **Ctrl+K** (**Cmd+K** on a Mac) in the console or the computer app to jump to a page, a recording or a
+  command. On the computer it also makes things (**Record now**, **Upload files**, **New project**, **Request link**,
+  **Invite people**) and opens any page by name (**Devices**, **Plan & usage**, a project). Press **/** to search the
+  Library's list.
 
-**Group by and Sort by (computer, since v1.5).** Above the Library's list, **Group by** puts recordings under headers by
+**Group by and Sort by (computer, since v1.5).** Above the Library's list, **View** (since v1.6, the same menu as the
+phone's View sheet) holds **Group by**, **Sort by** and **Density**. **Group by** puts recordings under headers by
 **Date** (the default), **App / Type**, **Project**, **Language**, **Status**, **Device** or **None**, and **Sort by**
 orders them **Newest**, **Oldest**, **Longest**, **Shortest**, **Name A–Z** or **Recently opened** (on this computer).
 Each view remembers its own choice (the whole Library, the Inbox and every smart folder). A header shows the group's name
@@ -434,7 +466,8 @@ levels (for example Acme › Invoices). Give each one a colour and a picture or 
   there first; then a rule on the title ("the title contains Acme"); then a rule on the app ("every Zoom call").
   Everything else waits in the Inbox. A rule never moves a recording that is already in a project. Add rules on the
   project's page.
-- **Moving:** drag recordings onto a project in the sidebar (computer and console), or choose **Move** (all apps,
+- **Moving:** drag recordings onto a project in the sidebar (console), onto the Inbox or a project in the Library's
+  column or a pinned project in the sidebar (computer), or choose **Move** (all apps,
   also for several selected recordings).
 - **Deleting a project** keeps its recordings: they go to the Inbox, and its folders move up a level.
 - **A recording's project:** choose one on the recording's page, or set a default project in **Settings**.
@@ -581,7 +614,7 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
 
 ## 13. App lock
 
-- **Windows:** **Settings → Privacy & security → App lock**. Set a PIN. Windows Hello can unlock it too. The
+- **Windows:** **Account → This computer → App lock**. Set a PIN. Windows Hello can unlock it too. The
   window locks after the time you choose. Recording carries on while it is locked.
 - **Phone:** **Settings → Privacy & security → App lock**. It uses your fingerprint, face or phone PIN, so your
   phone needs a screen lock first. **Hide content in Recents and screenshots** keeps your recordings private.
@@ -589,7 +622,7 @@ on **Zero Data Retention** at Groq. Your administrator has the details per provi
 
 ## 13b. Notifications (since v1.5)
 
-**Computer: Settings → General → Notifications.** Every notification belongs to one kind, the same list as the phone's:
+**Computer: Account → Notifications.** Every notification belongs to one kind, the same list as the phone's:
 **Recording**, **Transcription**, **Enhancement** (Roman Urdu and other views, briefs, call notes), **Uploads**,
 **Call capture & readiness**, **Sharing**, **Account & security**, **Usage & limits**, **Live Translate**, **App updates**
 and **Other**. Turn each kind on or off, choose **Sound** or **Silent**, and press **Test** to see one. **Show
@@ -616,14 +649,14 @@ while a recording runs.
 
 ## 15a. Plans, paid features and your own transcription key (computer, since v1.6)
 
-- **Settings → Account → Plan & usage** shows your plan, what you used of each limit (devices, storage, uploads,
+- **Account → Plan & usage** (also in the menu under your initials, top right) shows your plan, what you used of each limit (devices, storage, uploads,
   minutes) and your latest upgrade request.
 - A feature your plan does not include shows one badge, like **PRO ✦** or **BUSINESS ✦**, with a small lock: on
   Record (Live Translate), on a transcript (Roman Urdu, English and Urdu views), in Settings (Screen moments), on a
   project's Notes, and in Plan & usage. Click it to see what the feature does and the plans side by side. **Request
   upgrade** (with a message if you like) sends the request to the owner; the app then shows how to pay and says
   "We'll activate it once confirmed". A pending request shows as pending until the owner decides.
-- **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Settings → Account →
+- **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Account →
   Transcription key** and follow the three steps: open console.groq.com and sign in, choose **API Keys → Create API
   key** and copy it, paste it and press **Save**. The server checks it once and keeps it encrypted, only for your
   recordings. A recording made before you added a key says so, with **Add my Groq key**; after adding it, use
@@ -636,7 +669,7 @@ while a recording runs.
 During a meeting, the computer app keeps what was on the shared screen at each moment, so you (and an AI reading
 the transcript) know what "this page" or "click here" meant.
 
-- **Turn it on** in the computer app: **Settings → Screen moments**. On a Mac, allow EchoLedger under **System
+- **Turn it on** in the computer app: **Account → Calls & meetings → Screen moments**. On a Mac, allow EchoLedger under **System
   Settings → Privacy & Security → Screen & System Audio Recording**. From macOS 15, macOS asks again about once a month
   whether EchoLedger may still see your screen: choose **Allow**. If you miss it, screen moments pause and the recording
   goes on. On Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
@@ -708,7 +741,7 @@ nothing is recorded or kept unless you switch saving on.
 - A muted call or a sound that is turned all the way down also gives silence.
 
 **My call was not recorded**
-- Check that **Auto-record calls** and the app's switch are on (**Settings → Recording**).
+- Check that **Auto-record calls** and the app's switch are on (computer: **Account → Calls & meetings → Recording**).
 - Open the **Record** screen. It says why the call was ignored, for example "Ignored: unknown site".
 - In a browser, only Google Meet, WhatsApp Web and Zoom in the browser are known. Add other sites under **Call
   sites**, or record by hand.
