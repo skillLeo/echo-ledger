@@ -2,6 +2,9 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { clampSidebar, findPages, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
   SIDEBAR_DEFAULT, stepIndex } from "./shell";
 import { libraryPlaces } from "./folders";
+import { applyPreferences, DEFAULT_PREFERENCES, savePreferences } from "./shell";
+import { formatWhen } from "./format";
+import { rowTime } from "../views/main/LibraryView";
 import { workspacesOf } from "../views/main/TopBar";
 import { makeStatus } from "../test/fixtures";
 
@@ -35,6 +38,23 @@ describe("Preferences kept on this computer (v1.6, P4.5)", () => {
     expect(parsePreferences('{"sidebarStyle":"grey","density":"compact","clock":"24"}')).toEqual({ sidebarStyle: "grey", density: "compact", clock: "24" });
     expect(parsePreferences('{"sidebarStyle":"purple","clock":12}')).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
     expect(parsePreferences("{broken")).toEqual({ sidebarStyle: "light", density: "comfortable", clock: "12" });
+  });
+});
+
+describe("12- or 24-hour times everywhere (Account → Preferences; MANUAL_QA 16-P13)", () => {
+  it("shows every time as the preference says, and saving it applies it at once", () => {
+    const now = new Date(2026, 10, 9, 18, 0);
+    const at = new Date(2026, 10, 9, 14, 5).toISOString();
+    try {
+      expect(formatWhen(at, now)).toBe("Today · 2:05 PM");
+      savePreferences({ ...DEFAULT_PREFERENCES, clock: "24" });
+      expect(formatWhen(at, now)).toBe("Today · 14:05");
+      expect(rowTime(new Date().toISOString())).toMatch(/^\d{2}:\d{2}$/);
+      expect(document.documentElement.dataset.density).toBe("comfortable");
+    } finally {
+      applyPreferences(DEFAULT_PREFERENCES);
+    }
+    expect(formatWhen(at, now)).toBe("Today · 2:05 PM");
   });
 });
 

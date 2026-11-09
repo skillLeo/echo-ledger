@@ -238,6 +238,82 @@ describe("MainApp sidebar and keys", () => {
     expect(window.localStorage.getItem("echoledger-sidebar-width")).toBe("240");
   });
 
+  it("resizes by dragging the edge, saves the width when the button is let go, and opens at it after a restart (MANUAL_QA 16-P1)", async () => {
+    const first = await renderPaired();
+    const edge = screen.getByRole("separator", { name: "Resize the sidebar" });
+    fireEvent.pointerDown(edge, { clientX: 240, button: 0 });
+    act(() => {
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 290 }));
+    });
+    expect(document.querySelector(".app")).toHaveStyle({ "--sidebar-w": "290px" });
+    expect(window.localStorage.getItem("echoledger-sidebar-width")).toBeNull();
+    act(() => {
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 900 }));
+    });
+    expect(document.querySelector(".app")).toHaveStyle({ "--sidebar-w": "320px" });
+    act(() => {
+      window.dispatchEvent(new PointerEvent("pointerup", { clientX: 900 }));
+    });
+    expect(window.localStorage.getItem("echoledger-sidebar-width")).toBe("320");
+    first.unmount();
+    resetTauriMock();
+    await renderPaired();
+    expect(document.querySelector(".app")).toHaveStyle({ "--sidebar-w": "320px" });
+  });
+
+  it("keeps the Activity count and every page's name as a tooltip on the rail (MANUAL_QA 16-P2)", async () => {
+    window.localStorage.setItem("echoledger-sidebar", "collapsed");
+    await renderPaired({ pendingDecisions: 2 });
+    expect(document.querySelector(".app")).toHaveClass("collapsed");
+    for (const name of ["Home", "Library", "Projects", "Shared", "Upload", "Account"]) expect(nav(name)).toHaveAttribute("title", expect.stringContaining(name));
+    expect(within(nav("Activity, 2 need you")).getByText("2")).toHaveClass("nav-count");
+    expect(screen.getByRole("button", { name: "Find a page" })).toBeInTheDocument();
+    expect(screen.queryByRole("separator", { name: "Resize the sidebar" })).not.toBeInTheDocument();
+  });
+
+  it("marks a narrow page and leaves the column out by the page's own width, the sidebar's included (MANUAL_QA 16-P4)", async () => {
+    const width = window.innerWidth;
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+      const view = await renderPaired();
+      const app = () => document.querySelector(".app")!;
+      expect(app()).not.toHaveClass("narrow");
+      expect(app()).not.toHaveClass("no-column");
+      // The smallest window with the widest sidebar: 860 − 320 = 540 px of page.
+      fireEvent.keyDown(screen.getByRole("separator", { name: "Resize the sidebar" }), { key: "End" });
+      act(() => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 860 });
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(app()).toHaveClass("narrow", "no-column");
+      // Folding the sidebar gives the page 796 px: still narrow, and the column needs 1040.
+      fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+      expect(app()).toHaveClass("narrow", "no-column");
+      // 1200 − 64 = 1136 px: room for the column; with the 320 px sidebar back, 880 px: the Library's two parts, no column.
+      act(() => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1200 });
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(app()).not.toHaveClass("narrow");
+      expect(app()).not.toHaveClass("no-column");
+      fireEvent.click(screen.getByRole("button", { name: "Expand the sidebar" }));
+      expect(app()).not.toHaveClass("narrow");
+      expect(app()).toHaveClass("no-column");
+      view.unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
+  });
+
+  it("keeps Help, Account and Collapse out of the sidebar's scrolling part, and the top bar draggable on a Mac (MANUAL_QA 16-P4, 16-P5)", async () => {
+    await renderPaired();
+    const footer = sidebar().querySelector(".sidebar-footer")!;
+    expect(footer.closest(".sidebar-main")).toBeNull();
+    expect(sidebar().querySelector(".sidebar-main .nav")).not.toBeNull();
+    expect(within(footer as HTMLElement).getAllByRole("button").map((b) => b.querySelector(".nav-label")?.textContent)).toEqual(["Help & shortcuts", "Account", "Collapse sidebar"]);
+    expect(document.querySelector("header.topbar")).toHaveAttribute("data-tauri-drag-region");
+  });
+
   it("finds a page by name from the top of the sidebar", async () => {
     await renderPaired();
     fireEvent.change(screen.getByRole("combobox", { name: "Find a page" }), { target: { value: "devices" } });
@@ -398,12 +474,18 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]));
   });
 
-  it("lists the person's workspaces when the server sends them", async () => {
+  it("lists the person's workspaces when the server sends them, and switches in the console (MANUAL_QA 16-P11)", async () => {
     respond("account_get", account({ workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }] }));
+    respond("server_page_open", undefined);
     await renderPaired();
     fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
     expect(screen.getByRole("menuitemradio", { name: "Acme team" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByRole("menuitemradio", { name: "Personal" })).toHaveAttribute("aria-checked", "false");
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Personal" }));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin/workspace", serverUrl: null }]));
+    fireEvent.click(screen.getByRole("button", { name: "Workspace: Acme team" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Switch or manage workspaces in the browser" }));
+    await waitFor(() => expect(callsOf("server_page_open")).toHaveLength(2));
   });
 
   it("makes things from +: a voice note, a new project, a request link", async () => {

@@ -288,6 +288,20 @@ describe("LibraryView list", () => {
     expect(document.documentElement.dataset.density).toBe("comfortable");
   });
 
+  it("moves the focus through the table's rows too, and keeps Table and its columns after a restart (MANUAL_QA 16-P8)", async () => {
+    const { unmount } = await renderLibrary();
+    fireEvent.click(within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Table" }));
+    fireEvent.click(screen.getByRole("button", { name: "Columns" }));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Labels" }));
+    fireEvent.keyDown(screen.getByRole("button", { name: "Columns" }), { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "j" });
+    expect(within(screen.getByRole("table", { name: "Recordings" })).getAllByRole("button", { name: "Zoom with Acme" })[0]).toHaveFocus();
+    unmount();
+    await renderLibrary();
+    const table = screen.getByRole("table", { name: "Recordings" });
+    expect([...table.querySelectorAll("thead th")].map((h) => h.textContent)).toContain("Labels");
+  });
+
   it("shows the Library as a table with the chosen columns, and the recording in a drawer that Esc closes", async () => {
     await renderLibrary();
     fireEvent.click(within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Table" }));
@@ -312,8 +326,11 @@ describe("LibraryView list", () => {
     fireEvent.keyDown(screen.getByRole("button", { name: /^View:/ }), { key: "Escape" });
     fireEvent.keyDown(document.body, { key: "j" });
     expect(itemButton("Zoom with Acme")).toHaveClass("cursor");
+    // The row takes the focus, so a screen reader reads it (MANUAL_QA 16-P9).
+    expect(itemButton("Zoom with Acme")).toHaveFocus();
     fireEvent.keyDown(document.body, { key: "j" });
     expect(itemButton("WhatsApp call")).toHaveClass("cursor");
+    expect(itemButton("WhatsApp call")).toHaveFocus();
     fireEvent.keyDown(document.body, { key: "k" });
     expect(itemButton("Zoom with Acme")).toHaveClass("cursor");
     fireEvent.keyDown(document.body, { key: "Enter" });

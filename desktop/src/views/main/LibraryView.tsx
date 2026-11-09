@@ -823,7 +823,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       if (!next) return;
       e.preventDefault();
       setCursor(next.id);
-      document.querySelector(`[data-row="${CSS.escape(next.id)}"]`)?.scrollIntoView?.({ block: "nearest" });
+      // The row takes the focus too (MANUAL_QA 16-P9): a screen reader reads it, and Enter or Space opens it.
+      const row = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(next.id)}"]`);
+      (row instanceof HTMLButtonElement ? row : row?.querySelector<HTMLElement>(".lib-title"))?.focus();
+      row?.scrollIntoView?.({ block: "nearest" });
     } else if (key === "open") {
       // Enter on a button is the button's own.
       if (!cursor || target?.tagName === "BUTTON" || target?.tagName === "A") return;

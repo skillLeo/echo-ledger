@@ -217,6 +217,50 @@ describe("long text never breaks the layout (A6.DU8)", () => {
   });
 });
 
+describe("the sidebar's three styles are readable in both themes (v1.6, P4.1; MANUAL_QA 16-P3)", () => {
+  /** Every custom property a sidebar style gives in a theme: the rules in cascade order, `var()` resolved. */
+  function sidebarTokens(theme: Theme, style: "light" | "dark" | "grey"): Record<string, string> {
+    const selectors = [":root", ...(theme === "light" ? [':root[data-theme="light"]'] : []),
+      ...(style === "light" ? [] : [`:root[data-sidebar="${style}"]`, ...(theme === "light" ? [`:root[data-theme="light"][data-sidebar="${style}"]`] : [])])];
+    const out: Record<string, string> = {};
+    for (const selector of selectors) {
+      for (const rule of styleRules(rules).filter((r) => r.selectorText === selector)) {
+        for (let i = 0; i < rule.style.length; i++) {
+          const name = rule.style.item(i);
+          if (name.startsWith("--")) out[name] = rule.style.getPropertyValue(name).trim();
+        }
+      }
+    }
+    const value = (name: string, depth = 0): string => {
+      const raw = out[name] ?? "";
+      return depth > 5 ? raw : raw.replace(/var\((--[\w-]+)\)/g, (_, inner: string) => value(inner, depth + 1));
+    };
+    return Object.fromEntries(Object.keys(out).map((name) => [name, value(name)]));
+  }
+  const STYLES = ["light", "dark", "grey"] as const;
+
+  it.each(THEMES.flatMap((theme) => STYLES.map((style) => [theme, style] as const)))("%s theme, %s sidebar: its words, counts and the open page", (theme, style) => {
+    const t = sidebarTokens(theme, style);
+    const bg = parseColour(t["--sb-bg"]).rgb;
+    for (const fg of ["--sb-text", "--sb-muted", "--sb-faint"]) {
+      const ratio = contrast(parseColour(t[fg]).rgb, bg);
+      expect(ratio, `${theme}/${style}: ${fg} on the sidebar is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
+      // Under the pointer the row is tinted; the words stay readable.
+      const hover = over(parseColour(t["--sb-hover"]), bg);
+      expect(contrast(parseColour(t[fg]).rgb, hover), `${theme}/${style}: ${fg} on a hovered row`).toBeGreaterThanOrEqual(AA);
+    }
+    const active = over(parseColour(t["--sb-active"]), bg);
+    const ratio = contrast(parseColour(t["--sb-active-text"]).rgb, active);
+    expect(ratio, `${theme}/${style}: the open page is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
+    // The find field sits on its own fill.
+    expect(contrast(parseColour(t["--sb-text"]).rgb, parseColour(t["--sb-field"]).rgb)).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("keeps the window material only behind the Light style", () => {
+    expect(prop('html[data-material]:not([data-sidebar="dark"]):not([data-sidebar="grey"]) .sidebar', "background")).toBe("transparent");
+  });
+});
+
 describe("colour contrast meets WCAG AA in both themes (A6.DU7)", () => {
   const surfaces = ["--bg", "--surface", "--surface-2"];
 

@@ -183,9 +183,9 @@ h1, h2, h3 { font-family: var(--font-display); }
    themes. Its own tokens, so every part of it (search, rows, counts) follows. */
 :root { --sb-bg: var(--bg); --sb-text: var(--text); --sb-muted: var(--text-muted); --sb-faint: var(--text-faint); --sb-hover: var(--surface-3); --sb-active: var(--accent-soft); --sb-active-text: var(--accent-text); --sb-border: var(--border); --sb-field: var(--surface-2); }
 :root[data-sidebar="grey"] { --sb-bg: #18191b; --sb-hover: rgba(255, 255, 255, 0.06); --sb-field: #212225; }
-:root[data-theme="light"][data-sidebar="grey"] { --sb-bg: #f0f0f3; --sb-hover: rgba(0, 0, 51, 0.06); --sb-field: #ffffff; --sb-border: #e0e1e6; }
+:root[data-theme="light"][data-sidebar="grey"] { --sb-bg: #f0f0f3; --sb-hover: rgba(0, 0, 51, 0.06); --sb-field: #ffffff; --sb-border: #e0e1e6; --sb-faint: #5f6269; }
 :root[data-sidebar="dark"] { --sb-bg: #0b0b0d; --sb-text: #edeef0; --sb-muted: #b0b4ba; --sb-faint: #8b8f99; --sb-hover: rgba(255, 255, 255, 0.07); --sb-active: #1d2a5a; --sb-active-text: #c2cfff; --sb-border: #1f2124; --sb-field: #18191b; }
-:root[data-theme="light"][data-sidebar="dark"] { --sb-bg: #1c2024; --sb-border: #1c2024; --sb-field: #2b3035; --sb-hover: rgba(255, 255, 255, 0.08); }
+:root[data-theme="light"][data-sidebar="dark"] { --sb-bg: #1c2024; --sb-border: #1c2024; --sb-field: #2b3035; --sb-hover: rgba(255, 255, 255, 0.08); --sb-faint: #a0a4ad; }
 .sidebar { position: relative; background: var(--sb-bg); color: var(--sb-text); border-right: 1px solid var(--sb-border); padding: var(--space-3) var(--space-3) var(--space-3); display: flex; flex-direction: column; gap: var(--space-0); min-width: 0; min-height: 0; overflow: hidden; }
 /* The pages scroll; Help, Account and Collapse stay at the bottom, even in the smallest window. */
 .sidebar-main { flex: 1 1 auto; min-height: 0; overflow: hidden auto; margin: 0 calc(-1 * var(--space-1)); padding: 0 var(--space-1); }
