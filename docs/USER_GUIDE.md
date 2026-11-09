@@ -597,6 +597,10 @@ and **Other**. Turn each kind on or off, choose **Sound** or **Silent**, and pre
 notifications** turns them all off. **Quiet hours** (from and to) hold notifications back, except **Call capture &
 readiness**, which is Critical: a call that will not be recorded is always said.
 
+**The bell in the console (since v1.6)** counts only what needs you: a transcription or upload that failed, the monthly
+limit reached, an answer to your upgrade request, and calls waiting for **Keep** or **Discard**. Finished transcripts,
+new devices and shares are listed but not counted. Above nine it says **9+**.
+
 ## 14. Keep recordings for a set time (retention)
 
 - In **Settings → Storage and retention**, choose how long recordings are kept: **7**, **14**, **30** days or a

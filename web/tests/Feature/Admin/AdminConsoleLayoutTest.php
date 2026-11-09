@@ -56,10 +56,12 @@ describe('navigation', function () {
         expect($this->get('/app/login')->assertOk()->getContent())->not->toContain('el-bottom-nav');
     });
 
-    it('marks Activity in the bar with the number of unread notifications', function () {
+    it('marks Activity in the bar with the number of what needs you (since v1.6 a ready transcript is not counted)', function () {
         CaptureSession::factory()->create(['user_id' => $this->admin->id])->transcripts()->create([
             'kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'segments' => []]);
+        expect($this->get(Activity::getUrl())->assertOk()->getContent())->not->toContain('el-bottom-nav-badge');
 
+        app(App\Services\ActivityFeed::class)->post($this->admin, 'transcript_failed', 'Transcription failed', 'Call', null, 'heroicon-o-exclamation-triangle');
         $html = $this->get(Activity::getUrl())->assertOk()->getContent();
 
         expect($html)->toContain('el-bottom-nav-badge')->toMatch('/aria-current="page"[^>]*>\s*<span class="el-bottom-nav-icon">/');

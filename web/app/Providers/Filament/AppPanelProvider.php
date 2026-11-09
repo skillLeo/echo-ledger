@@ -17,6 +17,7 @@ use App\Filament\Support\Palette;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
+use App\Livewire\ActivityBell;
 use App\Services\Staff\StaffAccess;
 use Closure;
 use Filament\Actions\Action;
@@ -82,7 +83,8 @@ class AppPanelProvider extends PanelProvider
             ->registration(Register::class)
             ->passwordReset(RequestPasswordReset::class)
             // The activity centre (B18): the bell shows transcript, upload, device and budget notifications.
-            ->databaseNotifications()
+            // Since v1.6 (P6) its number counts only what needs you, "9+" above nine (App\Livewire\ActivityBell).
+            ->databaseNotifications(livewireComponent: ActivityBell::class)
             ->databaseNotificationsPolling('30s')
             // Passkeys (B16): a second way in, next to the password and the optional two-step code.
             ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, self::here(fn (): View => view('filament.auth.passkey-login')))
