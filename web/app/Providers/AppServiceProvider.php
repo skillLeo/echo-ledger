@@ -27,6 +27,7 @@ use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
+use App\Services\Entitlements\PromoCodes;
 use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
@@ -237,6 +238,15 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perHour(10)->by('transcription-key:'.($device instanceof Device ? $device->user_id : $request->ip()));
         });
         // Since v1.6: upgrade requests, 5 a day per person (whichever device asks).
+        // Promo codes (v1.6.2): against guessing, 10 a minute per person and 30 an hour per network.
+        RateLimiter::for('promo-check', function (Request $request) {
+            $device = $request->user();
+
+            return [
+                Limit::perMinute(PromoCodes::PER_MINUTE)->by('promo-check:user:'.($device instanceof Device ? $device->user_id : $request->ip())),
+                Limit::perHour(PromoCodes::PER_HOUR_PER_IP)->by('promo-check:ip:'.$request->ip()),
+            ];
+        });
         RateLimiter::for('upgrade-request', function (Request $request) {
             $device = $request->user();
 

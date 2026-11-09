@@ -169,6 +169,8 @@
                 this.picked = true;
                 if (v === 'original' || this.viewReady(v)) { this.view = v; this.editing = v === 'original' && this.editing; return; }
                 if (!this.d.views || this.d.views.status === 'making') return;
+                // Since v1.6.2: a view the plan leaves out opens the upgrade sheet.
+                if (this.d.views_locked) { $wire.mountAction('upgradeViews'); return; }
                 try { const views = await $wire.makeViews(); if (views) { this.d.views = views; if (this.viewReady(v)) this.view = v; } }
                 catch (e) { this.error = 'The views could not be started. Try again.'; }
             },
@@ -354,6 +356,7 @@
             .el-player .el-views button[aria-pressed=true] { background: var(--el-bg); color: var(--el-text); box-shadow: 0 1px 2px rgba(0,0,0,.08); }
             .el-player .el-views button:lang(ur) { font-family: "Noto Nastaliq Urdu", inherit; font-size: 14px; }
             .el-player .el-views button[data-unmade] { font-style: normal; opacity: .75; }
+            .el-player .el-views .el-views-lock { display: inline-flex; align-items: center; padding: 0 6px; }
             /* The docked player: it stays at the bottom of the window while the transcript scrolls under it. */
             .el-player .el-dock { position: sticky; bottom: 12px; z-index: 5; display: grid; align-items: center; gap: 6px 12px;
                 grid-template-columns: auto auto auto auto minmax(0, 1fr) auto auto auto; grid-template-areas: 'play back fwd now wave total speed more';
@@ -431,6 +434,7 @@
                 <button type="button" lang="ur" x-show="viewOffered('urdu')" x-on:click="pickView('urdu')" :aria-pressed="view === 'urdu'" :data-unmade="viewReady('urdu') ? null : ''">اردو</button>
                 <button type="button" x-show="viewOffered('english')" x-on:click="pickView('english')" :aria-pressed="view === 'english'" :data-unmade="viewReady('english') ? null : ''">English</button>
                 <button type="button" x-on:click="pickView('original')" :aria-pressed="view === 'original'">Original</button>
+                @if (($data['views_locked'] ?? false) && ($viewsBadge = \App\Filament\Support\PlanLock::lowestBadge('views')))<button type="button" class="el-views-lock" x-show="d.views_locked" x-cloak x-on:click="$wire.mountAction('upgradeViews')" aria-label="Roman Urdu, English and Urdu views are not in your plan. See plans" data-views-locked>{!! $viewsBadge->toHtml() !!}</button>@endif
             </span>
         </div>
 

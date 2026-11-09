@@ -185,9 +185,32 @@ class ViewClient extends ViewRecord
         return PlanLock::sheet('upgradeAiNotes', 'ai_notes', 'AI notes');
     }
 
+    /** The upgrade sheet for screen moments (since v1.6.2), from the Screens tab when the plan leaves them out. */
+    public function upgradeScreensAction(): Action
+    {
+        return PlanLock::sheet('upgradeScreens', 'screen_moments', 'Screen moments');
+    }
+
+    /**
+     * Without AI notes in the plan (since v1.6.2) the switch, Make again, Add (memory) and Ask stay visible and open
+     * the upgrade sheet instead; the server still refuses the work itself (403 feature_not_in_plan).
+     */
+    private function sheetIfAiLocked(): bool
+    {
+        if (PlanLock::allows('ai_notes')) {
+            return false;
+        }
+        $this->mountAction('upgradeAiNotes');
+
+        return true;
+    }
+
     /** AI notes on or off: off means no Claude request is made for this client. */
     public function toggleAiNotes(): void
     {
+        if ($this->sheetIfAiLocked()) {
+            return;
+        }
         $client = $this->client();
         $client->update(['ai_notes' => ! $client->ai_notes]);
         Notification::make()->title($client->ai_notes ? 'AI notes are on for '.$client->name : 'AI notes are off for '.$client->name)->success()->send();
@@ -231,6 +254,9 @@ class ViewClient extends ViewRecord
     /** Make again: from the files (or the calls), replacing an edited brief; done on the queue. */
     public function remakeBrief(): void
     {
+        if ($this->sheetIfAiLocked()) {
+            return;
+        }
         $client = $this->client();
         try {
             app(ClientWorkspace::class)->assertCanWriteNotes($client->workspace_id);
@@ -246,6 +272,9 @@ class ViewClient extends ViewRecord
 
     public function addMemory(): void
     {
+        if ($this->sheetIfAiLocked()) {
+            return;
+        }
         $this->validate([
             'memoryKind' => ['required', 'in:'.implode(',', ClientMemoryItem::KINDS)],
             'memoryText' => ['required', 'string', 'max:500'],
@@ -339,6 +368,9 @@ class ViewClient extends ViewRecord
 
     public function ask(): void
     {
+        if ($this->sheetIfAiLocked()) {
+            return;
+        }
         $this->validate([
             'question' => ['required', 'string', 'min:3', 'max:500'],
             'askLanguage' => ['required', 'in:en,roman_urdu'],
@@ -416,6 +448,9 @@ class ViewClient extends ViewRecord
             // Since v1.6 (P1.4): the plan's badge and the upgrade sheet when the plan leaves AI notes out.
             'aiLocked' => ! PlanLock::allows('ai_notes'),
             'aiBadge' => PlanLock::badge('ai_notes'),
+            // Since v1.6.2: the Screens tab keeps its place with the plan's badge when the plan leaves screen moments out.
+            'screensLocked' => ! PlanLock::allows('screen_moments'),
+            'screensBadge' => PlanLock::badge('screen_moments'),
         ];
 
         return $data + match ($this->tab) {

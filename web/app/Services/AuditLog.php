@@ -75,6 +75,10 @@ final class AuditLog
         'upgrade_requested' => 'Upgrade asked for',
         'upgrade_approved' => 'Upgrade approved',
         'upgrade_declined' => 'Upgrade declined',
+        // Since v1.6.2: promo codes.
+        'promo_code_used' => 'Promo code used',
+        'promo_code_created' => 'Promo code made',
+        'promo_code_changed' => 'Promo code changed',
         'unusual_usage' => 'Unusual use',
         'device_signed_in_again' => 'Signed in again',
         'device_signed_out' => 'Device signed out',

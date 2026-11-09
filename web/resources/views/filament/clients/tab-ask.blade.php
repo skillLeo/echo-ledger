@@ -2,7 +2,7 @@
 <div style="display: flex; flex-direction: column; gap: var(--space-5); max-width: 880px">
         @include('filament.clients.ai-locked')
     <form class="el-card" wire:submit="ask" style="display: flex; flex-direction: column; gap: var(--space-3)">
-        <label for="ask-question" class="el-card-title">Ask about {{ $client->name }}</label>
+        <label for="ask-question" class="el-card-title">Ask about {{ $client->name }} @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</label>
         <textarea id="ask-question" class="el-field-input" rows="3" wire:model="question" maxlength="500"
             placeholder="What did we agree about the deadline?" x-on:keydown.ctrl.enter.prevent="$wire.ask()" x-on:keydown.meta.enter.prevent="$wire.ask()"></textarea>
         @error('question')<p class="el-caption" role="alert" style="color: var(--danger)">{{ $message }}</p>@enderror

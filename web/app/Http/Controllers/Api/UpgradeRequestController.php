@@ -24,8 +24,9 @@ final class UpgradeRequestController extends Controller
         $data = $request->validate([
             'plan' => ['required', 'string', 'max:32'],
             'message' => ['nullable', 'string', 'max:1000'],
+            'promo_code' => ['nullable', 'string', 'max:40'],
         ]);
-        $created = $this->requests->create($device->user, $device->workspace_id, $data['plan'], $data['message'] ?? null);
+        $created = $this->requests->create($device->user, $device->workspace_id, $data['plan'], $data['message'] ?? null, $data['promo_code'] ?? null);
 
         return response()->json($this->requests->payload($created, created: true), 201);
     }

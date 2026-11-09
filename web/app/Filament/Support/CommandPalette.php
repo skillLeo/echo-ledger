@@ -20,6 +20,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Entitlements\Entitlements;
 use App\Services\LibrarySearch;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
@@ -122,7 +123,10 @@ final class CommandPalette implements GlobalSearchProvider
                 : ['Record now', GetTheApps::getUrl(panel: 'app'), 'Get the phone or computer app to record', 'start voice note new download install', ! $readOnly],
             ['Upload', Upload::getUrl(panel: 'app'), 'Voice notes, audio or video files', 'import files add', ! $readOnly && Upload::canAccess()],
             ['New project', ClientResource::getUrl('create', panel: 'app'), 'A folder for one customer\'s calls and files', 'create folder customer', ! $readOnly && ClientResource::canAccess()],
-            ['Invite', WorkspaceSettings::getUrl(['action' => 'addMember'], panel: 'app'), 'Ask someone to join this workspace', 'member team people add', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)],
+            // Since v1.6.2 also without a team in the plan: it opens the upgrade sheet, and says which plan has teams.
+            PlanLock::allows('team')
+                ? ['Invite', WorkspaceSettings::getUrl(['action' => 'addMember'], panel: 'app'), 'Ask someone to join this workspace', 'member team people add', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)]
+                : ['Invite', WorkspaceSettings::getUrl(['action' => 'upgradeForTeam'], panel: 'app'), 'Team workspaces are in '.(app(Entitlements::class)->lowestPlan('team')->name ?? 'a bigger plan').': see plans', 'member team people add upgrade', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)],
             ['New request link', RequestLinksPage::getUrl(['action' => 'create'], panel: 'app'), 'A link people use to send you files', 'ask upload files', ! $readOnly && RequestLinksPage::canAccess()],
         ];
 
@@ -152,12 +156,12 @@ final class CommandPalette implements GlobalSearchProvider
         return $out;
     }
 
-    /** Whether the person may invite to their current workspace (WorkspacePolicy's invite) and the plan has teams. */
+    /** Whether the person may invite to their current workspace (WorkspacePolicy's invite); the plan decides what Invite opens. */
     private static function mayInvite(?User $user): bool
     {
         $workspace = Workspace::query()->find(CurrentWorkspace::id());
 
-        return $user !== null && $workspace instanceof Workspace && PlanLock::allows('team') && Gate::forUser($user)->allows('invite', [$workspace]);
+        return $user !== null && $workspace instanceof Workspace && Gate::forUser($user)->allows('invite', [$workspace]);
     }
 
     private static function matches(string $query, string $haystack): bool

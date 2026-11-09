@@ -11,10 +11,10 @@
         <section class="el-card" aria-labelledby="ai-heading">
             <div class="el-setting-row">
                 <div>
-                    <h3 id="ai-heading" class="el-setting-title">AI notes</h3>
+                    <h3 id="ai-heading" class="el-setting-title">AI notes @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</h3>
                     <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: no Claude request for this project.</p>
                 </div>
-                <button type="button" class="el-switch" role="switch" aria-checked="{{ $client->ai_notes ? 'true' : 'false' }}" aria-labelledby="ai-heading" wire:click="toggleAiNotes"></button>
+                <button type="button" class="el-switch" role="switch" aria-checked="{{ $client->ai_notes && ! $aiLocked ? 'true' : 'false' }}" aria-labelledby="ai-heading" wire:click="toggleAiNotes" @if ($aiLocked) data-locked @endif></button>
             </div>
             <div class="el-budget" style="margin-top: var(--space-4)">
                 <p class="el-meta" data-ai-budget>AI this month: ${{ number_format($budget['spent_usd'], 2) }} of ${{ number_format($budget['budget_usd'], 2) }} · this project ${{ number_format($clientSpend, 2) }}</p>

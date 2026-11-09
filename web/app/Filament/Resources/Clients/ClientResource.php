@@ -12,6 +12,7 @@ use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Resources\Clients\RelationManagers\ContactsRelationManager;
 use App\Filament\Resources\Clients\RelationManagers\KeytermsRelationManager;
+use App\Filament\Support\PlanLock;
 use App\Filament\Support\SharingActions;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Models\Client;
@@ -111,8 +112,14 @@ class ClientResource extends Resource
                     ->dehydrateStateUsing(fn (?string $state): ?string => OrganiseController::avatar($state)),
                 Toggle::make('pinned')->label('Pin to the top')->inline(false),
                 // Since v1.5: off = the desktop keeps no screen moments of meetings filed here.
-                Toggle::make('screens')->label('Keep screen moments of its meetings')->default(true)->inline(false)
-                    ->helperText('The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.'),
+                // Since v1.6.2 without screen moments in the plan: the plan's badge, the switch kept as it is, See plans.
+                Toggle::make('screens')->label(fn () => PlanLock::label('Keep screen moments of its meetings', 'screen_moments'))->default(true)->inline(false)
+                    ->disabled(fn (): bool => ! PlanLock::allows('screen_moments'))
+                    ->hintAction(PlanLock::sheet('upgradeScreens', 'screen_moments')->label('See plans')->icon(Heroicon::OutlinedLockClosed)->link()
+                        ->visible(fn (): bool => ! PlanLock::allows('screen_moments')))
+                    ->helperText(fn (): string => PlanLock::allows('screen_moments')
+                        ? 'The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.'
+                        : 'Screen moments are not in your plan: the desktop app keeps no screens until you upgrade.'),
                 Select::make('language')->label('Language')->options(LanguageChoice::OFFERED)->selectablePlaceholder(false)
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::normalize($state) ?? '')
                     ->dehydrateStateUsing(fn (?string $state): ?string => LanguageChoice::normalize($state))

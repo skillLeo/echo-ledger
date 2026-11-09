@@ -6,6 +6,8 @@
     $note = $this->callNote();
     $client = $getRecord()->client;
     $sections = $note?->status === 'ready' ? $note->toApi()['sections'] : [];
+    // Since v1.6.2: without AI notes in the plan, Write notes carries the plan's badge and opens the upgrade sheet.
+    $notesBadge = app(\App\Services\Workspaces\PlanLimits::class)->allows($getRecord()->workspace_id, 'ai_notes', $getRecord()->user_id) ? null : \App\Filament\Support\PlanLock::lowestBadge('ai_notes');
 @endphp
 <section class="el-card" aria-labelledby="call-notes-heading" x-data="{ lang: @js($note?->language ?? 'en') }">
     <div class="el-card-head">
@@ -58,7 +60,7 @@
                 <button type="button" x-on:click="lang = 'roman_urdu'" :aria-pressed="lang === 'roman_urdu'">Roman Urdu</button>
             </span>
             <button type="button" class="el-pill el-pill-sm" x-on:click="$wire.writeNotes(lang)" wire:loading.attr="disabled" wire:target="writeNotes">
-                @svg('heroicon-o-sparkles', ['aria-hidden' => 'true']) {{ $note === null ? 'Write notes' : 'Write again' }}
+                @svg('heroicon-o-sparkles', ['aria-hidden' => 'true']) {{ $note === null ? 'Write notes' : 'Write again' }}@if ($notesBadge) {!! $notesBadge->toHtml() !!}@endif
             </button>
         </div>
     @endif

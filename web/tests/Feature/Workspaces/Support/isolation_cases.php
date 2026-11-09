@@ -256,6 +256,8 @@ function isoApiCases(array $b): array
         'api.me.transcription-key.delete' => ['DELETE', '/api/me/transcription-key', [], fn (TestResponse $r): bool => $r->status() === 204],
         // B's upgrade request is never A's: A has none, whatever B asked for.
         'api.upgrade-requests.latest' => ['GET', '/api/upgrade-requests/latest', [], 404],
+        // Since v1.6.2: another workspace's code is no different from an unknown one.
+        'api.promo-codes.check' => ['POST', '/api/promo-codes/check', ['code' => 'NO-SUCH-CODE'], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'invalid_promo_code'],
         'api.upgrade-requests.store' => ['POST', '/api/upgrade-requests', ['plan' => 'no-such-plan'], fn (TestResponse $r): bool => $r->status() === 422],
         'api.account.destroy' => ['DELETE', '/api/account', [], fn (TestResponse $r): bool => $r->status() === 422 && $r->json('code') === 'validation_failed'],
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],

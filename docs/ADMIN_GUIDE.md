@@ -205,6 +205,22 @@ reports.
 - **Payment instructions** (since v1.6): the text people read after **Request upgrade** (bank or JazzCash details and
   what to write as the reference), followed by "We'll activate it once confirmed".
 
+### Promo codes (since v1.6.2)
+**Admin panel → Promo codes** (staff who can see plans; making and changing them needs the Plans permission). Customers
+never see this page or the list of codes.
+
+1. **New promo code:** type the code (for example `SAVE50`; 6–24 letters, digits or `-`, case does not matter), choose
+   the **one plan** it is for (Pro or Ultra), the **discount** (1–100 %), and optionally an **end date**, a **maximum
+   number of uses**, **once per person** (on by default) and **how many months** the plan lasts once it is switched on.
+2. Give the code to whoever should have it. In the upgrade sheet they press **Have a promo code?**, type it and press
+   **Apply**: the price becomes, for example, "Rs 2,999 → Rs 1,500 / month with SAVE50". A code for another plan says
+   which plan it is for and offers that plan; it never works for any other plan.
+3. **Below 100 %:** the request reaches **Upgrade requests** with the code and the amount to pay; approve it once the
+   payment is in (the end date is filled in from the code's months). **At 100 %:** nothing is paid and the plan switches
+   on at once for the code's months.
+4. **Uses** lists who used each code and when. **Switch off** stops a code at once; a declined request gives its code
+   back to that person. Guessing codes is slowed down (10 tries a minute per person, 30 an hour per network).
+
 ### Upgrade requests (since v1.6)
 
 **Admin panel → Upgrade requests** lists the waiting requests first: who asked, the plan they are **On now**, the plan

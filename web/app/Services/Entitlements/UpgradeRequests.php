@@ -7,6 +7,8 @@ namespace App\Services\Entitlements;
 use App\Exceptions\ApiError;
 use App\Mail\UpgradeDecidedMail;
 use App\Models\Plan;
+use App\Models\PromoCode;
+use App\Models\PromoCodeUse;
 use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Models\Workspace;
@@ -51,9 +53,11 @@ final class UpgradeRequests
 
     /**
      * A new request for the plan [$planKey] (one on offer, other than the one the workspace is on). `409
-     * request_pending` with the pending one while another waits.
+     * request_pending` with the pending one while another waits. Since v1.6.2 with an optional promo code for that plan
+     * (`422 invalid_promo_code`, `422 promo_other_plan`): the request keeps the code, the percent and the amount due,
+     * and at 100 % it is approved at once, the plan on for the code's months.
      */
-    public function create(User $user, int $workspaceId, string $planKey, ?string $message): UpgradeRequest
+    public function create(User $user, int $workspaceId, string $planKey, ?string $message, ?string $promoCode = null): UpgradeRequest
     {
         $plan = Plan::query()->where('key', $planKey)->where('on_offer', true)->whereNull('archived_at')->first();
         if (! $plan instanceof Plan) {
@@ -62,28 +66,60 @@ final class UpgradeRequests
         if (app(Entitlements::class)->plan($workspaceId)->is($plan)) {
             throw ValidationException::withMessages(['plan' => "You are on {$plan->name} already."]);
         }
+        $promoCode = filled($promoCode) ? (string) $promoCode : null;
 
-        $request = DB::transaction(function () use ($user, $workspaceId, $plan, $message): UpgradeRequest {
+        $request = DB::transaction(function () use ($user, $workspaceId, $plan, $message, $promoCode): UpgradeRequest {
             User::query()->whereKey($user->id)->lockForUpdate()->first();
             $pending = $this->pendingFor($user);
             if ($pending instanceof UpgradeRequest) {
                 throw new ApiError(409, 'request_pending', "Your request for {$this->planName($pending->plan)} is still waiting. We will tell you once it is decided.", ['request' => $this->payload($pending, created: true)]);
             }
+            // The code is read again under a lock, so two people cannot take its last use at once.
+            $promo = $promoCode !== null ? app(PromoCodes::class)->usable($user, $promoCode, lock: true) : null;
+            if ($promo instanceof PromoCode && $promo->plan !== $plan->key) {
+                throw PromoCodes::otherPlan(app(PromoCodes::class)->planOf($promo));
+            }
+            $free = $promo instanceof PromoCode && $promo->percent >= 100;
+            $until = $free ? now()->addMonths(max(1, $promo->months)) : null;
 
-            return UpgradeRequest::query()->create([
+            $request = UpgradeRequest::query()->create([
                 'user_id' => $user->id,
                 'workspace_id' => $workspaceId,
                 'plan' => $plan->key,
                 'message' => filled($message) ? mb_substr(trim((string) $message), 0, 1000) : null,
-                'status' => UpgradeRequest::PENDING,
+                'promo_code' => $promo?->code,
+                'percent' => $promo?->percent,
+                'amount_due' => $promo instanceof PromoCode ? PromoCodes::discounted($plan, $promo->percent) : $plan->displayPrice(),
+                'status' => $free ? UpgradeRequest::APPROVED : UpgradeRequest::PENDING,
             ]);
+            if ($free) {
+                // Nothing to pay: the plan is on at once, for the code's months.
+                Workspace::query()->whereKey($workspaceId)->update(['plan_id' => $plan->id, 'plan_expires_at' => $until]);
+                $request->forceFill(['approved_plan' => $plan->key, 'approved_until' => $until, 'decided_at' => now()])->save();
+            }
+            if ($promo instanceof PromoCode) {
+                PromoCodeUse::query()->create(['promo_code_id' => $promo->id, 'user_id' => $user->id, 'upgrade_request_id' => $request->id, 'used_at' => now()]);
+            }
+
+            return $request;
         });
+        if ($request->promo_code !== null) {
+            $this->audit->record('promo_code_used', $user->id, $request, "Used the promo code {$request->promo_code} ({$request->percent} %) for {$plan->name}");
+        }
+        if ($request->status === UpgradeRequest::APPROVED) {
+            app(Entitlements::class)->forget();
+            $this->audit->record('upgrade_approved', $user->id, $request, "{$plan->name} switched on with the promo code {$request->promo_code}");
+            $this->tell($request, true, $plan->name, $request->approved_until, null);
+
+            return $request;
+        }
         $this->audit->record('upgrade_requested', $user->id, $request, "Asked for the {$plan->name} plan");
         // Staff who answer them see it in the bell (and on Admin panel → Upgrade requests).
+        $code = $request->promo_code !== null ? " with the code {$request->promo_code} ({$request->percent} % off, {$request->amount_due})" : '';
         User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
             ->filter(fn (User $staff): bool => StaffAccess::can('upgrades.manage', $staff))
             ->each(fn (User $staff) => app(ActivityFeed::class)
-                ->post($staff, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}.", null, 'heroicon-o-arrow-trending-up'));
+                ->post($staff, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}{$code}.", null, 'heroicon-o-arrow-trending-up'));
 
         return $request;
     }
@@ -109,6 +145,8 @@ final class UpgradeRequests
     public function decline(UpgradeRequest $request, User $admin, string $reply): void
     {
         $request->forceFill(['status' => UpgradeRequest::DECLINED, 'reply' => mb_substr(trim($reply), 0, 1000), 'decided_by' => $admin->id, 'decided_at' => now()])->save();
+        // A declined request gives its promo code back to the person (since v1.6.2): nothing was bought with it.
+        PromoCodeUse::query()->where('upgrade_request_id', $request->id)->delete();
         $this->audit->record('upgrade_declined', $admin->id, $request, 'Upgrade request declined for '.$request->user->email);
         $this->tell($request, false, $this->planName($request->plan), null, $request->reply);
     }
@@ -141,11 +179,17 @@ final class UpgradeRequests
             'plan' => $request->plan,
             'status' => $request->status,
             'message' => $request->message,
-            'payment_instructions' => $this->paymentInstructions(),
+            // Since v1.6.2: the promo code, its percent and the price after it; nothing to pay at 100 %.
+            'promo_code' => $request->promo_code,
+            'percent' => $request->percent,
+            'amount_due' => $request->amount_due ?? (string) (Plan::query()->where('key', $request->plan)->first()?->displayPrice() ?? ''),
+            'payment_instructions' => $request->percent !== null && $request->percent >= 100 ? null : $this->paymentInstructions(),
             'created_at' => $request->created_at->toAtomString(),
         ];
         if ($created) {
-            return $out;
+            // A 100 % promo code approves the request at once: the answer says so, with the plan and until when.
+            return $request->status === UpgradeRequest::APPROVED
+                ? [...$out, 'approved_plan' => $request->approved_plan, 'approved_until' => $request->approved_until?->toAtomString()] : $out;
         }
 
         return [...$out, 'decided_at' => $request->decided_at?->toAtomString(), 'reply' => $request->reply,
