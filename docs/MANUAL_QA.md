@@ -494,6 +494,20 @@ browser and a person's eyes. Screenshots of every page are in docs/design/screen
 | 16-WS9 | Admin panel at 1440 px: the sidebar, Customers → click a row, Esc. | The admin frame with ADMIN and its own groups; the quick look slides in from the right with the numbers and Open; Esc closes it. |
 | 16-WS10 | Admin → Sign-up with no Turnstile keys, then with them. | The switch is greyed out with "Off until its keys are saved…"; once saved it turns the check off and on, and the web sign-up asks for it only while on. |
 
+### Web console v1.6.2 All features and locked features (what only a real browser can prove)
+
+The tests prove the list, the count, which badge each feature gets and that a click opens the upgrade sheet and never
+the feature. Screenshots: docs/design/screens/web/web-account-plan-free-* and web-account-plan-ultra-*.
+
+| # | Check | Expected |
+|---|---|---|
+| 16-AF1 | Sign in as a Free person. Account → Plan & usage, scroll to All features; then type "all features" in Find a page. | 15 features in order: 6 with "✓ In your plan", the rest with PRO ✦ or ULTRA ✦ in the plan's colour with a lock; "Your plan has 6 of 15 features."; Find a page opens the list. |
+| 16-AF2 | Click ULTRA ✦ next to Live Translate, then Compare plans at the bottom. | The sheet says "Live Translate is in Ultra" with Ultra chosen; Compare plans shows the plans side by side; Request upgrade sends it. |
+| 16-AF3 | As Free, open a project: the Ask and Screens tabs, the AI notes switch, Make again, Add (memory), Ask; then the project's Settings. | Ask and Screens carry their badge; each control opens the sheet and nothing changes; Screens says screen moments are not in the plan; Settings shows the screen moments switch greyed with PRO ✦ and See plans. |
+| 16-AF4 | As Free, open a finished recording: Roman Urdu / English in the player, the lock beside them, Write notes (in a project). | Each opens the sheet; no view or notes are made. |
+| 16-AF5 | Ctrl+K, type "invite" as Free, Enter. | "Invite · Team workspaces are in Ultra: see plans"; the Workspace page opens with the sheet. |
+| 16-AF6 | The same pages as an Ultra person, in light and dark, at 1440 px and on a phone. | 15 of 15, no badges anywhere; the real controls work; nothing overflows at 390 px. |
+
 ### Web console v1.6.1 notices (what only a real browser and a person's hands can prove)
 
 The tests prove the targets, the labels, the timers' lengths, who may open which notification and the decisions (Node

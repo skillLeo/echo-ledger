@@ -225,6 +225,14 @@ plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
+**All features (web console, since v1.6.2).** **Account → Plan & usage → All features** (or type "All features" in
+**Find a page**) lists every feature with one line about it: **✓ In your plan**, or the badge of the plan that has it
+(**PRO ✦**, **ULTRA ✦**). Click a badge to see that feature and the plans side by side; the line at the top says how
+many of the 15 your plan has. A feature your plan leaves out is never hidden in the console: its button or tab stays
+where it is with the badge, and a click opens the plans instead (on a project: Ask, Screens, the AI notes switch, Make
+again and Add; on a recording: Roman Urdu, English and Urdu, and Write notes; in a project's Settings: Keep screen
+moments; **Invite** in the search box and on the Workspace page).
+
 ### Support access (since v1.6)
 
 EchoLedger's support never sees your recordings. If you want help with one, open **Account → Privacy & data → Support
