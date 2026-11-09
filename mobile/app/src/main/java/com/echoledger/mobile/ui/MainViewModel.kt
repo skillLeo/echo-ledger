@@ -453,6 +453,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     suspend fun exportStatus(id: String): com.echoledger.mobile.data.AccountExportDto? =
         workspaceCall("The export could not be checked.") { it.exportStatus(id) }
 
+    /** Settings → App lock (since v1.6): the widget names recordings by their app only, at once. */
+    fun setWidgetHideTitles(hide: Boolean) = viewModelScope.launch {
+        graph.settings.update { it.copy(widgetHideTitles = hide) }
+        WidgetStateStore.refresh(getApplication())
+    }
+
     fun unpair() = viewModelScope.launch {
         graph.settings.clearPairing()
         graph.library.clear()
@@ -479,6 +485,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
         runCatching { graph.library.refresh() }
+        // Since v1.6: the widget's "Transcribing · part 2 of 3" moves with the app's.
+        WidgetStateStore.refresh(getApplication())
     }
 
     fun refresh() = viewModelScope.launch {

@@ -31,6 +31,8 @@ data class AppSettings(
     val lockAfterMs: Long = 0L,
     /** While the lock is on, hide the app's content in Recents and screenshots (FLAG_SECURE). */
     val secureScreen: Boolean = false,
+    /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
+    val widgetHideTitles: Boolean = false,
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
     val settingsVersion: Int = 2,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */

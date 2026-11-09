@@ -27,6 +27,7 @@ object ReadinessWatch {
     private const val PREFS = "readiness"
     private const val KEY_HELPER_SEEN = "helper_seen"
     private const val KEY_ALERTED = "alerted"
+    private const val KEY_CHIP = "chip"
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
     private const val WORK = "readiness-check"
     private const val KEY_WHY = "why"
@@ -68,6 +69,17 @@ object ReadinessWatch {
         )
     }
 
+    /** The Ready check's last chip (`READY`, `NOT_READY`, `OFF`), or null when this phone records no calls (the widget's dot). */
+    fun lastChip(context: Context): String? = prefs(context).getString(KEY_CHIP, null)
+
+    /** Keeps the chip for the widget and redraws the widget when it changed (since v1.6, Phase 1C I4). */
+    suspend fun remember(context: Context, readiness: Readiness) {
+        val chip = readiness.chip.name.takeIf { readiness.chip != com.echoledger.mobile.core.ReadyChip.NONE }
+        if (chip == lastChip(context)) return
+        prefs(context).edit().putString(KEY_CHIP, chip).apply()
+        com.echoledger.mobile.widget.WidgetStateStore.refresh(context)
+    }
+
     /** Reads the facts, alerts once per new critical problem, and clears the alert when nothing critical is left. */
     suspend fun check(app: EchoLedgerApp, why: String): Readiness {
         val readiness = Readiness.evaluate(facts(app, app.graph.settings.current(), app.graph.helper))
@@ -85,6 +97,7 @@ object ReadinessWatch {
             Notifications.cancelReadinessAlert(app)
         }
         prefs(app).edit().putStringSet(KEY_ALERTED, critical.map { it.key }.toSet()).apply()
+        remember(app, readiness)
         return readiness
     }
 

@@ -38,7 +38,7 @@ object SettingsCatalogue {
             "app-lock",
             SettingsGroup.General,
             "App lock",
-            "lock fingerprint face screen lock recents screenshots hide content security"
+            "lock fingerprint face screen lock recents screenshots hide content security widget titles home screen"
         ),
         SettingsEntry("consent", SettingsGroup.General, "Privacy & consent", "consent law participants understand"),
         SettingsEntry("devices", SettingsGroup.General, "Devices", "revoke paired activity audit security"),
@@ -107,6 +107,7 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
+                widgetHideTitles = d.widgetHideTitles,
                 activityNotifications = d.activityNotifications,
                 quietHours = d.quietHours,
                 quietFrom = d.quietFrom,

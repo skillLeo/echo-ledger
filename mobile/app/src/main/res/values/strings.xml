@@ -4,7 +4,10 @@
     <string name="share_label">Transcribe with EchoLedger</string>
     <string name="tile_label">EchoLedger record</string>
     <string name="widget_label">EchoLedger</string>
-    <string name="widget_description">Quick record, status and your latest transcript</string>
+    <string name="widget_description">Record now, whether calls are ready, and your latest recordings</string>
+    <string name="widget_preview_status">Ready to record calls</string>
+    <string name="widget_preview_title">Call with Omar</string>
+    <string name="widget_preview_line">Transcribing · part 2 of 3</string>
     <string name="channel_recording">Recording</string>
     <string name="channel_recording_desc">Shown while EchoLedger is capturing audio</string>
     <string name="channel_decisions">Calls and problems</string>
@@ -12,6 +15,7 @@
     <string name="channel_activity">Transcripts ready</string>
     <string name="channel_activity_desc">Finished transcripts, failed uploads, new devices and the monthly limit</string>
     <string name="channel_live_translate">Live Translate</string>
+    <string name="shortcut_record_now">Record now</string>
     <string name="tile_game_translate">Game translate</string>
     <string name="tile_watch_translate">Watch translate</string>
     <string name="voice_keyboard_label">EchoLedger voice keyboard</string>

@@ -1,6 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Live Translate on and off (plan B2): long-press the app icon, or use them from Samsung Routines or a back tap. -->
+<!-- Long-press the app icon (or Samsung Routines, a back tap): Record now (since v1.6: a call going on is recorded on
+     both sides, else a voice note) and Live Translate on and off (plan B2). -->
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut
+        android:enabled="true"
+        android:icon="@mipmap/ic_launcher"
+        android:shortcutId="record_now"
+        android:shortcutShortLabel="@string/shortcut_record_now">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="com.echoledger.mobile.tile.TileTrampolineActivity"
+            android:targetPackage="com.echoledger.mobile">
+            <extra android:name="from" android:value="App shortcut" />
+        </intent>
+    </shortcut>
     <shortcut
         android:enabled="true"
         android:icon="@mipmap/ic_launcher"

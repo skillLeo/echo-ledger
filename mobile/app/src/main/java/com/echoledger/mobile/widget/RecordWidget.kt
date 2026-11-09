@@ -42,6 +42,8 @@ import androidx.glance.layout.padding
 import androidx.glance.layout.size
 import androidx.glance.layout.width
 import androidx.glance.material3.ColorProviders
+import androidx.glance.semantics.contentDescription
+import androidx.glance.semantics.semantics
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
@@ -61,7 +63,7 @@ import com.echoledger.mobile.ui.toScheme
  * or the wallpaper's when the app uses them.
  */
 class RecordWidget : GlanceAppWidget() {
-    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, SQUARE, WIDE))
+    override val sizeMode: SizeMode = SizeMode.Responsive(setOf(SMALL, SQUARE, WIDE, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val state = WidgetStateStore.load(context)
@@ -74,6 +76,9 @@ class RecordWidget : GlanceAppWidget() {
         val SMALL = DpSize(110.dp, 40.dp)
         val SQUARE = DpSize(110.dp, 110.dp)
         val WIDE = DpSize(250.dp, 110.dp)
+
+        /** 4 x 4 (since v1.6): the last six recordings, each one tap to open. */
+        val LARGE = DpSize(250.dp, 250.dp)
     }
 }
 
@@ -93,6 +98,7 @@ internal fun WidgetContent(state: WidgetState) {
     ) {
         when {
             size.height < 100.dp -> SmallLayout(state)
+            size.width >= 230.dp && size.height >= 230.dp -> LargeLayout(state)
             size.width >= 230.dp -> WideLayout(state)
             else -> SquareLayout(state)
         }
@@ -105,7 +111,10 @@ private fun SmallLayout(state: WidgetState) {
         RecordButton(state, 36.dp)
         Spacer(GlanceModifier.width(10.dp))
         Column(GlanceModifier.defaultWeight().clickable(actionStartActivity<MainActivity>())) {
-            StatusText(state, maxLines = 1)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                ReadyDot(state)
+                StatusText(state, maxLines = 1)
+            }
         }
     }
 }
@@ -113,7 +122,7 @@ private fun SmallLayout(state: WidgetState) {
 @Composable
 private fun SquareLayout(state: WidgetState) {
     Column(GlanceModifier.fillMaxSize()) {
-        AppName()
+        AppName(state)
         StatusText(state, maxLines = 2)
         ReviewText(state)
         Spacer(GlanceModifier.defaultWeight())
@@ -128,25 +137,82 @@ private fun SquareLayout(state: WidgetState) {
 private fun WideLayout(state: WidgetState) {
     Row(GlanceModifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         Column(GlanceModifier.defaultWeight().fillMaxHeight()) {
-            AppName()
+            AppName(state)
             StatusText(state, maxLines = 1)
             ReviewText(state)
             Spacer(GlanceModifier.height(6.dp))
-            LastRecording(state)
+            // Since v1.6: the last two with their progress; before the first refresh, the last one as before.
+            if (state.showsContent && state.recent.isNotEmpty()) {
+                state.recent.take(2).forEach { RecentRow(it) }
+            } else {
+                LastRecording(state)
+            }
         }
         Spacer(GlanceModifier.width(12.dp))
         RecordButton(state, 52.dp)
     }
 }
 
+/** 4 x 4 (since v1.6, Phase 1C I4): the status and Record now on top, then the last six, each one tap to open. */
 @Composable
-private fun AppName() {
-    Text(
-        "EchoLedger",
-        maxLines = 1,
-        style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = 13.sp),
-        modifier = GlanceModifier.clickable(actionStartActivity<MainActivity>())
-    )
+private fun LargeLayout(state: WidgetState) {
+    Column(GlanceModifier.fillMaxSize()) {
+        Row(GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(GlanceModifier.defaultWeight()) {
+                AppName(state)
+                StatusText(state, maxLines = 1)
+                ReviewText(state)
+            }
+            Spacer(GlanceModifier.width(12.dp))
+            RecordButton(state, 52.dp)
+        }
+        Spacer(GlanceModifier.height(8.dp))
+        if (state.showsContent) {
+            state.recent.take(6).forEach { RecentRow(it) }
+            if (state.recent.isEmpty()) LastRecording(state)
+        }
+    }
+}
+
+/** One recent recording: its title (or its app, with Hide titles) and its progress or time; a tap opens it. */
+@Composable
+private fun RecentRow(row: WidgetRow) {
+    Column(GlanceModifier.fillMaxWidth().padding(vertical = 3.dp).clickable(openSession(row.id))) {
+        Text(
+            row.title,
+            maxLines = 1,
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+        )
+        Text(row.line, maxLines = 1, style = TextStyle(color = GlanceTheme.colors.onSurfaceVariant, fontSize = 12.sp))
+    }
+}
+
+/** The Ready check's dot (since v1.6): green when calls are recorded, red when not, grey when switched off. */
+@Composable
+private fun ReadyDot(state: WidgetState) {
+    val label = state.readyLabel ?: return
+    val colour = when (state.ready) {
+        "READY" -> androidx.glance.color.ColorProvider(day = READY_DAY, night = READY_NIGHT)
+        "NOT_READY" -> GlanceTheme.colors.error
+        else -> GlanceTheme.colors.outline
+    }
+    Box(GlanceModifier.size(8.dp).cornerRadius(4.dp).background(colour).semantics { contentDescription = label }) {}
+    Spacer(GlanceModifier.width(6.dp))
+}
+
+private val READY_DAY = androidx.compose.ui.graphics.Color(0xFF15803D)
+private val READY_NIGHT = androidx.compose.ui.graphics.Color(0xFF4ADE80)
+
+@Composable
+private fun AppName(state: WidgetState) {
+    Row(GlanceModifier.clickable(actionStartActivity<MainActivity>()), verticalAlignment = Alignment.CenterVertically) {
+        ReadyDot(state)
+        Text(
+            "EchoLedger",
+            maxLines = 1,
+            style = TextStyle(color = GlanceTheme.colors.onSurface, fontWeight = FontWeight.Medium, fontSize = 13.sp)
+        )
+    }
 }
 
 @Composable
@@ -159,7 +225,12 @@ private fun StatusText(state: WidgetState, maxLines: Int) {
             fontSize = 12.sp,
             fontWeight = if (state.recording) FontWeight.Medium else FontWeight.Normal
         ),
-        modifier = if (!state.recording && state.pendingDecisions > 0) GlanceModifier.clickable(openPending()) else GlanceModifier
+        modifier = when {
+            state.recording -> GlanceModifier
+            state.pendingDecisions > 0 -> GlanceModifier.clickable(openPending())
+            state.notReady -> GlanceModifier.clickable(openReady())
+            else -> GlanceModifier
+        }
     )
 }
 
@@ -202,6 +273,16 @@ private fun RecordButton(state: WidgetState, size: Dp) {
     )
 }
 
+/** Opens one recording (since v1.6). */
+private fun openSession(id: String) = actionStartActivity<MainActivity>(
+    actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_OPEN) to MainActivity.OPEN_SESSION_PREFIX + id)
+)
+
+/** Opens the Ready check, where each problem has its fix (since v1.6). */
+private fun openReady() = actionStartActivity<MainActivity>(
+    actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_OPEN) to MainActivity.OPEN_READY)
+)
+
 /** Opens the Record tab's list of recordings waiting for Keep / Discard (glance passes parameters as intent extras). */
 private fun openPending() = actionStartActivity<MainActivity>(
     actionParametersOf(ActionParameters.Key<String>(MainActivity.EXTRA_OPEN) to MainActivity.OPEN_PENDING)
@@ -229,21 +310,42 @@ object WidgetStateStore {
     suspend fun refresh(context: Context) {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val settings = graph.settings.current()
-        // With App lock on, no titles or transcript text are stored for (or shown on) the home screen.
-        val latest = graph.library.items.value.firstOrNull { !it.deleted }?.takeUnless { settings.appLockEnabled }
+        // With App lock on, no titles or transcript text are stored for (or shown on) the home screen; with Hide titles
+        // (since v1.6) a recording is named by its app only and no transcript text is kept.
+        val shown = if (settings.appLockEnabled) emptyList() else graph.library.items.value.filter { !it.deleted }
+        val latest = shown.firstOrNull()
         save(
             context,
             WidgetState(
                 recording = RecordingService.isRecording,
                 armed = settings.autoRecordArmed,
                 paired = settings.paired,
-                lastTitle = latest?.title,
-                lastPreview = latest?.transcript?.preview,
+                lastTitle = latest?.let { if (settings.widgetHideTitles) null else it.title },
+                lastPreview = latest?.takeUnless { settings.widgetHideTitles }?.transcript?.preview,
                 pendingDecisions = graph.recordings.pendingDecisions().size,
                 locked = settings.appLockEnabled,
-                dynamicColour = settings.dynamicColour
+                dynamicColour = settings.dynamicColour,
+                recent = recentRows(shown, settings.widgetHideTitles, java.time.LocalDate.now()),
+                ready = com.echoledger.mobile.recording.ReadinessWatch.lastChip(context)
             )
         )
         runCatching { RecordWidget().updateAll(context) }
     }
+
+    /** The latest six, newest first: the title (or the app with [hideTitles]), and the progress, a problem or the time. */
+    fun recentRows(items: List<com.echoledger.mobile.data.LibraryItem>, hideTitles: Boolean, today: java.time.LocalDate): List<WidgetRow> =
+        items.sortedByDescending { it.startedAt.orEmpty() }.take(6).map { item ->
+            val app = com.echoledger.mobile.core.SourceApp.from(item.sourceApp)
+            val generic = com.echoledger.mobile.ui.design.untitled(app)
+            val title = if (hideTitles) generic else item.title?.takeIf { it.isNotBlank() } ?: generic
+            val line = when (com.echoledger.mobile.core.ItemStatus.of(item)) {
+                com.echoledger.mobile.core.ItemStatus.FAILED -> "Transcription failed"
+
+                com.echoledger.mobile.core.ItemStatus.NO_AUDIO -> "No audio"
+
+                else -> com.echoledger.mobile.core.RowProgress.of(item)?.text
+                    ?: com.echoledger.mobile.ui.design.rowTime(item.startedAt, today)
+            }
+            WidgetRow(item.id, title, line)
+        }
 }

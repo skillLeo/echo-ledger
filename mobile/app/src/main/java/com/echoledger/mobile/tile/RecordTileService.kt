@@ -42,10 +42,20 @@ class RecordTileService : TileService() {
     }
 }
 
+/**
+ * Starts or stops Record now from the Quick Settings tile and the app shortcut (since v1.6, Phase 1C A4): a visible
+ * activity may start the microphone service. The service decides: a call going on is recorded on both sides through
+ * the helper, else a voice note.
+ */
 class TileTrampolineActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        startForegroundService(RecordingService.intent(this, RecordingService.ACTION_TOGGLE, from = "Quick Settings tile"))
+        val from = intent?.getStringExtra(EXTRA_FROM)?.takeIf { it.isNotBlank() } ?: "Quick Settings tile"
+        startForegroundService(RecordingService.intent(this, RecordingService.ACTION_TOGGLE, from = from))
         finish()
+    }
+
+    companion object {
+        const val EXTRA_FROM = "from"
     }
 }

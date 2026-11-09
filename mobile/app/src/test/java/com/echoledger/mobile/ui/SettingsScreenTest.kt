@@ -260,6 +260,23 @@ class SettingsScreenTest : AppTest() {
         compose.onAllNodesWithText("Hide content in Recents and screenshots").assertCountEquals(0)
     }
 
+    @Test
+    fun `with the lock off the widget can hide recording titles (v1_6, Phase 1C I4)`() {
+        launch(open = privacyGroup)
+
+        compose.onNodeWithContentDescription("Hide recording titles on the widget").assertIsOff().performClick()
+        pumpUntil("hide titles saved") { settings().widgetHideTitles }
+    }
+
+    @Test
+    fun `with the lock on the widget shows no recordings, so the titles switch is not offered`() {
+        runBlocking { app.graph.settings.update { it.copy(appLockEnabled = true) } }
+        pumpUntil("settings") { vm.settings.value.appLockEnabled }
+        launch(open = privacyGroup)
+
+        compose.onAllNodesWithText("Hide recording titles on the widget").assertCountEquals(0)
+    }
+
     // ---- hiding content in Recents and screenshots (FLAG_SECURE) ------------------------------------------------------------------
 
     private fun Window.secure() = attributes.flags and WindowManager.LayoutParams.FLAG_SECURE != 0

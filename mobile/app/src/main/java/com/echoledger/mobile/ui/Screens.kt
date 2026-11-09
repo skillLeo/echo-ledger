@@ -1080,6 +1080,24 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                 )
             }
         }
+        // Since v1.6 (Phase 1C I4): the widget can name recordings by their app only. With the lock on it shows none.
+        if (!on) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Hide recording titles on the widget")
+                    Text(
+                        "The home-screen widget then says \"WhatsApp call\" or \"Voice note\". With App lock on it shows no recordings.",
+                        color = Brand.Muted,
+                        fontSize = 12.sp
+                    )
+                }
+                Switch(
+                    checked = settings.widgetHideTitles,
+                    onCheckedChange = { v -> vm.setWidgetHideTitles(v) },
+                    modifier = Modifier.semantics { contentDescription = "Hide recording titles on the widget" }
+                )
+            }
+        }
     }
 }
 

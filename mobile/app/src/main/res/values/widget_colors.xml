@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget picker's preview (since v1.6), light; values-night has the dark ones. -->
+<resources>
+    <color name="widget_preview_surface">#FFFFFFFF</color>
+    <color name="widget_preview_text">#FF1A1A1F</color>
+    <color name="widget_preview_muted">#FF5F6170</color>
+    <color name="widget_preview_accent">#FF4F46E5</color>
+    <color name="widget_preview_ready">#FF15803D</color>
+</resources>

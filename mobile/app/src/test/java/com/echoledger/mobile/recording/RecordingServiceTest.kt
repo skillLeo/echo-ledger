@@ -235,6 +235,28 @@ class RecordingServiceTest : AppTest() {
 
         val started = shadowOf(app).nextStartedService
         assertEquals(RecordingService.ACTION_TOGGLE, started.action)
+        assertEquals("Quick Settings tile", started.getStringExtra(RecordingService.EXTRA_FROM))
         assertTrue(controller.get().isFinishing)
+    }
+
+    @Test
+    fun `the Record now app shortcut starts the same toggle and says where it came from (Phase 1C A4)`() {
+        val shortcut = android.content.Intent(
+            app,
+            TileTrampolineActivity::class.java
+        ).putExtra(TileTrampolineActivity.EXTRA_FROM, "App shortcut")
+        buildActivity(TileTrampolineActivity::class.java, shortcut).create()
+
+        val started = shadowOf(app).nextStartedService
+        assertEquals(RecordingService.ACTION_TOGGLE, started.action)
+        assertEquals("App shortcut", started.getStringExtra(RecordingService.EXTRA_FROM))
+    }
+
+    @Test
+    fun `the app's shortcuts start with Record now, pointing at the trampoline`() {
+        val xml = java.io.File("src/main/res/xml/shortcuts.xml").readText()
+        val first = Regex("""android:shortcutId="([a-z_]+)"""").find(xml)?.groupValues?.get(1)
+        assertEquals("record_now", first)
+        assertTrue(xml.contains("com.echoledger.mobile.tile.TileTrampolineActivity"))
     }
 }

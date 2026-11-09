@@ -242,7 +242,16 @@ taken away, the microphone unplugged, detection stopped), a notification says so
 else as a voice note. It is **REC** on the Record page, **Record now** in the tray menu, and **Ctrl+Alt+R** on Windows or
 **⌘⌥R** on a Mac; press it again to stop. On a Mac, Safari uses the same keys to reload a page from the server, so while
 EchoLedger runs they record instead; change or clear the shortcut in **Settings → Shortcuts**. **Ctrl+Alt+Shift+R**
-(start or stop a call recording) stays as before. On the phone, tap **REC**.
+(start or stop a call recording) stays as before. On the phone, tap **REC**, or use **Record now** from the
+notification, the **Record** Quick Settings tile, the app icon's long-press menu, or the home-screen widget. During a
+call it records both sides (with the capture helper set up), otherwise a voice note.
+
+**The phone's widget (since v1.6).** Add **EchoLedger** from the home screen's widget list. A dot next to the name says
+whether calls are recorded: green is ready, red is **Not ready: tap to fix** (a tap opens the Ready check), grey is off.
+Make it as small as 2 x 1 for the Record button alone, 4 x 2 for your last two recordings with their progress, or 4 x 4
+for the last six; tap one to open it. It follows the phone's light or dark look and, when the app uses them, the
+wallpaper's colours. **Settings → App lock → Hide recording titles on the widget** names recordings by their app only
+("WhatsApp call"); with App lock on the widget shows no recordings at all.
 
 **Backup start.** If a meeting is on and its recording has not started 5 seconds later, EchoLedger starts it and says
 **Recording started (backup)**. A recording you stopped yourself is never started again.

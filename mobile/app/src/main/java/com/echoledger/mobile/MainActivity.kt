@@ -243,6 +243,8 @@ class MainActivity : FragmentActivity() {
             Readiness.evaluate(ReadinessWatch.facts(context, currentSettings, (application as EchoLedgerApp).graph.helper))
         }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { recheck++ }
+        // Since v1.6: the home-screen widget's Ready dot follows what the app shows.
+        LaunchedEffect(readiness.chip) { ReadinessWatch.remember(context, readiness) }
 
         // ---- app lock: decided only once the stored settings are known, then on every trip to the background ----
         val machine = rememberSaveable(saver = lockMachineSaver) { AppLockMachine(SystemClock::elapsedRealtime) }
