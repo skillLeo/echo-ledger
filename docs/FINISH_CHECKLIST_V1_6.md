@@ -69,5 +69,5 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [x] Call titles: the contact or meeting name (the caller-names Ready check; the S25's notification access granted again).
 - [x] All features with PRO / ULTRA badges, locked, on console, phone, Windows and Mac (v1.6.3). Live.
 - [x] Promo codes for one plan, 1–100 %, staff only, the upgrade sheet's "Have a promo code?" on all apps (v1.6.3). Live; ADMIN_GUIDE "Promo codes".
-- [ ] The new desktop build on this Mac (from CI for `d3776495`).
+- [x] The new desktop build on this Mac (CI run 42619946410 for `d3776495`, green on Windows and macOS; installed 2026-11-09 18:10).
 
