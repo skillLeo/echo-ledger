@@ -27,6 +27,15 @@ after it starts and every 6 hours, downloads it and checks its signature, then s
 that still runs **1.1.0** has no updater: install the new version once by hand from your server's **Downloads** page
 (run it over the old one; your settings and sign-in stay). After that it updates itself.
 
+**When the server asks for an update, has news or is in maintenance (computer, since v1.6).** A banner at the top of the
+window says so:
+- **Please update EchoLedger…** with **Update**: the app looks for the new version itself first (then **Update ready —
+  Restart**); if it has none, your server's Downloads page opens. When the server no longer accepts this version, the
+  banner says so: your recordings stay on this computer and upload after the update.
+- **An announcement** from the server's owner: close it with **×** and it stays closed (a new one shows again).
+- **Maintenance:** a quiet line, with the time it should end when the server says. Recordings and uploads wait on this
+  computer and go by themselves when it is back; nothing is marked as failed.
+
 ## 1b. Install the Mac app
 
 The Mac app is built for Apple Silicon Macs (M1 and newer) and Intel Macs, and needs **macOS 14.4 or newer**, which also

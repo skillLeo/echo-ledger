@@ -591,6 +591,12 @@ button.segment.active { background: var(--accent-soft); }
 .banner.danger > svg { color: var(--danger); }
 .banner.warn { background: color-mix(in srgb, var(--warning-fill) 18%, var(--surface)); }
 .banner.warn > svg { color: var(--warning); }
+/* What the server says to every app (v1.6, P2.7): an announcement in the accent's tint, maintenance quietly. */
+.banner.info { background: var(--accent-soft); }
+.banner.info > svg { color: var(--accent-text); }
+.banner.quiet { background: var(--surface-2); color: var(--text); }
+.banner.quiet > svg { color: var(--text-muted); }
+.banner-text .small { color: var(--text-muted); }
 .banner-close { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; }
 .banner-close:hover { background: var(--surface-3); color: var(--text); }
 /* The page's width decides (v1.6: the sidebar is 64–320 px, so the window's width alone cannot): MainApp sets

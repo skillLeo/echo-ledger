@@ -708,6 +708,9 @@ or Urdu text cut at a word, and a saved file's free name (16-W1, 16-W2: `whatsap
 | 16-W1 | With WhatsApp Desktop installed (Windows and Mac), then without it: a recording → WhatsApp button → **Text only**, in Roman Urdu and in Urdu. | WhatsApp Desktop opens (without it, WhatsApp Web in the browser) with the text, Urdu letters intact; choose a chat and send. A 30-minute call: the message holds its start ending in "…", the app says the whole text is copied, and pasting gives all of it. |
 | 16-W2 | **Text and voice** on a call, then on a voice note. | The audio is in Downloads (a second time with "(2)"); the sheet says "Attach the saved voice file in WhatsApp"; attaching it as a Document sends a file that plays on the phone. |
 | 16-W3 | **Link (works for 7 days)**; open the link on the phone; look at it in Shared → My links. | WhatsApp opens with the title and the link; the page plays the recording; My links shows it expiring in 7 days. |
+| 16-N1 | On the staging console set the minimum app version above this build (Refuse older apps off), then on; record a voice note meanwhile. | Within a minute a banner asks for the update; **Update** finds the new build or opens Downloads. With Refuse older apps on the banner says the recordings wait; the voice note stays waiting (not failed) and uploads after updating. |
+| 16-N2 | Put up an announcement (info, then warning, with an end time a few minutes away); close it; restart the app. | It shows within a minute; closed stays closed after the restart; a new text shows again; it goes by itself at its end time. |
+| 16-N3 | Turn maintenance on for 5 minutes (Retry-After 60) while two recordings wait to upload; open the Library; then turn it off. | A quiet maintenance line, no error toast, no failed upload, the Library as saved; within a minute of the end both recordings upload by themselves. |
 
 ## Appendix B — Accessibility
 
