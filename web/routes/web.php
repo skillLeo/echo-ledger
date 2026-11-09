@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Http\Controllers\AccountPageController;
 use App\Http\Controllers\AdminExportController;
 use App\Http\Controllers\AdminMediaController;
@@ -16,6 +17,7 @@ use App\Http\Controllers\LegacyConsoleRedirect;
 use App\Http\Controllers\LegalController;
 use App\Http\Controllers\NoticeOpenController;
 use App\Http\Controllers\PasskeyLoginController;
+use App\Http\Controllers\PaymentProofMediaController;
 use App\Http\Controllers\PublicShareController;
 use App\Http\Controllers\RequestLinkPageController;
 use App\Http\Controllers\ScreenMediaController;
@@ -25,6 +27,7 @@ use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use Filament\Http\Middleware\AuthenticateSession;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 // Console routes outside Filament's pages check what the panel's own pages check (since v1.5): a session the password
@@ -55,6 +58,16 @@ Route::get('/admin/{path}', LegacyConsoleRedirect::class)
     ->where('path', '('.implode('|', LegacyConsoleRedirect::PATHS).')(/.*)?')
     ->middleware('throttle:site')->name('legacy.console');
 
+// Settings (since v1.7) took over the account page and the security centre: their old addresses go to the same place
+// there, for good (301), a ?tab= of the old account page to its new page.
+Route::get('/app/profile', function (Request $request) {
+    $pages = ['profile' => 'profile', 'sign-in' => 'security', 'devices' => 'devices', 'notifications' => 'notifications', 'preferences' => 'appearance',
+        'plan' => 'plan', 'key' => 'transcription-key', 'privacy' => 'privacy'];
+
+    return redirect(EditProfile::settingsUrl($pages[(string) $request->query('tab')] ?? null), 301);
+})->middleware('throttle:site')->name('legacy.profile');
+Route::get('/app/security', fn () => redirect(EditProfile::settingsUrl('security'), 301))->middleware('throttle:site')->name('legacy.security');
+
 // Android App Links (v1.5): the phone app opens this server's /s/, /p/ and /r/ links itself when it is installed.
 Route::get('/.well-known/assetlinks.json', AppLinksController::class)->name('app-links');
 
@@ -73,6 +86,11 @@ Route::get('/screen-media/{screen}/{variant}', [ScreenMediaController::class, 's
 Route::get('/admin-media/screens/{screen}/{variant}', [ScreenMediaController::class, 'console'])
     ->whereUlid('screen')->whereIn('variant', ['image', 'thumb'])
     ->middleware($console)->name('admin.screens.media');
+
+// Payment receipts (since v1.7): the person's own, on the console; anyone else's id is 404 (PaymentProofMediaController).
+Route::get('/account-media/payment-proofs/{proof}/{variant}', PaymentProofMediaController::class)
+    ->whereUlid('proof')->whereIn('variant', ['thumb', 'full'])
+    ->middleware([...$console, 'throttle:account'])->name('account.payment-proofs');
 
 // Console exports of a transcript (download; `html` opens for printing to PDF).
 Route::get('/admin-export/transcripts/{transcript}/{format}', AdminExportController::class)

@@ -127,7 +127,7 @@ it('never renders tokens, API keys, the recordings key or other secrets on any c
 
     $urls = [
         '/app', '/app/sessions', '/app/sessions/'.$session->id, '/app/clients', '/app/clients/create',
-        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile',
+        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/settings/profile',
         '/admin/does-not-exist', '/definitely-not-a-page',
     ];
     foreach ($urls as $url) {
@@ -193,7 +193,7 @@ it('shows the last four characters of a stored key only on the credentials page'
         expect($credentials)->toContain('ends …'.$tail);
     }
 
-    foreach (['/app', '/admin/settings', '/app/devices', '/app/sessions', '/app/profile'] as $url) {
+    foreach (['/app', '/admin/settings', '/app/devices', '/app/sessions', '/app/settings/profile'] as $url) {
         expect($this->get($url)->getContent())->not->toContain('ends …');
     }
     expect($secrets)->not->toBeEmpty();

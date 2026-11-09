@@ -115,7 +115,7 @@ class ClientResource extends Resource
                 // Since v1.6.2 without screen moments in the plan: the plan's badge, the switch kept as it is, See plans.
                 Toggle::make('screens')->label(fn () => PlanLock::label('Keep screen moments of its meetings', 'screen_moments'))->default(true)->inline(false)
                     ->disabled(fn (): bool => ! PlanLock::allows('screen_moments'))
-                    ->hintAction(PlanLock::sheet('upgradeScreens', 'screen_moments')->label('See plans')->icon(Heroicon::OutlinedLockClosed)->link()
+                    ->hintAction(PlanLock::sheet('upgradeScreens', 'screen_moments')->label('See plans')->link()
                         ->visible(fn (): bool => ! PlanLock::allows('screen_moments')))
                     ->helperText(fn (): string => PlanLock::allows('screen_moments')
                         ? 'The desktop app keeps what was on the shared screen at each moment. Off for projects whose screens should not be kept.'

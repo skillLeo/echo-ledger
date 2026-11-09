@@ -17,7 +17,6 @@ use App\Services\CredentialVault;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\SettingsRepository;
 use App\Stt\Audio\AudioPrep;
-use Filament\Actions\Testing\TestAction;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -180,17 +179,17 @@ it('sets up the key on Profile → Transcription key in three steps, and refuses
     $this->actingAs($this->user, 'web');
     $this->user->forceFill(['consent_seen_at' => now()])->save();
 
-    $this->get('/app/profile')->assertOk()->assertSee('Transcription key')->assertSee('No key yet');
-    Livewire\Livewire::test(EditProfile::class)
-        ->callAction(TestAction::make('addTranscriptionKey')->schemaComponent('transcription-key-actions', schema: 'content'), ['key' => 'gsk_wrong_key_000000000000000000'])
-        ->assertNotified('Groq did not accept this key. Copy it again from console.groq.com → API Keys, or make a new one.');
+    $this->get('/app/settings/transcription-key')->assertOk()->assertSee('Transcription key')->assertSee('Transcripts on Free use your own free Groq key.');
+    Livewire\Livewire::test(EditProfile::class, ['subpage' => 'transcription-key'])
+        ->set('groqKey', 'gsk_wrong_key_000000000000000000')->call('saveGroqKey')
+        ->assertSet('groqKeyError', "That key didn't work. Check it on console.groq.com and paste it again.");
     expect($this->user->fresh()->transcription_key)->toBeNull();
 
-    Livewire\Livewire::test(EditProfile::class)
-        ->callAction(TestAction::make('addTranscriptionKey')->schemaComponent('transcription-key-actions', schema: 'content'), ['key' => OWN_KEY])
+    Livewire\Livewire::test(EditProfile::class, ['subpage' => 'transcription-key'])
+        ->set('groqKey', OWN_KEY)->call('saveGroqKey')
         ->assertNotified('Your Groq key is saved');
     expect($this->user->fresh()->transcription_key)->toBe(OWN_KEY);
-    expect($this->get('/app/profile')->assertOk()->assertSee('ending in 3f9a')->getContent())->not->toContain(OWN_KEY);
+    expect($this->get('/app/settings/transcription-key')->assertOk()->assertSee('Ending in 3f9a')->getContent())->not->toContain(OWN_KEY);
 });
 
 describe('re-transcribing a Free recording', function () {

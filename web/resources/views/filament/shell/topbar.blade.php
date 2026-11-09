@@ -1,7 +1,7 @@
 {{--
     The top bar (since v1.6, P4.3), to the right of the sidebar: the menu button on phones and tablets, the workspace,
     the search and commands field (Ctrl/⌘+K), "+" (Upload, New project, Request link), the bell (only what needs you),
-    help (?) and the avatar menu (Account, Plan & usage, Admin panel for staff or Back to the app, Sign out).
+    help (?) and the avatar menu (Upgrade or Plan & usage, Settings, the theme, Admin panel for staff, Sign out).
 --}}
 @php
     use App\Filament\Support\Shell;
@@ -45,7 +45,11 @@
                 @svg('heroicon-o-question-mark-circle', ['aria-hidden' => 'true'])
             </button>
 
-            <x-filament-panels::user-menu :position="UserMenuPosition::Topbar" />
+            @if ($inApp)
+                @include('filament.shell.user-menu')
+            @else
+                <x-filament-panels::user-menu :position="UserMenuPosition::Topbar" />
+            @endif
         @endif
     </nav>
 

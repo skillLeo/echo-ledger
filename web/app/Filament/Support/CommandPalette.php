@@ -7,6 +7,7 @@ namespace App\Filament\Support;
 use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Admin\Pages\Dashboard as AdminDashboard;
 use App\Filament\Admin\Pages\Settings;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\GetTheApps;
 use App\Filament\Pages\RequestLinksPage;
@@ -20,6 +21,7 @@ use App\Models\Client;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Accounts\SettingsIndex;
 use App\Services\Entitlements\Entitlements;
 use App\Services\LibrarySearch;
 use App\Services\SettingsRepository;
@@ -55,6 +57,15 @@ final class CommandPalette implements GlobalSearchProvider
             $results->category('Commands', array_map(fn (array $c): GlobalSearchResult => new GlobalSearchResult(
                 new HtmlString(e($c[0]).'<span class="el-palette-hint"> · '.e($c[2]).'</span>'), $c[1]), array_values($actions)));
         }
+        // Since v1.7 every individual setting, from the same index as Settings' own search, with where it is.
+        $context = SettingsContext::current();
+        $settings = $context !== null ? $context->index()->search($query) : ['settings' => [], 'help' => []];
+        $found = array_slice([...$settings['settings'], ...$settings['help']], 0, 8);
+        if ($found !== []) {
+            $results->category('Settings', array_map(fn (array $hit): GlobalSearchResult => new GlobalSearchResult(
+                new HtmlString(e((string) $hit['entry']['title']).'<span class="el-palette-hint"> · '.e(SettingsIndex::breadcrumb($hit['entry'])).'</span>'),
+                $context?->url($hit['entry']) ?? ''), $found));
+        }
         $commands = array_filter($this->commands(), fn (array $c): bool => self::matches($query, $c[0].' '.$c[2]));
         if ($commands !== []) {
             // The words a page answers to are for matching only; the page's name says enough.
@@ -88,6 +99,7 @@ final class CommandPalette implements GlobalSearchProvider
             ['Devices', DeviceResource::getUrl('index'), 'phones computers sign in out pair unpair', DeviceResource::canAccess()],
             ['Settings', Settings::getUrl(panel: 'admin'), 'retention language vocabulary bookmarks limit engines', Settings::canAccess()],
             ['API credentials', ApiCredentials::getUrl(panel: 'admin'), 'keys assemblyai elevenlabs azure whisper', ApiCredentials::canAccess()],
+            ['Settings', EditProfile::settingsUrl(), 'account preferences options plan devices', true],
             ['Admin panel', AdminDashboard::getUrl(panel: 'admin'), 'admin staff customers plans upgrade requests', StaffAccess::isStaff()],
         ];
 
@@ -96,7 +108,7 @@ final class CommandPalette implements GlobalSearchProvider
         // are under Projects below), once each; Devices only where the console has its page.
         $urls = array_column($commands, 1);
         foreach (Shell::pages() as $page) {
-            if (in_array($page['url'], $urls, true) || str_starts_with($page['id'], 'project-') || ($page['id'] === 'devices' && ! DeviceResource::canAccess())) {
+            if (in_array($page['url'], $urls, true) || str_starts_with($page['id'], 'project-') || str_starts_with($page['id'], 'settings-')) {
                 continue;
             }
             $commands[] = [$page['label'], $page['url'], trim($page['group'].' '.$page['words'])];
@@ -114,6 +126,7 @@ final class CommandPalette implements GlobalSearchProvider
     public static function actions(): array
     {
         $readOnly = ConsoleAccess::readOnly();
+        $context = SettingsContext::current();
         $user = auth()->user();
         $hasDevice = $user instanceof User && Device::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', $user->id)->whereNull('signed_out_at')->exists();
         $list = [
@@ -128,6 +141,10 @@ final class CommandPalette implements GlobalSearchProvider
                 ? ['Invite', WorkspaceSettings::getUrl(['action' => 'addMember'], panel: 'app'), 'Ask someone to join this workspace', 'member team people add', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)]
                 : ['Invite', WorkspaceSettings::getUrl(['action' => 'upgradeForTeam'], panel: 'app'), 'Team workspaces are in '.(app(Entitlements::class)->lowestPlan('team')->name ?? 'a bigger plan').': see plans', 'member team people add upgrade', WorkspaceSettings::canAccess() && self::mayInvite($user instanceof User ? $user : null)],
             ['New request link', RequestLinksPage::getUrl(['action' => 'create'], panel: 'app'), 'A link people use to send you files', 'ask upload files', ! $readOnly && RequestLinksPage::canAccess()],
+            // Since v1.7: Upgrade, or the request while one is open (never "Upgrade" then), and Settings.
+            ($open = $context?->openRequest()) !== null
+                ? ['Your upgrade request', UpgradeFlow::statusUrl($open), 'See where your request is', 'upgrade plan pro ultra payment receipt status', true]
+                : ['Upgrade plan', UpgradeFlow::chooseUrl(), 'Choose a plan and pay by bank transfer', 'pro ultra premium buy price plan', $context !== null && $context->flag('can_upgrade') && ! $context->flag('member')],
         ];
 
         return array_values(array_map(fn (array $c): array => [$c[0], $c[1], $c[2], $c[3]], array_filter($list, fn (array $c): bool => $c[4])));

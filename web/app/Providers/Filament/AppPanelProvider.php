@@ -40,7 +40,6 @@ use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\View\TablesIconAlias;
 use Filament\View\PanelsRenderHook;
-use Filament\Widgets\AccountWidget;
 use Illuminate\Contracts\View\View;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
@@ -137,12 +136,12 @@ class AppPanelProvider extends PanelProvider
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view('filament.offline-banner')))
             ->profile(EditProfile::class, isSimple: false)
-            // The avatar menu (since v1.6, P4.3): Account, Plan & usage, the workspace for owners and admins, the admin
-            // panel for staff (since P2.1; nobody else sees it), the theme and Sign out.
+            // The avatar menu: the top bar draws its own (filament.shell.user-menu, since v1.7: who you are, Upgrade or
+            // Plan & usage, Settings, the theme, the admin panel for staff, Sign out); these items are Filament's copy.
             ->userMenuItems([
-                'profile' => fn (Action $action): Action => $action->label('Account')->icon(Heroicon::OutlinedUserCircle),
-                Action::make('planAndUsage')->label('Plan & usage')->icon(Heroicon::OutlinedSparkles)
-                    ->url(fn (): string => (Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=plan'),
+                'profile' => fn (Action $action): Action => $action->label('Settings')->icon(Heroicon::OutlinedCog6Tooth),
+                Action::make('planAndUsage')->label('Plan & usage')->icon(Heroicon::OutlinedCreditCard)
+                    ->url(fn (): string => EditProfile::settingsUrl('plan')),
                 Action::make('workspace')->label('Workspace')->icon(Heroicon::OutlinedUserGroup)
                     ->visible(fn (): bool => WorkspaceSettings::canAccess())
                     ->url(fn (): string => WorkspaceSettings::getUrl(panel: 'app')),
@@ -193,9 +192,6 @@ class AppPanelProvider extends PanelProvider
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([
-                AccountWidget::class,
-            ])
             ->middleware([
                 EncryptCookies::class,
                 AddQueuedCookiesToResponse::class,

@@ -5,7 +5,8 @@ declare(strict_types=1);
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\PromoCodesPage;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
-use App\Filament\Auth\EditProfile;
+use App\Filament\Pages\Upgrade\ChoosePlan;
+use App\Filament\Support\SettingsContext;
 use App\Mail\UpgradeDecidedMail;
 use App\Models\AuditEvent;
 use App\Models\Plan;
@@ -19,7 +20,6 @@ use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\PromoCodes;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\SettingsRepository;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Artisan;
@@ -259,21 +259,16 @@ describe('the console\'s upgrade sheet', function () {
         Filament::setCurrentPanel('app');
     });
 
-    it('applies a code and shows the new price', function () {
+    it('applies a code and shows the new price, and says which plan another plan\'s code is for', function () {
         promo();
         promo(['code' => 'ULTRA25', 'plan' => 'business', 'percent' => 25]);
-        Livewire::test(EditProfile::class)->mountAction('upgradeFeature', ['feature' => 'views'])
-            ->fillForm(['promo_code' => 'save50'])
-            ->callAction(TestAction::make('applyPromo')->schemaComponent('promo_code'))
-            ->assertSchemaStateSet(['promo_line' => '50 % off: Rs 1,500 a month instead of Rs 2,999 a month, for 1 month.'], 'mountedActionSchema0')
-            // A code for another plan chooses that plan.
-            ->fillForm(['plan' => 'pro', 'promo_code' => 'ultra25'])
-            ->callAction(TestAction::make('applyPromo')->schemaComponent('promo_code'))
-            ->assertSchemaStateSet(['plan' => 'business', 'promo_line' => 'This code is for Ultra. We chose it for you. 25 % off: Rs 5,999 a month instead of Rs 7,999 a month, for 1 month.'], 'mountedActionSchema0')
-            // One that is not valid says so, and nothing else.
-            ->fillForm(['promo_code' => 'NOT-A-CODE'])
-            ->callAction(TestAction::make('applyPromo')->schemaComponent('promo_code'))
-            ->assertSchemaStateSet(['promo_line' => PromoCodes::INVALID], 'mountedActionSchema0');
+        Livewire::withQueryParams(['plan' => 'pro'])->test(ChoosePlan::class)
+            ->set('promo', 'save50')->call('applyPromo')
+            ->assertSet('promoApplied.percent', 50)->assertSee('SAVE50: 50% off Pro for 1 month')->assertSee('for the first month')
+            ->set('promo', 'ultra25')->call('applyPromo')
+            ->assertSet('promoApplied', null)->assertSet('promoError', 'This code is for Ultra.')
+            ->set('promo', 'NOT-A-CODE')->call('applyPromo')
+            ->assertSet('promoError', "We don't know this code. Check the spelling.");
     });
 
     it('applies a code through the service the sheet uses, choosing the plan the code is for', function () {
@@ -286,16 +281,15 @@ describe('the console\'s upgrade sheet', function () {
 
     it('sends a request with a code, and switches the plan on at once with a 100 % code', function () {
         promo();
-        Livewire::test(EditProfile::class)->mountAction('upgradeFeature', ['feature' => 'views'])
-            ->fillForm(['plan' => 'pro', 'promo_code' => 'SAVE50'])->callMountedAction()->assertHasNoActionErrors()
-            ->assertNotified('Request sent. We\'ll activate it once confirmed.');
+        Livewire::withQueryParams(['plan' => 'pro', 'promo' => 'SAVE50'])->test(ChoosePlan::class)
+            ->assertSet('promoApplied.code', 'SAVE50')->call('submit')->assertRedirectContains('/pay');
         expect(UpgradeRequest::query()->sole()->amount_due)->toBe('Rs 1,500 a month');
 
         UpgradeRequest::query()->update(['status' => UpgradeRequest::DECLINED]);
+        SettingsContext::forget();
         promo(['code' => 'ULTRAFREE', 'plan' => 'business', 'percent' => 100]);
-        Livewire::test(EditProfile::class)->mountAction('upgradeFeature', ['feature' => 'live_translate'])
-            ->fillForm(['plan' => 'business', 'promo_code' => 'ultrafree'])->callMountedAction()->assertHasNoActionErrors()
-            ->assertNotified('You are on Ultra now');
+        Livewire::withQueryParams(['plan' => 'business', 'promo' => 'ultrafree'])->test(ChoosePlan::class)
+            ->assertSee('Switch on Ultra')->call('submit')->assertRedirectContains('/app/settings/plan/requests/');
         expect(Workspace::query()->findOrFail($this->person->current_workspace_id)->plan->key)->toBe('business');
     });
 

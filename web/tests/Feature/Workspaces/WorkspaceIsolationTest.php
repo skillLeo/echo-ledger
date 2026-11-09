@@ -16,6 +16,7 @@ use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Routing\Route as RouteDefinition;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -106,6 +107,8 @@ it('answers 404 to workspace A on every console route outside Filament that take
         'admin.workspaces.switch' => ['POST', route('admin.workspaces.switch', (int) $b['bob']->current_workspace_id), [], 404],
         // Since v1.6.1: a notification of the bell opened; B's is not A's to open (nor to mark read).
         'notices.open' => ['GET', route('notices.open', $bobNotice), [], 404],
+        // Since v1.7: a payment receipt is the sender's own; any other id is 404.
+        'account.payment-proofs' => ['GET', route('account.payment-proofs', ['proof' => (string) Str::ulid(), 'variant' => 'thumb']), [], 404],
     ];
     $named = collect(Route::getRoutes()->getRoutes())->map(fn (RouteDefinition $r): ?string => $r->getName())->filter()
         ->reject(fn (string $n): bool => str_starts_with($n, 'filament.') || str_starts_with($n, 'livewire.') || str_starts_with($n, 'default-livewire.') || str_starts_with($n, 'api.')
@@ -153,6 +156,9 @@ it('never shows workspace B in any console resource, page, widget or global sear
     }
 
     foreach ($panel->getPages() as $page) {
+        if (str_contains($page::getSlug(), '{')) {
+            continue; // one upgrade request's pages: UpgradeFlowPagesTest checks they open the person's own only
+        }
         $response = $this->get($page::getUrl());
         if (! in_array($response->status(), [200, 403], true) || ($leaks = isoLeaks((string) $response->getContent(), $b)) !== []) {
             $failures[] = "{$page}: {$response->status()} ".implode(', ', $leaks ?? []);

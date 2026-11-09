@@ -7,7 +7,7 @@
     $inApp = \App\Filament\Support\Shell::inApp();
     $keys = [
         'Everywhere' => [
-            [$mac ? '⌘ K' : 'Ctrl K', 'Search recordings, transcripts and pages, or type a command'],
+            [$mac ? '⌘ K' : 'Ctrl K', 'Search recordings, transcripts, pages and settings, or type a command'],
             ['/', 'Search the list on this page'],
             ['[', 'Fold the sidebar to icons, and back'],
             ['?', 'This list'],
@@ -49,7 +49,7 @@
                     <footer class="el-help-foot">
                         <a href="{{ \App\Filament\Pages\GetTheApps::getUrl() }}" class="el-text-btn">Get the apps</a>
                         <span aria-hidden="true">·</span>
-                        <a href="{{ (\Filament\Facades\Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=preferences' }}" class="el-text-btn">Preferences</a>
+                        <a href="{{ \App\Filament\Auth\EditProfile::settingsUrl() }}" class="el-text-btn">Settings</a>
                     </footer>
                 @endif
             </div>

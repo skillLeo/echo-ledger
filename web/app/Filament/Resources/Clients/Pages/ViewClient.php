@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
@@ -39,7 +40,6 @@ use App\Support\UrduText;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Actions\EditAction;
-use Filament\Facades\Filament;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ViewRecord;
@@ -281,7 +281,7 @@ class ViewClient extends ViewRecord
         ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
         $client = $this->client();
         if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
-            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->url((Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=plan')->warning()->send();
+            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->url(EditProfile::settingsUrl('plan'))->warning()->send();
 
             return;
         }

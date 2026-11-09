@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Accounts;
 
+use App\Filament\Auth\EditProfile;
 use App\Mail\LoginAlertMail;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\SettingsRepository;
-use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -35,7 +35,7 @@ final class LoginAlerts
     private function send(User $user, string $what, ?string $ip, ?string $country): void
     {
         $when = now()->setTimezone($this->settings->displayTimezone())->format('M j, Y \a\t g:i A T');
-        $devices = (Filament::getPanel('app')->getProfileUrl() ?? url('/app/profile')).'#devices';
+        $devices = EditProfile::settingsUrl('devices');
         Mail::to($user->email)->queue(new LoginAlertMail($what, $when, $ip, $country, $devices));
     }
 }

@@ -199,7 +199,7 @@ it('changes a customer\'s plan with an end date and their own features and limit
     $this->get('/admin/customers/'.$ana->id)->assertOk()->assertSee('Paid by bank transfer, ref 991.');
     // The person never sees the note.
     $this->actingAs($ana->fresh(), 'web');
-    $this->get('/app/profile')->assertOk()->assertDontSee('Paid by bank transfer');
+    $this->get('/app/settings/plan')->assertOk()->assertDontSee('Paid by bank transfer');
 });
 
 it('opens recordings only while the person lets support look, logs every look, and only theirs', function () {
@@ -234,13 +234,13 @@ it('lets a person turn Support access on for a while and off again, for their ow
     $this->actingAs($ana, 'web');
     Filament::setCurrentPanel('app');
 
-    Livewire::test(EditProfile::class)->callAction(TestAction::make('grantSupportAccess')->schemaComponent('support-access-actions', schema: 'content'), ['hours' => '24']);
+    Livewire::test(EditProfile::class, ['subpage' => 'privacy'])->callAction('supportAccess', ['hours' => '24']);
     expect($ana->fresh()->support_access_until?->isFuture())->toBeTrue()
         ->and($ana->fresh()->support_access_until->diffInHours(now(), true))->toBeGreaterThan(23)
         ->and($bob->fresh()->support_access_until)->toBeNull();
-    $this->get('/app/profile')->assertOk()->assertSee('On until');
+    $this->get('/app/settings/privacy')->assertOk()->assertSee('On until');
 
-    Livewire::test(EditProfile::class)->callAction(TestAction::make('endSupportAccess')->schemaComponent('support-access-actions', schema: 'content'));
+    Livewire::test(EditProfile::class, ['subpage' => 'privacy'])->callAction('supportAccess');
     expect($ana->fresh()->support_access_until)->toBeNull()
         ->and(AuditEvent::query()->where('event', 'support_access_granted')->where('user_id', $ana->id)->exists())->toBeTrue()
         ->and(AuditEvent::query()->where('event', 'support_access_ended')->where('user_id', $ana->id)->exists())->toBeTrue();

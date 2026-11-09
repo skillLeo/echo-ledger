@@ -116,7 +116,7 @@ it('offers Sign in again on the profile for a row that is signed out, with the c
     Fx::device($ana, ['platform' => 'windows', 'name' => 'Desk PC']);
     $this->actingAs($ana, 'web');
 
-    $this->get('/app/profile')->assertOk()->assertSee('Sign in again');
+    $this->get('/app/settings/devices')->assertOk()->assertSee('Signed out by you');
     Filament::setCurrentPanel('app');
     $profile = Livewire::test(EditProfile::class)->mountAction(TestAction::make('signInAgain')->arguments(['device' => $device->id]));
     $pairing = $profile->get('mountedActions.0.data.pairing');

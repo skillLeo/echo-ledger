@@ -38,6 +38,8 @@ const out = resolve(process.env.OUT_DIR ?? resolve(here, '../../docs/design/scre
 const only = (process.env.ONLY ?? '').split(',').filter(Boolean);
 const widths = (process.env.WIDTHS ?? '1440,390').split(',').map(Number);
 const themes = (process.env.THEMES ?? 'light,dark').split(',');
+// A name for the account in the file names (web-settings-plan-free-…), for runs with another EMAIL.
+const suffix = process.env.SUFFIX ? `-${process.env.SUFFIX}` : '';
 
 // Pages by name. A function gets the page and resolves its path (for records whose ids change per database). `run`
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
@@ -83,15 +85,33 @@ const pages = {
     'get-the-apps': { path: '/app/get-the-apps' },
     devices: { path: '/app/devices' },
     usage: { path: '/app/usage' },
-    security: { path: '/app/security' },
     workspace: { path: '/app/workspace' },
-    'account-profile': { path: '/app/profile?tab=profile' },
-    'account-sign-in': { path: '/app/profile?tab=sign-in' },
-    'account-devices': { path: '/app/profile?tab=devices' },
-    'account-notifications': { path: '/app/profile?tab=notifications' },
-    'account-preferences': { path: '/app/profile?tab=preferences' },
-    'account-plan': { path: '/app/profile?tab=plan' },
-    'account-privacy': { path: '/app/profile?tab=privacy' },
+    // Settings (since v1.7). Per account: EMAIL=free@echoledger.local SUFFIX=free (php artisan db:seed --class=SettingsTourSeeder).
+    'settings-overview': { path: '/app/settings' },
+    'settings-plan': { path: '/app/settings/plan' },
+    'settings-plan-compare': { path: '/app/settings/plan', run: "document.querySelector('[data-setting=\"plan.compare\"]').open = true" },
+    'settings-language': { path: '/app/settings/language' },
+    'settings-key': { path: '/app/settings/transcription-key' },
+    'settings-appearance': { path: '/app/settings/appearance' },
+    'settings-notifications': { path: '/app/settings/notifications' },
+    'settings-storage': { path: '/app/settings/storage' },
+    'settings-shortcuts': { path: '/app/settings/shortcuts' },
+    'settings-profile': { path: '/app/settings/profile' },
+    'settings-security': { path: '/app/settings/security' },
+    'settings-activity': { path: '/app/settings/security/activity' },
+    'settings-devices': { path: '/app/settings/devices' },
+    'settings-privacy': { path: '/app/settings/privacy' },
+    'settings-help': { path: '/app/settings/help' },
+    'settings-search': { path: '/app/settings', type: { selector: '[data-settings-search]', text: 'dark' } },
+    'settings-search-payment': { path: '/app/settings', type: { selector: '[data-settings-search]', text: 'payment' } },
+    'settings-search-empty': { path: '/app/settings', type: { selector: '[data-settings-search]', text: 'xyzzy' } },
+    'settings-highlight': { path: '/app/settings/appearance?highlight=appearance.theme', full: false, settle: 1400 },
+    'palette-settings': { path: '/app', type: { selector: '.fi-global-search-field input', text: 'dark mode' }, full: false },
+    // The upgrade flow: the account's newest request (the tour's stage accounts have one each).
+    'upgrade-choose': { path: '/app/settings/plan/upgrade' },
+    'upgrade-pay': { path: async (page) => requestPath(page, '/pay') },
+    'upgrade-receipt': { path: async (page) => requestPath(page, '/receipt') },
+    'upgrade-status': { path: async (page) => requestPath(page, '') },
     // The shell itself: the rail, Find a page, the palette, the + menu, the avatar menu, Help & shortcuts.
     'shell-rail': { path: '/app/sessions', run: "Alpine.store('sidebar').close()", after: "Alpine.store('sidebar').open()", full: false, wide: true },
     'shell-find': { path: '/app', run: "(() => { const f = document.querySelector('.el-sb-find-box input'); f.focus(); f.value = 'dev'; f.dispatchEvent(new Event('input', { bubbles: true })); })()", full: false, wide: true },
@@ -115,6 +135,15 @@ const pages = {
     // The Recording tab holds "Always double-check recordings filed under a project" and the AI budget for projects.
     'settings-recording': { path: '/admin/settings', click: '.fi-tabs-item:has-text("Recording")' },
 };
+
+// The address of the account's newest upgrade request (from Plan & usage), plus [$tail]; '' when it has none.
+async function requestPath(page, tail) {
+    return page.evaluate(async ([url, tail]) => {
+        const html = await (await fetch(url)).text();
+        const match = html.match(/\/app\/settings\/plan\/requests\/([0-9a-z]{26})/i);
+        return match ? `/app/settings/plan/requests/${match[1]}${tail}` : '';
+    }, [`${base}/app/settings/plan`, tail]);
+}
 
 // The first Library row whose title matches (the demo data: php artisan db:seed --class=ConsoleTourSeeder).
 async function recording(page, title) {
@@ -216,7 +245,7 @@ for (const theme of themes) {
             if ((spec.wide && width < 600) || (spec.narrow && width >= 600)) continue;
             const path = spec.link ? authLinks()[spec.link] : (typeof spec.path === 'function' ? await spec.path(page) : spec.path);
             if (path === undefined || path === '') continue;
-            const file = `${out}/web-${name}-${width}-${theme}.png`;
+            const file = `${out}/web-${name}${suffix}-${width}-${theme}.png`;
             if (spec.guest) {
                 const guest = await browser.newContext({ viewport: { width, height: 844 }, colorScheme: theme, deviceScaleFactor: width < 600 ? 1.5 : 1 });
                 const gp = await guest.newPage();
@@ -263,7 +292,9 @@ for (const theme of themes) {
                     await page.waitForLoadState('networkidle');
                 }
                 // Alpine fades the sidebar labels in; give it time so every picture shows the settled page.
-                await page.waitForTimeout(900);
+                await page.waitForTimeout(spec.settle ?? 900);
+                // A whole-page picture: the flow's step bar and the phone's bottom tabs are drawn where they sit in the page.
+                if (spec.full !== false) await page.addStyleTag({ content: '.el-flow-bar,.el-bottom-nav{position:static!important}' });
                 await page.screenshot({ path: file, fullPage: spec.full !== false, animations: 'disabled' });
                 if (spec.after) {
                     await page.evaluate(spec.after);

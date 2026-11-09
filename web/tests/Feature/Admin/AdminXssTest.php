@@ -149,7 +149,7 @@ it('escapes the signed-in admin\'s own name in the account menu, profile and das
     $this->signInAsAdmin(['name' => ADMIN_XSS_SCRIPT]);
 
     adminAssertEscaped($this->get('/app')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the dashboard');
-    adminAssertEscaped($this->get('/app/profile')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the profile page', mustShow: false);
+    adminAssertEscaped($this->get('/app/settings/profile')->assertOk()->getContent(), ADMIN_XSS_SCRIPT, 'the profile page', mustShow: false);
 });
 
 it('escapes a provider error message shown on the session page', function () {

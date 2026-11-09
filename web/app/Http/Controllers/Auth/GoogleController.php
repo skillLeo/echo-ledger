@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Controllers\Auth;
 
+use App\Filament\Auth\EditProfile;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\Accounts\GoogleSignIn;
@@ -174,7 +175,7 @@ final class GoogleController extends Controller
 
     private function linkSignedIn(User $user, string $googleId): RedirectResponse
     {
-        $profile = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
+        $profile = EditProfile::settingsUrl('security');
         if (User::query()->where('google_id', $googleId)->whereKeyNot($user->id)->exists()) {
             session()->flash('google.status', 'That Google account already signs in to another EchoLedger account.');
 

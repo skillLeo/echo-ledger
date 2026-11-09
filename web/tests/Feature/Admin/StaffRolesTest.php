@@ -78,10 +78,10 @@ it('asks every member of staff for two-step sign-in before /admin opens', functi
     $person = staffWith('support', twoFactor: false);
     $this->actingAs($person, 'web');
 
-    $this->get('/admin')->assertRedirect('/app/profile?tab=sign-in#two-step-sign-in');
+    $this->get('/admin')->assertRedirect(url('/app/settings/security?highlight=security.two_step'));
     Notification::assertNotified('Turn on two-step sign-in to open the admin panel');
-    $this->get('/app/profile')->assertOk();
-    $this->get('/admin/customers')->assertRedirect('/app/profile?tab=sign-in#two-step-sign-in');
+    $this->get('/app/settings/security')->assertOk();
+    $this->get('/admin/customers')->assertRedirect(url('/app/settings/security?highlight=security.two_step'));
     $this->get('/admin/customers', ['X-Livewire' => 'true'])->assertForbidden();
 
     $person->forceFill(['app_authentication_secret' => Fx::STAFF_TOTP_SECRET])->save();

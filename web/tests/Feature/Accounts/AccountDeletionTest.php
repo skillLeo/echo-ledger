@@ -128,7 +128,7 @@ describe('the 7 days', function () {
         $this->actingAs($user, 'web');
 
         $this->get('/app')->assertRedirect(AccountBeingDeleted::getUrl());
-        $this->get('/app/profile')->assertRedirect(AccountBeingDeleted::getUrl());
+        $this->get('/app/settings')->assertRedirect(AccountBeingDeleted::getUrl());
         $this->get('/app/sessions')->assertRedirect(AccountBeingDeleted::getUrl());
         $this->get(AccountBeingDeleted::getUrl())->assertOk()->assertSee('Keep my account');
 

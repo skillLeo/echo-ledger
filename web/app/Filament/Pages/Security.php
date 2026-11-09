@@ -4,23 +4,16 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Auth\EditProfile;
 use App\Filament\Concerns\FullConsoleOnly;
-use App\Filament\Resources\Devices\DeviceResource;
-use App\Filament\Support\Notice as Notification;
 use App\Models\AuditEvent;
 use App\Models\Device;
-use App\Models\Passkey;
-use App\Models\User;
 use App\Services\AuditLog;
-use App\Services\Passkeys;
-use App\Services\WebSessions;
-use App\Services\Workspaces\CurrentWorkspace;
-use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
+use Filament\Panel;
 use Filament\Schemas\Components\EmbeddedTable;
-use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\View;
+use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
@@ -29,91 +22,39 @@ use Filament\Tables\Contracts\HasTable;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use UnitEnum;
 
 /**
- * The security centre (plan B16): passkeys, browsers signed in to the console, paired devices and the audit log of sign-ins,
- * deletes, exports, share links and credential changes.
+ * Settings › Sign-in & security › Sign-in activity (the security centre's log since plan B16; its passkeys and
+ * browsers moved to Settings in v1.7): sign-ins, deletes, exports, share links and credential changes.
  */
 class Security extends Page implements HasTable
 {
     use FullConsoleOnly;
     use InteractsWithTable;
 
-    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedShieldCheck;
+    protected static ?string $slug = 'settings/security/activity';
 
-    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ShieldCheck;
+    protected static bool $shouldRegisterNavigation = false;
 
-    protected static string|UnitEnum|null $navigationGroup = 'System';
+    protected static ?string $title = 'Sign-in activity';
 
-    protected static ?int $navigationSort = 0;
-
-    protected static ?string $title = 'Security';
+    public static function getRelativeRouteName(Panel $panel): string
+    {
+        return 'security';
+    }
 
     public function content(Schema $schema): Schema
     {
         return $schema->components([
-            Section::make('Passkeys')
-                ->description('Sign in with your fingerprint, face or device PIN instead of a password. Two-step sign-in with an app stays available.')
-                ->schema([View::make('filament.pages.security-passkeys')->viewData(fn (): array => ['passkeys' => Passkey::query()->where('user_id', auth()->id())->latest()->get(), 'max' => Passkeys::MAX_PER_USER])]),
-            Section::make('Signed-in browsers')
-                ->description('Sign out a browser you no longer use. Your phone and computer apps are under Devices.')
-                ->schema([View::make('filament.pages.security-browsers')->viewData(fn (): array => $this->browserData())]),
-            Section::make('Audit log')
-                ->description('Sign-ins, deleted recordings, exports, share links and credential changes from the last '.AuditEvent::KEEP_DAYS.' days.')
-                ->schema([EmbeddedTable::make()]),
+            Text::make('Sign-ins, deleted recordings, exports, share links and credential changes from the last '.AuditEvent::KEEP_DAYS.' days.'),
+            EmbeddedTable::make(),
         ]);
     }
 
-    /** @return array<string, mixed> */
-    public function browserData(): array
+    /** @return array<string, string> */
+    public function getBreadcrumbs(): array
     {
-        $userId = (int) auth()->id();
-
-        return [
-            'available' => WebSessions::available(),
-            'browsers' => app(WebSessions::class)->list($userId, session()->getId()),
-            'devices' => Device::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', $userId)->count(),
-            'devicesUrl' => DeviceResource::getUrl(),
-        ];
-    }
-
-    /** Options for `navigator.credentials.create()`, kept in the session until the answer comes back. */
-    public function passkeyOptions(): string
-    {
-        $user = auth()->user();
-
-        return $user instanceof User ? app(Passkeys::class)->registrationOptions($user) : '{}';
-    }
-
-    /** @param array<string, mixed> $credential */
-    public function savePasskey(array $credential, string $name = ''): void
-    {
-        $user = auth()->user();
-        $passkey = $user instanceof User ? app(Passkeys::class)->register($user, (string) json_encode($credential), $name) : null;
-        $passkey === null
-            ? Notification::make()->title('That passkey could not be added')->body('Try again, or use another device.')->danger()->send()
-            : Notification::make()->title('Passkey added')->body("“{$passkey->name}” can now sign you in.")->success()->send();
-    }
-
-    public function removePasskey(string $id): void
-    {
-        $user = auth()->user();
-        if ($user instanceof User && app(Passkeys::class)->remove($user, $id)) {
-            Notification::make()->title('Passkey removed')->success()->send();
-        }
-    }
-
-    public function signOutBrowser(string $id): void
-    {
-        $done = app(WebSessions::class)->revoke((int) auth()->id(), $id, session()->getId());
-        Notification::make()->title($done ? 'Browser signed out' : 'That browser was already signed out')->success()->send();
-    }
-
-    public function signOutOtherBrowsers(): void
-    {
-        $count = app(WebSessions::class)->revokeOthers((int) auth()->id(), session()->getId());
-        Notification::make()->title($count === 1 ? '1 browser signed out' : "{$count} browsers signed out")->success()->send();
+        return [EditProfile::settingsUrl() => 'Settings', EditProfile::settingsUrl('security') => 'Sign-in & security', 'Sign-in activity'];
     }
 
     public function table(Table $table): Table

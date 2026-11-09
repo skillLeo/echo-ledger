@@ -143,7 +143,7 @@ it('lists no server page in a customer\'s app, and the server pages are not in t
     foreach (['API Credentials', 'Plans', 'Server usage', 'Device reports', 'Accuracy Lab', 'Upgrade requests'] as $label) {
         expect($html)->not->toContain('>'.$label.'<');
     }
-    foreach (['/app/settings', '/app/plans', '/app/api-credentials', '/app/upgrade-requests', '/app/server-usage', '/app/device-reports', '/app/accuracy-lab'] as $gone) {
+    foreach (['/app/plans', '/app/api-credentials', '/app/upgrade-requests', '/app/server-usage', '/app/device-reports', '/app/accuracy-lab'] as $gone) {
         $this->get($gone)->assertNotFound();
     }
     expect(User::query()->whereKey($owner->id)->value('is_super_admin'))->toBeFalsy();

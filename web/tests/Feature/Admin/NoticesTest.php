@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\RecentlyDeleted;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
@@ -15,6 +16,7 @@ use App\Filament\Support\NoticeTargets;
 use App\Livewire\ActivityBell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Models\Workspace;
 use App\Services\ActivityFeed;
@@ -148,17 +150,17 @@ describe('the targets', function () {
         $staff = Fx::superAdmin(twoFactor: false);
         $this->actingAs($staff, 'web');
 
-        $this->get('/admin')->assertRedirect('/app/profile?tab=sign-in#two-step-sign-in');
+        $this->get('/admin')->assertRedirect(url('/app/settings/security?highlight=security.two_step'));
         $notice = noticeTitled('Turn on two-step sign-in');
-        expect($notice?->getUrl())->toEndWith('/app/profile?tab=sign-in#two-step-sign-in')->and($notice?->getDuration())->toBe('persistent');
-        expect((string) $this->get('/app/profile?tab=sign-in')->assertOk()->getContent())->toContain('id="two-step-sign-in"');
+        expect($notice?->getUrl())->toEndWith('/app/settings/security?highlight=security.two_step')->and($notice?->getDuration())->toBe('persistent');
+        expect((string) $this->get('/app/settings/security?highlight=security.two_step')->assertOk()->getContent())->toContain('id="setting-security.two_step"');
     });
 
     it('opens the page that fixes an error: a used-up plan to Usage, a missing feature to Plan & usage', function () {
         $this->actingAs(Fx::user(), 'web');
 
         expect(NoticeTargets::forError(new ApiError(403, 'budget_exceeded', 'Monthly limit reached')))->toContain('/app/usage')
-            ->and(NoticeTargets::forError(new ApiError(403, 'feature_not_in_plan', 'Not in your plan')))->toEndWith('/app/profile?tab=plan')
+            ->and(NoticeTargets::forError(new ApiError(403, 'feature_not_in_plan', 'Not in your plan')))->toEndWith('/app/settings/plan')
             ->and(NoticeTargets::forError(new ApiError(503, 'provider_not_configured', 'No key')))->toBeNull() // not staff
             ->and(NoticeTargets::forError(new RuntimeException('Something else')))->toBeNull();
     });
@@ -189,14 +191,17 @@ describe('the banners about something still true', function () {
             ->toContain('data-remember="visit"')->toContain('x-cloak')->toContain('window.elBanner');
     });
 
-    it('shows a plan limit line while the month\'s minutes are used up, opening Usage', function () {
+    it('shows a plan limit line while the month\'s minutes are used up (never for a plan with none), opening Plan & usage', function () {
         $a = Fx::user();
         $workspace = Workspace::query()->findOrFail($a->current_workspace_id);
-        $workspace->plan->forceFill(['monthly_minutes' => 0])->save();
+        $workspace->plan->forceFill(['monthly_minutes' => 1])->save();
+        UsageLedgerEntry::query()->create(['workspace_id' => $workspace->id, 'user_id' => $a->id, 'source' => 'server', 'report_id' => 'used-up',
+            'use_case' => 'final_transcript', 'provider' => 'assemblyai', 'duration_ms' => 120000, 'channels' => 1, 'billed_ms' => 120000,
+            'unit_price_usd' => 0, 'cost_usd' => 0, 'billable' => true, 'occurred_at' => now()]);
         $this->actingAs($a, 'web');
 
         $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
-        expect($html)->toContain('data-plan-limit="minutes"')->toContain('This month&#039;s minutes are used up')->toContain('See usage');
+        expect($html)->toContain('data-plan-limit="minutes"')->toContain('This month&#039;s minutes are used up')->toContain('Plan &amp; usage');
     })->skip(fn (): bool => ! method_exists(Workspace::class, 'plan'), 'Plans not on workspaces');
 
     it('remembers the announcement closed per text, and the maintenance reminder per state', function () {
@@ -236,7 +241,7 @@ describe('the bell', function () {
 
         app(ActivityFeed::class)->post($a, 'upgrade_approved', 'You are on Pro now', 'Thank you!', null, 'heroicon-o-check-badge');
         $plan = noticeOfKind($a, 'upgrade_approved');
-        $this->get(route('notices.open', $plan))->assertRedirect(Filament::getPanel('app')->getProfileUrl().'?tab=plan');
+        $this->get(route('notices.open', $plan))->assertRedirect(EditProfile::settingsUrl('plan'));
         app(ActivityFeed::class)->post($a, 'some_old_kind', 'Something', 'x', null, 'heroicon-o-bell');
         $other = noticeOfKind($a, 'some_old_kind');
         $this->get(route('notices.open', $other))->assertRedirect(Activity::getUrl(panel: 'app'));

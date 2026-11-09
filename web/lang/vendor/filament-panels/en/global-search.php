@@ -6,7 +6,7 @@ declare(strict_types=1);
 return [
     'field' => [
         'label' => 'Search and commands',
-        'placeholder' => 'Search recordings, transcripts, pages… or type a command',
+        'placeholder' => 'Search',
     ],
-    'no_results_message' => 'Nothing matches. Try another word, or a page such as Devices.',
+    'no_results_message' => 'Nothing matches. Try another word, such as dark mode or upgrade.',
 ];

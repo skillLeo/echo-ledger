@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Admin\Pages\UpgradeRequestsPage;
-use App\Filament\Auth\EditProfile;
+use App\Filament\Pages\Upgrade\ChoosePlan;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\UpgradeDecidedMail;
 use App\Models\Plan;
@@ -11,7 +11,6 @@ use App\Models\UpgradeRequest;
 use App\Models\Workspace;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
 use Livewire\Livewire;
@@ -134,20 +133,17 @@ describe('the console\'s badge and sheet', function () {
         $this->actingAs($this->person, 'web');
     });
 
-    it('shows Invite with the plan\'s badge on Free, and the sheet asks for the plan', function () {
+    it('shows Invite with the plan\'s tag on Free, which opens the upgrade on that plan', function () {
         $page = Livewire::test(WorkspaceSettings::class)->assertActionVisible('upgradeForTeam')->assertActionHidden('addMember');
-        expect($page->html())->toContain('BUSINESS ✦');
+        expect($page->html())->toContain('el-plan-badge')->not->toContain('✦');
 
-        $page->callAction('upgradeForTeam', ['plan' => 'business', 'message' => 'Our office'])
-            ->assertNotified('Request sent. We\'ll activate it once confirmed.');
-        expect(UpgradeRequest::query()->where('user_id', $this->person->id)->value('plan'))->toBe('business');
+        $page->callAction('upgradeForTeam')->assertRedirectContains('feature=team')->assertRedirectContains('plan=business');
     });
 
-    it('shows the plan on the profile, with the plans side by side', function () {
-        $this->get('/app/profile')->assertOk()->assertSee('Your plan')->assertSee('FREE ✦', false);
-        Livewire::test(EditProfile::class)
-            ->callAction(TestAction::make('comparePlans')->schemaComponent('plan-actions', schema: 'content'), ['plan' => 'pro'])
-            ->assertNotified('Request sent. We\'ll activate it once confirmed.');
+    it('shows the plan on Plan & usage, and Upgrade asks for the plan, then shows how to pay', function () {
+        $this->get('/app/settings/plan')->assertOk()->assertSee('Free plan')->assertDontSee('✦');
+        Livewire::withQueryParams(['plan' => 'pro'])->test(ChoosePlan::class)
+            ->assertSet('plan', 'pro')->call('submit')->assertRedirectContains('/pay');
         expect(UpgradeRequest::query()->where('user_id', $this->person->id)->value('plan'))->toBe('pro');
     });
 });

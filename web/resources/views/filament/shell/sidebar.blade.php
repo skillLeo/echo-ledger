@@ -1,7 +1,7 @@
 {{--
     The sidebar (since v1.6, P4.1), the desktop app's frame: the brand, "Find a page", the groups, and at the bottom
-    Help & shortcuts (?), Account and Collapse sidebar ([). 240 px, 200–320 by dragging its edge (double-click: 240),
-    a 64 px icon rail with "[" or the button; Light, Dark or Soft grey (Account → Preferences). Remembered per person.
+    Help & shortcuts (?), Settings and Collapse sidebar ([). 240 px, 200–320 by dragging its edge (double-click: 240),
+    a 64 px icon rail with "[" or the button; Light, Dark or Soft grey (Settings › Appearance). Remembered per person.
     It keeps Filament's sidebar contract (filamentSidebar, $store.sidebar), so on phones it is the drawer "More" opens.
 --}}
 @php
@@ -185,10 +185,10 @@
                     <span class="el-sb-label">Help &amp; shortcuts</span>
                     <kbd class="el-kbd el-sb-kbd" aria-hidden="true">?</kbd>
                 </button>
-                @php($onAccount = request()->routeIs('filament.app.auth.profile'))
-                <a href="{{ $profileUrl }}" @class(['el-sb-item', 'el-on' => $onAccount]) @if ($onAccount) aria-current="page" @endif x-bind:title="rail() ? 'Account' : null">
-                    @svg($onAccount ? 'heroicon-s-user-circle' : 'heroicon-o-user-circle', ['class' => 'el-sb-icon', 'aria-hidden' => 'true'])
-                    <span class="el-sb-label">Account</span>
+                @php($onAccount = request()->routeIs('filament.app.auth.profile', 'filament.app.pages.upgrade*', 'filament.app.pages.security'))
+                <a href="{{ $profileUrl }}" @class(['el-sb-item', 'el-on' => $onAccount]) @if ($onAccount) aria-current="page" @endif x-bind:title="rail() ? 'Settings' : null">
+                    @svg($onAccount ? 'heroicon-s-cog-6-tooth' : 'heroicon-o-cog-6-tooth', ['class' => 'el-sb-icon', 'aria-hidden' => 'true'])
+                    <span class="el-sb-label">Settings</span>
                 </a>
                 <button type="button" class="el-sb-item el-sb-collapse" x-on:click="toggle()" x-bind:aria-expanded="rail() ? 'false' : 'true'"
                     x-bind:aria-label="rail() ? 'Expand the sidebar' : 'Collapse the sidebar'" x-bind:title="rail() ? 'Expand the sidebar ([)' : null">

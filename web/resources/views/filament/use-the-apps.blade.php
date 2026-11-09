@@ -4,7 +4,7 @@
         <p style="margin: 0 0 .75rem">This server keeps its console for owners and admins. Your recordings, what is shared with you and your devices are in the EchoLedger apps for your phone and computer.</p>
         <p style="margin: 0">
             <a href="{{ route('downloads') }}" style="text-decoration: underline">Get the apps</a>
-            · <a href="{{ \Filament\Facades\Filament::getPanel('app')->getProfileUrl() }}" style="text-decoration: underline">Your account and devices</a>
+            · <a href="{{ \App\Filament\Auth\EditProfile::settingsUrl() }}" style="text-decoration: underline">Settings</a>
         </p>
     </x-filament::section>
 @endif

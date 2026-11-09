@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Security;
 use App\Models\AuditEvent;
 use App\Models\CaptureSession;
@@ -159,9 +160,9 @@ describe('the console security page', function () {
         AuditEvent::query()->create(['user_id' => User::factory()->create()->id, 'event' => 'login', 'actor' => 'web', 'summary' => 'Someone else']);
         DB::table('sessions')->insert(['id' => 'old-browser', 'user_id' => $admin->id, 'ip_address' => '198.51.100.4', 'user_agent' => 'Firefox/130.0 (Windows)', 'payload' => '', 'last_activity' => now()->subDay()->timestamp]);
 
-        $page = $this->panelComponent(Security::class)->assertOk()
-            ->assertSee('Share link made for Acme kickoff')->assertDontSee('Someone else')
-            ->assertSee('Firefox on Windows');
+        $this->panelComponent(Security::class)->assertOk()
+            ->assertSee('Share link made for Acme kickoff')->assertDontSee('Someone else');
+        $page = $this->panelComponent(EditProfile::class, ['subpage' => 'security'])->assertSee('Firefox on Windows');
         $page->call('signOutBrowser', 'old-browser')->assertNotified('Browser signed out');
 
         expect(DB::table('sessions')->where('id', 'old-browser')->exists())->toBeFalse();

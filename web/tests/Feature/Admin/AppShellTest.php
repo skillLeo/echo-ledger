@@ -8,6 +8,7 @@ use App\Filament\Pages\GetTheApps;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\ViewClient;
 use App\Filament\Support\CommandPalette;
+use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
@@ -38,13 +39,13 @@ function shellNavLabels(string $html): array
 }
 
 describe('the sidebar', function () {
-    it('lists Home, Library, Projects, Activity, Shared and Upload, then Help, Account and Collapse at the bottom', function () {
+    it('lists Home, Library, Projects, Activity, Shared and Upload, then Help, Settings and Collapse at the bottom', function () {
         $this->actingAs(Fx::user(), 'web');
         $html = (string) $this->get('/app')->assertOk()->getContent();
 
         expect(shellNavLabels($html))->toBe(['Home', 'Library', 'Projects', 'Activity', 'Shared', 'Upload'])
             ->and($html)->toContain('placeholder="Find a page"')
-            ->toContain('Help &amp; shortcuts')->toContain('Collapse sidebar')->toContain('>Account<')
+            ->toContain('Help &amp; shortcuts')->toContain('Collapse sidebar')->toContain('<span class="el-sb-label">Settings</span>')
             ->toContain('role="separator"')->toContain('aria-label="Resize the sidebar"');
     });
 
@@ -77,7 +78,7 @@ describe('the sidebar', function () {
     it('lists in Find a page only pages the person may open, and never the admin panel for a customer', function () {
         $this->actingAs(Fx::user(), 'web');
         $customer = collect(Shell::pages())->pluck('label')->all();
-        expect($customer)->toContain('Home', 'Library', 'Devices', 'Preferences', 'Plan & usage', 'Privacy & data')->not->toContain('Admin panel');
+        expect($customer)->toContain('Home', 'Library', 'Settings', 'Devices', 'Appearance', 'Plan & usage', 'Privacy & data')->not->toContain('Admin panel');
         expect((string) $this->get('/app')->getContent())->not->toContain('"Admin panel"');
 
         $this->actingAs(Fx::superAdmin(), 'web');
@@ -261,16 +262,16 @@ describe('the top bar (P4.3)', function () {
         $html = (string) $this->get('/app')->assertOk()->getContent();
 
         expect($html)->toContain('el-tb-workspace-name')->toContain('>Owner<')
-            ->toContain('placeholder="Search recordings, transcripts, pages… or type a command"')
+            ->toContain('placeholder="Search"')
             ->toContain('aria-label="Create"')->toContain('data-create="upload"')->toContain('data-create="project"')->toContain('data-create="request"')
             ->toContain('fi-topbar-database-notifications-btn')->toContain('aria-label="Help &amp; shortcuts"')
-            ->toContain('>Account<')->toContain('Plan &amp; usage')->toContain('Sign out')
-            ->not->toContain('>Admin panel<');
+            ->toContain('el-um-head')->toContain('Upgrade')->toContain('Settings')->toContain('Sign out')
+            ->not->toContain('Admin panel');
     });
 
     it('gives staff the admin panel in the avatar menu, and the admin panel a way back', function () {
         $this->actingAs(Fx::superAdmin(), 'web');
-        expect((string) $this->get('/app')->getContent())->toContain('>Admin panel<');
+        expect((string) $this->get('/app')->getContent())->toContain('Admin panel');
         Filament::setCurrentPanel('admin');
         $admin = (string) $this->get('/admin')->assertOk()->getContent();
         expect($admin)->toContain('Back to the app')->toContain('el-tb-admin-label')->not->toContain('el-tb-workspace-btn')->not->toContain('aria-label="Create"');
@@ -296,7 +297,7 @@ describe('the top bar (P4.3)', function () {
         expect($title($palette->getResults('upload')->getCategories()['Commands'][0]))->toStartWith('Upload ·')
             ->and($title($palette->getResults('new project')->getCategories()['Commands'][0]))->toStartWith('New project ·')
             ->and(collect($palette->getResults('devices')->getCategories()['Go to'])->pluck('title')->all())->toContain('Devices')
-            ->and(collect($palette->getResults('preferences')->getCategories()['Go to'])->pluck('title')->all())->toContain('Preferences');
+            ->and(collect($palette->getResults('appearance')->getCategories()['Settings'])->map(fn ($r) => strip_tags((string) $r->title))->implode('|'))->toContain('Appearance');
 
         Fx::device($owner);
         expect(app(CommandPalette::class)->getResults('record')->getCategories()['Commands'][0]->url)->toContain('/app/upload?record=1');
@@ -386,45 +387,35 @@ describe('the page pattern (P4.4)', function () {
     });
 });
 
-describe('Account in tabs (P4.5)', function () {
-    it('has Profile, Password & sign-in methods, Devices, Notifications, Preferences, Plan & usage and Privacy & data', function () {
+describe('Settings (v1.7, the account page before)', function () {
+    it('has the sections and their pages instead of tabs', function () {
         $this->actingAs(Fx::user(), 'web');
-        $html = (string) $this->get('/app/profile')->assertOk()->getContent();
+        $html = (string) $this->get('/app/settings')->assertOk()->getContent();
 
-        preg_match_all('/fi-tabs-item-label">\s*([^<]+?)\s*</', $html, $tabs);
-        expect($tabs[1])->toBe(['Profile', 'Password &amp; sign-in methods', 'Devices', 'Notifications', 'Preferences', 'Plan &amp; usage', 'Privacy &amp; data']);
-        expect($html)->toMatch('/<h1 class="fi-header-heading">\s*Account\s*<\/h1>/')
-            ->toContain('Support access')->toContain('Export my data')->toContain('Change password');
+        expect($html)->not->toContain('fi-tabs-item-label')->toContain('<h1 class="el-set-h1">Settings</h1>')
+            ->toContain('data-nav="profile"')->toContain('data-nav="security"')->toContain('data-nav="devices"')->toContain('data-nav="notifications"')
+            ->toContain('data-nav="appearance"')->toContain('data-nav="plan"')->toContain('data-nav="privacy"');
+        expect((string) $this->get('/app/settings/privacy')->assertOk()->getContent())->toContain('Support access')->toContain('Export my data');
     });
 
-    it('shows the Transcription key tab on the Free plan only (or while a key is saved)', function () {
+    it('shows the Transcription key page on the Free plan only (or while a key is saved)', function () {
         $user = Fx::user();
         $this->actingAs($user, 'web');
-        $tabs = function (string $url): array {
-            preg_match_all('/fi-tabs-item-label">\s*([^<]+?)\s*</', (string) $this->get($url)->assertOk()->getContent(), $m);
-
-            return $m[1];
-        };
-        expect($tabs('/app/profile'))->not->toContain('Transcription key');
+        expect((string) $this->get('/app/settings')->getContent())->not->toContain('data-nav="transcription-key"');
 
         Workspace::query()->whereKey($user->current_workspace_id)->update(['plan_id' => Plan::free()->id]);
-        expect($tabs('/app/profile?tab=key'))->toContain('Transcription key');
+        SettingsContext::forget();
+        expect((string) $this->get('/app/settings')->getContent())->toContain('data-nav="transcription-key"');
     });
 
-    it('opens the tab named in the address', function () {
-        $this->actingAs(Fx::user(), 'web');
-
-        expect((string) $this->get('/app/profile?tab=preferences')->assertOk()->getContent())->toContain('data-pref="style"')->toContain('Sidebar style');
-    });
-
-    it('saves a preference at once and says so, refuses anything else, and leaves other people\'s alone', function () {
+    it('saves a preference at once, refuses anything else, and leaves other people\'s alone', function () {
         $a = Fx::user();
         $b = Fx::user();
         $this->actingAs($a, 'web');
 
-        Livewire::test(EditProfile::class)->call('setPreference', 'clock', '24h')->assertSet('preferencesSavedAt', fn ($v) => is_string($v))
+        Livewire::test(EditProfile::class, ['subpage' => 'appearance'])->call('setPreference', 'clock', '24h')->assertReturned(true)
             ->call('setPreference', 'density', 'compact')->call('setPreference', 'language', 'ur')
-            ->call('setPreference', 'is_super_admin', '1')->call('setPreference', 'style', 'purple');
+            ->call('setPreference', 'is_super_admin', '1')->assertReturned(false)->call('setPreference', 'style', 'purple');
         $prefs = Shell::preferences($a->fresh());
         expect($prefs)->toMatchArray(['clock' => '24h', 'density' => 'compact', 'language' => 'ur', 'style' => 'light'])
             ->and($a->fresh()->is_super_admin)->toBeFalse()
@@ -436,14 +427,14 @@ describe('Account in tabs (P4.5)', function () {
         $codeOnly = Fx::user();
         $codeOnly->forceFill(['has_password' => false])->save();
         $this->actingAs($codeOnly->fresh(), 'web');
-        Livewire::test(EditProfile::class)
-            ->fillForm(['password' => 'a-first-long-password-1', 'passwordConfirmation' => 'a-first-long-password-1'], 'passwordForm')
-            ->call('savePassword')->assertHasNoFormErrors(form: 'passwordForm');
+        Livewire::test(EditProfile::class, ['subpage' => 'security'])
+            ->callAction('changePassword', ['password' => 'a-first-long-password-1', 'passwordConfirmation' => 'a-first-long-password-1'])
+            ->assertHasNoActionErrors();
         expect(Hash::check('a-first-long-password-1', (string) $codeOnly->fresh()->password))->toBeTrue()->and($codeOnly->fresh()->has_password)->toBeTrue();
 
-        Livewire::test(EditProfile::class)
-            ->fillForm(['password' => 'another-long-password-2', 'passwordConfirmation' => 'another-long-password-2'], 'passwordForm')
-            ->call('savePassword')->assertHasFormErrors(['currentPassword' => 'required'], 'passwordForm');
+        Livewire::test(EditProfile::class, ['subpage' => 'security'])
+            ->callAction('changePassword', ['password' => 'another-long-password-2', 'passwordConfirmation' => 'another-long-password-2'])
+            ->assertHasActionErrors(['currentPassword' => 'required']);
     });
 });
 

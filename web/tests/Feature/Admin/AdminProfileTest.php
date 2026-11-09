@@ -6,6 +6,8 @@ use App\Filament\Auth\EditProfile;
 use App\Models\User;
 use Filament\Auth\Pages\Login;
 use Filament\Facades\Filament;
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Schema;
 use Illuminate\Support\Facades\Hash;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -22,7 +24,7 @@ it('shows the signed-in admin their own name and email', function () {
         ->assertFormSet(['name' => 'Farah Khan', 'email' => 'farah@example.test'])
         ->assertSee('Profile');
 
-    $this->get('/app/profile')->assertOk()->assertSee('Farah Khan', false);
+    $this->get('/app/settings/profile')->assertOk()->assertSee('Farah Khan', false);
     expect($admin->is_super_admin)->toBeTrue();
 });
 
@@ -31,7 +33,7 @@ it('never renders the password hash or remember token on the profile page', func
     $admin->forceFill(['remember_token' => 'remember-token-value-1234567890'])->save();
 
     $html = $this->panelComponent(EditProfile::class)->html();
-    $page = $this->get('/app/profile')->assertOk()->getContent();
+    $page = $this->get('/app/settings/profile')->assertOk()->getContent();
 
     foreach ([$html, $page] as $output) {
         expect($output)->not->toContain($admin->fresh()->password)
@@ -106,15 +108,12 @@ it('changes the password when the current password is confirmed', function () {
     $admin = $this->signInAsAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm([
+        ->callAction('changePassword', [
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'password',
-        ], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasNoFormErrors(form: 'passwordForm')
-        ->assertSet('passwordData.password', null)
-        ->assertSet('passwordData.passwordConfirmation', null);
+        ])
+        ->assertHasNoActionErrors();
 
     $stored = $admin->fresh()->password;
     expect(Hash::check('a-much-longer-passphrase-42', $stored))->toBeTrue()
@@ -139,13 +138,12 @@ it('refuses a password change without the right current password', function () {
     $before = $admin->password;
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm([
+        ->callAction('changePassword', [
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'guess',
-        ], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasFormErrors(['currentPassword'], 'passwordForm');
+        ])
+        ->assertHasActionErrors(['currentPassword']);
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -155,13 +153,12 @@ it('refuses a password change when the current password is left blank', function
     $before = $admin->password;
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm([
+        ->callAction('changePassword', [
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => '',
-        ], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasFormErrors(['currentPassword' => 'required'], 'passwordForm');
+        ])
+        ->assertHasActionErrors(['currentPassword' => 'required']);
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -171,9 +168,8 @@ it('refuses a new password that is too short', function () {
     $before = $admin->password;
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm(['password' => 'short', 'passwordConfirmation' => 'short', 'currentPassword' => 'password'], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasFormErrors(['password'], 'passwordForm');
+        ->callAction('changePassword', ['password' => 'short', 'passwordConfirmation' => 'short', 'currentPassword' => 'password'])
+        ->assertHasActionErrors(['password']);
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -183,13 +179,12 @@ it('refuses a new password whose confirmation does not match', function () {
     $before = $admin->password;
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm([
+        ->callAction('changePassword', [
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'something-else-entirely',
             'currentPassword' => 'password',
-        ], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasFormErrors(['password' => 'same'], 'passwordForm');
+        ])
+        ->assertHasActionErrors(['password' => 'same']);
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -197,9 +192,12 @@ it('refuses a new password whose confirmation does not match', function () {
 it('offers a show and hide control on the password fields', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/app/profile')->assertOk()->getContent();
-
-    expect($html)->toContain('aria-label="Show password"')->toContain('aria-label="Hide password"');
+    $action = $this->panelComponent(EditProfile::class, ['subpage' => 'security'])->mountAction('changePassword')->assertActionMounted('changePassword')
+        ->instance()->getAction('changePassword');
+    $fields = collect($action->getSchema(Schema::make($action->getLivewire()))?->getFlatComponents() ?? [])
+        ->filter(fn ($c) => $c instanceof TextInput);
+    expect($fields)->not->toBeEmpty();
+    $fields->each(fn ($field) => expect($field->isPasswordRevealable())->toBeTrue());
 });
 
 it('does not let the profile form change the super-admin flag', function () {
@@ -229,7 +227,7 @@ it('limits how often the profile can be saved', function () {
 it('has no file upload field and only a narrow set of editable attributes', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/app/profile')->assertOk()->getContent();
+    $html = $this->get('/app/settings/profile')->assertOk()->getContent();
 
     expect($html)->not->toContain('type="file"');
     expect(User::query()->getModel()->getFillable())->toBe(['name', 'email', 'password']);

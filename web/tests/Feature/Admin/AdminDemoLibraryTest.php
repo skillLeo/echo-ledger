@@ -102,7 +102,7 @@ it('lists the demo devices as a phone and a desktop', function () {
 });
 
 it('renders every console page with the demo data in place', function () {
-    foreach (['/app', '/app/sessions', '/app/clients', '/app/clients/create', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile'] as $url) {
+    foreach (['/app', '/app/sessions', '/app/clients', '/app/clients/create', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/settings'] as $url) {
         $this->get($url)->assertOk();
     }
 });

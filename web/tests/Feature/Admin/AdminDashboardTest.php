@@ -56,14 +56,14 @@ it('renders the dashboard for a super admin with every widget placed', function 
     expect($admin->is_super_admin)->toBeTrue();
 });
 
-it('registers the stats, chart and account widgets on the dashboard', function () {
+it('registers the stats and chart widgets on the dashboard, and no account card (Settings has it)', function () {
     $this->signInAsAdmin();
 
     $widgets = collect(Filament::getWidgets())->all();
 
     expect($widgets)->toContain(SourceStatsOverview::class)
         ->toContain(SessionsChart::class)
-        ->toContain(AccountWidget::class);
+        ->not->toContain(AccountWidget::class);
 });
 
 it('does not poll the server from the dashboard', function () {
@@ -79,7 +79,7 @@ it('lists the app shell\'s places in the sidebar (since v1.6: the desktop app\'s
 
     $html = $this->get('/app')->assertOk()->getContent();
 
-    foreach (['Find a page', 'Home', 'Library', 'Projects', 'Activity', 'Shared', 'Upload', 'Help &amp; shortcuts', 'Account', 'Collapse sidebar'] as $label) {
+    foreach (['Find a page', 'Home', 'Library', 'Projects', 'Activity', 'Shared', 'Upload', 'Help &amp; shortcuts', 'Settings', 'Collapse sidebar'] as $label) {
         expect($html)->toContain($label);
     }
     expect($html)->toContain('fi-global-search'); // the command palette (Ctrl / Cmd + K)

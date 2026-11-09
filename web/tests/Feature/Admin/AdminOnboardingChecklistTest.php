@@ -55,13 +55,13 @@ it('lists the steps in order with their links', function () {
 
     expect(array_column($steps, 'id'))->toBe(OnboardingChecklist::STEPS)
         ->and(array_column($steps, 'title'))->toBe([
-            'Turn on two-factor sign-in',
+            'Turn on two-step sign-in',
             'Add a provider key',
             'Set certificate pins',
             'Sign in your first device',
             'Choose how long to keep recordings',
         ])
-        ->and($steps[0]['url'])->toEndWith('/app/security')
+        ->and($steps[0]['url'])->toEndWith('/app/settings/security?highlight=security.two_step')
         ->and($steps[1]['url'])->toEndWith('/admin/api-credentials')
         ->and($steps[2]['url'])->toEndWith('/admin/settings')
         ->and($steps[3]['url'])->toEndWith('/app/devices')
@@ -123,8 +123,8 @@ it('shows the checklist on the dashboard with the steps that are left', function
     $this->get('/app')->assertOk()
         ->assertSee('Finish setting up')
         ->assertSee('0 of 5 done')
-        ->assertSee('Turn on two-factor sign-in')
-        ->assertSee('Open Security')
+        ->assertSee('Turn on two-step sign-in')
+        ->assertSee('Open Sign-in & security')
         ->assertSee('Open API Credentials')
         ->assertSee('Dismiss');
 });
@@ -138,7 +138,7 @@ it('counts the finished steps and drops their link', function () {
         ->assertSee('2 of 5 done')
         ->assertDontSee('Open API Credentials')
         ->assertDontSee('Open Devices')
-        ->assertSee('Open Security');
+        ->assertSee('Open Sign-in & security');
 });
 
 it('disappears once every step is done', function () {

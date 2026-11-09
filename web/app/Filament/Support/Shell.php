@@ -22,11 +22,11 @@ use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Resources\Clients\Pages\ListClients;
-use App\Filament\Resources\Devices\DeviceResource;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
+use App\Services\Accounts\SettingsRegistry;
 use App\Services\LibraryOrganiser;
 use App\Services\Sharing\Teammates;
 use App\Services\Staff\StaffAccess;
@@ -289,7 +289,6 @@ final class Shell
      */
     public static function pages(): array
     {
-        $account = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
         $list = [
             ['home', 'Home', '', Dashboard::getUrl(panel: 'app'), 'dashboard start overview', true],
             ['library', 'Library', '', CaptureSessionResource::getUrl('index', panel: 'app'), 'recordings calls voice notes', CaptureSessionResource::canAccess()],
@@ -302,23 +301,26 @@ final class Shell
             ['request-links', 'Request links', 'Shared', RequestLinksPage::getUrl(panel: 'app'), 'ask files upload link', RequestLinksPage::canAccess()],
             ['recently-deleted', 'Recently deleted', 'Library', RecentlyDeleted::getUrl(panel: 'app'), 'trash restore bin', RecentlyDeleted::canAccess()],
             ['get-the-apps', 'Get the apps', '', GetTheApps::getUrl(panel: 'app'), 'download install phone computer record', true],
-            ['profile', 'Profile', 'Account', $account.'?tab=profile', 'name email account', true],
-            ['sign-in', 'Password & sign-in methods', 'Account', $account.'?tab=sign-in', 'password two-step passkey google security', true],
-            ['devices', 'Devices', 'Account', DeviceResource::canAccess() ? DeviceResource::getUrl('index', panel: 'app') : $account.'?tab=devices', 'phones computers sign out', true],
-            ['notifications', 'Notifications', 'Account', $account.'?tab=notifications', 'emails alerts', true],
-            ['preferences', 'Preferences', 'Account', $account.'?tab=preferences', 'sidebar style density clock 24-hour shortcuts theme', true],
-            ['plan', 'Plan & usage', 'Account', $account.'?tab=plan', 'upgrade pro business free minutes', true],
-            ['all-features', 'All features', 'Account', $account.'?tab=plan#all-features', 'features plan pro ultra business compare upgrade locked included', true],
-            ['usage', 'Usage', 'Account', Usage::getUrl(panel: 'app'), 'minutes cost budget', Usage::canAccess()],
-            ['privacy', 'Privacy & data', 'Account', $account.'?tab=privacy', 'export delete account support access', true],
-            ['security', 'Security', 'Account', Security::getUrl(panel: 'app'), 'audit log passkeys browsers', Security::canAccess()],
-            ['workspace', 'Workspace', 'Account', WorkspaceSettings::getUrl(panel: 'app'), 'members invite team roles', WorkspaceSettings::canAccess()],
+            ['usage', 'Usage details', 'Settings', Usage::getUrl(panel: 'app'), 'minutes cost budget usage', Usage::canAccess()],
+            ['security-activity', 'Sign-in activity', 'Settings', Security::getUrl(panel: 'app'), 'audit log sign ins history', Security::canAccess()],
             ['admin', 'Admin panel', 'Staff', AdminDashboard::getUrl(panel: 'admin'), 'staff customers plans', StaffAccess::isStaff()],
         ];
         $pages = [];
         foreach ($list as [$id, $label, $group, $url, $words, $allowed]) {
             if ($allowed) {
                 $pages[] = ['id' => $id, 'label' => $label, 'group' => $group, 'url' => $url, 'words' => $words];
+            }
+        }
+        // Settings and each of its pages (since v1.7), from the registry, so a page found here is the one Settings opens.
+        $context = SettingsContext::current();
+        if ($context !== null) {
+            $pages[] = ['id' => 'settings', 'label' => 'Settings', 'group' => '', 'url' => EditProfile::settingsUrl(), 'words' => 'account preferences options'];
+            foreach (SettingsRegistry::PAGES as $page => $id) {
+                $entry = SettingsRegistry::byId()[$id];
+                if ($context->available($entry)) {
+                    $pages[] = ['id' => 'settings-'.$page, 'label' => (string) $entry['title'], 'group' => 'Settings', 'url' => $context->url($entry),
+                        'words' => implode(' ', array_map('strval', [...(array) $entry['keywords'], ...(array) $entry['aliases']]))];
+                }
             }
         }
         foreach (self::libraryPlaces() as $place) {
@@ -342,14 +344,14 @@ final class Shell
      */
     public static function crumbs(string $page, string $title): array
     {
-        $profile = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
+        $profile = EditProfile::settingsUrl();
         $library = CaptureSessionResource::canAccess() ? CaptureSessionResource::getUrl('index', panel: 'app') : null;
         $shared = self::sharedPlaces()[0]['url'] ?? null;
         $section = match ($page) {
             ListCaptureSessions::class, ListClients::class, Activity::class, EditProfile::class => [],
             Upload::class, RecentlyDeleted::class, Search::class => $library !== null ? [$library => 'Library'] : [],
             SharedWithMe::class, Shares::class, RequestLinksPage::class => $shared !== null ? [$shared => 'Shared'] : [],
-            Security::class, ListDevices::class, Usage::class, WorkspaceSettings::class => [$profile => 'Account'],
+            ListDevices::class, Usage::class, WorkspaceSettings::class => [$profile => 'Settings'],
             GetTheApps::class => [Dashboard::getUrl(panel: 'app') => 'Home'],
             default => null,
         };
@@ -359,7 +361,6 @@ final class Shell
         $label = match ($page) {
             SharedWithMe::class => 'With me',
             Shares::class => 'My links',
-            EditProfile::class => 'Account',
             default => $title,
         };
 
@@ -381,10 +382,8 @@ final class Shell
             RequestLinksPage::class => 'Links people use to send you files, without an account.',
             RecentlyDeleted::class => 'Deleted recordings stay here for 48 hours; restore one or delete it for good.',
             Search::class => 'Find a word in every transcript; a result plays from that moment.',
-            Security::class => 'Passkeys, the browsers signed in, and the log of sign-ins and changes.',
             ListDevices::class => 'Your phones and computers: rename one, sign it out, or sign in a new one.',
             Usage::class => 'Minutes transcribed and what they cost, this month and before.',
-            EditProfile::class => 'Your profile, sign-in, devices, notifications, preferences, plan and data.',
             default => null,
         };
     }

@@ -107,9 +107,8 @@ it('refuses a new profile password shorter than the twelve characters the CLI de
     $storedHash = $admin->fresh()->password;
 
     Livewire::test(EditProfile::class)
-        ->fillForm(['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasFormErrors(['password'], 'passwordForm');
+        ->callAction('changePassword', ['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password])
+        ->assertHasActionErrors(['password']);
 
     // Nothing was saved. (Comparing hashes also covers the "password" case, which equals the current password.)
     expect($admin->fresh()->password)->toBe($storedHash);
@@ -123,9 +122,8 @@ it('accepts a long profile password', function () {
     $password = 'a-sufficiently-long-passphrase-42';
 
     Livewire::test(EditProfile::class)
-        ->fillForm(['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password], 'passwordForm')
-        ->call('savePassword')
-        ->assertHasNoFormErrors(form: 'passwordForm');
+        ->callAction('changePassword', ['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password])
+        ->assertHasNoActionErrors();
 
     expect(Hash::check($password, $admin->fresh()->password))->toBeTrue();
 });

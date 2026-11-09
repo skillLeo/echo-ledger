@@ -103,6 +103,19 @@ are not changed.
 ## Controls
 Switches for on/off; segmented controls for 2-4 choices; bottom sheets for long lists.
 
+## Settings (since v1.7; the console first)
+- Who you are comes first: the profile card (avatar, name, email, the plan's name in a neutral tag). Upgrade is filled on
+  Free, outlined on Pro, absent on the top plan and while a request is open; the card and the button are siblings.
+- Sections are named for what people do, in sentence case: Transcription, App, Account, Support. Rows show their value
+  at the right; a second line only on entity rows (a device, a browser) and on the request card.
+- Icons on root rows only: Heroicons outline in the console (the same family as its chrome), 20 px, the muted text
+  colour, no tile. Pages are text-only.
+- Plan identity is the plan's name, never a colour; no ✦, no capitals. Colour means something: the primary button,
+  amber and red on a meter near or at its limit, red for destructive rows, green once for "approved".
+- Settings content is 720 px at most on desktop and web, in two columns from 760 px of its own width.
+- Every setting has a registry entry (`App\Services\Accounts\SettingsRegistry`); the pages render from it and search
+  reads it, and `SettingsPagesTest` fails when a row and its entry drift apart.
+
 ## Components (`ui/design/`)
 EchoTopBar · SearchPill · FilterChip · SectionHeader · RecordingRow · SelectionBar · EchoBottomBar + RecordButton ·
 BottomSheet · Buttons (primary, secondary, text, destructive) · TextField · SegmentedControl · SettingsRow ·

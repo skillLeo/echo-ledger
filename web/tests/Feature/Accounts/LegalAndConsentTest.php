@@ -78,7 +78,7 @@ it('shows a new account the recording-consent notice once, then keeps it in the 
 
     $this->actingAs($user->fresh(), 'web');
     $this->get('/app')->assertOk();
-    $this->get('/app/profile')->assertOk()->assertSee('Recording consent')->assertSee(RecordingConsent::TEXT);
+    $this->get('/app/settings/privacy')->assertOk()->assertSee('Recording consent')->assertSee('Acknowledged on');
 });
 
 it('never shows the notice to accounts that existed before it', function () {
