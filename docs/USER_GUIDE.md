@@ -21,6 +21,12 @@ All three show the same library.
 3. EchoLedger starts in the system tray (the small icons next to the clock). Click its icon to open it.
 4. The first time, a short setup guide walks you through the microphone, pairing and a 10-second test.
 
+**Updates (computer, since v1.5; checked more often since v1.6).** The app looks for a new version on your server soon
+after it starts and every 6 hours, downloads it and checks its signature, then shows **Update ready — Restart**.
+**Restart** installs it now; otherwise it installs the next time EchoLedger starts (never during a recording). A computer
+that still runs **1.1.0** has no updater: install the new version once by hand from your server's **Downloads** page
+(run it over the old one; your settings and sign-in stay). After that it updates itself.
+
 ## 1b. Install the Mac app
 
 The Mac app is built for Apple Silicon Macs (M1 and newer) and Intel Macs, and needs **macOS 14.4 or newer**, which also
@@ -120,7 +126,20 @@ recordings unless they are shared with them.
 - **Sharing** is how anyone sees a recording of yours: **Send to a teammate**, or a share link you make and can take
   back.
 
-**Sign in (computer, since v1.5).** The first screen asks for the server address, then offers what your server allows:
+**Sign in or make an account (computer, since v1.6).** The first screen asks only for your email. Type it and press
+**Continue**:
+
+- **A new email:** EchoLedger emails you a 6-digit code (it works for 10 minutes; **Send a new code** is offered after a
+  minute). Type it, then your name, tick **I accept the Terms and Privacy** (both open in your browser) and press
+  **Create account**. Your account starts on the **Free** plan, and the **Record** page opens with the **Ready check**.
+- **An account you already have:** type your password, or press **Email me a code instead**. If your account has
+  two-step sign-in, the code from your authenticator app is asked for next.
+- **Continue with Google** opens your browser when the server offers Google; the app continues by itself.
+- **Sign in with QR / code** (the small link) uses a one-time code from the web console, as below.
+- The app knows its server. **Advanced → Use a different server** is only for another EchoLedger server, and holds the
+  optional name for this computer. Your sign-in is kept encrypted on this computer.
+
+**Sign in (computer, v1.5).** On an older server the first screen asks for the server address, then offers what your server allows:
 email and password (**Forgot password?** opens the server's reset page), **Continue with Google** when the server has
 Google sign-in (the browser opens and the app continues by itself), and **Create account** when the server lets anyone
 sign up (otherwise ask the owner for an invitation). The code from your authenticator app is asked for when your account
@@ -137,6 +156,11 @@ need the web console.
 4. The library appears. Repeat for each device.
 
 To remove a device, open **Profile → Devices** in the console and revoke it. It is signed out at once.
+
+**Your devices (computer, since v1.6).** **Settings → Account → Devices** lists every phone and computer signed in to
+your account, with when each was last active. **Rename** gives any of them a name of your own; **Revoke** signs another
+one out. A computer is named like "Windows 11 PC" or "MacBook Pro" when you sign in, and signing in again on the same
+computer keeps its one place in the list instead of adding another.
 
 **Changing your email:** on your profile, type the new address. It takes effect when you open the link sent to it, signed
 in; the old address is told, and your devices stay signed in. **Forgot password?** on the sign-in page signs your account
@@ -524,6 +548,23 @@ readiness**, which is Critical: a call that will not be recorded is always said.
 - The console **Usage** page shows the minutes and the cost for each month, per provider, device and client.
 - Your administrator sets a **monthly limit** in the console **Settings → Storage**. At 80% you get a message. At 100% new
   captions and new transcripts stop, but your recording carries on and is kept on your device.
+
+## 15a. Plans, paid features and your own transcription key (computer, since v1.6)
+
+- **Settings → Account → Plan & usage** shows your plan, what you used of each limit (devices, storage, uploads,
+  minutes) and your latest upgrade request.
+- A feature your plan does not include shows one badge, like **PRO ✦** or **BUSINESS ✦**, with a small lock: on
+  Record (Live Translate), on a transcript (Roman Urdu, English and Urdu views), in Settings (Screen moments), on a
+  project's Notes, and in Plan & usage. Click it to see what the feature does and the plans side by side. **Request
+  upgrade** (with a message if you like) sends the request to the owner; the app then shows how to pay and says
+  "We'll activate it once confirmed". A pending request shows as pending until the owner decides.
+- **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Settings → Account →
+  Transcription key** and follow the three steps: open console.groq.com and sign in, choose **API Keys → Create API
+  key** and copy it, paste it and press **Save**. The server checks it once and keeps it encrypted, only for your
+  recordings. A recording made before you added a key says so, with **Add my Groq key**; after adding it, use
+  **Re-transcribe** on that recording.
+- The computer app has no transcription engine of its own: on the Free plan, transcripts come from your Groq key.
+  Live captions during a call use EchoLedger's speech service and follow your plan.
 
 ## 15b. Screen moments: what was on the screen (since v1.5)
 

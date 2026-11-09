@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeEntitlements, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -58,6 +58,9 @@ const plan = makePlan({
   monthlyMinutes: 3000, usedMinutes: 812.5, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.4 * 1024 ** 3, retentionDays: 90, seats: 5,
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
+// v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
+const free = screen.endsWith("-free");
+const signedOut = screen.startsWith("sign-in");
 // Acme Holdings shows its folders in the trees.
 localStorage.setItem("echoledger-projects-open", JSON.stringify(["c-acme"]));
 const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"] };
@@ -86,7 +89,11 @@ const READY_REPORT = {
 const commands: Record<string, (args: Args) => unknown> = {
   ready_last: () => READY_REPORT,
   ready_check: () => READY_REPORT,
-  auth_options: () => ({ password: true, google: true, signUp: true, signUpUrl: "https://ledger.example.com/admin/register", resetUrl: "https://ledger.example.com/admin/password-reset/request", browserSignIn: true }),
+  auth_options: () => ({ password: true, google: true, signUp: true, signUpUrl: "https://ledger.example.com/admin/register", resetUrl: "https://ledger.example.com/admin/password-reset/request", browserSignIn: true, code: true }),
+  auth_start: ({ email }) => (String(email).startsWith("new") ? { account: "new", methods: ["code", "google"], signUp: true } : { account: "existing", methods: ["password", "code", "google"], signUp: true }),
+  auth_code_send: () => ({ resendAfter: 60, expiresIn: 600, sent: true }),
+  auth_code_verify: () => ({ result: "profile", status: null }),
+  entitlements_get: () => (free ? makeEntitlements() : null),
   app_status: () => makeStatus({
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,
@@ -94,7 +101,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     pendingDecisions: empty ? 0 : PENDING.length,
     captionsLive: controls,
     plan,
-    paired: screen !== "sign-in",
+    paired: !signedOut,
+    serverUrl: signedOut ? null : "https://ledger.example.test",
     platform: mac ? "macos" : "windows",
     systemAudioNote: windows10 ? "This Windows version records all sound playing on this computer, not just the call" : null,
   }),

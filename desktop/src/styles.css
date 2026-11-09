@@ -1164,9 +1164,11 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sign-in-email .btn { margin-left: auto; }
 .sign-in-code { font-size: var(--text-lg); letter-spacing: 0.3em; font-variant-numeric: tabular-nums; text-align: center; }
 .sign-in-resend { margin-top: var(--space-2); }
-.sign-in-accept { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: var(--space-2) 0; }
+.sign-in-accept { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; margin: var(--space-2) 0; }
+.sign-in-accept .btn { height: auto; padding: 0 2px; }
 .sign-in-accept input { width: 16px; height: 16px; margin: 0 var(--space-1) 0 0; accent-color: var(--accent); }
 .sign-in-advanced { margin-top: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.sign-in-advanced > .btn { padding-inline: 0; }
 .sign-in-advanced-body { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
 .sign-in-safe { margin-top: 14px; }
 /* Settings → Account (since v1.5): the account's facts, the plan's limits next to the usage, deleting the account. */
@@ -1202,8 +1204,9 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .upgrade-payment { white-space: pre-line; margin: var(--space-1) 0 0; }
 .upgrade-request.declined { border-color: var(--danger); }
 .transcription-key .row { gap: var(--space-2); }
-.key-steps { margin: var(--space-2) 0; padding-inline-start: var(--space-5); display: grid; gap: var(--space-2); font-size: var(--text-sm); }
-.key-steps li { display: grid; gap: var(--space-1); justify-items: start; }
+.key-steps { counter-reset: key-step; list-style: none; margin: var(--space-2) 0; padding-inline-start: 0; display: grid; gap: var(--space-3); font-size: var(--text-sm); }
+.key-steps li { counter-increment: key-step; position: relative; display: grid; gap: var(--space-1); justify-items: start; padding-left: 34px; min-height: 24px; }
+.key-steps li::before { content: counter(key-step); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-text); display: grid; place-items: center; font-size: var(--text-xs); font-weight: 700; }
 .key-paste { width: 100%; gap: var(--space-2); }
 .key-paste .input { flex: 1; min-width: 0; font-family: var(--font-mono, ui-monospace, monospace); }
 .needs-key { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }

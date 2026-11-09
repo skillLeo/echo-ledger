@@ -314,10 +314,11 @@ export function TranscriptionKeyCard({ e }: { e: Entitlements }) {
       <ol className="key-steps">
         <li>
           <span>Open <b>{GROQ_KEYS}</b> and sign in (it is free).</span>
-          <button type="button" className="btn ghost compact" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>Open {GROQ_KEYS}</button>
+          <button type="button" className="btn compact" onClick={() => void api.openGroqConsole().catch((err) => setProblem(errorMessage(err)))}>Open {GROQ_KEYS}</button>
         </li>
         <li><span>Choose <b>API Keys</b>, then <b>Create API key</b>, and copy it.</span></li>
         <li>
+          <span>Paste it here and press <b>Save</b>.</span>
           <form className="row key-paste" onSubmit={(ev) => void save(ev)}>
             <label htmlFor={fieldId} className="sr-only">Paste your Groq key</label>
             <input id={fieldId} className="input" type="password" autoComplete="off" spellCheck={false} placeholder={key?.set ? "Paste a new key to replace it" : "Paste your key (gsk_…)"}
