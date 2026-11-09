@@ -591,6 +591,31 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * The recording's audio (since v1.6, Send to WhatsApp) in the app's private `exports/` cache, from its temporary
+     * signed address; null with a message when it could not be fetched.
+     */
+    suspend fun downloadAudio(sessionId: String, title: String): File? = withContext(Dispatchers.IO) {
+        try {
+            val api = graph.api() ?: return@withContext null
+            val url = sessionDetail(sessionId)?.playbackUrl ?: run {
+                _message.value = "This recording has no audio on the server."
+                return@withContext null
+            }
+            val dir = File(getApplication<Application>().cacheDir, "exports").apply { mkdirs() }
+            val name = title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "").trim().ifBlank { "Recording" }.take(60) + ".ogg"
+            val file = File(dir, name)
+            api.http.newCall(okhttp3.Request.Builder().url(url).build()).execute().use { resp ->
+                if (!resp.isSuccessful) throw java.io.IOException("The audio could not be downloaded (${resp.code}).")
+                file.outputStream().use { out -> resp.body.byteStream().copyTo(out) }
+            }
+            file
+        } catch (e: Exception) {
+            _message.value = "The audio could not be downloaded. Check the connection and try again."
+            null
+        }
+    }
+
     suspend fun createShare(sessionId: String, expiresIn: Long, password: String?, includeAudio: Boolean): ShareLinkDto? =
         withContext(Dispatchers.IO) {
             runCatching { graph.api()?.createShare(sessionId, expiresIn, password, includeAudio) }

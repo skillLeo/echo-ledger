@@ -50,7 +50,7 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [ ] P5.2 Web Library decluttered.
 - [ ] P5.3 Auto titles backfilled; failed uploads explained.
 - [ ] P5.4 Progress everywhere, Continue in background, Notify me when ready. **Phone: shared notes done** 2026-11-09 (Library rows and the share page since Phase 1C; Continue in background goes back to the app it came from while a quiet notification shows Uploading % / Transcribing / Improving and opens the note, replaced by the ready notice; SharedNotesWorkerTest). Recording page and desktop/web next.
-- [ ] P5.5 Share to WhatsApp: text, text + voice, link.
+- [ ] P5.5 Share to WhatsApp: text, text + voice, link. **Phone done** 2026-11-09 (Send to WhatsApp on a recording: Text only (the view being read) · Text and voice (Ogg; the text also on the clipboard with "Text copied — paste it", since WhatsApp may drop it) · Link (7 days); WhatsApp, else WhatsApp Business, else the share sheet; WhatsAppShareTest). Whether WhatsApp keeps the caption with audio: to check on the S25.
 
 ## P6 — Flow audit
 - [ ] P6 Every listed item fixed, more searched for; the 15 common tasks counted on web, desktop and phone.

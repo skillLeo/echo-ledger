@@ -160,6 +160,7 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
     var menu by remember { mutableStateOf(false) }
     var shareDialog by remember { mutableStateOf(false) }
     var sendSheet by remember { mutableStateOf(false) }
+    var whatsApp by remember { mutableStateOf(false) }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (transcriptId != null) {
             Column {
@@ -190,6 +191,10 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
         }
         OutlinedButton(onClick = { shareDialog = true }) { Text("Share link") }
         OutlinedButton(onClick = { sendSheet = true }) { Text("Send") }
+        if (transcriptId != null) OutlinedButton(onClick = { whatsApp = true }) { Text("Send to WhatsApp") }
+    }
+    if (whatsApp && transcriptId != null) {
+        WhatsAppSheet(vm, sessionId, transcriptId, hasAudio, view, onDismiss = { whatsApp = false })
     }
     // Since v1.5: who may open the link (anyone, a password, chosen people), downloads, and how long it works.
     if (shareDialog) ShareSheet(vm, sessionId = sessionId, clientId = null, title = "this recording", onDismiss = { shareDialog = false })
@@ -377,5 +382,102 @@ fun TranscriptionSection(vm: MainViewModel, settings: com.echoledger.mobile.data
             color = Brand.Muted,
             fontSize = 12.sp
         )
+    }
+}
+
+/**
+ * Send to WhatsApp (since v1.6, P5.5): the transcript (in the view being read) as text, with the voice too, or a link
+ * that works for 7 days.
+ */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+fun WhatsAppSheet(vm: MainViewModel, sessionId: String, transcriptId: String, hasAudio: Boolean, view: String?, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var working by remember { mutableStateOf<String?>(null) }
+    val target = remember { com.echoledger.mobile.share.WhatsAppShare.target(com.echoledger.mobile.share.WhatsAppShare.installed(context)) }
+    suspend fun transcriptText(): String? = vm.export(transcriptId, "txt", view)?.readText()
+    fun run(kind: String, block: suspend () -> Unit) {
+        working = kind
+        scope.launch {
+            block()
+            working = null
+            onDismiss()
+        }
+    }
+    androidx.compose.material3.ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
+        Column(
+            Modifier.fillMaxWidth().padding(horizontal = Space.screen).padding(bottom = Space.s5),
+            verticalArrangement = Arrangement.spacedBy(Space.s2)
+        ) {
+            Text(
+                if (target ==
+                    com.echoledger.mobile.share.WhatsAppShare.BUSINESS
+                ) {
+                    "Send to WhatsApp Business"
+                } else {
+                    "Send to WhatsApp"
+                },
+                style = LocalEchoType.current.titleM,
+                color = Brand.Text
+            )
+            com.echoledger.mobile.ui.design.EchoButton("Text only", {
+                run("text") {
+                    transcriptText()?.let {
+                        com.echoledger.mobile.share.WhatsAppShare.start(
+                            context,
+                            com.echoledger.mobile.share.WhatsAppShare.textIntent(it, target)
+                        )
+                    }
+                }
+            }, Modifier.fillMaxWidth(), loading = working == "text", enabled = working == null)
+            if (hasAudio) {
+                com.echoledger.mobile.ui.design.EchoButton(
+                    "Text and voice",
+                    {
+                        run("voice") {
+                            val text = transcriptText() ?: return@run
+                            val audio = vm.downloadAudio(sessionId, "EchoLedger recording") ?: return@run
+                            val uri = androidx.core.content.FileProvider.getUriForFile(context, "${context.packageName}.exports", audio)
+                            // WhatsApp may drop text sent with audio: it is on the clipboard too.
+                            context.getSystemService(android.content.ClipboardManager::class.java)
+                                ?.setPrimaryClip(
+                                    android.content.ClipData.newPlainText(
+                                        "Transcript",
+                                        com.echoledger.mobile.share.WhatsAppShare.clip(text)
+                                    )
+                                )
+                            vm.showMessage(com.echoledger.mobile.share.WhatsAppShare.TEXT_COPIED)
+                            com.echoledger.mobile.share.WhatsAppShare.start(
+                                context,
+                                com.echoledger.mobile.share.WhatsAppShare.voiceIntent(uri, text, target)
+                            )
+                        }
+                    },
+                    Modifier.fillMaxWidth(),
+                    kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
+                    loading = working == "voice",
+                    enabled =
+                        working == null
+                )
+            }
+            com.echoledger.mobile.ui.design.EchoButton(
+                "Link (works for 7 days)",
+                {
+                    run("link") {
+                        val link = vm.createShare(sessionId, 7L * 24 * 3600, null, includeAudio = hasAudio)?.url ?: return@run
+                        com.echoledger.mobile.share.WhatsAppShare.start(
+                            context,
+                            com.echoledger.mobile.share.WhatsAppShare.textIntent(link, target)
+                        )
+                    }
+                },
+                Modifier.fillMaxWidth(),
+                kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary,
+                loading = working == "link",
+                enabled =
+                    working == null
+            )
+        }
     }
 }
