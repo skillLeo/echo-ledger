@@ -2,6 +2,7 @@
 // lines, white on brand indigo. The brand's own drawing, not an icon: it keeps its 64-unit grid and stroke, and its
 // indigo stays the brand's even where the window takes the system's accent colour. Below 24 px it is the small mark
 // (one line fewer, bolder strokes), as mark-small.svg.
+// Google's "G" (GoogleMark, v1.6.2) is here too: another brand's mark, drawn as Google gives it, not an icon.
 export const MARK_WAVE =
   "M13.00 24.00C13.25 23.07 14.00 19.82 14.50 18.43C15.00 17.04 15.50 16.09 16.00 15.66C16.50 15.22 17.00 15.39 17.50 15.82C18.00 16.25 18.50 17.24 19.00 18.22C19.50 19.20 20.00 20.56 20.50 21.70C21.00 22.83 21.50 24.09 22.00 25.03C22.50 25.97 23.00 26.81 23.50 27.34C24.00 27.87 24.50 28.14 25.00 28.20C25.50 28.26 26.00 28.02 26.50 27.70C27.00 27.38 27.50 26.81 28.00 26.28C28.50 25.76 29.00 25.09 29.50 24.55C30.00 24.01 30.50 23.45 31.00 23.05C31.50 22.65 32.00 22.33 32.50 22.15C33.00 21.97 33.50 21.92 34.00 21.96C34.50 22.00 35.00 22.19 35.50 22.39C36.00 22.59 36.50 22.89 37.00 23.16C37.50 23.43 38.25 23.86 38.50 24.00H51";
 export const BRAND_INDIGO = "#3E63DD";
@@ -29,5 +30,20 @@ export function Wordmark({ size = 24 }: { size?: number }) {
       <BrandMark size={size} />
       <span className="brand-name">EchoLedger</span>
     </div>
+  );
+}
+
+/**
+ * Google's "G" in its four colours, as Google's sign-in branding guidelines ask for "Continue with Google": the mark
+ * unchanged, on a neutral button.
+ */
+export function GoogleMark() {
+  return (
+    <svg className="google-mark" width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" focusable="false" data-testid="google-mark">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
   );
 }

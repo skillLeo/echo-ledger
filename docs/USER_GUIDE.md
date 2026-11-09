@@ -157,7 +157,8 @@ recordings unless they are shared with them.
   **Create account**. Your account starts on the **Free** plan, and the **Record** page opens with the **Ready check**.
 - **An account you already have:** type your password, or press **Email me a code instead**. If your account has
   two-step sign-in, the code from your authenticator app is asked for next.
-- **Continue with Google** opens your browser when the server offers Google; the app continues by itself.
+- Under **or**, **Continue with Google** (with Google's own "G") and **Passkey** sit side by side (since v1.6.2), each when
+  the server offers it. Both open your browser, where Google and passkeys work; the app continues by itself.
 - **Sign in with QR / code** (the small link) uses a one-time code from the web console, as below.
 - The app knows its server. **Advanced → Use a different server** is only for another EchoLedger server, and holds the
   optional name for this computer. Your sign-in is kept encrypted on this computer.

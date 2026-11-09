@@ -1245,7 +1245,16 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
 .sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
 /* The v1.6 sign-in: one primary action per step, the email it is for, the code, Terms, and Advanced kept small. */
-.sign-in-primary, .sign-in-google, .sign-in-secondary { width: 100%; justify-content: center; }
+.sign-in-primary, .sign-in-secondary { width: 100%; justify-content: center; }
+/* Under "or" (v1.6.2): Google and Passkey side by side, equal width, the same height as the other buttons; they stack only
+   when the card is very narrow. Google's button is neutral (Google's light and dark colours, a 1 px border) around its
+   own "G"; Passkey wears the same frame. */
+:root { --google-bg: #131314; --google-border: #8e918f; --google-text: #e3e3e3; }
+:root[data-theme="light"] { --google-bg: #ffffff; --google-border: #747775; --google-text: #1f1f1f; }
+.sign-in-alt { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.sign-in-alt .btn { flex: 1 1 0; min-width: 168px; padding: 0 var(--space-3); background: var(--google-bg); border-color: var(--google-border); color: var(--google-text); }
+.sign-in-alt .btn:hover:not(:disabled) { background: color-mix(in srgb, var(--google-bg), var(--google-text) 8%); }
+.sign-in-alt .btn svg { flex: none; }
 .sign-in-primary { margin-top: var(--space-3); }
 .sign-in-secondary { margin-top: var(--space-2); }
 .sign-in-email { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-3); }

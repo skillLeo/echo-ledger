@@ -1,7 +1,7 @@
 // Sign in to EchoLedger (v1.6, P1, docs/API.md "Sign-up and sign-in with an email code"): one flow in plain words. The
 // email first. A new email gets a 6-digit code, then the name and "I accept the Terms and Privacy", and is signed in on
 // the Free plan; an existing one types its password or asks for a code by email, then the two-factor code when the
-// account has one. "Continue with Google" when the server offers it (the browser sign-in), and "Sign in with QR / code"
+// account has one. Under "or", "Continue with Google" and "Passkey" side by side (both the browser sign-in), and "Sign in with QR / code"
 // as a small link (pairing codes, for older servers and the console's "Sign in a device").
 //
 // The server is built in (lib/server.ts); "Use a different server" sits under Advanced. A build without one asks for
@@ -10,8 +10,8 @@ import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, listenTo, type AppStatus, type AuthOptions } from "../../lib/ipc";
 import { DEFAULT_SERVER, cleanServer, serverHost } from "../../lib/server";
 import { PairingView } from "./PairingView";
-import { ShieldIcon } from "../../components/Icons";
-import { Wordmark } from "../../components/BrandMark";
+import { KeyIcon, ShieldIcon } from "../../components/Icons";
+import { GoogleMark, Wordmark } from "../../components/BrandMark";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const PAIRING_ONLY = "This server does not sign in with accounts yet. Sign in with a code from the console instead.";
@@ -111,8 +111,10 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
   parent.current = { onSignedIn, notify };
   const target = server.trim();
 
-  // "Continue with Google" when the server offers it; an older server (no options) keeps the browser for Google and passkeys.
-  const browserLabel = !options ? "Sign in in the browser (Google, passkeys)" : options.google ? "Continue with Google" : options.browserSignIn ? "Sign in in the browser (passkeys)" : null;
+  // Under "or" (v1.6.2): "Continue with Google" when the server offers it, and Passkey when it signs in in the browser;
+  // both finish in the browser, where Google and passkeys work. An older server (no options) offers both there.
+  const withGoogle = !options || options.google;
+  const withPasskey = !options || options.browserSignIn;
   const openPage = (url: string) => void api.openAuthPage(target, url).catch((e) => setProblem(errorMessage(e)));
   const openServerPage = (page: "terms" | "privacy") => void api.openServerPage(page, target).catch((e) => setProblem(errorMessage(e)));
 
@@ -253,7 +255,7 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
     </label>
   );
   // The browser (Google) beside the email, and beside a sign-in whose account can use it; never while signing up.
-  const google = !!browserLabel && (step.kind === "email"
+  const google = (withGoogle || withPasskey) && (step.kind === "email"
     || (step.kind === "password" && (step.older || step.methods.includes("google")))
     || (step.kind === "code" && step.purpose === "sign_in" && step.methods.includes("google")));
   const emailLine = (
@@ -270,7 +272,7 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
 
   return (
     <div style={{ display: "grid", placeItems: "center", height: "100%", padding: 24 }}>
-      <form className="card sign-in" style={{ width: 440 }} onSubmit={submit} aria-labelledby="sign-in-title">
+      <form className="card sign-in" style={{ width: 440, maxWidth: "100%" }} onSubmit={submit} aria-labelledby="sign-in-title">
         <Wordmark />
         <h1 id="sign-in-title" className="page-title">{title}</h1>
         {waiting ? (
@@ -359,7 +361,19 @@ export function SignInView({ onSignedIn, notify, serverUrl, defaultServer = DEFA
             {google && (
               <>
                 <div className="sign-in-or" aria-hidden="true"><span>or</span></div>
-                <button className="btn sign-in-google" type="button" disabled={busy || !usableServer(server)} onClick={() => void browser()}>{browserLabel}</button>
+                <div className="sign-in-alt" data-testid="sign-in-alt">
+                  {withGoogle && (
+                    <button className="btn sign-in-google" type="button" disabled={busy || !usableServer(server)} onClick={() => void browser()}>
+                      <GoogleMark />Continue with Google
+                    </button>
+                  )}
+                  {withPasskey && (
+                    <button className="btn sign-in-passkey" type="button" aria-label="Sign in with a passkey" title="Opens the browser, where your passkey works"
+                      disabled={busy || !usableServer(server)} onClick={() => void browser()}>
+                      <KeyIcon size={18} />Passkey
+                    </button>
+                  )}
+                </div>
               </>
             )}
             {step.kind === "password" && step.older && options?.signUp && options.signUpUrl && (
