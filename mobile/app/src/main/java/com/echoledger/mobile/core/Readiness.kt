@@ -23,6 +23,9 @@ enum class ReadyFix(val label: String) {
     TURN_ON("Turn on"),
     SIGN_IN("Sign in"),
     STORAGE("Free up space"),
+
+    /** Notification access is off (lost when the app is installed again): recordings cannot be named after the person. */
+    CALLER_NAMES("Allow"),
     TEST("Test a call")
 }
 
@@ -56,7 +59,9 @@ data class ReadyFacts(
     val freeStorageMb: Long,
     val batteryExempt: Boolean,
     /** The last call recorded only this phone's side (A5); null when the last call had both or none was checked. */
-    val lastCallOneSided: String? = null
+    val lastCallOneSided: String? = null,
+    /** Notification access is on (since v1.6.1): the caller's name is read from WhatsApp's and the dialer's call notification. */
+    val callerNamesAllowed: Boolean = true
 )
 
 /** What the chip says. */
@@ -144,6 +149,18 @@ data class Readiness(val problems: List<ReadyProblem>, val chip: ReadyChip) {
                             "Not signed in",
                             "Recordings are kept on this phone and are transcribed once you sign in.",
                             ReadyFix.SIGN_IN,
+                            blocking = false
+                        )
+                    )
+                }
+                // Since v1.6.1: without notification access a call is titled by its first words, not by who it was with.
+                if (callsPossible && !facts.callerNamesAllowed) {
+                    add(
+                        ReadyProblem(
+                            "caller_names",
+                            "EchoLedger can't see who you call",
+                            "Allow notification access so each call is named after the person (\"Call with Omar\") instead of its first words.",
+                            ReadyFix.CALLER_NAMES,
                             blocking = false
                         )
                     )

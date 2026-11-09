@@ -24,7 +24,8 @@ class ReadinessTest {
         signedIn: Boolean = true,
         freeMb: Long = 10_000,
         battery: Boolean = true,
-        oneSided: String? = null
+        oneSided: String? = null,
+        callerNames: Boolean = true
     ) = ReadyFacts(
         caps,
         autoRecord,
@@ -37,7 +38,8 @@ class ReadinessTest {
         signedIn,
         freeMb,
         battery,
-        oneSided
+        oneSided,
+        callerNames
     )
 
     @Test
@@ -182,5 +184,15 @@ class ReadinessTest {
         assertFalse(AfterCallCheck.backupDue(1_000, 9_000, recording = true, helperReady = true, alreadyTried = false))
         assertFalse(AfterCallCheck.backupDue(1_000, 9_000, recording = false, helperReady = false, alreadyTried = false))
         assertFalse(AfterCallCheck.backupDue(1_000, 9_000, recording = false, helperReady = true, alreadyTried = true))
+    }
+
+    @Test
+    fun `without notification access calls stay ready but the check says names are missing (v1_6_1)`() {
+        val r = Readiness.evaluate(facts(callerNames = false))
+        val p = r.problems.single { it.key == "caller_names" }
+        assertEquals(ReadyFix.CALLER_NAMES, p.fix)
+        assertEquals(false, p.blocking)
+        assertEquals(ReadyChip.READY, r.chip)
+        assertEquals(null, Readiness.evaluate(facts()).problems.firstOrNull { it.key == "caller_names" })
     }
 }

@@ -106,6 +106,25 @@ fun ReadyCheckSheet(
 
             ReadyFix.BATTERY -> permissionIntent(context, "battery")?.let { runCatching { context.startActivity(it) } }
 
+            // Android's page for this app's notification access (its list of all apps before Android 11).
+            ReadyFix.CALLER_NAMES -> runCatching {
+                val detail = Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
+                    Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+                    android.content.ComponentName(context, com.echoledger.mobile.notify.CallerNameListener::class.java).flattenToString()
+                )
+                context.startActivity(
+                    (
+                        if (Build.VERSION.SDK_INT >=
+                            30
+                        ) {
+                            detail
+                        } else {
+                            Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                        }
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                )
+            }
+
             ReadyFix.TURN_ON -> runCatching {
                 context.startForegroundService(RecordingService.intent(context, RecordingService.ACTION_ARM, from = "ready check"))
             }

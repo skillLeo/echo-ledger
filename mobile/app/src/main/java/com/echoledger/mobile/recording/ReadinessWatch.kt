@@ -65,7 +65,10 @@ object ReadinessWatch {
             signedIn = settings.paired,
             freeStorageMb = free,
             batteryExempt = CaptureHealth.ignoresBatteryOptimisation(context),
-            lastCallOneSided = OneSidedCalls.last(context)
+            lastCallOneSided = OneSidedCalls.last(context),
+            callerNamesAllowed = androidx.core.app.NotificationManagerCompat.getEnabledListenerPackages(
+                context
+            ).contains(context.packageName)
         )
     }
 
