@@ -112,7 +112,7 @@ Every addition below is marked **(since v1.1)**.
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
 | provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only), `gemini` (since v1.5: Google Gemini, final transcripts only) |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
-| transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing` |
+| transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing`, `needs_transcription_key` (since v1.6: the Free plan without the person's own key) |
 | transcript `backup_reason` / `retry_reason` (since v1.5) | `waited`, `rejected` / `rate_limited`, `unavailable` |
 
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
@@ -302,8 +302,9 @@ they use the production server and keep "Use a different server" under Advanced.
   the code), its personal workspace on the default plan (Free) and the device's token. `accept_terms` must be `true`
   (`422 validation_failed`); a used or old token `422 invalid_code`. The web page `/sign-up` does the same with the
   console session instead of a device token.
-- `install_id` (since v1.6, P3): a random id the app makes once per install and keeps (Android: encrypted storage;
-  desktop: a hash of the machine id and the app's data folder). Every sign-in route takes it; a device of the same
+- `install_id` (since v1.6, P3): an opaque string of 8–64 characters `[A-Za-z0-9-]` the app makes once per install and
+  keeps (Android: a random UUID in its private storage; desktop: 64 hex characters, a hash of the machine id and the
+  app's data folder). Every sign-in route takes it; a device of the same
   account with the same `install_id` is signed in again on its own row instead of a new one. Optional for older apps.
 - `GET /api/auth/options` gains `"code": true` (email codes offered) and `"server": "https://…"` (its own address).
 
@@ -330,7 +331,7 @@ for the plan (then the default plan). Every route checks them; the apps only sho
               "description": "…", "features": ["platform_transcription", "views", "…"],
               "limits": {"monthly_minutes": 600, "devices": 5, "…": "…"}}]}
   ```
-  `limit: null` = no limit. `upgrade_request` is the newest one or `null`. `plans` are the plans on offer, cheapest
+  `limit: null` = no limit; `limit: 0` = not in the plan (the apps say so). `upgrade_request` is the newest one or `null`. `plans` are the plans on offer, cheapest
   first, for the comparison sheet.
 - Feature keys: free — `record`, `organise`, `search`, `share_links`, `export`, `ready_check`; paid —
   `platform_transcription`, `views` (Roman Urdu, English and Urdu views; until v1.6 never switched off),
@@ -347,12 +348,18 @@ for the plan (then the default plan). Every route checks them; the apps only sho
   `DELETE /api/me/transcription-key` → `204`.
 - A recording of someone without `platform_transcription` is transcribed with their own key; without one, its
   transcript is `failed` with `error_code: "needs_transcription_key"` ("Add your free Groq key in Account →
-  Transcription key"), and the desktop can send its on-device transcript as before (device-supplied transcripts).
+  Transcription key"). Retry and Re-transcribe use the same key. (The desktop has no on-device engine today: a Free
+  computer uses the person's key too.)
+
+### Renaming a device (since v1.6, P3)
+- `PATCH /api/devices/{id}` — `sessions:write`: `{"name": "…"}` (1–60 characters, trimmed) → `200` with the device as
+  `GET /api/security` lists it. Another person's device `404 not_found`. An older server answers `404`/`405`: the apps
+  say to rename it in the console.
 
 ### Upgrade requests (since v1.6, P1)
 - `POST /api/upgrade-requests` — `sessions:write`, throttled (5/day): `{"plan": "pro", "message": "…" | null}` →
   `201 {"id", "plan", "status": "pending", "message", "payment_instructions": "…", "created_at"}`. One pending
-  request at a time: another is `409 request_pending` with the pending one.
+  request at a time: another is `409 {"message", "code": "request_pending", "request": {…the pending one…}}`.
 - `GET /api/upgrade-requests/latest` — `config:read` → the newest request (with `decided_at` and the admin's
   `reply` once decided) or `404 not_found`.
 - The admin approves (the plan, until a date or not) or declines with a message; the person gets an email and an
