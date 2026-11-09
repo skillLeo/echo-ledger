@@ -95,6 +95,7 @@ fun NotificationsSection(settings: AppSettings, update: ((AppSettings) -> AppSet
 @Composable
 private fun NotificationKinds(settings: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
     val context = LocalContext.current
+    val notices = com.echoledger.mobile.ui.design.LocalNotices.current
     // Android's channel switches change outside the app: read them again whenever the person comes back.
     var looked by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { looked++ }
@@ -132,7 +133,14 @@ private fun NotificationKinds(settings: AppSettings, update: ((AppSettings) -> A
             Row {
                 TextButton(onClick = {
                     if (!Notifications.test(context, category)) {
-                        Toast.makeText(context, "Allow notifications for EchoLedger first.", Toast.LENGTH_SHORT).show()
+                        // Since v1.6.1 a notice that opens Android's notification settings for this app when tapped.
+                        notices?.show(
+                            com.echoledger.mobile.core.Notice(
+                                "Allow notifications for EchoLedger first. Tap to open the settings.",
+                                com.echoledger.mobile.core.NoticeKind.ERROR,
+                                com.echoledger.mobile.core.NoticeTarget.SystemNotifications
+                            )
+                        ) ?: Toast.makeText(context, "Allow notifications for EchoLedger first.", Toast.LENGTH_SHORT).show()
                     }
                 }, modifier = Modifier.semantics { contentDescription = "Test ${category.title}" }) { Text("Test") }
                 TextButton(

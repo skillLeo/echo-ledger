@@ -18,6 +18,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -61,7 +62,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -616,37 +620,60 @@ fun InlineBanner(
     kind: BannerKind = BannerKind.Info,
     action: String? = null,
     onAction: () -> Unit = {},
-    onDismiss: (() -> Unit)? = null
+    onDismiss: (() -> Unit)? = null,
+    /** Where a tap on the banner goes (since v1.6.1); by default what its action does. */
+    onClick: (() -> Unit)? = if (action != null) onAction else null
 ) {
+    // Since v1.6.1 (docs/DESIGN_SYSTEM.md "Notices"): every banner has × and closes with a swipe either way. A banner
+    // whose caller does not keep the closing stays closed until this screen is opened again (it describes something that
+    // is still true, so it has no timer).
+    var closedHere by rememberSaveable(text) { mutableStateOf(false) }
+    if (onDismiss == null && closedHere) return
+    val close = onDismiss ?: { closedHere = true }
     val c = LocalEchoColors.current
     val (bg, fg, icon) = when (kind) {
         BannerKind.Info -> Triple(c.accentSoft, c.accentText, Icons.Rounded.Info)
         BannerKind.Warning -> Triple(c.warningFill.copy(alpha = if (c.isDark) 0.14f else 0.18f), c.warning, Icons.Rounded.WarningAmber)
         BannerKind.Error -> Triple(c.dangerSoft, c.danger, Icons.Rounded.ErrorOutline)
     }
-    Row(
-        modifier.fillMaxWidth().clip(
-            RoundedCornerShape(Radius.md)
-        ).background(bg).padding(start = Space.s3, top = Space.s1, bottom = Space.s1),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(Space.s2))
-        Text(
-            text,
-            style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal),
-            color = c.text,
-            modifier = Modifier.weight(1f).padding(vertical = Space.s2)
-        )
-        if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
-        if (onDismiss != null) BarIcon(Icons.Rounded.Close, "Dismiss", onDismiss)
-        if (action == null && onDismiss == null) Spacer(Modifier.width(Space.s3))
+    SwipeAway(onGone = close, modifier = modifier) {
+        Row(
+            Modifier.fillMaxWidth().clip(
+                RoundedCornerShape(Radius.md)
+            ).background(bg)
+                .then(onClick?.let { Modifier.clickable(onClick = it) } ?: Modifier)
+                .padding(start = Space.s3, top = Space.s1, bottom = Space.s1),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = fg, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.width(Space.s2))
+            Text(
+                text,
+                style = LocalEchoType.current.labelM.copy(fontWeight = FontWeight.Normal),
+                color = c.text,
+                modifier = Modifier.weight(1f).padding(vertical = Space.s2)
+            )
+            if (action != null) EchoButton(action, onAction, kind = ButtonKind.Text)
+            BarIcon(Icons.Rounded.Close, "Dismiss", close)
+        }
     }
 }
 
-/** The undo message after a delete or discard: dark, radius 12, 5 s (the caller times it). */
+/**
+ * The undo message after a delete or discard: dark, radius 12, 5 s (the caller times it). Since v1.6.1 × and a swipe
+ * either way close it without undoing ([onDismiss]).
+ */
 @Composable
-fun UndoSnackbar(text: String, onUndo: () -> Unit, modifier: Modifier = Modifier) {
+fun UndoSnackbar(text: String, onUndo: () -> Unit, modifier: Modifier = Modifier, onDismiss: (() -> Unit)? = null) {
+    if (onDismiss == null) {
+        UndoRow(text, onUndo, modifier, null)
+    } else {
+        SwipeAway(onGone = onDismiss, modifier = modifier) { UndoRow(text, onUndo, Modifier, onDismiss) }
+    }
+}
+
+@Composable
+private fun UndoRow(text: String, onUndo: () -> Unit, modifier: Modifier, onDismiss: (() -> Unit)?) {
     Row(
         modifier
             .fillMaxWidth()
@@ -670,6 +697,15 @@ fun UndoSnackbar(text: String, onUndo: () -> Unit, modifier: Modifier = Modifier
                 min = 48.dp
             ).combinedClickable(role = Role.Button, onClick = onUndo).padding(horizontal = Space.s4, vertical = 14.dp)
         )
+        if (onDismiss != null) {
+            Icon(
+                Icons.Rounded.Close,
+                contentDescription = "Dismiss",
+                tint = Color(0xFFB0B4BA),
+                modifier = Modifier.heightIn(min = 48.dp).combinedClickable(role = Role.Button, onClick = onDismiss)
+                    .padding(end = Space.s3, start = Space.s1)
+            )
+        }
     }
 }
 

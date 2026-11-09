@@ -83,7 +83,18 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _busy = MutableStateFlow(false)
     val busy: StateFlow<Boolean> = _busy.asStateFlow()
 
+    /** Where the current message goes when tapped (since v1.6.1); null when it is about nothing in particular. */
+    private val _messageTarget = MutableStateFlow<com.echoledger.mobile.core.NoticeTarget?>(null)
+    val messageTarget: StateFlow<com.echoledger.mobile.core.NoticeTarget?> = _messageTarget.asStateFlow()
+
+    /** A message that leads somewhere when tapped. */
+    fun say(text: String, target: com.echoledger.mobile.core.NoticeTarget?) {
+        _messageTarget.value = target
+        _message.value = text
+    }
+
     fun consumeMessage() {
+        _messageTarget.value = null
         _message.value = null
     }
 
@@ -809,7 +820,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** "Save to my library": a copy that is yours; the library is synced so it shows at once. */
     suspend fun saveShared(id: String): Boolean {
         workspaceCall("It could not be saved.") { it.saveShared(id) } ?: return false
-        _message.value = "Saved to your library"
+        say("Saved to your library", com.echoledger.mobile.core.NoticeTarget.Library)
         refresh()
         return true
     }
@@ -1120,7 +1131,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun restoreSkipped(id: String) = viewModelScope.launch(Dispatchers.IO) {
         Decisions.restoreSkipped(getApplication(), id)
         reloadLocal()
-        _message.value = "Restored — it uploads now"
+        say("Restored — it uploads now", com.echoledger.mobile.core.NoticeTarget.Library)
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }
@@ -1237,9 +1248,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun connectShizuku() {
         val h = graph.helper
         when {
-            !h.shizukuAvailable() -> _message.value = "Shizuku is not running. Start it (Wireless debugging) and try again."
+            !h.shizukuAvailable() -> say(
+                "Shizuku is not running. Start it (Wireless debugging) and try again.",
+                com.echoledger.mobile.core.NoticeTarget.Ready
+            )
+
             !h.shizukuPermissionGranted() -> h.requestShizukuPermission()
-            !h.bindShizuku() -> _message.value = "Could not start the capture helper through Shizuku."
+
+            !h.bindShizuku() -> say("Could not start the capture helper through Shizuku.", com.echoledger.mobile.core.NoticeTarget.Ready)
         }
     }
 
@@ -1247,11 +1263,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun restartHelper() {
         val h = graph.helper
         if (!h.shizukuAvailable()) {
-            _message.value = "Shizuku is not running. Start it (Wireless debugging) and try again."
+            say("Shizuku is not running. Start it (Wireless debugging) and try again.", com.echoledger.mobile.core.NoticeTarget.Ready)
             return
         }
         h.unbindShizuku()
-        if (!h.bindShizuku()) _message.value = "Could not start the capture helper through Shizuku."
+        if (!h.bindShizuku()) say("Could not start the capture helper through Shizuku.", com.echoledger.mobile.core.NoticeTarget.Ready)
     }
 
     /** "Request upgrade" (since v1.6): asks for [plan]; the answer carries the owner's payment instructions. */

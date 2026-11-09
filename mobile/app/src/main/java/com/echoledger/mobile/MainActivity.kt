@@ -40,7 +40,6 @@ import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -105,7 +104,6 @@ import com.echoledger.mobile.ui.WaitingScreen
 import com.echoledger.mobile.ui.applySecureScreen
 import com.echoledger.mobile.ui.capabilities
 import com.echoledger.mobile.ui.design.EchoBottomBar
-import com.echoledger.mobile.ui.design.EchoSnackbarHost
 import com.echoledger.mobile.ui.design.LocalSharedScopes
 import com.echoledger.mobile.ui.design.NavTab
 import com.echoledger.mobile.ui.design.RecordingStrip
@@ -199,7 +197,8 @@ class MainActivity : FragmentActivity() {
         val currentSettings by rememberUpdatedState(settings)
         val helper by vm.helper.collectAsState()
         val message by vm.message.collectAsState()
-        val snackbar = remember { SnackbarHostState() }
+        // Since v1.6.1: the messages at the bottom follow docs/DESIGN_SYSTEM.md "Notices" (tap, ×, timer, swipe).
+        val notices = remember { com.echoledger.mobile.ui.design.NoticeHostState() }
         // Where the user is survives a rotation (A6.M9): the tab, the open recording (by id) and the setup page.
         var tab by rememberSaveable { mutableStateOf(TAB_LIBRARY) }
         // Re-tapping the current tab scrolls it to the top (a counter each screen watches).
@@ -411,7 +410,7 @@ class MainActivity : FragmentActivity() {
         }
         LaunchedEffect(message) {
             message?.let {
-                snackbar.showSnackbar(it)
+                notices.show(com.echoledger.mobile.core.Notice(it, target = vm.messageTarget.value))
                 vm.consumeMessage()
             }
         }
@@ -425,7 +424,7 @@ class MainActivity : FragmentActivity() {
             showSetup = false
         }
 
-        CompositionLocalProvider(LocalUnlockPrompter provides prompter) {
+        CompositionLocalProvider(LocalUnlockPrompter provides prompter, com.echoledger.mobile.ui.design.LocalNotices provides notices) {
             upgradeLock?.let { lock -> com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, lock) { upgradeLock = null } }
             if (showReady) {
                 ReadyCheckSheet(
@@ -466,7 +465,33 @@ class MainActivity : FragmentActivity() {
             }
             Scaffold(
                 containerColor = Brand.Background,
-                snackbarHost = { EchoSnackbarHost(snackbar) },
+                snackbarHost = {
+                    com.echoledger.mobile.ui.design.NoticeHost(notices, onOpen = { target ->
+                        when (target) {
+                            is com.echoledger.mobile.core.NoticeTarget.Recording -> openSession = target.sessionId
+
+                            com.echoledger.mobile.core.NoticeTarget.Library -> {
+                                showItem(null)
+                                showSetup = false
+                                tab = TAB_LIBRARY
+                            }
+
+                            com.echoledger.mobile.core.NoticeTarget.Ready -> showReady = true
+
+                            is com.echoledger.mobile.core.NoticeTarget.Settings -> {
+                                showItem(null)
+                                tab = TAB_YOU
+                            }
+
+                            com.echoledger.mobile.core.NoticeTarget.SystemNotifications -> runCatching {
+                                startActivity(
+                                    Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, packageName)
+                                )
+                            }
+                        }
+                    })
+                },
                 bottomBar = {
                     val selectingNow = librarySelecting && tab == TAB_LIBRARY
                     if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null &&

@@ -18,6 +18,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.swipeLeft
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ReadinessFixtures
@@ -184,7 +185,8 @@ class LibraryScreenTest : ScreenTest() {
         compose.onNodeWithText("Back at 11:00.").assertExists()
         compose.onNodeWithText("New: plans and badges.").assertExists()
 
-        compose.onNodeWithContentDescription("Dismiss").performClick()
+        // Every banner has × now (v1.6.1); the announcement closes with a swipe, and only it is remembered as closed.
+        compose.onNodeWithText("New: plans and badges.").performTouchInput { swipeLeft() }
         pumpUntil("the announcement to close") { runBlocking { app.graph.settings.current() }.closedAnnouncements.isNotEmpty() }
         pumpUntil("it to go") {
             compose.waitForIdle()

@@ -485,7 +485,8 @@ fun LibraryScreen(
                     deleted = null
                     scope.launch { if (vm.restore(gone.id)) vm.refresh() }
                 },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Space.s4)
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = Space.s4),
+                onDismiss = { deleted = null }
             )
         }
     }

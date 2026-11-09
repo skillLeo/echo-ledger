@@ -155,7 +155,12 @@ fun WaitingScreen(vm: MainViewModel, onBack: () -> Unit) {
             UndoSnackbar(
                 if (discarding.size == 1) "Discarding 1 call" else "Discarding ${discarding.size} calls",
                 onUndo = { discarding = emptyList() },
-                modifier = Modifier.align(Alignment.BottomCenter).padding(Space.screen).padding(bottom = 80.dp)
+                modifier = Modifier.align(Alignment.BottomCenter).padding(Space.screen).padding(bottom = 80.dp),
+                // Closing it (× or a swipe, since v1.6.1) means "go ahead": the calls are discarded now.
+                onDismiss = {
+                    discarding.forEach { vm.decide(it, keep = false) }
+                    discarding = emptyList()
+                }
             )
         }
     }
