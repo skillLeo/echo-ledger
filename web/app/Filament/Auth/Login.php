@@ -144,7 +144,7 @@ class Login extends BaseLogin
 
             return null;
         }
-        if (! $this->existing && app(Turnstile::class)->configured()) {
+        if (! $this->existing && app(Turnstile::class)->active()) {
             $this->step = self::STEP_HUMAN;
 
             return null;
@@ -337,7 +337,7 @@ class Login extends BaseLogin
             $this->getEmailFormComponent(),
             $this->getPasswordFormComponent(),
             View::make('filament.auth.turnstile')->viewData(['siteKey' => $turnstile->siteKey()])
-                ->visible(fn (): bool => $this->step === self::STEP_HUMAN && $turnstile->configured()),
+                ->visible(fn (): bool => $this->step === self::STEP_HUMAN && $turnstile->active()),
             Hidden::make('turnstile'),
             TextInput::make('code')->label('Code from the email')->placeholder('6 digits')
                 ->required(fn (): bool => in_array($this->step, [self::STEP_CODE, self::STEP_OTP], true))

@@ -14,6 +14,7 @@ use App\Models\Recording;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\SettingsRepository;
 use App\Services\Staff\Customers;
 use App\Services\Staff\StaffAccess;
@@ -33,6 +34,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Table;
+use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
@@ -113,6 +115,32 @@ class CustomerResource extends Resource
             ]);
     }
 
+    /** The quick look: the numbers, the plan and the latest devices, metadata only. */
+    public static function peekAction(): Action
+    {
+        return Action::make('peek')->label('Quick look')->icon(Heroicon::OutlinedEye)->color('gray')->iconButton()
+            ->slideOver()->modalWidth('lg')
+            ->modalHeading(fn (User $record): string => $record->name)
+            ->modalDescription(fn (User $record): string => $record->email.' · '.Customers::status($record))
+            ->modalContent(function (User $record): ViewContract {
+                $customers = app(Customers::class);
+                $home = $customers->homeWorkspaceId($record);
+
+                return view('filament.admin.customer-peek', [
+                    'user' => $record,
+                    'stats' => $customers->stats($record),
+                    'plan' => $customers->plan($record),
+                    'until' => $home !== null ? Workspace::query()->whereKey($home)->value('plan_expires_at') : null,
+                    'devices' => Device::query()->withoutGlobalScopes()->where('user_id', $record->id)->orderByDesc('last_seen_at')->limit(5)->get(),
+                ]);
+            })
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Close')
+            ->extraModalFooterActions(fn (User $record): array => [
+                Action::make('openCustomer')->label('Open')->icon(Heroicon::OutlinedArrowTopRightOnSquare)->url(ViewCustomer::getUrl(['record' => $record])),
+            ]);
+    }
+
     public static function table(Table $table): Table
     {
         $customers = app(Customers::class);
@@ -159,8 +187,10 @@ class CustomerResource extends Resource
                         default => $query,
                     }),
             ])
-            ->recordActions([ViewAction::make()->label('Open')])
-            ->recordUrl(fn (User $record): string => ViewCustomer::getUrl(['record' => $record]))
+            // Since v1.6 (P4.4): a row opens a quick look in a drawer on the right (Esc closes it); Open is the full page.
+            ->recordActions([self::peekAction(), ViewAction::make()->label('Open')])
+            ->recordAction('peek')
+            ->recordUrl(null)
             ->headerActions([
                 Action::make('csv')->label('Download CSV')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                     ->action(fn (): StreamedResponse => self::csv(self::getEloquentQuery()->orderBy('id')->limit(10000)->get())),

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
-use App\Filament\Admin\Pages\Settings;
+use App\Filament\Admin\Pages\SignUpSettings;
 use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
@@ -216,14 +216,16 @@ it('sends a reset link to an account and says the same for an unknown address', 
     expect($user->fresh()->password)->toBe($user->password);
 });
 
-it('switches sign-up on the Settings page, for the server admin only', function () {
+it('switches sign-up on the admin panel\'s Sign-up page (since v1.6 its one place), for staff only', function () {
     $admin = Fx::superAdmin();
     $this->actingAs($admin, 'web');
+    Filament::setCurrentPanel('admin');
 
-    Livewire::test(Settings::class)->set('activeTab', 'privacy')->assertSee('Who can sign up')
-        ->fillForm(['signup_mode' => SignUp::INVITED])->call('save')->assertHasNoFormErrors();
+    Livewire::test(SignUpSettings::class)->assertSee('Sign-up')
+        ->fillForm(['mode' => SignUp::INVITED])->call('save')->assertHasNoFormErrors();
     expect(app(SettingsRepository::class)->get('signup.mode'))->toBe(SignUp::INVITED);
 
     $this->actingAs(Fx::user(), 'web');
     $this->get('/admin/settings')->assertForbidden();
+    $this->get('/admin/sign-up')->assertForbidden();
 });

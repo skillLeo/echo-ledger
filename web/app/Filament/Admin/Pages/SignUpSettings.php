@@ -19,13 +19,13 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
-use Filament\Schemas\Components\Text;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
@@ -33,7 +33,7 @@ use UnitEnum;
 /**
  * Admin panel → Sign-up (since v1.6, P2.7): who may make an account (on, off, invite only), the allowed email domains,
  * new accounts a day from one network, the anti-bot check, the plan new accounts get and the payment instructions
- * people read after "Request upgrade". The same values Settings → Privacy & security shows.
+ * people read after "Request upgrade". Since v1.6 the one page for these values (Settings no longer repeats them).
  *
  * @property-read Schema $form
  */
@@ -67,6 +67,7 @@ class SignUpSettings extends Page
             'per_ip_day' => app(EmailCodes::class)->signUpsPerIpDay(),
             'default_plan' => Plan::defaultPlan()->id,
             'payment_instructions' => $settings->get('upgrade.payment_instructions'),
+            'turnstile' => app(Turnstile::class)->switchedOn(),
         ]);
     }
 
@@ -78,9 +79,14 @@ class SignUpSettings extends Page
                 TagsInput::make('allowed_domains')->label('Allowed email domains')->placeholder('company.com')
                     ->helperText('Empty: any address (throwaway ones never). Otherwise only addresses at these domains may sign up.'),
                 TextInput::make('per_ip_day')->label('New accounts a day from one network')->integer()->minValue(1)->maxValue(1000)->required(),
-                Text::make(fn (): string => app(Turnstile::class)->configured()
-                    ? 'The anti-bot check (Cloudflare Turnstile) is on for the web sign-up page.'
-                    : 'The anti-bot check (Cloudflare Turnstile) is off: add its keys under API Credentials → Turnstile to turn it on.'),
+                // Since v1.6: the anti-bot check on and off; on works once its keys are saved.
+                Toggle::make('turnstile')->label('Anti-bot check (Cloudflare Turnstile)')
+                    ->disabled(fn (): bool => ! app(Turnstile::class)->configured())
+                    ->helperText(fn (): string => match (true) {
+                        ! app(Turnstile::class)->configured() => 'Off until its keys are saved under API Credentials → Turnstile; then the anti-bot check can be switched on here.',
+                        app(Turnstile::class)->active() => 'On: new accounts on the web sign-up page pass the anti-bot check first.',
+                        default => 'Off: the web sign-up page asks for no anti-bot check.',
+                    }),
             ]),
             Section::make('New accounts')->schema([
                 Select::make('default_plan')->label('Plan new accounts get')->required()->selectablePlaceholder(false)
@@ -113,6 +119,10 @@ class SignUpSettings extends Page
             'signup.per_ip_day' => max(1, min(1000, (int) ($data['per_ip_day'] ?? EmailCodes::DEFAULT_SIGN_UPS_PER_IP_DAY))),
             'upgrade.payment_instructions' => $text !== '' ? $text : null,
         ]);
+        // The switch is kept only once the keys are there (the field is disabled, and so not sent, without them).
+        if (app(Turnstile::class)->configured() && array_key_exists('turnstile', $data)) {
+            $settings->set(Turnstile::SETTING, (bool) $data['turnstile']);
+        }
         $plan = Plan::query()->whereNull('archived_at')->find((int) ($data['default_plan'] ?? 0));
         if ($plan instanceof Plan && ! $plan->is_default) {
             Plan::query()->where('is_default', true)->update(['is_default' => false]);

@@ -82,6 +82,7 @@ final class SettingsRepository
         'display.timezone' => 'UTC',                 // IANA zone the admin console shows times in
         // Since v1.5: who may make an account on the console's sign-up page (App\Services\Accounts\SignUp).
         'signup.mode' => 'nobody',                   // nobody | anyone | invited
+        'signup.turnstile' => true,                  // since v1.6: the anti-bot check, once its keys are saved
         'signup.allowed_domains' => [],              // since v1.6: empty = any domain (throwaway addresses never)
         'signup.per_ip_day' => 5,                    // since v1.6: new accounts a day from one IP address
         'abuse.hours_per_day' => 6,                  // since v1.6: alert the super admin above these hours a day per person

@@ -176,11 +176,12 @@ it('exports only the non-secret settings and never the credentials', function ()
         ->not->toContain('onboarding');
 });
 
-it('exports exactly the settings that the page saves', function () {
+it('exports exactly the settings that the page saves, and the Sign-up page\'s', function () {
     $this->signInAsAdmin();
     adminGroupsPage($this)->call('save')->assertHasNoFormErrors();
 
-    $saved = Setting::query()->pluck('key')->all();
+    // Since v1.6 who can sign up, the domains and the network limit are saved on the admin panel's Sign-up page alone.
+    $saved = [...Setting::query()->pluck('key')->all(), 'signup.allowed_domains', 'signup.mode', 'signup.per_ip_day'];
     sort($saved);
     $portable = SettingsTransfer::PORTABLE;
     sort($portable);

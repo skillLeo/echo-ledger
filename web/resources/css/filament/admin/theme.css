@@ -4235,3 +4235,51 @@ html[data-density='compact'] .el-library .fi-ta-cell {
         display: none;
     }
 }
+
+/* The admin panel's quick look at a customer (a drawer from the table). */
+.el-peek-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.el-peek-kpis > div {
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-field);
+}
+
+.el-peek-kpis dt,
+.el-peek-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.el-peek-kpis dd {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.el-peek-line {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    font-size: 14px;
+}
+
+.el-peek-line .el-peek-label {
+    width: 84px;
+    flex-shrink: 0;
+    line-height: 20px;
+}
+
+.el-peek-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
