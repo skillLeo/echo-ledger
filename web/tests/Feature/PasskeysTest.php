@@ -121,7 +121,7 @@ describe('signing in with a passkey', function () {
     });
 
     it('offers the button on the login page and throttles attempts', function () {
-        $this->get('/app/login')->assertOk()->assertSee('Sign in with a passkey');
+        $this->get('/app/login')->assertOk()->assertSee('Passkey')->assertSee('data-passkey', false);
         foreach (range(1, 20) as $_) {
             $this->postJson('/passkeys/login/options')->assertOk();
         }

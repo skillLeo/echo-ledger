@@ -31,11 +31,21 @@
                 o.excludeCredentials = descriptors(o.excludeCredentials);
                 return json(await navigator.credentials.create({ publicKey: o }));
             },
-            async get(options) {
+            /** [extra]: { mediation: 'conditional', signal } for the email box's autofill (since v1.6.2). */
+            async get(options, extra = {}) {
                 const o = typeof options === 'string' ? JSON.parse(options) : options;
                 o.challenge = toBuffer(o.challenge);
                 o.allowCredentials = descriptors(o.allowCredentials);
-                return json(await navigator.credentials.get({ publicKey: o }));
+                return json(await navigator.credentials.get({ publicKey: o, ...extra }));
+            },
+            /** Whether the browser offers passkeys in a field's autofill (conditional mediation). */
+            async conditional() {
+                try {
+                    return supported() && typeof PublicKeyCredential.isConditionalMediationAvailable === 'function'
+                        && await PublicKeyCredential.isConditionalMediationAvailable();
+                } catch (e) {
+                    return false;
+                }
             },
         };
     })();

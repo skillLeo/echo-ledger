@@ -121,11 +121,7 @@ class AppPanelProvider extends PanelProvider
             // Since v1.6 (P6) its number counts only what needs you, "9+" above nine (App\Livewire\ActivityBell).
             ->databaseNotifications(livewireComponent: ActivityBell::class)
             ->databaseNotificationsPolling('30s')
-            // Passkeys (B16): a second way in, next to the password and the optional two-step code.
-            ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, self::here(fn (): View => view('filament.auth.passkey-login')))
-            // Sign in with Google (since v1.5), once API Credentials → Google sign-in is filled in.
-            ->renderHook(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER, self::here(fn (): View => view('filament.auth.google-login')))
-            ->renderHook(PanelsRenderHook::AUTH_REGISTER_FORM_AFTER, self::here(fn (): View => view('filament.auth.google-login', ['label' => 'Sign up with Google'])))
+            // Passkeys (B16) and Google (since v1.5) are under the sign-in form itself (Login::content, since v1.6.2).
             // Since v1.5: the Terms and the Privacy Policy under every page and the sign-in page (both layouts have this hook).
             ->renderHook(PanelsRenderHook::FOOTER, self::here(fn (): View => view('filament.legal-links')))
             // Since v1.5: members and viewers while the console is closed to them are pointed to the apps.

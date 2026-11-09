@@ -74,6 +74,12 @@ class Register extends Login
         return $field->readOnly(fn (): bool => $this->step !== self::STEP_EMAIL || $this->invitation() !== null);
     }
 
+    /** The Cloudflare check shows with the email here, where the code is asked for (since v1.6.2). */
+    protected function asksForTurnstileFirst(): bool
+    {
+        return true;
+    }
+
     protected function invitationForSignUp(): ?WorkspaceInvitation
     {
         return $this->invitation();
