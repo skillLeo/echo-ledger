@@ -293,6 +293,12 @@ The console in the browser has the computer app's frame.
   (sidebar style, density, 12- or 24-hour times, List or Table, the language your uploads start in, the keys; each
   choice says **Saved · just now**), **Plan & usage**, **Transcription key** (Free plan) and **Privacy & data**
   (export your data, delete your account, Support access).
+- **Notices (since v1.6.1)** all behave the same: click one to go where it is about (the recording, the setting, the
+  page that fixes it), **×** closes it, and a swipe left or right closes it too (a finger, a trackpad, or a mouse
+  drag). A message hides by itself after 6 seconds (an error after 10), with a thin bar showing the time left; it waits
+  while the pointer or a finger is on it. **Esc** closes the newest. A line about something still true (failed
+  uploads, calls waiting, a used-up plan) has no timer and stays closed until it changes or your next visit. In the
+  bell, a click opens a notification and marks it read; **×** or a swipe removes it.
 - **On a phone** the console has five tabs at the bottom: **Home**, **Library**, **Record**, **Activity** and **More**
   (the whole sidebar). **Record → Record a voice note** opens the phone's own recorder; the note is uploaded when you
   stop.
