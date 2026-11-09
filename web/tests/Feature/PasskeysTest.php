@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\Security;
+use App\Filament\Auth\EditProfile;
 use App\Models\AuditEvent;
 use App\Models\Passkey;
 use App\Services\Passkeys;
@@ -17,7 +17,7 @@ uses(AdminTestHelpers::class);
 /** Adds a passkey for the signed-in admin through the Security page, as the browser would. */
 function addPasskey(object $test, SoftAuthenticator $authenticator, string $name = 'Work laptop'): object
 {
-    $page = $test->panelComponent(Security::class);
+    $page = $test->panelComponent(EditProfile::class, ['subpage' => 'security']);
     $options = json_decode((string) $page->instance()->passkeyOptions(), true);
     $page->call('savePasskey', $authenticator->create($options), $name);
 
@@ -58,14 +58,14 @@ describe('adding a passkey', function () {
 
     it('refuses an answer from another site or for a challenge that was not asked', function () {
         $this->signInAsAdmin();
-        $page = $this->panelComponent(Security::class);
+        $page = $this->panelComponent(EditProfile::class, ['subpage' => 'security']);
         $options = json_decode((string) $page->instance()->passkeyOptions(), true);
-        $page->call('savePasskey', (new SoftAuthenticator)->create($options, 'https://evil.example'), 'Phish')->assertNotified('That passkey could not be added');
+        $page->call('savePasskey', (new SoftAuthenticator)->create($options, 'https://evil.example'), 'Phish')->assertNotified("Couldn't add that passkey");
 
         // The challenge is used once: the same answer again is refused too.
         $answer = (new SoftAuthenticator)->create(json_decode((string) $page->instance()->passkeyOptions(), true));
         $page->call('savePasskey', $answer, 'First');
-        $page->call('savePasskey', $answer, 'Replay')->assertNotified('That passkey could not be added');
+        $page->call('savePasskey', $answer, 'Replay')->assertNotified("Couldn't add that passkey");
         expect(Passkey::query()->pluck('name')->all())->toBe(['First']);
     });
 

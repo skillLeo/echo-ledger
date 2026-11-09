@@ -11,6 +11,7 @@ use App\Models\RequestUpload;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Storage\RecordingFiles;
 use Illuminate\Support\Carbon;
+use Livewire\Features\SupportFileUploads\FileUploadConfiguration;
 use Throwable;
 
 /**
@@ -36,6 +37,7 @@ final class TempFileSweeper
         return $this->step(fn (): int => $this->sweepTempDirectory($cutoff))
             + $this->step(fn (): int => $this->sweepParts($cutoff, now()->subHours(self::ORPHANED_PARTS_HOURS)->getTimestamp()))
             + $this->step(fn (): int => $this->sweepRequestUploads($cutoffAt))
+            + $this->step(fn (): int => $this->sweepLivewireUploads($cutoff))
             + $this->step(fn (): int => app(RecordingFiles::class)->retryErasures());
     }
 
@@ -109,6 +111,27 @@ final class TempFileSweeper
                 continue;
             }
             $removed += $this->removeIfOlder($path, $cutoff);
+        }
+
+        return $removed;
+    }
+
+    /**
+     * The browser uploads Livewire keeps while a page uses them (since v1.7: payment receipts among them): gone after
+     * the hour, not Livewire's own 24. A bucket has its own lifecycle rule (livewire:configure-s3-upload-cleanup).
+     */
+    private function sweepLivewireUploads(int $cutoff): int
+    {
+        if (FileUploadConfiguration::isUsingS3()) {
+            return 0;
+        }
+        $disk = FileUploadConfiguration::storage();
+        $removed = 0;
+        foreach ($disk->files(FileUploadConfiguration::directory()) as $path) {
+            if ($disk->lastModified($path) < $cutoff) {
+                $disk->delete($path);
+                $removed++;
+            }
         }
 
         return $removed;

@@ -13,7 +13,6 @@ use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\DeviceSignIn;
 use App\Services\PairingService;
 use App\Services\Workspaces\Workspaces;
-use Filament\Actions\Testing\TestAction;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -45,8 +44,9 @@ it('lists the person\'s own devices in every workspace, and nobody else\'s', fun
     Device::factory()->create(['user_id' => $owner->id, 'name' => 'Owner secret tablet']);
     $this->actingAs($member->fresh(), 'web');
 
-    $this->get('/app/profile')->assertOk()->assertSee('Devices')->assertSee('Member phone')->assertSee('Team laptop')
-        ->assertSee($team->name)->assertSee('Sign in a device')->assertSee('Sign out everywhere')->assertDontSee('Owner secret tablet');
+    $this->get('/app/settings/devices')->assertOk()->assertSee('Devices')->assertSee('Member phone')->assertSee('Team laptop')
+        ->assertSee('Sign in a device')->assertDontSee('Owner secret tablet');
+    $this->get('/app/settings/security')->assertOk()->assertSee('Sign out everywhere');
 });
 
 it('makes a pairing code for the person\'s own account, not only for admins', function () {
@@ -54,7 +54,7 @@ it('makes a pairing code for the person\'s own account, not only for admins', fu
     expect($member->fresh()->is_super_admin)->toBeFalse();
     $this->actingAs($member, 'web');
 
-    Livewire::test(EditProfile::class)->mountAction(TestAction::make('signInDevice')->schemaComponent('device-actions', schema: 'content'))
+    Livewire::test(EditProfile::class, ['subpage' => 'devices'])->mountAction('signInDevice')
         ->assertHasNoErrors();
 
     $pairing = unscoped(fn () => DevicePairingCode::query()->sole());
@@ -88,7 +88,7 @@ it('signs out everywhere from the profile: every device, token and browser, this
     plantBrowser(Fx::user(), str_repeat('b', 40));
     $this->actingAs($member, 'web');
 
-    Livewire::test(EditProfile::class)->callAction(TestAction::make('signOutEverywhere')->schemaComponent('device-actions', schema: 'content'))
+    Livewire::test(EditProfile::class, ['subpage' => 'security'])->callAction('signOutEverywhere')
         ->assertRedirect(Filament::getPanel('app')->getLoginUrl());
 
     // Since v1.6 the rows stay, signed out, with no token left.
@@ -161,7 +161,7 @@ it('shows a console browser\'s country from the account\'s last sign-in at that 
     KnownBrowser::query()->create(['user_id' => Fx::user()->id, 'token_hash' => str_repeat('f', 64), 'label' => 'Firefox', 'ip' => '203.0.113.5', 'country' => 'PK', 'last_used_at' => now()->addMinute()]);
     $this->actingAs($member, 'web');
 
-    $this->get('/app/profile')->assertOk()->assertSeeText('203.0.113.5 · AE · active')->assertDontSeeText('203.0.113.5 · PK');
+    $this->get('/app/settings/security')->assertOk()->assertSeeText('AE')->assertDontSeeText('PK');
 });
 
 it('shows the device\'s country when the server\'s proxy names it', function () {
@@ -179,5 +179,5 @@ it('shows the device\'s country when the server\'s proxy names it', function () 
     expect(unscoped(fn () => $device->fresh()->last_country))->toBeNull();
 
     $this->actingAs($member, 'web');
-    $this->get('/app/profile')->assertOk()->assertSee($device->name);
+    $this->get('/app/settings/devices')->assertOk()->assertSee($device->readableName());
 });

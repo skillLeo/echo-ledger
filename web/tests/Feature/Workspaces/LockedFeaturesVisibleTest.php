@@ -55,26 +55,26 @@ describe('a project', function () {
         $project->update(['ai_notes' => true]);
 
         $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent();
-        expect($html)->toMatch('/client-tab-ask">Ask(<!--.*?-->)?\s*<span class="el-plan-badge"/')
-            ->toMatch('/client-tab-screens">Screens(<!--.*?-->)?\s*<span class="el-plan-badge"/')
-            ->toContain('ULTRA ✦')->toContain('PRO ✦')
+        expect($html)->toMatch('/client-tab-ask">Ask(<!--.*?-->)?\s*<span class="el-tag el-plan-badge"/')
+            ->toMatch('/client-tab-screens">Screens(<!--.*?-->)?\s*<span class="el-tag el-plan-badge"/')
+            ->toContain('el-plan-badge">Ultra</span>')->toContain('el-plan-badge">Pro</span>')->not->toContain('✦')
             // The switch reads off while the plan leaves AI notes out.
             ->toContain('aria-checked="false" aria-labelledby="ai-heading"');
 
         $page = Livewire::test(ViewClient::class, ['record' => $project->id]);
-        $page->call('toggleAiNotes')->assertActionMounted('upgradeAiNotes');
+        $page->call('toggleAiNotes')->assertRedirectContains('/app/settings/plan/upgrade');
         expect($project->fresh()->ai_notes)->toBeTrue();
 
-        Livewire::test(ViewClient::class, ['record' => $project->id])->call('remakeBrief')->assertActionMounted('upgradeAiNotes');
-        Livewire::test(ViewClient::class, ['record' => $project->id])->set('memoryText', 'Ship on Friday')->call('addMemory')->assertActionMounted('upgradeAiNotes');
+        Livewire::test(ViewClient::class, ['record' => $project->id])->call('remakeBrief')->assertRedirectContains('/app/settings/plan/upgrade');
+        Livewire::test(ViewClient::class, ['record' => $project->id])->set('memoryText', 'Ship on Friday')->call('addMemory')->assertRedirectContains('/app/settings/plan/upgrade');
         expect(ClientMemoryItem::query()->where('client_id', $project->id)->exists())->toBeFalse();
 
         Livewire::test(ViewClient::class, ['record' => $project->id])->call('setTab', 'ask')->set('question', 'What is the deadline?')->call('ask')
-            ->assertActionMounted('upgradeAiNotes')->assertSet('answer', null);
+            ->assertRedirectContains('/app/settings/plan/upgrade')->assertSet('answer', null);
 
         Livewire::test(ViewClient::class, ['record' => $project->id])->call('setTab', 'screens')
             ->assertSee('data-screens-locked', false)->assertSee('Screen moments are not in your plan')
-            ->mountAction('upgradeScreens')->assertActionMounted('upgradeScreens')->assertMountedActionModalSee('Screen moments is in Pro');
+            ->mountAction('upgradeScreens')->assertRedirectContains('/app/settings/plan/upgrade?feature=screen_moments&plan=pro');
     });
 
     it('shows the real controls on Ultra', function () {
@@ -83,7 +83,7 @@ describe('a project', function () {
         $project->update(['ai_notes' => false]);
 
         $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent();
-        expect($html)->not->toMatch('/client-tab-ask">Ask(<!--.*?-->)?\s*<span class="el-plan-badge"/')->not->toContain('data-ai-locked');
+        expect($html)->not->toMatch('/client-tab-ask">Ask(<!--.*?-->)?\s*<span class="el-tag el-plan-badge"/')->not->toContain('data-ai-locked');
 
         Livewire::test(ViewClient::class, ['record' => $project->id])->call('toggleAiNotes')->assertActionNotMounted('upgradeAiNotes');
         expect($project->fresh()->ai_notes)->toBeTrue();
@@ -95,13 +95,13 @@ describe('a project', function () {
         $project = Fx::client($this->person, 'Acme');
 
         Livewire::test(EditClient::class, ['record' => $project->id])
-            ->assertSee('Keep screen moments of its meetings')->assertSee('PRO ✦')
+            ->assertSee('Keep screen moments of its meetings')->assertSee('Pro')->assertDontSee('✦')
             ->assertFormFieldDisabled('screens')
             ->mountAction(TestAction::make('upgradeScreens')->schemaComponent('screens'))
-            ->assertActionMounted(TestAction::make('upgradeScreens')->schemaComponent('screens'));
+            ->assertRedirectContains('/app/settings/plan/upgrade');
 
         lockedPlan($this->person, 'pro');
-        Livewire::test(EditClient::class, ['record' => $project->id])->assertFormFieldEnabled('screens')->assertDontSee('PRO ✦');
+        Livewire::test(EditClient::class, ['record' => $project->id])->assertFormFieldEnabled('screens')->assertDontSee('el-plan-badge');
     });
 
     it('still refuses AI notes on the server for a plan without them', function () {
@@ -117,8 +117,8 @@ describe('a recording', function () {
         $session = lockedRecording($this->person);
 
         $page = Livewire::test(ViewCaptureSession::class, ['record' => $session->id]);
-        expect($page->html())->toContain('data-views-locked')->toContain('PRO ✦');
-        $page->call('makeViews')->assertActionMounted('upgradeViews');
+        expect($page->html())->toContain('data-views-locked')->toContain('el-plan-badge">Pro</span>');
+        $page->call('makeViews')->assertRedirectContains('/app/settings/plan/upgrade');
         expect(app(TranscriptViews::class)->state($session->finalTranscript()->firstOrFail())['status'])->not->toBe('making');
 
         // The server is the authority: the request itself is refused.
@@ -139,12 +139,12 @@ describe('a recording', function () {
         $session = lockedRecording($this->person, $project);
 
         $page = Livewire::test(ViewCaptureSession::class, ['record' => $session->id]);
-        expect($page->html())->toContain('Write notes')->toContain('ULTRA ✦');
-        $page->call('writeNotes', 'en')->assertActionMounted('upgradeAiNotes');
+        expect($page->html())->toContain('Write notes')->toContain('el-plan-badge">Ultra</span>');
+        $page->call('writeNotes', 'en')->assertRedirectContains('/app/settings/plan/upgrade');
         expect(CallNote::query()->where('capture_session_id', $session->id)->exists())->toBeFalse();
 
         lockedPlan($this->person, 'business');
-        expect(Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->html())->toContain('Write notes')->not->toContain('ULTRA ✦');
+        expect(Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->html())->toContain('Write notes')->not->toContain('el-plan-badge');
     });
 
     it('never shows another person\'s recording, locked or not', function () {
