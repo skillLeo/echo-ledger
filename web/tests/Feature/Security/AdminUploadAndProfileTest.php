@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Models\Recording;
 use App\Stt\Support\WavFile;
-use Filament\Auth\Pages\EditProfile;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
@@ -107,9 +107,9 @@ it('refuses a new profile password shorter than the twelve characters the CLI de
     $storedHash = $admin->fresh()->password;
 
     Livewire::test(EditProfile::class)
-        ->fillForm(['name' => $admin->name, 'email' => $admin->email, 'currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password])
-        ->call('save')
-        ->assertHasFormErrors(['password']);
+        ->fillForm(['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasFormErrors(['password'], 'passwordForm');
 
     // Nothing was saved. (Comparing hashes also covers the "password" case, which equals the current password.)
     expect($admin->fresh()->password)->toBe($storedHash);
@@ -123,9 +123,9 @@ it('accepts a long profile password', function () {
     $password = 'a-sufficiently-long-passphrase-42';
 
     Livewire::test(EditProfile::class)
-        ->fillForm(['name' => $admin->name, 'email' => $admin->email, 'currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password])
-        ->call('save')
-        ->assertHasNoFormErrors();
+        ->fillForm(['currentPassword' => 'password', 'password' => $password, 'passwordConfirmation' => $password], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasNoFormErrors(form: 'passwordForm');
 
     expect(Hash::check($password, $admin->fresh()->password))->toBeTrue();
 });

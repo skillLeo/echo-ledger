@@ -253,3 +253,21 @@ it('shows the customer\'s own activity log on their page', function () {
 
     $this->get('/admin/customers/'.$ana->id)->assertOk()->assertSee('Password changed by Ana');
 });
+
+it('opens a quick look at a customer in a drawer from the table, metadata only, with Open for the full page (since v1.6)', function () {
+    $staff = Fx::superAdmin();
+    $customer = Fx::user(['name' => 'Ayesha Peek']);
+    Fx::session($customer, null, ['title' => 'A private title']);
+    $this->actingAs($staff, 'web');
+    Filament::setCurrentPanel('admin');
+
+    $peek = Livewire::test(ListCustomers::class)->mountTableAction('peek', $customer);
+    // Action modals are streamed as partials, not in the component's html().
+    $html = implode('', array_map('strval', (array) ($peek->effects['partials'] ?? [])));
+    expect($html)->toContain('data-customer-peek="'.$customer->id.'"')->toContain('Minutes this month')->toContain('Ayesha Peek')
+        ->toContain(e(ViewCustomer::getUrl(['record' => $customer])))->not->toContain('A private title');
+
+    // A customer never reaches it.
+    $this->actingAs(Fx::user(), 'web');
+    Livewire::test(ListCustomers::class)->assertForbidden();
+});

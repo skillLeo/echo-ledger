@@ -17,7 +17,7 @@
             @if ($hosts !== [])
                 <p class="hint">After you choose, the browser goes back to <strong>{{ implode(', ', $hosts) }}</strong>.</p>
             @endif
-            <p class="hint">Allow only if you are adding EchoLedger in Claude or ChatGPT yourself, just now. You can disconnect it at any time under Profile → Connected apps.</p>
+            <p class="hint">Allow only if you are adding EchoLedger in Claude or ChatGPT yourself, just now. You can disconnect it at any time under Account → Devices → Connected apps.</p>
             <div class="actions">
                 <form method="post" action="{{ route('passport.authorizations.approve') }}">
                     @csrf

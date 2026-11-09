@@ -73,7 +73,7 @@ final class SecurityHeaders
             return false;
         }
         try {
-            return app(Turnstile::class)->configured();
+            return app(Turnstile::class)->active();
         } catch (\Throwable) {
             return false;
         }

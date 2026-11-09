@@ -5,13 +5,17 @@ declare(strict_types=1);
 use App\Filament\Admin\Pages\ActivityLog;
 use App\Filament\Admin\Pages\AppVersions;
 use App\Filament\Admin\Pages\Notices;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Admin\Pages\SignUpSettings;
 use App\Models\AuditEvent;
 use App\Models\Plan;
+use App\Services\Accounts\Turnstile;
 use App\Services\AuditLog;
+use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Services\System\PlatformNotices;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -56,6 +60,40 @@ it('saves who can sign up, the allowed domains, the network limit, the default p
         ->and($settings->get('upgrade.payment_instructions'))->toBe('JazzCash 0300 0000000')
         ->and(AuditEvent::query()->where('summary', 'Sign-up settings changed')->exists())->toBeTrue();
     $this->get('/admin/sign-up')->assertOk()->assertSee('anti-bot check');
+});
+
+it('switches the anti-bot check off and on, which works only once its keys are saved (since v1.6)', function () {
+    onAdminAsStaff();
+    $turnstile = app(Turnstile::class);
+
+    // No keys: the switch is disabled, says why, and a save cannot turn the check on.
+    $this->get('/admin/sign-up')->assertOk()->assertSee('Off until its keys are saved under API Credentials');
+    Livewire::test(SignUpSettings::class)->assertFormFieldIsDisabled('turnstile')->call('save')->assertHasNoFormErrors();
+    expect($turnstile->active())->toBeFalse();
+
+    app(CredentialVault::class)->put('turnstile', 'site_key', '0x4AAAA-site');
+    app(CredentialVault::class)->put('turnstile', 'secret_key', '0x4AAAA-secret');
+    expect($turnstile->active())->toBeTrue();
+
+    Livewire::test(SignUpSettings::class)->assertFormFieldIsEnabled('turnstile')->fillForm(['turnstile' => false])->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get(Turnstile::SETTING))->toBeFalse()->and(app(Turnstile::class)->active())->toBeFalse()
+        ->and(app(Turnstile::class)->verify('anything', null))->toBeTrue();
+    Http::fake();
+    app(SettingsRepository::class)->set('signup.mode', 'anyone');
+    $this->postJson('/api/auth/code', ['email' => 'new.one@example.test', 'turnstile' => 'bad'])->assertStatus(202);
+    Http::assertNothingSent();
+
+    Livewire::test(SignUpSettings::class)->fillForm(['turnstile' => true])->call('save');
+    expect(app(Turnstile::class)->active())->toBeTrue();
+});
+
+it('keeps the sign-up values on the Sign-up page alone: Settings links there and leaves them as they are', function () {
+    onAdminAsStaff();
+    app(SettingsRepository::class)->setMany(['signup.mode' => 'anyone', 'signup.per_ip_day' => 7]);
+
+    Livewire::test(Settings::class)->set('activeTab', 'privacy')->assertFormFieldDoesNotExist('signup_mode')->assertFormFieldDoesNotExist('signup_per_ip_day')->assertSee('Open Sign-up')
+        ->call('save')->assertHasNoFormErrors();
+    expect(app(SettingsRepository::class)->get('signup.mode'))->toBe('anyone')->and(app(SettingsRepository::class)->get('signup.per_ip_day'))->toBe(7);
 });
 
 it('asks an older app to update, and refuses it when the admin says so, while GET /api/config still answers', function () {

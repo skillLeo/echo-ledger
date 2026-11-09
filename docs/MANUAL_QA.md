@@ -476,6 +476,24 @@ Run these when the change touches the area, or before a release.
 | 16-C8 | **WhatsApp → Text and voice**. | The audio downloads; the panel says "Attach the saved voice file in WhatsApp" with the steps; the text is in the message. |
 | 16-C9 | **WhatsApp → Link (works for 7 days)**, with a popup blocker on. | WhatsApp opens with the title and the link (no blocked-popup warning); the link is copied; Shares lists it, expiring in 7 days. |
 
+### Web console v1.6 app shell (what only a real browser can prove; P4)
+
+The tests prove what the server draws, who sees what, and that every choice is kept per person; these need a real
+browser and a person's eyes. Screenshots of every page are in docs/design/screens/web.
+
+| # | Check | Expected |
+|---|---|---|
+| 16-WS1 | Drag the sidebar's right edge to its narrowest and widest, double-click it, reload, then sign in from another browser. | 200 px and 320 px at most, back to 240 px on a double-click; the width you left it at comes back after the reload and in the other browser. |
+| 16-WS2 | Press **[** (not in a text box), then the rail's search icon, type "dev", press Enter. | The sidebar folds to 64 px icons with their names as tooltips and the Activity number as a dot; the search icon opens it with Find a page focused; Enter opens Devices. |
+| 16-WS3 | Account → Preferences: Sidebar style Dark, then Soft grey; Density Compact; Times 24-hour. | The sidebar changes at once in light and dark themes, "Saved · just now" shows; the Library's rows get tighter; times read 14:30. |
+| 16-WS4 | Drag a recording from the Library onto a project in the column, then onto Pinned, then several selected ones onto the Inbox. | The place is outlined while dragged over; "Moved 1 recording to Acme Holdings", "Pinned 1 recording", "Moved 3 recordings to the Inbox"; counts update after the reload. |
+| 16-WS5 | In the Library press J J K, Enter, J (the drawer is open), Esc, X, Esc. | The row with the keys is outlined and kept in view; Enter opens the drawer, J shows the next one in it; Esc closes it; X ticks the row's box and the selection bar shows; Esc clears it. |
+| 16-WS6 | Ctrl+K (⌘K on a Mac), type "up", Enter; then "record" with no device signed in. | Commands lists Upload first and opens it; Record now opens Get the apps. |
+| 16-WS7 | Library → Table, open Columns, turn Device on, reload. | The table shows Title, App, Project, Length, Date, Status (+ Device); the choice of Table stays after the reload; on a phone the Library is the list. |
+| 16-WS8 | On a phone (Chrome on Android, Safari on iPhone): the bottom tabs, Record → Record a voice note, stop, save. | Home · Library · Record · Activity · More; the phone's recorder opens; the note uploads and shows in the Library; More opens the whole sidebar as a drawer. |
+| 16-WS9 | Admin panel at 1440 px: the sidebar, Customers → click a row, Esc. | The admin frame with ADMIN and its own groups; the quick look slides in from the right with the numbers and Open; Esc closes it. |
+| 16-WS10 | Admin → Sign-up with no Turnstile keys, then with them. | The switch is greyed out with "Off until its keys are saved…"; once saved it turns the check off and on, and the web sign-up asks for it only while on. |
+
 ### macOS 14.4+ (only if you have a Mac)
 
 | # | Check | Expected |

@@ -12,7 +12,7 @@
                 <input type="hidden" name="{{ $field }}" value="{{ $params[$field] }}">
             @endforeach
             <p style="margin: 0;">The EchoLedger app on <strong>{{ $params['name'] }}</strong> ({{ $platform }}) will sign in as <strong>{{ $email }}</strong>@if ($workspace) and record into <strong>{{ $workspace }}</strong>@endif.</p>
-            <p class="hint">Approve only if you started this sign-in in the app yourself, just now. You can revoke the device at any time under Profile → Devices.</p>
+            <p class="hint">Approve only if you started this sign-in in the app yourself, just now. You can revoke the device at any time under Account → Devices.</p>
             <div class="actions">
                 <button type="submit" class="button">Sign in</button>
                 <button type="submit" name="cancel" value="1" class="button secondary">Cancel</button>

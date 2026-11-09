@@ -42,7 +42,7 @@ never their recordings. A workspace always has one owner, so an owner who wants 
    alerts all need this.
 2. **Google sign-in (optional).** One OAuth client of type *Web application*: the steps are in
    [Google sign-in: the OAuth client](#google-sign-in-the-oauth-client) below.
-3. **Who can sign up.** Admin panel → Settings → Privacy & security → Who can sign up:
+3. **Who can sign up.** Admin panel → Sign-up → Who can sign up:
    - **On** (*Anyone*): family and friends make their own free account on the sign-up page, or with **Create account**
      in the apps. Each account gets its own private workspace: they never see your recordings and you never see theirs
      unless one of you shares.
@@ -100,12 +100,13 @@ Open **Workspace** in the console.
 - **Hand over** makes another member the owner; you become an admin. **Leave** works after that.
 - **Rename** and **Delete workspace** (owner only). **Switch workspace** when you belong to several.
 
-Each person sees their devices under **Profile → Devices** (phones, computers and console browsers, with Revoke) and
+Each person sees their devices under **Account → Devices** (phones, computers and console browsers, with Revoke) and
 can **Sign out everywhere**. A new device or a console sign-in from a new browser sends that person an email.
 
 ### Sign-up (since v1.6)
 
-**Admin panel → Settings → Privacy & security → Sign-up.** Everyone signs up the same way: their email, a 6-digit code by email,
+**Admin panel → Sign-up** (since v1.6 the one page for these; Settings → Privacy & security links there).
+Everyone signs up the same way: their email, a 6-digit code by email,
 their name and the Terms (no password needed; they can set one later with **Forgot password?**).
 
 - **Who can sign up:** On (anyone), Off (only people you add), or Invite only (an address with an invitation waiting;
@@ -113,9 +114,10 @@ their name and the Terms (no password needed; they can set one later with **Forg
 - **Allowed email domains:** empty for any address, or only these domains. Throwaway addresses (the list in
   `web/resources/data/disposable-email-domains.txt`, one domain a line) are always refused.
 - **New accounts a day from one network:** default 5.
-- **Turnstile** (Cloudflare's free check against robots) protects the web sign-up once its site key and secret are
-  saved in **Admin panel → API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
-  Without them it is skipped. The apps do not show it; the limits per address and network protect them.
+- **Anti-bot check (Cloudflare Turnstile)**, Cloudflare's free check against robots, protects the web sign-up once its
+  site key and secret are saved in **Admin panel → API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add
+  widget for the console's domain). Without them it is skipped and its switch on the Sign-up page is greyed out and
+  says why; with them the switch turns it off and on (on by default). The apps do not show it; the limits per address and network protect them.
 - Codes: 10 minutes, 5 tries, a new one after 60 seconds, at most 5 an hour per address and 20 an hour per network.
 - **Tell me when one person records more than … hours a day** (default 6): an email and a notification to you, at
   most once a day per person. Only the lengths are counted.
@@ -141,9 +143,15 @@ ready:
 
 **New role** makes one of your own; the **Permissions** matrix below the list has a box per permission and role and
 applies at once. Staff who may manage staff can give only what they have themselves and cannot change their own role.
-**Every member of staff needs two-step sign-in** (Profile → Two-step sign-in in the app) before the admin panel opens;
+**Every member of staff needs two-step sign-in** (Account → Password & sign-in methods in the app) before the admin panel opens;
 without it /admin takes them to their profile. Workspace roles (owner, admin, member, viewer) are the customers' own:
 the app's Workspace page shows what each may do.
+
+### The admin panel's frame (since v1.6)
+
+The admin panel has the app's frame: its sidebar (the brand with ADMIN, **Find a page**, Customers, Plans, Usage and
+System, then Help & shortcuts, Account and Collapse sidebar; the same width, rail and style as in the app) and a top
+bar with help and the avatar menu (**Back to the app**, **Account**, the theme, **Sign out**).
 
 ### Customers (since v1.6)
 
@@ -151,6 +159,8 @@ the app's Workspace page shows what each may do.
 confirmed, Being deleted), devices signed in, minutes and US dollars this month (per provider under the total), how
 much of the plan's minutes is used, storage, last active and the sign-up date. Search by name or email, filter by plan
 or status, and select rows to **Change plan** (until a date or not), **Suspend**, **Restore** or **Download CSV**.
+A click on a row opens a quick look on the right (this month's numbers, the plan, the latest devices; **Esc** closes
+it); **Open** there, or the row's **Open**, shows the full page.
 
 A customer's page has this month's numbers and a chart of the last 30 days, their devices (**Revoke** one), their
 workspaces with roles, the plan with **Change plan** (with an end date: then the default plan) and **Features and
@@ -226,7 +236,7 @@ grant can still report up to that time on two channels, so one account can use u
 ### System pages (since v1.6)
 
 - **Sign-up:** who may sign up (on, off, invite only), the allowed email domains, new accounts a day from one network,
-  whether the anti-bot check is on (its keys are under API Credentials → Turnstile), the plan new accounts get, and the
+  the anti-bot check's switch (it works once its keys are under API Credentials → Turnstile), the plan new accounts get, and the
   payment instructions shown after **Request upgrade**.
 - **App versions:** the lowest version of the phone, Windows and Mac apps (empty: any). An older app shows "Please
   update" with a link to the downloads page; tick **Refuse older apps** to stop it working until it is updated. The
@@ -265,7 +275,7 @@ reads, and sees only what that person can open in the apps.
 - **Once on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key storage/oauth-public.key`,
   run as the user PHP runs as. Until then `/mcp` and its sign-in page answer with a server error. [DEPLOY.md](../web/DEPLOY.md)
   has checks you can run with curl.
-- **What a person controls:** Profile → Connected apps lists each app with its last use and Disconnect. **Sign out
+- **What a person controls:** Account → Devices → Connected apps lists each app with its last use and Disconnect. **Sign out
   everywhere** disconnects them too.
 - **What you can see:** every tool call is in **Security** (the tool, the arguments without content, the size of the
   answer). "App disconnected: used token came back" means a sign-in token was used twice, so the connection was ended; the
@@ -281,7 +291,7 @@ unless the person taps it. Use it to see what works on your team's phones. The l
 ## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in
-  page as in the apps); two-step codes and recovery codes are under Profile.
+  page as in the apps); two-step codes and recovery codes are under Account → Password & sign-in methods.
 - The server answers only the address in `APP_URL` and builds every link from it: a wrong `APP_URL` makes every request
   fail with 400 (see `web/DEPLOY.md`).
 - **Forgot password?** signs the account out everywhere: browsers, devices and connected apps. Changing the password

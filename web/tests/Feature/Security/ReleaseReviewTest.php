@@ -307,8 +307,8 @@ it('M7 leaves devices and apps signed in when the password is changed on the pro
 
     $this->actingAs($user, 'web');
     Livewire::test(EditProfile::class)
-        ->fillForm(['password' => 'a-new-password-1234', 'passwordConfirmation' => 'a-new-password-1234', 'currentPassword' => 'old-password-1234'])
-        ->call('save')->assertHasNoFormErrors();
+        ->fillForm(['password' => 'a-new-password-1234', 'passwordConfirmation' => 'a-new-password-1234', 'currentPassword' => 'old-password-1234'], 'passwordForm')
+        ->call('savePassword')->assertHasNoFormErrors(form: 'passwordForm');
 
     expect(Hash::check('a-new-password-1234', (string) $user->fresh()->password))->toBeTrue()
         ->and(ConnectedApp::query()->connected()->where('user_id', $user->id)->count())->toBe(1);

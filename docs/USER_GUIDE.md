@@ -172,7 +172,7 @@ calls will be recorded.
 **Signing in with a code** also works, for older apps too. It connects a device to your server with a one-time code; you
 need the web console.
 
-1. In the console, open **Profile → Devices** and click **Sign in a device**. A code and a QR code appear. The code works for
+1. In the console, open **Account → Devices** and click **Sign in a device**. A code and a QR code appear. The code works for
    10 minutes and only once.
 2. **Phone:** tap **Other ways to sign in → Scan QR code** and point the camera at the screen, or type the code under
    **One-time sign-in code**.
@@ -213,22 +213,22 @@ ready. It has 2 devices, 1 GB and keeps recordings 30 days.
 
 1. Open **console.groq.com** and sign in (with Google is fine).
 2. Open **API Keys**, press **Create API Key**, and copy the key.
-3. In EchoLedger open **Profile → Transcription key** (on the phone **You → Transcription key**, on the computer
-   **Account → Transcription key**), paste it and press **Save**.
+3. In EchoLedger open **Account → Transcription key** (on the phone **You → Transcription key**), paste it and press
+   **Save**.
 
 We check the key with Groq once, keep it locked, never show it again (only its last four characters), and use it for
 your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
 key". **Pro** and **Business** transcribe for you, with no key of your own.
 
-**Upgrading.** Tap a badge (or **Profile → Your plan → Compare plans**; on the phone **You → Plan & usage → See
+**Upgrading.** Tap a badge (or **Account → Plan & usage → Compare plans**; on the phone **You → Plan & usage → See
 plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
 ### Support access (since v1.6)
 
-EchoLedger's support never sees your recordings. If you want help with one, open **Profile → Support access → Let
-support look** and choose for how long (1 hour, 1 day or 7 days). Until then support can open your recordings and their
+EchoLedger's support never sees your recordings. If you want help with one, open **Account → Privacy & data → Support
+access → Let support look** and choose for how long (1 hour, 1 day or 7 days). Until then support can open your recordings and their
 transcripts, and every look shows in your activity log. **Stop now** ends it at once.
 
 ## 3c. Find your way in the computer app (since v1.6)
@@ -263,6 +263,39 @@ transcripts, and every look shows in your activity log. **Stop now** ends it at 
 says so with **Update**. If the server no longer takes recordings from your version, they wait on the phone and are sent
 after you update; nothing is lost (the computer does the same, see "When the server asks for an update" above). During maintenance the Library says so and recordings wait the same way. A notice
 from the server's owner shows at the top of the Library until you close it.
+
+## 3d. Find your way in the web console (since v1.6)
+
+The console in the browser has the computer app's frame.
+
+- **The sidebar** lists **Home**, **Library** (the arrow shows its smart folders with their counts), **Projects** (your
+  pinned ones), **Activity** (its number counts only what needs you), **Shared** (**With me**, **My links**, **Request
+  links**) and **Upload**; **Help & shortcuts**, **Account** and **Collapse sidebar** are at the bottom. Type in **Find
+  a page** to jump to any page, smart folder, project or Account tab. Drag its right edge to make it wider or narrower
+  (200 to 320 pixels; double-click it for the usual width), press **[** to fold it to icons and back. **Account →
+  Preferences → Sidebar style** makes it **Light**, **Dark** or **Soft grey**. The console remembers all of this for
+  you, in every browser you sign in on.
+- **The top bar:** your workspace and your role there (the other workspaces you belong to are one click away); the
+  search box, "Search recordings, transcripts, pages… or type a command" (**Ctrl+K**, **⌘K** on a Mac): type a word to
+  find it in your transcripts, a page's name, or a command: **Record now** (the console does not record calls: it
+  opens the apps' page, or on a phone a voice note), **Upload**, **New project**, **Invite**, **New request link**; **+**
+  for **Upload files**, **New project** and **Request link**; the bell; help; and the menu under your initials:
+  **Account**, **Plan & usage**, **Workspace** (owners and admins), the **Admin panel** (staff only), the theme and
+  **Sign out**.
+- **Pages** show where they are above the title (for example **Shared › With me**) and one line about what they hold.
+  In the Library a recording opens in a panel on the right (**Esc** closes it) with **Open**, **Send to WhatsApp** and
+  **Copy text** (the whole transcript, in the view it opens in) and the start of the transcript. A project's tabs show
+  how many recordings, files and rules it has.
+- **Keys** (never while you type): **J** and **K** move through the Library, **Enter** opens, **X** selects, **Esc**
+  closes the panel or clears the selection, **/** searches the list, **[** folds the sidebar, **?** lists them all.
+- **Account** has tabs: **Profile**, **Password & sign-in methods** (change or set your password, two-step sign-in,
+  Google, passkeys and browsers under Security), **Devices** (with Connected apps), **Notifications**, **Preferences**
+  (sidebar style, density, 12- or 24-hour times, List or Table, the language your uploads start in, the keys; each
+  choice says **Saved · just now**), **Plan & usage**, **Transcription key** (Free plan) and **Privacy & data**
+  (export your data, delete your account, Support access).
+- **On a phone** the console has five tabs at the bottom: **Home**, **Library**, **Record**, **Activity** and **More**
+  (the whole sidebar). **Record → Record a voice note** opens the phone's own recorder; the note is uploaded when you
+  stop.
 
 ## 4. Record automatically
 
@@ -404,10 +437,12 @@ selects the whole group for **Move**, **Label**, **Export** or **Delete**; it sh
 own choice on this phone. Tap a header's name or arrow to fold it; while selecting, its box selects the whole group, and a
 long press on a header starts selecting with that group.
 
-**In the web console (since v1.6)** the Library has one toolbar under the search box: **All recordings** (or the smart
-view you chose: Today, This week, Waiting for decision, Bookmarked, Failed uploads, Pinned, each with its count),
-**All folders** (Inbox, WhatsApp, Zoom, Phone, Voice notes, Imported and the others that hold recordings, and Shared
-with me), then **Group by** and **Sort by** with the same choices as the phone and the computer. A header's box only
+**In the web console (since v1.6)** the Library has a column on the left on a wide screen: **All**, **Waiting**,
+**Pinned**, **Failed uploads** (and **Today**, **This week** and **Bookmarked** while they hold something), the smart
+folders with their counts (Inbox, WhatsApp, WhatsApp Business, Meet, Zoom, Teams, SIM, Voice notes, Imported, Shared
+with me), then your projects with **+ New project**. On a narrower screen the toolbar's **All recordings** and **All
+folders** menus do the same. The toolbar under the search box has **Group by** and **Sort by** with the same choices as
+the phone and the computer, and **List** or **Table** (the table's **Columns** chooses what it shows). A header's box only
 selects its group (a dash when only some are selected); its name and arrow fold it. Select recordings and one bar shows
 what you can do with them: **8 selected · Move · Label · Export · Delete · More · Clear** (**More** pins, unpins, keeps
 forever or stops keeping). An empty view says why it is empty and offers **Show all recordings**.
@@ -530,8 +565,8 @@ levels (for example Acme › Invoices). Give each one a colour and a picture or 
   there first; then a rule on the title ("the title contains Acme"); then a rule on the app ("every Zoom call").
   Everything else waits in the Inbox. A rule never moves a recording that is already in a project. Add rules on the
   project's page.
-- **Moving:** drag recordings onto a project in the sidebar (console), onto the Inbox or a project in the Library's
-  column or a pinned project in the sidebar (computer), or choose **Move** (all apps,
+- **Moving:** drag recordings onto the Inbox or a project in the Library's column, onto Pinned, or onto a pinned
+  project in the sidebar (console and computer), or choose **Move** (all apps,
   also for several selected recordings).
 - **Deleting a project** keeps its recordings: they go to the Inbox, and its folders move up a level.
 - **A recording's project:** choose one on the recording's page, or set a default project in **Settings**.
@@ -837,7 +872,7 @@ nothing is recorded or kept unless you switch saving on.
 - When the limit is raised, open the recording in the console and choose **Transcribe again**.
 
 **"This computer was signed out on the server"** (or "This phone was signed out on the server")
-- The device was signed out: revoked in the console or under **Profile → Devices**, or by **Sign out everywhere**.
+- The device was signed out: revoked in the console or under **Account → Devices**, or by **Sign out everywhere**.
   Sign in again (section 3). Recordings waiting to upload stay on the device.
 
 **I forgot my app lock PIN**

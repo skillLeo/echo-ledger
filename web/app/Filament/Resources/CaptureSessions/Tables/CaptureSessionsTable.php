@@ -13,6 +13,7 @@ use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Filament\Support\FailedUpload;
 use App\Filament\Support\LibraryView;
+use App\Filament\Support\Shell;
 use App\Filament\Support\WhatsAppActions;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -71,7 +72,8 @@ final class CaptureSessionsTable
             ->groupingDirectionSettingHidden()
             ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
-            ->columns([
+            // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
+            ->columns(self::isTable($table) ? self::tableColumns() : [
                 Split::make([
                     ViewColumn::make('title')->label('Title')->view('filament.library.row')
                         ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
@@ -91,6 +93,7 @@ final class CaptureSessionsTable
                 TextColumn::make('status')->hidden(),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->hidden(),
             ])
+            ->columnManagerTriggerAction(fn (Action $action): Action => $action->label('Columns')->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
             ->filters([
                 SelectFilter::make('source_device')->label('Source device')->options(SourceDevice::class)->multiple(),
@@ -162,6 +165,42 @@ final class CaptureSessionsTable
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty')
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
+    }
+
+    /** Whether the Library shows its table rather than its list (the page's List/Table switch). */
+    public static function isTable(Table $table): bool
+    {
+        $livewire = $table->getLivewire();
+
+        return property_exists($livewire, 'libraryLayout') && $livewire->libraryLayout === 'table';
+    }
+
+    /**
+     * The Library as a table (since v1.6, P4.4): title, app, project, length, date and status, with the device and
+     * the labels in Columns. A plain click opens the drawer as in the list.
+     *
+     * @return list<TextColumn>
+     */
+    public static function tableColumns(): array
+    {
+        $zone = fn (): string => app(SettingsRepository::class)->displayTimezone();
+
+        return [
+            TextColumn::make('title')->label('Title')->weight('medium')
+                ->state(fn (CaptureSession $r): string => $r->displayTitle())
+                ->extraAttributes(fn (CaptureSession $r): array => ['data-recording' => $r->id, 'draggable' => ConsoleAccess::readOnly() ? 'false' : 'true', 'class' => 'el-table-title'])
+                ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
+            TextColumn::make('source_app')->label('App')->toggleable(),
+            TextColumn::make('client.name')->label('Project')->placeholder('Inbox')->toggleable(),
+            TextColumn::make('device.name')->label('Device')->state(fn (CaptureSession $r): string => self::deviceLabel($r))->toggleable(isToggledHiddenByDefault: true),
+            TextColumn::make('duration_ms')->label('Length')->formatStateUsing(fn (?int $state): string => self::duration($state))->toggleable(),
+            TextColumn::make('started_at')->label('Date')->toggleable()
+                ->formatStateUsing(fn (CaptureSession $r): string => $r->started_at->copy()->setTimezone($zone())->format('M j, Y · '.Shell::timeFormat())),
+            // A status only when it needs the person, as in the list: never "Completed".
+            TextColumn::make('status')->label('Status')->badge()->toggleable()
+                ->state(fn (CaptureSession $r): ?SessionStatus => $r->status === SessionStatus::Completed ? null : $r->status),
+            TextColumn::make('labels.label')->label('Labels')->badge()->color('gray')->toggleable(isToggledHiddenByDefault: true),
+        ];
     }
 
     /**

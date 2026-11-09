@@ -2520,7 +2520,7 @@ textarea.el-field-input {
     bottom: 0;
     z-index: 35;
     display: grid;
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(var(--tabs, 5), minmax(0, 1fr));
     height: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
     padding-bottom: env(safe-area-inset-bottom);
     border-top: 1px solid var(--border);
@@ -2582,22 +2582,27 @@ textarea.el-field-input {
     text-align: center;
 }
 
-@media (min-width: 1024px) {
+/* Since v1.6 (P4.6) the bottom tabs are the phone's (up to 600 px); wider screens have the sidebar or its drawer. */
+@media (min-width: 600.02px) {
     .el-bottom-nav {
         display: none;
     }
 }
 
-@media (max-width: 1023.98px) {
+@media (max-width: 600px) {
     .fi-body:has(.el-bottom-nav) .fi-main-ctn {
         padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom) + var(--space-4));
     }
 
-    /* The phone's top bar: the page title is the screen's heading, so the bar stays small. */
-    .fi-topbar .fi-global-search-field {
+    /* The app's phone top bar: the workspace, search, the bell and you; More and Record hold the rest. The admin
+       panel has no bottom tabs, so it keeps its menu button. */
+    .fi-panel-app .el-tb .el-tb-menu,
+    .fi-panel-app .el-tb .el-tb-help,
+    .fi-panel-app .el-tb .el-tb-create {
         display: none;
     }
 }
+
 
 /* ================================================================== media and focus */
 
@@ -3081,4 +3086,1220 @@ textarea.el-field-input {
     width: 16px;
     height: 16px;
     color: var(--accent-text);
+}
+
+/* ================================================================== app shell (since v1.6, P4) */
+
+/* The desktop app's frame: the sidebar from the top of the window, the top bar beside it. Filament's own toggle
+   button is replaced by the top bar's menu button. */
+.fi-body > .fi-layout-sidebar-toggle-btn-ctn {
+    display: none;
+}
+
+.el-sb {
+    --sb-bg: var(--bg);
+    --sb-text: var(--text);
+    --sb-muted: var(--text-muted);
+    --sb-faint: var(--text-faint);
+    --sb-hover: var(--surface-2);
+    --sb-active-bg: var(--accent-soft);
+    --sb-active-text: var(--accent-text);
+    --sb-border: var(--border);
+    --sb-field: var(--surface-2);
+    background-color: var(--sb-bg);
+    color: var(--sb-text);
+}
+
+.el-sb[data-style='soft'] {
+    --sb-bg: var(--surface-2);
+    --sb-hover: var(--surface-3);
+    --sb-field: var(--surface);
+}
+
+.el-sb[data-style='dark'] {
+    --sb-bg: #18191b;
+    --sb-text: #edeef0;
+    --sb-muted: #b0b4ba;
+    --sb-faint: #8b8f99;
+    --sb-hover: #272a2d;
+    --sb-active-bg: #182449;
+    --sb-active-text: #c2d0ff;
+    --sb-border: #272a2d;
+    --sb-field: #212225;
+}
+
+.dark .el-sb[data-style='dark'] {
+    --sb-bg: #0b0b0d;
+    --sb-hover: #1c1d20;
+    --sb-field: #18191b;
+}
+
+@media (min-width: 1024px) {
+    .fi-sidebar.el-sb {
+        border-inline-end: 1px solid var(--sb-border);
+    }
+}
+
+.el-sb-inner {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+}
+
+.el-sb-brand {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 56px;
+    flex-shrink: 0;
+    padding-inline: var(--space-4);
+}
+
+.el-sb-logo {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    flex: 1;
+    color: var(--sb-text);
+}
+
+.el-sb .fi-logo {
+    color: var(--sb-text);
+}
+
+.el-sb-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    color: var(--sb-muted);
+}
+
+.el-sb-icon-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+@media (min-width: 1024px) {
+    .el-sb-close {
+        display: none;
+    }
+}
+
+.el-sb-find {
+    padding: 0 var(--space-3) var(--space-2);
+    flex-shrink: 0;
+}
+
+.el-sb-find-box {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 36px;
+    padding-inline: var(--space-3);
+    border-radius: var(--radius-sm);
+    background-color: var(--sb-field);
+    color: var(--sb-muted);
+}
+
+.el-sb-find-box svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.el-sb-find-box input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    font-size: 14px;
+    color: var(--sb-text);
+    outline: none;
+    box-shadow: none;
+}
+
+.el-sb-find-box input::placeholder {
+    color: var(--sb-muted);
+}
+
+.el-sb-find-box:focus-within {
+    outline: 2px solid var(--accent);
+    outline-offset: -1px;
+}
+
+.el-sb-found {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 var(--space-2);
+}
+
+.el-sb-found li {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.el-sb-found li.el-on {
+    background-color: var(--sb-hover);
+}
+
+.el-sb-found-group,
+.el-sb-found-empty {
+    font-size: 12px;
+    color: var(--sb-muted);
+}
+
+.el-sb-nav {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: var(--space-1) var(--space-2) var(--space-3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.el-sb-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.el-sb-admin-group + .el-sb-admin-group {
+    margin-top: var(--space-3);
+}
+
+.el-sb-heading {
+    padding: var(--space-2) var(--space-3) var(--space-1);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--sb-faint);
+}
+
+.el-sb-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.el-sb-row > .el-sb-item {
+    flex: 1;
+    min-width: 0;
+}
+
+.el-sb-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    min-height: 36px;
+    padding: var(--space-1) var(--space-3);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    color: var(--sb-text);
+    text-align: start;
+    transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.el-sb-item:hover {
+    background-color: var(--sb-hover);
+}
+
+.el-sb-item.el-on {
+    background-color: var(--sb-active-bg);
+    color: var(--sb-active-text);
+    font-weight: 600;
+}
+
+.el-sb-icon {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+    color: var(--sb-muted);
+}
+
+.el-sb-item.el-on .el-sb-icon {
+    color: var(--sb-active-text);
+}
+
+.el-sb-label {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.el-sb-badge {
+    min-width: 20px;
+    height: 20px;
+    padding: 0 6px;
+    border-radius: var(--radius-full);
+    background-color: var(--danger-strong);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 20px;
+    color: #fff;
+    text-align: center;
+}
+
+.el-sb-expand {
+    position: absolute;
+    inset-inline-end: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-tag);
+    color: var(--sb-muted);
+}
+
+.el-sb-expand:hover {
+    background-color: var(--sb-hover);
+}
+
+.el-sb-expand svg {
+    width: 16px;
+    height: 16px;
+    transition: transform var(--motion-fast) var(--ease-standard);
+}
+
+.el-sb-expand.el-open svg {
+    transform: rotate(90deg);
+}
+
+.el-sb-row:has(.el-sb-expand) > .el-sb-item {
+    padding-inline-end: 36px;
+}
+
+.el-sb-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: 2px 0 var(--space-2) var(--space-6);
+}
+
+.el-sb-subitem {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 30px;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-tag);
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--sb-muted);
+}
+
+.el-sb-subitem:hover {
+    background-color: var(--sb-hover);
+    color: var(--sb-text);
+}
+
+.el-sb-subitem.el-on {
+    background-color: var(--sb-active-bg);
+    color: var(--sb-active-text);
+    font-weight: 600;
+}
+
+.el-sb-subitem svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+}
+
+.el-sb-count {
+    font-size: 12px;
+    color: var(--sb-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.el-sb-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+    padding: var(--space-2);
+    border-top: 1px solid var(--sb-border);
+}
+
+.el-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 20px;
+    height: 20px;
+    padding: 0 5px;
+    border: 1px solid var(--border-strong);
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--text-muted);
+    background-color: var(--surface);
+}
+
+.el-sb .el-kbd {
+    border-color: var(--sb-border);
+    background-color: transparent;
+    color: var(--sb-faint);
+}
+
+.el-sb-resize {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    inset-inline-end: -4px;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 2;
+}
+
+.el-sb-resize:hover,
+.el-sb-resize:focus-visible {
+    background: linear-gradient(to right, transparent 3px, var(--accent) 3px, var(--accent) 5px, transparent 5px);
+    outline: none;
+}
+
+body.el-resizing {
+    cursor: col-resize;
+    user-select: none;
+}
+
+@media (max-width: 1023.98px) {
+    .el-sb-resize {
+        display: none;
+    }
+}
+
+/* The 64 px rail: icons only; a label shows as the button's title, the Activity number as a dot. */
+@media (min-width: 1024px) {
+    .fi-sidebar.el-sb:not(.fi-sidebar-open) {
+        & .el-sb-label,
+        & .el-sb-kbd,
+        & .el-sb-count,
+        & .el-sb-expand,
+        & .el-sb-sub,
+        & .el-sb-found,
+        & .el-sb-heading {
+            display: none !important;
+        }
+
+        & .el-sb-brand {
+            justify-content: center;
+            padding-inline: 0;
+        }
+
+        & .el-sb-brand .fi-logo > :not(svg):not(img),
+        & .el-sb-brand .el-brand-name {
+            display: none;
+        }
+
+        & .el-sb-find {
+            padding-inline: var(--space-2);
+        }
+
+        & .el-sb-item {
+            justify-content: center;
+            padding-inline: 0;
+        }
+
+        & .el-sb-badge {
+            position: absolute;
+            top: 4px;
+            inset-inline-end: 10px;
+            min-width: 10px;
+            width: 10px;
+            height: 10px;
+            padding: 0;
+            font-size: 0;
+            border: 2px solid var(--sb-bg);
+        }
+    }
+}
+
+/* Recordings dragged onto a place. */
+.el-dragging-recordings [data-el-drop] {
+    border-radius: var(--radius-tag);
+    outline: 1px dashed var(--border-strong);
+    outline-offset: -1px;
+}
+
+[data-el-drop].el-drop-over {
+    outline: 2px solid var(--accent) !important;
+    background-color: var(--accent-soft);
+}
+
+.el-row[draggable='true'] {
+    -webkit-user-drag: element;
+}
+
+/* ---------- the top bar ---------- */
+.fi-topbar.el-tb {
+    gap: var(--space-2);
+    min-height: 56px;
+    padding-inline: var(--space-4);
+    background-color: var(--bg);
+    border-bottom: 1px solid var(--border);
+    box-shadow: none;
+}
+
+.el-tb-ctn {
+    z-index: 25;
+}
+
+.el-tb-icon {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border-radius: var(--radius-full);
+    color: var(--text-muted);
+}
+
+.el-tb-icon:hover {
+    background-color: var(--surface-2);
+    color: var(--text);
+}
+
+.el-tb-icon svg {
+    width: 20px;
+    height: 20px;
+}
+
+@media (min-width: 1024px) {
+    .el-tb-menu {
+        display: none;
+    }
+}
+
+.el-tb-spacer {
+    flex: 1;
+}
+
+.el-tb-admin-label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+}
+
+.el-tb-workspace-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    max-width: 240px;
+    padding: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    text-align: start;
+}
+
+.el-tb-workspace-btn:hover {
+    background-color: var(--surface-2);
+}
+
+.el-tb-workspace-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    flex-shrink: 0;
+    border-radius: var(--radius-sm);
+    background-color: var(--accent-soft);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent-text);
+}
+
+.el-tb-workspace-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.el-tb-workspace-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--text);
+}
+
+.el-tb-workspace-role {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-muted);
+}
+
+.el-tb-chevron {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.el-tb-search {
+    flex: 1;
+    max-width: 560px;
+    min-width: 0;
+    margin-inline-start: var(--space-2);
+}
+
+.el-tb-search .fi-global-search-ctn,
+.el-tb-search .fi-global-search {
+    width: 100%;
+}
+
+.el-tb-search .fi-input-wrp {
+    border-radius: var(--radius-sm);
+    background-color: var(--surface-2);
+    border-color: transparent;
+}
+
+@media (max-width: 767.98px) {
+    .el-tb-workspace-text,
+    .el-tb-chevron {
+        display: none;
+    }
+
+    .el-tb-search {
+        margin-inline-start: 0;
+    }
+
+    .el-tb-search .fi-input-wrp-suffix {
+        display: none;
+    }
+}
+
+.el-tb .fi-user-menu-trigger .fi-avatar {
+    width: 32px;
+    height: 32px;
+}
+
+/* ---------- Help & shortcuts ---------- */
+.el-help-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 10vh var(--space-4) var(--space-4);
+    background-color: rgba(17, 17, 19, 0.5);
+}
+
+.el-help {
+    width: 100%;
+    max-width: 520px;
+    max-height: 80vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-float);
+    padding: var(--space-5);
+}
+
+.el-help-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--space-3);
+}
+
+.el-help-head h2 {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.el-help-section + .el-help-section {
+    margin-top: var(--space-4);
+}
+
+.el-help-section h3 {
+    margin-bottom: var(--space-2);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.el-help-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: 6px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--border);
+}
+
+.el-help-row dt {
+    width: 84px;
+    flex-shrink: 0;
+}
+
+.el-help-foot {
+    display: flex;
+    gap: var(--space-2);
+    margin-top: var(--space-4);
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.el-sb-logo .fi-logo > span {
+    color: var(--sb-text) !important;
+}
+
+@media (min-width: 1024px) {
+    .fi-sidebar.el-sb:not(.fi-sidebar-open) .el-sb-logo {
+        flex: none;
+    }
+}
+
+/* ---------- the nested column (P4.2): the Library's places and the projects ---------- */
+.el-with-col > .fi-sc {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    column-gap: var(--space-5);
+    align-items: start;
+}
+
+.el-col,
+.el-with-col > .fi-sc > .fi-grid-col:has(.el-col) {
+    display: none;
+}
+
+@media (min-width: 1200px) {
+    .el-with-col > .fi-sc {
+        grid-template-columns: 220px minmax(0, 1fr);
+    }
+
+    .el-with-col > .fi-sc > .fi-grid-col:has(.el-col) {
+        display: block;
+        position: sticky;
+        top: calc(56px + var(--space-4));
+    }
+
+    .el-col {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        max-height: calc(100dvh - 56px - var(--space-6));
+        overflow-y: auto;
+        padding-bottom: var(--space-4);
+    }
+
+    /* The column does what the toolbar's Show and Folder menus do. */
+    .el-with-col .el-library-toolbar [data-menu='view'],
+    .el-with-col .el-library-toolbar [data-menu='folder'] {
+        display: none;
+    }
+}
+
+.el-col-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+}
+
+.el-col-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: 32px;
+    padding: var(--space-1) var(--space-3);
+    padding-inline-start: calc(var(--space-3) + var(--depth, 0) * 14px);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text);
+    text-align: start;
+}
+
+.el-col-item:hover {
+    background-color: var(--surface-2);
+}
+
+.el-col-item.el-on {
+    background-color: var(--accent-soft);
+    color: var(--accent-text);
+    font-weight: 600;
+}
+
+.el-col-item svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+.el-col-item.el-on svg {
+    color: var(--accent-text);
+}
+
+.el-col-label {
+    min-width: 0;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.el-col-count {
+    font-size: 12px;
+    color: var(--text-faint);
+    font-variant-numeric: tabular-nums;
+}
+
+.el-col-item.el-on .el-col-count {
+    color: var(--accent-text);
+}
+
+.el-col-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: var(--space-4);
+    padding: var(--space-2) var(--space-1) var(--space-1) var(--space-3);
+}
+
+.el-col-heading {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.el-col-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: var(--radius-tag);
+    color: var(--text-muted);
+}
+
+.el-col-add:hover {
+    background-color: var(--surface-2);
+    color: var(--text);
+}
+
+.el-col-add svg,
+.el-col-new svg {
+    width: 16px;
+    height: 16px;
+}
+
+.el-col-new {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-1);
+    padding: var(--space-1) var(--space-3);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--accent-text);
+}
+
+.el-col-empty,
+.el-col-hint {
+    padding: var(--space-1) var(--space-3);
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-muted);
+}
+
+.el-col-hint {
+    margin-top: var(--space-3);
+}
+
+/* ---------- the drawer (P4.4): the chosen recording on the right, Esc closes it ---------- */
+.el-drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 38;
+    background-color: rgba(17, 17, 19, 0.24);
+}
+
+.el-drawer {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    inset-inline-end: 0;
+    z-index: 39;
+    display: flex;
+    flex-direction: column;
+    width: min(600px, 100vw);
+    overflow-y: auto;
+    border-inline-start: 1px solid var(--border);
+    background-color: var(--surface);
+    box-shadow: var(--shadow-float);
+    animation: el-drawer-in var(--motion-base) var(--ease-out);
+}
+
+@keyframes el-drawer-in {
+    from {
+        transform: translateX(24px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .el-drawer {
+        animation: none;
+    }
+}
+
+.el-drawer-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-3) var(--space-4) 0 var(--space-5);
+}
+
+.el-drawer-source {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-width: 0;
+    font-size: 13px;
+    color: var(--text-muted);
+}
+
+.el-drawer-source .el-tile {
+    width: 28px;
+    height: 28px;
+}
+
+.el-drawer .el-detail-head {
+    padding-top: var(--space-3);
+}
+
+@media (max-width: 1023.98px) {
+    .el-drawer-slot {
+        display: none;
+    }
+}
+
+/* Record on the Upload page (P4.6): the recorder on touch screens, a pointer to the apps on computers. */
+.el-record-here {
+    margin-bottom: var(--space-4);
+}
+
+.el-record-touch {
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+}
+
+@media (pointer: coarse) {
+    .el-record-touch {
+        display: flex;
+    }
+
+    .el-record-desk {
+        display: none;
+    }
+}
+
+/* ---------- the page pattern (P4.4) ---------- */
+.el-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 2px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-muted);
+}
+
+.el-crumbs-link:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
+.el-crumbs-sep {
+    width: 12px;
+    height: 12px;
+    color: var(--text-faint);
+}
+
+.el-tb-search {
+    max-width: 640px;
+}
+
+/* The lines that need you ("1 call waiting · Review", "Failed uploads (1) · See why") side by side, not stacked. */
+.fi-sc:has(> .fi-wi-widget > .el-waiting-chip) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.fi-sc:has(> .fi-wi-widget > .el-waiting-chip) > .fi-wi-widget {
+    flex: none;
+    width: auto;
+}
+
+/* List or Table. */
+.el-layout-switch > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.el-layout-switch svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Group headers stay at the top while their rows scroll under them. */
+.el-library .fi-ta-group-header {
+    position: sticky;
+    top: 56px;
+    z-index: 4;
+    background-color: var(--bg);
+}
+
+/* A row's actions show when the pointer is on it (or it has the keys); touch screens always show them. */
+@media (hover: hover) and (pointer: fine) {
+    .el-library .fi-ta-record .fi-ta-actions,
+    .el-library .fi-ta-row .fi-ta-actions {
+        opacity: 0;
+        transition: opacity var(--motion-fast) var(--ease-out);
+    }
+
+    .el-library .fi-ta-record:hover .fi-ta-actions,
+    .el-library .fi-ta-record:focus-within .fi-ta-actions,
+    .el-library .fi-ta-record.el-kb-row .fi-ta-actions,
+    .el-library .fi-ta-row:hover .fi-ta-actions,
+    .el-library .fi-ta-row:focus-within .fi-ta-actions,
+    .el-library .fi-ta-row.el-kb-row .fi-ta-actions,
+    .el-library .fi-ta-actions:has([aria-expanded='true']) {
+        opacity: 1;
+    }
+}
+
+/* J and K: the row the keys are on. */
+.el-library .el-kb-row {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-field);
+}
+
+.el-library-table .el-table-title {
+    cursor: pointer;
+}
+
+/* Density (Account → Preferences): compact rows. */
+html[data-density='compact'] .el-library .el-row {
+    min-height: 0;
+    padding-block: 2px;
+}
+
+html[data-density='compact'] .el-library .el-tile {
+    width: 36px;
+    height: 36px;
+}
+
+html[data-density='compact'] .el-library .fi-ta-record-content-ctn,
+html[data-density='compact'] .el-library .fi-ta-cell {
+    padding-block: 4px;
+}
+
+/* Columns (the table's) sits next to Filters inside the search pill. */
+.el-list .fi-ta-search-field ~ .fi-ta-col-manager-dropdown {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 52px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+}
+
+.el-list:has(.fi-ta-col-manager-dropdown) .fi-ta-search-field .fi-input {
+    padding-inline-end: 92px;
+}
+
+/* A tab's count (P4.4). */
+.el-tab-count {
+    display: inline-block;
+    min-width: 18px;
+    margin-inline-start: 6px;
+    padding: 0 5px;
+    border-radius: var(--radius-full);
+    background-color: var(--surface-2);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--text-muted);
+    text-align: center;
+}
+
+/* ---------- Account (P4.5) ---------- */
+.el-account-tabs .fi-tabs {
+    flex-wrap: wrap;
+}
+
+.el-prefs {
+    display: flex;
+    flex-direction: column;
+}
+
+.el-prefs-saved {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 20px;
+    font-size: 13px;
+    color: var(--success);
+}
+
+.el-prefs-saved [data-saved] {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.el-prefs-saved svg {
+    width: 16px;
+    height: 16px;
+}
+
+.el-pref {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-5);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.el-pref:last-child {
+    border-bottom: 0;
+}
+
+.el-pref-text {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.el-pref-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.el-pref-select {
+    min-width: 220px;
+}
+
+/* A table needs room: on phones the Library is the list. */
+@media (max-width: 767.98px) {
+    .el-library-toolbar .el-layout-switch {
+        display: none;
+    }
+}
+
+@media (max-width: 600px) {
+    .fi-panel-app .el-tb .el-tb-spacer {
+        display: none;
+    }
+}
+
+/* The admin panel's quick look at a customer (a drawer from the table). */
+.el-peek-kpis {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+    margin-bottom: var(--space-4);
+}
+
+.el-peek-kpis > div {
+    padding: var(--space-3);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-field);
+}
+
+.el-peek-kpis dt,
+.el-peek-label {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.el-peek-kpis dd {
+    font-size: 20px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.el-peek-line {
+    display: flex;
+    gap: var(--space-2);
+    padding: var(--space-1) 0;
+    font-size: 14px;
+}
+
+.el-peek-line .el-peek-label {
+    width: 84px;
+    flex-shrink: 0;
+    line-height: 20px;
+}
+
+.el-peek-list li {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2) 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+}
+
+/* On a phone the drawer ends above the bottom tabs, so Help, Account and Collapse stay in reach. */
+@media (max-width: 600px) {
+    .fi-sidebar.el-sb {
+        padding-bottom: calc(var(--bottom-nav-height) + env(safe-area-inset-bottom));
+    }
+}
+
+/* The rail is the desktop's: the drawer on phones and tablets has no Collapse sidebar. */
+@media (max-width: 1023.98px) {
+    .el-sb .el-sb-collapse {
+        display: none;
+    }
+}
+
+.el-palette-hint {
+    font-weight: 400;
+    color: var(--text-muted);
 }

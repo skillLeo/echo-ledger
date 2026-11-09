@@ -10,14 +10,18 @@ use App\Filament\Auth\EmailVerificationPrompt;
 use App\Filament\Auth\Login;
 use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
+use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Support\CommandPalette;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
+use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use App\Livewire\ActivityBell;
+use App\Livewire\Shell\Sidebar;
+use App\Livewire\Shell\Topbar;
 use App\Services\Staff\StaffAccess;
 use Closure;
 use Filament\Actions\Action;
@@ -28,9 +32,11 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
+use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Facades\FilamentIcon;
+use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\View\TablesIconAlias;
 use Filament\View\PanelsRenderHook;
@@ -41,7 +47,9 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Livewire\Livewire;
 
 class AppPanelProvider extends PanelProvider
 {
@@ -53,6 +61,31 @@ class AppPanelProvider extends PanelProvider
             TablesIconAlias::ACTIONS_COLUMN_MANAGER => Heroicon::OutlinedViewColumns,
             TablesIconAlias::EMPTY_STATE => Heroicon::OutlinedRectangleStack,
         ]);
+
+        // The app shell's top bar, script and Help & shortcuts in both panels (since v1.6, P4). Registered here, once
+        // per application, rather than per panel: Filament boots only the first panel a process serves.
+        $shell = fn (Closure $view): Closure => fn (): View|string => in_array(Filament::getCurrentPanel()?->getId(), ['app', 'admin'], true) && auth()->check() ? $view() : '';
+        FilamentView::registerRenderHook(PanelsRenderHook::CONTENT_BEFORE, $shell(fn (): View => view('filament.shell.topbar-slot')));
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, $shell(fn (): View => view('filament.shell.head')));
+        FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
+        // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));
+    }
+
+    /** The trail or the subtitle the app's page draws no copy of itself (the page being rendered decides). */
+    private static function pageHeader(string $part): View|HtmlString|string
+    {
+        $page = Livewire::current();
+        if (Filament::getCurrentPanel()?->getId() !== 'app' || ! $page instanceof Page) {
+            return '';
+        }
+        if ($part === 'crumbs') {
+            return $page->getBreadcrumbs() === [] ? view('filament.shell.page-crumbs', ['crumbs' => Shell::crumbs($page::class, (string) $page->getTitle())]) : '';
+        }
+        $subtitle = blank($page->getSubheading()) ? Shell::subtitle($page::class) : null;
+
+        return $subtitle !== null ? new HtmlString('<p class="fi-header-subheading el-subtitle">'.e($subtitle).'</p>') : '';
     }
 
     /**
@@ -97,16 +130,28 @@ class AppPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.use-the-apps')))
             // Since v1.6 (P2.7): the platform's announcement for everyone.
             ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.announcement')))
-            // Since v1.5: the workspace switcher at the top of the sidebar, for people in more than one.
-            ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, self::here(fn (): View => view('filament.workspace-switcher')))
+            // Since v1.6 (P4): the app shell, the desktop app's frame. The sidebar (brand, Find a page, Home · Library ·
+            // Projects · Activity · Shared · Upload, then Help, Account, Collapse) and, beside it, the top bar (the
+            // workspace, search and commands, +, the bell, help, the avatar menu). Its script runs before Alpine.
+            ->topbar(false)
+            ->sidebarLivewireComponent(Sidebar::class)
+            ->topbarLivewireComponent(Topbar::class)
             // C6: a quiet notice while the browser is offline.
             ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view('filament.offline-banner')))
             ->profile(EditProfile::class, isSimple: false)
-            // Since v1.6 (P2.1): staff switch to the admin panel here; nobody else sees it.
+            // The avatar menu (since v1.6, P4.3): Account, Plan & usage, the workspace for owners and admins, the admin
+            // panel for staff (since P2.1; nobody else sees it), the theme and Sign out.
             ->userMenuItems([
+                'profile' => fn (Action $action): Action => $action->label('Account')->icon(Heroicon::OutlinedUserCircle),
+                Action::make('planAndUsage')->label('Plan & usage')->icon(Heroicon::OutlinedSparkles)
+                    ->url(fn (): string => (Filament::getPanel('app')->getProfileUrl() ?? '/app/profile').'?tab=plan'),
+                Action::make('workspace')->label('Workspace')->icon(Heroicon::OutlinedUserGroup)
+                    ->visible(fn (): bool => WorkspaceSettings::canAccess())
+                    ->url(fn (): string => WorkspaceSettings::getUrl(panel: 'app')),
                 Action::make('adminPanel')->label('Admin panel')->icon(Heroicon::OutlinedShieldCheck)
                     ->visible(fn (): bool => StaffAccess::isStaff())
                     ->url(fn (): string => Filament::getPanel('admin')->getUrl() ?? '/app'),
+                'logout' => fn (Action $action): Action => $action->label('Sign out'),
             ])
             // Confirming one's email: required since v1.5 Phase 4 (an unconfirmed account sees only "Confirm your
             // email", and the apps' sign-in answers 403 email_not_verified); people-only share links need it too.
@@ -137,9 +182,11 @@ class AppPanelProvider extends PanelProvider
             // Ctrl / Cmd + K: pages, recordings (title and transcript) and projects.
             ->globalSearch(CommandPalette::class)
             ->globalSearchKeyBindings(['mod+k'])
-            ->globalSearchFieldSuffix(fn (): string => 'Ctrl K')
+            ->globalSearchFieldSuffix(fn (): string => Shell::paletteKeys())
+            // 240 px by default, 200–320 by dragging its edge, a 64 px rail when folded: the person's own (P4.1).
             ->sidebarCollapsibleOnDesktop()
-            ->sidebarWidth('16rem')
+            ->sidebarWidth(fn (): string => Shell::sidebarWidth())
+            ->collapsedSidebarWidth(Shell::RAIL_WIDTH.'px')
             // The everyday pages sit ungrouped at the top, like the phone's tabs; the rest below.
             ->navigationGroups([
                 NavigationGroup::make('More'),

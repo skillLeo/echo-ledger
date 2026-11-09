@@ -14,8 +14,8 @@
         <h2>Your account</h2>
         <ul>
             <li>Keep your password and two-step codes to yourself. You are responsible for what is done with your account.</li>
-            <li>Tell us at once if you think someone else used it: you can sign out everywhere under Profile → Devices.</li>
-            <li>You can delete your account at any time under Profile → Your data, or on the <a href="{{ route('account.delete') }}">Delete your account</a> page. It is erased 7 days later.</li>
+            <li>Tell us at once if you think someone else used it: you can sign out everywhere under Account → Devices.</li>
+            <li>You can delete your account at any time under Account → Privacy & data, or on the <a href="{{ route('account.delete') }}">Delete your account</a> page. It is erased 7 days later.</li>
         </ul>
 
         <h2>Recording other people</h2>

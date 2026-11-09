@@ -27,7 +27,7 @@ beforeEach(function () {
 });
 
 describe('navigation', function () {
-    it('has the phone\'s bottom bar with Library, Clients, Upload, Activity and More, the current page marked', function () {
+    it('has the phone\'s bottom tabs Home, Library, Record, Activity and More, the current page marked (since v1.6, P4.6)', function () {
         $html = $this->get(CaptureSessionResource::getUrl('index'))->assertOk()->getContent();
 
         $dom = new DOMDocument;
@@ -37,17 +37,17 @@ describe('navigation', function () {
 
         expect($nav)->not->toBeNull()->and($nav->getAttribute('aria-label'))->toBe('Main');
         $labels = array_map(fn (DOMNode $n): string => trim(preg_replace('/\s+/', ' ', $n->textContent)), iterator_to_array($nav->childNodes));
-        expect(implode('|', array_values(array_filter($labels))))->toBe('Library|Projects|Upload|Activity|More');
+        expect(implode('|', array_values(array_filter($labels))))->toBe('Home|Library|Record|Activity|More');
         $current = (new DOMXPath($dom))->query('.//*[@aria-current="page"]', $nav);
         expect($current->length)->toBe(1)->and(trim($current->item(0)->textContent))->toBe('Library');
         expect($html)->toContain('$store.sidebar.open()');
     });
 
-    it('shows the bottom bar only below 1024 px, where the sidebar becomes a drawer', function () {
+    it('shows the bottom tabs only up to 600 px, the phone\'s width (since v1.6, P4.6)', function () {
         $css = (string) file_get_contents(resource_path('css/filament/admin/theme.css'));
 
-        expect($css)->toMatch('/@media \(min-width: 1024px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
-            ->toMatch('/@media \(max-width: 1023\.98px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
+        expect($css)->toMatch('/@media \(min-width: 600\.02px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
+            ->toMatch('/@media \(max-width: 600px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
         expect(Filament::getPanel('app')->isSidebarCollapsibleOnDesktop())->toBeTrue();
     });
 
@@ -87,27 +87,28 @@ describe('library', function () {
             ->toMatch('/data-option="view-pinned" aria-checked="true"/');
     });
 
-    it('shows the chosen recording beside the list, with its transcript and Open', function () {
+    it('opens the chosen recording in the drawer on the right, with its transcript and Open (since v1.6, P4.4)', function () {
         $session = $this->sessionWithTranscript($this->admin, [
             ['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 900, 'text' => 'Hello there'],
             ['channel' => 2, 'speaker' => 'Client', 'start_ms' => 1000, 'end_ms' => 2000, 'text' => 'Hi, thanks for calling'],
         ], ['title' => 'Invoice questions']);
 
         $list = $this->panelComponent(ListCaptureSessions::class);
-        expect($list->html())->toContain('Choose a recording');
+        expect($list->html())->not->toContain('data-recording-drawer');
 
         $html = $list->call('selectRecording', $session->id)->assertSet('selected', $session->id)->html();
-        expect($html)->toContain('Invoice questions')->toContain('Hi, thanks for calling')
-            ->toContain(e(CaptureSessionResource::getUrl('view', ['record' => $session])));
+        expect($html)->toContain('data-recording-drawer="'.$session->id.'"')->toContain('Invoice questions')->toContain('Hi, thanks for calling')
+            ->toContain(e(CaptureSessionResource::getUrl('view', ['record' => $session])))
+            ->toContain('Copy text')->toContain('Close (Esc)')->toContain('closeRecording()');
 
-        expect($list->call('closeRecording')->html())->toContain('Choose a recording');
+        expect($list->call('closeRecording')->html())->not->toContain('data-recording-drawer');
     });
 
     it('does not show another workspace\'s recording beside the list', function () {
         $theirs = CaptureSession::factory()->create(['user_id' => $this->makeAdmin()->id, 'title' => 'Not yours']);
 
         expect($this->panelComponent(ListCaptureSessions::class)->call('selectRecording', $theirs->id)->html())
-            ->not->toContain('Not yours')->toContain('Choose a recording');
+            ->not->toContain('Not yours')->not->toContain('data-recording-drawer');
     });
 
     it('puts one slim waiting line above the list (since v1.5, no card)', function () {

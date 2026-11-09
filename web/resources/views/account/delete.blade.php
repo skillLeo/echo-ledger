@@ -9,7 +9,7 @@
         @if ($user === null)
             <div class="card">
                 <p style="margin: 0;">Deleting your EchoLedger account erases, after 7 days, everything only it owns: your recordings with their audio, transcripts and screens, your projects with their files and notes, and your devices. Recordings you sent to teammates stay in their libraries.</p>
-                <p class="hint">Until then you can change your mind: sign in and choose "Keep my account". To keep a copy first, use Profile → Export my data in the console.</p>
+                <p class="hint">Until then you can change your mind: sign in and choose "Keep my account". To keep a copy first, use Account → Privacy & data → Export my data in the console.</p>
                 <div class="actions"><a class="button" href="{{ route('account.delete', ['sign_in' => 1]) }}">Sign in to continue</a></div>
             </div>
         @elseif ($user->isBeingDeleted())

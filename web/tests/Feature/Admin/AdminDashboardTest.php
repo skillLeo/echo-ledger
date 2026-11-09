@@ -74,12 +74,12 @@ it('does not poll the server from the dashboard', function () {
         ->and((new ReflectionProperty(SessionsChart::class, 'pollingInterval'))->getDefaultValue())->toBeNull();
 });
 
-it('lists the navigation groups and pages in the sidebar', function () {
+it('lists the app shell\'s places in the sidebar (since v1.6: the desktop app\'s frame)', function () {
     $this->signInAsAdmin();
 
     $html = $this->get('/app')->assertOk()->getContent();
 
-    foreach (['Library', 'More', 'System', 'Projects', 'Activity', 'Upload', 'Devices', 'API Credentials', 'Settings'] as $label) {
+    foreach (['Find a page', 'Home', 'Library', 'Projects', 'Activity', 'Shared', 'Upload', 'Help &amp; shortcuts', 'Account', 'Collapse sidebar'] as $label) {
         expect($html)->toContain($label);
     }
     expect($html)->toContain('fi-global-search'); // the command palette (Ctrl / Cmd + K)

@@ -87,7 +87,8 @@
             cfg: config,
             files: [],
             clientId: '',
-            language: '',
+            // Since v1.6 (P4.5): the language chosen in Account → Preferences, else Automatic.
+            language: config.language || '',
             dragging: false,
             depth: 0,
             active: 0,
