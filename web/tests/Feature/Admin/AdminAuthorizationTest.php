@@ -94,7 +94,7 @@ it('lists the console pages in the navigation for a super admin', function () {
     // The admin panel's own navigation in the app shell's sidebar (since v1.6, P4).
     $nav = (string) preg_replace('/^.*?<nav class="el-sb-nav"|<\/nav>.*$/s', '', $html);
     preg_match_all('/<span class="el-sb-label">\s*([^<]+?)\s*</', $nav, $items);
-    expect($items[1])->toBe(['Overview', 'Customers', 'Plans', 'Upgrade requests', 'Server usage', 'API Credentials', 'Settings', 'Staff', 'Sign-up', 'Device reports', 'Accuracy Lab', 'App versions', 'Announcement', 'Activity log']);
+    expect($items[1])->toBe(['Overview', 'Customers', 'Plans', 'Upgrade requests', 'Promo codes', 'Server usage', 'API Credentials', 'Settings', 'Staff', 'Sign-up', 'Device reports', 'Accuracy Lab', 'App versions', 'Announcement', 'Activity log']);
 });
 
 it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {

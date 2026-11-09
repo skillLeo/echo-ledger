@@ -7,15 +7,22 @@ namespace App\Filament\Support;
 use App\Exceptions\ApiError;
 use App\Filament\Support\Notice as Notification;
 use App\Models\Plan;
+use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
+use App\Services\Entitlements\PromoCodes;
 use App\Services\Entitlements\UpgradeRequests;
 use App\Services\Workspaces\CurrentWorkspace;
 use Closure;
 use Filament\Actions\Action;
+use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\TextInput;
+use Filament\Schemas\Components\Text;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Number;
@@ -116,6 +123,12 @@ final class PlanLock
                         ->reject(fn (Plan $p): bool => $p->is(app(Entitlements::class)->plan((int) CurrentWorkspace::id())))
                         ->mapWithKeys(fn (Plan $p): array => [$p->key => $p->name.(filled($p->price_label) ? ' · '.$p->price_label : '')])->all())
                     ->default(fn (): ?string => ($key = $of($arguments)) !== null ? app(Entitlements::class)->lowestPlan($key)?->key : null),
+                // Since v1.6.2: a promo code, checked with Apply (the new price, the plan it is for, or nothing to pay).
+                TextInput::make('promo_code')->label('Promo code (optional)')->maxLength(24)->autocomplete('off')->placeholder('SAVE50')
+                    ->suffixAction(Action::make('applyPromo')->label('Apply')->icon(Heroicon::OutlinedTicket)
+                        ->action(fn (Get $get, Set $set) => self::applyPromo($get, $set))),
+                Hidden::make('promo_line'),
+                Text::make(fn (Get $get): string => (string) $get('promo_line'))->visible(fn (Get $get): bool => filled($get('promo_line'))),
                 Textarea::make('message')->label('Message (optional)')->rows(2)->maxLength(1000)->placeholder('Anything we should know'),
             ])
             ->action(function (array $data): void {
@@ -125,14 +138,61 @@ final class PlanLock
                 }
                 $requests = app(UpgradeRequests::class);
                 try {
-                    $requests->create($user, (int) CurrentWorkspace::id(), (string) ($data['plan'] ?? ''), $data['message'] ?? null);
+                    $request = $requests->create($user, (int) CurrentWorkspace::id(), (string) ($data['plan'] ?? ''), $data['message'] ?? null, $data['promo_code'] ?? null);
                 } catch (ApiError|ValidationException $e) {
                     Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
-                Notification::make()->title('Request sent. We\'ll activate it once confirmed.')->body($requests->paymentInstructions())->success()->persistent()->send();
+                if ($request->status === UpgradeRequest::APPROVED) {
+                    $name = (string) (Plan::query()->where('key', $request->plan)->value('name') ?? $request->plan);
+                    Notification::make()->title(e("You are on {$name} now"))
+                        ->body($request->approved_until !== null ? e('Until '.$request->approved_until->format('M j, Y').'. Nothing to pay.') : null)->success()->send();
+
+                    return;
+                }
+                Notification::make()->title('Request sent. We\'ll activate it once confirmed.')
+                    ->body(e(($request->promo_code !== null ? "To pay: {$request->amount_due} with {$request->promo_code}.\n" : '').$requests->paymentInstructions()))->success()->persistent()->send();
             });
+    }
+
+    /**
+     * Apply in the upgrade sheet (since v1.6.2): the price after the code, or why it cannot be used. A code for another
+     * plan chooses that plan (the line says so); at 100 % the plan switches on as soon as the request is sent.
+     */
+    private static function applyPromo(Get $get, Set $set): void
+    {
+        $user = self::person();
+        $code = trim((string) $get('promo_code'));
+        if ($user === null || $code === '') {
+            $set('promo_line', $code === '' ? 'Type the code first.' : null);
+
+            return;
+        }
+        $codes = app(PromoCodes::class);
+        $line = function (array $r, string $before = ''): string {
+            $months = $r['months'] === 1 ? '1 month' : $r['months'].' months';
+
+            return $before.($r['free']
+                ? "{$r['percent']} % off: {$r['plan_name']} is free for {$months}. It switches on as soon as you press Request upgrade."
+                : "{$r['percent']} % off: {$r['final_price']} instead of {$r['price']}, for {$months}.");
+        };
+        try {
+            $set('promo_line', $line($codes->checkThrottled($user, $code, (string) $get('plan'), request()->ip())));
+        } catch (ApiError $e) {
+            $other = $e->apiCode() === 'promo_other_plan' ? ($e->extra()['plan'] ?? null) : null;
+            if (! is_string($other)) {
+                $set('promo_line', $e->getMessage());
+
+                return;
+            }
+            $set('plan', $other);
+            try {
+                $set('promo_line', $line($codes->check($user, $code, $other), $e->getMessage().' We chose it for you. '));
+            } catch (ApiError $again) {
+                $set('promo_line', $again->getMessage());
+            }
+        }
     }
 
     /**

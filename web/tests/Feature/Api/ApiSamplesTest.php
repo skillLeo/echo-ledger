@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use App\Mail\EmailCodeMail;
 use App\Models\CaptureSession;
+use App\Models\Plan;
+use App\Models\PromoCode;
 use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\User;
@@ -229,7 +231,11 @@ it('keeps the shape of every answer the apps read', function () {
     ]));
     $record('entitlements', $api()->getJson('/api/me/entitlements'));
     $record('transcription_key', $api()->putJson('/api/me/transcription-key', ['provider' => 'groq', 'key' => 'gsk_sample_key_00000000000000001234']));
-    $record('upgrade_request', $api()->postJson('/api/upgrade-requests', ['plan' => 'business', 'message' => 'For the team']));
+    // Promo codes (v1.6.2): a code checked, then a request made with it.
+    Plan::query()->where('key', 'business')->update(['price_label' => null, 'price_amount' => 7999, 'currency' => 'PKR']);
+    PromoCode::query()->create(['code' => 'TEAM25', 'plan' => 'business', 'percent' => 25, 'months' => 1]);
+    $record('promo_check', $api()->postJson('/api/promo-codes/check', ['code' => 'team25', 'plan' => 'business']));
+    $record('upgrade_request', $api()->postJson('/api/upgrade-requests', ['plan' => 'business', 'message' => 'For the team', 'promo_code' => 'TEAM25']));
     $record('upgrade_request_latest', $api()->getJson('/api/upgrade-requests/latest'));
     $record('device_rename', $api()->patchJson('/api/devices/'.$signedIn['device']['id'], ['name' => 'Sample phone']));
 

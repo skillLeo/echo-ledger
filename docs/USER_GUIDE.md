@@ -225,6 +225,12 @@ plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
+**Promo codes (since v1.6.2).** Got a code? Type it under **Promo code** in the upgrade sheet and press **Apply**: you
+see the price after the discount (for example "50 % off: Rs 1,500 a month instead of Rs 2,999 a month"). A code for
+another plan chooses that plan for you and says so. A 100 % code switches the plan on as soon as you press **Request
+upgrade**, with nothing to pay, for as many months as the code gives. A code works once per person unless it says
+otherwise; if your request is declined you can use it again.
+
 **All features (web console, since v1.6.2).** **Account → Plan & usage → All features** (or type "All features" in
 **Find a page**) lists every feature with one line about it: **✓ In your plan**, or the badge of the plan that has it
 (**PRO ✦**, **ULTRA ✦**). Click a badge to see that feature and the plans side by side; the line at the top says how

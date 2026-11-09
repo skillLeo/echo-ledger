@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\SttWebhookController;
 use App\Http\Controllers\Api\TeammateController;
 use App\Http\Controllers\Api\TranscriptEditController;
 use App\Http\Controllers\Api\TranscriptViewsController;
+use App\Http\Controllers\Api\PromoCodeController;
 use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
@@ -84,6 +85,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Upgrade requests (v1.6): the newest one of this device's person.
         Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
+        // Promo codes (v1.6.2): one code checked for this device's person; codes are never listed.
+        Route::post('promo-codes/check', [PromoCodeController::class, 'check'])->middleware(['abilities:config:read', 'throttle:promo-check'])->name('api.promo-codes.check');
         Route::get('security', [SecurityController::class, 'index'])->middleware('abilities:config:read')->name('api.security');
         Route::get('clients', [ConfigController::class, 'clients'])->middleware('abilities:library:read')->name('api.clients');
 

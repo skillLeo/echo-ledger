@@ -1,8 +1,11 @@
 {
-    "id": "01m6z2k9th437amnvpsekm05ap",
+    "id": "01m704nvg67n5e119fc3x6e88k",
     "plan": "business",
     "status": "pending",
     "message": "For the team",
+    "promo_code": "TEAM25",
+    "percent": 25,
+    "amount_due": "Rs 5,999 a month",
     "payment_instructions": "We will email you how to pay. Once the payment is confirmed, we switch your plan on.",
-    "created_at": "2026-11-09T02:36:03+00:00"
+    "created_at": "2026-11-09T12:31:38+00:00"
 }

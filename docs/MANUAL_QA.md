@@ -494,7 +494,7 @@ browser and a person's eyes. Screenshots of every page are in docs/design/screen
 | 16-WS9 | Admin panel at 1440 px: the sidebar, Customers → click a row, Esc. | The admin frame with ADMIN and its own groups; the quick look slides in from the right with the numbers and Open; Esc closes it. |
 | 16-WS10 | Admin → Sign-up with no Turnstile keys, then with them. | The switch is greyed out with "Off until its keys are saved…"; once saved it turns the check off and on, and the web sign-up asks for it only while on. |
 
-### Web console v1.6.2 All features and locked features (what only a real browser can prove)
+### Web console v1.6.2 All features, locked features and promo codes (what only a real browser can prove)
 
 The tests prove the list, the count, which badge each feature gets and that a click opens the upgrade sheet and never
 the feature. Screenshots: docs/design/screens/web/web-account-plan-free-* and web-account-plan-ultra-*.
@@ -506,6 +506,9 @@ the feature. Screenshots: docs/design/screens/web/web-account-plan-free-* and we
 | 16-AF3 | As Free, open a project: the Ask and Screens tabs, the AI notes switch, Make again, Add (memory), Ask; then the project's Settings. | Ask and Screens carry their badge; each control opens the sheet and nothing changes; Screens says screen moments are not in the plan; Settings shows the screen moments switch greyed with PRO ✦ and See plans. |
 | 16-AF4 | As Free, open a finished recording: Roman Urdu / English in the player, the lock beside them, Write notes (in a project). | Each opens the sheet; no view or notes are made. |
 | 16-AF5 | Ctrl+K, type "invite" as Free, Enter. | "Invite · Team workspaces are in Ultra: see plans"; the Workspace page opens with the sheet. |
+| 16-PC1 | Admin → Promo codes → New promo code: `spring-50`, Pro, 50 %, 1 month. Then as a Free person in the console: the upgrade sheet → Promo code `SPRING-50` → Apply; then Request upgrade. | The code is saved as SPRING-50; Apply shows "50 % off: … instead of …"; the request shows in Admin → Upgrade requests with the code, 50 % off and the amount to pay. |
+| 16-PC2 | A 100 % code for Ultra, applied while Pro is chosen, then Request upgrade. | Apply says "This code is for Ultra. We chose it for you." and chooses Ultra; after Request upgrade "You are on Ultra now", the badges are gone and the bell has the notice. |
+| 16-PC3 | The same person tries the 50 % code again, then a made-up code 11 times within a minute. | "This code is not valid." both times (nothing about uses or other people); the 11th try says to wait. |
 | 16-AF6 | The same pages as an Ultra person, in light and dark, at 1440 px and on a phone. | 15 of 15, no badges anywhere; the real controls work; nothing overflows at 390 px. |
 
 ### Web console v1.6.1 notices (what only a real browser and a person's hands can prove)

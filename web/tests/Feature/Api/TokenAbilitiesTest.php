@@ -115,6 +115,7 @@ function abilityRoutes(): array
         'ask for a plan' => ['POST', '/api/upgrade-requests', 'sessions:write'],
         'rename a device' => ['PATCH', "/api/devices/{$id}", 'sessions:write'],
         'your latest upgrade request' => ['GET', '/api/upgrade-requests/latest', 'config:read'],
+        'check a promo code' => ['POST', '/api/promo-codes/check', 'config:read'],
         'delete your account' => ['DELETE', '/api/account', 'sessions:write'],
         'export your data' => ['POST', '/api/account/export', 'library:read'],
         'your export' => ['GET', "/api/account/export/{$id}", 'library:read'],

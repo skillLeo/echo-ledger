@@ -1,0 +1,10 @@
+{
+    "code": "TEAM25",
+    "plan": "business",
+    "plan_name": "Business",
+    "percent": 25,
+    "price": "Rs 7,999 a month",
+    "final_price": "Rs 5,999 a month",
+    "free": false,
+    "months": 1
+}

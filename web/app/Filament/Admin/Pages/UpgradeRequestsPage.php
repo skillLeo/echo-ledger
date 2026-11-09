@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Pages;
 use App\Filament\Admin\Resources\Customers\Pages\ViewCustomer;
 use App\Filament\Support\Notice as Notification;
 use App\Models\Plan;
+use App\Models\PromoCode;
 use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Services\Entitlements\Entitlements;
@@ -62,6 +63,13 @@ class UpgradeRequestsPage extends Page implements HasTable
         return $count > 0 ? (string) $count : null;
     }
 
+    private static function promoUntil(UpgradeRequest $request): ?string
+    {
+        $months = $request->promo_code !== null ? PromoCode::query()->where('code', $request->promo_code)->value('months') : null;
+
+        return $months !== null ? now()->addMonths((int) $months)->format('Y-m-d H:i') : null;
+    }
+
     public function getSubheading(): ?string
     {
         return 'People who asked for a plan. Approve once the payment is confirmed; the plan is on at once.';
@@ -84,6 +92,10 @@ class UpgradeRequestsPage extends Page implements HasTable
                 TextColumn::make('user.name')->label('Person')->description(fn (UpgradeRequest $r): string => $r->user->email)->searchable(['name', 'email']),
                 TextColumn::make('current')->label('On now')->state($current),
                 TextColumn::make('plan')->label('Asks for')->formatStateUsing(fn (string $state) => $plans()[$state] ?? $state)->badge(),
+                // Since v1.6.2: the promo code and what is to be paid after it.
+                TextColumn::make('promo_code')->label('Code')->fontFamily('mono')->placeholder('—')
+                    ->description(fn (UpgradeRequest $r): ?string => $r->percent !== null ? $r->percent.' % off' : null),
+                TextColumn::make('amount_due')->label('To pay')->placeholder('—'),
                 TextColumn::make('message')->limit(80)->placeholder('—')->wrap(),
                 TextColumn::make('status')->badge()->color(fn (string $state): string => match ($state) {
                     UpgradeRequest::APPROVED => 'success', UpgradeRequest::DECLINED => 'danger', default => 'warning',
@@ -104,7 +116,8 @@ class UpgradeRequestsPage extends Page implements HasTable
                     ->authorize(fn (): bool => StaffAccess::can('upgrades.manage'))
                     ->visible(fn (UpgradeRequest $r): bool => $r->status === UpgradeRequest::PENDING)
                     ->modalDescription('The person\'s workspace goes on the plan at once. With an end date it goes back to the default plan then.')
-                    ->fillForm(fn (UpgradeRequest $r): array => ['plan' => $r->plan])
+                    // With a promo code the plan lasts the code's months unless staff choose otherwise.
+                    ->fillForm(fn (UpgradeRequest $r): array => ['plan' => $r->plan, 'until' => self::promoUntil($r)])
                     ->schema([
                         Select::make('plan')->required()->options(fn (): array => Plan::query()->whereNull('archived_at')->orderBy('sort_order')->orderBy('id')->pluck('name', 'key')->all())->selectablePlaceholder(false),
                         DateTimePicker::make('until')->label('Until (optional)')->minDate(now())->seconds(false),

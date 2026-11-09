@@ -18,6 +18,9 @@ use Illuminate\Support\Carbon;
  * @property int $workspace_id
  * @property string $plan
  * @property string|null $message
+ * @property string|null $promo_code since v1.6.2
+ * @property int|null $percent the promo code's discount
+ * @property string|null $amount_due the price after the discount, as shown
  * @property string $status
  * @property string|null $reply
  * @property string|null $approved_plan
@@ -38,7 +41,7 @@ class UpgradeRequest extends Model
 
     public const DECLINED = 'declined';
 
-    protected $fillable = ['user_id', 'workspace_id', 'plan', 'message', 'status', 'reply', 'approved_plan', 'approved_until', 'decided_by', 'decided_at'];
+    protected $fillable = ['user_id', 'workspace_id', 'plan', 'message', 'promo_code', 'percent', 'amount_due', 'status', 'reply', 'approved_plan', 'approved_until', 'decided_by', 'decided_at'];
 
     /** @return BelongsTo<User, $this> */
     public function user(): BelongsTo
@@ -55,6 +58,6 @@ class UpgradeRequest extends Model
     /** @return array<string, string> */
     protected function casts(): array
     {
-        return ['approved_until' => 'datetime', 'decided_at' => 'datetime'];
+        return ['approved_until' => 'datetime', 'decided_at' => 'datetime', 'percent' => 'integer'];
     }
 }
