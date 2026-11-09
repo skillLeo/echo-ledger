@@ -83,7 +83,8 @@ class ApiSamplesTest {
     )
 
     /** Answers the phone sends for and does not read (only whether the call worked). */
-    private val notRead = setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
+    private val notRead =
+        setOf("device_rename", "recording_chunk", "session_marker", "session_restore", "session_speakers", "session_update")
 
     private val everyField = Json {
         encodeDefaults = true

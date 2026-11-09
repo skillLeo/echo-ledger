@@ -473,6 +473,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Whether this phone has finished at least one library sync since it was paired. */
     fun hasSynced(): Boolean = graph.library.hasSynced()
 
+    /** "Notify me when ready" on a recording page (since v1.6): one notice when its transcript is ready. */
+    fun notifyWhenReady(sessionId: String) = com.echoledger.mobile.notify.ReadyWatchWorker.enqueue(getApplication<Application>(), sessionId)
+
     /** The live status (since 1.3.2): the library again, without the pull-to-refresh spinner or a config fetch. */
     fun refreshQuietly() = viewModelScope.launch(Dispatchers.IO) {
         runCatching { graph.library.refresh() }

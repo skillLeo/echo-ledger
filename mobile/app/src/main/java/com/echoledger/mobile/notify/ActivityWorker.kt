@@ -34,7 +34,12 @@ class ActivityWorker(context: Context, params: WorkerParameters) : CoroutineWork
         if (!canPost || fresh.isEmpty()) return Result.success()
         // Each kind has its own switch and Android channel (since v1.5); quiet hours hold back all but critical ones.
         val app = applicationContext as EchoLedgerApp
-        val shown = fresh.filter { NotifyGate.allowed(app, NotifyCategory.forActivity(it.kind)) }
+        // A recording someone asked about with "Notify me when ready" was already announced (since v1.6).
+        val announced = ReadyWatchWorker.notified(applicationContext).toSet()
+        val shown = fresh.filter {
+            NotifyGate.allowed(app, NotifyCategory.forActivity(it.kind)) &&
+                !(NotifyCategory.forActivity(it.kind) == NotifyCategory.TRANSCRIPTION && it.sessionId in announced)
+        }
         val texts = Activity.notificationText(shown)
         if (texts.size == 1 && shown.size > 1) {
             Notifications.activity(applicationContext, "activity-summary", texts[0].first, texts[0].second, null)

@@ -122,6 +122,7 @@ import com.echoledger.mobile.core.LibrarySort
 import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.PairingPayload
 import com.echoledger.mobile.core.PhoneBrand
+import com.echoledger.mobile.core.RecordingSteps
 import com.echoledger.mobile.core.SmartView
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.core.SourceDevice
@@ -180,7 +181,8 @@ fun SessionScreen(
     var detailFor by remember { mutableStateOf<Pair<String, Int>?>(null) }
     // Opening the page counts as opening the recording (the unopened dot goes away here and on the server).
     LaunchedEffect(item.id) { vm.markOpened(item) }
-    LaunchedEffect(item.id, attempt, version) {
+    // The final transcript's id and status are keys too, so the page loads it as soon as the server has it (since v1.6).
+    LaunchedEffect(item.id, attempt, version, item.transcript?.finalTranscriptId, item.transcript?.finalStatus) {
         val previous = previousVersionId(item).takeIf { version == TranscriptVersion.PREVIOUS }
         val id = previous ?: item.transcript?.finalTranscriptId ?: item.transcript?.liveTranscriptId
         transcript = id?.let { vm.transcript(it) }
@@ -203,6 +205,20 @@ fun SessionScreen(
         }
     }
     val t = transcript
+    // Since v1.6 (P5.4): Upload · Transcribe · Improve while it is on its way; the page follows it by itself (the
+    // Library's live refresh does not run while a recording is open).
+    val steps = RecordingSteps.of(item, t.takeIf { version == TranscriptVersion.CURRENT })
+    val following = steps?.working == true
+    LaunchedEffect(item.id, following) {
+        while (following) {
+            delay(LIVE_PAGE_REFRESH_MS)
+            vm.refreshQuietly()
+            val shown = transcript
+            if (version == TranscriptVersion.CURRENT && shown != null && shown.status in IN_PROGRESS) {
+                vm.transcript(shown.id)?.let { transcript = it }
+            }
+        }
+    }
     // Nothing was heard: no player, no sharing, no failure card; say what to do and offer delete in one tap.
     val noAudio = ItemStatus.of(item) == ItemStatus.NO_AUDIO || t?.errorCode == "no_audio"
     val segments = t?.segments.orEmpty()
@@ -477,6 +493,10 @@ fun SessionScreen(
                     )
                 }
 
+                t == null && steps != null && steps.working -> item(key = "progress") {
+                    RecordingStepsBlock(item.id, steps, { vm.notifyWhenReady(item.id) }, Modifier.padding(horizontal = Space.screen))
+                }
+
                 t == null -> item(key = "no-transcript") {
                     val status = item.transcript?.finalStatus
                     Text(
@@ -518,6 +538,10 @@ fun SessionScreen(
                     )
                 }
 
+                t.status in IN_PROGRESS && steps != null && steps.working -> item(key = "progress") {
+                    RecordingStepsBlock(item.id, steps, { vm.notifyWhenReady(item.id) }, Modifier.padding(horizontal = Space.screen))
+                }
+
                 t.status in IN_PROGRESS -> item(key = "progress") {
                     Row(Modifier.padding(horizontal = Space.screen), verticalAlignment = Alignment.CenterVertically) {
                         com.echoledger.mobile.ui.design.Spinner(16.dp)
@@ -541,6 +565,12 @@ fun SessionScreen(
                 }
 
                 else -> {
+                    // Since v1.6 (P5.4): the transcript can be read while its views are written.
+                    if (steps != null && steps.onlyImproving) {
+                        item(key = "improving") {
+                            ImprovingBar(steps, Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3))
+                        }
+                    }
                     // Since v1.5: made by a backup engine (the preferred one stayed busy or refused it): offer the best one.
                     if (t.backupEngine && t.kind == "final") {
                         item(key = "backup-engine") {
@@ -1076,6 +1106,8 @@ fun providerName(id: String?): String = when (id) {
 }
 
 /** Final transcript states that are still being worked on: never shown as an empty transcript (A6.M5). */
+private const val LIVE_PAGE_REFRESH_MS = 5_000L
+
 private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_device")
 
 /** The failure reason, plus the phone's own hint when nothing was captured. */

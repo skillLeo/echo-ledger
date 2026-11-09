@@ -14,6 +14,7 @@ import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.ProgressDto
+import com.echoledger.mobile.data.RowViewsDto
 import com.echoledger.mobile.data.TranscriptSummary
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -219,7 +220,10 @@ class SessionScreenTest : ScreenTest() {
         serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
         showSession(item(finalStatus = "processing"))
 
-        awaitText("Transcribing…")
+        // Since v1.6 (P5.4): the three steps, the running one named.
+        awaitText("Transcribing")
+        compose.onNodeWithText("Uploaded").assertIsDisplayed()
+        compose.onNodeWithText("Improve").assertIsDisplayed()
     }
 
     @Test
@@ -228,7 +232,7 @@ class SessionScreenTest : ScreenTest() {
         val inParts = item(finalStatus = "processing")
         showSession(inParts.copy(transcript = inParts.transcript?.copy(finalProgress = ProgressDto(done = 2, total = 5))))
 
-        awaitText("Transcribing… part 3 of 5")
+        awaitText("Transcribing · part 3 of 5")
     }
 
     @Test
@@ -236,7 +240,46 @@ class SessionScreenTest : ScreenTest() {
         serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
         showSession(item(finalStatus = "awaiting_device"))
 
-        awaitText("Transcribing…")
+        awaitText("Transcribing")
+    }
+
+    @Test
+    fun `Notify me when ready asks for one notice about this recording`() {
+        serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
+        showSession(item(finalStatus = "processing"))
+        awaitText("Notify me when ready")
+
+        compose.onNodeWithText("Notify me when ready").performClick()
+
+        awaitText("You will get a notification when it is ready.")
+        val work = androidx.work.WorkManager.getInstance(app).getWorkInfosForUniqueWork("ready-watch:${ServerFixtures.SESSION_ID}").get()
+        assertEquals(1, work.size)
+    }
+
+    @Test
+    fun `the page follows a recording being transcribed and shows it when it is ready`() {
+        serve(transcriptStatus = 404, transcriptJson = """{"message":"No query results."}""")
+        val shown = androidx.compose.runtime.mutableStateOf(item(finalStatus = "processing"))
+        show { SessionScreen(vm, shown.value, onBack = {}) }
+        awaitText("Transcribing")
+
+        // The Library row (refreshed by the page) says it is done: the page loads the transcript by itself.
+        serve()
+        shown.value = item()
+
+        awaitText("Hi, thanks for calling.")
+        compose.onAllNodesWithText("Notify me when ready").assertCountEquals(0)
+    }
+
+    @Test
+    fun `a readable transcript shows Improving with its percent while the views are made`() {
+        serve()
+        val ready = item()
+        val views = RowViewsDto(status = "making", default = "roman", progress = mapOf("roman" to ProgressDto(done = 3, total = 5)))
+        showSession(ready.copy(transcript = ready.transcript?.copy(views = views)))
+
+        awaitText("Improving Roman Urdu… 60%")
+        compose.onAllNodesWithText("Notify me when ready").assertCountEquals(0)
     }
 
     @Test
