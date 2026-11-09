@@ -134,6 +134,57 @@
             }
         });
 
+        // The Library's keys (P4.4): J and K move through the list, Enter opens (the drawer on a wide screen), X selects,
+        // Esc closes the drawer or clears the selection. With the drawer open, J and K show the next one in it.
+        const library = () => {
+            const list = document.querySelector('.el-library-list');
+            const host = list ? list.closest('[wire\\:id]') : null;
+            return list && host && window.Livewire ? { list, wire: window.Livewire.find(host.getAttribute('wire:id')) } : null;
+        };
+        const rowOf = (el) => el.closest('.fi-ta-record, .fi-ta-row') || el;
+        const wide = () => window.matchMedia('(min-width: 1024px)').matches;
+        document.addEventListener('keydown', (e) => {
+            if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || window.elTyping(e.target)) return;
+            if (document.querySelector('.fi-modal-open[aria-modal="true"]')) return;
+            const lib = library();
+            if (! lib) return;
+            const items = Array.from(lib.list.querySelectorAll('[data-recording]'));
+            const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+            let at = items.findIndex((el) => rowOf(el).classList.contains('el-kb-row'));
+            const drawer = document.querySelector('[data-recording-drawer]');
+            if (key === 'j' || key === 'k') {
+                if (! items.length) return;
+                e.preventDefault();
+                at = at < 0 ? 0 : Math.max(0, Math.min(items.length - 1, at + (key === 'j' ? 1 : -1)));
+                items.forEach((el) => rowOf(el).classList.remove('el-kb-row'));
+                const row = rowOf(items[at]);
+                row.classList.add('el-kb-row');
+                row.scrollIntoView({ block: 'nearest' });
+                if (drawer) lib.wire.selectRecording(items[at].dataset.recording);
+            } else if (key === 'Enter' && at >= 0) {
+                e.preventDefault();
+                const id = items[at].dataset.recording;
+                if (wide()) lib.wire.selectRecording(id);
+                else window.location.href = window.location.pathname.replace(/\/$/, '') + '/' + id;
+            } else if (key === 'x' && at >= 0) {
+                const box = rowOf(items[at]).querySelector('input.fi-ta-record-checkbox');
+                if (box) { e.preventDefault(); box.click(); }
+            } else if (key === 'Escape' && ! drawer) {
+                const checked = lib.list.querySelectorAll('input.fi-ta-record-checkbox:checked');
+                if (checked.length) { e.preventDefault(); checked.forEach((b) => b.click()); }
+            }
+        });
+        // The table's rows open the drawer on a wide screen, as the list's do.
+        document.addEventListener('click', (e) => {
+            const cell = e.target instanceof Element ? e.target.closest('.el-library-table [data-recording]') : null;
+            if (! cell || ! wide() || e.ctrlKey || e.metaKey || e.shiftKey || e.button !== 0) return;
+            const lib = library();
+            if (! lib) return;
+            e.preventDefault();
+            e.stopPropagation();
+            lib.wire.selectRecording(cell.dataset.recording);
+        }, true);
+
         // Recordings dragged onto a place: the rows chosen with their box, or the one dragged.
         const TYPE = 'application/x-echoledger-recordings';
         document.addEventListener('dragstart', (e) => {

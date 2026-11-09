@@ -101,10 +101,31 @@ class ListCaptureSessions extends ListRecords
     /** The Group by of the Library (LibraryView::GROUPS), remembered per person and view. */
     public string $libraryGroup = LibraryView::DEFAULT_GROUP;
 
+    /** Since v1.6 (P4.4): the Library as the phone's list or as a table, remembered per person (Shell::LAYOUTS). */
+    public string $libraryLayout = 'list';
+
     public function mount(): void
     {
+        $user = auth()->user();
+        $this->libraryLayout = Shell::preferences($user instanceof User ? $user : null)['layout'];
         parent::mount();
         $this->loadLibraryView();
+    }
+
+    /** The toolbar's List / Table switch. */
+    public function setLibraryLayout(string $layout): void
+    {
+        if (! isset(Shell::LAYOUTS[$layout])) {
+            return;
+        }
+        $this->libraryLayout = $layout;
+        $user = auth()->user();
+        if ($user instanceof User) {
+            Shell::remember($user, 'layout', $layout);
+        }
+        // The table is built again with the other columns; the search and the filters stay.
+        $this->bootedInteractsWithTable();
+        $this->flushCachedTableRecords();
     }
 
     public function updatedActiveTab(): void
@@ -332,7 +353,7 @@ class ListCaptureSessions extends ListRecords
                     RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
                     EmbeddedTable::make(),
                     RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
-                ])->extraAttributes(['class' => 'el-list el-library-list']),
+                ])->extraAttributes(fn (): array => ['class' => 'el-list el-library-list'.($this->libraryLayout === 'table' ? ' el-library-table' : '')]),
             ])->extraAttributes(['class' => 'el-library el-with-col']),
             View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
         ]);

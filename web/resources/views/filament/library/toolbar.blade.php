@@ -74,6 +74,17 @@
 
     <span class="el-tool-spacer" aria-hidden="true"></span>
 
+    {{-- Since v1.6 (P4.4): the phone's list or a table (Columns chooses what it shows). --}}
+    <div class="el-seg el-layout-switch" role="group" aria-label="Show as">
+        @foreach (\App\Filament\Support\Shell::LAYOUTS as $key => $label)
+            <button type="button" @class(['el-segment', 'el-on' => $this->libraryLayout === $key]) aria-pressed="{{ $this->libraryLayout === $key ? 'true' : 'false' }}"
+                wire:click="setLibraryLayout('{{ $key }}')" data-layout="{{ $key }}" title="{{ $label }}">
+                @svg($key === 'list' ? 'heroicon-o-queue-list' : 'heroicon-o-table-cells', ['aria-hidden' => 'true'])
+                <span class="el-tool-label">{{ $label }}</span>
+            </button>
+        @endforeach
+    </div>
+
     @foreach ($menus as [$menu, $label, $options, $current, $method, $icon])
         <x-filament::dropdown placement="bottom-end" wire:key="library-menu-{{ $menu }}">
             <x-slot name="trigger">

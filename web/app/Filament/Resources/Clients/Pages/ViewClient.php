@@ -402,6 +402,12 @@ class ViewClient extends ViewRecord
             'client' => $client,
             'tab' => $this->tab,
             'tabs' => self::TABS,
+            // Since v1.6 (P4.4): the tabs with their counts, as in the desktop app.
+            'tabCounts' => [
+                'recordings' => $client->captureSessions()->count(),
+                'files' => ClientFile::query()->where('client_id', $client->id)->count(),
+                'rules' => FilingRule::query()->where('client_id', $client->id)->count(),
+            ],
             'pending' => $this->hasPending(),
             'poll' => self::POLL,
             'zone' => $zone,

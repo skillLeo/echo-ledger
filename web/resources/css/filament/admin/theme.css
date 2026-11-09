@@ -4026,3 +4026,137 @@ body.el-resizing {
         display: none;
     }
 }
+
+/* ---------- the page pattern (P4.4) ---------- */
+.el-crumbs {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    margin-bottom: 2px;
+    font-size: 13px;
+    line-height: 18px;
+    color: var(--text-muted);
+}
+
+.el-crumbs-link:hover {
+    color: var(--text);
+    text-decoration: underline;
+}
+
+.el-crumbs-sep {
+    width: 12px;
+    height: 12px;
+    color: var(--text-faint);
+}
+
+.el-tb-search {
+    max-width: 640px;
+}
+
+/* The lines that need you ("1 call waiting · Review", "Failed uploads (1) · See why") side by side, not stacked. */
+.fi-sc:has(> .fi-wi-widget > .el-waiting-chip) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+}
+
+.fi-sc:has(> .fi-wi-widget > .el-waiting-chip) > .fi-wi-widget {
+    flex: none;
+    width: auto;
+}
+
+/* List or Table. */
+.el-layout-switch > button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.el-layout-switch svg {
+    width: 16px;
+    height: 16px;
+}
+
+/* Group headers stay at the top while their rows scroll under them. */
+.el-library .fi-ta-group-header {
+    position: sticky;
+    top: 56px;
+    z-index: 4;
+    background-color: var(--bg);
+}
+
+/* A row's actions show when the pointer is on it (or it has the keys); touch screens always show them. */
+@media (hover: hover) and (pointer: fine) {
+    .el-library .fi-ta-record .fi-ta-actions,
+    .el-library .fi-ta-row .fi-ta-actions {
+        opacity: 0;
+        transition: opacity var(--motion-fast) var(--ease-out);
+    }
+
+    .el-library .fi-ta-record:hover .fi-ta-actions,
+    .el-library .fi-ta-record:focus-within .fi-ta-actions,
+    .el-library .fi-ta-record.el-kb-row .fi-ta-actions,
+    .el-library .fi-ta-row:hover .fi-ta-actions,
+    .el-library .fi-ta-row:focus-within .fi-ta-actions,
+    .el-library .fi-ta-row.el-kb-row .fi-ta-actions,
+    .el-library .fi-ta-actions:has([aria-expanded='true']) {
+        opacity: 1;
+    }
+}
+
+/* J and K: the row the keys are on. */
+.el-library .el-kb-row {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: var(--radius-field);
+}
+
+.el-library-table .el-table-title {
+    cursor: pointer;
+}
+
+/* Density (Account → Preferences): compact rows. */
+html[data-density='compact'] .el-library .el-row {
+    min-height: 0;
+    padding-block: 2px;
+}
+
+html[data-density='compact'] .el-library .el-tile {
+    width: 36px;
+    height: 36px;
+}
+
+html[data-density='compact'] .el-library .fi-ta-record-content-ctn,
+html[data-density='compact'] .el-library .fi-ta-cell {
+    padding-block: 4px;
+}
+
+/* Columns (the table's) sits next to Filters inside the search pill. */
+.el-list .fi-ta-search-field ~ .fi-ta-col-manager-dropdown {
+    position: absolute;
+    inset-block: 0;
+    inset-inline-end: 52px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+}
+
+.el-list:has(.fi-ta-col-manager-dropdown) .fi-ta-search-field .fi-input {
+    padding-inline-end: 92px;
+}
+
+/* A tab's count (P4.4). */
+.el-tab-count {
+    display: inline-block;
+    min-width: 18px;
+    margin-inline-start: 6px;
+    padding: 0 5px;
+    border-radius: var(--radius-full);
+    background-color: var(--surface-2);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    color: var(--text-muted);
+    text-align: center;
+}

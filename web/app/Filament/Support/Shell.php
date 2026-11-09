@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Filament\Admin\Pages\Dashboard as AdminDashboard;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\GetTheApps;
@@ -20,7 +21,9 @@ use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Resources\Clients\Pages\ListClients;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\User;
@@ -59,6 +62,9 @@ final class Shell
     /** @var array<string, string> */
     public const CLOCKS = ['12h' => '12-hour (2:30 PM)', '24h' => '24-hour (14:30)'];
 
+    /** @var array<string, string> the Library as a list (the phone's rows) or a table */
+    public const LAYOUTS = ['list' => 'List', 'table' => 'Table'];
+
     /** The sidebar's groups that open to show what is inside. */
     public const GROUPS = ['library', 'projects', 'shared'];
 
@@ -80,7 +86,7 @@ final class Shell
     /**
      * The person's shell choices, each checked, or its default.
      *
-     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string}
+     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string, layout: string}
      */
     public static function preferences(?User $user = null): array
     {
@@ -96,6 +102,7 @@ final class Shell
             'open' => $open,
             'density' => is_string($saved['density'] ?? null) && isset(self::DENSITIES[$saved['density']]) ? $saved['density'] : 'comfortable',
             'clock' => is_string($saved['clock'] ?? null) && isset(self::CLOCKS[$saved['clock']]) ? $saved['clock'] : '12h',
+            'layout' => is_string($saved['layout'] ?? null) && isset(self::LAYOUTS[$saved['layout']]) ? $saved['layout'] : 'list',
         ];
     }
 
@@ -110,6 +117,7 @@ final class Shell
             'style' => is_string($value) && isset(self::STYLES[$value]) ? $value : null,
             'density' => is_string($value) && isset(self::DENSITIES[$value]) ? $value : null,
             'clock' => is_string($value) && isset(self::CLOCKS[$value]) ? $value : null,
+            'layout' => is_string($value) && isset(self::LAYOUTS[$value]) ? $value : null,
             'open' => is_array($value) ? array_values(array_intersect(self::GROUPS, array_filter($value, 'is_string'))) : null,
             default => null,
         };
@@ -318,6 +326,61 @@ final class Shell
         }
 
         return $pages;
+    }
+
+    /**
+     * The page pattern's trail (since v1.6, P4.4) for pages that draw none themselves: the section, then the page,
+     * as [url => label] with the current page last and without a link (its key is an integer). By the page's class,
+     * so a Livewire update draws the same trail as the first load.
+     *
+     * @return array<int|string, string>
+     */
+    public static function crumbs(string $page, string $title): array
+    {
+        $profile = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
+        $library = CaptureSessionResource::canAccess() ? CaptureSessionResource::getUrl('index', panel: 'app') : null;
+        $shared = self::sharedPlaces()[0]['url'] ?? null;
+        $section = match ($page) {
+            ListCaptureSessions::class, ListClients::class, Activity::class, EditProfile::class => [],
+            Upload::class, RecentlyDeleted::class, Search::class => $library !== null ? [$library => 'Library'] : [],
+            SharedWithMe::class, Shares::class, RequestLinksPage::class => $shared !== null ? [$shared => 'Shared'] : [],
+            Security::class, ListDevices::class, Usage::class, WorkspaceSettings::class => [$profile => 'Account'],
+            GetTheApps::class => [Dashboard::getUrl(panel: 'app') => 'Home'],
+            default => null,
+        };
+        if ($section === null) {
+            return [];
+        }
+        $label = match ($page) {
+            SharedWithMe::class => 'With me',
+            Shares::class => 'My links',
+            EditProfile::class => 'Account',
+            default => $title,
+        };
+
+        return [...$section, $label];
+    }
+
+    /** The one-line subtitle of a page that has none of its own (P4.4). */
+    public static function subtitle(string $page): ?string
+    {
+        $all = fn (): int => self::counts()['all'];
+
+        return match ($page) {
+            ListCaptureSessions::class => ($all() === 1 ? '1 recording' : number_format($all()).' recordings').' from your phone, your computer and the web.',
+            ListClients::class => 'A folder for each customer: their calls, files, notes and the words to get right.',
+            Activity::class => 'Uploads, transcripts, devices and what needs you.',
+            SharedWithMe::class => 'Recordings and projects your teammates sent you.',
+            Shares::class => 'The links you made, who opened them, and Stop sharing.',
+            RequestLinksPage::class => 'Links people use to send you files, without an account.',
+            RecentlyDeleted::class => 'Deleted recordings stay here for 48 hours; restore one or delete it for good.',
+            Search::class => 'Find a word in every transcript; a result plays from that moment.',
+            Security::class => 'Passkeys, the browsers signed in, and the log of sign-ins and changes.',
+            ListDevices::class => 'Your phones and computers: rename one, sign it out, or sign in a new one.',
+            Usage::class => 'Minutes transcribed and what they cost, this month and before.',
+            EditProfile::class => 'Your profile, sign-in, devices, notifications, preferences, plan and data.',
+            default => null,
+        };
     }
 
     /**

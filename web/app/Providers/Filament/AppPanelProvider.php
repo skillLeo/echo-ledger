@@ -32,6 +32,7 @@ use Filament\Http\Middleware\AuthenticateSession;
 use Filament\Http\Middleware\DisableBladeIconComponents;
 use Filament\Http\Middleware\DispatchServingFilamentEvent;
 use Filament\Navigation\NavigationGroup;
+use Filament\Pages\Page;
 use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Facades\FilamentIcon;
@@ -46,7 +47,9 @@ use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
+use Illuminate\Support\HtmlString;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
+use Livewire\Livewire;
 
 class AppPanelProvider extends PanelProvider
 {
@@ -65,6 +68,24 @@ class AppPanelProvider extends PanelProvider
         FilamentView::registerRenderHook(PanelsRenderHook::CONTENT_BEFORE, $shell(fn (): View => view('filament.shell.topbar-slot')));
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, $shell(fn (): View => view('filament.shell.head')));
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
+        // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
+        FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));
+    }
+
+    /** The trail or the subtitle the app's page draws no copy of itself (the page being rendered decides). */
+    private static function pageHeader(string $part): View|HtmlString|string
+    {
+        $page = Livewire::current();
+        if (Filament::getCurrentPanel()?->getId() !== 'app' || ! $page instanceof Page) {
+            return '';
+        }
+        if ($part === 'crumbs') {
+            return $page->getBreadcrumbs() === [] ? view('filament.shell.page-crumbs', ['crumbs' => Shell::crumbs($page::class, (string) $page->getTitle())]) : '';
+        }
+        $subtitle = blank($page->getSubheading()) ? Shell::subtitle($page::class) : null;
+
+        return $subtitle !== null ? new HtmlString('<p class="fi-header-subheading el-subtitle">'.e($subtitle).'</p>') : '';
     }
 
     /**

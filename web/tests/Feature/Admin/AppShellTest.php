@@ -314,3 +314,60 @@ describe('the top bar (P4.3)', function () {
             ->toContain('data-record-here')->toContain('el-record-asked')->toContain('Record a voice note')->toContain('accept="audio/*" capture');
     });
 });
+
+describe('the page pattern (P4.4)', function () {
+    it('puts the section above the title and a one-line subtitle, on the first load and after an update', function () {
+        $a = Fx::user();
+        Fx::session($a);
+        $this->actingAs($a, 'web');
+
+        $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+        expect($html)->toContain('<nav class="el-crumbs" aria-label="Breadcrumbs">')->toContain('aria-current="page">Library</span>')
+            ->toContain('1 recording from your phone, your computer and the web.');
+        expect(Livewire::test(ListCaptureSessions::class)->call('openPlace', 'pinned')->html())->toContain('el-subtitle');
+
+        $shared = (string) $this->get('/app/shared-with-me')->assertOk()->getContent();
+        expect($shared)->toMatch('/class="el-crumbs-link">Shared<\/a>.*aria-current="page">With me</s');
+    });
+
+    it('switches the Library between List and Table, keeps the choice per person, and refuses anything else', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        Fx::session($a, null, ['title' => 'Budget review']);
+        $this->actingAs($a, 'web');
+
+        $html = Livewire::test(ListCaptureSessions::class)->call('setLibraryLayout', 'table')->assertSet('libraryLayout', 'table')->html();
+        expect($html)->toContain('el-library-table')->toContain('fi-ta-col-manager-dropdown')->toContain('Budget review');
+        expect(Shell::preferences($a->fresh())['layout'])->toBe('table');
+        Livewire::test(ListCaptureSessions::class)->assertSet('libraryLayout', 'table')->call('setLibraryLayout', 'grid')->assertSet('libraryLayout', 'table');
+
+        $this->actingAs($b, 'web');
+        Livewire::test(ListCaptureSessions::class)->assertSet('libraryLayout', 'list');
+    });
+
+    it('sends to WhatsApp from the drawer only the person\'s own recording (404 for user A\'s)', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        $theirs = Fx::session($a, null, ['title' => 'A private call']);
+        $this->actingAs($b, 'web');
+
+        Livewire::test(ListCaptureSessions::class)->set('selected', $theirs->id)->call('mountAction', 'drawerWhatsapp')->assertNotFound();
+    });
+
+    it('counts the project\'s recordings, files and rules on its tabs', function () {
+        $a = Fx::user();
+        $project = Fx::client($a, 'Acme Holdings');
+        Fx::session($a, null, ['client_id' => $project->id]);
+        Fx::session($a, null, ['client_id' => $project->id]);
+        $this->actingAs($a, 'web');
+
+        expect(Livewire::test(ViewClient::class, ['record' => $project->id])->html())->toMatch('/Recordings(?:<!--.*?-->)*<span class="el-tab-count" aria-label=", 2">2<\/span>/s');
+    });
+
+    it('has the Library\'s keys, J and K, Enter, X and Esc, never while typing', function () {
+        $this->actingAs(Fx::user(), 'web');
+        $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
+
+        expect($html)->toContain("key === 'j' || key === 'k'")->toContain("key === 'x'")->toContain('window.elTyping(e.target)')->toContain('el-kb-row');
+    });
+});
