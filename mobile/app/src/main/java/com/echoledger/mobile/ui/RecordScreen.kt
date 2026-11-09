@@ -206,10 +206,11 @@ private fun ModeTile(icon: ImageVector, name: String, status: String, modifier: 
         verticalArrangement = Arrangement.SpaceBetween
     ) {
         Box(
-            Modifier.size(36.dp).clip(CircleShape).background(if (enabled) c.accentSoft else c.surface3),
+            // Neutral (since v1.7): the tiles no longer take the accent, so Wallpaper colours cannot tint them.
+            Modifier.size(36.dp).clip(CircleShape).background(c.surface3),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, contentDescription = null, tint = if (enabled) c.accentText else c.textFaint, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = null, tint = if (enabled) c.text else c.textFaint, modifier = Modifier.size(20.dp))
         }
         Column {
             Text(name, style = type.bodyL, color = if (enabled) c.text else c.textMuted, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -462,7 +463,7 @@ internal fun RecordStage(live: LiveRecording, onAction: ((String) -> Unit)? = nu
                 if (live.active) null else Icons.Rounded.Mic,
                 if (live.active) "Stop" else "Record",
                 72.dp,
-                if (live.active) c.dangerStrong else c.accentStrong,
+                if (live.active) c.dangerStrong else c.recordFill,
                 Color.White
             ) { act(RecordingService.ACTION_TOGGLE) }
             if (live.active) {

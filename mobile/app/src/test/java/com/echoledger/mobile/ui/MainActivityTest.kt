@@ -115,7 +115,7 @@ class MainActivityTest : AppTest() {
         awaitText("Sign in or create an account")
 
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Settings").assertCountEquals(0)
         // Since v1.6 the sign-in screen asks only what the server offers (Google, sign-up): nothing else is sent.
         assertTrue(server.requests.all { it.url.encodedPath == "/api/auth/options" })
     }
@@ -126,7 +126,9 @@ class MainActivityTest : AppTest() {
 
         awaitText("Weekly sync")
 
-        listOf("Library", "Projects", "Record", "Activity", "You").forEach { compose.onNodeWithContentDescription(it).assertIsDisplayed() }
+        listOf("Library", "Projects", "Record", "Activity", "Settings").forEach {
+            compose.onNodeWithContentDescription(it).assertIsDisplayed()
+        }
         compose.onNodeWithContentDescription("Library").assertIsSelected()
     }
 
@@ -146,8 +148,8 @@ class MainActivityTest : AppTest() {
             !present("Weekly sync")
         }
 
-        compose.onNodeWithContentDescription("You").performClick()
-        awaitText("Game translate")
+        compose.onNodeWithContentDescription("Settings").performClick()
+        awaitText("Live Translate")
 
         compose.onNodeWithContentDescription("Projects").performClick()
         awaitText("Folders")
@@ -163,16 +165,16 @@ class MainActivityTest : AppTest() {
     fun `a settings group closes with the system back button and the tab stays on the list`() {
         val controller = launch(preload = true)
         awaitText("Weekly sync")
-        compose.onNodeWithContentDescription("You").performClick()
-        awaitText("Game translate")
+        compose.onNodeWithContentDescription("Settings").performClick()
+        awaitText("Live Translate")
 
-        compose.onNodeWithText("Watch translate").performClick()
+        compose.onNodeWithText("Videos").performClick()
         awaitText("Subtitle style")
         compose.onAllNodesWithText("Search settings").assertCountEquals(0)
 
         controller.get().onBackPressedDispatcher.onBackPressed()
-        awaitText("Game translate")
-        compose.onNodeWithContentDescription("You").assertIsDisplayed()
+        awaitText("Live Translate")
+        compose.onNodeWithContentDescription("Settings").assertIsDisplayed()
     }
 
     @Test
@@ -256,10 +258,7 @@ class MainActivityTest : AppTest() {
     fun `unpairing from settings returns to the pairing screen`() {
         launch(preload = true)
         awaitText("Weekly sync")
-        compose.onNodeWithContentDescription("You").performClick()
-        awaitText("General")
-        compose.onNodeWithText("General").performClick()
-        compose.onNodeWithText("This phone").performClick()
+        compose.onNodeWithContentDescription("Settings").performClick()
         awaitText("Sign out")
 
         compose.onNodeWithText("Sign out").performScrollTo().performClick()

@@ -33,10 +33,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccountCircle
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.VideoLibrary
 import androidx.compose.material.icons.rounded.AccountCircle
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.VideoLibrary
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Scaffold
@@ -753,5 +755,5 @@ private val MAIN_TABS = listOf(
     NavTab(TAB_LIBRARY, "Library", Icons.Outlined.VideoLibrary, Icons.Rounded.VideoLibrary),
     NavTab(TAB_CLIENTS, "Projects", Icons.Outlined.Folder, Icons.Rounded.Folder),
     NavTab(TAB_ACTIVITY, "Activity", Icons.Outlined.Notifications, Icons.Rounded.Notifications),
-    NavTab(TAB_YOU, "You", Icons.Outlined.AccountCircle, Icons.Rounded.AccountCircle)
+    NavTab(TAB_YOU, "Settings", Icons.Outlined.Settings, Icons.Rounded.Settings)
 )

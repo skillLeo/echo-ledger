@@ -445,6 +445,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun account(): com.echoledger.mobile.data.AccountDto? = workspaceCall("The account could not be loaded.") { it.account() }
 
+    /** The account for the Settings card (since v1.7): nothing is said when it can't be read; the card keeps what it had. */
+    suspend fun accountQuietly(): com.echoledger.mobile.data.AccountDto? =
+        runCatching { withContext(Dispatchers.IO) { graph.api()?.account() } }.getOrNull()
+
     /** Signs out every device and console session of the account, this phone too (back to the sign-in screen). */
     suspend fun signOutEverywhere(): Boolean {
         workspaceCall("Signing out failed.") { it.signOutEverywhere() } ?: return false
@@ -1295,20 +1299,127 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** "Request upgrade" (since v1.6): asks for [plan]; the answer carries the owner's payment instructions. */
-    suspend fun requestUpgrade(plan: String, message: String?, promoCode: String? = null): com.echoledger.mobile.data.UpgradeRequestDto? {
+    suspend fun requestUpgrade(plan: String, message: String?, promoCode: String? = null): com.echoledger.mobile.data.UpgradeRequestDto? =
+        requestUpgradeAttempt(plan, message, promoCode).also { it.error?.let { text -> _message.value = text } }.value
+
+    /** "Request" in the upgrade flow (since v1.7): the error stays in the flow instead of a passing message. */
+    suspend fun requestUpgradeAttempt(
+        plan: String,
+        message: String?,
+        promoCode: String? = null
+    ): Attempt<com.echoledger.mobile.data.UpgradeRequestDto> {
         val answer = try {
             withContext(Dispatchers.IO) { graph.api()?.requestUpgrade(plan, message, promoCode) }
         } catch (e: ApiException) {
-            _message.value = if (e.code == "request_pending") "You have already asked. We'll let you know." else e.message
-            null
+            // Already asked: the open request is the answer, so the flow shows its status.
+            if (e.code == "request_pending") return Attempt(loadUpgradeRequest(), null)
+            return Attempt(
+                null,
+                if (e.status ==
+                    429
+                ) {
+                    "You have asked a few times today. Try again tomorrow."
+                } else {
+                    e.message ?: "That didn't work. Try again."
+                }
+            )
         } catch (e: Exception) {
-            _message.value = "Can't reach the server. Try again."
-            null
-        } ?: return null
-        graph.settings.update { it.copy(plan = it.plan.copy(upgrade = answer)) }
+            return Attempt(null, "Can't reach the server. Try again.")
+        } ?: return Attempt(null, "Sign in again to upgrade.")
+        storeRequest(answer)
         // A 100 % promo code switches the plan on at once: read the new plan now.
         if (answer.status == "approved") refresh()
-        return answer
+        return Attempt(answer, null)
+    }
+
+    /** What a receipt step did (since v1.7): the new state, or the words to show next to the button. */
+    data class Attempt<T>(val value: T?, val error: String?)
+
+    private fun receiptError(e: ApiException): String = when (e.code) {
+        "too_large" -> "That file is over 5 MB. Send a screenshot instead."
+        "validation_failed" -> "Send a picture (JPG, PNG or WebP) or a PDF without a password."
+        "too_many_proofs" -> "You can send 3 files at a time. Remove one first."
+        "proof_locked" -> "That receipt was already sent, so it stays."
+        "proof_required" -> "Add a receipt or the transaction ID first."
+        "request_decided" -> "This request is already closed. Pull to refresh."
+        else -> if (e.status == 429) "Too many tries. Wait a minute, then try again." else e.message ?: "That didn't work. Try again."
+    }
+
+    private suspend fun storeRequest(request: com.echoledger.mobile.data.UpgradeRequestDto?) {
+        graph.settings.update { it.copy(plan = it.plan.copy(upgrade = request)) }
+    }
+
+    /** The newest upgrade request in full (Plan & usage and Request status read it when they open). */
+    suspend fun loadUpgradeRequest(): com.echoledger.mobile.data.UpgradeRequestDto? {
+        val latest = runCatching { withContext(Dispatchers.IO) { graph.api()?.latestUpgradeRequest() } }.getOrElse {
+            return graph.settings.current().plan.upgrade
+        }
+        storeRequest(latest)
+        return latest
+    }
+
+    /**
+     * Adds one receipt from [uri]: a picture is redrawn as a JPEG of at most 2560 px on the long side (no location or
+     * camera data leaves the phone; the server re-encodes it again), a PDF is sent as it is.
+     */
+    suspend fun uploadReceipt(requestId: String, uri: android.net.Uri): Attempt<com.echoledger.mobile.data.ProofDto> {
+        val context = getApplication<android.app.Application>()
+        val prepared = withContext(Dispatchers.IO) {
+            runCatching { com.echoledger.mobile.core.Receipts.prepare(context.contentResolver, uri) }.getOrNull()
+        } ?: return Attempt(null, "That file can't be read. Try a screenshot.")
+        if (prepared.bytes.size > com.echoledger.mobile.core.Receipts.MAX_BYTES) {
+            return Attempt(null, "That file is over 5 MB. Send a screenshot instead.")
+        }
+        return try {
+            val proof = withContext(Dispatchers.IO) { graph.api()?.uploadProof(requestId, prepared.name, prepared.mime, prepared.bytes) }
+                ?: return Attempt(null, "Sign in again to send a receipt.")
+            loadUpgradeRequest()
+            Attempt(proof, null)
+        } catch (e: ApiException) {
+            Attempt(null, receiptError(e))
+        } catch (e: Exception) {
+            Attempt(null, "Can't reach the server. Try again.")
+        }
+    }
+
+    suspend fun removeReceipt(requestId: String, proofId: String): String? = try {
+        withContext(Dispatchers.IO) { graph.api()?.deleteProof(requestId, proofId) }
+        loadUpgradeRequest()
+        null
+    } catch (e: ApiException) {
+        receiptError(e)
+    } catch (e: Exception) {
+        "Can't reach the server. Try again."
+    }
+
+    suspend fun receiptImage(requestId: String, proofId: String, variant: String = "thumb"): ByteArray? =
+        runCatching { withContext(Dispatchers.IO) { graph.api()?.proofImage(requestId, proofId, variant) } }.getOrNull()
+
+    /** "Send receipt": the files added so far and/or the transaction ID go to staff for checking. */
+    suspend fun sendReceipt(
+        requestId: String,
+        reference: String?,
+        payerName: String?
+    ): Attempt<com.echoledger.mobile.data.UpgradeRequestDto> = try {
+        val request = withContext(Dispatchers.IO) { graph.api()?.markPaid(requestId, reference, payerName) }
+            ?: return Attempt(null, "Sign in again to send a receipt.")
+        storeRequest(request)
+        Attempt(request, null)
+    } catch (e: ApiException) {
+        Attempt(null, receiptError(e))
+    } catch (e: Exception) {
+        Attempt(null, "Can't reach the server. Try again.")
+    }
+
+    suspend fun cancelUpgradeRequest(requestId: String): Attempt<com.echoledger.mobile.data.UpgradeRequestDto> = try {
+        val request = withContext(Dispatchers.IO) { graph.api()?.cancelUpgradeRequest(requestId) }
+            ?: return Attempt(null, "Sign in again to cancel the request.")
+        storeRequest(request)
+        Attempt(request, null)
+    } catch (e: ApiException) {
+        Attempt(null, receiptError(e))
+    } catch (e: Exception) {
+        Attempt(null, "Can't reach the server. Try again.")
     }
 
     /** Account → Transcription key (since v1.6, the Free plan): saves this person's own Groq key on the server. */

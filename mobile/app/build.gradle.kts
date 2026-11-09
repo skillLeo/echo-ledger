@@ -62,12 +62,15 @@ android {
             isDefault = true
             buildConfigField("boolean", "CALL_LOG", "true")
             buildConfigField("boolean", "CAPTURE_HELPER", "true")
+            // Since v1.7: upgrades by bank transfer with a receipt (Google Play's billing rules leave them out of the play build).
+            buildConfigField("boolean", "MANUAL_PAYMENTS", "true")
         }
         create("play") {
             dimension = "store"
             buildConfigField("boolean", "CALL_LOG", "false")
             // Play allows neither a shell-UID capture helper nor the special-use foreground service it needs.
             buildConfigField("boolean", "CAPTURE_HELPER", "false")
+            buildConfigField("boolean", "MANUAL_PAYMENTS", "false")
         }
     }
 

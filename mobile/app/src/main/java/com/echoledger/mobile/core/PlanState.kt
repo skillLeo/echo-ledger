@@ -48,8 +48,8 @@ data class PlanState(
             featureName = f.name.ifBlank { feature },
             description = f.description,
             planKey = f.lowestPlan ?: offer?.key.orEmpty(),
-            badge = badgeText(offer?.badge?.ifBlank { null } ?: offer?.name ?: f.lowestPlan ?: "PRO"),
-            color = offer?.color
+            badge = badgeText(offer?.name?.ifBlank { null } ?: planName(f.lowestPlan)),
+            color = null
         )
     }
 
@@ -68,12 +68,32 @@ data class PlanState(
     /** A viewer opens what is shared with them and records nothing. */
     val viewer: Boolean get() = role == "viewer"
 
-    /** "Free plan · 120 of 300 min this month", "Personal plan", or null before the server said. */
+    /**
+     * The line next to the plan on the Settings card (since v1.7): "120 of 300 min this month" when the plan has
+     * minutes, nothing on Free (its limit is 0: it transcribes with the person's own key), null before the server said.
+     */
     fun summary(): String? {
-        val plan = name?.takeIf { it.isNotBlank() }?.let { "$it plan" } ?: return null
-        val limit = monthlyMinutes ?: return plan
-        return "$plan · ${usedMinutes ?: 0} of $limit min this month"
+        name?.takeIf { it.isNotBlank() } ?: return null
+        val limit = monthlyMinutes ?: return null
+        if (limit <= 0) return null
+        return "${usedMinutes ?: 0} of ${"%,d".format(limit)} min this month"
     }
+
+    /** The plan's display name ("Free", "Pro", "Ultra"), never its key. */
+    val displayName: String get() = name?.takeIf { it.isNotBlank() } ?: planName(key)
+
+    /** The plans above this one, cheapest first (the Plans section and the upgrade flow offer only these). */
+    val higherPlans: List<com.echoledger.mobile.data.PlanOfferDto>
+        get() {
+            val mine = offers.indexOfFirst { it.key == key }
+            return offers.filterIndexed { i, o -> i > mine && o.key != "free" && (o.pricePkr ?: 1) > 0 }
+        }
+
+    /** Free with the platform's engines off: the person transcribes with their own Groq key. */
+    val isFree: Boolean get() = key == "free" || (key == null && name.equals("Free", ignoreCase = true))
+
+    /** The top plan: nothing to upgrade to. */
+    val isTop: Boolean get() = offers.isNotEmpty() && higherPlans.isEmpty()
 
     /** "Acme team · Viewer", or null when the server did not say. */
     fun membership(): String? = listOfNotNull(workspace?.takeIf { it.isNotBlank() }, roleLabel(role)).joinToString(" · ").ifEmpty { null }
@@ -93,13 +113,20 @@ data class PlanState(
         )
 
         /**
-         * The mark after a plan's name on its badge (v1.6 P1.4, Hassam's design: "PRO" followed by a four-pointed star),
-         * the one symbol the copy rules allow, and only here.
+         * A plan tag's text (since v1.7): the plan's name in sentence case, "Pro" or "Ultra", with no mark and no
+         * capitals, the same neutral tag on every app (docs/DESIGN_SYSTEM.md "Settings").
          */
-        const val PLAN_MARK = "\u2726"
+        fun badgeText(name: String): String = planName(name)
 
-        /** "PRO" → the badge text (the name and [PLAN_MARK]): one badge style for every plan. */
-        fun badgeText(name: String): String = name.trim().uppercase() + " " + PLAN_MARK
+        /** "business" or "BUSINESS" → "Ultra" (its display name), "PRO" → "Pro"; null or blank → "Pro". */
+        fun planName(keyOrName: String?): String {
+            val t = keyOrName?.trim().orEmpty()
+            return when (t.lowercase()) {
+                "" -> "Pro"
+                "business", "ultra" -> "Ultra"
+                else -> t.lowercase().replaceFirstChar { it.titlecase() }
+            }
+        }
 
         /** The v1.6 entitlements on top of what the config said (an older server's answer keeps [base]). */
         fun withEntitlements(base: PlanState, e: com.echoledger.mobile.data.EntitlementsDto): PlanState {

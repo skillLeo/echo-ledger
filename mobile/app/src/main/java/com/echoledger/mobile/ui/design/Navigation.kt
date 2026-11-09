@@ -159,7 +159,7 @@ fun RecordButton(recording: Boolean, onClick: () -> Unit, onLongPress: () -> Uni
     }
     val interaction = remember { MutableInteractionSource() }
     val fill by animateColorAsState(
-        if (recording) c.dangerStrong else c.accentStrong,
+        if (recording) c.dangerStrong else c.recordFill,
         tween(Motion.BASE, easing = Motion.Standard),
         label = "record fill"
     )

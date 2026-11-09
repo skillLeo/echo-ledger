@@ -6,7 +6,6 @@ import com.echoledger.mobile.data.FeatureDto
 import com.echoledger.mobile.data.LimitDto
 import com.echoledger.mobile.data.PlanOfferDto
 import com.echoledger.mobile.data.TranscriptionKeyDto
-import com.echoledger.mobile.ui.limitText
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -35,11 +34,11 @@ class EntitlementsTest {
     fun `a Free plan locks paid features with the lowest plan's badge`() {
         val plan = PlanState.withEntitlements(PlanState(), free)
         val views = plan.lockFor("views")!!
-        assertEquals("PRO ✦", views.badge)
+        assertEquals("Pro", views.badge)
         assertEquals("pro", views.planKey)
-        assertEquals("#7c3aed", views.color)
+        assertNull(views.color)
         assertEquals("Read any call in Roman Urdu or English.", views.description)
-        assertEquals("BUSINESS ✦", plan.lockFor("live_translate")!!.badge)
+        assertEquals("Ultra", plan.lockFor("live_translate")!!.badge)
         assertNull(plan.lockFor("record"))
         assertFalse(plan.liveTranslate)
         assertTrue(plan.needsOwnKey)
@@ -55,12 +54,23 @@ class EntitlementsTest {
     }
 
     @Test
-    fun `limits read in plain words`() {
-        assertEquals("1 of 2", limitText("devices", 1, 2))
-        assertEquals("50 MB of 1 GB", limitText("storage_bytes", 50L shl 20, 1L shl 30))
-        assertEquals("120 min of 600 min", limitText("monthly_minutes", 120, 600))
-        assertEquals("30 days", limitText("retention_days", null, 30))
-        assertEquals("No limit", limitText("seats", null, null))
-        assertEquals("3 · no limit", limitText("devices", 3, null))
+    fun `limits read in plain words (v1_7)`() {
+        assertEquals("1 of 2", PlanFormat.limit("devices", 1, 2))
+        assertEquals("50 MB of 1 GB", PlanFormat.limit("storage_bytes", 50L shl 20, 1L shl 30))
+        assertEquals("120 of 600 min", PlanFormat.limit("monthly_minutes", 120, 600))
+        assertEquals("1,230 of 3,000 min", PlanFormat.limit("monthly_minutes", 1230, 3000))
+        assertEquals("30 days", PlanFormat.limit("retention_days", null, 30))
+        assertEquals("1 year", PlanFormat.limit("retention_days", null, 365))
+        assertEquals("No limit", PlanFormat.limit("seats", 3, null))
+        assertEquals("1.4 GB", PlanFormat.fileSize((14L shl 30) / 10))
+        assertEquals("640 KB", PlanFormat.fileSize(640L * 1024))
+    }
+
+    @Test
+    fun `plan names are never keys, and Free shows no minutes line (v1_7)`() {
+        assertEquals("Ultra", PlanState.planName("business"))
+        assertEquals("Pro", PlanState.planName("PRO"))
+        assertNull(PlanState(name = "Free", monthlyMinutes = 0, usedMinutes = 0).summary())
+        assertEquals("120 of 300 min this month", PlanState(name = "Pro", monthlyMinutes = 300, usedMinutes = 120).summary())
     }
 }

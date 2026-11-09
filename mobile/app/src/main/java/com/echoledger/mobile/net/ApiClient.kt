@@ -279,6 +279,54 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("upgrade-requests").post(body).build(), com.echoledger.mobile.data.UpgradeRequestDto.serializer())!!
     }
 
+    /** `GET /api/upgrade-requests/latest`: the newest request in full, or null when there is none (404). */
+    suspend fun latestUpgradeRequest(): com.echoledger.mobile.data.UpgradeRequestDto? = try {
+        call(request("upgrade-requests/latest").get().build(), com.echoledger.mobile.data.UpgradeRequestDto.serializer())
+    } catch (e: ApiException) {
+        if (e.status == 404) null else throw e
+    }
+
+    /** `POST /api/upgrade-requests/{id}/proofs` (since v1.7): one receipt, a picture or a PDF of at most 5 MB. */
+    suspend fun uploadProof(requestId: String, name: String, mime: String, bytes: ByteArray): com.echoledger.mobile.data.ProofDto {
+        val body = okhttp3.MultipartBody.Builder().setType(okhttp3.MultipartBody.FORM)
+            .addFormDataPart("file", name, bytes.toRequestBody(mime.toMediaType()))
+            .build()
+        return call(
+            request("upgrade-requests/$requestId/proofs").post(body).build(),
+            com.echoledger.mobile.data.ProofResponse.serializer()
+        )!!.data
+    }
+
+    suspend fun deleteProof(requestId: String, proofId: String) {
+        call(request("upgrade-requests/$requestId/proofs/$proofId").delete().build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
+    /** A receipt's picture (`variant` thumb or full), with this device's token. */
+    suspend fun proofImage(requestId: String, proofId: String, variant: String = "thumb"): ByteArray = withContext(Dispatchers.IO) {
+        http.newCall(request("upgrade-requests/$requestId/proofs/$proofId?variant=$variant").get().build()).execute().use { resp ->
+            if (!resp.isSuccessful) throw java.io.IOException("The receipt could not be loaded (${resp.code}).")
+            resp.body.bytes()
+        }
+    }
+
+    /** `POST /api/upgrade-requests/{id}/paid` (since v1.7): sends the receipts and/or the bank's transaction ID. */
+    suspend fun markPaid(requestId: String, reference: String?, payerName: String?): com.echoledger.mobile.data.UpgradeRequestDto {
+        val body = buildJsonObject {
+            reference?.trim()?.takeIf { it.isNotEmpty() }?.let { put("payment_reference", it.take(64)) }
+            payerName?.trim()?.takeIf { it.isNotEmpty() }?.let { put("payer_name", it.take(120)) }
+        }.toString().toRequestBody(jsonType)
+        return call(
+            request("upgrade-requests/$requestId/paid").post(body).build(),
+            com.echoledger.mobile.data.UpgradeRequestDto.serializer()
+        )!!
+    }
+
+    /** `POST /api/upgrade-requests/{id}/cancel` (since v1.7). */
+    suspend fun cancelUpgradeRequest(requestId: String): com.echoledger.mobile.data.UpgradeRequestDto = call(
+        request("upgrade-requests/$requestId/cancel").post("{}".toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.UpgradeRequestDto.serializer()
+    )!!
+
     /** `POST /api/promo-codes/check` (since v1.6.2): `422 invalid_promo_code` or `promo_other_plan` (with `plan`) are ApiExceptions. */
     suspend fun checkPromo(code: String, plan: String?): com.echoledger.mobile.data.PromoCheckDto {
         val body = buildJsonObject {

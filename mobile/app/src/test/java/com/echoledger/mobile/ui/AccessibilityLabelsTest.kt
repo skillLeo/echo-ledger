@@ -82,7 +82,7 @@ class AccessibilityLabelsTest : ScreenTest() {
         show { SettingsScreen(vm, onSetup = {}) }
         compose.waitForIdle()
         assertEquals(emptyList<String>(), unlabelled())
-        compose.onNodeWithText("General").performClick()
+        compose.onNodeWithText("Appearance").performClick()
         compose.waitForIdle()
         assertEquals(emptyList<String>(), unlabelled())
     }

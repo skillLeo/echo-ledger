@@ -116,7 +116,7 @@ class AppLockTest : AppTest() {
         compose.onNodeWithText("Unlock with your fingerprint, face or device PIN.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Unlock").assertIsDisplayed()
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(0)
-        compose.onAllNodesWithContentDescription("You").assertCountEquals(0)
+        compose.onAllNodesWithContentDescription("Settings").assertCountEquals(0)
     }
 
     @Test
@@ -131,7 +131,7 @@ class AppLockTest : AppTest() {
 
         assertFalse(lockScreenShown())
         compose.onAllNodesWithContentDescription("Record").assertCountEquals(1)
-        compose.onAllNodesWithContentDescription("You").assertCountEquals(1)
+        compose.onAllNodesWithContentDescription("Settings").assertCountEquals(1)
     }
 
     @Test

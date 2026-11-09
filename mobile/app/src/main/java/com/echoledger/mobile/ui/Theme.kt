@@ -133,19 +133,28 @@ fun isDarkTheme(themeMode: String): Boolean = when (themeMode) {
 /** Dynamic colour (Material You) needs Android 12. */
 val supportsDynamicColour: Boolean get() = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
 
-/** Our tokens with the wallpaper's accent and surfaces (dynamic colour); text and status colours stay ours. */
-private fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
+/**
+ * Wallpaper colours (since v1.7, docs/DESIGN_SYSTEM.md "Wallpaper colours"): the wallpaper's scheme replaces the
+ * neutrals and the accent only. Record, recording, danger, warning, success and the two speaker colours keep their
+ * fixed, contrast-checked values, so the Record button and "Me" / "Client" never change with the wallpaper.
+ */
+internal fun EchoColors.withScheme(scheme: ColorScheme): EchoColors = copy(
     bg = scheme.surface,
     surface = scheme.surfaceContainerLow,
     surface2 = scheme.surfaceContainerHigh,
+    surface3 = scheme.surfaceContainerHighest,
+    border = scheme.outlineVariant,
+    borderStrong = scheme.outline,
     text = scheme.onSurface,
     textMuted = scheme.onSurfaceVariant,
+    textFaint = scheme.onSurfaceVariant,
     accent = scheme.primary,
     accentText = scheme.primary,
     accentStrong = scheme.primary,
-    accentSoft = scheme.primary.copy(alpha = if (isDark) 0.16f else 0.1f),
-    onAccent = scheme.onPrimary,
-    me = scheme.primary
+    accentPressed = androidx.compose.ui.graphics.lerp(scheme.primary, scheme.onPrimary, 0.12f),
+    accentSoft = scheme.primaryContainer,
+    accentSoftText = scheme.onPrimaryContainer,
+    onAccent = scheme.onPrimary
 )
 
 /** The Material 3 colour scheme of these tokens (the app theme and the home-screen widget). */
@@ -157,10 +166,10 @@ fun EchoColors.toScheme(): ColorScheme {
         primaryContainer = accentSoft,
         // Material picks secondaryContainer for selected chips and segments: ours, not its default lavender.
         secondaryContainer = accentSoft,
-        onSecondaryContainer = accentText,
-        surfaceTint = bg,
-        onPrimaryContainer = accentText,
-        secondary = client,
+        onSecondaryContainer = accentSoftText,
+        surfaceTint = Color.Transparent,
+        onPrimaryContainer = accentSoftText,
+        secondary = accent,
         background = bg,
         onBackground = text,
         surface = bg,
@@ -196,8 +205,9 @@ fun EchoLedgerTheme(
     val colors = dynamicScheme?.let { base.withScheme(it) } ?: base
     val type = if (phoneFont) EchoType.Phone else EchoType.Bundled
     CompositionLocalProvider(LocalEchoColors provides colors, LocalEchoType provides type) {
+        // One scheme for Material's controls and ours, with or without Wallpaper colours.
         MaterialTheme(
-            colorScheme = dynamicScheme ?: colors.toScheme(),
+            colorScheme = colors.toScheme(),
             typography = type.material(),
             shapes = EchoShapes,
             content = content

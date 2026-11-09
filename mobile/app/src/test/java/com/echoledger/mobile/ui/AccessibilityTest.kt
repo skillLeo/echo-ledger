@@ -92,7 +92,7 @@ class AccessibilityTest : ScreenTest() {
     fun `You and its panels name everything that can be tapped`() {
         show { SettingsScreen(vm, onSetup = {}) }
         assertEquals(emptyList<String>(), unnamedClickables())
-        for (panel in listOf("Calls & meetings", "Game translate", "Watch translate", "Voice notes & files")) {
+        for (panel in listOf("Calls & meetings", "Games", "Videos", "Voice notes & dictation")) {
             compose.onNodeWithText(panel).performClick()
             compose.waitForIdle()
             assertEquals("$panel: unnamed", emptyList<String>(), unnamedClickables())

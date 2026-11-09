@@ -1,9 +1,7 @@
 package com.echoledger.mobile.ui
 
-import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onAllNodesWithText
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -20,48 +18,77 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** v1.6 P1.4: the upgrade sheet asks for the plan and shows the owner's payment instructions; the Free plan's own key. */
+/** The upgrade flow (since v1.7; v1.6 P1.4 before): plans above yours, promo codes, the request; the Free plan's own key. */
 class PlanUiTest : ScreenTest() {
     private val plan = PlanState(
         name = "Free",
         key = "free",
         features = mapOf(
             "views" to FeatureDto(false, "Roman Urdu and English views", "Read any call in Roman Urdu or English.", "paid", "pro"),
-            "platform_transcription" to FeatureDto(false, "Transcription on EchoLedger", cost = "paid", lowestPlan = "pro")
+            "platform_transcription" to FeatureDto(false, "Transcription on EchoLedger", cost = "paid", lowestPlan = "pro"),
+            "live_translate" to FeatureDto(false, "Live Translate", cost = "paid", lowestPlan = "business")
         ),
         offers = listOf(
-            PlanOfferDto("free", "Free", "FREE"),
-            PlanOfferDto("pro", "Pro", "PRO", "#7c3aed", "Rs 2,000 a month", features = listOf("views"))
+            PlanOfferDto("free", "Free"),
+            PlanOfferDto(
+                "pro",
+                "Pro",
+                features = listOf("views"),
+                limits = mapOf("monthly_minutes" to 300),
+                pricePkr = 2999,
+                priceText = "Rs 2,999 a month"
+            ),
+            PlanOfferDto(
+                "business",
+                "Ultra",
+                features = listOf("views", "live_translate"),
+                limits = mapOf("monthly_minutes" to 900),
+                pricePkr = 12499,
+                priceText = "Rs 12,499 a month"
+            )
         )
     )
 
-    @Test
-    fun `All features lists every feature, a check for what the plan has and the badge for the rest (v1_6_2)`() {
-        val mixed = plan.copy(features = plan.features + ("record" to FeatureDto(true, "Record and upload")))
-        show { AllFeatures(vm, mixed) }
+    private val requested =
+        """{"id":"01JF","plan":"pro","status":"pending","promo_code":"SAVE50","percent":50,""" +
+            """"amount_due":"Rs 1,500","amount_due_pkr":1500,""" +
+            """"reference_code":"EL-7K2Q9M","payment_instructions":"Bank transfer…","created_at":"2026-11-09T10:00:00Z",""" +
+            """"payment":{"stage":"awaiting_payment","accounts":[{"bank":"Example Bank",""" +
+            """"title":"EXAMPLE PRIVATE LIMITED","iban":"PK00XXXX0000000123456789"}]}}"""
 
-        compose.onNodeWithText("Your plan has 1 of 3 features.").assertExists()
-        compose.onNodeWithText("Record and upload").assertExists()
-        compose.onNodeWithContentDescription("Included").assertExists()
-        compose.onNodeWithText("Roman Urdu and English views").assertExists()
-        compose.onAllNodesWithText(PlanState.badgeText("PRO")).assertCountEquals(2)
-
-        compose.onAllNodesWithText(PlanState.badgeText("PRO"))[0].performClick()
-        compose.onNodeWithText("Request upgrade").assertExists()
+    private fun waitFor(condition: () -> Boolean) = pumpUntil {
+        compose.waitForIdle()
+        condition()
     }
 
-    private fun openPromo() {
-        show { UpgradeSheet(vm, plan, plan.lockFor("views")) {} }
-        compose.onNodeWithText("Have a promo code?").performClick()
-        compose.onNodeWithText("Promo code").performTextInput("save50")
+    private fun openFlow(startPlan: String? = "pro") {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/upgrade-requests/latest", FakeServer.json(404, """{"code":"not_found"}"""))
+        show { UpgradeFlow(vm, startPlan, "Roman Urdu and English views", null, given = plan, inDialog = false) {} }
+    }
+
+    private fun applyPromo(code: String) {
+        compose.onNodeWithText("Promo code").performClick()
+        compose.onNodeWithText("Promo code").performTextInput(code)
         compose.onNodeWithText("Apply").performClick()
     }
 
     @Test
-    fun `a promo code shows the new price, and Request upgrade sends it (v1_6_2)`() {
-        runBlocking { app.pairLocally(server) }
+    fun `the flow offers only the plans above Free, with the feature that opened it (v1_7)`() {
+        openFlow()
+        compose.onNodeWithText("Roman Urdu and English views is in Pro. You're on Free.").assertIsDisplayed()
+        compose.onNodeWithText("Rs 2,999 a month").assertExists()
+        compose.onNodeWithText("Rs 12,499 a month").assertExists()
+        assertTrue(compose.onAllNodesWithText("PRO ✦").fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("Request Pro").assertIsDisplayed()
+    }
+
+    @Test
+    fun `a promo code shows the new price, and Request sends it (v1_6_2, v1_7)`() {
+        openFlow()
         server.on(
             "POST",
             "/api/promo-codes/check",
@@ -70,65 +97,45 @@ class PlanUiTest : ScreenTest() {
                 """{"code":"SAVE50","plan":"pro","plan_name":"Pro","percent":50,"price":"Rs 2,999 / month","final_price":"Rs 1,500 / month","free":false,"months":1}"""
             )
         )
-        server.on(
-            "POST",
-            "/api/upgrade-requests",
-            FakeServer.json(
-                201,
-                """{"id":"01JF","plan":"pro","status":"pending","promo_code":"SAVE50","percent":50,"amount_due":"Rs 1,500 / month","payment_instructions":"Bank transfer…","created_at":"2026-11-09T10:00:00Z"}"""
-            )
-        )
-        openPromo()
-
-        pumpUntil("the price") {
-            compose.onAllNodesWithText("Pro: Rs 2,999 / month → Rs 1,500 / month with SAVE50").fetchSemanticsNodes().isNotEmpty()
-        }
-        assertEquals(
-            "SAVE50",
-            Json.parseToJsonElement(
-                server.requestsTo("POST", "/api/promo-codes/check").single().bodyText()
-            ).jsonObject["code"]!!.jsonPrimitive.content
-        )
-        compose.onNodeWithText("Request upgrade").performClick()
-
-        pumpUntil("the amount to pay") {
-            compose.onAllNodesWithText("To pay: Rs 1,500 / month (with SAVE50)").fetchSemanticsNodes().isNotEmpty()
-        }
-        assertEquals(
-            "SAVE50",
-            Json.parseToJsonElement(
-                server.requestsTo("POST", "/api/upgrade-requests").single().bodyText()
-            ).jsonObject["promo_code"]!!.jsonPrimitive.content
-        )
+        server.on("POST", "/api/upgrade-requests", FakeServer.json(201, requested))
+        applyPromo("save50")
+        waitFor { compose.onAllNodesWithText("SAVE50: 50% off Pro for 1 month").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Rs 1,500").assertExists()
+        compose.onNodeWithText("Request Pro").performClick()
+        waitFor { compose.onAllNodesWithText("EXAMPLE PRIVATE LIMITED").fetchSemanticsNodes().isNotEmpty() }
+        val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/upgrade-requests").last().bodyText()).jsonObject
+        assertEquals("pro", body["plan"]!!.jsonPrimitive.content)
+        assertEquals("SAVE50", body["promo_code"]!!.jsonPrimitive.content)
+        compose.onNodeWithText("EL-7K2Q9M").assertExists()
     }
 
     @Test
-    fun `a code for another plan says so and offers that plan`() {
-        runBlocking { app.pairLocally(server) }
-        server.on(
-            "POST",
-            "/api/promo-codes/check",
-            FakeServer.json(422, """{"message":"This code is for Ultra.","code":"promo_other_plan","plan":"business"}""")
-        )
-        val withUltra = plan.copy(offers = plan.offers + PlanOfferDto("business", "Ultra", "ULTRA"))
-        show { UpgradeSheet(vm, withUltra, withUltra.lockFor("views")) {} }
-        compose.onNodeWithText("Have a promo code?").performClick()
-        compose.onNodeWithText("Promo code").performTextInput("TEAM20")
-        compose.onNodeWithText("Apply").performClick()
-
-        pumpUntil("the other plan") { compose.onAllNodesWithText("This code is for Ultra.").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Use it for Ultra").assertExists()
+    fun `a code for another plan moves the choice to that plan (v1_7)`() {
+        openFlow()
+        server.on("POST", "/api/promo-codes/check") { req ->
+            if (req.bodyText().contains("\"plan\":\"business\"")) {
+                FakeServer.json(
+                    200,
+                    """{"code":"TEAM20","plan":"business","plan_name":"Ultra","percent":20,"final_price":"Rs 9,999 / month","months":1}"""
+                )
+            } else {
+                FakeServer.json(422, """{"message":"This code is for Ultra.","code":"promo_other_plan","plan":"business"}""")
+            }
+        }
+        applyPromo("TEAM20")
+        waitFor { compose.onAllNodesWithText("TEAM20: 20% off Ultra for 1 month").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Request Ultra").assertExists()
     }
 
     @Test
     fun `a 100 percent code switches the plan on at once, with nothing to pay`() {
-        runBlocking { app.pairLocally(server) }
+        openFlow()
         server.on(
             "POST",
             "/api/promo-codes/check",
             FakeServer.json(
                 200,
-                """{"code":"FREEPRO","plan":"pro","plan_name":"Pro","percent":100,"price":"Rs 2,999 / month","final_price":"Rs 0","free":true,"months":2}"""
+                """{"code":"GIFT100","plan":"pro","plan_name":"Pro","percent":100,"final_price":"Rs 0 / month","free":true,"months":1}"""
             )
         )
         server.on(
@@ -136,53 +143,22 @@ class PlanUiTest : ScreenTest() {
             "/api/upgrade-requests",
             FakeServer.json(
                 201,
-                """{"id":"01JG","plan":"pro","status":"approved","approved_plan":"pro","approved_until":"2027-01-09T10:00:00Z","promo_code":"FREEPRO","percent":100,"amount_due":"Rs 0","payment_instructions":null,"created_at":"2026-11-09T10:00:00Z"}"""
+                """{"id":"01JG","plan":"pro","status":"approved","approved_plan":"pro","approved_until":"2026-12-09T00:00:00Z","created_at":"2026-11-09T10:00:00Z"}"""
             )
         )
-        openPromo()
-
-        pumpUntil("free") { compose.onAllNodesWithText("Pro free for 2 months with FREEPRO").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("Switch on").performClick()
-
-        pumpUntil("the plan on") { compose.onAllNodesWithText("Your Pro plan is on until 2027-01-09.").fetchSemanticsNodes().isNotEmpty() }
+        server.on("GET", "/api/me/entitlements", FakeServer.json(404, "{}"))
+        applyPromo("GIFT100")
+        waitFor { compose.onAllNodesWithText("Switch on Pro").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("Switch on Pro").performClick()
+        waitFor { compose.onAllNodesWithText("You're on Pro").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test
-    fun `an older server without promo codes hides the field`() {
-        runBlocking { app.pairLocally(server) }
-        server.on("POST", "/api/promo-codes/check", FakeServer.json(404, """{"message":"Not found"}"""))
-        openPromo()
-
-        pumpUntil("the field to go") { compose.onAllNodesWithText("Promo code").fetchSemanticsNodes().isEmpty() }
-        compose.onAllNodesWithText("Have a promo code?").assertCountEquals(0)
-    }
-
-    @Test
-    fun `Request upgrade sends the plan and the message, then shows the payment instructions`() {
-        runBlocking { app.pairLocally(server) }
-        server.on(
-            "POST",
-            "/api/upgrade-requests",
-            FakeServer.json(
-                201,
-                """{"id":"01JF","plan":"pro","status":"pending","message":"Please","payment_instructions":"Send Rs 2,000 to JazzCash 0300…","created_at":"2026-11-09T10:00:00Z"}"""
-            )
-        )
-        show { UpgradeSheet(vm, plan, plan.lockFor("views")) {} }
-
-        // The title, and again in Pro's list of what it includes.
-        compose.onAllNodes(androidx.compose.ui.test.hasText("Roman Urdu and English views")).assertCountEquals(2)
-        compose.onNodeWithText("Rs 2,000 a month").assertIsDisplayed()
-        compose.onNodeWithText("Message (optional)").performTextInput("Please")
-        compose.onNodeWithText("Request upgrade").performClick()
-        pumpUntil("the instructions") {
-            compose.waitForIdle()
-            compose.onAllNodes(androidx.compose.ui.test.hasText("Send Rs 2,000 to JazzCash 0300…")).fetchSemanticsNodes().isNotEmpty()
-        }
-        compose.onNodeWithText("We'll activate it once confirmed.").assertIsDisplayed()
-        val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/upgrade-requests").single().bodyText()).jsonObject
-        assertEquals("pro", body["plan"]!!.jsonPrimitive.content)
-        assertEquals("Please", body["message"]!!.jsonPrimitive.content)
+    fun `an older server without promo codes says so in the dialog`() {
+        openFlow()
+        server.on("POST", "/api/promo-codes/check", FakeServer.json(404, """{"code":"not_found"}"""))
+        applyPromo("SAVE50")
+        waitFor { compose.onAllNodesWithText("Promo codes aren't available right now.").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

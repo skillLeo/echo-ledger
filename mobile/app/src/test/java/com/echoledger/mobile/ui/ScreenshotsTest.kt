@@ -228,7 +228,7 @@ class ScreenshotsTest : ScreenTest() {
     fun settingsGeneral() {
         runBlocking { app.pairLocally(server) }
         shoot { SettingsScreen(vm, onSetup = {}) }
-        compose.onNodeWithText("General").performClick()
+        compose.onNodeWithText("Appearance").performClick()
         capture("settings-general")
     }
 

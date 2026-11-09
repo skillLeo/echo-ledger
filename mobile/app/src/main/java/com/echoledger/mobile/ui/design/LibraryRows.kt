@@ -68,7 +68,7 @@ fun SourceApp.hue(): Color {
         SourceApp.SLACK -> Color(0xFFE01E5A)
         SourceApp.DISCORD -> Color(0xFF5865F2)
         SourceApp.PHONE_CALL -> c.success
-        SourceApp.VOICE_NOTE -> c.accentText
+        SourceApp.VOICE_NOTE -> c.textMuted
         SourceApp.OTHER -> c.textMuted
     }
 }

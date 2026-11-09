@@ -384,7 +384,7 @@ data class FeatureDto(
 )
 
 @Serializable
-data class LimitDto(val limit: Long? = null, val used: Long? = null)
+data class LimitDto(val limit: Long? = null, val used: Long? = null, @SerialName("resets_at") val resetsAt: String? = null)
 
 @Serializable
 data class TranscriptionKeyDto(val provider: String = "groq", val set: Boolean = false, val last4: String? = null)
@@ -404,8 +404,77 @@ data class UpgradeRequestDto(
     /** Since v1.6.2: the promo code used, its discount and what is left to pay. */
     @SerialName("promo_code") val promoCode: String? = null,
     val percent: Int? = null,
-    @SerialName("amount_due") val amountDue: String? = null
+    @SerialName("amount_due") val amountDue: String? = null,
+    /** Since v1.7 (docs/API.md "Payment receipts"): the code to put in the transfer, the amount in rupees, how to pay. */
+    @SerialName("reference_code") val referenceCode: String? = null,
+    @SerialName("amount_due_pkr") val amountDuePkr: Long? = null,
+    val payment: PaymentDto? = null,
+    val timeline: List<TimelineStepDto> = emptyList()
+) {
+    /** Where the request stands; an older server sends no `payment`, so it is worked out from `status`. */
+    val stage: String
+        get() = payment?.stage ?: when (status) {
+            "approved" -> "approved"
+            "declined" -> "declined"
+            else -> "awaiting_payment"
+        }
+
+    /** Waiting on the person or on staff: no Upgrade buttons then (docs/DESIGN_SYSTEM.md "Settings"). */
+    val open: Boolean get() = stage in OPEN_STAGES
+
+    companion object {
+        val OPEN_STAGES = setOf("awaiting_payment", "in_review", "needs_receipt")
+    }
+}
+
+@Serializable
+data class PaymentDto(
+    val stage: String = "awaiting_payment",
+    val accounts: List<PaymentAccountDto> = emptyList(),
+    val note: String? = null,
+    @SerialName("review_hours") val reviewHours: String? = null,
+    @SerialName("paid_at") val paidAt: String? = null,
+    val reference: String? = null,
+    @SerialName("payer_name") val payerName: String? = null,
+    @SerialName("proof_request") val proofRequest: ProofRequestDto? = null,
+    val proofs: List<ProofDto> = emptyList(),
+    @SerialName("max_proofs") val maxProofs: Int = 3,
+    @SerialName("max_bytes") val maxBytes: Long = 5_242_880,
+    val accepts: List<String> = listOf("image/jpeg", "image/png", "image/webp", "application/pdf")
 )
+
+@Serializable
+data class PaymentAccountDto(
+    val bank: String? = null,
+    val branch: String? = null,
+    val title: String? = null,
+    @SerialName("account_number") val accountNumber: String? = null,
+    val iban: String? = null
+)
+
+@Serializable
+data class ProofRequestDto(val note: String? = null, val at: String? = null)
+
+@Serializable
+data class ProofDto(
+    val id: String,
+    val kind: String = "image",
+    val mime: String? = null,
+    val name: String? = null,
+    val bytes: Long = 0,
+    val width: Int? = null,
+    val height: Int? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    val locked: Boolean = false,
+    @SerialName("thumb_url") val thumbUrl: String? = null,
+    @SerialName("file_url") val fileUrl: String? = null
+)
+
+@Serializable
+data class ProofResponse(val data: ProofDto)
+
+@Serializable
+data class TimelineStepDto(val step: String, val at: String? = null)
 
 /** `POST /api/promo-codes/check` (since v1.6.2): what a promo code does for its one plan. */
 @Serializable
@@ -429,7 +498,10 @@ data class PlanOfferDto(
     val price: String? = null,
     val description: String? = null,
     val features: List<String> = emptyList(),
-    val limits: Map<String, Long?> = emptyMap()
+    val limits: Map<String, Long?> = emptyMap(),
+    /** Since v1.7: the price in whole rupees and as shown ("Rs 2,999 a month"). */
+    @SerialName("price_pkr") val pricePkr: Long? = null,
+    @SerialName("price_text") val priceText: String? = null
 )
 
 /** `POST /api/auth/start` (since v1.6): whether the email has an account, and what it can sign in with. */

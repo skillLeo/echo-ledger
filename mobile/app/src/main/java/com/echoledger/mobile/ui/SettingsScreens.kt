@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -21,6 +22,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.AccountCircle
@@ -28,22 +30,30 @@ import androidx.compose.material.icons.outlined.AudioFile
 import androidx.compose.material.icons.outlined.Badge
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.ClosedCaption
+import androidx.compose.material.icons.outlined.DataUsage
 import androidx.compose.material.icons.outlined.Devices
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.FiberManualRecord
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Key
+import androidx.compose.material.icons.outlined.KeyboardVoice
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Schedule
+import androidx.compose.material.icons.outlined.Shield
+import androidx.compose.material.icons.outlined.Spellcheck
 import androidx.compose.material.icons.outlined.SportsEsports
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WarningAmber
 import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
@@ -72,6 +82,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
@@ -85,305 +96,530 @@ import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
+import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
 import com.echoledger.mobile.recording.RecordingService
 import java.time.LocalDate
 
-private fun SettingsGroup.icon(): ImageVector = when (this) {
-    SettingsGroup.General -> Icons.Outlined.Tune
-    SettingsGroup.VoiceNotes -> Icons.Outlined.AudioFile
-    SettingsGroup.Calls -> Icons.Outlined.Call
-    SettingsGroup.Game -> Icons.Outlined.SportsEsports
-    SettingsGroup.Watch -> Icons.Outlined.Subtitles
-}
-
-/**
- * Settings, laid out like the system settings app (B19): a search box and one row per group; every group is its own
- * screen. Searching lists the matching settings and a tap jumps to that setting inside its group. Back (also the
- * predictive back gesture) returns from a group to this list.
- */
-@Composable
-fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
-    var group by rememberSaveable { mutableStateOf<String?>(null) }
-    var focus by rememberSaveable { mutableStateOf<String?>(null) }
-    var query by rememberSaveable { mutableStateOf("") }
-    // The You tab tapped again (since 1.3.2): back to the list of panels.
-    LaunchedEffect(home) {
-        if (home > 0) {
-            group = null
-            focus = null
-            query = ""
-        }
-    }
-    var accountOpen by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(home) { if (home > 0) accountOpen = false }
-    if (accountOpen) {
-        BackHandler { accountOpen = false }
-        AccountScreen(vm, onBack = { accountOpen = false })
-        return
-    }
-    val open = group?.let { name -> SettingsGroup.entries.firstOrNull { it.name == name } }
-    if (open != null) {
-        // General is a list of its own pages; Back from one of them returns to that list.
-        val close = {
-            if (open == SettingsGroup.General && focus != null) {
-                focus = null
-            } else {
-                group = null
-                focus = null
-            }
-        }
-        BackHandler(onBack = close)
-        if (open == SettingsGroup.General) {
-            GeneralScreen(vm, focus, onSetup, onOpen = { focus = it }, onBack = close)
-        } else {
-            SettingsGroupScreen(vm, open, focus, onSetup, onBack = close)
-        }
-        return
-    }
-    // You (since v1.3): this phone and its server on top, then the settings as a flat list, and Unpair at the bottom.
-    val settings by vm.settings.collectAsState()
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
-        com.echoledger.mobile.ui.design.EchoTopBar("You")
-        ProfileCard(settings)
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it.take(60) },
-            label = { Text("Search settings") },
-            leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
-            trailingIcon = {
-                if (query.isNotEmpty()) {
-                    IconButton(onClick = { query = "" }) { Icon(Icons.Rounded.Close, contentDescription = "Clear search") }
-                }
-            },
-            singleLine = true,
-            shape = androidx.compose.foundation.shape.CircleShape,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2)
-        )
-        val results = SettingsCatalogue.search(query)
-        when {
-            query.isBlank() -> {
-                // Since v1.5: the account this phone is signed in to (export, sign out everywhere, delete).
-                SettingsRow(Icons.Outlined.AccountCircle, "Account", "Sign-in, your data, deleting the account", "Open your account") {
-                    accountOpen =
-                        true
-                }
-                com.echoledger.mobile.ui.design.SectionHeader("Settings")
-                SettingsGroup.entries.forEach { g ->
-                    SettingsRow(g.icon(), g.label, g.summary, "Open ${g.label} settings") {
-                        group = g.name
-                        focus = null
-                    }
-                }
-                Box(Modifier.padding(horizontal = Space.s2, vertical = Space.s4)) {
-                    com.echoledger.mobile.ui.design.EchoButton(
-                        "Sign out of this phone…",
-                        {
-                            group = SettingsGroup.General.name
-                            focus = "this-phone"
-                        },
-                        kind = com.echoledger.mobile.ui.design.ButtonKind.Text
-                    )
-                }
-            }
-
-            results.isEmpty() -> Text(
-                "No settings match “${query.trim()}”.",
-                color = Brand.Muted,
-                modifier = Modifier.padding(horizontal = Space.screen, vertical = Space.s4)
-            )
-
-            else -> results.forEach { e ->
-                SettingsRow(e.group.icon(), e.title, e.group.label, "Open ${e.title}") {
-                    group = e.group.name
-                    focus = e.id
-                }
-            }
-        }
-    }
-}
-
-/** Who is signed in here (a phone paired without an account shows its own name), the server, the workspace and the plan. */
-@Composable
-private fun ProfileCard(settings: AppSettings) {
-    val type = LocalEchoType.current
-    val name = settings.account?.email?.takeIf { it.isNotBlank() }
-        ?: settings.deviceName?.takeIf { it.isNotBlank() }
-        ?: "This phone"
-    val server = settings.serverUrl?.let { runCatching { java.net.URI(it).host }.getOrNull() ?: it }
-    Row(
-        Modifier.fillMaxWidth().padding(horizontal = Space.screen, vertical = Space.s2).clip(RoundedCornerShape(Radius.md))
-            .background(Brand.Surface).border(1.dp, Brand.Border, RoundedCornerShape(Radius.md)).padding(Space.s4),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        com.echoledger.mobile.ui.design.Avatar(name, size = 48.dp)
-        Column(Modifier.padding(start = Space.s3).weight(1f)) {
-            Text(name, style = type.titleS, color = Brand.Text)
-            Text(server?.let { "Signed in to $it" } ?: "Not signed in", style = type.labelM, color = Brand.Muted)
-            // Since v1.5: the workspace, this person's role there and the plan's minutes.
-            settings.plan.membership()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
-            settings.plan.summary()?.let { Text(it, style = type.labelM, color = Brand.Muted) }
-        }
-    }
-}
-
-/** A settings group or search result: the design system's row (tinted icon tile, title, summary) with a chevron. */
-@Composable
-private fun SettingsRow(icon: ImageVector, title: String, summary: String, clickLabel: String, onClick: () -> Unit) {
-    com.echoledger.mobile.ui.design.SettingsRow(
-        icon,
-        title,
-        Modifier.semantics {
-            onClick(label = clickLabel) {
-                onClick()
-                true
-            }
-        },
-        summary = summary,
-        onClick = onClick,
-        trailing = {
-            Icon(
-                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                contentDescription = null,
-                tint = Brand.Faint,
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    )
-}
-
-private fun generalIcon(id: String): ImageVector = when (id) {
+private fun pageIcon(id: String): ImageVector = when (id) {
+    "calls" -> Icons.Outlined.Call
+    "mic" -> Icons.Outlined.Mic
+    "captions" -> Icons.Outlined.ClosedCaption
+    "voice" -> Icons.Outlined.KeyboardVoice
+    "language" -> Icons.Outlined.Translate
+    "words" -> Icons.Outlined.Spellcheck
+    "key" -> Icons.Outlined.Key
+    "games" -> Icons.Outlined.SportsEsports
+    "videos" -> Icons.Outlined.Subtitles
     "appearance" -> Icons.Outlined.Palette
-    "this-phone" -> Icons.Outlined.PhoneAndroid
-    "transcription" -> Icons.Outlined.Translate
-    "client" -> Icons.Outlined.Badge
     "notifications" -> Icons.Outlined.Notifications
-    "app-lock" -> Icons.Outlined.Lock
-    "consent" -> Icons.Outlined.PrivacyTip
-    "devices" -> Icons.Outlined.Devices
-    "plan" -> Icons.Outlined.WorkspacePremium
-    "transcription-key" -> Icons.Outlined.Key
+    "lock" -> Icons.Outlined.Lock
     "storage" -> Icons.Outlined.Storage
+    "plan" -> Icons.Outlined.DataUsage
+    "account" -> Icons.Outlined.Shield
+    "devices" -> Icons.Outlined.Devices
+    "privacy" -> Icons.Outlined.PrivacyTip
     "help" -> Icons.Outlined.HelpOutline
     else -> Icons.Outlined.Info
 }
 
+/** The value a root row shows at its end ("Dark", "On", "Pro"), or null when it has none worth showing. */
+private fun pageValue(id: String, s: AppSettings): String? = when (id) {
+    "mic" -> if (s.micSource == "mic") "Raw microphone" else "Automatic"
+
+    "captions" -> if (s.captionsEnabled) "On" else "Off"
+
+    "voice" -> if (s.dictationMode == "hold") "Hold to talk" else "Tap to start"
+
+    "language" -> s.transcriptionLanguage?.let { code ->
+        com.echoledger.mobile.core.Languages.OPTIONS.firstOrNull { it.code == code }?.menu
+    }
+        ?: "Automatic"
+
+    "key" -> if (s.plan.transcriptionKey?.set == true) "Added" else "Not added"
+
+    "games" -> s.liveTranslate.game.games.size.takeIf { it > 0 }?.let { "$it game${if (it == 1) "" else "s"}" } ?: "Not set up"
+
+    "videos" -> s.liveTranslate.watch.apps.size.takeIf { it > 0 }?.let { "$it app${if (it == 1) "" else "s"}" } ?: "Not set up"
+
+    "appearance" -> when (s.themeMode) {
+        "light" -> "Light"
+        "dark" -> "Dark"
+        else -> "System"
+    }
+
+    "notifications" -> when {
+        !s.activityNotifications -> "Off"
+        s.quietHours -> "Quiet ${s.quietFrom}–${s.quietTo}"
+        else -> "On"
+    }
+
+    "lock" -> if (s.appLockEnabled) "On" else "Off"
+
+    "plan" -> s.plan.displayName.takeIf { s.plan.name != null || s.plan.key != null }
+
+    "about" -> BuildConfig.VERSION_NAME
+
+    else -> null
+}
+
+/** A root row is shown: Transcription key only on Free or once a key is saved; the rest always (where built). */
+private fun pageShown(id: String, s: AppSettings): Boolean = when (id) {
+    "key" -> s.plan.needsOwnKey || s.plan.transcriptionKey?.set == true
+    "plan" -> s.serverUrl != null
+    "account" -> s.account?.email != null || s.serverUrl != null
+    else -> true
+}
+
 /**
- * General (since v1.3): one row per setting page (Appearance, This phone, App lock…); [page] opens that page alone,
- * Back returns to the list. "Reset this panel" sits under the list.
+ * Settings (since v1.7, docs/DESIGN_SYSTEM.md "Settings", the same names as the desktop app and the console): who is
+ * signed in with the plan and Upgrade on top, one line while something needs the person, search that reaches every
+ * setting, then six sections of plain rows with their values, and Sign out. Pages open one level down; search results
+ * open their page and highlight the setting.
  */
 @Composable
-private fun GeneralScreen(vm: MainViewModel, page: String?, onSetup: () -> Unit, onOpen: (String) -> Unit, onBack: () -> Unit) {
-    val settings by vm.settings.collectAsState()
-    val entry = page?.let { id -> SettingsCatalogue.entries.firstOrNull { it.id == id && it.group == SettingsGroup.General } }
-    Column(Modifier.fillMaxSize()) {
-        com.echoledger.mobile.ui.design.EchoTopBar(
-            entry?.title ?: SettingsGroup.General.label,
-            large = false,
-            navigation = {
-                com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
-            }
-        )
-        if (entry != null) {
-            Column(
-                Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = Space.s4),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) { SettingsEntryContent(entry, vm, settings, onSetup) }
-            return@Column
+fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
+    var page by rememberSaveable { mutableStateOf<String?>(null) }
+    var highlight by rememberSaveable { mutableStateOf<String?>(null) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    var upgrade by remember { mutableStateOf<FlowStart?>(null) }
+    // The Settings tab tapped again (since 1.3.2): back to the root.
+    LaunchedEffect(home) {
+        if (home > 0) {
+            page = null
+            highlight = null
+            searching = false
         }
-        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Space.s4)) {
-            SettingsCatalogue.inGroup(SettingsGroup.General).forEach { e ->
-                SettingsRow(generalIcon(e.id), e.title, generalSummary(e.id), "Open ${e.title}") { onOpen(e.id) }
+    }
+    val settings by vm.settings.collectAsState()
+    val pending by vm.pending.collectAsState()
+    var account by remember { mutableStateOf<com.echoledger.mobile.data.AccountDto?>(null) }
+    LaunchedEffect(settings.serverUrl) {
+        if (settings.serverUrl != null) account = vm.accountQuietly() ?: account
+        if (manualPayments && settings.plan.upgrade?.open == true) vm.loadUpgradeRequest()
+    }
+    upgrade?.let { start -> UpgradeFlow(vm, start.planKey, null, start.step) { upgrade = null } }
+    if (searching) {
+        BackHandler { searching = false }
+        SettingsSearchScreen(settings, onBack = { searching = false }) { pageId, entry ->
+            searching = false
+            page = pageId
+            highlight = entry
+        }
+        return
+    }
+    val open = page?.let { SettingsIndex.page(it) }
+    if (open != null) {
+        val close = {
+            page = null
+            highlight = null
+        }
+        BackHandler(onBack = close)
+        if (open.id == "account") {
+            AccountScreen(vm, onBack = close)
+        } else {
+            SettingsPageScreen(vm, open, highlight, onSetup, onBack = close, onSearch = { searching = true }, onOpenPage = { page = it })
+        }
+        return
+    }
+    var confirmSignOut by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(bottom = 96.dp)) {
+        com.echoledger.mobile.ui.design.EchoTopBar("Settings")
+        val plan = settings.plan
+        val request = plan.upgrade
+        val member = plan.role == "member" || plan.role == "viewer"
+        val canUpgrade = manualPayments && !member && request?.open != true && plan.higherPlans.isNotEmpty() && settings.serverUrl != null
+        ProfileCard(
+            settings,
+            account,
+            onOpen = { page = "plan" },
+            upgradeLabel = if (canUpgrade) "Upgrade" else null,
+            filled = plan.isFree,
+            onUpgrade = { upgrade = FlowStart(plan.higherPlans.firstOrNull()?.key) }
+        )
+        StateRow(settings, account, onOpenPlan = { page = "plan" }, onOpenKey = { page = "key" }, onRequest = { step ->
+            upgrade =
+                FlowStart(request?.plan, step = step)
+        })
+        com.echoledger.mobile.ui.design.SearchPill(
+            "Search settings",
+            { searching = true },
+            Modifier.padding(horizontal = Space.screen).padding(top = Space.s2, bottom = Space.s4)
+        )
+        SettingsIndex.sections.forEach { section ->
+            val rows = SettingsIndex.pages.filter { it.section == section && pageShown(it.id, settings) }
+            if (rows.isEmpty()) return@forEach
+            com.echoledger.mobile.ui.design.SettingsSection(section) {
+                rows.forEachIndexed { i, p ->
+                    if (i > 0) com.echoledger.mobile.ui.design.RowDivider()
+                    val locked = when (p.id) {
+                        "games", "videos" -> plan.lockFor("live_translate")
+                        else -> null
+                    }
+                    com.echoledger.mobile.ui.design.SettingsRow(
+                        pageIcon(p.id),
+                        p.title,
+                        Modifier.semantics { contentDescription = listOfNotNull(p.title, pageValue(p.id, settings)).joinToString(", ") },
+                        value = if (locked == null) pageValue(p.id, settings) else null,
+                        onClick = { page = p.id },
+                        trailing = {
+                            if (locked != null) com.echoledger.mobile.ui.design.PlanTag(locked.badge) else Chevron()
+                        }
+                    )
+                }
             }
-            var confirmReset by remember { mutableStateOf(false) }
-            Box(Modifier.padding(horizontal = Space.s2, vertical = Space.s2)) {
-                com.echoledger.mobile.ui.design.EchoButton(
-                    "Reset this panel",
-                    { confirmReset = true },
-                    kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+        }
+        if (settings.serverUrl != null) {
+            com.echoledger.mobile.ui.design.SettingsSection(null) {
+                com.echoledger.mobile.ui.design.SettingsRow(
+                    Icons.AutoMirrored.Outlined.Logout,
+                    "Sign out",
+                    tint = LocalEchoColors.current.danger,
+                    titleColor = LocalEchoColors.current.danger,
+                    onClick = { confirmSignOut = true }
                 )
             }
-            if (confirmReset) {
-                ConfirmDialog(
-                    text = "Put the General settings back to their defaults? Your pairing stays.",
-                    confirmLabel = "Reset",
-                    onConfirm = {
-                        confirmReset = false
-                        vm.updateSettings { com.echoledger.mobile.core.SettingsReset.reset(SettingsGroup.General, it) }
-                        vm.showMessage("General settings reset")
-                    },
-                    onDismiss = { confirmReset = false }
+        }
+    }
+    if (confirmSignOut) {
+        val waiting = pending.size
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { confirmSignOut = false },
+            title = { Text("Sign out of this phone?") },
+            text = if (waiting > 0) {
+                {
+                    Text(
+                        if (waiting == 1) {
+                            "1 recording hasn't uploaded yet. It'll stay on this phone, but nobody else can see it until you sign in again."
+                        } else {
+                            "$waiting recordings haven't uploaded yet. They'll stay on this phone, but nobody else can see them until you sign in again."
+                        }
+                    )
+                }
+            } else {
+                null
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSignOut = false
+                    vm.unpair()
+                }) { Text("Sign out", color = LocalEchoColors.current.danger) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSignOut = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+/**
+ * Who is signed in (since v1.7): initials, the account's name and email, the plan's tag and its minutes, all one target
+ * that opens Plan & usage; Upgrade (filled on Free, outlined on Pro, none on Ultra or while a request is open) is its
+ * sibling, never inside it.
+ */
+@Composable
+private fun ProfileCard(
+    settings: AppSettings,
+    account: com.echoledger.mobile.data.AccountDto?,
+    onOpen: () -> Unit,
+    upgradeLabel: String?,
+    filled: Boolean,
+    onUpgrade: () -> Unit
+) {
+    val type = LocalEchoType.current
+    val c = LocalEchoColors.current
+    val email = account?.email ?: settings.account?.email
+    val name = account?.name?.takeIf { it.isNotBlank() }
+        ?: email?.substringBefore('@')?.replace('.', ' ')?.split(' ')?.joinToString(" ") { w -> w.replaceFirstChar { it.titlecase() } }
+        ?: settings.deviceName?.takeIf { it.isNotBlank() }
+        ?: "Not signed in"
+    val plan = settings.plan
+    val signedIn = settings.serverUrl != null
+    val planLine = when {
+        !signedIn -> null
+
+        plan.isFree -> null
+
+        plan.expiresAt != null && plan.monthlyMinutes == null -> com.echoledger.mobile.core.PlanFormat.dateWithYear(plan.expiresAt)?.let {
+            "Paid until $it"
+        }
+
+        else -> plan.summary()
+    }
+    val spoken =
+        listOfNotNull(name, email, if (signedIn) "${plan.displayName} plan" else null).joinToString(", ") +
+            if (signedIn) ". Opens plan and usage." else ""
+    com.echoledger.mobile.ui.design.SettingsSection(null) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier.weight(1f).clickable(enabled = signedIn, onClickLabel = "Open plan and usage", onClick = onOpen)
+                    .semantics(mergeDescendants = true) { contentDescription = spoken }.padding(Space.s4),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                com.echoledger.mobile.ui.design.Avatar(name, size = 56.dp)
+                Column(Modifier.padding(start = Space.s3).weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text(
+                        name,
+                        style = type.titleM,
+                        color = c.text,
+                        maxLines = 1,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                    email?.let {
+                        Text(
+                            it,
+                            style = type.body,
+                            color = c.textMuted,
+                            maxLines = 1,
+                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                        )
+                    }
+                    if (signedIn) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                            com.echoledger.mobile.ui.design.PlanTag(plan.displayName)
+                            planLine?.let {
+                                Text(
+                                    it,
+                                    style = type.labelM.copy(fontWeight = FontWeight.Normal),
+                                    color = c.textMuted,
+                                    modifier = Modifier.padding(start = Space.s2),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+                        plan.membership()?.takeIf {
+                            plan.role != "owner" || plan.workspace?.equals("Personal", ignoreCase = true) == false
+                        }?.let {
+                            Text(it, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted, maxLines = 1)
+                        }
+                    }
+                }
+            }
+            if (upgradeLabel != null) {
+                com.echoledger.mobile.ui.design.EchoButton(
+                    upgradeLabel,
+                    onUpgrade,
+                    Modifier.padding(end = Space.s4),
+                    kind = if (filled) {
+                        com.echoledger.mobile.ui.design.ButtonKind.Primary
+                    } else {
+                        com.echoledger.mobile.ui.design.ButtonKind.Secondary
+                    }
                 )
             }
         }
     }
 }
 
-private fun generalSummary(id: String): String = when (id) {
-    "appearance" -> "Theme and font"
-    "this-phone" -> "Server, name, sign out"
-    "transcription" -> "Language of new recordings"
-    "client" -> "Names and words for a project"
-    "notifications" -> "Activity and quiet hours"
-    "app-lock" -> "Fingerprint or screen lock"
-    "consent" -> "Telling people you record"
-    "devices" -> "Signed-in phones and computers"
-    "plan" -> "Your plan, what you have used, upgrades"
-    "transcription-key" -> "Your own free Groq key (Free plan)"
-    "storage" -> "Space used and how long things are kept"
-    "help" -> "Device check, audio probe, capture test, diagnostics"
-    else -> "Version, export and import settings"
+/** One line under the card while something is true (a request needs the person, the plan ends soon, no transcription key). */
+@Composable
+private fun StateRow(
+    settings: AppSettings,
+    account: com.echoledger.mobile.data.AccountDto?,
+    onOpenPlan: () -> Unit,
+    onOpenKey: () -> Unit,
+    onRequest: (FlowStep) -> Unit
+) {
+    val c = LocalEchoColors.current
+    val plan = settings.plan
+    val r = plan.upgrade
+    val name = plan.nameOf(r?.plan)
+    val ends = com.echoledger.mobile.core.PlanFormat.daysUntil(plan.expiresAt)
+    data class Line(val icon: ImageVector, val text: String, val tone: androidx.compose.ui.graphics.Color, val onClick: () -> Unit)
+    val line = when {
+        account?.deletesAt != null -> Line(
+            Icons.Outlined.WarningAmber,
+            "Your account will be deleted on ${com.echoledger.mobile.core.PlanFormat.shortDate(account.deletesAt)}.",
+            c.warning,
+            onOpenPlan
+        )
+
+        manualPayments && r?.stage == "needs_receipt" -> Line(Icons.Outlined.ErrorOutline, "We need another receipt for $name", c.warning) {
+            onRequest(FlowStep.Receipt)
+        }
+
+        manualPayments && r?.stage == "awaiting_payment" -> Line(
+            Icons.Outlined.Schedule,
+            "$name requested. Waiting for your payment",
+            c.textMuted
+        ) {
+            onRequest(FlowStep.Pay)
+        }
+
+        manualPayments && r?.stage == "in_review" -> Line(Icons.Outlined.Schedule, "Checking your payment for $name", c.textMuted) {
+            onRequest(FlowStep.Status)
+        }
+
+        !plan.isFree && ends != null && ends in 0..7 -> Line(
+            Icons.Outlined.Event,
+            "${plan.displayName} ends on ${com.echoledger.mobile.core.PlanFormat.shortDate(plan.expiresAt)}",
+            c.warning,
+            onOpenPlan
+        )
+
+        settings.serverUrl != null && plan.needsOwnKey && plan.transcriptionKey?.set != true -> Line(
+            Icons.Outlined.Key,
+            "Set up free transcription (2 minutes)",
+            c.textMuted,
+            onOpenKey
+        )
+
+        else -> null
+    } ?: return
+    com.echoledger.mobile.ui.design.SettingsSection(null) {
+        com.echoledger.mobile.ui.design.SettingsRow(line.icon, line.text, tint = line.tone, onClick = line.onClick)
+    }
 }
 
-/** One group of settings; [focus] is the entry a search result pointed at, scrolled into view once. */
+/**
+ * One settings page: the cards of its entries in order. A search result's [highlight] entry is scrolled to and drawn on
+ * the accent-soft colour for a few seconds (still under Remove animations: the colour simply stays until then).
+ */
 @Composable
-private fun SettingsGroupScreen(vm: MainViewModel, group: SettingsGroup, focus: String?, onSetup: () -> Unit, onBack: () -> Unit) {
+private fun SettingsPageScreen(
+    vm: MainViewModel,
+    page: SettingsIndex.Page,
+    highlight: String?,
+    onSetup: () -> Unit,
+    onBack: () -> Unit,
+    onSearch: () -> Unit,
+    onOpenPage: (String) -> Unit
+) {
     val settings by vm.settings.collectAsState()
     Column(Modifier.fillMaxSize()) {
         com.echoledger.mobile.ui.design.EchoTopBar(
-            group.label,
+            page.title,
             large = false,
             navigation = {
                 com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
-            }
+            },
+            actions = { com.echoledger.mobile.ui.design.BarIcon(Icons.Rounded.Search, "Search settings", onSearch) }
         )
-        Column(
-            Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = Space.screen).padding(bottom = Space.s4),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            SettingsCatalogue.inGroup(group).forEach { entry ->
-                val requester = remember { BringIntoViewRequester() }
-                LaunchedEffect(focus) {
-                    if (focus == entry.id) {
-                        withFrameNanos { }
-                        requester.bringIntoView()
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Space.s5)) {
+            if (page.id == "plan") {
+                PlanUsagePage(vm, settings.plan, onOpenKey = { onOpenPage("key") })
+                return@Column
+            }
+            Column(Modifier.padding(horizontal = Space.screen).padding(top = Space.s2), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                page.entries.mapNotNull { id -> SettingsCatalogue.entries.firstOrNull { it.id == id } }.forEach { entry ->
+                    val requester = remember { BringIntoViewRequester() }
+                    var lit by remember { mutableStateOf(false) }
+                    LaunchedEffect(highlight) {
+                        if (highlight == entry.id) {
+                            withFrameNanos { }
+                            requester.bringIntoView()
+                            lit = true
+                            kotlinx.coroutines.delay(2_500)
+                            lit = false
+                        }
+                    }
+                    Column(
+                        Modifier.bringIntoViewRequester(requester).clip(RoundedCornerShape(Radius.md))
+                            .then(
+                                if (lit) Modifier.border(2.dp, LocalEchoColors.current.accent, RoundedCornerShape(Radius.md)) else Modifier
+                            ),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        SettingsEntryContent(entry, vm, settings, onSetup)
                     }
                 }
-                Column(Modifier.bringIntoViewRequester(requester), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    SettingsEntryContent(entry, vm, settings, onSetup)
+                if (page.id == "privacy") {
+                    com.echoledger.mobile.ui.design.EchoButton(
+                        "Export or delete my data",
+                        { onOpenPage("account") },
+                        kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+                    )
                 }
+                PageReset(vm, page)
             }
-            // Every panel can go back to its defaults (plan B5); what the person made or picked stays.
-            var confirmReset by remember { mutableStateOf(false) }
-            com.echoledger.mobile.ui.design.EchoButton(
-                "Reset this panel",
-                { confirmReset = true },
-                kind = com.echoledger.mobile.ui.design.ButtonKind.Text
+        }
+    }
+}
+
+/** "Reset to defaults" for the pages whose choices have defaults; what the person made or picked stays. */
+@Composable
+private fun PageReset(vm: MainViewModel, page: SettingsIndex.Page) {
+    val group = when (page.id) {
+        "appearance", "notifications", "lock", "language" -> SettingsGroup.General
+        "voice" -> SettingsGroup.VoiceNotes
+        "calls", "mic", "captions" -> SettingsGroup.Calls
+        "games" -> SettingsGroup.Game
+        "videos" -> SettingsGroup.Watch
+        else -> null
+    } ?: return
+    var confirm by remember { mutableStateOf(false) }
+    com.echoledger.mobile.ui.design.EchoButton("Reset to defaults", {
+        confirm = true
+    }, kind = com.echoledger.mobile.ui.design.ButtonKind.Text)
+    if (confirm) {
+        ConfirmDialog(
+            text = "Put the ${page.title} settings back to their defaults? Your picked apps, games and words stay.",
+            confirmLabel = "Reset",
+            onConfirm = {
+                confirm = false
+                vm.updateSettings { com.echoledger.mobile.core.SettingsReset.resetPage(page.id, group, it) }
+                vm.showMessage("${page.title} reset")
+            },
+            onDismiss = { confirm = false }
+        )
+    }
+}
+
+/** Search every setting (since v1.7): results show where each one is; a tap opens its page and highlights it. */
+@Composable
+private fun SettingsSearchScreen(settings: AppSettings, onBack: () -> Unit, onOpen: (page: String, entry: String?) -> Unit) {
+    var query by rememberSaveable { mutableStateOf("") }
+    val type = LocalEchoType.current
+    val focus = remember { androidx.compose.ui.focus.FocusRequester() }
+    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    val results = SettingsIndex.search(query) { item -> pageShown(item.page, settings) }
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().height(64.dp).padding(horizontal = Space.s1), verticalAlignment = Alignment.CenterVertically) {
+            com.echoledger.mobile.ui.design.BarIcon(Icons.AutoMirrored.Rounded.ArrowBack, "Back", onBack, tint = Brand.Text)
+            androidx.compose.foundation.text.BasicTextField(
+                query,
+                { query = it.take(60) },
+                singleLine = true,
+                textStyle = type.bodyL.copy(color = Brand.Text),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(LocalEchoColors.current.accent),
+                modifier = Modifier.weight(1f).focusRequester(focus).semantics { contentDescription = "Search settings" },
+                decorationBox = { inner ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (query.isEmpty()) Text("Search settings", style = type.bodyL, color = Brand.Muted)
+                        inner()
+                    }
+                }
             )
-            if (confirmReset) {
-                ConfirmDialog(
-                    text = "Put the ${group.label} settings back to their defaults? Your pairing, picked apps, " +
-                        "replacements and snippets stay.",
-                    confirmLabel = "Reset",
-                    onConfirm = {
-                        confirmReset = false
-                        vm.updateSettings { com.echoledger.mobile.core.SettingsReset.reset(group, it) }
-                        vm.showMessage("${group.label} settings reset")
-                    },
-                    onDismiss = { confirmReset = false }
+            if (query.isNotEmpty()) com.echoledger.mobile.ui.design.BarIcon(Icons.Rounded.Close, "Clear search", { query = "" })
+        }
+        Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(bottom = Space.s5)) {
+            when {
+                query.isBlank() -> Text(
+                    "Search every setting, for example dark, fingerprint, Urdu, receipt or upgrade.",
+                    style = type.body,
+                    color = Brand.Muted,
+                    modifier = Modifier.padding(horizontal = Space.screen, vertical = Space.s3)
                 )
+
+                results.isEmpty() -> Text(
+                    "No settings match “${query.trim()}”. Try a shorter word, like dark, lock or plan.",
+                    style = type.body,
+                    color = Brand.Muted,
+                    modifier = Modifier.padding(horizontal = Space.screen, vertical = Space.s3)
+                )
+
+                else -> com.echoledger.mobile.ui.design.SettingsSection(null, Modifier.padding(top = Space.s2)) {
+                    results.forEachIndexed { i, hit ->
+                        if (i > 0) com.echoledger.mobile.ui.design.RowDivider()
+                        com.echoledger.mobile.ui.design.SettingsRow(
+                            pageIcon(hit.page.id),
+                            hit.item.title,
+                            summary = SettingsIndex.path(hit),
+                            onClick = { onOpen(hit.page.id, hit.item.entry.ifEmpty { null }) },
+                            trailing = { Chevron() }
+                        )
+                    }
+                }
             }
         }
     }

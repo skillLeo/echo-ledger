@@ -70,6 +70,8 @@ data class EchoColors(
     val accentStrong: Color,
     val accentPressed: Color,
     val accentSoft: Color,
+    /** Text and icons on [accentSoft] (since v1.7: the wallpaper's onPrimaryContainer when Wallpaper colours is on). */
+    val accentSoftText: Color,
     val onAccent: Color,
     val danger: Color,
     val dangerStrong: Color,
@@ -79,6 +81,12 @@ data class EchoColors(
     val warningFill: Color,
     val me: Color,
     val client: Color,
+    /**
+     * The Record button and the dictation mic (since v1.7): fixed brand indigo with a white glyph, never the
+     * wallpaper's colour, so the one control people look for always looks the same. While recording it is dangerStrong.
+     */
+    val recordFill: Color = Color(0xFF3E63DD),
+    val onRecord: Color = Color.White,
     val isDark: Boolean
 )
 
@@ -97,6 +105,7 @@ val DarkColors = EchoColors(
     accentStrong = Color(0xFF3E63DD),
     accentPressed = Color(0xFF5472E4),
     accentSoft = Color(0xFF182449),
+    accentSoftText = Color(0xFF9EB1FF),
     onAccent = Color.White,
     danger = Color(0xFFFF9592),
     dangerStrong = Color(0xFFCE2C31),
@@ -124,6 +133,7 @@ val LightColors = EchoColors(
     accentStrong = Color(0xFF3E63DD),
     accentPressed = Color(0xFF3358D4),
     accentSoft = Color(0xFFEDF2FE),
+    accentSoftText = Color(0xFF3A5BC7),
     onAccent = Color.White,
     danger = Color(0xFFCE2C31),
     dangerStrong = Color(0xFFCE2C31),

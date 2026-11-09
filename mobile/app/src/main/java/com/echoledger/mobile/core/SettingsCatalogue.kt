@@ -97,6 +97,48 @@ object SettingsCatalogue {
  * pairing, auto-record on or off, replacements and snippets, added call apps, the picked games and video apps.
  */
 object SettingsReset {
+    /**
+     * "Reset to defaults" on one Settings page (since v1.7): only that page's choices; picked apps, games, words and the
+     * pairing stay. Pages not listed reset as their old panel did.
+     */
+    fun resetPage(page: String, group: SettingsGroup, s: AppSettings): AppSettings {
+        val d = AppSettings()
+        return when (page) {
+            "appearance" -> s.copy(themeMode = d.themeMode, dynamicColour = d.dynamicColour, phoneFont = d.phoneFont)
+
+            "notifications" -> s.copy(
+                activityNotifications = d.activityNotifications,
+                quietHours = d.quietHours,
+                quietFrom = d.quietFrom,
+                quietTo = d.quietTo,
+                notifyOff = d.notifyOff
+            )
+
+            "lock" -> s.copy(
+                appLockEnabled = d.appLockEnabled,
+                lockAfterMs = d.lockAfterMs,
+                secureScreen = d.secureScreen,
+                widgetHideTitles = d.widgetHideTitles
+            )
+
+            "language" -> s.copy(transcriptionLanguage = d.transcriptionLanguage)
+
+            "calls" -> s.copy(decisionTimeout = d.decisionTimeout, decisionTimeoutChosen = d.decisionTimeoutChosen)
+
+            "mic" -> s.copy(
+                recordingKbps = d.recordingKbps,
+                phoneCalls = d.phoneCalls,
+                micSource = d.micSource,
+                inputDevice = d.inputDevice,
+                farSideWarning = d.farSideWarning
+            )
+
+            "captions" -> s.copy(captionsEnabled = d.captionsEnabled, captionStyle = CaptionStyle())
+
+            else -> reset(group, s)
+        }
+    }
+
     fun reset(group: SettingsGroup, s: AppSettings): AppSettings {
         val d = AppSettings()
         return when (group) {

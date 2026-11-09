@@ -58,7 +58,7 @@ class SettingsScreenTest : AppTest() {
 
     private lateinit var vm: MainViewModel
     private var setupTaps = 0
-    private val privacyGroup = "General/App lock"
+    private val privacyGroup = "App lock"
 
     @Before
     fun createViewModel() {
@@ -86,7 +86,7 @@ class SettingsScreenTest : AppTest() {
                 }
             }
         }
-        // A path of rows to tap: "General/App lock" opens General, then its App lock page.
+        // A path of rows to tap: "App lock" opens General, then its App lock page.
         open?.split("/")?.forEach { compose.onNodeWithText(it).performClick() }
         return activity
     }
@@ -325,7 +325,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `live captions can be turned off and on again`() {
-        launch(open = "Calls & meetings")
+        launch(open = "Captions")
         val captions = { compose.onNodeWithContentDescription("Live captions while recording").performScrollTo() }
         captions().assertIsOn()
 
@@ -339,7 +339,7 @@ class SettingsScreenTest : AppTest() {
 
     @Test
     fun `the microphone source toggles between echo-cancelled and raw`() {
-        launch(open = "Calls & meetings")
+        launch(open = "Microphone & audio")
         compose.onNodeWithText("Voice communication (echo-cancelled)").performScrollTo().assertIsDisplayed()
 
         // The microphone row's Change (the bitrate row below it has one too).
@@ -360,7 +360,7 @@ class SettingsScreenTest : AppTest() {
         server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
         val refresh = vm.refresh()
         pumpUntil("clients") { refresh.isCompleted && vm.clients.value.size == 2 }
-        launch(open = "General/Project keyterms")
+        launch(open = "Custom words")
 
         compose.onNodeWithText("Acme Holdings").performClick()
         pumpUntil("client saved") { settings().clientId == "01JCLIENT0000000000000000A" }
@@ -375,7 +375,7 @@ class SettingsScreenTest : AppTest() {
     @Test
     fun `the device card shows the phone name server address and pin status`() {
         pairAndSettle()
-        launch(open = "General/This phone")
+        launch(open = "About")
 
         compose.onNodeWithText("Sam's Pixel · ${server.baseUrl}").assertIsDisplayed()
         compose.onNodeWithText("Server certificate pinned (2 pins)").assertIsDisplayed()
@@ -385,14 +385,14 @@ class SettingsScreenTest : AppTest() {
     fun `a server without pins is flagged as not pinned`() {
         runBlocking { app.pairLocally(server, pins = emptyList()) }
         pumpUntil("settings") { vm.settings.value.paired }
-        launch(open = "General/This phone")
+        launch(open = "About")
 
         compose.onNodeWithText("Certificate pinning not configured on the server").assertIsDisplayed()
     }
 
     @Test
     fun `Setup guide opens the setup screen`() {
-        launch(open = "General/This phone")
+        launch(open = "About")
 
         compose.onNodeWithText("Setup guide").performClick()
 
@@ -403,7 +403,7 @@ class SettingsScreenTest : AppTest() {
     fun `Unpair forgets the pairing but keeps the preferences`() {
         pairAndSettle()
         runBlocking { app.graph.settings.update { it.copy(captionsEnabled = false) } }
-        launch(open = "General/This phone")
+        launch(open = "About")
 
         compose.onNodeWithText("Sign out").performClick()
         assertTrue("nothing changes before the user confirms", settings().paired)

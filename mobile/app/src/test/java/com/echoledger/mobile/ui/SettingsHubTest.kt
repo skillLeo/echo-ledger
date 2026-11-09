@@ -7,41 +7,43 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
-import com.echoledger.mobile.core.SettingsGroup
+import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.testsupport.ScreenTest
 import org.junit.Test
 
-/** The Settings tab laid out like the system settings app: a search box, eight groups, one screen per group (B19). */
+/** Settings (since v1.7; B19 before): the account card, a search that reaches every setting, six sections of pages. */
 class SettingsHubTest : ScreenTest() {
     private fun showSettings() = show { SettingsScreen(vm, onSetup = {}) }
 
     private fun search(text: String) {
+        compose.onNodeWithText("Search settings").performClick()
         compose.onNode(hasSetTextAction()).performTextInput(text)
         compose.waitForIdle()
     }
 
     @Test
-    fun `settings opens on a search box and the eight groups with their summaries`() {
+    fun `settings opens on a search box and the six sections with their pages`() {
         showSettings()
 
         compose.onNodeWithText("Settings").assertIsDisplayed()
         compose.onNodeWithText("Search settings").assertIsDisplayed()
-        SettingsGroup.entries.forEach { group ->
-            compose.onNodeWithText(group.label).assertIsDisplayed()
-            compose.onNodeWithText(group.summary).assertIsDisplayed()
+        SettingsIndex.sections.forEach { compose.onNodeWithText(it).assertExists() }
+        listOf("Calls & meetings", "Captions", "Appearance", "Notifications", "App lock", "Storage", "Help", "About").forEach {
+            compose.onNodeWithText(it).assertExists()
         }
+        compose.onAllNodesWithText("General").assertCountEquals(0)
     }
 
     @Test
-    fun `a group is its own screen with a back arrow to the list`() {
+    fun `a page is its own screen with a back arrow to the list`() {
         showSettings()
 
         compose.onNodeWithText("Calls & meetings").performClick()
         compose.onNodeWithText("Auto-record apps").assertIsDisplayed()
         compose.onNodeWithText("After a call").assertExists()
-        compose.onAllNodesWithText("Microphone")[0].assertExists()
-        compose.onAllNodesWithText("Search settings").assertCountEquals(0)
+        compose.onNodeWithContentDescription("Search settings").assertExists()
 
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Search settings").assertIsDisplayed()
@@ -49,76 +51,66 @@ class SettingsHubTest : ScreenTest() {
     }
 
     @Test
-    fun `each group shows its own settings`() {
+    fun `each page shows its own settings`() {
         showSettings()
 
         mapOf(
-            "General" to
-                listOf("Appearance", "Transcription", "Project keyterms", "Notifications", "Storage and retention", "Help & diagnostics"),
-            "Voice notes & files" to listOf("After sharing a voice note", "Voice keyboard"),
-            "Calls & meetings" to listOf("Live captions while recording", "Caption style"),
-            "Game translate" to listOf("Games", "Box style", "Monthly budget"),
-            "Watch translate" to listOf("Apps", "Subtitle style")
-        ).forEach { (group, titles) ->
-            compose.onNodeWithText(group).performClick()
+            "Appearance" to listOf("Wallpaper colours"),
+            "Notifications" to listOf("Quiet hours"),
+            "Voice notes & dictation" to listOf("After sharing a voice note", "Voice keyboard"),
+            "Captions" to listOf("Live captions while recording", "Caption style"),
+            "Games" to listOf("Games", "Box style", "Monthly budget"),
+            "Videos" to listOf("Apps", "Subtitle style")
+        ).forEach { (page, titles) ->
+            compose.onNodeWithText(page).performScrollTo().performClick()
             titles.forEach {
-                org.junit.Assert.assertTrue("$group shows $it", compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty())
+                org.junit.Assert.assertTrue("$page shows $it", compose.onAllNodesWithText(it).fetchSemanticsNodes().isNotEmpty())
             }
             compose.onNodeWithContentDescription("Back").performClick()
         }
     }
 
     @Test
-    fun `searching lists the matching settings with their group and hides the group list`() {
+    fun `search finds a setting inside a page and says where it is`() {
         showSettings()
 
         search("quiet")
 
-        compose.onNodeWithText("Notifications").assertIsDisplayed()
-        compose.onNodeWithText("General").assertIsDisplayed()
+        compose.onNodeWithText("Quiet hours").assertIsDisplayed()
+        compose.onNodeWithText("App › Notifications").assertIsDisplayed()
         compose.onAllNodesWithText("Storage").assertCountEquals(0)
-        compose.onAllNodesWithText(SettingsGroup.Calls.summary).assertCountEquals(0)
     }
 
     @Test
-    fun `a search result jumps into its group`() {
+    fun `a search result opens its page`() {
         showSettings()
 
         search("quiet hours")
-        compose.onNodeWithText("Notifications").performClick()
+        compose.onNodeWithText("Quiet hours").performClick()
 
         compose.onNodeWithText("Show notifications").assertIsDisplayed()
-        compose.onNodeWithText("Quiet hours").assertIsDisplayed()
-        // A General page goes back to the General list, then to You.
-        compose.onNodeWithContentDescription("Back").performClick()
-        compose.onNodeWithText("Project keyterms").assertIsDisplayed()
         compose.onNodeWithContentDescription("Back").performClick()
         compose.onNodeWithText("Search settings").assertIsDisplayed()
     }
 
     @Test
-    fun `a keyword finds a setting that its name does not mention`() {
+    fun `a word the title does not use still finds the setting`() {
         showSettings()
 
         search("retention")
-        compose.onNodeWithText("Storage and retention").performClick()
+        compose.onNodeWithText("How long recordings are kept").performClick()
 
-        compose.onAllNodesWithText("Storage and retention")[0].assertIsDisplayed()
         compose.onNodeWithText("Couldn't load the server's storage. Check the connection.").assertIsDisplayed()
-        compose.onNodeWithText("Retry").assertIsDisplayed()
     }
 
     @Test
-    fun `no match says so and clearing the search brings the groups back`() {
+    fun `no match says so`() {
         showSettings()
 
         search("zzzz")
-        compose.onNodeWithText("No settings match “zzzz”.").assertIsDisplayed()
-        compose.onAllNodesWithText("Calls & meetings").assertCountEquals(0)
-
+        compose.onNodeWithText("No settings match “zzzz”. Try a shorter word, like dark, lock or plan.").assertIsDisplayed()
         compose.onNodeWithContentDescription("Clear search").performClick()
-        compose.onNodeWithText("Calls & meetings").assertIsDisplayed()
-        compose.onAllNodesWithText("No settings match “zzzz”.").assertCountEquals(0)
+        compose.onAllNodesWithText("No settings match “zzzz”. Try a shorter word, like dark, lock or plan.").assertCountEquals(0)
     }
 
     @Test
@@ -126,8 +118,7 @@ class SettingsHubTest : ScreenTest() {
         runBlockingSettings { it.copy(serverUrl = "https://ledger.example.com", serverApiVersion = "1.1", deviceId = "D") }
         showSettings()
 
-        compose.onNodeWithText("General").performClick()
-        compose.onNodeWithText("About").performClick()
+        compose.onNodeWithText("About").performScrollTo().performClick()
 
         compose.onNodeWithText("Server ledger.example.com · API 1.1").assertExists()
     }

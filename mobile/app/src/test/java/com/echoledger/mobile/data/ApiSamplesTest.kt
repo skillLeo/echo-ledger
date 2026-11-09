@@ -31,6 +31,7 @@ class ApiSamplesTest {
         "transcription_key" to TranscriptionKeyDto.serializer(),
         "upgrade_request" to UpgradeRequestDto.serializer(),
         "upgrade_request_latest" to UpgradeRequestDto.serializer(),
+        "promo_check" to PromoCheckDto.serializer(),
         "auth_password" to RegisterResponse.serializer(),
         "bin" to BinResponse.serializer(),
         "client_brief" to BriefResponse.serializer(),
@@ -133,6 +134,14 @@ class ApiSamplesTest {
 
     /** What the real answers leave out on purpose: fields of another kind of item, or only in another answer. */
     private val notInEveryAnswer = setOf(
+        // Since v1.7 only the monthly minutes reset on a date; the other limits have no resets_at.
+        "entitlements.limits.devices.resets_at",
+        "entitlements.limits.storage_bytes.resets_at",
+        "entitlements.limits.retention_days.resets_at",
+        "entitlements.limits.seats.resets_at",
+        "entitlements.limits.max_file_minutes.resets_at",
+        "entitlements.limits.uploads_per_day.resets_at",
+        "entitlements.limits.ai_usd_month.resets_at",
         // Limits that are not used up (how long recordings are kept, the longest recording) have no "used".
         "entitlements.limits.retention_days.used",
         "entitlements.limits.max_file_minutes.used",

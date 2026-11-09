@@ -37,6 +37,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -471,16 +472,19 @@ fun RecordingRow(
 }
 
 /**
- * A settings row: 32 dp tinted icon tile, title, a short summary (two lines at most) and a trailing switch, chevron or
- * value; the whole row is the touch target.
+ * A settings row (since v1.7, docs/DESIGN_SYSTEM.md "Settings"): an optional 24 dp icon in the muted text colour, never
+ * on a tile; the title; the current value at the end ("Dark", "On", "2 signed in"); then a chevron, switch or tag.
+ * Subtitles are rare: [summary] is for the few rows whose title needs it. The whole row is the touch target.
  */
 @Composable
 fun SettingsRow(
-    icon: ImageVector,
+    icon: ImageVector?,
     title: String,
     modifier: Modifier = Modifier,
     summary: String? = null,
-    tint: Color = Brand.AccentText,
+    value: String? = null,
+    tint: Color = Brand.Muted,
+    titleColor: Color = Brand.Text,
     onClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null
 ) {
@@ -493,10 +497,12 @@ fun SettingsRow(
             .padding(horizontal = Space.screen, vertical = Space.s3),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        IconTile(icon, tint, size = 32.dp)
-        Spacer(Modifier.width(Space.s3))
+        if (icon != null) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(Space.s4))
+        }
         Column(Modifier.weight(1f)) {
-            Text(title, style = type.bodyL, color = Brand.Text)
+            Text(title, style = type.body, color = titleColor, maxLines = 2, overflow = TextOverflow.Ellipsis)
             if (summary != null) {
                 Text(
                     summary,
@@ -506,6 +512,18 @@ fun SettingsRow(
                     overflow = TextOverflow.Ellipsis
                 )
             }
+        }
+        if (value != null) {
+            Spacer(Modifier.width(Space.s3))
+            Text(
+                value,
+                style = type.body,
+                color = Brand.Muted,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = androidx.compose.ui.text.style.TextAlign.End,
+                modifier = Modifier.widthIn(max = 160.dp)
+            )
         }
         trailing?.let {
             Spacer(Modifier.width(Space.s2))
@@ -632,7 +650,7 @@ fun InlineBanner(
     val close = onDismiss ?: { closedHere = true }
     val c = LocalEchoColors.current
     val (bg, fg, icon) = when (kind) {
-        BannerKind.Info -> Triple(c.accentSoft, c.accentText, Icons.Rounded.Info)
+        BannerKind.Info -> Triple(c.accentSoft, c.accentSoftText, Icons.Rounded.Info)
         BannerKind.Warning -> Triple(c.warningFill.copy(alpha = if (c.isDark) 0.14f else 0.18f), c.warning, Icons.Rounded.WarningAmber)
         BannerKind.Error -> Triple(c.dangerSoft, c.danger, Icons.Rounded.ErrorOutline)
     }
