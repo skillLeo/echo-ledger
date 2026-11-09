@@ -102,7 +102,11 @@ internal fun SharedNotesScreen(
                 fontWeight = FontWeight.Bold,
                 modifier = Modifier.weight(1f)
             )
-            TextButton(onClick = onBackToSource) { Text("Back to ${sourceApp ?: "the app"}") }
+            // Since v1.6 (P5.4): while it is still being made, Continue in background goes back and a notification follows it.
+            TextButton(onClick = {
+                if (!allDone) com.echoledger.mobile.share.SharedNotesWorker.enqueue(context, localIds)
+                onBackToSource()
+            }) { Text(if (allDone) "Back to ${sourceApp ?: "the app"}" else "Continue in background") }
         }
         statuses.forEachIndexed { i, status ->
             SectionCard {

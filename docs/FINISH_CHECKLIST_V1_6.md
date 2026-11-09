@@ -49,7 +49,7 @@ Not needed any more: the laptop's Android `debug.keystore` (the S25 runs a build
 - [ ] P5.1 Group header: checkbox only selects, chevron/label only folds (web, desktop, phone).
 - [ ] P5.2 Web Library decluttered.
 - [ ] P5.3 Auto titles backfilled; failed uploads explained.
-- [ ] P5.4 Progress everywhere, Continue in background, Notify me when ready.
+- [ ] P5.4 Progress everywhere, Continue in background, Notify me when ready. **Phone: shared notes done** 2026-11-09 (Library rows and the share page since Phase 1C; Continue in background goes back to the app it came from while a quiet notification shows Uploading % / Transcribing / Improving and opens the note, replaced by the ready notice; SharedNotesWorkerTest). Recording page and desktop/web next.
 - [ ] P5.5 Share to WhatsApp: text, text + voice, link.
 
 ## P6 — Flow audit

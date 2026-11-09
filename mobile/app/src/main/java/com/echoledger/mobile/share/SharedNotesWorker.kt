@@ -32,14 +32,23 @@ class SharedNotesWorker(context: Context, params: WorkerParameters) : CoroutineW
         val library = graph.library.items.value
         val waiting = ids.filter { id ->
             val session = SharedNotes.sessionFor(applicationContext, id)
+            val item = session?.let { s -> library.firstOrNull { it.id == s } }
             val status = SharedNotes.status(
                 local.firstOrNull {
                     it.id == id
                 },
                 session,
-                session?.let { s -> library.firstOrNull { it.id == s } }
+                item,
+                com.echoledger.mobile.core.RowProgress.uploads.value[id]
             )
-            if (!SharedNotes.done(status.stage)) return@filter true
+            if (!SharedNotes.done(status.stage)) {
+                // Since v1.6 (P5.4): while it is being made, a quiet notification says where it is and opens it.
+                val sending = com.echoledger.mobile.core.RowProgress.uploads.value[id]
+                val percent = sending?.let { com.echoledger.mobile.core.RowProgress.uploading(it.first, it.second).percent }
+                    ?: item?.let { com.echoledger.mobile.core.RowProgress.of(it)?.percent }
+                Notifications.sharedProgress(applicationContext, id, status.text, percent)
+                return@filter true
+            }
             val preview = library.firstOrNull { it.id == status.sessionId }?.transcript?.preview?.takeIf { it.isNotBlank() }
             if (!NotifyGate.allowed(applicationContext as EchoLedgerApp, NotifyCategory.TRANSCRIPTION)) {
                 return@filter false

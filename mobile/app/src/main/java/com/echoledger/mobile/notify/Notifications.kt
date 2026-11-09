@@ -550,6 +550,32 @@ object Notifications {
         NotificationManagerCompat.from(context).notify(key.hashCode(), notification)
     }
 
+    /**
+     * A shared voice note on its way (since v1.6, P5.4): "Transcribing · part 2 of 3", silent, with a bar when the
+     * percent is known; a tap opens the note. The "ready" notice (key `shared:<id>`) replaces it.
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun sharedProgress(context: Context, localId: String, text: String, percent: Int?) {
+        if (!canPost(context)) return
+        val open = PendingIntent.getActivity(
+            context,
+            ("shared:$localId").hashCode(),
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SHARED_PREFIX + localId),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val builder = NotificationCompat.Builder(context, NotifyCategory.UPLOADS.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Shared voice note")
+            .setContentText(text)
+            .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setContentIntent(open)
+            .setProgress(100, percent ?: 0, percent == null)
+        runCatching { NotificationManagerCompat.from(context).notify(("shared:$localId").hashCode(), builder.build()) }
+    }
+
     fun cancelDecision(context: Context, recordingId: String) {
         NotificationManagerCompat.from(context).cancel(recordingId.hashCode())
     }

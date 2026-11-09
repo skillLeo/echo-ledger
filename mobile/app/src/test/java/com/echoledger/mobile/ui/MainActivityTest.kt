@@ -482,7 +482,8 @@ class MainActivityTest : AppTest() {
         val activity = openShared("L2", from = app.packageName)
 
         awaitText("Shared voice note")
-        compose.onNodeWithText("Back to EchoLedger", substring = true).assertExists()
+        // Still being made: Continue in background (back to the app it came from, with a notification following it).
+        compose.onNodeWithText("Continue in background").assertExists()
         activity.onBackPressedDispatcher.onBackPressed()
         awaitText("Weekly sync")
         assertTrue("the app stays open", !activity.isFinishing)
