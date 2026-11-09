@@ -670,25 +670,30 @@ screens and the requests with fakes; these rows prove the system around them.
 
 ### Desktop v1.6 shell (what only a real computer can prove)
 
-Use the CI build of `v16-desktop-shell` on Windows 11 and a Mac. The tests cover the shell with a page in jsdom and the
-pictures in `docs/design/screens/desktop/`; these rows prove what a real window, mouse and system add.
+Use the CI build of `v16-desktop-p5` on Windows 11 and a Mac. These are now proven by tests and need no run here: the
+sidebar's limits, saving on release and the width after a restart (16-P1, `MainApp.test.tsx`); the rail with its
+tooltips and the Activity count, and **[** typed in a field (16-P2); the contrast of the three sidebar styles in both
+themes (16-P3, `styles.test.ts`); narrow and no-column by the page's own width, and Help, Account and Collapse outside
+the scrolling part (16-P4); the top bar's drag region (16-P5); dropping on the Inbox, a project in the column and a
+pinned project, and Esc during a drag (16-P6, `MoveRecordings.test.tsx`); the palette's searches (16-P7); Table, its
+columns and List or Table after a restart (16-P8, `LibraryView.test.tsx`); J/K moving the focus with the highlight
+(16-P9); the Admin panel only for the super admin and the workspace switcher (16-P10, 16-P11); the badge's count and
+9+ (16-P12); 24-hour times (16-P13, `shell.test.ts`); a new link on the clipboard (16-P14); the WhatsApp address, a long
+or Urdu text cut at a word, and a saved file's free name (16-W1, 16-W2: `whatsapp.rs`, `commands/tests.rs`).
 
 | # | Check | Expected |
 |---|---|---|
-| 16-P1 | Drag the sidebar's right edge as far as it goes both ways; double-click it; quit and reopen. | It stops at 200 and 320 px, the line under the pointer follows, double-click gives 240, and the width comes back after a restart. Windows and Mac. |
-| 16-P2 | Press **[** with the Library open, then again; then with the cursor in a search box. | The sidebar folds to the 64 px rail (icons with tooltips, the Activity count on its bell) and back; in a field **[** is typed. |
-| 16-P3 | Account → Preferences → Sidebar style: Light, Dark, Soft grey, in the app's light and dark themes; on Windows 11 with Mica and on a Mac with vibrancy. | Each style is readable in both themes; Light keeps the window material behind the sidebar, Dark and Soft grey are solid. |
-| 16-P4 | Make the window as small as it goes (860 × 560) with the sidebar at 320 px; then widen it slowly to full screen. | Nothing is cut off or scrolls sideways; Help, Account and Collapse stay at the bottom; the Library stacks under 798 px of page and gets its column from 1040 px. |
-| 16-P5 | On a Mac, click and drag the top bar between its buttons. | The window moves; the buttons still work; the traffic lights do not cover the brand. |
-| 16-P6 | Drag a recording from the list onto **Inbox**, a project in the Library's column and a pinned project in the sidebar; press Esc during a drag. | Each moves it (the toast names where); Esc moves nothing. On Windows the window's own file drop still works afterwards. |
-| 16-P7 | Ctrl+K (⌘K): type "devices", "new project", "upload", "acme" (a project), then a word said in a call. | Each opens or does what it says; the word finds the recording at that moment. |
-| 16-P8 | Table view: Columns → Device and Labels on; open a recording; Esc; quit and reopen. | The columns come back; the recording opens in the drawer on the right over the table and Esc closes it; List or Table is remembered. |
-| 16-P9 | J, K, Enter, X, Esc in the list, with a screen reader on (Narrator or VoiceOver). | The highlighted row moves and is read; Enter opens; X selects ("1 selected"); Esc closes the recording, then ends selecting. Space still plays, ← → jump. |
-| 16-P10 | Sign in as the super admin; open the avatar menu → **Admin panel**. Then as a normal account. | The browser opens the console's admin panel; a normal account has no Admin panel item. (Needs the server to send `super_admin` on `GET /api/account`.) |
-| 16-P11 | An account in two workspaces: open the workspace switcher. | Both are listed, the current one ticked; choosing **Switch or manage workspaces in the browser** opens the console's workspace page. (Without the server's `workspaces` list only the current one shows.) |
-| 16-P12 | Leave the app with 20 finished transcripts unread, 1 failed transcript and 2 calls waiting. | The bell and Activity say **3**, not 23; with 10 or more things that need you they say **9+**. |
-| 16-P13 | Account → Preferences → Times: 24-hour. | Every time in the Library, Home and Activity shows as 14:30; 12-hour brings back 2:30 PM. |
-| 16-P14 | Make a share link. | "Link made and copied": paste it in a browser at once, without pressing Copy link. |
+| 16-P1 | Drag the sidebar's edge with a mouse and with a trackpad, on Windows and a Mac. | It follows the pointer smoothly with the resize cursor; no text gets selected; nothing behind it flickers. |
+| 16-P3 | The three sidebar styles on Windows 11 with Mica and on a Mac with vibrancy. | Light keeps the window material behind the sidebar, Dark and Soft grey are solid; nothing looks washed out. |
+| 16-P4 | The window at its smallest (860 × 560) with the sidebar at 320 px, then widened slowly to full screen. | Nothing is cut off or scrolls sideways at any width; the Library stacks, then gets its column. |
+| 16-P5 | On a Mac, drag the top bar between its buttons; then click each button. | The window moves; every button works; the traffic lights do not cover the brand. |
+| 16-P6 | After dragging recordings onto projects, drop a file from Explorer or Finder on the window (Windows and Mac). | The import sheet opens as before: the window's own file drop still works. |
+| 16-P9 | With Narrator (Windows) or VoiceOver (Mac), press J and K in the Library, then Enter. | Each row is read as the focus reaches it; Enter opens it; Space on a row opens it, Space elsewhere plays. |
+| 16-P10 | Against a server that sends `super_admin` and `workspaces`: the avatar menu's **Admin panel**, then the workspace switcher's other workspace. | The browser opens the console's admin panel, then its workspace page. A normal account has no Admin panel item. |
+| 16-P14 | Make a share link, then paste in a browser at once (Windows WebView2 and a Mac). | The link is there: the system clipboard took it. |
+| 16-W1 | With WhatsApp Desktop installed (Windows and Mac), then without it: a recording → WhatsApp button → **Text only**, in Roman Urdu and in Urdu. | WhatsApp Desktop opens (without it, WhatsApp Web in the browser) with the text, Urdu letters intact; choose a chat and send. A 30-minute call: the message holds its start ending in "…", the app says the whole text is copied, and pasting gives all of it. |
+| 16-W2 | **Text and voice** on a call, then on a voice note. | The audio is in Downloads (a second time with "(2)"); the sheet says "Attach the saved voice file in WhatsApp"; attaching it as a Document sends a file that plays on the phone. |
+| 16-W3 | **Link (works for 7 days)**; open the link on the phone; look at it in Shared → My links. | WhatsApp opens with the title and the link; the page plays the recording; My links shows it expiring in 7 days. |
 
 ## Appendix B — Accessibility
 

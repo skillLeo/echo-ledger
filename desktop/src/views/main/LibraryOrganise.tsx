@@ -104,7 +104,7 @@ export function TitleEditor({ initial, className = "", onSave, onCancel }: {
 
 /** The ⋯ menu on a Library row: Rename, Move to (since v1.5), Pin or Unpin, Delete. It opens upwards when it would end
  * below the visible part of the list (the last rows), where the list's scroll box cut it off. */
-export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete }: {
+export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete, onWhatsApp }: {
   title: string;
   pinned: boolean;
   onRename: () => void;
@@ -112,6 +112,8 @@ export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete }: {
   onMove?: () => void;
   onPin: () => void;
   onDelete: () => void;
+  /** Send to WhatsApp (v1.6, P5.5): opens the recording and its sheet. */
+  onWhatsApp?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [up, setUp] = useState(false);
@@ -157,6 +159,7 @@ export function RowMenu({ title, pinned, onRename, onMove, onPin, onDelete }: {
         <div ref={pop} className={`row-menu-pop card${up ? " up" : ""}`} role="menu" aria-label={`Actions for ${title}`}>
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onRename)}>Rename</button>
           {onMove && <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onMove)}>Move to…</button>}
+          {onWhatsApp && <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onWhatsApp)}>Send to WhatsApp…</button>}
           <button type="button" role="menuitem" className="btn ghost small" onClick={() => pick(onPin)}>{pinned ? "Unpin" : "Pin"}</button>
           <button type="button" role="menuitem" className="btn ghost small danger" onClick={() => pick(onDelete)}>Delete</button>
         </div>

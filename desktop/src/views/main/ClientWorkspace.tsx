@@ -111,6 +111,14 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
   const screensRead = screens?.id === client.id ? screens : null;
   const screensMissing = !!screensRead && !screensRead.page && !screensRead.error;
   const tabs = TABS.filter(([id]) => (id !== "ai_notes" || aiNotes) && (id !== "screens" || !screensMissing));
+  // The tabs that list things show how many (v1.6, P4.4): the recordings the tab lists, the files, the screens (with a
+  // "+" while there are more pages). Notes and AI notes are documents, not lists.
+  const tabCount = (id: Tab): string | null => {
+    if (id === "recordings") return String(own.length);
+    if (id === "files") return ws ? String(ws.files.length) : null;
+    if (id === "screens" && screensRead?.page) return `${screensRead.page.data.length}${screensRead.page.next_cursor ? "+" : ""}`;
+    return null;
+  };
   useEffect(() => {
     if (tab === "ai_notes" && !aiNotes) setTab("notes");
     if (tab === "screens" && screensMissing) setTab("recordings");
@@ -195,7 +203,9 @@ export function ClientWorkspace({ client, projects = [client], items, notify, on
       )}
       <div className="tabs" role="tablist" aria-label={`${client.name} project`}>
         {tabs.map(([id, label]) => (
-          <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>{label}</button>
+          <button key={id} type="button" role="tab" id={`ws-tab-${id}`} className="tab" aria-selected={tab === id} aria-controls={`ws-panel-${id}`} onClick={() => setTab(id)}>
+            {label}{tabCount(id) !== null && <span className="tab-count" aria-hidden="true">{tabCount(id)}</span>}
+          </button>
         ))}
       </div>
       <div role="tabpanel" id={`ws-panel-${tab}`} aria-labelledby={`ws-tab-${tab}`}>

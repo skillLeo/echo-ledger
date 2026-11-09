@@ -215,7 +215,7 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
 
   return (
     <div className="projects-home">
-      <PageHeader title="Projects"
+      <PageHeader crumbs={[{ label: "Projects" }]} title="Projects"
         subtitle="Calls, files, a brief and notes together, for each client or piece of work. Recordings in no project are in the Inbox."
         actions={<>
           {requests && (

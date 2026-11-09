@@ -115,6 +115,9 @@ const commands: Record<string, (args: Args) => unknown> = {
     systemAudioNote: windows10 ? "This Windows version records all sound playing on this computer, not just the call" : null,
   }),
   account_get: () => ACCOUNT,
+  // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
+  whatsapp_open: () => false,
+  save_audio_downloads: () => "C:\\Users\\Hassam\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }

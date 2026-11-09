@@ -10,7 +10,8 @@ import { formatWhen } from "../../lib/format";
 import { dayGroup } from "../../lib/library";
 import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
-import { BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
+import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
+import { PageHeader } from "../../components/Page";
 import { CheckIcon } from "../../components/ControlIcons";
 
 /** What is on its way (Phase 1C, C4): uploads with their %, and recordings being transcribed, the Library's words. */
@@ -83,6 +84,13 @@ function ActivityTile({ kind }: { kind: string | null }) {
   if (kind === "transcript_ready") return <span className="activity-tile"><CheckIcon size={20} /></span>;
   if (kind === "device_paired") return <span className="activity-tile neutral"><DesktopIcon size={20} /></span>;
   return <span className="activity-tile neutral"><BellIcon size={20} /></span>;
+}
+
+/** The Activity page's one line (v1.6, P4.4): how many things need the person, else how many are unread, else calm. */
+export function activitySubtitle(needsYou: number, unread: number): string {
+  if (needsYou > 0) return needsYou === 1 ? "1 thing needs you. Your other notifications follow, newest first." : `${needsYou} things need you. Your other notifications follow, newest first.`;
+  if (unread > 0) return unread === 1 ? "Nothing needs you. 1 notification you have not read yet." : `Nothing needs you. ${unread} notifications you have not read yet.`;
+  return "Nothing needs you. Finished transcripts, problems, devices and shares show up here.";
 }
 
 /** Today's notifications show the time, older ones the day. */
@@ -182,6 +190,8 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
     else groups.push({ label, items: [item] });
   }
   const waiting = pending.length > 0 || status.pendingDecisions > 0;
+  // What the badge counts (lib/badge.ts), for the page's one line.
+  const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
   const row = (i: ActivityItem) => (
     <li key={i.id}>
@@ -198,11 +208,8 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
 
   return (
     <div className="activity-page">
-      <div className="page-head">
-        <h1 className="page-title">Activity</h1>
-        <span className="spacer" />
-        {unread > 0 && <button type="button" className="btn text" onClick={() => void readAll()}>Mark all read</button>}
-      </div>
+      <PageHeader crumbs={[{ label: "Activity" }]} title="Activity" subtitle={activitySubtitle(needsYou, unread)}
+        actions={unread > 0 && <button type="button" className="btn ghost" onClick={() => void readAll()}>Mark all read</button>} />
       {(waiting || status.failedUploads > 0 || needsAction.length > 0) && (
         <section aria-labelledby="activity-needs">
           <h2 id="activity-needs" className="section-title">Needs action</h2>

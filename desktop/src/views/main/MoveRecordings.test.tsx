@@ -166,6 +166,36 @@ describe("dragging recordings onto the Library's column (v1.6; the sidebar's pin
     expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).not.toBeInTheDocument();
   });
 
+  it("drops a recording on a pinned project in the sidebar (MANUAL_QA 16-P6)", async () => {
+    respond("list_clients", { data: PROJECTS.map((p) => (p.id === "c2" ? { ...p, pinned: true } : p)) });
+    respond("session_organise", { data: ITEMS[1] });
+    await renderApp();
+    const pinned = await screen.findByRole("list", { name: "Pinned projects" });
+    drag(row("Loose call"), within(pinned).getByRole("button", { name: "Zed" }));
+    await waitFor(() => expect(callsOf("session_organise")).toEqual([{ id: "b", patch: { client_id: "c2" } }]));
+    expect(await screen.findByRole("status")).toHaveTextContent("Moved “Loose call” to Zed");
+  });
+
+  it("moves nothing when Esc is pressed during the drag (MANUAL_QA 16-P6)", async () => {
+    await renderApp();
+    const target = within(screen.getByRole("list", { name: "Projects in the column" })).getByRole("button", { name: "Zed" });
+    fireEvent.pointerDown(row("Loose call"), { clientX: 300, clientY: 300, button: 0 });
+    under = target;
+    act(() => {
+      window.dispatchEvent(new PointerEvent("pointermove", { clientX: 120, clientY: 200, buttons: 1 }));
+    });
+    expect(document.querySelector(".drop-over")).not.toBeNull();
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    });
+    expect(document.querySelector(".drop-over")).toBeNull();
+    act(() => {
+      window.dispatchEvent(new PointerEvent("pointerup", { clientX: 120, clientY: 200 }));
+    });
+    await flushAsync();
+    expect(callsOf("session_organise")).toHaveLength(0);
+  });
+
   it("moves nothing when the row is dropped outside the sidebar", async () => {
     await renderApp();
     drag(row("Loose call"), document.querySelector(".detail"));

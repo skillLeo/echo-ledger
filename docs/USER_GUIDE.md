@@ -435,6 +435,16 @@ A project's link shows its recordings, newest first; each opens like a recording
 any time and it stops working at once. **Shares** (in the console) and the share sheet in the apps list every link
 with its views and when it was last opened.
 
+**Send to WhatsApp (computer, since v1.6).** On a recording, the WhatsApp button next to **Share**, or **⋯ → Send to
+WhatsApp…** on its row, offers three ways, as on the phone:
+- **Text only:** the transcript in the view you are reading (Roman Urdu, English, Urdu or the original). WhatsApp, or
+  WhatsApp Web, opens with it ready; choose the chat and press send. The text is copied too: a very long transcript does
+  not fit in the message, so only its start is there, and you paste the rest.
+- **Text and voice:** the same, and the recording's audio is saved in your **Downloads** folder. **Attach the saved voice
+  file in WhatsApp**: in the chat click **+** (or the paper clip), then **Document**, and choose the file.
+- **Link (works for 7 days):** a link anyone can open for a week (with the audio when the recording has it); WhatsApp
+  opens with the title and the link, and the link is copied.
+
 **Send to a teammate** puts a recording or a project in the **Shared with me** folder of someone with an account on
 your server. Type their email and, if you like, a note. People without an account here will not receive it, and nothing
 tells you so: check with them if it matters. They can play and read it but not change it, and **Save to my library**

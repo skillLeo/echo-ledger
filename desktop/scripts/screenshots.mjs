@@ -234,6 +234,18 @@ const SCREENS = [
     await page.getByRole("table", { name: "Recordings" }).getByRole("button", { name: "Kick-off: Contoso website", exact: true }).click();
     await page.waitForSelector(".detail.drawer .segments .segment");
   }],
+  // v1.6 (P5.5): Send to WhatsApp from a recording, and the voice saved in Downloads to attach.
+  ["whatsapp", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
+    await page.waitForSelector(".whatsapp-sheet");
+  }],
+  ["whatsapp-voice", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".detail").getByRole("button", { name: "Send to WhatsApp" }).click();
+    await page.getByRole("button", { name: "Text and voice" }).click();
+    await page.waitForSelector(".whatsapp-done");
+  }],
   ["palette", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.keyboard.press("Control+k");

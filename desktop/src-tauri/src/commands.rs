@@ -1296,6 +1296,36 @@ pub async fn save_audio(app: AppHandle, id: String) -> AppResult<Option<String>>
     Ok(Some(path.to_string_lossy().into_owned()))
 }
 
+/// Send to WhatsApp → Text and voice (v1.6, P5.5): the recording's audio saved in Downloads under a free name, without
+/// a dialog, so the person can attach it in WhatsApp; returns its path.
+#[tauri::command]
+pub async fn save_audio_downloads(app: AppHandle, id: String) -> AppResult<String> {
+    let state = app.state::<AppState>();
+    ensure_unlocked(&state)?;
+    let api = state.api()?;
+    let detail = api.session(&id).await?;
+    let Some(url) = detail.get("playback_url").and_then(serde_json::Value::as_str).filter(|u| !u.is_empty()).map(str::to_string) else {
+        return Err(AppError::msg("The audio of this recording is not on the server, so there is nothing to save yet."));
+    };
+    let dir = app.path().download_dir().unwrap_or_else(|_| state.data_dir.clone());
+    let path = export_target(&dir, &crate::files::audio_file_name(&detail));
+    api.download_audio(&url, &path).await?;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+/// Send to WhatsApp (v1.6, P5.5): opens `wa.me` with the text (WhatsApp, else WhatsApp Web). True when the text was
+/// too long for the address and was cut (the window has put the whole text on the clipboard).
+#[tauri::command]
+pub fn whatsapp_open(app: AppHandle, text: String) -> AppResult<bool> {
+    use tauri_plugin_opener::OpenerExt;
+    if text.trim().is_empty() {
+        return Err(AppError::msg("There is nothing to send yet."));
+    }
+    let (url, cut) = crate::whatsapp::whatsapp_url(&text);
+    app.opener().open_url(url, None::<&str>).map_err(|e| AppError::msg(e.to_string()))?;
+    Ok(cut)
+}
+
 // ---- Settings export / import (B19) -----------------------------------------------------------------------------
 
 /// Keys never exported or imported: the pairing (server, pins, device) and the client of this server.

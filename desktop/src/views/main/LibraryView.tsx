@@ -6,6 +6,7 @@ import { PageHeader } from "../../components/Page";
 import { Menu } from "../../components/Menu";
 import { DENSITIES, listKey, loadPreferences, PREFERENCES_EVENT, savePreferences, stepIndex, type Density, type Preferences } from "../../lib/shell";
 import { LibraryTable, loadColumns, saveColumns, TABLE_COLUMNS, type TableColumn } from "./LibraryTable";
+import { WhatsAppSheet } from "./WhatsAppSheet";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { SharedWithMe, sentLine } from "./SharedWithMe";
 import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialogs";
@@ -17,7 +18,7 @@ import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needs
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
-import { AlertIcon, AppTileIcon, appKind, CloseIcon, ColumnsIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, ListIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TableIcon, TrashIcon } from "../../components/Icons";
+import { AlertIcon, AppTileIcon, appKind, ChatIcon, CloseIcon, ColumnsIcon, CopyIcon, DeviceBadgeIcon, DownloadIcon, ImportIcon, LibraryIcon, LinkIcon, ListIcon, MonitorIcon, PinIcon, RefreshIcon, SearchIcon, SparkleIcon, TableIcon, TrashIcon } from "../../components/Icons";
 import { NO_AUDIO_HINT } from "../../lib/pending";
 import { BookmarkIcon } from "../../components/ControlIcons";
 import { LibraryQueue, type PendingFocus } from "./LibraryQueue";
@@ -190,6 +191,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     return next;
   });
   const [cursor, setCursor] = useState<string | null>(null);
+  // Send to WhatsApp (v1.6, P5.5): the recording its sheet is for (opened from its row's menu or its page).
+  const [whatsFor, setWhatsFor] = useState<string | null>(null);
   const [density, setDensity] = useState<Density>(() => loadPreferences().density);
   useEffect(() => {
     const follow = (e: Event) => setDensity((e as CustomEvent<Preferences>).detail?.density ?? loadPreferences().density);
@@ -685,6 +688,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
   // Unsure words go into the copy as "[?word]" (or the console's style); Copy for AI starts with the note line and puts
   // each screen ("[Screen 7 at 14:32: …]") after the line of its moment.
+  /** The text Send to WhatsApp sends: what Copy text copies, in the view being read. */
+  const whatsAppText = (): string => {
+    const segments = (transcript?.segments ?? []).map((seg) => ({ ...seg, speaker: speakerName(speakerNames, seg.speaker) }));
+    return copiedTranscript(segments, viewText, false, unsure);
+  };
   const copy = async (withTimestamps: boolean, forAi = false) => {
     if (!transcript) return;
     try {
@@ -815,7 +823,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       if (!next) return;
       e.preventDefault();
       setCursor(next.id);
-      document.querySelector(`[data-row="${CSS.escape(next.id)}"]`)?.scrollIntoView?.({ block: "nearest" });
+      // The row takes the focus too (MANUAL_QA 16-P9): a screen reader reads it, and Enter or Space opens it.
+      const row = document.querySelector<HTMLElement>(`[data-row="${CSS.escape(next.id)}"]`);
+      (row instanceof HTMLButtonElement ? row : row?.querySelector<HTMLElement>(".lib-title"))?.focus();
+      row?.scrollIntoView?.({ block: "nearest" });
     } else if (key === "open") {
       // Enter on a button is the button's own.
       if (!cursor || target?.tagName === "BUTTON" || target?.tagName === "A") return;
@@ -1073,7 +1084,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const pendingFix = readOnly ? null : openSuggestions.find((f) => f.id === openSuggestion) ?? null;
   return (
     <>
-      <PageHeader crumbs={place ? [{ label: "Library", onOpen: onSmartFolder ? () => onSmartFolder(null) : undefined }, { label: place }] : []}
+      <PageHeader crumbs={place ? [{ label: "Library", onOpen: onSmartFolder ? () => onSmartFolder(null) : undefined }, { label: place }] : [{ label: "Library" }]}
         title={place ?? "Library"}
         subtitle={smartView ? `${filtered.length} recording${filtered.length === 1 ? "" : "s"} ${VIEW_LINE[smartView]}`
           : smartFolder ? (shared ? "Recordings and projects teammates sent you." : `${filtered.length} recording${filtered.length === 1 ? "" : "s"} in this smart folder of your Library.`)
@@ -1204,6 +1215,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   onRename={() => { setSelected(item.id); setRenaming({ id: item.id, where: "detail" }); }}
                   onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                   onPin={() => void togglePin(item)}
+                  onWhatsApp={() => { setSelected(item.id); setWhatsFor(item.id); }}
                   onDelete={() => void remove(item.id)} />
               )} />
           )}
@@ -1279,6 +1291,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         onRename={() => setRenaming({ id: item.id, where: "list" })}
                         onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                         onPin={() => void togglePin(item)}
+                  onWhatsApp={() => { setSelected(item.id); setWhatsFor(item.id); }}
                         onDelete={() => void remove(item.id)} />
                     )}
                   </div>
@@ -1318,6 +1331,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <button type="button" className="btn ghost icon-only" aria-label="Find in this transcript" aria-pressed={findOpen} title="Find in this transcript (Ctrl+F)" onClick={() => setFindOpen(!findOpen)}><SearchIcon size={18} /></button>
                     )}
                     {playbackUrl && !readOnly && <button type="button" className="btn ghost icon-only" aria-label="Save audio" onClick={() => void saveAudio()} title="Save the recording's audio file on this computer"><DownloadIcon size={18} /></button>}
+                    {!readOnly && <button type="button" className="btn ghost icon-only" aria-label="Send to WhatsApp" title="Send to WhatsApp: the text, the text and voice, or a link" onClick={() => setWhatsFor(current.id)}><ChatIcon size={18} /></button>}
                     {!readOnly && <button className="btn ghost icon-only" aria-label="Share" title="Share a view-only link" aria-pressed={panel === "share"} onClick={() => setPanel(panel === "share" ? null : "share")}><LinkIcon size={18} /></button>}
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
@@ -1564,6 +1578,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         <ScreenViewer screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}
           onPlay={playbackUrl ? (s) => { setScreenOpen(null); seek(s.at_ms); } : undefined}
           onDelete={(s) => void deleteScreen(s)} />
+      )}
+      {whatsFor && current?.id === whatsFor && !readOnly && (
+        <WhatsAppSheet sessionId={current.id} title={current.title ?? null} hasAudio={!!playbackUrl} notify={notify} onClose={() => setWhatsFor(null)}
+          text={transcript && transcript.status === "completed" && transcript.segments.length > 0 ? whatsAppText() : null} />
       )}
       {moveFor && (
         <MoveRecordingsDialog ids={moveFor.ids} title={moveFor.title} current={moveFor.current} projects={folders} notify={notify}
