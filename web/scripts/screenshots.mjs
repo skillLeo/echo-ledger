@@ -43,6 +43,20 @@ const themes = (process.env.THEMES ?? 'light,dark').split(',');
 // is JavaScript run once the page has loaded (a menu opened, a key pressed); `full: false` keeps the window's height.
 const pages = {
     login: { path: '/app/login', guest: true },
+    // The auth pages (since v1.6.2): each step of the sign-in and sign-up card, and the account pages on the site.
+    // `steps` are run one after another as a guest; `link` reads a signed address from AUTH_LINKS (a JSON file the
+    // tour's tinker step writes: reset, invitation, device). Turnstile's test keys make the check pass by itself.
+    register: { path: '/app/register', guest: true },
+    'login-password': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }] },
+    'login-check': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', 'new.person@example.com'] }, { click: 'button[type=submit]', wait: '[data-turnstile]' }] },
+    'register-code': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'new.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
+    'register-profile': { path: '/app/register', guest: true, steps: [{ fill: ['input[type=email]', 'profile.{run}@example.com'] }, { pause: 2500 }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]' }, { code: 'input[autocomplete=one-time-code]' }, { click: 'button[type=submit]', wait: 'input[autocomplete=name]' }] },
+    'two-step': { path: '/app/login', guest: true, steps: [{ fill: ['input[type=email]', email] }, { click: 'button[type=submit]', wait: 'input[type=password]' }, { fill: ['input[type=password]', password] }, { click: 'button[type=submit]', wait: 'input[autocomplete=one-time-code]:visible' }] },
+    'password-reset': { path: '/app/password-reset/request', guest: true },
+    'password-reset-new': { link: 'reset', guest: true },
+    invitation: { link: 'invitation' },
+    'account-delete': { path: '/account/delete', guest: true },
+    'device-sign-in': { link: 'device' },
     home: { path: '/app' },
     library: { path: '/app/sessions' },
     'library-drawer': { path: '/app/sessions', waitFor: '.el-row', run: "document.querySelector('.el-row')?.click()", full: false, wide: true },
@@ -109,6 +123,22 @@ async function recording(page, title) {
         const match = html.match(/data-recording="([0-9A-Za-z]{26})"/);
         return match ? match[1] : '';
     }, `${base}/app/sessions?search=${encodeURIComponent(title)}`);
+}
+
+// Signed addresses for the auth pages (reset, invitation, device sign-in), relative to BASE_URL.
+function authLinks() {
+    try {
+        return JSON.parse(readFileSync(process.env.AUTH_LINKS ?? '', 'utf8'));
+    } catch {
+        return {};
+    }
+}
+
+// The newest sign-in code in the local mail log (MAIL_MAILER=log): sample accounts only.
+function latestCode() {
+    const log = readFileSync(resolve(here, '../storage/logs/laravel.log'), 'utf8');
+    const codes = [...log.matchAll(/Enter this code in EchoLedger:[\s\S]*?\b(\d{6})\b/g)].map((m) => m[1]);
+    return codes[codes.length - 1] ?? '000000';
 }
 
 async function firstCustomer(page) {
@@ -184,16 +214,31 @@ for (const theme of themes) {
         for (const [name, spec] of Object.entries(pages)) {
             if (only.length && !only.includes(name)) continue;
             if ((spec.wide && width < 600) || (spec.narrow && width >= 600)) continue;
-            const path = typeof spec.path === 'function' ? await spec.path(page) : spec.path;
+            const path = spec.link ? authLinks()[spec.link] : (typeof spec.path === 'function' ? await spec.path(page) : spec.path);
+            if (path === undefined || path === '') continue;
             const file = `${out}/web-${name}-${width}-${theme}.png`;
             if (spec.guest) {
                 const guest = await browser.newContext({ viewport: { width, height: 844 }, colorScheme: theme, deviceScaleFactor: width < 600 ? 1.5 : 1 });
                 const gp = await guest.newPage();
-                await gp.goto(base + path, { waitUntil: 'networkidle' });
+                // 'load', not 'networkidle': Turnstile's frame keeps talking to Cloudflare.
+                await gp.goto(base + path, { waitUntil: 'load' });
+                await gp.waitForTimeout(1500);
+                for (const step of spec.steps ?? []) {
+                    // {run}: a sample address of its own per width and theme (a code is sent once a minute per address).
+                    if (step.fill) await gp.fill(step.fill[0], step.fill[1].replace('{run}', `${width}${theme}`));
+                    if (step.pause) await gp.waitForTimeout(step.pause);
+                    if (step.code) await gp.fill(step.code, latestCode());
+                    if (step.click) await gp.click(step.click);
+                    if (step.wait) await gp.waitForSelector(step.wait, { timeout: 15000 });
+                    await gp.waitForTimeout(600);
+                }
+                await gp.waitForTimeout(1200);
                 await gp.screenshot({ path: file, fullPage: true, animations: 'disabled' });
                 await guest.close();
+                // The sign-in allows a few tries a minute per network: STEP_PAUSE_MS spaces the pages with steps.
+                if (spec.steps) await new Promise((r) => setTimeout(r, Number(process.env.STEP_PAUSE_MS ?? 0)));
             } else {
-                await page.goto(base + path, { waitUntil: 'networkidle' });
+                await page.goto(base + path, { waitUntil: spec.link ? 'load' : 'networkidle' });
                 if (spec.click) {
                     await page.click(spec.click);
                     await page.waitForLoadState('networkidle');

@@ -25,9 +25,11 @@ use Filament\Forms\Components\Checkbox;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\RenderHook;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
+use Filament\View\PanelsRenderHook;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\HtmlString;
@@ -146,6 +148,10 @@ class Login extends BaseLogin
             return null;
         }
         if (! $this->existing && app(Turnstile::class)->active()) {
+            // The sign-up page shows the check with the email (since v1.6.2): its answer goes along with Continue.
+            if (filled($this->data['turnstile'] ?? null)) {
+                return $this->emailCode();
+            }
             $this->step = self::STEP_HUMAN;
 
             return null;
@@ -277,6 +283,28 @@ class Login extends BaseLogin
         return null;
     }
 
+    /** Whether the Turnstile check shows with the email, on the first step: on the sign-up page (since v1.6.2). */
+    protected function asksForTurnstileFirst(): bool
+    {
+        return false;
+    }
+
+    /**
+     * The form, then (on the first step) "or" and the other ways in, side by side: Continue with Google and a passkey
+     * (since v1.6.2; they were render hooks under the form).
+     */
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            RenderHook::make(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE),
+            $this->getFormContentComponent(),
+            $this->getMultiFactorChallengeFormContentComponent(),
+            View::make('filament.auth.other-ways')
+                ->visible(fn (): bool => $this->step === self::STEP_EMAIL && blank($this->userUndertakingMultiFactorAuthentication)),
+            RenderHook::make(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER),
+        ]);
+    }
+
     /** The invitation the sign-up page was opened with (the Register page has one). */
     protected function invitationForSignUp(): ?WorkspaceInvitation
     {
@@ -338,7 +366,7 @@ class Login extends BaseLogin
             $this->getEmailFormComponent(),
             $this->getPasswordFormComponent(),
             View::make('filament.auth.turnstile')->viewData(['siteKey' => $turnstile->siteKey()])
-                ->visible(fn (): bool => $this->step === self::STEP_HUMAN && $turnstile->active()),
+                ->visible(fn (): bool => $turnstile->active() && ($this->step === self::STEP_HUMAN || ($this->step === self::STEP_EMAIL && $this->asksForTurnstileFirst()))),
             Hidden::make('turnstile'),
             TextInput::make('code')->label('Code from the email')->placeholder('6 digits')
                 ->required(fn (): bool => in_array($this->step, [self::STEP_CODE, self::STEP_OTP], true))
@@ -367,7 +395,8 @@ class Login extends BaseLogin
             ->email()
             ->required()
             ->maxLength(255)
-            ->autocomplete('email')
+            // Since v1.6.2 a saved passkey is offered from the email box itself (WebAuthn conditional mediation).
+            ->autocomplete('username webauthn')
             ->autofocus()
             ->readOnly(fn (): bool => $this->step !== self::STEP_EMAIL)
             ->hintAction(Action::make('startOver')->label('Use another email')->action(fn () => $this->startOver())
@@ -390,15 +419,14 @@ class Login extends BaseLogin
 
     protected function getFormActions(): array
     {
-        $label = match ($this->step) {
-            self::STEP_PASSWORD => 'Sign in',
-            self::STEP_HUMAN => 'Email me a code',
-            self::STEP_PROFILE => 'Create my account',
-            default => 'Continue',
-        };
-
         return [
-            $this->getAuthenticateFormAction()->label($label),
+            // The label follows the step (a closure: the actions are made once for the page).
+            $this->getAuthenticateFormAction()->label(fn (): string => match ($this->step) {
+                self::STEP_PASSWORD => 'Sign in',
+                self::STEP_HUMAN => 'Email me a code',
+                self::STEP_PROFILE => 'Create my account',
+                default => 'Continue',
+            }),
             Action::make('emailMeACode')->label('Email me a code instead')->link()->color('gray')
                 ->visible(fn (): bool => $this->step === self::STEP_PASSWORD)
                 ->action(fn () => $this->emailCode()),

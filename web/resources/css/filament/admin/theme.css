@@ -4495,3 +4495,191 @@ html[data-density='compact'] .el-library .fi-ta-cell {
 .fi-wi-widget:has(> .el-notice[style*='display: none']) {
     display: none;
 }
+
+/* ================================================================== auth pages (since v1.6.2) */
+
+/* One card, one rhythm: 40 px controls, the primary Continue full width, then "or" and the other ways side by side. */
+.fi-simple-main .fi-btn,
+.fi-simple-main .fi-input-wrp {
+    min-height: 40px;
+}
+
+.fi-simple-main .fi-simple-header-heading {
+    font-size: 24px;
+    line-height: 30px;
+    letter-spacing: -0.3px;
+}
+
+.fi-simple-main .fi-simple-header-subheading {
+    font-size: 14px;
+    line-height: 20px;
+    color: var(--text-muted);
+}
+
+.el-other-ways {
+    margin-top: var(--space-5);
+}
+
+.el-or {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4);
+    font-size: 12px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+}
+
+.el-or::before,
+.el-or::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--border);
+}
+
+.el-other-ways-row {
+    display: flex;
+    gap: var(--space-3);
+}
+
+.el-other-ways-row > * {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+@media (max-width: 359.98px) {
+    .el-other-ways-row {
+        flex-direction: column;
+    }
+}
+
+.el-auth-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 0 var(--space-3);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-full);
+    background-color: var(--surface);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+    color: var(--text);
+    white-space: nowrap;
+    cursor: pointer;
+    transition: background-color var(--motion-fast) var(--ease-out);
+}
+
+.el-auth-btn > span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.el-auth-btn:hover {
+    background-color: var(--surface-2);
+}
+
+.el-auth-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+}
+
+.el-auth-btn[disabled] {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.el-auth-btn-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--text-muted);
+}
+
+/* Google's sign-in branding: white with a #747775 border and #1F1F1F text; dark: #131314 with #8E918F and #E3E3E3. */
+.el-google-btn {
+    border-color: #747775;
+    background-color: #ffffff;
+    color: #1f1f1f;
+    font-family: Roboto, var(--font-sans-stack);
+    font-weight: 500;
+}
+
+.el-google-btn:hover {
+    background-color: #f8f9fa;
+}
+
+.dark .el-google-btn {
+    border-color: #8e918f;
+    background-color: #131314;
+    color: #e3e3e3;
+}
+
+.dark .el-google-btn:hover {
+    background-color: #1f1f20;
+}
+
+.el-google-g {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.el-other-ways-error {
+    margin-top: var(--space-2);
+    font-size: 14px;
+    color: var(--danger);
+}
+
+/* Turnstile: the managed widget across the card, and who checks it. */
+.el-turnstile {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.el-turnstile-box {
+    min-height: 65px;
+}
+
+.el-turnstile-note {
+    font-size: 12px;
+    line-height: 16px;
+    color: var(--text-faint);
+}
+
+.el-turnstile-note a {
+    text-decoration: underline;
+}
+
+/* Google's label is never cut (its branding asks for the whole words): on a narrow phone the Google button takes the
+   width it needs and Passkey the rest, still one row; below 360 px they stack. */
+@media (max-width: 439.98px) {
+    .el-other-ways-row > .el-google-btn {
+        flex: 0 0 auto;
+    }
+
+}
+
+@media (max-width: 359.98px) {
+    .el-other-ways-row > .el-google-btn {
+        flex: 1 1 auto;
+    }
+}
+
+/* The primary action full width, the quiet ones ("Email me a code instead", "Send a new code") under it, centred. */
+.fi-simple-main .fi-sc-actions > .fi-ac.fi-width-full {
+    grid-template-columns: minmax(0, 1fr) !important;
+    row-gap: var(--space-2);
+}
+
+.fi-simple-main .fi-sc-actions > .fi-ac.fi-width-full > .fi-link {
+    justify-self: center;
+    font-weight: 500;
+    color: var(--accent-text);
+}
