@@ -119,11 +119,15 @@ they are tested. Send your admin the report from Device check if something diffe
 - **Continue with Google** works when the server offers it. A new code can be asked for after a minute; after 5 wrong
   tries ask for a new one.
 
-**Sign in (phone, since v1.5).** On the phone's first screen, **Sign in to EchoLedger**: type the server address,
-your email and password, then the code from your authenticator app when it asks. **Sign in in the browser** does the
-same with Google or a passkey: the browser opens, you sign in there, and the phone is signed in when you come back.
-Your account's page on the phone (**You → Account**) exports your data, signs out every device, or deletes the
-account (you have 7 days to change your mind by signing in again).
+**Sign in or make an account (phone, since v1.6).** The first screen, **Sign in or create an account**, asks only for
+your email: type it and tap **Continue**. A new email gets the 6-digit code, then your name and the Terms, and the
+account starts on **Free**; an account you have asks for the password (or **Forgot it? Email me a code instead**), then
+the authenticator code if two-step sign-in is on. The phone knows its server: **Advanced → Use a different server** is
+only for another EchoLedger server. **Other ways to sign in** holds **Scan QR code**, the **One-time sign-in code** from
+the console, and **Sign in in the browser** (Google or a passkey: the browser opens, and the phone is signed in when you
+come back). On an older server the phone goes straight to the password, as before. Your account's page on the phone
+(**You → Account**) exports your data, signs out every device, or deletes the account (you have 7 days to change your
+mind by signing in again).
 
 **Family, friends and teammates (since v1.5).** Everyone has their own account, and nobody sees anyone else's
 recordings unless they are shared with them.
@@ -161,7 +165,8 @@ need the web console.
 
 1. In the console, open **Profile → Devices** and click **Sign in a device**. A code and a QR code appear. The code works for
    10 minutes and only once.
-2. **Phone:** tap **Scan QR code** and point the camera at the screen. Or type the server address and the code.
+2. **Phone:** tap **Other ways to sign in → Scan QR code** and point the camera at the screen, or type the code under
+   **One-time sign-in code**.
 3. **Windows:** type the server address and the code.
 4. The library appears. Repeat for each device.
 
@@ -172,6 +177,9 @@ again on the same phone or computer uses the same row. **Rename** gives it your 
 once (its recordings stay) and keeps it in the list until you **Remove from list**; the **Show** filter shows the
 signed-out ones. While the **Sign in a device** code is open, it says **Waiting for the app…**, then "✓ Galaxy S25
 Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
+
+**Your devices (phone, since v1.6).** **You → Devices** lists the same devices with their readable names. **Rename**
+works on any of them, this phone too; **Sign out** signs another one out at once.
 
 **Your devices (computer, since v1.6).** **Settings → Account → Devices** lists every phone and computer signed in to
 your account, with when each was last active. **Rename** gives any of them a name of your own; **Revoke** signs another
@@ -192,14 +200,15 @@ ready. It has 2 devices, 1 GB and keeps recordings 30 days.
 
 1. Open **console.groq.com** and sign in (with Google is fine).
 2. Open **API Keys**, press **Create API Key**, and copy the key.
-3. In EchoLedger open **Profile → Transcription key** (or **Account → Transcription key** in the apps), paste it and
-   press **Save**.
+3. In EchoLedger open **Profile → Transcription key** (on the phone **You → Transcription key**, on the computer
+   **Settings → Account → Transcription key**), paste it and press **Save**.
 
 We check the key with Groq once, keep it locked, never show it again (only its last four characters), and use it for
 your own recordings only. Without a key a new recording says "Add your free Groq key in Account → Transcription
 key". **Pro** and **Business** transcribe for you, with no key of your own.
 
-**Upgrading.** Tap a badge (or **Profile → Your plan → Compare plans**): you see what the feature does and the plans
+**Upgrading.** Tap a badge (or **Profile → Your plan → Compare plans**; on the phone **You → Plan & usage → See
+plans**): you see what the feature does and the plans
 side by side. **Request upgrade** (a message is optional) shows how to pay; we switch the plan on once the payment is
 confirmed, and you get an email and a notification.
 
