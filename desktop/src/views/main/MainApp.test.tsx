@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeEntitlements, makeItem, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { makeEntitlements, makeItem, sampleEntitlements, makeNavigate, makePendingItem, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import type { AppStatus } from "../../lib/ipc";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
@@ -1001,5 +1001,40 @@ describe("MainApp and what the plan allows (v1.6)", () => {
     });
     expect(await screen.findByRole("heading", { name: "Transcription key", level: 1 })).toBeInTheDocument();
     expect(await screen.findByRole("region", { name: "Transcription key" })).toBeInTheDocument();
+  });
+
+  const SAM = { name: "Sam", email: "sam@example.test", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null };
+
+  it("opens All features from the command palette, in view, with the Free plan's six of fifteen (v1.6.2)", async () => {
+    Object.defineProperty(Element.prototype, "scrollIntoView", { configurable: true, value: vi.fn() });
+    resetEntitlementsForTests();
+    respond("entitlements_get", sampleEntitlements("free"));
+    respond("account_get", SAM);
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = within(await screen.findByRole("dialog", { name: "Command palette" })).getByRole("combobox");
+    fireEvent.change(input, { target: { value: "all features" } });
+    expect(screen.getByRole("option", { name: "All features" })).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
+    const region = await screen.findByRole("region", { name: "All features" });
+    expect(within(region).getByTestId("all-features-summary")).toHaveTextContent("Your plan has 6 of 15 features");
+    await waitFor(() => expect(Element.prototype.scrollIntoView).toHaveBeenCalled());
+    expect(vi.mocked(Element.prototype.scrollIntoView).mock.contexts.at(-1)).toBe(region);
+  });
+
+  it("shows All features under Plan & usage from the avatar menu, and Ultra has all fifteen (v1.6.2)", async () => {
+    resetEntitlementsForTests();
+    respond("entitlements_get", sampleEntitlements("ultra"));
+    respond("account_get", SAM);
+    await renderPaired();
+    await waitFor(() => expect(callsOf("entitlements_get")).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "Account menu: Sam" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Plan & usage" }));
+    expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
+    const region = await screen.findByRole("region", { name: "All features" });
+    expect(within(region).getByTestId("all-features-summary")).toHaveTextContent("Your plan has 15 of 15 features");
+    expect(within(region).queryAllByRole("button")).toHaveLength(0);
   });
 });

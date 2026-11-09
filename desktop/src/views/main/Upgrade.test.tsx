@@ -2,10 +2,10 @@
 // plan's own Groq key. An older server (no entitlements) shows none of it.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { LockedFeatureCard, PlanBadge, PlanUsageCard, TranscriptionKeyCard, UpgradeSheet } from "./Upgrade";
-import { resetEntitlementsForTests } from "../../lib/entitlements";
+import { AllFeaturesCard, LockedFeatureCard, PlanBadge, PlanUsageCard, TranscriptionKeyCard, UpgradeSheet } from "./Upgrade";
+import { OPEN_SECTION_EVENT, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { callsOf, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeEntitlements } from "../../test/fixtures";
+import { FEATURE_REGISTRY, makeEntitlements, sampleEntitlements } from "../../test/fixtures";
 import type { Entitlements } from "../../lib/ipc";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -117,9 +117,8 @@ describe("Account → Plan & usage (v1.6)", () => {
     expect(card).toHaveTextContent("Storage50.0 MB of 1.0 GB");
     expect(card).toHaveTextContent("Transcription on EchoLedgerNot in your plan");
     expect(card).toHaveTextContent("Recordings kept30 days");
-    const features = screen.getByRole("list", { name: "Paid features" });
-    expect(within(features).getAllByRole("listitem")).toHaveLength(9);
-    expect(within(features).getByRole("button", { name: /Transcript views is in the Pro plan/ })).toBeInTheDocument();
+    expect(screen.getByTestId("plan-features-summary")).toHaveTextContent("Your plan has 1 of 10 features.");
+    expect(screen.getByRole("button", { name: "See all features" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "See plans" })).toBeInTheDocument();
   });
 
@@ -197,5 +196,93 @@ describe("Account → Transcription key (v1.6, the Free plan)", () => {
       fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
     });
     await waitFor(() => expect(callsOf("transcription_key_delete")).toHaveLength(1));
+  });
+});
+
+describe("Account → Plan & usage → All features (v1.6.2)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+  });
+
+  const rows = () => within(screen.getByRole("list", { name: "All features" })).getAllByRole("listitem");
+
+  it("lists all fifteen features in the registry's order, with what each does, for a Free plan: six ticks and nine badges", () => {
+    const e = sampleEntitlements("free");
+    withEntitlements(e);
+    render(<AllFeaturesCard e={e} />);
+    expect(screen.getByTestId("all-features-summary")).toHaveTextContent("Your plan has 6 of 15 features");
+    expect(rows().map((li) => li.dataset.testid)).toEqual(FEATURE_REGISTRY.map(([key]) => `feature-${key}`));
+    expect(screen.getByTestId("feature-record")).toHaveTextContent("Record and upload");
+    expect(screen.getByTestId("feature-record")).toHaveTextContent("Record calls, meetings and voice notes on your phone and computer, and upload files.");
+    for (const [key, name, , lowest] of FEATURE_REGISTRY) {
+      const row = screen.getByTestId(`feature-${key}`);
+      if (!lowest) {
+        expect(within(row).getByRole("img", { name: `${name} is in your plan` })).toBeInTheDocument();
+        expect(within(row).queryByRole("button")).not.toBeInTheDocument();
+      } else {
+        expect(within(row).queryByRole("img", { name: /is in your plan/ })).not.toBeInTheDocument();
+        expect(within(row).getByRole("button", { name: `${name} is in the ${lowest === "pro" ? "Pro" : "Ultra"} plan. See what it does` }))
+          .toHaveTextContent(lowest === "pro" ? "PRO ✦" : "ULTRA ✦");
+      }
+    }
+    expect(within(screen.getByTestId("feature-views")).getByRole("button").style.getPropertyValue("--badge")).toBe("#7c3aed");
+    expect(within(screen.getByTestId("feature-live_translate")).getByRole("button").style.getPropertyValue("--badge")).toBe("#0369a1");
+  });
+
+  it("ticks every feature on the Ultra plan, with no badge", () => {
+    const e = sampleEntitlements("ultra");
+    withEntitlements(e);
+    render(<AllFeaturesCard e={e} />);
+    expect(screen.getByTestId("all-features-summary")).toHaveTextContent("Your plan has 15 of 15 features");
+    expect(rows()).toHaveLength(15);
+    expect(screen.getAllByRole("img", { name: /is in your plan/ })).toHaveLength(15);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("shows only the Ultra features locked on Pro", () => {
+    const e = sampleEntitlements("pro");
+    withEntitlements(e);
+    render(<AllFeaturesCard e={e} />);
+    expect(screen.getByTestId("all-features-summary")).toHaveTextContent("Your plan has 11 of 15 features");
+    expect(screen.getAllByRole("button").map((b) => b.textContent)).toEqual(["ULTRA ✦", "ULTRA ✦", "ULTRA ✦", "ULTRA ✦"]);
+  });
+
+  it("opens the upgrade sheet for that feature from its badge, never the feature", () => {
+    const e = sampleEntitlements("free");
+    withEntitlements(e);
+    let open: string | null | undefined;
+    function Probe() {
+      const sheet = useUpgradeSheet();
+      open = sheet ? sheet.feature : undefined;
+      return null;
+    }
+    render(<><AllFeaturesCard e={e} /><UpgradeSheet /><Probe /></>);
+    fireEvent.click(within(screen.getByTestId("feature-screen_moments")).getByRole("button", { name: /Screen moments is in the Pro plan/ }));
+    expect(open).toBe("screen_moments");
+    const sheet = screen.getByRole("dialog");
+    expect(sheet).toHaveTextContent("Screen moments");
+    expect(sheet).toHaveTextContent("What was on the screen during a meeting, next to the words that were said.");
+    expect(callsOf("entitlements_get").length + callsOf("upgrade_request_create").length).toBe(0);
+  });
+
+  it("follows the server's words and count: a sixteenth feature is listed too", () => {
+    const e = sampleEntitlements("free");
+    e.features.night_mode = { enabled: false, name: "Night mode", description: "Something new.", cost: "paid", lowest_plan: "pro" };
+    withEntitlements(e);
+    render(<AllFeaturesCard e={e} />);
+    expect(screen.getByTestId("all-features-summary")).toHaveTextContent("Your plan has 6 of 16 features");
+    expect(rows().at(-1)).toHaveTextContent("Night modeSomething new.PRO ✦");
+  });
+
+  it("goes from Plan & usage's summary to All features", () => {
+    const e = sampleEntitlements("free");
+    withEntitlements(e);
+    const opened = vi.fn();
+    window.addEventListener(OPEN_SECTION_EVENT, opened);
+    render(<PlanUsageCard e={e} />);
+    expect(screen.getByTestId("plan-features-summary")).toHaveTextContent("Your plan has 6 of 15 features.");
+    fireEvent.click(screen.getByRole("button", { name: "See all features" }));
+    window.removeEventListener(OPEN_SECTION_EVENT, opened);
+    expect((opened.mock.calls[0][0] as CustomEvent).detail).toBe("all-features");
   });
 });

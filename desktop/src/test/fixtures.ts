@@ -4,6 +4,7 @@ import type {
   AppStatus,
   AskPayload,
   Entitlements,
+  OfferedPlan,
   LibraryItem,
   MicUser,
   NavigatePayload,
@@ -352,3 +353,58 @@ export function makeEntitlements(overrides: Partial<Entitlements> = {}): Entitle
 
 /** Any notice target, none included (v1.6.1: every notify call says where it goes; a test that is not about that). */
 export const anyTarget = { asymmetricMatch: () => true, toString: () => "anyTarget", toAsymmetricMatcher: () => "anyTarget" };
+
+/**
+ * The feature registry as docs/api-samples/entitlements.json sends it (v1.6.2, All features): key, name, what it
+ * does, and the lowest plan that has it. `registry.test.ts` keeps this list equal to the real sample.
+ */
+export const FEATURE_REGISTRY: readonly (readonly [string, string, string, string | null])[] = [
+  ["record", "Record and upload", "Record calls, meetings and voice notes on your phone and computer, and upload files.", null],
+  ["organise", "Organise", "Projects, labels, pins and filing rules for your recordings.", null],
+  ["search", "Search", "Find any word in your recordings and transcripts.", null],
+  ["share_links", "Share links", "Links to a recording or a project that you can take back at any time.", null],
+  ["export", "Export", "Transcripts as text and subtitles.", null],
+  ["ready_check", "Ready check", "Checks that your phone or computer will record your calls.", null],
+  ["platform_transcription", "Transcription on EchoLedger", "Your recordings are transcribed for you, with no key of your own.", "pro"],
+  ["views", "Roman Urdu, English and Urdu", "Read any call in Roman Urdu, English or Urdu, side by side with what was said.", "pro"],
+  ["double_check", "Double-check", "A second engine listens again to the words the first one was unsure of, and to every short note.", "pro"],
+  ["screen_moments", "Screen moments", "What was on the screen during a meeting, next to the words that were said.", "pro"],
+  ["connector", "Claude and ChatGPT", "Ask Claude or ChatGPT about your recordings.", "pro"],
+  ["team", "Team workspace", "Invite people to a shared workspace, with roles and seats.", "business"],
+  ["premium_engines", "Premium engines", "ElevenLabs and Gemini for the hardest calls and languages.", "business"],
+  ["live_translate", "Live Translate", "Live subtitles in your language for games and videos.", "business"],
+  ["ai_notes", "AI notes", "Project notes, memory and Ask about a project.", "business"],
+];
+
+const PRO_FEATURES = FEATURE_REGISTRY.filter(([, , , lowest]) => lowest === "pro").map(([key]) => key);
+const PAID_KEYS = FEATURE_REGISTRY.filter(([, , , lowest]) => lowest).map(([key]) => key);
+
+/**
+ * The real sample's answer for a plan: `free` has the six free features, `pro` adds its five, and `ultra` (the top
+ * plan; the sample calls it Business, the badge is whatever the server sends) has all fifteen.
+ */
+export function sampleEntitlements(planKey: "free" | "pro" | "ultra"): Entitlements {
+  const top = { key: "ultra", name: "Ultra", badge: "ULTRA", color: "#0369a1" };
+  const plans: OfferedPlan[] = [
+    { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed", price: "Ask for the price",
+      description: "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and Claude or ChatGPT.",
+      features: PRO_FEATURES, limits: { monthly_minutes: 600, devices: 5, storage_bytes: 21474836480, retention_days: 365, seats: 1 } },
+    { ...top, price: "Ask for the price", description: "Everything in Pro, and a team with roles, premium engines, Live Translate and AI notes.",
+      features: PAID_KEYS, limits: { monthly_minutes: 3000, devices: 5, storage_bytes: 107374182400, retention_days: 365, seats: 10 } },
+  ];
+  const has = (lowest: string | null) => !lowest || planKey === "ultra" || (planKey === "pro" && lowest === "pro");
+  const plan = planKey === "free" ? { key: "free", name: "Free", badge: "FREE", color: "#64748b" } : planKey === "pro" ? { key: "pro", name: "Pro", badge: "PRO", color: "#7c3aed" } : top;
+  return {
+    plan: { ...plan, expires_at: null, trial_minutes_left: planKey === "free" ? 0 : null },
+    features: Object.fromEntries(FEATURE_REGISTRY.map(([key, name, description, lowest]) => [key, {
+      enabled: has(lowest), name, description, cost: lowest ? "paid" : "free", lowest_plan: lowest === "business" ? "ultra" : lowest,
+    }])),
+    limits: planKey === "free"
+      ? { monthly_minutes: { limit: 0, used: 0 }, devices: { limit: 2, used: 1 }, storage_bytes: { limit: 1073741824, used: 4332716 }, retention_days: { limit: 30, used: null } }
+      : { monthly_minutes: { limit: planKey === "pro" ? 600 : 3000, used: 212 }, devices: { limit: 5, used: 3 }, storage_bytes: { limit: 107374182400, used: 4332716 }, seats: { limit: planKey === "pro" ? 1 : 10, used: 2 } },
+    engines: planKey === "free" ? ["own_groq", "on_device"] : ["own_groq", "on_device", "assemblyai", "groq", "soniox", "azure_mai", ...(planKey === "ultra" ? ["elevenlabs", "gemini"] : [])],
+    transcription_key: { provider: "groq", set: false, last4: null },
+    upgrade_request: null,
+    plans,
+  };
+}

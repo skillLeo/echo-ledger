@@ -1,7 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { badgeText, featureWords, forgetEntitlements, isLocked, lowestPlan, needsOwnKey, pendingRequest, refreshEntitlements, resetEntitlementsForTests, useEntitlements } from "./entitlements";
-import { makeEntitlements } from "../test/fixtures";
+import { allFeatures, badgeText, featureWords, featuresSummary, forgetEntitlements, isLocked, lowestPlan, needsOwnKey, pendingRequest, refreshEntitlements, resetEntitlementsForTests, useEntitlements } from "./entitlements";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { FEATURE_REGISTRY, makeEntitlements, sampleEntitlements } from "../test/fixtures";
 import { callsOf, fail, resetTauriMock, respond } from "../test/tauri";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../test/tauri")).coreModule);
@@ -72,5 +75,26 @@ describe("reading the entitlements", () => {
     expect(result.current).toBeNull();
     act(() => forgetEntitlements());
     expect(result.current).toBeUndefined();
+  });
+});
+
+describe("All features (v1.6.2)", () => {
+  // The real answer (docs/api-samples, kept true by the server's own test), read from disk.
+  const real = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../../docs/api-samples/entitlements.json"), "utf8")) as {
+    features: Record<string, { name: string; description: string; lowest_plan: string | null }>;
+  };
+
+  it("the fixtures' registry is the real sample's: the same fifteen features, names, words and order", () => {
+    expect(FEATURE_REGISTRY.map(([key, name, description, lowest]) => [key, name, description, lowest]))
+      .toEqual(Object.entries(real.features).map(([key, f]) => [key, f.name, f.description, f.lowest_plan]));
+  });
+
+  it("keeps the server's order and counts what the plan has", () => {
+    expect(allFeatures(sampleEntitlements("free")).keys).toEqual(Object.keys(real.features));
+    expect(featuresSummary(sampleEntitlements("free"))).toBe("Your plan has 6 of 15 features");
+    expect(featuresSummary(sampleEntitlements("pro"))).toBe("Your plan has 11 of 15 features");
+    expect(featuresSummary(sampleEntitlements("ultra"))).toBe("Your plan has 15 of 15 features");
+    expect(featuresSummary(makeEntitlements({ features: { record: { enabled: true, name: null, description: null, cost: "free", lowest_plan: null } } })))
+      .toBe("Your plan has 1 of 1 feature");
   });
 });

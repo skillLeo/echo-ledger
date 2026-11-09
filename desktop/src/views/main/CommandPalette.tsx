@@ -90,6 +90,7 @@ export function paletteCommands(status: AppStatus, actions: {
     ...(extra.account ? [
       { id: "devices", label: "Go to Devices", keywords: "account devices phones computers sign out rename", run: () => extra.account!("devices") },
       { id: "plan", label: "Go to Plan & usage", keywords: "account plan usage minutes upgrade limits", run: () => extra.account!("plan") },
+      { id: "all-features", label: "All features", keywords: "plan features what is in my plan included locked pro upgrade badge", run: () => extra.account!("all-features") },
       { id: "preferences", label: "Go to Preferences", keywords: "account theme sidebar density clock shortcuts language", run: () => extra.account!("preferences") },
     ] : []),
     ...(extra.help ? [{ id: "help", label: "Help & shortcuts", keywords: "keys keyboard help", run: extra.help }] : []),

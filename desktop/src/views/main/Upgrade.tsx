@@ -8,7 +8,7 @@ import { useEffect, useId, useState, type CSSProperties } from "react";
 import { api, errorMessage, type Entitlements, type LimitEntitlement, type OfferedPlan, type UpgradeRequest } from "../../lib/ipc";
 // The sheet is opened through the store (lib/entitlements), so a badge anywhere opens the one sheet MainApp holds.
 import {
-  LIMIT_LABELS, PAID_FEATURES, badgeText, closeUpgradeSheet, featureWords, isLocked, lowestPlan, noteUpgradeRequest, openUpgradeSheet as openSheet,
+  LIMIT_LABELS, PAID_FEATURES, allFeatures, badgeText, closeUpgradeSheet, featureWords, featuresSummary, isLocked, lowestPlan, noteUpgradeRequest, openSettingsSection, openUpgradeSheet as openSheet,
   pendingRequest, refreshEntitlements, useEntitlements, useUpgradeSheet,
 } from "../../lib/entitlements";
 import { fileSize } from "../../lib/format";
@@ -236,15 +236,12 @@ export function PlanUsageCard({ e }: { e: Entitlements }) {
         </p>
       )}
       {limits.map(([key, label]) => <LimitLine key={key} id={key} label={label} limit={e.limits[key]} />)}
-      <ul className="plan-features" aria-label="Paid features">
-        {PAID_FEATURES.filter(([key]) => e.features[key]).map(([key]) => (
-          <li key={key} className={e.features[key].enabled ? "" : "off"}>
-            {e.features[key].enabled ? <CheckIcon size={13} /> : <LockIcon size={13} />}
-            <span>{featureWords(e, key).name}</span>
-            <PlanBadge feature={key} />
-          </li>
-        ))}
-      </ul>
+      {Object.keys(e.features).length > 0 && (
+        <div className="row plan-features-summary" data-testid="plan-features-summary">
+          <span className="small">{featuresSummary(e)}.</span><span className="spacer" />
+          <button type="button" className="btn compact ghost" onClick={() => openSettingsSection("all-features")}>See all features</button>
+        </div>
+      )}
       {request && (
         <div className={`notice small upgrade-request ${request.status}`} role="status" data-testid="upgrade-request">
           {request.status === "pending" && <>Your request for {requestName} is pending. {ACTIVATE_ONCE_CONFIRMED}</>}
@@ -256,6 +253,38 @@ export function PlanUsageCard({ e }: { e: Entitlements }) {
       {e.plans.some((p) => p.key !== plan?.key) && (
         <div className="row organise-field"><span className="spacer" /><button type="button" className="btn" onClick={() => openSheet(null)}>See plans</button></div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Account → Plan & usage → All features (v1.6.2): every feature the server names, in its registry's order, with what
+ * it does; a tick when the plan has it, otherwise the one badge, which opens the upgrade sheet for that feature (never
+ * the feature: the server still refuses it with `feature_not_in_plan`).
+ */
+export function AllFeaturesCard({ e }: { e: Entitlements }) {
+  const { keys } = allFeatures(e);
+  return (
+    <div className="card all-features" data-testid="all-features">
+      <div className="row"><b>All features</b></div>
+      <p className="small muted" data-testid="all-features-summary">{featuresSummary(e)}</p>
+      <ul className="feature-list" aria-label="All features">
+        {keys.map((key) => {
+          const included = e.features[key].enabled;
+          const words = featureWords(e, key);
+          return (
+            <li key={key} className={included ? "included" : "locked"} data-testid={`feature-${key}`}>
+              <span className="feature-words">
+                <span className="feature-name">{words.name}</span>
+                {words.description && <span className="small muted">{words.description}</span>}
+              </span>
+              {included
+                ? <span className="feature-included" role="img" aria-label={`${words.name} is in your plan`} title="In your plan"><CheckIcon size={15} /></span>
+                : <PlanBadge feature={key} />}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
 }

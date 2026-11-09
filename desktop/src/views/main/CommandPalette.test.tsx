@@ -79,6 +79,11 @@ describe("command palette (B9)", () => {
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
     expect(extra.account).toHaveBeenCalledWith("devices");
     cleanup();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra} />);
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "all features" } });
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(extra.account).toHaveBeenCalledWith("all-features");
+    cleanup();
     render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} extra={extra}
       pages={[{ id: "project-c1", label: "Acme Holdings", group: "Projects", open }]} />);
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "acme" } });

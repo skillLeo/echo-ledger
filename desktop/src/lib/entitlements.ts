@@ -95,6 +95,18 @@ export function featureWords(e: Entitlements | null | undefined, feature: string
   };
 }
 
+/** Every feature the answer names, in the server's (the registry's) order, and how many of them the plan has. */
+export function allFeatures(e: Entitlements): { keys: string[]; included: number } {
+  const keys = Object.keys(e.features);
+  return { keys, included: keys.filter((key) => e.features[key].enabled).length };
+}
+
+/** "Your plan has 6 of 15 features". */
+export function featuresSummary(e: Entitlements): string {
+  const { keys, included } = allFeatures(e);
+  return `Your plan has ${included} of ${keys.length} ${keys.length === 1 ? "feature" : "features"}`;
+}
+
 /** The pending upgrade request, if there is one. */
 export function pendingRequest(e: Entitlements | null | undefined): UpgradeRequest | null {
   return e?.upgrade_request?.status === "pending" ? e.upgrade_request : null;
