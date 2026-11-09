@@ -32,7 +32,7 @@ final class TwoFactorCodes
 
     private function provider(): AppAuthentication
     {
-        foreach (Filament::getPanel('admin')->getMultiFactorAuthenticationProviders() as $provider) {
+        foreach (Filament::getPanel('app')->getMultiFactorAuthenticationProviders() as $provider) {
             if ($provider instanceof AppAuthentication) {
                 return $provider;
             }

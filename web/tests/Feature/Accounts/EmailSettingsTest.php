@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Mail\AccountMail;
 use App\Mail\DeletionScheduledMail;
 use App\Mail\ExportReadyMail;
@@ -37,7 +37,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 
 uses(AdminTestHelpers::class);
 
-beforeEach(fn () => Filament::setCurrentPanel('admin'));
+beforeEach(fn () => Filament::setCurrentPanel('app'));
 
 const SMTP_PASSWORD = 'smtp-Secret-pass-4821';
 
@@ -209,7 +209,7 @@ it('allows 5 test emails a minute', function () {
 it('keeps Settings → Email to the super admin', function () {
     $this->actingAs($this->makeRegularUser(), 'web');
 
-    $this->get(Settings::getUrl())->assertForbidden();
+    $this->get(Settings::getUrl(panel: 'admin'))->assertForbidden();
 });
 
 it('finds the email settings by search', function () {
@@ -227,9 +227,9 @@ it('queues every account email and draws it in the console theme', function (Acc
     'verify email' => [new VerifyEmailMail('https://ledger.test/verify/1'), 'https://ledger.test/verify/1'],
     'reset password' => [new ResetPasswordMail('https://ledger.test/reset/1'), 'https://ledger.test/reset/1'],
     'invitation' => [new InvitationMail('Acme team', 'Hassam', 'https://ledger.test/invite/1', true), 'Acme team'],
-    'login alert' => [new LoginAlertMail('S25 Ultra, Android', 'Nov 6, 2026 10:00', '203.0.113.9', 'PK', 'https://ledger.test/admin/profile'), 'S25 Ultra, Android'],
+    'login alert' => [new LoginAlertMail('S25 Ultra, Android', 'Nov 6, 2026 10:00', '203.0.113.9', 'PK', 'https://ledger.test/app/profile'), 'S25 Ultra, Android'],
     'share received' => [new ShareReceivedMail('Hassam', 'Weekly call', false, 'https://ledger.test/admin/shared/1'), 'Weekly call'],
-    'transcript ready' => [new TranscriptReadyMail('Weekly call', 'https://ledger.test/admin/sessions/1'), 'Weekly call'],
+    'transcript ready' => [new TranscriptReadyMail('Weekly call', 'https://ledger.test/app/sessions/1'), 'Weekly call'],
     'export ready' => [new ExportReadyMail('https://ledger.test/export/1', 'Nov 7, 2026 10:00', '12 MB'), 'https://ledger.test/export/1'],
     'deletion scheduled' => [new DeletionScheduledMail('Nov 13, 2026', 'https://ledger.test/admin'), 'Nov 13, 2026'],
 ]);
@@ -247,9 +247,9 @@ it('keeps a link typed into an email\'s text as text, so nobody can put their ow
 })->with([
     'invitation: workspace and inviter' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/invite/1', true, 'Nov 13, 2026')],
     'added to a workspace' => [fn (string $evil) => new InvitationMail($evil, $evil, 'https://ledger.test/admin', false)],
-    'login alert: device name and country' => [fn (string $evil) => new LoginAlertMail($evil, 'Nov 6, 2026 10:00', '203.0.113.9', $evil, 'https://ledger.test/admin/profile')],
+    'login alert: device name and country' => [fn (string $evil) => new LoginAlertMail($evil, 'Nov 6, 2026 10:00', '203.0.113.9', $evil, 'https://ledger.test/app/profile')],
     'share received: sender, title and note' => [fn (string $evil) => new ShareReceivedMail($evil, $evil, false, 'https://ledger.test/admin/shared/1', "Hi,\n{$evil}")],
     'share received: a project' => [fn (string $evil) => new ShareReceivedMail($evil, $evil, true, 'https://ledger.test/admin/shared/1', $evil)],
-    'transcript ready: title' => [fn (string $evil) => new TranscriptReadyMail($evil, 'https://ledger.test/admin/sessions/1')],
+    'transcript ready: title' => [fn (string $evil) => new TranscriptReadyMail($evil, 'https://ledger.test/app/sessions/1')],
     'test email: SMTP server' => [fn (string $evil) => new TestMail($evil)],
 ]);

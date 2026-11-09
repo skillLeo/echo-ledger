@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SttUseCase;
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Models\Setting;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
@@ -16,7 +16,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 function adminGroupsPage($test)
@@ -142,7 +142,7 @@ it('links to the pages that own the access and device settings', function () {
     $this->signInAsAdmin();
 
     adminGroupsPage($this)->set('activeTab', 'privacy')->assertSee('Open Security')
-        ->set('activeTab', 'devices')->assertSee('/admin/devices');
+        ->set('activeTab', 'devices')->assertSee('/app/devices');
 });
 
 // --- Export and import (B19) -------------------------------------------------------------------------------------

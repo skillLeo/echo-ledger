@@ -1,4 +1,4 @@
-# EchoLedger admin guide (v1.5)
+# EchoLedger admin guide (v1.6)
 
 For the person who runs the server (the super admin) and for workspace owners and admins. Everyday use of the apps
 is in [USER_GUIDE.md](USER_GUIDE.md); putting the server up is in [web/DEPLOY.md](../web/DEPLOY.md).
@@ -22,15 +22,27 @@ shares it with a link or with **Send to a teammate**.
 The **super admin** runs the server: plans, server settings, API credentials, and every workspace's people and usage,
 never their recordings. A workspace always has one owner, so an owner who wants to leave hands it over first.
 
+### The app and the admin panel (since v1.6)
+
+- **The app** is at `/app`: everyone's own recordings, projects, devices, workspace and profile. Owners and admins
+  run their workspace there.
+- **The admin panel** is at `/admin`, for the platform's staff only. It is orange with an **ADMIN** label next to the
+  name, so it is never mistaken for your own app. Staff sign in to the app as usual and open it from the avatar menu
+  (**Admin panel**); **Back to the app** returns. It has Plans, Upgrade requests, Server usage, API Credentials,
+  Settings (email, sign-up, engines and the rest of the server), Device reports and the Accuracy Lab.
+- Someone who is not staff gets "Forbidden" on every admin page; the bare `/admin` (the console's home before v1.6)
+  takes them to `/app`. The app's old addresses under `/admin` (bookmarks, links in emails sent before the update)
+  go to the same page under `/app`.
+
 ## 2. After the accounts update (once)
 
-1. **Email.** Settings → Email: the SMTP server, port, encryption, user, password and sender. **Send a test email**
+1. **Email.** Admin panel → Settings → Email: the SMTP server, port, encryption, user, password and sender. **Send a test email**
    tries the values on the page before you save them. Then add the SPF, DKIM and DMARC records in
    [EMAIL_DNS.md](EMAIL_DNS.md) at your domain's DNS host. Invitations, confirmations, password resets and sign-in
    alerts all need this.
 2. **Google sign-in (optional).** One OAuth client of type *Web application*: the steps are in
    [Google sign-in: the OAuth client](#google-sign-in-the-oauth-client) below.
-3. **Who can sign up.** Settings → Privacy & security → Who can sign up:
+3. **Who can sign up.** Admin panel → Settings → Privacy & security → Who can sign up:
    - **On** (*Anyone*): family and friends make their own free account on the sign-up page, or with **Create account**
      in the apps. Each account gets its own private workspace: they never see your recordings and you never see theirs
      unless one of you shares.
@@ -39,7 +51,7 @@ never their recordings. A workspace always has one owner, so an owner who wants 
    - **Invite only**: the Workspace page's **Invite** emails a sign-up link to an address without an account.
 
    Keep it Off or Invite only until the server is ready for the public (VPS, legal pages reviewed).
-4. **Members in the console.** Settings → Members can use the console (on by default). When it is on, members and
+4. **Members in the console.** Admin panel → Settings → Members can use the console (on by default). When it is on, members and
    viewers get a small read-only console: their own library, Shared with me, their profile and devices. When it is
    off, the console points them to the apps.
 5. **Legal pages.** `/terms` and `/privacy` are drafts marked "Draft — for review". Have them read before anyone
@@ -63,10 +75,10 @@ desktop client are needed; create them only if the apps ever sign in with Google
 5. **Clients → Create client** (older consoles: *Credentials → Create credentials → OAuth client ID*):
    - Application type: **Web application**; name: *EchoLedger console*.
    - Authorised JavaScript origins: `https://<your server>` (optional).
-   - Authorised redirect URIs: the address the console shows under **API Credentials → Google sign-in**, exactly, for
+   - Authorised redirect URIs: the address the console shows under **Admin panel → API Credentials → Google sign-in**, exactly, for
      example `https://echoledger.example.com/auth/google/callback`. It is the server's address followed by
      `/auth/google/callback`; `http://` works only for `localhost`.
-6. **Create**, then copy the **Client ID** and **Client secret** into **API Credentials → Google sign-in** in the console
+6. **Create**, then copy the **Client ID** and **Client secret** into **Admin panel → API Credentials → Google sign-in** in the console
    and save. *Sign in with Google* appears on the console's sign-in page at once, and the apps offer Google too
    (`GET /api/auth/options` says `"google": true`).
 7. Check it: sign out, choose **Sign in with Google**, and sign in with an account whose email has an account here.
@@ -93,7 +105,7 @@ can **Sign out everywhere**. A new device or a console sign-in from a new browse
 
 ### Sign-up (since v1.6)
 
-**Settings → Privacy & security → Sign-up.** Everyone signs up the same way: their email, a 6-digit code by email,
+**Admin panel → Settings → Privacy & security → Sign-up.** Everyone signs up the same way: their email, a 6-digit code by email,
 their name and the Terms (no password needed; they can set one later with **Forgot password?**).
 
 - **Who can sign up:** On (anyone), Off (only people you add), or Invite only (an address with an invitation waiting;
@@ -102,12 +114,12 @@ their name and the Terms (no password needed; they can set one later with **Forg
   `web/resources/data/disposable-email-domains.txt`, one domain a line) are always refused.
 - **New accounts a day from one network:** default 5.
 - **Turnstile** (Cloudflare's free check against robots) protects the web sign-up once its site key and secret are
-  saved in **API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
+  saved in **Admin panel → API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
   Without them it is skipped. The apps do not show it; the limits per address and network protect them.
 - Codes: 10 minutes, 5 tries, a new one after 60 seconds, at most 5 an hour per address and 20 an hour per network.
 - **Tell me when one person records more than … hours a day** (default 6): an email and a notification to you, at
   most once a day per person. Only the lengths are counted.
-- **Suspend or restore a person** (System → Plans): a suspended person cannot sign in anywhere (the console and the
+- **Suspend or restore a person** (Admin panel → Plans): a suspended person cannot sign in anywhere (the console and the
   apps say "This account is suspended"), and their phones and computers are refused on every call. They stay signed
   in, so lifting the suspension brings them straight back.
 - **Device limit:** each plan's devices per person; one more is refused with "Your plan signs in 2 devices. Sign one
@@ -115,7 +127,7 @@ their name and the Terms (no password needed; they can set one later with **Forg
 
 ## 4. Plans (super admin)
 
-**System → Plans.** Prices stay at 0 until billing comes (backlog); **Price as shown** is the text the apps show
+**Admin panel → Plans.** Prices stay at 0 until billing comes (backlog); **Price as shown** is the text the apps show
 ("Rs 2,000 a month").
 
 - **New plan** / **Edit:** name, badge (PRO) and its colour, price, description, order on the comparison, **On offer**
@@ -140,14 +152,14 @@ their name and the Terms (no password needed; they can set one later with **Forg
 
 ### Upgrade requests (since v1.6)
 
-**System → Upgrade requests** lists who asked for which plan, with their message (the badge counts the waiting ones;
+**Admin panel → Upgrade requests** lists who asked for which plan, with their message (the badge counts the waiting ones;
 the bell tells you too). Once the payment is confirmed press **Approve**: choose the plan and, if you like, until when
 (then it goes back to the default plan). **Decline** needs a reply. Either way the person gets an email and a
 notification in the apps. One request waits at a time per person.
 
 ## 5. Usage and costs
 
-- **System → Server usage** (super admin): minutes and tokens per provider (Groq, AssemblyAI, ElevenLabs, Soniox,
+- **Admin panel → Server usage** (super admin): minutes and tokens per provider (Groq, AssemblyAI, ElevenLabs, Soniox,
   Anthropic with its uses, Gemini), per workspace and per person, the dollars from the price table on the same page
   (edit a price when a provider changes theirs), the share of each plan used, the last six months, date and workspace
   filters, and **CSV**.
@@ -181,7 +193,7 @@ Next to the ones in [web/DEPLOY.md](../web/DEPLOY.md):
 People can connect Claude or ChatGPT to their own recordings; the steps are in [CONNECTOR.md](CONNECTOR.md). It only
 reads, and sees only what that person can open in the apps.
 
-- **Turn it on or off** per plan: System → Plans → the Connector feature.
+- **Turn it on or off** per plan: Admin panel → Plans → the Connector feature.
 - **Once on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key storage/oauth-public.key`,
   run as the user PHP runs as. Until then `/mcp` and its sign-in page answer with a server error. [DEPLOY.md](../web/DEPLOY.md)
   has checks you can run with curl.
@@ -193,7 +205,7 @@ reads, and sees only what that person can open in the apps.
 
 ## 9. Device reports
 
-**System → Device reports** (super admin) lists what people chose to send from **Send to my admin** on the phone's Device
+**Admin panel → Device reports** (super admin) lists what people chose to send from **Send to my admin** on the phone's Device
 check or the Mac's Run Mac check: the maker, model, system version, app version and each check's result. Nothing is sent
 unless the person taps it. Use it to see what works on your team's phones. The list of checks a teammate should run is in
 [MANUAL_QA.md](MANUAL_QA.md), "Teammate phone check".

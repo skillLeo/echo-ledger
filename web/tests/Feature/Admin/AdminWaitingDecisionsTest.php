@@ -112,7 +112,7 @@ it('shows one slim line with a Review link to the waiting view above the recordi
     $reviewUrl = CaptureSessionResource::getUrl('index', ['tab' => 'waiting']);
 
     expect(WaitingDecisionsWidget::canView())->toBeTrue()
-        ->and($reviewUrl)->toEndWith('/admin/sessions?tab=waiting');
+        ->and($reviewUrl)->toEndWith('/app/sessions?tab=waiting');
     $this->get(CaptureSessionResource::getUrl('index'))->assertOk()
         ->assertSeeInOrder(['2 calls waiting', '·', 'Review'])
         ->assertSee('href="'.e($reviewUrl).'"', escape: false)

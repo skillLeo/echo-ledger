@@ -13,7 +13,7 @@ it('answers an unknown address with a 404 page', function (string $url) {
     $response->assertNotFound();
     expect($response->headers->get('Content-Type'))->toContain('text/html');
     expect($response->getContent())->toContain('Not Found');
-})->with(['site root path' => '/nothing-here', 'under the console' => '/admin/nothing-here', 'deep path' => '/admin/sessions/abc/def/ghi', 'static look-alike' => '/admin-media']);
+})->with(['site root path' => '/nothing-here', 'under the console' => '/admin/nothing-here', 'deep path' => '/app/sessions/abc/def/ghi', 'static look-alike' => '/admin-media']);
 
 it('serves the same 404 to a signed-in admin', function () {
     $this->signInAsAdmin();
@@ -35,10 +35,10 @@ it('answers an unknown record with a 404 rather than an error', function () {
     $admin = $this->signInAsAdmin();
     CaptureSession::factory()->create(['user_id' => $admin->id]);
 
-    $this->get('/admin/sessions/01JNOSUCHSESSION0000000000')->assertNotFound();
-    $this->get('/admin/clients/01JNOSUCHCLIENT000000000000/edit')->assertNotFound();
-    $this->get('/admin/sessions/%00')->assertNotFound();
-    $this->get("/admin/sessions/'%20OR%201=1")->assertNotFound();
+    $this->get('/app/sessions/01JNOSUCHSESSION0000000000')->assertNotFound();
+    $this->get('/app/clients/01JNOSUCHCLIENT000000000000/edit')->assertNotFound();
+    $this->get('/app/sessions/%00')->assertNotFound();
+    $this->get("/app/sessions/'%20OR%201=1")->assertNotFound();
 });
 
 it('does not echo the requested path back into the 404 page', function () {
@@ -52,8 +52,8 @@ it('does not echo the requested path back into the 404 page', function () {
 it('rejects an unsupported method with 405 instead of 404 for known console routes', function () {
     $this->signInAsAdmin();
 
-    $this->postJson('/admin/sessions')->assertStatus(405);
-    $this->deleteJson('/admin/clients')->assertStatus(405);
+    $this->postJson('/app/sessions')->assertStatus(405);
+    $this->deleteJson('/app/clients')->assertStatus(405);
 });
 
 it('returns JSON errors for unknown API routes', function () {

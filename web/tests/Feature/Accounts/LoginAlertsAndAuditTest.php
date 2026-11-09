@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Auth\EditProfile;
 use App\Filament\Auth\Login;
-use App\Filament\Pages\Settings;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Mail\LoginAlertMail;
 use App\Mail\ShareReceivedMail;
@@ -28,7 +28,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 require_once __DIR__.'/Support/account_helpers.php';
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 
@@ -50,7 +50,7 @@ it('emails the account when the console is opened from a browser it has not used
     // Another browser (no token of this account).
     auth('web')->logout();
     $this->withHeader('User-Agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Version/18.0 Safari/605.1.15')->get('/auth/google/callback')->assertRedirect();
-    Mail::assertQueued(LoginAlertMail::class, fn (LoginAlertMail $mail): bool => $mail->hasTo('farah@example.test') && $mail->what === 'Safari on macOS' && str_contains($mail->devicesUrl, '/admin/profile#devices'));
+    Mail::assertQueued(LoginAlertMail::class, fn (LoginAlertMail $mail): bool => $mail->hasTo('farah@example.test') && $mail->what === 'Safari on macOS' && str_contains($mail->devicesUrl, '/app/profile#devices'));
 
     // The first browser again, with its token.
     auth('web')->logout();
@@ -102,7 +102,7 @@ it('emails a finished transcript only to people who asked for it in their profil
     $session = CaptureSession::factory()->create(['user_id' => $user->id, 'title' => 'Site visit']);
     $transcript = $session->transcripts()->create(['kind' => 'final', 'provider' => 'assemblyai', 'status' => 'processing']);
     $transcript->update(['status' => 'completed', 'text' => 'Done']);
-    Mail::assertQueued(TranscriptReadyMail::class, fn (TranscriptReadyMail $mail): bool => $mail->hasTo('reader@example.test') && $mail->title === 'Site visit' && str_ends_with($mail->url, '/admin/sessions/'.$session->id));
+    Mail::assertQueued(TranscriptReadyMail::class, fn (TranscriptReadyMail $mail): bool => $mail->hasTo('reader@example.test') && $mail->title === 'Site visit' && str_ends_with($mail->url, '/app/sessions/'.$session->id));
 
     $quiet = Fx::user();
     $other = CaptureSession::factory()->create(['user_id' => $quiet->id]);

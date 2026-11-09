@@ -32,7 +32,7 @@ final class AccountPageController extends Controller
         if (! $user instanceof User) {
             // "Sign in to continue" comes back here after the console's sign-in.
             if ($request->boolean('sign_in')) {
-                return redirect()->guest(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+                return redirect()->guest(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
             }
 
             return view('account.delete', ['user' => null]);
@@ -64,7 +64,7 @@ final class AccountPageController extends Controller
         } catch (ApiError $e) {
             $team = $e->apiCode() === 'owner_of_team';
 
-            return response()->view('account.delete', ['user' => $user, 'date' => null, 'error' => $e->getMessage(), 'workspaceUrl' => $team ? WorkspaceSettings::getUrl(panel: 'admin') : null, ...$google], $e->getStatusCode() === 429 ? 429 : 422);
+            return response()->view('account.delete', ['user' => $user, 'date' => null, 'error' => $e->getMessage(), 'workspaceUrl' => $team ? WorkspaceSettings::getUrl(panel: 'app') : null, ...$google], $e->getStatusCode() === 429 ? 429 : 422);
         }
         GoogleSignIn::forgetConfirmed($request->session());
         $date = $this->date($user->fresh() ?? $user);

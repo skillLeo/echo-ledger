@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Models\Credential;
 use App\Services\CredentialVault;
 use Filament\Facades\Filament;
@@ -13,7 +13,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 function adminVault(): CredentialVault

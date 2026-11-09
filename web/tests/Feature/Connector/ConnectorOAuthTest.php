@@ -210,7 +210,7 @@ describe('the code flow with PKCE', function () {
         [, $challenge] = connectorPkce();
         $url = connectorAuthorizeUrl($client, $challenge);
 
-        $this->get($url)->assertRedirect(route('filament.admin.auth.login'));
+        $this->get($url)->assertRedirect(route('filament.app.auth.login'));
 
         parse_str((string) parse_url((string) session('url.intended'), PHP_URL_QUERY), $kept);
         parse_str((string) parse_url($url, PHP_URL_QUERY), $asked);
@@ -392,13 +392,13 @@ describe('the code flow with PKCE', function () {
     });
 
     it('needs the two-step code before the person is signed in and asked', function () {
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
         $provider = AppAuthentication::make();
         $provider->saveSecret($this->person, $secret = $provider->generateSecret());
         $client = connectorRegister($this);
         [, $challenge] = connectorPkce();
         $url = connectorAuthorizeUrl($client, $challenge);
-        $this->get($url)->assertRedirect(route('filament.admin.auth.login'));
+        $this->get($url)->assertRedirect(route('filament.app.auth.login'));
 
         $login = Livewire::test(Login::class)
             ->fillForm(['email' => $this->person->email, 'password' => 'password'])
@@ -458,16 +458,16 @@ describe('the code flow with PKCE', function () {
         // The password changes elsewhere: this session is one from before it, and the console already refuses it.
         $this->person->forceFill(['password' => Hash::make('a-new-good-password-43')])->save();
 
-        $this->post('/oauth/authorize', ['auth_token' => $token[1]])->assertRedirect(route('filament.admin.auth.login'));
+        $this->post('/oauth/authorize', ['auth_token' => $token[1]])->assertRedirect(route('filament.app.auth.login'));
         $this->assertGuest('web');
         expect(Passport::authCode()->newQuery()->count())->toBe(0);
 
         $this->withSession(['password_hash_web' => 'from before the change'])->actingAs($this->person, 'web')
-            ->get($url)->assertRedirect(route('filament.admin.auth.login'));
+            ->get($url)->assertRedirect(route('filament.app.auth.login'));
         $this->assertGuest('web');
 
         $this->withSession(['password_hash_web' => 'from before the change'])->actingAs($this->person, 'web')
-            ->delete('/oauth/authorize', ['auth_token' => 'x'])->assertRedirect(route('filament.admin.auth.login'));
+            ->delete('/oauth/authorize', ['auth_token' => 'x'])->assertRedirect(route('filament.app.auth.login'));
         // The same address still works after signing in again.
         $this->actingAs($this->person, 'web')->get($url)->assertOk()->assertSee('Allow Claude');
     });

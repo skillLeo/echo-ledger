@@ -17,7 +17,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Carbon::setTestNow(Carbon::parse('2026-10-24 12:00:00', 'UTC'));
 });
 
@@ -46,7 +46,7 @@ function adminStatsByLabel(): array
 it('renders the dashboard for a super admin with every widget placed', function () {
     $admin = $this->signInAsAdmin(['name' => 'Farah Khan']);
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
     // Widgets load lazily, so the page carries their component names; their content is asserted below.
     expect($html)->toContain('Dashboard')
@@ -69,7 +69,7 @@ it('registers the stats, chart and account widgets on the dashboard', function (
 it('does not poll the server from the dashboard', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin')->assertOk()->assertDontSee('wire:poll', false);
+    $this->get('/app')->assertOk()->assertDontSee('wire:poll', false);
     expect((new ReflectionProperty(SourceStatsOverview::class, 'pollingInterval'))->getDefaultValue())->toBeNull()
         ->and((new ReflectionProperty(SessionsChart::class, 'pollingInterval'))->getDefaultValue())->toBeNull();
 });
@@ -77,7 +77,7 @@ it('does not poll the server from the dashboard', function () {
 it('lists the navigation groups and pages in the sidebar', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
     foreach (['Library', 'More', 'System', 'Projects', 'Activity', 'Upload', 'Devices', 'API Credentials', 'Settings'] as $label) {
         expect($html)->toContain($label);

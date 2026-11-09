@@ -32,13 +32,13 @@ final class InvitationController extends Controller
         $user = Auth::guard('web')->user();
         if (! $user instanceof User) {
             if (User::query()->where('email', $invitation->email)->exists()) {
-                return redirect()->guest(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+                return redirect()->guest(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
             }
 
             return redirect()->to($this->invitations->signUpUrl($token));
         }
         if (! $this->invitations->matches($invitation, $user->email)) {
-            return $this->message(403, 'This invitation is for another address', "Sign in as {$invitation->email} to accept it.", url('/admin'), 'Open the console');
+            return $this->message(403, 'This invitation is for another address', "Sign in as {$invitation->email} to accept it.", url('/app'), 'Open the console');
         }
 
         return response()->view('auth.invitation', [
@@ -58,10 +58,10 @@ final class InvitationController extends Controller
         try {
             $this->invitations->accept($invitation, $user);
         } catch (ApiError $e) {
-            return $this->message(403, 'This workspace is full', $e->getMessage(), url('/admin'), 'Open the console');
+            return $this->message(403, 'This workspace is full', $e->getMessage(), url('/app'), 'Open the console');
         }
 
-        return redirect()->to(Filament::getPanel('admin')->getUrl() ?? '/admin');
+        return redirect()->to(Filament::getPanel('app')->getUrl() ?? '/app');
     }
 
     private function message(int $status, string $title, string $message, ?string $back = null, ?string $backLabel = null): Response

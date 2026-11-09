@@ -131,7 +131,7 @@ describe('PATCH /api/devices/{id}', function () {
 });
 
 describe('statuses and the console', function () {
-    beforeEach(fn () => Filament::setCurrentPanel('admin'));
+    beforeEach(fn () => Filament::setCurrentPanel('app'));
 
     it('shows Active, Signed out by you, Revoked by admin and Expired', function () {
         $owner = Fx::user();

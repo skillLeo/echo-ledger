@@ -130,7 +130,7 @@ describe('the console bell', function () {
         $data = $admin->notifications()->sole()->data;
         expect($data['format'])->toBe('filament')->and($data['title'])->toBe('Transcript ready')
             ->and($data['actions'][0]['url'])->toContain($session->id);
-        expect(Filament\Facades\Filament::getPanel('admin')->hasDatabaseNotifications())->toBeTrue();
+        expect(Filament\Facades\Filament::getPanel('app')->hasDatabaseNotifications())->toBeTrue();
     });
 
     it('forgets old notifications', function () {

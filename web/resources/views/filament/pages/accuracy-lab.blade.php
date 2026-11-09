@@ -66,7 +66,7 @@
                         <tbody>
                             @foreach ($report['recordings'] as $recording)
                                 <tr>
-                                    <td style="{{ $cell }}"><a href="{{ \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('view', ['record' => $recording['id']]) }}" style="text-decoration:underline" dir="auto">{{ $recording['title'] }}</a></td>
+                                    <td style="{{ $cell }}"><a href="{{ \App\Filament\Resources\CaptureSessions\CaptureSessionResource::getUrl('view', ['record' => $recording['id']], panel: 'app') }}" style="text-decoration:underline" dir="auto">{{ $recording['title'] }}</a></td>
                                     <td style="{{ $cell }}">{{ $recording['language'] }}</td>
                                     <td style="{{ $cell }}">
                                         @forelse ($recording['scores'] as $provider => $score)

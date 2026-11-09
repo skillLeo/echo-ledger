@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\PairingService;
@@ -260,7 +260,7 @@ it('shows only a masked status for stored credentials on the console page and ne
     secStoreSentinels();
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     $page = Livewire::test(ApiCredentials::class);
 
@@ -279,7 +279,7 @@ it('shows only a masked status for stored credentials on the console page and ne
 it('ignores credential fields that are not part of the vault schema', function () {
     $admin = Fx::superAdmin();
     $this->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     Livewire::test(ApiCredentials::class)
         ->set('data.evil__api_key', 'planted')

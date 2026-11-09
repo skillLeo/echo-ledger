@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
 use App\Models\Plan;
 use App\Models\User;
@@ -11,6 +11,7 @@ use App\Services\AuditLog;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -52,17 +53,15 @@ class Plans extends Page implements HasTable
 
     protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::RectangleStack;
 
-    protected static string|UnitEnum|null $navigationGroup = 'System';
+    protected static string|UnitEnum|null $navigationGroup = 'Plans';
 
-    protected static ?int $navigationSort = 6;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $title = 'Plans';
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('plans.view');
     }
 
     public function getSubheading(): ?string

@@ -6,6 +6,7 @@ namespace App\Models;
 
 use App\Mail\ResetPasswordMail;
 use App\Mail\VerifyEmailMail;
+use App\Services\Staff\StaffAccess;
 use Database\Factories\UserFactory;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthentication;
 use Filament\Auth\MultiFactor\App\Concerns\InteractsWithAppAuthenticationRecovery;
@@ -82,9 +83,14 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
 
     public function canAccessPanel(Panel $panel): bool
     {
-        // Super admins (the server operator) and members of a workspace reach /admin; `is_super_admin` and
-        // `current_workspace_id` are never mass-assignable. Content is always that of the current workspace.
-        return $panel->getId() === 'admin' && ($this->is_super_admin || $this->workspaces()->exists());
+        // The app (/app): super admins (the server operator) and members of a workspace; content is always that of the
+        // current workspace. The admin panel (/admin, since v1.6): platform staff only. `is_super_admin` and
+        // `current_workspace_id` are never mass-assignable.
+        return match ($panel->getId()) {
+            'app' => $this->is_super_admin || $this->workspaces()->exists(),
+            'admin' => StaffAccess::isStaff($this),
+            default => false,
+        };
     }
 
     /** In the 7-day deletion grace (v1.5): signing in only offers "Keep my account". */
@@ -107,13 +113,13 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
     /** The console's confirmation link, as a queued email of our own (Mail::fake() sees it in tests). */
     public function sendEmailVerificationNotification(): void
     {
-        Mail::to($this->email)->queue(new VerifyEmailMail(Filament::getPanel('admin')->getVerifyEmailUrl($this)));
+        Mail::to($this->email)->queue(new VerifyEmailMail(Filament::getPanel('app')->getVerifyEmailUrl($this)));
     }
 
     /** @param  string  $token */
     public function sendPasswordResetNotification(#[\SensitiveParameter] $token): void
     {
-        Mail::to($this->email)->queue(new ResetPasswordMail(Filament::getPanel('admin')->getResetPasswordUrl($token, $this)));
+        Mail::to($this->email)->queue(new ResetPasswordMail(Filament::getPanel('app')->getResetPasswordUrl($token, $this)));
     }
 
     /** @return BelongsToMany<Workspace, $this> */

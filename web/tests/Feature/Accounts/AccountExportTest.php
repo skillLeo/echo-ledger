@@ -31,7 +31,7 @@ uses(InteractsWithDeviceApi::class);
 require_once __DIR__.'/../Api/Support/screen_helpers.php';
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 

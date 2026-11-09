@@ -21,7 +21,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** Opens the "Sign in a device" modal and returns [component, displayed code, modal html]. */
@@ -37,8 +37,8 @@ function adminOpenPairing($test): array
 it('renders the devices list and has no create or edit pages', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/devices')->assertOk()->assertSee('Devices')->assertSee('Sign in a device');
-    $this->get('/admin/devices/create')->assertNotFound();
+    $this->get('/app/devices')->assertOk()->assertSee('Devices')->assertSee('Sign in a device');
+    $this->get('/app/devices/create')->assertNotFound();
 });
 
 it('shows an empty state with a hint about pairing', function () {
@@ -133,7 +133,7 @@ it('locks a revoked device out of the API straight away', function () {
     // The API call switched the default guard to the device; sign the admin back in for the console.
     $this->app['auth']->forgetGuards();
     $this->actingAs($admin, 'web');
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->panelComponent(ListDevices::class)->callAction(TestAction::make(DeleteAction::class)->table($device));
     $this->app['auth']->forgetGuards();
 

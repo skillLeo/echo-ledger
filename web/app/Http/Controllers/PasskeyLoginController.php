@@ -30,7 +30,7 @@ final class PasskeyLoginController extends Controller
     {
         $data = $request->validate(['credential' => ['required', 'array']]);
         $user = $this->passkeys->verifyLogin(json_encode($data['credential'], JSON_THROW_ON_ERROR));
-        $panel = Filament::getPanel('admin');
+        $panel = Filament::getPanel('app');
         if ($user === null || ! $user->canAccessPanel($panel)) {
             $audit->record('login_failed', $user?->id, null, 'Sign-in with a passkey failed');
 

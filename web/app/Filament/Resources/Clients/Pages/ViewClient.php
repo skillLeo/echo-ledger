@@ -7,7 +7,7 @@ namespace App\Filament\Resources\Clients\Pages;
 use App\Enums\SessionStatus;
 use App\Enums\SourceApp;
 use App\Exceptions\ApiError;
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
@@ -404,10 +404,10 @@ class ViewClient extends ViewRecord
                 'apps' => collect(SourceApp::cases())->mapWithKeys(fn (SourceApp $a): array => [$a->value => $a->getLabel()])->all()],
             'files' => ['files' => ClientFile::query()->where('client_id', $client->id)->latest()->get()],
             'screens' => ['groups' => $this->screenGroups($client, $zone), 'limit' => self::SCREEN_RECORDINGS],
-            'ask' => ['configured' => $service->configured(), 'credentialsUrl' => ApiCredentials::getUrl()],
+            'ask' => ['configured' => $service->configured(), 'credentialsUrl' => ApiCredentials::canAccess() ? ApiCredentials::getUrl(panel: 'admin') : null],
             default => [
                 'configured' => $service->configured(),
-                'credentialsUrl' => ApiCredentials::getUrl(),
+                'credentialsUrl' => ApiCredentials::canAccess() ? ApiCredentials::getUrl(panel: 'admin') : null,
                 'budget' => $service->budget($client->workspace_id),
                 'clientSpend' => $service->clientSpend($client),
                 'brief' => $this->brief(),

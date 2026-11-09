@@ -19,7 +19,7 @@ it('offers to pair a device when there are no sessions yet', function () {
         ->assertSee('No recordings yet')
         ->assertActionVisible(TestAction::make('pairDevice')->table())
         ->assertActionHidden(TestAction::make('clearSearchAndFilters')->table())
-        ->assertSee('/admin/devices', false);
+        ->assertSee('/app/devices', false);
 });
 
 it('offers to clear the search when nothing matches it', function () {
@@ -47,6 +47,6 @@ it('offers to add a client when there are none', function () {
 it('shows an offline notice only while the browser is offline', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
     expect($html)->toContain('wire:offline')->toContain("You're offline.");
 });

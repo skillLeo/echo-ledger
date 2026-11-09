@@ -35,7 +35,7 @@ function secAdminWith(string $payload): array
     Fx::fakeRecordingsDisk();
     $admin = Fx::superAdmin();
     test()->actingAs($admin);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     $client = Client::query()->create(['user_id' => $admin->id, 'name' => 'C '.$payload, 'notes' => $payload]);
     $client->keyterms()->create(['term' => substr($payload, 0, 90)]);

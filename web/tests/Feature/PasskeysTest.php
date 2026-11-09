@@ -87,7 +87,7 @@ describe('signing in with a passkey', function () {
     });
 
     it('signs in without the password or the two-step code and records it', function () {
-        passkeySignIn($this, $this->authenticator)->assertOk()->assertJsonPath('redirect', url('/admin'));
+        passkeySignIn($this, $this->authenticator)->assertOk()->assertJsonPath('redirect', url('/app'));
 
         expect(auth('web')->id())->toBe($this->admin->id)
             ->and(Passkey::query()->sole()->last_used_at)->not->toBeNull()
@@ -121,7 +121,7 @@ describe('signing in with a passkey', function () {
     });
 
     it('offers the button on the login page and throttles attempts', function () {
-        $this->get('/admin/login')->assertOk()->assertSee('Sign in with a passkey');
+        $this->get('/app/login')->assertOk()->assertSee('Sign in with a passkey');
         foreach (range(1, 20) as $_) {
             $this->postJson('/passkeys/login/options')->assertOk();
         }

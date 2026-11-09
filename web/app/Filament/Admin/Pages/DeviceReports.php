@@ -2,12 +2,11 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
-use App\Filament\Concerns\FullConsoleOnly;
 use App\Models\DeviceReport;
 use App\Models\Scopes\WorkspaceScope;
-use App\Models\User;
+use App\Services\Staff\StaffAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -22,12 +21,11 @@ use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 /**
- * What works on each phone and computer (since v1.5): the device checks people chose to send from the apps. The super
- * admin sees every device's, owners and admins those of their workspace.
+ * What works on each phone and computer (since v1.5): the device checks people chose to send from the apps. Since v1.6
+ * on the admin panel only, every device's.
  */
 class DeviceReports extends Page implements HasTable
 {
-    use FullConsoleOnly;
     use InteractsWithTable;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedDevicePhoneMobile;
@@ -36,11 +34,16 @@ class DeviceReports extends Page implements HasTable
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 8;
+    protected static ?int $navigationSort = 5;
 
     protected static ?string $title = 'Device reports';
 
     protected static ?string $slug = 'device-reports';
+
+    public static function canAccess(): bool
+    {
+        return StaffAccess::can('devices.reports');
+    }
 
     public function getSubheading(): ?string
     {
@@ -80,9 +83,6 @@ class DeviceReports extends Page implements HasTable
     /** @return Builder<DeviceReport> */
     private function reports(): Builder
     {
-        $user = auth()->user();
-        $query = DeviceReport::query()->with(['device', 'user']);
-
-        return $user instanceof User && $user->is_super_admin ? $query->withoutGlobalScope(WorkspaceScope::class) : $query;
+        return DeviceReport::query()->withoutGlobalScope(WorkspaceScope::class)->with(['device' => fn ($q) => $q->withoutGlobalScope(WorkspaceScope::class), 'user']);
     }
 }

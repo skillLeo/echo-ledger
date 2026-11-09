@@ -15,12 +15,12 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    $this->panel = Filament::getPanel('admin');
+    $this->panel = Filament::getPanel('app');
 });
 
-it('is mounted at /admin as the default panel named EchoLedger', function () {
-    expect($this->panel->getId())->toBe('admin')
-        ->and($this->panel->getPath())->toBe('admin')
+it('is mounted at /app as the default panel named EchoLedger (since v1.6; /admin is the staff panel)', function () {
+    expect($this->panel->getId())->toBe('app')
+        ->and($this->panel->getPath())->toBe('app')
         ->and($this->panel->isDefault())->toBeTrue()
         ->and($this->panel->getBrandName())->toBe('EchoLedger');
 });
@@ -33,7 +33,7 @@ it('follows the visitor\'s system light or dark preference by default', function
 it('lets the visitor choose light, dark or system from the account menu', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
     foreach (['light', 'dark', 'system'] as $mode) {
         expect($html)->toContain("(theme = '{$mode}') && close()");
@@ -42,7 +42,7 @@ it('lets the visitor choose light, dark or system from the account menu', functi
 });
 
 it('applies the stored theme before first paint to avoid a flash of the wrong theme', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $html = $this->get('/app/login')->assertOk()->getContent();
 
     expect($html)->toMatch('/window\.theme\s*=\s*localStorage\.getItem\(\'filament:theme:mode\'\)\s*\?\?\s*\'system\'/')
         ->toContain("document.documentElement.classList.add('dark')");
@@ -55,7 +55,7 @@ it('uses the phone\'s indigo as the accent and its slate greys, with its red, am
     $colors = $this->panel->getColors();
 
     expect($colors)->toHaveKeys(['primary', 'gray', 'danger', 'warning', 'success', 'info']);
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $html = $this->get('/app/login')->assertOk()->getContent();
     $palettes = ['primary' => Palette::INDIGO, 'gray' => Palette::SLATE, 'danger' => Palette::RED, 'warning' => Palette::AMBER, 'success' => Palette::GREEN, 'info' => Palette::TEAL];
     foreach ($palettes as $name => $palette) {
         expect($html)->toContain("--{$name}-500:".Color::convertToOklch($palette[500]).';');
@@ -102,19 +102,19 @@ it('titles console pages "Page - EchoLedger" and declares the language', functio
 
     $html = $this->get('/admin/settings')->assertOk()->getContent();
 
-    expect($html)->toMatch('/<title>\s*Settings\s*-\s*EchoLedger\s*<\/title>/')
+    expect($html)->toMatch('/<title>\s*Settings\s*-\s*EchoLedger admin\s*<\/title>/')
         ->and($html)->toMatch('/<html\s+lang="en"/');
 });
 
 it('titles the sign-in page "Login - EchoLedger" with a "Sign in or create an account" heading (since v1.6)', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $html = $this->get('/app/login')->assertOk()->getContent();
 
     expect($html)->toMatch('/<title>\s*Login\s*-\s*EchoLedger\s*<\/title>/')
         ->and($html)->toMatch('/<h1[^>]*>\s*Sign in or create an account\s*<\/h1>/');
 });
 
 it('loads the console assets from the app itself', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $html = $this->get('/app/login')->assertOk()->getContent();
 
     expect($html)->toContain(config('app.url').'/css/filament/filament/app.css')
         ->toContain(config('app.url').'/js/filament/filament/app.js')
@@ -124,7 +124,7 @@ it('loads the console assets from the app itself', function () {
 it('does not load fonts, avatars or scripts from third-party hosts', function () {
     $this->signInAsAdmin(['name' => 'Farah Khan']);
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
     preg_match_all('#(?:src|href)=["\'](https?://[^"\']+)["\']#i', $html, $matches);
     $hosts = collect($matches[1])->map(fn (string $url) => parse_url($url, PHP_URL_HOST))->filter()->unique()->values()->all();
 
@@ -135,7 +135,7 @@ it('does not load fonts, avatars or scripts from third-party hosts', function ()
 it('names no font or avatar service anywhere in the console page (A6.W27)', function () {
     $this->signInAsAdmin(['name' => 'Farah Khan']);
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
     expect($html)->not->toContain('fonts.bunny.net')->not->toContain('ui-avatars.com')->not->toContain('fonts.googleapis.com');
     expect($this->panel->getFontProvider())->toBe(LocalInterFontProvider::class)

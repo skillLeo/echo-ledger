@@ -102,7 +102,7 @@ final class ActivityFeed
     {
         $this->post($session->user, 'transcript_ready', 'Transcript ready', $session->displayTitle(), $session, 'heroicon-o-document-text');
         if (EmailPreferences::wants($session->user, EmailPreferences::TRANSCRIPTION)) {
-            Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/admin/sessions/'.$session->id)));
+            Mail::to($session->user->email)->queue(new TranscriptReadyMail($session->displayTitle(), url('/app/sessions/'.$session->id)));
         }
     }
 
@@ -227,7 +227,7 @@ final class ActivityFeed
     {
         try {
             $notification = self::make($title, $body, 'shared_with_you', $sessionId)->icon('heroicon-o-users')
-                ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'admin'), shouldOpenInNewTab: false)->markAsRead()]);
+                ->actions([Action::make('open')->label('Open')->url(SharedWithMe::getUrl(panel: 'app'), shouldOpenInNewTab: false)->markAsRead()]);
             $recipient->notifyNow($notification->toDatabase());
         } catch (Throwable $e) {
             report($e);

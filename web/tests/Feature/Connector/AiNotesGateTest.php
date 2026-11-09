@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
-use App\Filament\Pages\Plans;
+use App\Filament\Admin\Pages\Plans;
 use App\Jobs\MakeCallNotesJob;
 use App\Jobs\MakeSuggestedFixesJob;
 use App\Jobs\RefreshClientBriefJob;
@@ -140,7 +140,7 @@ it('still describes screens', function () {
 });
 
 it('leaves AI notes off in a new plan unless they are switched on', function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->actingAs(Fx::superAdmin(), 'web');
 
     Livewire::test(Plans::class)->callTableAction('create', null, ['key' => 'plain', 'name' => 'Plain', 'price_usd' => 0])->assertHasNoTableActionErrors();

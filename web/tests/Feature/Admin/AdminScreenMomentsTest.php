@@ -3,8 +3,8 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Infolists\TranscriptPlayerEntry;
-use App\Filament\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Filament\Resources\Clients\Pages\EditClient;
 use App\Filament\Resources\Clients\Pages\ViewClient;
@@ -26,7 +26,7 @@ require_once __DIR__.'/../Api/Support/screen_helpers.php';
  */
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Http::preventStrayRequests();
     $this->admin = $this->signInAsAdmin();
     $this->isolatedStorage();
@@ -90,7 +90,7 @@ describe('the recording page', function () {
         if (! is_string($probe) || preg_match('/^v\d+/', trim($probe)) !== 1) {
             $this->markTestSkipped('node is not installed');
         }
-        $out = screenPlayerScript($this->get('/admin/sessions/'.$this->session->id)->assertOk()->getContent());
+        $out = screenPlayerScript($this->get('/app/sessions/'.$this->session->id)->assertOk()->getContent());
 
         // Screen 1 (0:30) falls in the first line's time (from 0:05), Screen 2 (14:32) in the second's (from 1:00).
         expect($out['before'])->toBe([])->and($out['after'])->toBe([[1], [2]])

@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
-use App\Filament\Pages\ApiCredentials;
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
 use App\Filament\Resources\Devices\DeviceResource;
@@ -21,7 +21,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** Every console URL, including the ones that need a record. */
@@ -32,8 +32,8 @@ function adminConsoleUrls(): array
     $client = Client::factory()->create(['user_id' => $owner->id]);
 
     return [
-        '/admin', '/admin/sessions', '/admin/sessions/'.$session->id, '/admin/clients', '/admin/clients/create',
-        '/admin/clients/'.$client->id.'/edit', '/admin/devices', '/admin/settings', '/admin/api-credentials', '/admin/profile',
+        '/app', '/app/sessions', '/app/sessions/'.$session->id, '/app/clients', '/app/clients/create',
+        '/app/clients/'.$client->id.'/edit', '/app/devices', '/admin/settings', '/admin/api-credentials', '/app/profile',
     ];
 }
 
@@ -45,7 +45,7 @@ function adminEnrolMfa(User $user): void
 
 it('sends a guest from every console URL to the login page', function () {
     foreach (adminConsoleUrls() as $url) {
-        $this->get($url)->assertRedirect(route('filament.admin.auth.login'));
+        $this->get($url)->assertRedirect(route('filament.app.auth.login'));
     }
 });
 
@@ -62,8 +62,8 @@ it('does not let a device bearer token open the console', function () {
     $device = Device::factory()->create(['user_id' => $this->makeAdmin()->id]);
     $token = $device->createToken('device', Device::ABILITIES)->plainTextToken;
 
-    $this->withToken($token)->get('/admin')->assertRedirect(route('filament.admin.auth.login'));
-    $this->withToken($token)->get('/admin/sessions')->assertRedirect(route('filament.admin.auth.login'));
+    $this->withToken($token)->get('/app')->assertRedirect(route('filament.app.auth.login'));
+    $this->withToken($token)->get('/app/sessions')->assertRedirect(route('filament.app.auth.login'));
 });
 
 it('does not let a console session call the device API', function () {
@@ -87,7 +87,12 @@ it('lists the console pages in the navigation for a super admin', function () {
 
     $labels = collect(Filament::getNavigation())->flatMap(fn ($group) => $group->getItems())->map(fn ($item) => $item->getLabel())->all();
 
-    expect($labels)->toContain('Library', 'Projects', 'Activity', 'Upload', 'Devices', 'API Credentials', 'Settings');
+    // Since v1.6 the server's pages are on the admin panel, never in the app's sidebar.
+    expect($labels)->toContain('Library', 'Projects', 'Activity', 'Upload', 'Devices')->not->toContain('API Credentials', 'Settings', 'Plans');
+
+    $html = (string) $this->get('/admin')->assertOk()->getContent();
+    preg_match_all('/fi-sidebar-item-label[^>]*>\s*([^<]+?)\s*</', $html, $items);
+    expect($items[1])->toBe(['Overview', 'Plans', 'Upgrade requests', 'Server usage', 'API Credentials', 'Settings', 'Device reports', 'Accuracy Lab']);
 });
 
 it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {
@@ -117,8 +122,8 @@ it('returns 404, not the record, when one admin asks for another\'s session, cli
     $session = CaptureSession::factory()->create(['user_id' => $other->id]);
     $client = Client::factory()->create(['user_id' => $other->id]);
 
-    $this->get('/admin/sessions/'.$session->id)->assertNotFound();
-    $this->get('/admin/clients/'.$client->id.'/edit')->assertNotFound();
+    $this->get('/app/sessions/'.$session->id)->assertNotFound();
+    $this->get('/app/clients/'.$client->id.'/edit')->assertNotFound();
 });
 
 // --- Admin audio route ----------------------------------------------------------------------------------------
@@ -127,7 +132,7 @@ it('redirects a guest away from the audio route', function () {
     $session = CaptureSession::factory()->create();
     $recording = $this->readyRecording($session);
 
-    $this->get(route('admin.recordings.stream', $recording))->assertRedirect(route('filament.admin.auth.login'));
+    $this->get(route('admin.recordings.stream', $recording))->assertRedirect(route('filament.app.auth.login'));
 });
 
 it('refuses the audio route to a signed-in account that is not a super admin, even with two-factor enrolled', function () {
@@ -173,7 +178,7 @@ it('lets the session page play audio for a super admin without two-factor', func
     $session = $this->sessionWithTranscript($admin, [['channel' => 1, 'speaker' => 'Me', 'start_ms' => 0, 'end_ms' => 1, 'text' => 'hi']]);
     $recording = $this->readyRecording($session);
 
-    $page = $this->get('/admin/sessions/'.$session->id)->assertOk()->getContent();
+    $page = $this->get('/app/sessions/'.$session->id)->assertOk()->getContent();
     expect($page)->toContain(route('admin.recordings.stream', $recording));
 
     // The <audio> element requests exactly this URL with the admin's session cookie.
@@ -220,16 +225,16 @@ it('requires a CSRF token to sign out', function () {
     $this->signInAsAdmin();
     adminEnforceCsrf();
 
-    $this->post(route('filament.admin.auth.logout'))->assertStatus(419);
+    $this->post(route('filament.app.auth.logout'))->assertStatus(419);
     $this->assertAuthenticated('web');
 
-    $this->withSession(['_token' => 'known-token'])->post(route('filament.admin.auth.logout'), ['_token' => 'known-token'])->assertRedirect();
+    $this->withSession(['_token' => 'known-token'])->post(route('filament.app.auth.logout'), ['_token' => 'known-token'])->assertRedirect();
 });
 
 it('requires a CSRF token or a same-origin request for Livewire updates', function () {
     $this->actingAs($this->makeAdmin(), 'web');
     $html = $this->get('/admin/settings')->assertOk()->getContent();
-    preg_match('/<div[^>]*wire:snapshot="([^"]*)"[^>]*wire:name="App\\\\Filament\\\\Pages\\\\Settings"/s', $html, $match);
+    preg_match('/<div[^>]*wire:snapshot="([^"]*)"[^>]*wire:name="App\\\\Filament\\\\Admin\\\\Pages\\\\Settings"/s', $html, $match);
     $snapshot = html_entity_decode($match[1], ENT_QUOTES | ENT_HTML5);
     adminEnforceCsrf();
     $payload = ['components' => [['snapshot' => $snapshot, 'updates' => [], 'calls' => []]]];
@@ -242,7 +247,7 @@ it('requires a CSRF token or a same-origin request for Livewire updates', functi
 it('forbids framing the console, so its buttons cannot be clickjacked', function () {
     $this->signInAsAdmin();
 
-    $headers = $this->get('/admin')->assertOk()->headers;
+    $headers = $this->get('/app')->assertOk()->headers;
     $framing = strtolower((string) $headers->get('X-Frame-Options'));
     $csp = strtolower((string) $headers->get('Content-Security-Policy'));
 
@@ -260,7 +265,7 @@ it('does not let browsers cache the console pages', function () {
 // --- Session cookie ---------------------------------------------------------------------------------------------
 
 it('issues the session cookie as HttpOnly with SameSite=Lax', function () {
-    $response = $this->get('/admin/login')->assertOk();
+    $response = $this->get('/app/login')->assertOk();
 
     $cookie = collect($response->headers->getCookies())->first(fn ($c) => $c->getName() === config('session.cookie'));
     expect($cookie)->not->toBeNull()
@@ -271,7 +276,7 @@ it('issues the session cookie as HttpOnly with SameSite=Lax', function () {
 it('marks the session cookie Secure when the deployment asks for it', function () {
     config(['session.secure' => true]);
 
-    $response = $this->get('/admin/login')->assertOk();
+    $response = $this->get('/app/login')->assertOk();
 
     $cookie = collect($response->headers->getCookies())->first(fn ($c) => $c->getName() === config('session.cookie'));
     expect($cookie->isSecure())->toBeTrue();

@@ -36,8 +36,8 @@ final class AuthController extends Controller
             'password' => true,
             'google' => $google->configured(),
             'sign_up' => $signUpOpen,
-            'sign_up_url' => $signUpOpen ? route('filament.admin.auth.register') : null,
-            'reset_url' => route('filament.admin.auth.password-reset.request'),
+            'sign_up_url' => $signUpOpen ? route('filament.app.auth.register') : null,
+            'reset_url' => route('filament.app.auth.password-reset.request'),
             'browser_sign_in' => true,
             // Since v1.6: email codes, and the server's own address (the apps keep "Use a different server" under Advanced).
             'code' => true,

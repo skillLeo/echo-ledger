@@ -322,7 +322,7 @@ final class ConsoleUploads
         return [
             'session_id' => $session->id,
             'title' => $session->displayTitle(),
-            'url' => route('filament.admin.resources.sessions.view', ['record' => $session->id]),
+            'url' => route('filament.app.resources.sessions.view', ['record' => $session->id]),
         ];
     }
 

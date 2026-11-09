@@ -12,7 +12,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 it('creates a super admin from the command who can then sign in to the console', function () {
@@ -33,7 +33,7 @@ it('creates a super admin from the command who can then sign in to the console',
         ->assertHasNoFormErrors()
         ->assertRedirect();
     $this->assertAuthenticatedAs($user);
-    $this->get('/admin')->assertOk();
+    $this->get('/app')->assertOk();
 });
 
 it('refuses a password shorter than twelve characters and creates nobody', function () {

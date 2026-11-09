@@ -6,15 +6,15 @@ use App\Models\User;
 use Filament\Facades\Filament;
 
 it('redirects guests away from the admin dashboard', function () {
-    $this->get('/admin')->assertRedirect();
+    $this->get('/app')->assertRedirect();
 });
 
 it('serves the admin login page', function () {
-    $this->get('/admin/login')->assertOk();
+    $this->get('/app/login')->assertOk();
 });
 
 it('grants panel access only to super admins and workspace members', function () {
-    $panel = Filament::getPanel('admin');
+    $panel = Filament::getPanel('app');
 
     $regular = withoutWorkspace(User::factory()->create());
     expect($regular->canAccessPanel($panel))->toBeFalse();

@@ -33,7 +33,7 @@ class RequestPasswordReset extends BaseRequestPasswordReset
         Password::broker(Filament::getAuthPasswordBroker())->sendResetLink(
             ['email' => Str::lower(trim((string) $data['email']))],
             function (CanResetPassword $user, #[\SensitiveParameter] string $token): void {
-                if ($user instanceof User && $user->canAccessPanel(Filament::getPanel('admin'))) {
+                if ($user instanceof User && $user->canAccessPanel(Filament::getPanel('app'))) {
                     $user->sendPasswordResetNotification($token);
                 }
             },

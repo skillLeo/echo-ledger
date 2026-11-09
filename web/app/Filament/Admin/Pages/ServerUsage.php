@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
-use App\Models\User;
+use App\Filament\Pages\Usage;
 use App\Models\Workspace;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use App\Services\Usage\UsageBreakdown;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -36,9 +37,9 @@ class ServerUsage extends Page
 
     protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ServerStack;
 
-    protected static string|UnitEnum|null $navigationGroup = 'System';
+    protected static string|UnitEnum|null $navigationGroup = 'Usage';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 1;
 
     protected static ?string $title = 'Server usage';
 
@@ -49,9 +50,7 @@ class ServerUsage extends Page
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('usage.view');
     }
 
     public function mount(): void

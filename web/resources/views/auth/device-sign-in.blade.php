@@ -18,7 +18,7 @@
                 <button type="submit" name="cancel" value="1" class="button secondary">Cancel</button>
             </div>
         </form>
-        <form method="post" action="{{ route('filament.admin.auth.logout') }}" style="margin-top: 12px;">
+        <form method="post" action="{{ route('filament.app.auth.logout') }}" style="margin-top: 12px;">
             @csrf
             <button type="submit" style="background: none; border: 0; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline;">Not you? Use another account</button>
         </form>

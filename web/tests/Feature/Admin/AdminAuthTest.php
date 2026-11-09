@@ -13,36 +13,36 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 dataset('admin urls', [
-    'dashboard' => ['/admin'],
-    'sessions list' => ['/admin/sessions'],
-    'clients list' => ['/admin/clients'],
-    'client create' => ['/admin/clients/create'],
-    'devices list' => ['/admin/devices'],
+    'dashboard' => ['/app'],
+    'sessions list' => ['/app/sessions'],
+    'clients list' => ['/app/clients'],
+    'client create' => ['/app/clients/create'],
+    'devices list' => ['/app/devices'],
     'settings' => ['/admin/settings'],
     'api credentials' => ['/admin/api-credentials'],
-    'profile' => ['/admin/profile'],
+    'profile' => ['/app/profile'],
 ]);
 
 it('shows the landing page at the site root, whose Sign in leads to the admin console', function () {
-    $this->get('/')->assertOk()->assertSee('Sign in')->assertSee('href="'.url('/admin').'"', false);
+    $this->get('/')->assertOk()->assertSee('Sign in')->assertSee('href="'.url('/app').'"', false);
 });
 
 it('redirects a guest from the console page to the login page', function (string $url) {
-    $this->get($url)->assertRedirect(route('filament.admin.auth.login'));
+    $this->get($url)->assertRedirect(route('filament.app.auth.login'));
 })->with('admin urls');
 
 it('redirects guests from a session detail page to the login page', function () {
     $session = CaptureSession::factory()->create();
 
-    $this->get('/admin/sessions/'.$session->id)->assertRedirect(route('filament.admin.auth.login'));
+    $this->get('/app/sessions/'.$session->id)->assertRedirect(route('filament.app.auth.login'));
 });
 
 it('renders the email first, then the password and Keep me signed in for an account (since v1.6)', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $html = $this->get('/app/login')->assertOk()->getContent();
     expect($html)->toContain('wire:model="data.email"')->not->toContain('wire:model="data.password"')->toContain('EchoLedger')->toContain('Continue');
 
     $this->makeAdmin(['email' => 'owner@example.test']);
@@ -64,9 +64,9 @@ it('offers a show and hide control on the password field', function () {
 });
 
 it('offers no registration path while sign-up is off, and a password reset (since v1.5)', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
-    expect($html)->not->toContain('/admin/register');
-    $this->get('/admin/register')->assertNotFound();
+    $html = $this->get('/app/login')->assertOk()->getContent();
+    expect($html)->not->toContain('/app/register');
+    $this->get('/app/register')->assertNotFound();
 
     $this->makeAdmin(['email' => 'owner@example.test']);
     expect($this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')->html())->toContain('password-reset');
@@ -82,7 +82,7 @@ it('signs a super admin in with the right credentials', function () {
         ->assertRedirect();
 
     $this->assertAuthenticatedAs($admin);
-    $this->get('/admin')->assertOk();
+    $this->get('/app')->assertOk();
 });
 
 it('rejects a wrong password and stays signed out', function () {
@@ -153,8 +153,8 @@ it('does not reveal to a non-admin account that its password was correct', funct
 it('denies a signed-in non-admin account access to the console', function () {
     $this->actingAs($this->makeRegularUser());
 
-    $this->get('/admin')->assertForbidden();
-    $this->get('/admin/sessions')->assertForbidden();
+    $this->get('/app')->assertForbidden();
+    $this->get('/app/sessions')->assertForbidden();
     $this->get('/admin/settings')->assertForbidden();
 });
 
@@ -202,32 +202,32 @@ it('only sets the remember-me cookie when the box is ticked', function () {
 it('sends an already signed-in admin straight to the console from the login page', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/login')->assertRedirect();
+    $this->get('/app/login')->assertRedirect();
 });
 
 it('signs the admin out and protects the console afterwards', function () {
     $admin = $this->signInAsAdmin();
-    $this->get('/admin')->assertOk();
+    $this->get('/app')->assertOk();
 
-    $this->post(route('filament.admin.auth.logout'))->assertRedirect();
+    $this->post(route('filament.app.auth.logout'))->assertRedirect();
 
     $this->assertGuest();
-    $this->get('/admin')->assertRedirect(route('filament.admin.auth.login'));
+    $this->get('/app')->assertRedirect(route('filament.app.auth.login'));
     expect(User::query()->find($admin->id))->not->toBeNull();
 });
 
 it('offers Profile and Sign out in the account menu', function () {
     $this->signInAsAdmin(['name' => 'Farah Khan']);
 
-    $html = $this->get('/admin')->assertOk()->getContent();
+    $html = $this->get('/app')->assertOk()->getContent();
 
-    expect($html)->toContain(route('filament.admin.auth.profile'))
-        ->toMatch('/<form[^>]*action="'.preg_quote(route('filament.admin.auth.logout'), '/').'"[^>]*method="post"/i')
+    expect($html)->toContain(route('filament.app.auth.profile'))
+        ->toMatch('/<form[^>]*action="'.preg_quote(route('filament.app.auth.logout'), '/').'"[^>]*method="post"/i')
         ->toContain('Sign out');
 });
 
 it('rejects logout over GET', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/logout')->assertStatus(405);
+    $this->get('/app/logout')->assertStatus(405);
 });

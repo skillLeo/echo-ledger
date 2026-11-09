@@ -19,12 +19,12 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 require_once __DIR__.'/Support/account_helpers.php';
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 
 it('offers nothing until API Credentials has a Google client', function () {
-    expect($this->get('/admin/login')->getContent())->not->toContain('Sign in with Google');
+    expect($this->get('/app/login')->getContent())->not->toContain('Sign in with Google');
     $this->get('/auth/google/redirect')->assertNotFound();
     $this->get('/auth/google/callback')->assertNotFound();
 });
@@ -32,7 +32,7 @@ it('offers nothing until API Credentials has a Google client', function () {
 it('shows the button once configured and sends the browser to Google', function () {
     fakeGoogle();
 
-    expect($this->get('/admin/login')->getContent())->toContain('Sign in with Google')->toContain(route('auth.google.redirect'));
+    expect($this->get('/app/login')->getContent())->toContain('Sign in with Google')->toContain(route('auth.google.redirect'));
     $this->get('/auth/google/redirect')->assertRedirect('https://accounts.google.com/o/oauth2/auth?client_id=1234-test');
 });
 
@@ -41,7 +41,7 @@ it('signs a linked account in and records it', function () {
     $user->forceFill(['google_id' => 'google-sub-1'])->save();
     fakeGoogle();
 
-    $this->get('/auth/google/callback?code=abc&state=xyz')->assertRedirect('/admin');
+    $this->get('/auth/google/callback?code=abc&state=xyz')->assertRedirect('/app');
 
     $this->assertAuthenticatedAs($user, 'web');
     expect(AuditEvent::query()->where('event', 'google_login')->where('user_id', $user->id)->exists())->toBeTrue()
@@ -60,7 +60,7 @@ it('still asks a linked account with two-step sign-in for its code', function ()
 
     $this->post(route('auth.google.confirm.store'), ['code' => '000000'])->assertOk()->assertSee('That code is wrong');
     $this->assertGuest('web');
-    $this->post(route('auth.google.confirm.store'), ['code' => accountsTotp($user, $secret)])->assertRedirect('/admin');
+    $this->post(route('auth.google.confirm.store'), ['code' => accountsTotp($user, $secret)])->assertRedirect('/app');
     $this->assertAuthenticatedAs($user, 'web');
 });
 
@@ -77,7 +77,7 @@ it('links a Google account to an existing address only after its password, never
     expect($user->fresh()->google_id)->toBeNull();
     $this->assertGuest('web');
 
-    $this->post(route('auth.google.confirm.store'), ['password' => 'password'])->assertRedirect('/admin');
+    $this->post(route('auth.google.confirm.store'), ['password' => 'password'])->assertRedirect('/app');
     expect($user->fresh()->google_id)->toBe('google-sub-1');
     $this->assertAuthenticatedAs($user->fresh(), 'web');
     expect(AuditEvent::query()->where('event', 'google_linked')->where('user_id', $user->id)->exists())->toBeTrue();
@@ -107,7 +107,7 @@ it('makes an account for a new Google address only when sign-up allows it', func
     $user = User::query()->where('email', 'newcomer@example.test')->first();
     expect($user !== null)->toBe($made);
     if ($made) {
-        $response->assertRedirect('/admin');
+        $response->assertRedirect('/app');
         expect($user->google_id)->toBe('google-sub-1')->and($user->hasVerifiedEmail())->toBeTrue()->and($user->workspaces()->count())->toBe(1);
         $this->assertAuthenticatedAs($user, 'web');
     } else {
@@ -127,7 +127,7 @@ it('makes an account for an invited Google address and joins the workspace', fun
     app(Invitations::class)->invite($workspace, $owner, 'newcomer@example.test', WorkspaceRole::Member);
     fakeGoogle(email: 'newcomer@example.test');
 
-    $this->get('/auth/google/callback')->assertRedirect('/admin');
+    $this->get('/auth/google/callback')->assertRedirect('/app');
 
     $user = User::query()->where('email', 'newcomer@example.test')->firstOrFail();
     expect($workspace->roleOf($user))->toBe(WorkspaceRole::Member);
@@ -151,12 +151,12 @@ it('links and unlinks from the profile, never a Google account another account u
 
     fakeGoogle(id: 'google-sub-taken');
     $this->get('/auth/google/redirect?intent=link')->assertRedirect();
-    $this->get('/auth/google/callback')->assertRedirect('/admin/profile');
+    $this->get('/auth/google/callback')->assertRedirect('/app/profile');
     expect($user->fresh()->google_id)->toBeNull();
 
     fakeGoogle(id: 'google-sub-mine');
     $this->get('/auth/google/redirect?intent=link');
-    $this->get('/auth/google/callback')->assertRedirect('/admin/profile');
+    $this->get('/auth/google/callback')->assertRedirect('/app/profile');
     expect($user->fresh()->google_id)->toBe('google-sub-mine');
 
     $this->actingAs($user->fresh(), 'web');

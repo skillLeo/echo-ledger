@@ -21,7 +21,7 @@ uses(AdminTestHelpers::class);
  * detail pane on wide screens, and the Activity and Upload pages.
  */
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     $this->admin = $this->signInAsAdmin();
 });
 
@@ -47,13 +47,13 @@ describe('navigation', function () {
 
         expect($css)->toMatch('/@media \(min-width: 1024px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
             ->toMatch('/@media \(max-width: 1023\.98px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
-        expect(Filament::getPanel('admin')->isSidebarCollapsibleOnDesktop())->toBeTrue();
+        expect(Filament::getPanel('app')->isSidebarCollapsibleOnDesktop())->toBeTrue();
     });
 
     it('leaves the bottom bar off the sign-in page', function () {
         auth()->logout();
 
-        expect($this->get('/admin/login')->assertOk()->getContent())->not->toContain('el-bottom-nav');
+        expect($this->get('/app/login')->assertOk()->getContent())->not->toContain('el-bottom-nav');
     });
 
     it('marks Activity in the bar with the number of unread notifications', function () {

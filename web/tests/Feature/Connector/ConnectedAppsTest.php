@@ -26,7 +26,7 @@ require_once __DIR__.'/Support/connector_helpers.php';
 
 beforeEach(function () {
     connectorKeys();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
     $this->person = Fx::user();
 });
@@ -38,7 +38,7 @@ it('lists each connection with its name, when it was made and when it was last u
     connectorTool($this, $claude['access'], 'list_recent');
     app('auth')->forgetGuards();
 
-    $page = $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk();
+    $page = $this->actingAs($this->person->fresh(), 'web')->get('/app/profile')->assertOk();
 
     $page->assertSee('Connected apps')->assertSee('Claude')->assertSee('ChatGPT')->assertSee('Disconnect')
         ->assertSee('Connected '.now()->format('M j, Y'))->assertSee('last used')->assertSee('not used yet');
@@ -48,7 +48,7 @@ it('says when no app is connected, and shows nobody else\'s', function () {
     connectorConnect($this, Fx::user(), 'SomeoneElsesApp');
     app('auth')->forgetGuards();
 
-    $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk()
+    $this->actingAs($this->person->fresh(), 'web')->get('/app/profile')->assertOk()
         ->assertSee('No app is connected')->assertDontSee('SomeoneElsesApp');
 });
 
@@ -132,7 +132,7 @@ it('shows an app\'s name as text wherever it appears', function () {
 
     connectorExchange($this, $client, connectorAllow($this, $this->person, $client, $challenge), $verifier)->assertOk();
     app('auth')->forgetGuards();
-    expect((string) $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk()->getContent())->not->toContain($evil);
+    expect((string) $this->actingAs($this->person->fresh(), 'web')->get('/app/profile')->assertOk()->getContent())->not->toContain($evil);
 });
 
 it('disconnects every app when the person signs out everywhere', function () {
@@ -144,7 +144,7 @@ it('disconnects every app when the person signs out everywhere', function () {
     connectorRefresh($this, $connected['client'], $connected['refresh'])->assertStatus(400);
     expect(ConnectedApp::query()->connected()->count())->toBe(0);
     app('auth')->forgetGuards();
-    $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk()->assertSee('No app is connected');
+    $this->actingAs($this->person->fresh(), 'web')->get('/app/profile')->assertOk()->assertSee('No app is connected');
 });
 
 it('can connect again after signing out everywhere, with the same app', function () {
@@ -203,7 +203,7 @@ it('keeps an app that was connected and disconnected, so pressing Connect in it 
 
     connectorMessage($this, $tokens['access_token'], 'tools/list')->assertOk();
     app('auth')->forgetGuards();
-    $page = $this->actingAs($this->person->fresh(), 'web')->get('/admin/profile')->assertOk();
+    $page = $this->actingAs($this->person->fresh(), 'web')->get('/app/profile')->assertOk();
     $page->assertSee('Claude')->assertSee('Disconnect')->assertSee('Connected '.now()->format('M j, Y'))->assertSee('not used yet');
     expect(ConnectedApp::query()->connected()->count())->toBe(1)
         ->and(AuditEvent::query()->where('event', 'connector_connected')->count())->toBe(2);

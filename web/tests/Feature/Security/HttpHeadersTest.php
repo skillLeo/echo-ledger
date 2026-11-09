@@ -9,7 +9,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 uses(ApiClient::class);
 
 /** @return list<Cookie> */
-function secCookies(string $path = '/admin/login'): array
+function secCookies(string $path = '/app/login'): array
 {
     return test()->get($path)->headers->getCookies();
 }
@@ -25,7 +25,7 @@ function secSessionCookie(): Cookie
 }
 
 it('stops the console login page from being framed', function () {
-    $response = $this->get('/admin/login');
+    $response = $this->get('/app/login');
 
     $frameOptions = strtolower((string) $response->headers->get('X-Frame-Options'));
     $csp = strtolower((string) $response->headers->get('Content-Security-Policy'));
@@ -33,24 +33,24 @@ it('stops the console login page from being framed', function () {
 });
 
 it('sends X-Content-Type-Options nosniff on console pages and API responses', function () {
-    expect($this->get('/admin/login')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
+    expect($this->get('/app/login')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
     expect($this->api()->getJson('/api/config')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
     expect($this->api(Fx::token(Fx::device()))->getJson('/api/config')->headers->get('X-Content-Type-Options'))->toBe('nosniff');
 });
 
 it('sends a Referrer-Policy header on console pages', function () {
-    expect($this->get('/admin/login')->headers->get('Referrer-Policy'))->not->toBeNull();
+    expect($this->get('/app/login')->headers->get('Referrer-Policy'))->not->toBeNull();
 });
 
 it('sends Strict-Transport-Security on HTTPS responses', function () {
-    $response = $this->get('/admin/login');
+    $response = $this->get('/app/login');
 
     expect($this->app['request']->isSecure() || str_starts_with((string) config('app.url'), 'https://'))->toBeTrue();
     expect((string) $response->headers->get('Strict-Transport-Security'))->toContain('max-age=');
 });
 
 it('sends a Content-Security-Policy on console pages', function () {
-    expect($this->get('/admin/login')->headers->get('Content-Security-Policy'))->not->toBeNull();
+    expect($this->get('/app/login')->headers->get('Content-Security-Policy'))->not->toBeNull();
 });
 
 it('marks the session cookie HttpOnly and SameSite', function () {
@@ -83,14 +83,14 @@ it('issues no cookies at all for bearer-token API calls', function () {
 });
 
 it('does not advertise the framework or PHP version in response headers', function () {
-    $headers = $this->get('/admin/login')->headers->all();
+    $headers = $this->get('/app/login')->headers->all();
 
     expect(array_keys($headers))->not->toContain('x-powered-by')->not->toContain('server');
     expect(json_encode($headers))->not->toContain('Laravel')->not->toContain('PHP/');
 });
 
 it('never answers a cross-origin request from the console with CORS headers', function () {
-    $response = $this->withHeaders(['Origin' => 'https://evil.example', 'Access-Control-Request-Method' => 'POST'])->call('OPTIONS', '/admin/login');
+    $response = $this->withHeaders(['Origin' => 'https://evil.example', 'Access-Control-Request-Method' => 'POST'])->call('OPTIONS', '/app/login');
 
     expect($response->headers->get('Access-Control-Allow-Origin'))->toBeNull()
         ->and($response->headers->get('Access-Control-Allow-Credentials'))->toBeNull();
@@ -123,7 +123,7 @@ it('serves error pages for unknown console URLs without version or path details'
 });
 
 it('limits the console to its own origin with a Content-Security-Policy that forbids framing', function () {
-    $csp = (string) $this->get('/admin/login')->headers->get('Content-Security-Policy');
+    $csp = (string) $this->get('/app/login')->headers->get('Content-Security-Policy');
 
     expect($csp)->toContain("default-src 'self'")
         ->toContain("frame-ancestors 'none'")
@@ -131,8 +131,8 @@ it('limits the console to its own origin with a Content-Security-Policy that for
         ->toContain("img-src 'self' data:")
         ->not->toContain('*')
         ->not->toContain('http');
-    expect($this->get('/admin/login')->headers->get('X-Frame-Options'))->toBe('DENY')
-        ->and($this->get('/admin/login')->headers->get('Referrer-Policy'))->toBe('same-origin');
+    expect($this->get('/app/login')->headers->get('X-Frame-Options'))->toBe('DENY')
+        ->and($this->get('/app/login')->headers->get('Referrer-Policy'))->toBe('same-origin');
 });
 
 it('keeps the security headers on API answers, without the console policy', function () {
@@ -150,7 +150,7 @@ it('keeps the security headers on error answers', function () {
 });
 
 it('sends Strict-Transport-Security only over HTTPS', function () {
-    $plain = $this->get('http://echoledger.test/admin/login');
+    $plain = $this->get('http://echoledger.test/app/login');
 
     expect($plain->headers->get('Strict-Transport-Security'))->toBeNull()
         ->and($plain->headers->get('X-Content-Type-Options'))->toBe('nosniff');

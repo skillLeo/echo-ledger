@@ -2,13 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
+use App\Filament\Pages\Security;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Mail\TestMail;
-use App\Models\User;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
 use App\Services\Accounts\EmailCodes;
@@ -24,6 +24,7 @@ use App\Services\SessionMarkers;
 use App\Services\SettingsRepository;
 use App\Services\SettingsSearch;
 use App\Services\SettingsTransfer;
+use App\Services\Staff\StaffAccess;
 use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
@@ -81,7 +82,7 @@ class Settings extends Page
 
     protected static string|UnitEnum|null $navigationGroup = 'System';
 
-    protected static ?int $navigationSort = 3;
+    protected static ?int $navigationSort = 2;
 
     /** @var array<string, mixed>|null */
     public ?array $data = [];
@@ -91,9 +92,7 @@ class Settings extends Page
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('settings.manage');
     }
 
     /** Languages Live Translate hears and writes (the phone offers the same list). */
@@ -427,7 +426,7 @@ class Settings extends Page
                 ]),
                 'privacy' => $this->tab('privacy', [
                     $this->section('access')->description('Two-factor sign-in, passkeys, signed-in browsers and the audit log.')->schema([
-                        Actions::make([Action::make('openSecurity')->label('Open Security')->color('gray')->url(fn (): string => Security::getUrl())]),
+                        Actions::make([Action::make('openSecurity')->label('Open Security')->color('gray')->url(fn (): string => Security::getUrl(panel: 'app'))]),
                     ]),
                     $this->section('signup')->description('New accounts get their own personal workspace and must confirm their email before they can sign in. People you add on the Workspace page always can.')->schema([
                         Select::make('signup_mode')->label('Who can sign up')->options(SignUp::SETTING_LABELS)->selectablePlaceholder(false)->required()
@@ -452,7 +451,7 @@ class Settings extends Page
                 ]),
                 'devices' => $this->tab('devices', [
                     $this->section('devices')->description('Sign in a phone or computer, see when it was last seen and revoke it.')->schema([
-                        Actions::make([Action::make('openDevices')->label('Open Devices')->color('gray')->url(fn (): string => DeviceResource::getUrl())]),
+                        Actions::make([Action::make('openDevices')->label('Open Devices')->color('gray')->url(fn (): string => DeviceResource::getUrl(panel: 'app'))]),
                     ]),
                 ]),
                 'storage' => $this->tab('storage', [

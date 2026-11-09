@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Widgets;
 
-use App\Filament\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Pages\Security;
-use App\Filament\Pages\Settings;
 use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\User;
 use App\Services\OnboardingChecklist;
@@ -47,10 +47,10 @@ class OnboardingChecklistWidget extends Widget
         $status = $user instanceof User ? app(OnboardingChecklist::class)->status($user) : [];
         $copy = [
             'two_factor' => ['Turn on two-factor sign-in', 'Protects the console with an authenticator app or a passkey.', 'Open Security', Security::getUrl()],
-            'provider_key' => ['Add a provider key', 'Needed for live captions and transcripts.', 'Open API Credentials', ApiCredentials::getUrl()],
-            'cert_pins' => ['Set certificate pins', 'Lets phones and computers check that they talk to this server.', 'Open Settings', Settings::getUrl()],
+            'provider_key' => ['Add a provider key', 'Needed for live captions and transcripts.', 'Open API Credentials', ApiCredentials::getUrl(panel: 'admin')],
+            'cert_pins' => ['Set certificate pins', 'Lets phones and computers check that they talk to this server.', 'Open Settings', Settings::getUrl(panel: 'admin')],
             'first_device' => ['Sign in your first device', 'Scan the code from the phone or desktop app.', 'Open Devices', DeviceResource::getUrl()],
-            'retention' => ['Choose how long to keep recordings', 'Pick a retention time and save it.', 'Open Settings', Settings::getUrl()],
+            'retention' => ['Choose how long to keep recordings', 'Pick a retention time and save it.', 'Open Settings', Settings::getUrl(panel: 'admin')],
         ];
 
         return array_map(

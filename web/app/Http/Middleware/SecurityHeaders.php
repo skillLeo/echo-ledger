@@ -69,7 +69,7 @@ final class SecurityHeaders
 
     private static function wantsTurnstile(Request $request): bool
     {
-        if (! $request->routeIs('filament.admin.auth.login', 'filament.admin.auth.register')) {
+        if (! $request->routeIs('filament.app.auth.login', 'filament.app.auth.register')) {
             return false;
         }
         try {

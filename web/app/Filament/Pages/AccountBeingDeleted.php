@@ -56,7 +56,7 @@ class AccountBeingDeleted extends Page
                             Filament::auth()->logout();
                             session()->invalidate();
                             session()->regenerateToken();
-                            $this->redirect(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+                            $this->redirect(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
                         }),
                 ])->key('deletion-actions'),
             ]),

@@ -146,7 +146,7 @@ final class PublicShareController extends Controller
                 // The console's sign-in comes back here (Filament redirects to the intended address).
                 $request->session()->put('url.intended', $request->fullUrl());
 
-                return response()->view('share.signin', ['loginUrl' => Filament::getPanel('admin')->getLoginUrl()], 200, self::HEADERS);
+                return response()->view('share.signin', ['loginUrl' => Filament::getPanel('app')->getLoginUrl()], 200, self::HEADERS);
             }
             if (! $link->allows($viewer->email)) {
                 return response()->view('share.refused', ['email' => $viewer->email], 403, self::HEADERS);
@@ -200,7 +200,7 @@ final class PublicShareController extends Controller
         if (! $viewer instanceof User || ! $link->allows($viewer->email) || $viewer->hasVerifiedEmail()) {
             return $this->gone();
         }
-        $panel = Filament::getPanel('admin');
+        $panel = Filament::getPanel('app');
         $notification = app(VerifyEmail::class);
         $notification->url = $panel->getVerifyEmailUrl($viewer);
         $viewer->notify($notification);

@@ -151,7 +151,7 @@ describe('audiences', function () {
         $this->get(pathOf($share).'/download')->assertNotFound();
 
         // "Send me the link": the console's email confirmation, which comes back to this page.
-        $this->post(pathOf($share))->assertRedirect(Filament::getPanel('admin')->getEmailVerificationPromptUrl());
+        $this->post(pathOf($share))->assertRedirect(Filament::getPanel('app')->getEmailVerificationPromptUrl());
         Notification::assertSentTo($ana, VerifyEmail::class);
         expect(session('url.intended'))->toBe(url(pathOf($share)));
 

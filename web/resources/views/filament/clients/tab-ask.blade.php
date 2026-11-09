@@ -16,7 +16,11 @@
             </button>
         </div>
         @unless ($configured)
-            <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to ask.</p>
+            @if ($credentialsUrl)
+                <p class="el-caption">Add your Anthropic key in <a class="el-link" href="{{ $credentialsUrl }}">API Credentials</a> to ask.</p>
+            @else
+                <p class="el-caption">Ask is not set up on this server yet.</p>
+            @endif
         @endunless
     </form>
 

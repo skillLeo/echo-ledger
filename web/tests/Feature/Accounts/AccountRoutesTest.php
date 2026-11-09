@@ -22,7 +22,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 uses(InteractsWithDeviceApi::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Mail::fake();
 });
 

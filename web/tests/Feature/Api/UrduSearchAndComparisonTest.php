@@ -6,7 +6,7 @@ use App\Enums\SessionStatus;
 use App\Enums\SttProviderKey;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ViewCaptureSession;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\CaptureSession;
@@ -95,7 +95,7 @@ describe('searching Urdu transcripts', function () {
 
 describe('compare engines', function () {
     beforeEach(function () {
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
         $this->admin = $this->signInAsAdmin();
         foreach (['assemblyai', 'elevenlabs', 'soniox'] as $provider) {
             app(CredentialVault::class)->put($provider, 'api_key', $provider.'_key_1234567890');

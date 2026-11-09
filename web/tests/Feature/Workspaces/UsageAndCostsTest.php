@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
-use App\Filament\Pages\ServerUsage;
+use App\Filament\Admin\Pages\ServerUsage;
 use App\Filament\Pages\Usage;
 use App\Models\Plan;
 use App\Models\Screen;
@@ -30,7 +30,7 @@ uses(ApiClient::class);
 
 beforeEach(function () {
     Fx::fakeRecordingsDisk();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 afterEach(fn () => Fx::cleanupDisks());
 
@@ -218,10 +218,10 @@ describe('who sees what', function () {
         $t = usageTeam();
         foreach (['owner', 'admin', 'member', 'viewer'] as $who) {
             $this->actingAs($t[$who], 'web');
-            $this->get(ServerUsage::getUrl())->assertForbidden();
+            $this->get(ServerUsage::getUrl(panel: 'admin'))->assertForbidden();
         }
         $this->actingAs(Fx::superAdmin(), 'web');
-        $this->get(ServerUsage::getUrl())->assertOk();
+        $this->get(ServerUsage::getUrl(panel: 'admin'))->assertOk();
     });
 
     it('shows the super admin every workspace, person and provider in the chosen days, and no content', function () {

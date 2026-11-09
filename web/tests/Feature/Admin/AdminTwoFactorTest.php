@@ -13,7 +13,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** Gives the user an authenticator secret and recovery codes, returning both in plain text. */
@@ -44,7 +44,7 @@ function adminOpenTotpSetup($test, User $user): array
 }
 
 it('is configured as optional two-factor authentication with recovery codes', function () {
-    $panel = Filament::getPanel('admin');
+    $panel = Filament::getPanel('app');
 
     expect($panel->hasMultiFactorAuthentication())->toBeTrue()
         ->and($panel->isMultiFactorAuthenticationRequired())->toBeFalse();
@@ -58,8 +58,8 @@ it('is configured as optional two-factor authentication with recovery codes', fu
 it('lets an admin without two-factor use the console without being forced to enrol', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin')->assertOk();
-    $this->get('/admin/sessions')->assertOk();
+    $this->get('/app')->assertOk();
+    $this->get('/app/sessions')->assertOk();
     $this->get('/admin/settings')->assertOk();
 });
 
@@ -454,7 +454,7 @@ it('binds the recovery-code field without a blur update, so one click on Confirm
 
     expect($html)->toContain('wire:model="data.multiFactor.app.recoveryCode"')
         ->not->toMatch('/wire:model\.[a-z.]*="data\.multiFactor\.app\.recoveryCode"/');
-    expect(Filament::getPanel('admin')->getMultiFactorAuthenticationProviders()['app'])->toBeInstanceOf(AppAuthentication::class);
+    expect(Filament::getPanel('app')->getMultiFactorAuthenticationProviders()['app'])->toBeInstanceOf(AppAuthentication::class);
 });
 
 it('asks for the recovery code, not the 6-digit code, once the admin chose to use a recovery code', function () {

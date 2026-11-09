@@ -12,7 +12,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 it('shows the signed-in admin their own name and email', function () {
@@ -22,7 +22,7 @@ it('shows the signed-in admin their own name and email', function () {
         ->assertFormSet(['name' => 'Farah Khan', 'email' => 'farah@example.test'])
         ->assertSee('Profile');
 
-    $this->get('/admin/profile')->assertOk()->assertSee('Farah Khan', false);
+    $this->get('/app/profile')->assertOk()->assertSee('Farah Khan', false);
     expect($admin->is_super_admin)->toBeTrue();
 });
 
@@ -31,7 +31,7 @@ it('never renders the password hash or remember token on the profile page', func
     $admin->forceFill(['remember_token' => 'remember-token-value-1234567890'])->save();
 
     $html = $this->panelComponent(EditProfile::class)->html();
-    $page = $this->get('/admin/profile')->assertOk()->getContent();
+    $page = $this->get('/app/profile')->assertOk()->getContent();
 
     foreach ([$html, $page] as $output) {
         expect($output)->not->toContain($admin->fresh()->password)
@@ -197,7 +197,7 @@ it('refuses a new password whose confirmation does not match', function () {
 it('offers a show and hide control on the password fields', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/admin/profile')->assertOk()->getContent();
+    $html = $this->get('/app/profile')->assertOk()->getContent();
 
     expect($html)->toContain('aria-label="Show password"')->toContain('aria-label="Hide password"');
 });
@@ -229,7 +229,7 @@ it('limits how often the profile can be saved', function () {
 it('has no file upload field and only a narrow set of editable attributes', function () {
     $this->signInAsAdmin();
 
-    $html = $this->get('/admin/profile')->assertOk()->getContent();
+    $html = $this->get('/app/profile')->assertOk()->getContent();
 
     expect($html)->not->toContain('type="file"');
     expect(User::query()->getModel()->getFillable())->toBe(['name', 'email', 'password']);

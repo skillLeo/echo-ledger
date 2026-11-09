@@ -57,7 +57,7 @@ describe('the Projects tree', function () {
         $this->panelComponent(ListClients::class)->assertCanSeeTableRecords([$acme])->assertCanNotSeeTableRecords([Client::query()->where('name', 'Website')->sole()])
             ->assertSee('1 subfolder')
             ->searchTable('web')->assertCanSeeTableRecords([Client::query()->where('name', 'Website')->sole()])->assertSee('In Acme');
-        $this->get('/admin/clients')->assertOk()->assertSee('Projects');
+        $this->get('/app/clients')->assertOk()->assertSee('Projects');
     });
 
     it('makes a subfolder, keeps names unique per folder and refuses a fifth level', function () {
@@ -71,7 +71,7 @@ describe('the Projects tree', function () {
         $this->panelComponent(CreateClient::class)->fillForm(['name' => 'notes', 'parent_id' => $one->id])->call('create')->assertHasFormErrors(['name']);
         $this->panelComponent(CreateClient::class)->fillForm(['name' => 'Five', 'parent_id' => $four->id])->call('create')->assertHasFormErrors(['parent_id']);
         // A subfolder link from the project page fills the folder in.
-        $this->get('/admin/clients/create?parent='.$one->id)->assertOk();
+        $this->get('/app/clients/create?parent='.$one->id)->assertOk();
     });
 });
 

@@ -32,7 +32,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Http::preventStrayRequests();
 });
 
@@ -47,7 +47,7 @@ function adminTinyWav(int $samples = 800): string
 it('renders the sessions list page', function () {
     $this->signInAsAdmin();
 
-    $this->get('/admin/sessions')->assertOk()->assertSee('Library')->assertSee('Upload')->assertSee('Drop sound or video files here');
+    $this->get('/app/sessions')->assertOk()->assertSee('Library')->assertSee('Upload')->assertSee('Drop sound or video files here');
 });
 
 it('shows a helpful empty state when there are no sessions', function () {
@@ -406,7 +406,7 @@ it('has a view link for each row and no create button', function () {
     $this->panelComponent(ListCaptureSessions::class)
         ->assertActionExists(TestAction::make('view')->table($session))
         ->assertActionDoesNotExist('create');
-    $this->get('/admin/sessions/create')->assertNotFound();
+    $this->get('/app/sessions/create')->assertNotFound();
 });
 
 it('shows the session details on the view page', function () {
@@ -419,7 +419,7 @@ it('shows the session details on the view page', function () {
         ['client_id' => $client->id, 'device_id' => $device->id, 'source_device' => SourceDevice::Desktop, 'source_app' => SourceApp::Zoom, 'title' => 'Quarterly review', 'duration_ms' => 3_725_000],
     );
 
-    $this->get('/admin/sessions/'.$session->id)
+    $this->get('/app/sessions/'.$session->id)
         ->assertOk()
         ->assertSee('Quarterly review')
         ->assertSee('Desktop')
@@ -460,9 +460,9 @@ it('returns 404 for another admin\'s session and for a deleted one', function ()
     $deleted = CaptureSession::factory()->create(['user_id' => $admin->id]);
     $deleted->delete();
 
-    $this->get('/admin/sessions/'.$theirs->id)->assertNotFound();
-    $this->get('/admin/sessions/'.$deleted->id)->assertNotFound();
-    $this->get('/admin/sessions/01JNOSUCHSESSION0000000000')->assertNotFound();
+    $this->get('/app/sessions/'.$theirs->id)->assertNotFound();
+    $this->get('/app/sessions/'.$deleted->id)->assertNotFound();
+    $this->get('/app/sessions/01JNOSUCHSESSION0000000000')->assertNotFound();
 });
 
 it('offers Re-transcribe only for a ready recording without a running or finished final transcript', function () {

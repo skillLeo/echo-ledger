@@ -35,7 +35,7 @@ final class LoginAlerts
     private function send(User $user, string $what, ?string $ip, ?string $country): void
     {
         $when = now()->setTimezone($this->settings->displayTimezone())->format('M j, Y \a\t g:i A T');
-        $devices = (Filament::getPanel('admin')->getProfileUrl() ?? url('/admin/profile')).'#devices';
+        $devices = (Filament::getPanel('app')->getProfileUrl() ?? url('/app/profile')).'#devices';
         Mail::to($user->email)->queue(new LoginAlertMail($what, $when, $ip, $country, $devices));
     }
 }

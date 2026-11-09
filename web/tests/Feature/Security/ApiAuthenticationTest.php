@@ -315,7 +315,7 @@ it('does not let an admin web session satisfy the device guard', function () {
 it('does not let a device token open the admin panel or the admin media route', function () {
     $plain = Fx::token(Fx::device());
 
-    $this->api($plain, false)->get('/admin')->assertRedirect();
+    $this->api($plain, false)->get('/app')->assertRedirect();
     $this->api($plain, false)->get('/admin-media/recordings/'.Fx::MISSING_ID)->assertRedirect();
 });
 

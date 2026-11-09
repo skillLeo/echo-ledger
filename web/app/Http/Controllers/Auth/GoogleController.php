@@ -116,7 +116,7 @@ final class GoogleController extends Controller
     {
         $pending = $this->pendingUser($request);
         if ($pending === null) {
-            return redirect()->to(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+            return redirect()->to(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
         }
         [$user, $state] = $pending;
 
@@ -127,7 +127,7 @@ final class GoogleController extends Controller
     {
         $pending = $this->pendingUser($request);
         if ($pending === null) {
-            return redirect()->to(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+            return redirect()->to(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
         }
         [$user, $state] = $pending;
         $data = $request->validate(['password' => ['nullable', 'string', 'max:4096'], 'code' => ['nullable', 'string', 'max:64']]);
@@ -174,7 +174,7 @@ final class GoogleController extends Controller
 
     private function linkSignedIn(User $user, string $googleId): RedirectResponse
     {
-        $profile = Filament::getPanel('admin')->getProfileUrl() ?? '/admin/profile';
+        $profile = Filament::getPanel('app')->getProfileUrl() ?? '/app/profile';
         if (User::query()->where('google_id', $googleId)->whereKeyNot($user->id)->exists()) {
             session()->flash('google.status', 'That Google account already signs in to another EchoLedger account.');
 
@@ -236,7 +236,7 @@ final class GoogleController extends Controller
 
     private function signIn(Request $request, User $user): Response
     {
-        if (! $user->canAccessPanel(Filament::getPanel('admin'))) {
+        if (! $user->canAccessPanel(Filament::getPanel('app'))) {
             return $this->message('This account cannot open the console', 'It belongs to no workspace. Ask a workspace owner to add you.');
         }
         $request->session()->put('audit.google_login', true);
@@ -244,11 +244,11 @@ final class GoogleController extends Controller
         $request->session()->regenerate();
         $this->audit->record('google_login', $user->id, $user);
 
-        return redirect()->intended(Filament::getPanel('admin')->getUrl() ?? '/admin');
+        return redirect()->intended(Filament::getPanel('app')->getUrl() ?? '/app');
     }
 
     private function message(string $title, string $message): Response
     {
-        return response()->view('auth.message', ['title' => $title, 'message' => $message, 'back' => Filament::getPanel('admin')->getLoginUrl()], 422);
+        return response()->view('auth.message', ['title' => $title, 'message' => $message, 'back' => Filament::getPanel('app')->getLoginUrl()], 422);
     }
 }

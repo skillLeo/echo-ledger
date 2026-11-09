@@ -125,7 +125,7 @@ it('answers the owner 404 on every console route of a member\'s recording', func
     ] as $url) {
         expect($this->get($url)->status())->toBe(404, $url);
     }
-    foreach ([route('filament.admin.resources.sessions.view', ['record' => $b['session']->id]), route('filament.admin.resources.clients.view', ['record' => $b['client']->id])] as $url) {
+    foreach ([route('filament.app.resources.sessions.view', ['record' => $b['session']->id]), route('filament.app.resources.clients.view', ['record' => $b['client']->id])] as $url) {
         expect($this->get($url)->status())->toBe(404, $url);
     }
 });
@@ -133,7 +133,7 @@ it('answers the owner 404 on every console route of a member\'s recording', func
 it('never shows a member\'s content to the owner on any console page, widget or global search', function () {
     $b = privacyWorld();
     $this->actingAs($b['alice'], 'web');
-    $panel = Filament::getPanel('admin');
+    $panel = Filament::getPanel('app');
     Filament::setCurrentPanel($panel);
     $failures = [];
 
@@ -303,12 +303,12 @@ it('leaves a removed member\'s content in the workspace, seen by nobody, and the
 
     expect(unscoped(fn () => CaptureSession::query()->find($b['session']->id)?->workspace_id))->toBe($team->id);
     $this->actingAs(User::query()->findOrFail($b['alice']->id), 'web');
-    expect($this->get(route('filament.admin.resources.sessions.view', ['record' => $b['session']->id]))->status())->toBe(404);
+    expect($this->get(route('filament.app.resources.sessions.view', ['record' => $b['session']->id]))->status())->toBe(404);
 
     app(Workspaces::class)->addMember($team, $b['bob']->fresh());
     app(Workspaces::class)->switchTo($b['bob']->fresh(), $team);
     $this->actingAs($b['bob']->fresh(), 'web');
-    expect($this->get(route('filament.admin.resources.sessions.view', ['record' => $b['session']->id]))->status())->toBe(200);
+    expect($this->get(route('filament.app.resources.sessions.view', ['record' => $b['session']->id]))->status())->toBe(200);
 });
 
 it('keeps the notes and memory lines of a member\'s recording filed under the owner\'s project before v1.5 out of that project', function () {
@@ -334,7 +334,7 @@ it('keeps the notes and memory lines of a member\'s recording filed under the ow
     $alice->patchJson("/api/clients/{$alices->id}/memory/{$line->id}", ['pinned' => true])->assertNotFound()->assertJsonPath('code', 'memory_not_found');
     $this->app['auth']->forgetGuards();
     $this->actingAs($b['alice'], 'web');
-    $page = $this->get(route('filament.admin.resources.clients.view', ['record' => $alices->id]))->assertOk();
+    $page = $this->get(route('filament.app.resources.clients.view', ['record' => $alices->id]))->assertOk();
     expect((string) $page->getContent())->not->toContain('BOBSECRETNOTE');
 
     // Nothing new is written there either: a new transcript or Bob asking for notes again.

@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\Settings;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Setting;
@@ -18,7 +18,7 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 /** A complete, valid form payload that differs from the defaults in every field. */
@@ -195,10 +195,10 @@ it('shows times in the newly chosen time zone straight after saving', function (
     $admin = $this->signInAsAdmin();
     $session = CaptureSession::factory()->create(['user_id' => $admin->id, 'started_at' => Carbon::parse('2026-10-24 09:05:00', 'UTC')]);
 
-    $this->get('/admin/sessions')->assertOk()->assertSee('Oct 24, 2026 · 9:05 AM');
+    $this->get('/app/sessions')->assertOk()->assertSee('Oct 24, 2026 · 9:05 AM');
     adminSettingsPage($this)->fillForm(adminChangedSettings(['display_timezone' => 'Asia/Karachi']))->call('save')->assertHasNoFormErrors();
 
-    $this->get('/admin/sessions')->assertOk()->assertSee('Oct 24, 2026 · 2:05 PM')->assertDontSee('Oct 24, 2026 · 9:05 AM');
+    $this->get('/app/sessions')->assertOk()->assertSee('Oct 24, 2026 · 2:05 PM')->assertDontSee('Oct 24, 2026 · 9:05 AM');
     expect($session->exists)->toBeTrue();
 });
 
@@ -480,7 +480,7 @@ it('survives a stored time zone that is no longer valid', function () {
     app(SettingsRepository::class)->set('display.timezone', 'Mars/Phobos');
 
     adminSettingsPage($this)->assertFormSet(['display_timezone' => 'UTC']);
-    $this->get('/admin/sessions')->assertOk();
+    $this->get('/app/sessions')->assertOk();
 });
 
 // --- Monthly limit and prices (A5.2) ---------------------------------------------------------------------------

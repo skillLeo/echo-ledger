@@ -45,7 +45,7 @@ trait AdminTestHelpers
     {
         $admin = $this->makeAdmin($attributes);
         $this->actingAs($admin, 'web');
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
 
         return $admin;
     }

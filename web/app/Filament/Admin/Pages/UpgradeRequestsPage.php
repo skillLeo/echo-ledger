@@ -2,12 +2,13 @@
 
 declare(strict_types=1);
 
-namespace App\Filament\Pages;
+namespace App\Filament\Admin\Pages;
 
 use App\Models\Plan;
 use App\Models\UpgradeRequest;
 use App\Models\User;
 use App\Services\Entitlements\UpgradeRequests;
+use App\Services\Staff\StaffAccess;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -39,9 +40,9 @@ class UpgradeRequestsPage extends Page implements HasTable
 
     protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::ArrowTrendingUp;
 
-    protected static string|UnitEnum|null $navigationGroup = 'System';
+    protected static string|UnitEnum|null $navigationGroup = 'Plans';
 
-    protected static ?int $navigationSort = 7;
+    protected static ?int $navigationSort = 2;
 
     protected static ?string $title = 'Upgrade requests';
 
@@ -49,9 +50,7 @@ class UpgradeRequestsPage extends Page implements HasTable
 
     public static function canAccess(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return StaffAccess::can('upgrades.manage');
     }
 
     public static function getNavigationBadge(): ?string

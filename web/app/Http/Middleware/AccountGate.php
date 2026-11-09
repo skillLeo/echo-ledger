@@ -21,7 +21,7 @@ use Symfony\Component\HttpFoundation\Response;
 final class AccountGate
 {
     /** Routes an account being deleted still reaches. */
-    private const OPEN = ['filament.admin.auth.logout', 'filament.admin.auth.email-verification.prompt', 'filament.admin.auth.email-verification.verify'];
+    private const OPEN = ['filament.app.auth.logout', 'filament.admin.auth.logout', 'filament.app.auth.email-verification.prompt', 'filament.app.auth.email-verification.verify'];
 
     public function handle(Request $request, Closure $next): Response
     {
@@ -38,18 +38,20 @@ final class AccountGate
             $request->session()->flash('account.suspended', true);
             abort_unless($this->isPage($request), 403, 'This account is suspended.');
 
-            return redirect()->to(Filament::getPanel('admin')->getLoginUrl() ?? '/admin/login');
+            return redirect()->to(Filament::getPanel('app')->getLoginUrl() ?? '/app/login');
         }
         if (in_array($route, self::OPEN, true)) {
             return $next($request);
         }
-        if ($user->isBeingDeleted() && $route !== AccountBeingDeleted::getRouteName()) {
+        // The pages it leads to are the app's, also from the admin panel (since v1.6).
+        $app = Filament::getPanel('app');
+        if ($user->isBeingDeleted() && $route !== AccountBeingDeleted::getRouteName($app)) {
             abort_unless($this->isPage($request), 403, 'This account is being deleted.');
 
-            return redirect()->to(AccountBeingDeleted::getUrl());
+            return redirect()->to(AccountBeingDeleted::getUrl(panel: 'app'));
         }
-        if (! $user->isBeingDeleted() && $user->consent_seen_at === null && $route !== RecordingConsentNotice::getRouteName() && $this->isPage($request)) {
-            return redirect()->to(RecordingConsentNotice::getUrl());
+        if (! $user->isBeingDeleted() && $user->consent_seen_at === null && $route !== RecordingConsentNotice::getRouteName($app) && $this->isPage($request)) {
+            return redirect()->to(RecordingConsentNotice::getUrl(panel: 'app'));
         }
 
         return $next($request);

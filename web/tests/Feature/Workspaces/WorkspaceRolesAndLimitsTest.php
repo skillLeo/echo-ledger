@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
-use App\Filament\Pages\ApiCredentials;
-use App\Filament\Pages\Settings;
+use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\Pages\ListDevices;
 use App\Models\CaptureSession;
@@ -117,7 +117,7 @@ describe('roles', function () {
     it('shows a member in the console only their own recordings, to open and not to change', function () {
         $t = team();
         $this->actingAs($t['member'], 'web');
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
 
         Livewire::test(ListCaptureSessions::class)
             ->assertCanSeeTableRecords([$t['memberSession']])
@@ -130,7 +130,7 @@ describe('roles', function () {
     it('shows the owner every device of the workspace to revoke, but only their own recordings', function () {
         $t = team();
         $this->actingAs($t['owner'], 'web');
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
 
         Livewire::test(ListCaptureSessions::class)
             ->assertCanSeeTableRecords([$t['ownerSession']])
@@ -156,9 +156,9 @@ describe('roles', function () {
         $t = team();
         $this->actingAs($t['member'], 'web');
 
-        $this->get(Settings::getUrl())->assertForbidden();
-        $this->get(ApiCredentials::getUrl())->assertForbidden();
-        $this->get('/admin')->assertOk();
+        $this->get(Settings::getUrl(panel: 'admin'))->assertForbidden();
+        $this->get(ApiCredentials::getUrl(panel: 'admin'))->assertForbidden();
+        $this->get('/app')->assertOk();
     });
 });
 
@@ -195,7 +195,7 @@ describe('memberships', function () {
         $t['ws']->members()->detach($t['member']->id); // removed behind the service's back
         $this->actingAs($t['member']->fresh(), 'web');
 
-        $this->get('/admin')->assertOk();
+        $this->get('/app')->assertOk();
         expect($t['member']->fresh()->current_workspace_id)->toBe($own->id);
     });
 
@@ -204,7 +204,7 @@ describe('memberships', function () {
         $t['ws']->members()->detach($t['member']->id);
         $this->actingAs($t['member']->fresh(), 'web');
 
-        $this->get('/admin')->assertForbidden();
+        $this->get('/app')->assertForbidden();
         $this->get(route('admin.recordings.stream', Fx::readyRecording($t['ownerSession'])))->assertForbidden();
     });
 });
@@ -257,7 +257,7 @@ describe('plan limits', function () {
             ->assertForbidden()->assertJson(['code' => 'limit_reached', 'limit' => 'devices']);
 
         $this->actingAs($t['owner'], 'web');
-        Filament::setCurrentPanel('admin');
+        Filament::setCurrentPanel('app');
         Livewire::test(ListDevices::class)->mountAction('pair')->assertActionDataSet(['pairing' => ['error' => PlanLimits::devicesMessage(1)]]);
         Plan::personal()->update(['max_devices' => 2]);
         expect(app(PairingService::class)->createCode($t['owner']))->toBeString();

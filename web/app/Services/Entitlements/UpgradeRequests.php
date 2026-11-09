@@ -113,7 +113,7 @@ final class UpgradeRequests
     {
         $user = $request->user;
         $when = $until?->copy()->setTimezone($this->settings->displayTimezone())->format('M j, Y');
-        Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/admin')));
+        Mail::to($user->email)->queue(new UpgradeDecidedMail($approved, $planName, $when, $reply, url('/app')));
         $approved
             ? app(ActivityFeed::class)->post($user, 'upgrade_approved', "You are on {$planName} now", $when !== null ? "Until {$when}. Thank you!" : 'Thank you! Everything in it is on.', null, 'heroicon-o-check-badge')
             : app(ActivityFeed::class)->post($user, 'upgrade_declined', "Your request for {$planName} was declined", $reply ?? 'Write to us if you have a question.', null, 'heroicon-o-x-circle');

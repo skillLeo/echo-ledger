@@ -78,7 +78,7 @@ require_once __DIR__.'/../Accounts/Support/account_helpers.php';
 uses(ApiClient::class);
 
 beforeEach(function () {
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
     Fx::fakeRecordingsDisk();
 });
 
@@ -131,7 +131,7 @@ it('C1 trusts exactly the host of APP_URL, on every request', function () {
 it('C1 refuses another Host, a subdomain and a name that only starts with ours, and serves its own', function (string $host, int $status) {
     asProduction();
 
-    $this->get("http://{$host}/admin/password-reset/request")->assertStatus($status);
+    $this->get("http://{$host}/app/password-reset/request")->assertStatus($status);
 })->with([
     'someone else\'s' => ['evil.test', 400],
     'a subdomain' => ['app.echoledger.test', 400],
@@ -144,7 +144,7 @@ it('C1 puts APP_URL in the reset email whatever Host the request named', functio
     Mail::fake();
     $user = Fx::user(['email' => 'target@corp.test']);
     // A request the host check did not stop: the same code the reset page calls, while the request says evil.test.
-    $request = Request::create('http://evil.test/admin/password-reset/request');
+    $request = Request::create('http://evil.test/app/password-reset/request');
     app()->instance('request', $request);
     URL::setRequest($request);
 
@@ -169,7 +169,7 @@ it('C1 keeps the request\'s address in local, where a phone reaches the laptop b
     app()->instance('request', $request);
     URL::setRequest($request);
 
-    expect(url('/admin/login'))->toBe('http://192.168.1.20:8000/admin/login');
+    expect(url('/app/login'))->toBe('http://192.168.1.20:8000/app/login');
 });
 
 // ---- M5: browsers end with "Sign out everywhere" on the documented VPS too -----------------------------------------
@@ -207,7 +207,7 @@ it('M7 ends a session on every console route outside the panel once the password
     $routes = sessionRoutes($user);
     $session = fn (): array => [Auth::guard('web')->getName() => $user->id, 'password_hash_web' => $user->fresh()->getAuthPassword()];
     $before = $session();
-    $login = Filament::getPanel('admin')->getLoginUrl();
+    $login = Filament::getPanel('app')->getLoginUrl();
 
     foreach ($routes as $name => [$method, $uri, $body]) {
         $alive = $this->withSession($before)->call($method, $uri, $body);
@@ -231,7 +231,7 @@ it('M7 lets no ended session link Google, accept an invitation or schedule the a
     $stolen = [Auth::guard('web')->getName() => $user->id, 'password_hash_web' => $user->getAuthPassword()];
     $user->forceFill(['password' => 'new-password-5678'])->save();
     fakeGoogle('attacker-sub', 'attacker@gmail.test', 'A');
-    $login = Filament::getPanel('admin')->getLoginUrl();
+    $login = Filament::getPanel('app')->getLoginUrl();
 
     $this->withSession($stolen)->get('/auth/google/redirect?intent=link')->assertRedirect($login);
     app('auth')->forgetGuards();
@@ -270,7 +270,7 @@ it('M7 lets an ended session open no people-only link that names the account', f
 
     $user->forceFill(['password' => 'new-password-5678'])->save();
 
-    $this->withSession($stolen)->get($url)->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
+    $this->withSession($stolen)->get($url)->assertRedirect(Filament::getPanel('app')->getLoginUrl());
 });
 
 it('M7 signs an account out everywhere when "Forgot password?" sets a new password, through Filament\'s own page', function () {
@@ -722,7 +722,7 @@ it('M3 leaves the address as it is until the link sent to the new one is opened,
 
     expect($user->fresh()->email)->toBe('ana@corp.test')
         ->and($user->fresh()->hasVerifiedEmail())->toBeTrue()
-        ->and($url)->toStartWith('https://echoledger.test/admin/');
+        ->and($url)->toStartWith('https://echoledger.test/app/');
     Notification::assertSentTo($user, NoticeOfEmailChangeRequest::class, fn (NoticeOfEmailChangeRequest $mail): bool => $mail->newEmail === 'ceo@corp.test');
 });
 
@@ -745,7 +745,7 @@ it('M3 opens the link for no one but the account it is for', function () {
     Auth::guard('web')->logout();
     app('auth')->forgetGuards();
 
-    $this->get($url)->assertRedirect(Filament::getPanel('admin')->getLoginUrl());
+    $this->get($url)->assertRedirect(Filament::getPanel('app')->getLoginUrl());
     $this->actingAs(Fx::user(), 'web')->get($url)->assertForbidden();
 
     expect($user->fresh()->email)->toBe('ana@corp.test');

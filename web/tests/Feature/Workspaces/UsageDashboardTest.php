@@ -107,7 +107,7 @@ it('shows the month, the plan meter and the chart to a member, and the server ca
     $member = Fx::user();
     usageReportRow($member, ['billed_ms' => 3 * 60000]);
     Plan::personal()->update(['monthly_minutes' => 30000]);
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 
     $this->actingAs($admin, 'web');
     Livewire::test(Usage::class)
@@ -135,7 +135,7 @@ it('charts billable minutes per day of the chosen month for the signed-in worksp
 });
 
 it('never puts the usage chart on the dashboard', function () {
-    expect(Filament::getPanel('admin')->getWidgets())->not->toContain(DailyUsageChart::class);
+    expect(Filament::getPanel('app')->getWidgets())->not->toContain(DailyUsageChart::class);
 });
 
 it('shows Game and Watch translate per mode, and keeps them out of the transcription limit', function () {

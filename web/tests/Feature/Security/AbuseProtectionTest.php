@@ -3,9 +3,9 @@
 declare(strict_types=1);
 
 use App\Exceptions\ApiError;
+use App\Filament\Admin\Pages\Plans;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Auth\Login;
-use App\Filament\Pages\Plans;
-use App\Filament\Pages\Settings;
 use App\Mail\EmailCodeMail;
 use App\Mail\UnusualUsageMail;
 use App\Models\AuditEvent;
@@ -33,7 +33,7 @@ uses(ApiClient::class);
 
 beforeEach(function () {
     Mail::fake();
-    Filament::setCurrentPanel('admin');
+    Filament::setCurrentPanel('app');
 });
 
 describe('the suspend switch', function () {
@@ -86,7 +86,7 @@ describe('the suspend switch', function () {
         $this->assertGuest('web');
 
         $this->actingAs($person, 'web');
-        $this->get('/admin')->assertRedirect(route('filament.admin.auth.login'));
+        $this->get('/app')->assertRedirect(route('filament.app.auth.login'));
         $this->assertGuest('web');
     });
 
