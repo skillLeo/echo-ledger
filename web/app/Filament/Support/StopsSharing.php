@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Filament\Support;
 
+use App\Filament\Support\Notice as Notification;
 use App\Models\SentItem;
 use App\Models\User;
 use App\Services\Sharing\Teammates;
 use App\Services\Workspaces\CurrentWorkspace;
-use Filament\Notifications\Notification;
 
 /** "Stop sharing" in the Sent to list (SharingActions::sentTo) of the recording's and the project's page. */
 trait StopsSharing

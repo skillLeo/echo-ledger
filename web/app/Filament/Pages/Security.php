@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\Notice as Notification;
 use App\Models\AuditEvent;
 use App\Models\Device;
 use App\Models\Passkey;
@@ -16,7 +17,6 @@ use App\Services\WebSessions;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\Section;

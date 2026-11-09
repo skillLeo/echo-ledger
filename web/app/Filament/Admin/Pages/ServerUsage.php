@@ -6,6 +6,7 @@ namespace App\Filament\Admin\Pages;
 
 use App\Filament\Admin\Resources\Customers\Pages\ViewCustomer;
 use App\Filament\Pages\Usage;
+use App\Filament\Support\Notice as Notification;
 use App\Models\Workspace;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
@@ -18,7 +19,6 @@ use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;

@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace App\Filament\Pages;
 
+use App\Filament\Support\Notice as Notification;
 use App\Models\User;
 use App\Services\Accounts\AccountDeletion;
 use App\Services\SettingsRepository;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Section;

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Pages;
 
 use App\Filament\Admin\Resources\Customers\Pages\ViewCustomer;
+use App\Filament\Support\Notice as Notification;
 use App\Models\Plan;
 use App\Models\UpgradeRequest;
 use App\Models\User;
@@ -16,7 +17,6 @@ use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -116,7 +116,7 @@ class UpgradeRequestsPage extends Page implements HasTable
                         $admin = auth()->user();
                         $until = filled($data['until'] ?? null) ? Carbon::parse((string) $data['until']) : null;
                         app(UpgradeRequests::class)->approve($record, $admin, (string) $data['plan'], $until, $data['message'] ?? null);
-                        Notification::make()->title(e("Approved for {$record->user->email}"))->success()->send();
+                        Notification::make()->title(e("Approved for {$record->user->email}"))->url(ViewCustomer::getUrl(['record' => $record->user], panel: 'admin'))->success()->send();
                     }),
                 Action::make('decline')->label('Decline')->icon(Heroicon::OutlinedXMark)->color('danger')
                     ->authorize(fn (): bool => StaffAccess::can('upgrades.manage'))
@@ -127,7 +127,7 @@ class UpgradeRequestsPage extends Page implements HasTable
                         /** @var User $admin */
                         $admin = auth()->user();
                         app(UpgradeRequests::class)->decline($record, $admin, (string) $data['reply']);
-                        Notification::make()->title(e("Declined for {$record->user->email}"))->success()->send();
+                        Notification::make()->title(e("Declined for {$record->user->email}"))->url(ViewCustomer::getUrl(['record' => $record->user], panel: 'admin'))->success()->send();
                     }),
             ])
             ->emptyStateIcon(Heroicon::OutlinedArrowTrendingUp)

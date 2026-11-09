@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace App\Filament\Admin\Pages;
 
+use App\Filament\Admin\Resources\Customers\Pages\ViewCustomer;
 use App\Filament\Admin\Support\OverridesForm;
+use App\Filament\Support\Notice as Notification;
 use App\Models\Plan;
 use App\Models\User;
 use App\Models\Workspace;
@@ -22,7 +24,6 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedTable;
@@ -180,7 +181,7 @@ class Plans extends Page implements HasTable
                         $on = (bool) ($data['suspended'] ?? false);
                         $user->forceFill(['suspended_at' => $on ? ($user->suspended_at ?? now()) : null, 'suspended_reason' => $on ? (filled($data['reason'] ?? null) ? trim((string) $data['reason']) : null) : null])->save();
                         app(AuditLog::class)->record($on ? 'account_suspended' : 'account_unsuspended', (int) auth()->id(), $user, ($on ? 'Suspended ' : 'Suspension lifted for ').Str::limit($user->email, 120, ''));
-                        Notification::make()->title(e(($on ? 'Suspended: ' : 'Restored: ').$user->email))->success()->send();
+                        Notification::make()->title(e(($on ? 'Suspended: ' : 'Restored: ').$user->email))->url(ViewCustomer::getUrl(['record' => $user], panel: 'admin'))->success()->send();
                     }),
                 // A person's own features and limits (since v1.6): on top of their workspace's plan, for them only.
                 Action::make('overrides')->label('Overrides for a person')->icon(Heroicon::OutlinedAdjustmentsHorizontal)->color('gray')
@@ -202,7 +203,7 @@ class Plans extends Page implements HasTable
                         $user->forceFill(['entitlement_overrides' => OverridesForm::fromForm($data)])->save();
                         app(Entitlements::class)->forget();
                         app(AuditLog::class)->record('entitlements_changed', (int) auth()->id(), $user, 'Features and limits changed for '.Str::limit($user->email, 120, ''));
-                        Notification::make()->title(e("Saved for {$user->email}"))->success()->send();
+                        Notification::make()->title(e("Saved for {$user->email}"))->url(ViewCustomer::getUrl(['record' => $user], panel: 'admin'))->success()->send();
                     }),
                 Action::make('create')->label('New plan')->icon(Heroicon::OutlinedPlus)
                     ->authorize(fn (): bool => StaffAccess::can('plans.manage'))

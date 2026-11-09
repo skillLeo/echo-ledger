@@ -6,12 +6,14 @@ namespace App\Filament\Pages;
 
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\FullConsoleOnly;
+use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Models\CaptureSession;
 use App\Services\RetentionPolicy;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -66,9 +68,9 @@ class RecentlyDeleted extends Page implements HasTable
                     ->action(function (CaptureSession $record): void {
                         try {
                             app(RetentionPolicy::class)->restore($record);
-                            Notification::make()->title('Recording restored')->success()->send();
+                            Notification::make()->title('Recording restored')->url(CaptureSessionResource::getUrl('view', ['record' => $record]))->success()->send();
                         } catch (ApiError $e) {
-                            Notification::make()->title($e->getMessage())->warning()->send();
+                            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
                         }
                     }),
                 Action::make('eraseNow')->label('Delete now')->icon(Heroicon::OutlinedTrash)->color('danger')

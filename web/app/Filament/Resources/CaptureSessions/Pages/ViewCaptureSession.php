@@ -9,9 +9,14 @@ use App\Enums\SttProviderKey;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
+use App\Filament\Admin\Pages\ApiCredentials;
+use App\Filament\Admin\Pages\Settings;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
@@ -60,7 +65,6 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ViewRecord;
 use Filament\Schemas\Components\View as ViewComponent;
 use Filament\Schemas\Schema;
@@ -286,7 +290,9 @@ class ViewCaptureSession extends ViewRecord
             return ['error' => 'Type the words to replace and what to write instead.'];
         }
         $client->update(['replacements' => TextReplacements::rules([...$rule, ...TextReplacements::rules($client->replacements)])]);
-        Notification::make()->title('“'.$rule[0]['from'].'” is now written “'.$rule[0]['to'].'” for '.$client->name)->success()->send();
+        // The project's corrections are in its settings.
+        Notification::make()->title('“'.$rule[0]['from'].'” is now written “'.$rule[0]['to'].'” for '.$client->name)
+            ->url(ClientResource::getUrl('edit', ['record' => $client]))->success()->send();
 
         return ['ok' => true];
     }
@@ -327,7 +333,7 @@ class ViewCaptureSession extends ViewRecord
         try {
             $state = app(TranscriptViews::class)->request($transcript);
         } catch (RuntimeException $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
             $state = app(TranscriptViews::class)->state($transcript);
         }
         $this->viewsMaking = $state['status'] === 'making';
@@ -366,7 +372,7 @@ class ViewCaptureSession extends ViewRecord
         try {
             app(ClientWorkspace::class)->assertCanWriteNotes($session->workspace_id);
         } catch (ApiError $e) {
-            Notification::make()->title($e->getMessage())->warning()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->warning()->send();
 
             return;
         }
@@ -397,7 +403,8 @@ class ViewCaptureSession extends ViewRecord
     {
         $this->assertCanChange();
         $session = app(LibraryOrganiser::class)->update($this->session(), ['pinned' => ! $this->session()->pinned]);
-        Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')->success()->send();
+        Notification::make()->title($session->pinned ? 'Pinned to the top of the Library' : 'Unpinned')
+            ->url($session->pinned ? CaptureSessionResource::getUrl('index', ['tab' => 'pinned']) : null)->success()->send();
     }
 
     public function toggleKeep(): void
@@ -422,7 +429,8 @@ class ViewCaptureSession extends ViewRecord
             ->modalSubmitActionLabel('Save')
             ->action(function (array $data): void {
                 $session = app(LibraryOrganiser::class)->update($this->session(), ['client_id' => $data['client_id'] ?? null]);
-                Notification::make()->title($session->client !== null ? 'Filed under '.$session->client->name : 'No project')->success()->send();
+                Notification::make()->title($session->client !== null ? 'Filed under '.$session->client->name : 'No project')
+                    ->url($session->client !== null ? ClientResource::getUrl('view', ['record' => $session->client]) : CaptureSessionResource::getUrl('index', ['folder' => 'inbox']))->success()->send();
             });
     }
 
@@ -444,7 +452,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     app(LibraryOrganiser::class)->update($this->session(), ['labels' => array_values((array) ($data['labels'] ?? []))]);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -604,7 +612,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     $state = app(TranscriptViews::class)->request($transcript);
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -720,14 +728,15 @@ class ViewCaptureSession extends ViewRecord
             ->action(function (CaptureSession $record): void {
                 $next = $this->nextEngine($record);
                 if ($next === null) {
-                    Notification::make()->title('No other engine for this language has a key. Add one on API Credentials.')->warning()->send();
+                    Notification::make()->title('No other engine for this language has a key. Add one on API Credentials.')
+                        ->url(ApiCredentials::canAccess() ? ApiCredentials::getUrl(panel: 'admin') : null)->warning()->send();
 
                     return;
                 }
                 try {
                     app(Retranscriber::class)->start($record, $next, $record->finalTranscript?->language);
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -773,7 +782,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     $runs = app(EngineComparison::class)->start($record, array_map(fn (string $v): SttProviderKey => SttProviderKey::from($v), (array) $data['engines']), (string) $data['language']);
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -817,7 +826,7 @@ class ViewCaptureSession extends ViewRecord
                         is_string($data['category'] ?? null) ? $data['category'] : null,
                     );
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -884,11 +893,13 @@ class ViewCaptureSession extends ViewRecord
         try {
             app(EngineComparison::class)->pick($run);
         } catch (RuntimeException $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return;
         }
-        Notification::make()->title($run->providerKey()?->getLabel().' is now the first engine for '.LanguageChoice::label($run->language))->success()->send();
+        // The order is Settings → Engine per language.
+        Notification::make()->title($run->providerKey()?->getLabel().' is now the first engine for '.LanguageChoice::label($run->language))
+            ->url(Settings::canAccess() ? Settings::getUrl(panel: 'admin') : null)->success()->send();
     }
 
     /** "Use this version" on a run in Engine results. */
@@ -902,7 +913,7 @@ class ViewCaptureSession extends ViewRecord
         try {
             app(EngineComparison::class)->useAsTranscript($run);
         } catch (RuntimeException $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return;
         }
@@ -951,7 +962,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     $run = app(Retranscriber::class)->startAs($record, $data['language'] ?? null);
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -977,7 +988,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     $run = app(Retranscriber::class)->startAs($session, LanguageChoice::normalize($session->language));
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -1004,7 +1015,7 @@ class ViewCaptureSession extends ViewRecord
                 try {
                     app(Retranscriber::class)->start($record, SttProviderKey::from((string) $data['provider']), $data['language'] ?? null);
                 } catch (RuntimeException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }

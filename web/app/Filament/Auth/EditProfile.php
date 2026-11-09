@@ -7,6 +7,8 @@ namespace App\Filament\Auth;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\WatchesPairing;
 use App\Filament\Pages\Security;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
 use App\Filament\Support\Shell;
 use App\Models\ConnectedApp;
@@ -39,7 +41,6 @@ use Filament\Facades\Filament;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
-use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Component;
 use Filament\Schemas\Components\EmbeddedSchema;
@@ -87,6 +88,8 @@ class EditProfile extends BaseEditProfile
                 ]),
                 Tab::make('Password & sign-in methods')->key('sign-in', isInheritable: false)->icon(Heroicon::OutlinedKey)->schema([
                     $this->passwordContentComponent(),
+                    // Its own anchor: "Turn on two-step sign-in" opens the page here (since v1.6.1).
+                    Text::make(new HtmlString('<span id="two-step-sign-in" class="el-anchor" aria-hidden="true"></span>')),
                     ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
                     $this->googleSection(),
                     Section::make('Passkeys and signed-in browsers')
@@ -310,7 +313,7 @@ class EditProfile extends BaseEditProfile
                             try {
                                 app(TranscriptionKeys::class)->put($this->account(), TranscriptionKeys::PROVIDER, (string) $data['key']);
                             } catch (ApiError $e) {
-                                Notification::make()->title($e->getMessage())->danger()->send();
+                                Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
                                 $action->halt();
                             }
                             Notification::make()->title('Your Groq key is saved')->body('New recordings are transcribed with it.')->success()->send();

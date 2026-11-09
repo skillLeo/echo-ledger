@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Exceptions\ApiError;
+use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\Notice as Notification;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\SentItem;
@@ -24,7 +26,6 @@ use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Contracts\View\View;
@@ -100,7 +101,7 @@ final class SharingActions
                         'view' => is_string($data['view'] ?? null) ? $data['view'] : null,
                     ], self::author());
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -133,7 +134,7 @@ final class SharingActions
                 try {
                     $sent = app(Teammates::class)->send($user, $target(), array_values((array) $data['to']), $data['note'] ?? null);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }
@@ -191,7 +192,7 @@ final class SharingActions
                         return $record;
                     });
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
                     $action->halt();
 
                     return;
@@ -229,13 +230,14 @@ final class SharingActions
                         return $record;
                     });
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
                     $action->halt();
 
                     return;
                 }
                 $parent = $record->parent_id !== null ? $record->parent()->first() : null;
-                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.e($parent->name).'”')->success()->send();
+                Notification::make()->title($parent === null ? 'Moved to the top level' : 'Moved into “'.e($parent->name).'”')
+                    ->url($parent === null ? ClientResource::getUrl('index') : ClientResource::getUrl('view', ['record' => $parent]))->success()->send();
             });
     }
 
@@ -256,7 +258,7 @@ final class SharingActions
                 try {
                     $moved = app(ProjectTree::class)->delete($record, $user instanceof User ? $user : null);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }

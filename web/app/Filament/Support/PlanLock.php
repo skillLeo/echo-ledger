@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Support;
 
 use App\Exceptions\ApiError;
+use App\Filament\Support\Notice as Notification;
 use App\Models\Plan;
 use App\Models\User;
 use App\Services\Entitlements\Entitlements;
@@ -14,7 +15,6 @@ use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
-use Filament\Notifications\Notification;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\HtmlString;
 use Illuminate\Support\Number;
@@ -98,7 +98,7 @@ final class PlanLock
                 try {
                     $requests->create($user, (int) CurrentWorkspace::id(), (string) ($data['plan'] ?? ''), $data['message'] ?? null);
                 } catch (ApiError|ValidationException $e) {
-                    Notification::make()->title($e->getMessage())->danger()->send();
+                    Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
                     return;
                 }

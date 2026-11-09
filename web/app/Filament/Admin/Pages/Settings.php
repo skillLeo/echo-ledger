@@ -8,6 +8,8 @@ use App\Enums\SttProviderKey;
 use App\Enums\SttUseCase;
 use App\Filament\Pages\Security;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Mail\TestMail;
 use App\Rules\CertificatePin;
 use App\Rules\ProviderEndpoint;
@@ -42,7 +44,6 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
@@ -657,7 +658,7 @@ class Settings extends Page
             }
             $incoming = app(SettingsTransfer::class)->read($json);
         } catch (InvalidArgumentException $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return;
         }

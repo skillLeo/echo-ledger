@@ -10,6 +10,8 @@ use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Models\CaptureSession;
 use App\Models\SentItem;
 use App\Models\Transcript;
@@ -22,7 +24,6 @@ use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
 use BackedEnum;
 use Filament\Actions\Action;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -117,15 +118,16 @@ class SharedWithMe extends Page implements HasTable
         try {
             $copy = app(Teammates::class)->save($this->person(), $workspace, $item);
         } catch (ApiError $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return;
         }
         $url = isset($copy['client_id'])
             ? ClientResource::getUrl('view', ['record' => $copy['client_id']])
             : CaptureSessionResource::getUrl('view', ['record' => $copy['session_id']]);
-        Notification::make()->title('Saved to your library')->body('Your copy is yours to edit, share or delete.')->success()
-            ->actions([Action::make('openCopy')->label('Open the copy')->url($url)])->send();
+        // The whole notice opens the copy (since v1.6.1), so it needs no button of its own.
+        Notification::make()->title('Saved to your library')->body('Your copy is yours to edit, share or delete. Click to open it.')->success()
+            ->url($url)->send();
     }
 
     /** @return array<string, mixed> what the preview shows: a recording's player and transcript, or a project's recordings */

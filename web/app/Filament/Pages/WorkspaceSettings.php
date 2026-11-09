@@ -6,6 +6,8 @@ namespace App\Filament\Pages;
 
 use App\Enums\WorkspaceRole;
 use App\Exceptions\ApiError;
+use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
 use App\Models\User;
 use App\Models\Workspace;
@@ -22,7 +24,6 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Components\View;
@@ -320,7 +321,7 @@ class WorkspaceSettings extends Page implements HasTable
             app(PlanLimits::class)->assertFeature($workspace->id, 'team', $this->user()->id);
             app(PlanLimits::class)->assertSeat($workspace->id, null, $this->user()->id);
         } catch (ApiError $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return;
         }
@@ -341,7 +342,7 @@ class WorkspaceSettings extends Page implements HasTable
         try {
             $change();
         } catch (InvalidArgumentException|ApiError $e) {
-            Notification::make()->title($e->getMessage())->danger()->send();
+            Notification::make()->title($e->getMessage())->url(NoticeTargets::forError($e))->danger()->send();
 
             return false;
         }
