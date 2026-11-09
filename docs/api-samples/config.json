@@ -217,5 +217,8 @@
         "id": 1,
         "name": "Personal",
         "role": "owner"
-    }
+    },
+    "app_update": null,
+    "announcement": null,
+    "maintenance": null
 }

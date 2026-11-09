@@ -57,6 +57,7 @@ class AdminPanelProvider extends PanelProvider
             ->brandLogoHeight('1.5rem')
             ->favicon(asset('favicon.svg'))
             ->renderHook(PanelsRenderHook::FOOTER, self::here(fn (): View => view('filament.legal-links')))
+            ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.announcement')))
             ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view('filament.offline-banner')))
             ->userMenuItems([
                 Action::make('openApp')->label('Back to the app')->icon(Heroicon::OutlinedArrowUturnLeft)

@@ -35,6 +35,7 @@ use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\EnsureCanRecord;
 use App\Http\Middleware\EnsureNotSuspended;
+use App\Http\Middleware\EnsurePlatformAvailable;
 use App\Http\Middleware\TouchDevice;
 use Illuminate\Support\Facades\Route;
 
@@ -71,7 +72,7 @@ Route::get('recordings/{recording}/audio', [RecordingController::class, 'audio']
     ->middleware(['signed', 'throttle:device'])->name('api.recordings.audio');
 
 // Since v1.6 a suspended account's devices are refused on every call (403 account_suspended).
-Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class])->group(function (): void {
+Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class, EnsurePlatformAvailable::class])->group(function (): void {
     // Every authenticated route except the upload routes counts against the general per-device limit.
     Route::middleware('throttle:device')->group(function (): void {
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');

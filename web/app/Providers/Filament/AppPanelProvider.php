@@ -15,6 +15,7 @@ use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
 use App\Http\Middleware\AccountGate;
+use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use App\Services\Staff\StaffAccess;
 use Closure;
@@ -92,6 +93,8 @@ class AppPanelProvider extends PanelProvider
             ->renderHook(PanelsRenderHook::FOOTER, self::here(fn (): View => view('filament.legal-links')))
             // Since v1.5: members and viewers while the console is closed to them are pointed to the apps.
             ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.use-the-apps')))
+            // Since v1.6 (P2.7): the platform's announcement for everyone.
+            ->renderHook(PanelsRenderHook::PAGE_START, self::here(fn (): View => view('filament.announcement')))
             // Since v1.5: the workspace switcher at the top of the sidebar, for people in more than one.
             ->renderHook(PanelsRenderHook::SIDEBAR_NAV_START, self::here(fn (): View => view('filament.workspace-switcher')))
             // C6: a quiet notice while the browser is offline.
@@ -163,6 +166,8 @@ class AppPanelProvider extends PanelProvider
                 EnsureWorkspaceMember::class,
                 // Since v1.5: an account being deleted reaches only "Keep my account".
                 AccountGate::class,
+                // Since v1.6 (P2.7): during maintenance customers see the pause page.
+                EnsureAppAvailable::class,
             ], isPersistent: true);
     }
 }

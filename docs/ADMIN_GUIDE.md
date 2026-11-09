@@ -223,6 +223,22 @@ server-wide budget stops transcription for everyone once it is reached, and stre
 A report can no longer claim more than the time since the server granted that device a stream, but a device with a real
 grant can still report up to that time on two channels, so one account can use up a small server-wide budget.
 
+### System pages (since v1.6)
+
+- **Sign-up:** who may sign up (on, off, invite only), the allowed email domains, new accounts a day from one network,
+  whether the anti-bot check is on (its keys are under API Credentials → Turnstile), the plan new accounts get, and the
+  payment instructions shown after **Request upgrade**.
+- **App versions:** the lowest version of the phone, Windows and Mac apps (empty: any). An older app shows "Please
+  update" with a link to the downloads page; tick **Refuse older apps** to stop it working until it is updated. The
+  page says how many of each are signed in and the oldest version among them.
+- **Announcement:** a line at the top of the app and in the apps for everyone, information or warning, until a time.
+- **Maintenance:** while it is on, customers see "EchoLedger will be back soon" with your message in the app and their
+  apps wait (they ask again after the time you give); staff keep working and see a red reminder. Share links,
+  webhooks and the public pages keep working. Remember to turn it off.
+- **Activity log:** everything the audit log keeps for the whole platform (sign-ins, devices, sharing, settings, plans,
+  staff and support actions, every look under Support access) with filters by what happened, who did it and the date,
+  and search.
+
 ## 6. Deleting an account, exporting data
 
 - A person deletes their account in the app, in the console or on the public page `/account/delete`. They have

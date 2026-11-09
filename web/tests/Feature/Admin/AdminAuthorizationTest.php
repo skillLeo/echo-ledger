@@ -92,7 +92,7 @@ it('lists the console pages in the navigation for a super admin', function () {
 
     $html = (string) $this->get('/admin')->assertOk()->getContent();
     preg_match_all('/fi-sidebar-item-label[^>]*>\s*([^<]+?)\s*</', $html, $items);
-    expect($items[1])->toBe(['Overview', 'Customers', 'Plans', 'Upgrade requests', 'Server usage', 'API Credentials', 'Settings', 'Staff', 'Device reports', 'Accuracy Lab']);
+    expect($items[1])->toBe(['Overview', 'Customers', 'Plans', 'Upgrade requests', 'Server usage', 'API Credentials', 'Settings', 'Staff', 'Sign-up', 'Device reports', 'Accuracy Lab', 'App versions', 'Announcement', 'Activity log']);
 });
 
 it('registers only the B20 role policies: recordings and devices; scoping rests on workspace-scoped queries', function () {

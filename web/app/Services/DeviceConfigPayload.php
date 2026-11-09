@@ -9,6 +9,7 @@ use App\Models\Device;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\LiveTranslate\LiveTranslateBudget;
+use App\Services\System\PlatformNotices;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
@@ -91,6 +92,11 @@ final class DeviceConfigPayload
             // without a plan for a server older than screen moments.
             'plan' => $this->plan($device),
             'workspace' => $this->workspace($device),
+            // Since v1.6 (P2.7): the lowest app version for this device's platform, the banner for everyone, and
+            // maintenance (null when there is none).
+            'app_update' => app(PlatformNotices::class)->updateFor($device),
+            'announcement' => app(PlatformNotices::class)->announcement(),
+            'maintenance' => app(PlatformNotices::class)->maintenance(),
         ];
     }
 
