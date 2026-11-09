@@ -2,8 +2,8 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\EditProfile;
 use App\Models\User;
-use Filament\Auth\Pages\EditProfile;
 use Filament\Auth\Pages\Login;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Hash;
@@ -110,11 +110,11 @@ it('changes the password when the current password is confirmed', function () {
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'password',
-        ])
-        ->call('save')
-        ->assertHasNoFormErrors()
-        ->assertSet('data.password', null)
-        ->assertSet('data.passwordConfirmation', null);
+        ], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasNoFormErrors(form: 'passwordForm')
+        ->assertSet('passwordData.password', null)
+        ->assertSet('passwordData.passwordConfirmation', null);
 
     $stored = $admin->fresh()->password;
     expect(Hash::check('a-much-longer-passphrase-42', $stored))->toBeTrue()
@@ -143,9 +143,9 @@ it('refuses a password change without the right current password', function () {
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => 'guess',
-        ])
-        ->call('save')
-        ->assertHasFormErrors(['currentPassword']);
+        ], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasFormErrors(['currentPassword'], 'passwordForm');
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -159,9 +159,9 @@ it('refuses a password change when the current password is left blank', function
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'a-much-longer-passphrase-42',
             'currentPassword' => '',
-        ])
-        ->call('save')
-        ->assertHasFormErrors(['currentPassword' => 'required']);
+        ], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasFormErrors(['currentPassword' => 'required'], 'passwordForm');
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -171,9 +171,9 @@ it('refuses a new password that is too short', function () {
     $before = $admin->password;
 
     $this->panelComponent(EditProfile::class)
-        ->fillForm(['password' => 'short', 'passwordConfirmation' => 'short', 'currentPassword' => 'password'])
-        ->call('save')
-        ->assertHasFormErrors(['password']);
+        ->fillForm(['password' => 'short', 'passwordConfirmation' => 'short', 'currentPassword' => 'password'], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasFormErrors(['password'], 'passwordForm');
 
     expect($admin->fresh()->password)->toBe($before);
 });
@@ -187,9 +187,9 @@ it('refuses a new password whose confirmation does not match', function () {
             'password' => 'a-much-longer-passphrase-42',
             'passwordConfirmation' => 'something-else-entirely',
             'currentPassword' => 'password',
-        ])
-        ->call('save')
-        ->assertHasFormErrors(['password' => 'same']);
+        ], 'passwordForm')
+        ->call('savePassword')
+        ->assertHasFormErrors(['password' => 'same'], 'passwordForm');
 
     expect($admin->fresh()->password)->toBe($before);
 });

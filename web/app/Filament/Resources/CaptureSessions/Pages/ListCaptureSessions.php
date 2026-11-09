@@ -429,6 +429,7 @@ class ListCaptureSessions extends ListRecords
             'clients' => Client::query()->where('workspace_id', CurrentWorkspace::id())->where('user_id', CurrentWorkspace::userId())->orderByDesc('pinned')->orderBy('name')
                 ->get(['id', 'name'])->map(fn (Client $c): array => ['value' => $c->id, 'label' => $c->name])->values()->all(),
             'languages' => LanguageChoice::selectOptions(),
+            'language' => Shell::preferences()['language'],
             'extensions' => array_keys(ConsoleUploads::EXTENSIONS),
             'maxBytes' => (int) config('echoledger.max_recording_bytes'),
             'nativeHashMaxBytes' => self::NATIVE_HASH_MAX_BYTES,

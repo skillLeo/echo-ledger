@@ -138,7 +138,7 @@ final class CommandPalette implements GlobalSearchProvider
         foreach ($found['items'] as $session) {
             $hit = $found['hits'][$session->id]['hits'][0] ?? null;
             $url = CaptureSessionResource::getUrl('view', ['record' => $session]).($hit !== null ? '?t='.$hit['start_ms'] : '');
-            $details = ['When' => $session->started_at->copy()->setTimezone($tz)->format('M j, Y · g:i A')];
+            $details = ['When' => $session->started_at->copy()->setTimezone($tz)->format('M j, Y · '.Shell::timeFormat())];
             if ($hit !== null) {
                 $details[TranscriptExporter::clock($hit['start_ms'])] = $hit['snippet'];
             }

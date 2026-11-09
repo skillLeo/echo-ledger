@@ -6,6 +6,7 @@ namespace App\Filament\Pages;
 
 use App\Filament\Concerns\FullConsoleOnly;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Support\Shell;
 use App\Models\User;
 use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
@@ -101,8 +102,8 @@ class Activity extends Page
             $item = ActivityFeed::payload($notification);
             $at = $notification->created_at?->copy()->setTimezone($zone);
             $item += [
-                'time' => $at === null ? '' : ($at->gte($today) ? $at->format('g:i A') : $at->format('M j')),
-                'full_time' => $at?->format('M j, Y · g:i A') ?? '',
+                'time' => $at === null ? '' : ($at->gte($today) ? $at->format(Shell::timeFormat()) : $at->format('M j')),
+                'full_time' => $at?->format('M j, Y · '.Shell::timeFormat()) ?? '',
                 'tone' => self::tone($item['kind']),
                 'icon' => self::icon($item['kind'], $notification->data['icon'] ?? null),
             ];

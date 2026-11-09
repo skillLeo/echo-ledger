@@ -6,7 +6,9 @@ namespace App\Filament\Auth;
 
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\WatchesPairing;
+use App\Filament\Pages\Security;
 use App\Filament\Support\PlanLock;
+use App\Filament\Support\Shell;
 use App\Models\ConnectedApp;
 use App\Models\Device;
 use App\Models\KnownBrowser;
@@ -26,9 +28,11 @@ use App\Services\PairingService;
 use App\Services\SettingsRepository;
 use App\Services\WebSessions;
 use App\Services\Workspaces\PlanLimits;
+use App\Stt\LanguageChoice;
 use App\Support\ClientCountry;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
+use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EditProfile as BaseEditProfile;
 use Filament\Facades\Filament;
@@ -37,51 +41,227 @@ use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\ViewField;
 use Filament\Notifications\Notification;
 use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\Component;
+use Filament\Schemas\Components\EmbeddedSchema;
+use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Components\Text;
 use Filament\Schemas\Components\View;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\Rules\Password as PasswordRule;
 use Illuminate\Validation\ValidationException;
+use SensitiveParameter;
 
 /**
- * The profile (since v1.5): name, email, password and two-step sign-in as before, and below them the account's own
- * things: Sign in with Google, Devices (every phone, computer and browser signed in, "Sign in a device" with a pairing
- * QR for one's own account, Revoke and "Sign out everywhere"), and Connected apps (Claude, ChatGPT) with Disconnect.
+ * Account (the profile since v1.5, in tabs since v1.6, P4.5): Profile (name, email, recording consent) · Password &
+ * sign-in methods (the password, two-step sign-in, Google, a way to Security's passkeys and browsers) · Devices (every
+ * phone, computer and browser signed in, "Sign in a device" with a pairing QR, Revoke, "Sign out everywhere", and the
+ * Connected apps) · Notifications (emails) · Preferences · Plan & usage · Transcription key (Free) · Privacy & data
+ * (export, delete, Support access). Old /app/profile links keep working; ?tab= opens a tab.
  */
 class EditProfile extends BaseEditProfile
 {
     use WatchesPairing;
 
+    /**
+     * Account (since v1.6, P4.5), in tabs as in the desktop app: Profile · Password & sign-in methods · Devices ·
+     * Notifications · Preferences · Plan & usage · Transcription key (the Free plan, or a key saved) · Privacy & data
+     * (with Support access). The tab is in the address (?tab=), so a link opens it.
+     */
+    public function content(Schema $schema): Schema
+    {
+        return $schema->components([
+            Tabs::make('Account')->persistTabInQueryString('tab')->extraAttributes(['class' => 'el-account-tabs'])->tabs([
+                Tab::make('Profile')->key('profile', isInheritable: false)->icon(Heroicon::OutlinedUserCircle)->schema([
+                    $this->getFormContentComponent(),
+                    Section::make('Recording consent')->schema([
+                        Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
+                    ]),
+                ]),
+                Tab::make('Password & sign-in methods')->key('sign-in', isInheritable: false)->icon(Heroicon::OutlinedKey)->schema([
+                    $this->passwordContentComponent(),
+                    ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
+                    $this->googleSection(),
+                    Section::make('Passkeys and signed-in browsers')
+                        ->description('Sign in with your fingerprint or face, sign out a browser, and see the log of sign-ins.')
+                        ->visible(fn (): bool => Security::canAccess())
+                        ->schema([Actions::make([Action::make('openSecurity')->label('Open Security')->icon(Heroicon::OutlinedShieldCheck)->color('gray')->url(fn (): string => Security::getUrl())])]),
+                ]),
+                Tab::make('Devices')->key('devices', isInheritable: false)->icon(Heroicon::OutlinedDevicePhoneMobile)->schema([
+                    $this->devicesSection(),
+                    $this->connectedAppsSection(),
+                ]),
+                Tab::make('Notifications')->key('notifications', isInheritable: false)->icon(Heroicon::OutlinedBell)->schema([
+                    $this->emailsSection(),
+                ]),
+                Tab::make('Preferences')->key('preferences', isInheritable: false)->icon(Heroicon::OutlinedAdjustmentsHorizontal)->schema([
+                    View::make('filament.profile.preferences')->viewData(fn (): array => $this->preferencesData()),
+                ]),
+                Tab::make('Plan & usage')->key('plan', isInheritable: false)->icon(Heroicon::OutlinedSparkles)->schema([
+                    $this->planSection(),
+                ]),
+                Tab::make('Transcription key')->key('key', isInheritable: false)->icon(Heroicon::OutlinedLockClosed)->visible(fn (): bool => $this->needsOwnKey())->schema([
+                    $this->transcriptionKeySection(),
+                ]),
+                Tab::make('Privacy & data')->key('privacy', isInheritable: false)->icon(Heroicon::OutlinedShieldExclamation)->schema([
+                    $this->dataSection(),
+                    $this->supportAccessSection(),
+                ]),
+            ]),
+        ]);
+    }
+
+    public function getTitle(): string
+    {
+        return 'Account';
+    }
+
+    /** Profile: the name and the email (a new email asks for the password, when there is one). */
+    public function form(Schema $schema): Schema
+    {
+        return $schema->components([
+            $this->getNameFormComponent(),
+            $this->getEmailFormComponent(),
+            $this->getCurrentPasswordFormComponent(),
+        ]);
+    }
+
+    /** @var array<string, mixed>|null the Password & sign-in methods tab's form */
+    public ?array $passwordData = [];
+
+    /** When a preference was last saved, for "Saved · just now". */
+    public ?string $preferencesSavedAt = null;
+
+    /**
+     * Password & sign-in methods → Password: a new one twice, and the current one when the account has one (an
+     * account made with an email code or Google sets its first password here).
+     */
+    public function passwordForm(Schema $schema): Schema
+    {
+        return $schema
+            ->inlineLabel()
+            ->model($this->getUser())
+            ->operation('edit')
+            ->statePath('passwordData')
+            ->components([
+                // Filament's own password field (its rules, its hashing), with a label that says what it is for.
+                TextInput::make('password')
+                    ->label(fn (): string => $this->account()->has_password !== false ? 'New password' : 'Choose a password')
+                    ->validationAttribute(__('filament-panels::auth/pages/edit-profile.form.password.validation_attribute'))
+                    ->password()->revealable(filament()->arePasswordsRevealable())
+                    ->rule(PasswordRule::default())->showAllValidationMessages()->autocomplete('new-password')->required()
+                    ->dehydrated(fn (#[SensitiveParameter] $state): bool => filled($state))
+                    ->dehydrateStateUsing(fn (#[SensitiveParameter] $state): string => Hash::make($state))
+                    ->live(debounce: 500)->same('passwordConfirmation'),
+                $this->getPasswordConfirmationFormComponent(),
+                TextInput::make('currentPassword')
+                    ->label(__('filament-panels::auth/pages/edit-profile.form.current_password.label'))
+                    ->belowContent(__('filament-panels::auth/pages/edit-profile.form.current_password.below_content'))
+                    ->password()->revealable(filament()->arePasswordsRevealable())->autocomplete('current-password')
+                    ->currentPassword(guard: Filament::getAuthGuard())
+                    ->required()
+                    ->visible(fn (): bool => $this->account()->has_password !== false)
+                    ->dehydrated(false),
+            ]);
+    }
+
+    private function passwordContentComponent(): Component
+    {
+        return Form::make([EmbeddedSchema::make('passwordForm')])
+            ->id('passwordForm')
+            ->livewireSubmitHandler('savePassword')
+            ->footer([
+                Actions::make([
+                    Action::make('savePassword')->label(fn (): string => $this->account()->has_password !== false ? 'Change password' : 'Set password')->submit('passwordForm'),
+                ])->key('password-actions'),
+            ]);
+    }
+
+    /** Changes (or sets) the password: the same checks and the same rate limit as the profile's Save. */
+    public function savePassword(): void
+    {
+        try {
+            $this->rateLimit(5);
+        } catch (TooManyRequestsException $exception) {
+            $this->getRateLimitedNotification($exception)?->send();
+
+            return;
+        }
+        $data = $this->getSchema('passwordForm')?->getState() ?? [];
+        if (! is_string($data['password'] ?? null) || $data['password'] === '') {
+            return;
+        }
+        $user = $this->account();
+        $user->forceFill(['password' => $data['password']])->save();
+        if (request()->hasSession()) {
+            request()->session()->put(['password_hash_'.Filament::getAuthGuard() => $data['password']]);
+        }
+        $this->passwordData = [];
+        $this->getSchema('passwordForm')?->fill();
+        Notification::make()->title('Password saved')->success()->send();
+    }
+
     public function mount(): void
     {
         parent::mount();
+        $this->getSchema('passwordForm')?->fill();
         $status = session()->pull('google.status');
         if (is_string($status)) {
             Notification::make()->title($status)->info()->send();
         }
     }
 
-    public function content(Schema $schema): Schema
+    /** Whether the Transcription key tab is there: the Free plan's own key, or a key saved before. */
+    private function needsOwnKey(): bool
     {
-        return $schema->components([
-            $this->getFormContentComponent(),
-            ...Arr::wrap($this->getMultiFactorAuthenticationContentComponent()),
-            $this->planSection(),
-            $this->googleSection(),
-            $this->transcriptionKeySection(),
-            $this->devicesSection(),
-            $this->connectedAppsSection(),
-            Section::make('Recording consent')->schema([
-                Text::make(RecordingConsent::TEXT.' '.RecordingConsent::APPS),
-            ]),
-            $this->emailsSection(),
-            $this->supportAccessSection(),
-            $this->dataSection(),
-        ]);
+        $workspace = (int) ($this->account()->current_workspace_id ?? 0);
+        $platform = $workspace > 0 && app(PlanLimits::class)->allows($workspace, 'platform_transcription', $this->account()->id);
+
+        return ! $platform || app(TranscriptionKeys::class)->describe($this->account())['set'];
+    }
+
+    /**
+     * Preferences (P4.5): the sidebar's style, the list density, 12- or 24-hour times, the Library as a list or a
+     * table, the language uploads start in, and the keys.
+     *
+     * @return array<string, mixed>
+     */
+    public function preferencesData(): array
+    {
+        return [
+            'prefs' => Shell::preferences($this->account()),
+            'choices' => [
+                'style' => ['Sidebar style', Shell::STYLES, 'How the sidebar looks; the page follows the theme in the menu under your initials.'],
+                'density' => ['Density', Shell::DENSITIES, 'How much room each recording takes in the Library.'],
+                'clock' => ['Times', Shell::CLOCKS, 'How times are written in the Library and its drawer.'],
+                'layout' => ['Library', Shell::LAYOUTS, 'The phone\'s list, or a table with the columns you choose.'],
+            ],
+            'languages' => LanguageChoice::selectOptions(),
+            'savedAt' => $this->preferencesSavedAt,
+        ];
+    }
+
+    /** One preference, saved at once ("Saved · just now"). */
+    public function setPreference(string $key, string $value): void
+    {
+        if (! in_array($key, ['style', 'density', 'clock', 'layout', 'language'], true) || ! Shell::remember($this->account(), $key, $value)) {
+            return;
+        }
+        $this->account()->refresh();
+        $this->preferencesSavedAt = now()->toIso8601String();
+        if ($key === 'style') {
+            $this->js('document.getElementById("fi-main-sidebar")?.setAttribute("data-style", '.json_encode($value).')');
+        }
+        if ($key === 'density') {
+            $this->js('document.documentElement.dataset.density = '.json_encode($value));
+        }
     }
 
     /** Profile → Your plan (since v1.6): the plan with its badge, until when, and the plans side by side. */

@@ -41,7 +41,7 @@ final class RecordingRow
             'icon' => self::appIcon($session->source_app),
             'device_icon' => self::deviceIcon($session->source_device),
             'time' => self::shortTime($at, $zone),
-            'full_time' => $at->format('M j, Y · g:i A'),
+            'full_time' => $at->format('M j, Y · '.Shell::timeFormat()),
             'iso' => $session->started_at->toIso8601ZuluString(),
             'meta' => implode(' · ', array_filter([CaptureSessionsTable::duration($session->duration_ms), $with, $labels[0] ?? null])),
             'status' => self::status($session),
@@ -55,7 +55,7 @@ final class RecordingRow
     {
         $now = Carbon::now($zone);
         if ($at->isSameDay($now)) {
-            return $at->format('g:i A');
+            return $at->format(Shell::timeFormat());
         }
 
         return $at->year === $now->year ? $at->format('M j') : $at->format('M j, Y');

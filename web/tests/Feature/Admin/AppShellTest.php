@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\WorkspaceRole;
+use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\GetTheApps;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Clients\Pages\ViewClient;
@@ -10,9 +11,11 @@ use App\Filament\Support\CommandPalette;
 use App\Filament\Support\Shell;
 use App\Livewire\Shell\Sidebar;
 use App\Models\CaptureSession;
+use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Hash;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -369,5 +372,66 @@ describe('the page pattern (P4.4)', function () {
         $html = (string) $this->get('/app/sessions')->assertOk()->getContent();
 
         expect($html)->toContain("key === 'j' || key === 'k'")->toContain("key === 'x'")->toContain('window.elTyping(e.target)')->toContain('el-kb-row');
+    });
+});
+
+describe('Account in tabs (P4.5)', function () {
+    it('has Profile, Password & sign-in methods, Devices, Notifications, Preferences, Plan & usage and Privacy & data', function () {
+        $this->actingAs(Fx::user(), 'web');
+        $html = (string) $this->get('/app/profile')->assertOk()->getContent();
+
+        preg_match_all('/fi-tabs-item-label">\s*([^<]+?)\s*</', $html, $tabs);
+        expect($tabs[1])->toBe(['Profile', 'Password &amp; sign-in methods', 'Devices', 'Notifications', 'Preferences', 'Plan &amp; usage', 'Privacy &amp; data']);
+        expect($html)->toMatch('/<h1 class="fi-header-heading">\s*Account\s*<\/h1>/')
+            ->toContain('Support access')->toContain('Export my data')->toContain('Change password');
+    });
+
+    it('shows the Transcription key tab on the Free plan only (or while a key is saved)', function () {
+        $user = Fx::user();
+        $this->actingAs($user, 'web');
+        $tabs = function (string $url): array {
+            preg_match_all('/fi-tabs-item-label">\s*([^<]+?)\s*</', (string) $this->get($url)->assertOk()->getContent(), $m);
+
+            return $m[1];
+        };
+        expect($tabs('/app/profile'))->not->toContain('Transcription key');
+
+        Workspace::query()->whereKey($user->current_workspace_id)->update(['plan_id' => Plan::free()->id]);
+        expect($tabs('/app/profile?tab=key'))->toContain('Transcription key');
+    });
+
+    it('opens the tab named in the address', function () {
+        $this->actingAs(Fx::user(), 'web');
+
+        expect((string) $this->get('/app/profile?tab=preferences')->assertOk()->getContent())->toContain('data-pref="style"')->toContain('Sidebar style');
+    });
+
+    it('saves a preference at once and says so, refuses anything else, and leaves other people\'s alone', function () {
+        $a = Fx::user();
+        $b = Fx::user();
+        $this->actingAs($a, 'web');
+
+        Livewire::test(EditProfile::class)->call('setPreference', 'clock', '24h')->assertSet('preferencesSavedAt', fn ($v) => is_string($v))
+            ->call('setPreference', 'density', 'compact')->call('setPreference', 'language', 'ur')
+            ->call('setPreference', 'is_super_admin', '1')->call('setPreference', 'style', 'purple');
+        $prefs = Shell::preferences($a->fresh());
+        expect($prefs)->toMatchArray(['clock' => '24h', 'density' => 'compact', 'language' => 'ur', 'style' => 'light'])
+            ->and($a->fresh()->is_super_admin)->toBeFalse()
+            ->and(Shell::preferences($b->fresh())['clock'])->toBe('12h');
+        expect(Shell::timeFormat())->toBe('H:i');
+    });
+
+    it('lets an account made with a code set its first password, and asks for the current one when there is one', function () {
+        $codeOnly = Fx::user();
+        $codeOnly->forceFill(['has_password' => false])->save();
+        $this->actingAs($codeOnly->fresh(), 'web');
+        Livewire::test(EditProfile::class)
+            ->fillForm(['password' => 'a-first-long-password-1', 'passwordConfirmation' => 'a-first-long-password-1'], 'passwordForm')
+            ->call('savePassword')->assertHasNoFormErrors(form: 'passwordForm');
+        expect(Hash::check('a-first-long-password-1', (string) $codeOnly->fresh()->password))->toBeTrue()->and($codeOnly->fresh()->has_password)->toBeTrue();
+
+        Livewire::test(EditProfile::class)
+            ->fillForm(['password' => 'another-long-password-2', 'passwordConfirmation' => 'another-long-password-2'], 'passwordForm')
+            ->call('savePassword')->assertHasFormErrors(['currentPassword' => 'required'], 'passwordForm');
     });
 });

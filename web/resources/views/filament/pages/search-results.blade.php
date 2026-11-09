@@ -38,7 +38,7 @@
             <div class="el-card">
                 <a class="el-title" href="{{ $urlFor($session) }}" dir="auto">{{ $session->displayTitle() }}</a>
                 <div class="el-muted">
-                    {{ $session->started_at->copy()->setTimezone($tz)->format('M j, Y · g:i A') }} · {{ $session->source_app->getLabel() }}
+                    {{ $session->started_at->copy()->setTimezone($tz)->format('M j, Y · '.\App\Filament\Support\Shell::timeFormat()) }} · {{ $session->source_app->getLabel() }}
                     @if ($session->client) · {{ $session->client->name }} @endif
                     @if ($found['count'] > count($found['hits'])) · {{ $found['count'] }} matches @endif
                 </div>

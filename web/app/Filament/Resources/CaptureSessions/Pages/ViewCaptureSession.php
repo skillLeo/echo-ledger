@@ -17,6 +17,7 @@ use App\Filament\Support\RecordingProgress;
 use App\Filament\Support\RecordingRow;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
+use App\Filament\Support\Shell;
 use App\Filament\Support\StopsSharing;
 use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
@@ -135,7 +136,7 @@ class ViewCaptureSession extends ViewRecord
 
         return new HtmlString(view('filament.recording.subheading', [
             'row' => RecordingRow::for($session),
-            'when' => implode(' · ', array_filter([$at->format('M j'), $at->format('g:i A'), CaptureSessionsTable::duration($session->duration_ms), $session->client?->name])),
+            'when' => implode(' · ', array_filter([$at->format('M j'), $at->format(Shell::timeFormat()), CaptureSessionsTable::duration($session->duration_ms), $session->client?->name])),
         ])->render());
     }
 

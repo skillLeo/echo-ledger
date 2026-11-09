@@ -51,9 +51,9 @@
 
         <h2>Your choices</h2>
         <ul>
-            <li>Download everything you keep here: Profile → Your data → Export my data.</li>
-            <li>Delete your account: Profile → Your data, or the <a href="{{ route('account.delete') }}">Delete your account</a> page.</li>
-            <li>See where you are signed in and sign out everywhere: Profile → Devices.</li>
+            <li>Download everything you keep here: Account → Privacy & data → Export my data.</li>
+            <li>Delete your account: Account → Privacy & data, or the <a href="{{ route('account.delete') }}">Delete your account</a> page.</li>
+            <li>See where you are signed in and sign out everywhere: Account → Devices.</li>
         </ul>
 
         <h2>Recording other people</h2>

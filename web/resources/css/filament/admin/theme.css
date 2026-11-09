@@ -4160,3 +4160,61 @@ html[data-density='compact'] .el-library .fi-ta-cell {
     color: var(--text-muted);
     text-align: center;
 }
+
+/* ---------- Account (P4.5) ---------- */
+.el-account-tabs .fi-tabs {
+    flex-wrap: wrap;
+}
+
+.el-prefs {
+    display: flex;
+    flex-direction: column;
+}
+
+.el-prefs-saved {
+    display: flex;
+    justify-content: flex-end;
+    min-height: 20px;
+    font-size: 13px;
+    color: var(--success);
+}
+
+.el-prefs-saved [data-saved] {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.el-prefs-saved svg {
+    width: 16px;
+    height: 16px;
+}
+
+.el-pref {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-5);
+    padding: var(--space-4) 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.el-pref:last-child {
+    border-bottom: 0;
+}
+
+.el-pref-text {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+
+.el-pref-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text);
+}
+
+.el-pref-select {
+    min-width: 220px;
+}

@@ -21,7 +21,7 @@
         <ol style="display:grid;gap:.5rem;list-style:decimal;padding-left:1.25rem">
             <li>Open the app and enter your email.</li>
             <li>Type the code we email you. That is it: no password needed.</li>
-            <li>On the Free plan, add your own free Groq key in Profile → Transcription key to get transcripts.</li>
+            <li>On the Free plan, add your own free Groq key in Account → Transcription key to get transcripts.</li>
         </ol>
         <div style="margin-top:1rem">
             <x-filament::button tag="a" :href="\App\Filament\Pages\Dashboard::getUrl()">Continue to EchoLedger</x-filament::button>

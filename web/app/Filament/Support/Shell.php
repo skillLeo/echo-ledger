@@ -32,6 +32,7 @@ use App\Services\Sharing\Teammates;
 use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Stt\LanguageChoice;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
 use Throwable;
@@ -86,7 +87,7 @@ final class Shell
     /**
      * The person's shell choices, each checked, or its default.
      *
-     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string, layout: string}
+     * @return array{width: int, collapsed: bool, style: string, open: list<string>, density: string, clock: string, layout: string, language: string}
      */
     public static function preferences(?User $user = null): array
     {
@@ -103,6 +104,7 @@ final class Shell
             'density' => is_string($saved['density'] ?? null) && isset(self::DENSITIES[$saved['density']]) ? $saved['density'] : 'comfortable',
             'clock' => is_string($saved['clock'] ?? null) && isset(self::CLOCKS[$saved['clock']]) ? $saved['clock'] : '12h',
             'layout' => is_string($saved['layout'] ?? null) && isset(self::LAYOUTS[$saved['layout']]) ? $saved['layout'] : 'list',
+            'language' => is_string($saved['language'] ?? null) && LanguageChoice::normalize($saved['language']) !== null ? $saved['language'] : '',
         ];
     }
 
@@ -118,6 +120,8 @@ final class Shell
             'density' => is_string($value) && isset(self::DENSITIES[$value]) ? $value : null,
             'clock' => is_string($value) && isset(self::CLOCKS[$value]) ? $value : null,
             'layout' => is_string($value) && isset(self::LAYOUTS[$value]) ? $value : null,
+            // The language new uploads start in ('' = Automatic).
+            'language' => $value === '' ? '' : (is_string($value) && LanguageChoice::normalize($value) === $value ? $value : null),
             'open' => is_array($value) ? array_values(array_intersect(self::GROUPS, array_filter($value, 'is_string'))) : null,
             default => null,
         };
