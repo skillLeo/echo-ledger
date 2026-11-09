@@ -87,6 +87,8 @@ function registeredApiRoutes(): array
 const SERVED_BEFORE_DOCUMENTED = [];
 
 const NOT_SERVED_YET = [
+    // v1.6.2 promo codes: documented first, served by the next web pass.
+    'POST /api/promo-codes/check',
 ];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
