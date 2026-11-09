@@ -31,7 +31,8 @@ describe("activity page (B18)", () => {
     expect(screen.getByText("Pixel 9 paired")).toBeInTheDocument();
     expect(screen.getByText("Transcript ready").closest("button")).toHaveClass("unread");
     expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveClass("unread");
-    expect(onItems).toHaveBeenCalledWith(ITEMS);
+    // The badge gets the list in an effect after the list is shown (a slow runner sees the list first).
+    await waitFor(() => expect(onItems).toHaveBeenCalledWith(ITEMS));
   });
 
   it("has the page header: breadcrumbs, the title and one line that says what needs you (v1.6, P4.4)", async () => {
