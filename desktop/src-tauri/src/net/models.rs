@@ -639,8 +639,60 @@ pub struct AuthOptions {
     pub reset_url: Option<String>,
     #[serde(default, alias = "browser_sign_in")]
     pub browser_sign_in: bool,
+    /// Email codes are offered (since v1.6).
+    #[serde(default)]
+    pub code: bool,
 }
 
 fn yes() -> bool {
     true
+}
+
+// ---- Sign-up and sign-in with an email code (since v1.6, P1) -------------------------------------------------------
+
+/// `POST /api/auth/start`: whether the email has an account and what it can sign in with. `account` is `existing`,
+/// `new`, or (made by the app, never sent) `older` for a server without the route.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AuthStart {
+    #[serde(default)]
+    pub account: String,
+    #[serde(default)]
+    pub methods: Vec<String>,
+    #[serde(default, alias = "sign_up")]
+    pub sign_up: bool,
+}
+
+/// `POST /api/auth/code`: a code is on its way (`sent`), or one went out a moment ago and a new one may be asked for in
+/// `resend_after` seconds (`429 resend_too_soon`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CodeSent {
+    #[serde(default = "sixty", alias = "resend_after")]
+    pub resend_after: u64,
+    #[serde(default, alias = "expires_in")]
+    pub expires_in: Option<u64>,
+    #[serde(default = "yes")]
+    pub sent: bool,
+}
+
+fn sixty() -> u64 {
+    60
+}
+
+/// The answer to `POST /api/auth/code/verify`: this computer's token (an existing account), the two-factor code first,
+/// or a new email's sign-up token (kept in the core, never shown to the page).
+#[derive(Clone, Debug)]
+pub enum CodeAnswer {
+    SignedIn(Box<RegisterResponse>),
+    OtpRequired,
+    Profile { sign_up_token: String },
+}
+
+/// What a sign-in route sends about this computer besides its own fields (since v1.6 with `install_id`).
+#[derive(Clone, Debug, Default)]
+pub struct ThisDevice {
+    pub name: String,
+    pub platform: &'static str,
+    pub os_version: String,
 }

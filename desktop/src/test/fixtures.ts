@@ -86,6 +86,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     pins: ["sha256/abc"],
     deviceId: "dev-1",
     deviceName: "Work laptop",
+    installId: null,
     shortcuts: {
       record_now: "CommandOrControl+Alt+R",
       toggle_captions: "CommandOrControl+Shift+Space",

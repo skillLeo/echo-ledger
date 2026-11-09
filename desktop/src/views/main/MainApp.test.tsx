@@ -70,7 +70,7 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false, serverUrl: null, deviceName: null });
     respond("pair_device", makeStatus({ deviceName: "Studio PC" }));
     render(<MainApp />);
-    fireEvent.click(await screen.findByRole("button", { name: "Use a sign-in code or QR instead" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with QR / code" }));
     await screen.findByRole("heading", { name: "Sign in with a code" });
     fireEvent.change(screen.getByLabelText(/Server address/), { target: { value: "https://ledger.example.test" } });
     fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "ABCD-1234" } });
@@ -88,7 +88,7 @@ describe("MainApp start-up and pairing gate", () => {
     mockBackend({ paired: false });
     respondWith("pair_device", () => Promise.reject("Server returned 422: The pairing code is invalid or has expired."));
     render(<MainApp />);
-    fireEvent.click(await screen.findByRole("button", { name: "Use a sign-in code or QR instead" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Sign in with QR / code" }));
     await screen.findByRole("heading", { name: "Sign in with a code" });
     fireEvent.change(screen.getByLabelText(/Sign-in code/), { target: { value: "NOPE" } });
     fireEvent.click(screen.getByRole("button", { name: "Sign in with code" }));

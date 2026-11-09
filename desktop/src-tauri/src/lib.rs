@@ -13,6 +13,7 @@ pub mod detect;
 pub mod dictation;
 pub mod error;
 pub mod files;
+pub mod identity;
 pub mod lifecycle;
 pub mod lock;
 pub mod mac_check;
@@ -108,6 +109,8 @@ pub struct AppState {
     pub screens: screens::Screens,
     /// A browser sign-in waiting for its `echoledger://signed-in` link (v1.5), in memory only.
     pub browser_sign_in: Mutex<Option<account::BrowserSignIn>>,
+    /// A new email's sign-up between its code and its name (v1.6), in memory only.
+    pub pending_sign_up: Mutex<Option<account::PendingSignUp>>,
     /// The account the running recording was made under, when another account signed in while it ran (its client
     /// reference and the account).
     pub recording_owner: Mutex<Option<(String, owner::Owner)>>,
@@ -179,6 +182,7 @@ impl AppState {
             recording_caller: Mutex::new(None),
             screens: screens::Screens::new(Box::new(screens::platform::Native), if smoke { Box::new(smoke::NoKeys) } else { Box::new(screens::store::KeychainKeys) }),
             browser_sign_in: Mutex::new(None),
+            pending_sign_up: Mutex::new(None),
             recording_owner: Mutex::new(None),
             owner_checked: AtomicBool::new(false),
             updates: updates::Updates::default(),
@@ -215,6 +219,19 @@ impl AppState {
         f(&mut guard);
         guard.save(&self.data_dir.join("settings.json"))?;
         Ok(guard.clone())
+    }
+
+    /// This install's id (v1.6, P3): the kept one, else made now from the machine's id and the data folder (a random
+    /// one without a machine id) and kept.
+    pub fn install_id(&self) -> String {
+        if let Some(id) = self.settings().install_id.filter(|id| identity::is_install_id(id)) {
+            return id;
+        }
+        let id = identity::machine_id().map(|m| identity::install_id_of(&m, &self.data_dir)).unwrap_or_else(identity::random_install_id);
+        if let Err(e) = self.update_settings(|s| s.install_id = Some(id.clone())) {
+            eprintln!("[echoledger] the install id could not be kept: {e}");
+        }
+        id
     }
 
     pub fn is_paired(&self) -> bool {
@@ -409,6 +426,11 @@ pub fn run() {
             commands::sign_in_password,
             commands::sign_in_browser,
             commands::auth_options,
+            commands::auth_start,
+            commands::auth_code_send,
+            commands::auth_code_verify,
+            commands::auth_sign_up,
+            commands::device_rename,
             commands::auth_page_open,
             commands::sign_in_browser_cancel,
             commands::unpair,

@@ -20,6 +20,7 @@ fn customised() -> Settings {
         ],
         device_id: Some("01JB8Q3R0Z5V1K7M9N2P4S6T8W".into()),
         device_name: Some("Büro-PC 🖥️".into()),
+        install_id: Some("3f1c5e0b7a9d2c4e6f8a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e".into()),
         shortcuts,
         captions_on_record: false,
         auto_mode: false,
@@ -173,6 +174,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "dictationSounds",
             "farSideWarning",
             "inputDevice",
+            "installId",
             "lockAfterMinutes",
             "notificationCategories",
             "notificationSounds",
@@ -193,7 +195,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 42, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 43, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");

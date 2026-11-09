@@ -190,7 +190,7 @@ describe("Settings → Account → Your data", () => {
     expect(within(form).getByText(/Signed in with Google and no password\?/)).toBeInTheDocument();
     fireEvent.click(within(form).getByRole("button", { name: "Delete on the web page" }));
 
-    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "account/delete" }]));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "account/delete", serverUrl: null }]));
     expect(callsOf("account_delete")).toEqual([]);
     // Opening the page leaves the form as it was: nothing is deleted until the person confirms there.
     expect(screen.getByRole("form", { name: "Confirm deleting your account" })).toBeInTheDocument();

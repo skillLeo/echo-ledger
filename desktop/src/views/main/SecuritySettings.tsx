@@ -64,11 +64,37 @@ export function LockCard({ settings, patch, run }: { settings: Settings; patch: 
   );
 }
 
-/** Devices: the devices paired with the server (revoke the others) and the recent audit log. */
+/** A device's platform in plain words (the server sends `windows`, `macos`, `android`…). */
+export function platformLabel(platform: string): string {
+  return ({ windows: "Windows", macos: "Mac", android: "Android phone", ios: "iPhone", linux: "Linux" } as Record<string, string>)[platform] ?? platform;
+}
+
+/** One device's name, renamed in place (v1.6, P3). */
+function RenameDevice({ device, run, onDone }: { device: SecurityDevice; run: Run; onDone: (renamed: boolean) => void }) {
+  const [name, setName] = useState(device.name);
+  const id = useId();
+  const save = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const saved = await run(() => api.renameDevice(device.id, name.trim()), "Name saved");
+    onDone(saved !== undefined);
+  };
+  return (
+    <form className="row device-rename" onSubmit={(e) => void save(e)} aria-label={`Rename ${device.name}`}>
+      <label htmlFor={id} className="sr-only">New name for {device.name}</label>
+      <input id={id} className="input" value={name} maxLength={64} autoFocus onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => { if (e.key === "Escape") onDone(false); }} />
+      <button type="submit" className="btn small" disabled={!name.trim() || name.trim() === device.name}>Save</button>
+      <button type="button" className="btn ghost small" onClick={() => onDone(false)}>Cancel</button>
+    </form>
+  );
+}
+
+/** Devices: the devices signed in to the account (rename any, revoke the others) and the recent audit log. */
 export function DevicesCard({ run }: { run: Run }) {
   const [devices, setDevices] = useState<SecurityDevice[]>([]);
   const [events, setEvents] = useState<SecurityEvent[]>([]);
   const [overviewError, setOverviewError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
 
   const loadOverview = () =>
     api.securityOverview().then((o) => {
@@ -94,11 +120,18 @@ export function DevicesCard({ run }: { run: Run }) {
       <div className="site-list" role="list" aria-label="Signed-in devices">
         {devices.map((d) => (
           <div className="site-rule" role="listitem" key={d.id}>
-            <div className="site-main">
-              <div className="site-pattern">{d.name}{d.current && <span className="small muted"> · this computer</span>}</div>
-              <div className="small muted">{d.platform}{d.last_seen_at ? ` · seen ${formatWhen(d.last_seen_at)}` : ""}</div>
-            </div>
-            {!d.current && <button type="button" className="btn danger ghost small" onClick={() => void revoke(d)}>Revoke</button>}
+            {renaming === d.id ? (
+              <RenameDevice device={d} run={run} onDone={(renamed) => { setRenaming(null); if (renamed) void loadOverview(); }} />
+            ) : (
+              <>
+                <div className="site-main">
+                  <div className="site-pattern">{d.name}{d.current && <span className="small muted"> · this computer</span>}</div>
+                  <div className="small muted">{platformLabel(d.platform)}{d.last_seen_at ? ` · active ${formatWhen(d.last_seen_at)}` : ""}</div>
+                </div>
+                <button type="button" className="btn ghost small" aria-label={`Rename ${d.name}`} onClick={() => setRenaming(d.id)}>Rename</button>
+                {!d.current && <button type="button" className="btn danger ghost small" onClick={() => void revoke(d)}>Revoke</button>}
+              </>
+            )}
           </div>
         ))}
       </div>

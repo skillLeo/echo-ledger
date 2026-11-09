@@ -68,7 +68,28 @@ export interface AuthOptions {
   signUpUrl: string | null;
   resetUrl: string | null;
   browserSignIn: boolean;
+  /** Email codes are offered (since v1.6). */
+  code: boolean;
 }
+
+/** "Email → Continue" (since v1.6): `older` is a server without the route (the v1.5 sign-in then). */
+export interface AuthStart {
+  account: "existing" | "new" | "older";
+  methods: string[];
+  signUp: boolean;
+}
+/** A code on its way, or (`sent: false`) one went out a moment ago and another may be asked for in `resendAfter` s. */
+export interface CodeSent {
+  resendAfter: number;
+  expiresIn: number | null;
+  sent: boolean;
+}
+export type CodeResult = "signed_in" | "otp_required" | "profile";
+export interface CodeOutcome {
+  result: CodeResult;
+  status: AppStatus | null;
+}
+
 
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
 export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
@@ -167,6 +188,7 @@ export interface Settings {
   pins: string[];
   deviceId: string | null;
   deviceName: string | null;
+  installId: string | null; // since v1.6: sent with every sign-in, never exported
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
@@ -1161,6 +1183,14 @@ export const api = {
   authOptions: (serverUrl: string) => invoke<AuthOptions | null>("auth_options", { serverUrl }),
   /** Create account or Forgot password: the server's own page in the browser. */
   openAuthPage: (serverUrl: string, url: string) => invoke<void>("auth_page_open", { serverUrl, url }),
+  // Sign-up and sign-in with an email code (since v1.6). A new email's sign-up token stays in the core.
+  authStart: (serverUrl: string, email: string) => invoke<AuthStart>("auth_start", { serverUrl, email }),
+  sendCode: (serverUrl: string, email: string, purpose: "sign_in" | "sign_up") => invoke<CodeSent>("auth_code_send", { serverUrl, email, purpose }),
+  verifyCode: (serverUrl: string, email: string, code: string, otp: string | null, deviceName: string) =>
+    invoke<CodeOutcome>("auth_code_verify", { serverUrl, email, code, otp, deviceName }),
+  signUp: (name: string, acceptTerms: boolean) => invoke<AppStatus>("auth_sign_up", { name, acceptTerms }),
+  /** Account → Devices → Rename (since v1.6); the new name. */
+  renameDevice: (id: string, name: string) => invoke<string>("device_rename", { id, name }),
   /** null on a server without accounts. */
   account: () => invoke<Account | null>("account_get"),
   /** Every device and console session of the account, this computer too: the answer is the signed-out status. */
@@ -1170,8 +1200,8 @@ export const api = {
   startExport: () => invoke<AccountExport>("account_export_start"),
   exportStatus: (id: string) => invoke<AccountExport>("account_export_status", { id }),
   openExport: (url: string) => invoke<void>("account_export_open", { url }),
-  /** The server's Terms, Privacy, account deletion or downloads page in the browser. */
-  openServerPage: (page: ServerPage) => invoke<void>("server_page_open", { page }),
+  /** The server's Terms, Privacy, account deletion or downloads page in the browser; `serverUrl` before signing in. */
+  openServerPage: (page: ServerPage, serverUrl: string | null = null) => invoke<void>("server_page_open", { page, serverUrl }),
   // Updates (since v1.5): checked every 12 hours and on request; `update:status` follows the check and the download.
   updateStatus: () => invoke<UpdateStatus>("update_status"),
   checkForUpdates: () => invoke<UpdateStatus>("update_check"),

@@ -326,7 +326,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme }: {
       </div>
     ) },
     { id: "lock", group: "general", title: "App lock", keywords: "lock pin windows hello touch id privacy security", node: <LockCard settings={settings} patch={patch} run={run} /> },
-    { id: "devices", group: "general", title: "Devices", keywords: "devices revoke paired activity audit", node: <DevicesCard run={run} /> },
+    // Account → Devices (v1.6, P3) when the server has accounts: rename any, revoke the others.
+    { id: "devices", group: account ? "account" : "general", title: "Devices", keywords: "devices rename revoke signed in paired activity audit", node: <DevicesCard run={run} /> },
     { id: "this-device", group: "general", title: "This computer", keywords: "sign out unpair device name", node: (
       <div className="card">
         <div className="row"><div><b>{status.deviceName}</b><div className="small muted" data-testid="signed-in-to">{signedInLine(status.serverUrl)}</div></div><span className="spacer" />

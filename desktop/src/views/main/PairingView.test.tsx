@@ -30,7 +30,8 @@ describe("PairingView", () => {
     expect(screen.getByText(/Devices → Pair a device/)).toBeInTheDocument();
     expect(server().value).toBe("https://");
     expect(code()).toHaveFocus();
-    expect(screen.getByText(/stored in your OS keychain/)).toBeInTheDocument();
+    expect(screen.getByText("Your data is encrypted on this computer.")).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/token|keychain/i);
   });
 
   it("sends trimmed server, code and name to pair_device and reports success", async () => {
@@ -119,5 +120,27 @@ describe("PairingView", () => {
     expect(screen.queryByLabelText(/Server address/)).not.toBeInTheDocument();
     fireEvent.change(code(), { target: { value: "" } });
     expect(server()).toBeInTheDocument();
+  });
+});
+
+describe("PairingView with a built-in server (v1.6)", () => {
+  beforeEach(() => {
+    resetTauriMock();
+  });
+
+  it("uses the sign-in screen's server and keeps its field under Use a different server", async () => {
+    respond("pair_device", makeStatus());
+    const onPaired = vi.fn();
+    render(<PairingView onPaired={onPaired} notify={vi.fn()} serverUrl="https://ledger.example.com" defaultServer="https://ledger.example.com" />);
+    expect(screen.queryByLabelText(/Server address/)).not.toBeInTheDocument();
+    expect(screen.getByText(/Server: ledger.example.com/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Use a different server" }));
+    const other = screen.getByLabelText(/Use a different server/) as HTMLInputElement;
+    expect(other.value).toBe("https://ledger.example.com");
+    fireEvent.change(other, { target: { value: "https://other.example.test" } });
+    fireEvent.change(code(), { target: { value: "ABCD-1234" } });
+    fireEvent.click(submit());
+    await waitFor(() => expect(onPaired).toHaveBeenCalled());
+    expect(callsOf("pair_device")[0].serverUrl).toBe("https://other.example.test");
   });
 });

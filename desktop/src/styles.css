@@ -1156,6 +1156,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .sign-in-or::before, .sign-in-or::after { content: ""; flex: 1; border-top: 1px solid var(--border); }
 .sign-in-pair { display: flex; margin: var(--space-2) auto 0; }
 .sign-in-wait { display: grid; gap: var(--space-2); padding: var(--space-3); border-radius: var(--radius-field); background: var(--accent-soft); }
+/* The v1.6 sign-in: one primary action per step, the email it is for, the code, Terms, and Advanced kept small. */
+.sign-in-primary, .sign-in-google, .sign-in-secondary { width: 100%; justify-content: center; }
+.sign-in-primary { margin-top: var(--space-3); }
+.sign-in-secondary { margin-top: var(--space-2); }
+.sign-in-email { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: 0 0 var(--space-3); }
+.sign-in-email .btn { margin-left: auto; }
+.sign-in-code { font-size: var(--text-lg); letter-spacing: 0.3em; font-variant-numeric: tabular-nums; text-align: center; }
+.sign-in-resend { margin-top: var(--space-2); }
+.sign-in-accept { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1); margin: var(--space-2) 0; }
+.sign-in-accept input { width: 16px; height: 16px; margin: 0 var(--space-1) 0 0; accent-color: var(--accent); }
+.sign-in-advanced { margin-top: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-2); }
+.sign-in-advanced-body { display: grid; gap: var(--space-2); margin-top: var(--space-2); }
+.sign-in-safe { margin-top: 14px; }
 /* Settings → Account (since v1.5): the account's facts, the plan's limits next to the usage, deleting the account. */
 .account-facts { display: grid; gap: 0; margin: var(--space-2) 0; }
 .account-facts > div { display: flex; justify-content: space-between; gap: var(--space-3); padding: var(--space-2) 0; border-bottom: 1px solid var(--border); }
