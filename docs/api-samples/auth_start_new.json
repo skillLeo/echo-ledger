@@ -1,0 +1,7 @@
+{
+    "account": "new",
+    "methods": [
+        "code"
+    ],
+    "sign_up": true
+}

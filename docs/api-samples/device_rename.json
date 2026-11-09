@@ -1,0 +1,11 @@
+{
+    "id": "01m6z2k9ppknys8t1w02vsx1fg",
+    "name": "Sample phone",
+    "platform": "android",
+    "app_version": "1.5.0",
+    "last_seen_at": "2026-11-09T02:36:03+00:00",
+    "paired_at": "2026-11-09T02:36:03+00:00",
+    "current": true,
+    "status": "active",
+    "signed_out_at": null
+}
