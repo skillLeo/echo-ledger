@@ -114,7 +114,10 @@ fun RecordSheet(
     onDismiss: () -> Unit,
     liveTranslate: Boolean = true,
     readyChip: com.echoledger.mobile.core.ReadyChip = com.echoledger.mobile.core.ReadyChip.NONE,
-    onReady: () -> Unit = {}
+    onReady: () -> Unit = {},
+    /** Since v1.6: Live Translate not in the plan shows its badge; a tap opens the plans instead of the mode. */
+    liveTranslateLock: com.echoledger.mobile.core.PlanState.Lock? = null,
+    onLocked: (com.echoledger.mobile.core.PlanState.Lock) -> Unit = {}
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = Brand.Surface) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = Space.screen).padding(bottom = Space.s5)) {
@@ -133,7 +136,18 @@ fun RecordSheet(
                 ModeTile(Icons.Rounded.Mic, "Voice & files", "Record or import", Modifier.weight(1f)) { onPick(RecordMode.VOICE) }
                 ModeTile(Icons.Rounded.Call, "Calls & meetings", calls, Modifier.weight(1f)) { onPick(RecordMode.CALLS) }
             }
-            // Since v1.5: a plan without Live Translate shows neither mode.
+            // Since v1.5: a plan without Live Translate shows neither mode; since v1.6 they show with the plan's badge.
+            if (!liveTranslate && liveTranslateLock != null) {
+                Spacer(Modifier.height(Space.s3))
+                Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {
+                    ModeTile(Icons.Rounded.SportsEsports, "Game translate", liveTranslateLock.badge, Modifier.weight(1f)) {
+                        onLocked(liveTranslateLock)
+                    }
+                    ModeTile(Icons.Rounded.Tv, "Watch translate", liveTranslateLock.badge, Modifier.weight(1f)) {
+                        onLocked(liveTranslateLock)
+                    }
+                }
+            }
             if (liveTranslate) Spacer(Modifier.height(Space.s3))
             if (liveTranslate) {
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.s3)) {

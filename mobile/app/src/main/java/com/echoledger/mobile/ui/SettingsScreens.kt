@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Devices
 import androidx.compose.material.icons.outlined.FiberManualRecord
 import androidx.compose.material.icons.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Key
 import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.Notifications
@@ -43,6 +44,7 @@ import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.Subtitles
 import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material.icons.outlined.Tune
+import androidx.compose.material.icons.outlined.WorkspacePremium
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Button
@@ -261,6 +263,8 @@ private fun generalIcon(id: String): ImageVector = when (id) {
     "app-lock" -> Icons.Outlined.Lock
     "consent" -> Icons.Outlined.PrivacyTip
     "devices" -> Icons.Outlined.Devices
+    "plan" -> Icons.Outlined.WorkspacePremium
+    "transcription-key" -> Icons.Outlined.Key
     "storage" -> Icons.Outlined.Storage
     "help" -> Icons.Outlined.HelpOutline
     else -> Icons.Outlined.Info
@@ -326,6 +330,8 @@ private fun generalSummary(id: String): String = when (id) {
     "app-lock" -> "Fingerprint or screen lock"
     "consent" -> "Telling people you record"
     "devices" -> "Signed-in phones and computers"
+    "plan" -> "Your plan, what you have used, upgrades"
+    "transcription-key" -> "Your own free Groq key (Free plan)"
     "storage" -> "Space used and how long things are kept"
     "help" -> "Device check, audio probe, capture test, diagnostics"
     else -> "Version, export and import settings"
@@ -416,6 +422,10 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
         "app-lock" -> AppLockSection(vm, settings)
 
         "devices" -> SecuritySection(load = { vm.security() }, revoke = { vm.revokeDevice(it) })
+
+        "plan" -> PlanSection(vm, settings.plan)
+
+        "transcription-key" -> TranscriptionKeySection(vm, settings.plan)
 
         "this-phone" -> ThisPhoneCard(vm, settings, onSetup)
 

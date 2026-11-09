@@ -236,6 +236,8 @@ class MainActivity : FragmentActivity() {
         // The Ready check (since v1.5, Phase 1C): the chip on the Library and the Record sheet, and its sheet.
         var showReady by rememberSaveable { mutableStateOf(false) }
         var readyFix by remember { mutableStateOf<ReadyFix?>(null) }
+        // Since v1.6: the plans sheet for a locked feature (Live Translate from the Record sheet).
+        var upgradeLock by remember { mutableStateOf<com.echoledger.mobile.core.PlanState.Lock?>(null) }
         val armState by (application as EchoLedgerApp).graph.helper.armState.collectAsState()
         val readiness = remember(helper, armState, recheck, currentSettings.autoRecordArmed, currentSettings.paired) {
             Readiness.evaluate(ReadinessWatch.facts(context, currentSettings, (application as EchoLedgerApp).graph.helper))
@@ -422,6 +424,7 @@ class MainActivity : FragmentActivity() {
         }
 
         CompositionLocalProvider(LocalUnlockPrompter provides prompter) {
+            upgradeLock?.let { lock -> com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, lock) { upgradeLock = null } }
             if (showReady) {
                 ReadyCheckSheet(
                     vm,
@@ -443,6 +446,9 @@ class MainActivity : FragmentActivity() {
                 RecordSheet(caps, settings.autoRecordArmed, readyChip = readiness.chip, onReady = {
                     recordSheet = false
                     showReady = true
+                }, liveTranslateLock = settings.plan.lockFor("live_translate"), onLocked = {
+                    recordSheet = false
+                    upgradeLock = it
                 }, onPick = {
                     recordMode = it
                     tab = TAB_RECORD

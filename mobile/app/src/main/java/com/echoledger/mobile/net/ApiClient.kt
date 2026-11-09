@@ -257,6 +257,32 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun authOptions(): com.echoledger.mobile.data.AuthOptionsDto =
         call(request("auth/options").get().build(), com.echoledger.mobile.data.AuthOptionsDto.serializer())!!
 
+    /** `GET /api/me/entitlements` (since v1.6): the plan, its features and limits; an older server answers 404. */
+    suspend fun entitlements(): com.echoledger.mobile.data.EntitlementsDto =
+        call(request("me/entitlements").get().build(), com.echoledger.mobile.data.EntitlementsDto.serializer())!!
+
+    /** `POST /api/upgrade-requests` (since v1.6): asks the server's owner for [plan]; one pending at a time. */
+    suspend fun requestUpgrade(plan: String, message: String?): com.echoledger.mobile.data.UpgradeRequestDto {
+        val body = buildJsonObject {
+            put("plan", plan)
+            message?.takeIf { it.isNotBlank() }?.let { put("message", it.take(1000)) }
+        }.toString().toRequestBody(jsonType)
+        return call(request("upgrade-requests").post(body).build(), com.echoledger.mobile.data.UpgradeRequestDto.serializer())!!
+    }
+
+    /** `PUT /api/me/transcription-key` (since v1.6, the Free plan): this person's own Groq key, checked by the server. */
+    suspend fun setTranscriptionKey(key: String): com.echoledger.mobile.data.TranscriptionKeyDto {
+        val body = buildJsonObject {
+            put("provider", "groq")
+            put("key", key.trim())
+        }.toString().toRequestBody(jsonType)
+        return call(request("me/transcription-key").put(body).build(), com.echoledger.mobile.data.TranscriptionKeyDto.serializer())!!
+    }
+
+    suspend fun deleteTranscriptionKey() {
+        call(request("me/transcription-key").delete().build(), null as KSerializer<Unit>?)
+    }
+
     /** `POST /api/auth/start` (since v1.6): the email first; whether it has an account and what it can use. */
     suspend fun authStart(email: String): AuthStartDto {
         val body = buildJsonObject { put("email", email) }.toString().toRequestBody(jsonType)

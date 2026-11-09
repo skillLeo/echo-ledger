@@ -503,6 +503,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 } catch (e: ApiException) {
                     // No config answer is no reason to skip the library: keep the last known contract version.
                 }
+                // Since v1.6: what the plan allows (badges, locks, limits); a server older than v1.6 answers 404.
+                runCatching { graph.api()?.entitlements() }.getOrNull()?.let { e ->
+                    graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState.withEntitlements(it.plan, e)) }
+                }
                 graph.library.refresh()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
@@ -1176,6 +1180,45 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
         h.unbindShizuku()
         if (!h.bindShizuku()) _message.value = "Could not start the capture helper through Shizuku."
+    }
+
+    /** "Request upgrade" (since v1.6): asks for [plan]; the answer carries the owner's payment instructions. */
+    suspend fun requestUpgrade(plan: String, message: String?): com.echoledger.mobile.data.UpgradeRequestDto? {
+        val answer = try {
+            withContext(Dispatchers.IO) { graph.api()?.requestUpgrade(plan, message) }
+        } catch (e: ApiException) {
+            _message.value = if (e.code == "request_pending") "You have already asked. We'll let you know." else e.message
+            null
+        } catch (e: Exception) {
+            _message.value = "Can't reach the server. Try again."
+            null
+        } ?: return null
+        graph.settings.update { it.copy(plan = it.plan.copy(upgrade = answer)) }
+        return answer
+    }
+
+    /** Account → Transcription key (since v1.6, the Free plan): saves this person's own Groq key on the server. */
+    suspend fun saveTranscriptionKey(key: String): Boolean {
+        val saved = try {
+            withContext(Dispatchers.IO) { graph.api()?.setTranscriptionKey(key) }
+        } catch (e: ApiException) {
+            _message.value =
+                if (e.code == "invalid_key") "Groq did not accept that key. Copy it again from console.groq.com." else e.message
+            null
+        } catch (e: Exception) {
+            _message.value = "Can't reach the server. Try again."
+            null
+        } ?: return false
+        graph.settings.update { it.copy(plan = it.plan.copy(transcriptionKey = saved)) }
+        _message.value = "Key saved. New recordings are transcribed with it."
+        return true
+    }
+
+    suspend fun removeTranscriptionKey() {
+        runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteTranscriptionKey() } }.onSuccess {
+            graph.settings.update { it.copy(plan = it.plan.copy(transcriptionKey = null)) }
+            _message.value = "Key removed"
+        }.onFailure { _message.value = "Can't reach the server. Try again." }
     }
 
     fun adbCommand(): String = graph.helper.adbCommand()

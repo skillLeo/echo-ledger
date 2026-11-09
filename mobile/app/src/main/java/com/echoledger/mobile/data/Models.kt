@@ -328,6 +328,67 @@ data class RowViewsDto(val status: String = "none", val default: String = "origi
 @Serializable
 data class ProgressDto(val done: Int = 0, val total: Int = 0, @SerialName("eta_seconds") val etaSeconds: Long? = null)
 
+/** `GET /api/me/entitlements` (since v1.6, P1): what this person's plan allows; the server alone decides. */
+@Serializable
+data class EntitlementsDto(
+    val plan: EntitlementPlanDto = EntitlementPlanDto(),
+    val features: Map<String, FeatureDto> = emptyMap(),
+    val limits: Map<String, LimitDto> = emptyMap(),
+    val engines: List<String> = emptyList(),
+    @SerialName("transcription_key") val transcriptionKey: TranscriptionKeyDto? = null,
+    @SerialName("upgrade_request") val upgradeRequest: UpgradeRequestDto? = null,
+    val plans: List<PlanOfferDto> = emptyList()
+)
+
+@Serializable
+data class EntitlementPlanDto(
+    val key: String = "",
+    val name: String = "",
+    val badge: String = "",
+    val color: String? = null,
+    @SerialName("expires_at") val expiresAt: String? = null,
+    @SerialName("trial_minutes_left") val trialMinutesLeft: Long = 0
+)
+
+@Serializable
+data class FeatureDto(
+    val enabled: Boolean = true,
+    val name: String = "",
+    val description: String = "",
+    val cost: String = "free",
+    @SerialName("lowest_plan") val lowestPlan: String? = null
+)
+
+@Serializable
+data class LimitDto(val limit: Long? = null, val used: Long? = null)
+
+@Serializable
+data class TranscriptionKeyDto(val provider: String = "groq", val set: Boolean = false, val last4: String? = null)
+
+@Serializable
+data class UpgradeRequestDto(
+    val id: String,
+    val plan: String,
+    val status: String = "pending",
+    val message: String? = null,
+    @SerialName("payment_instructions") val paymentInstructions: String? = null,
+    val reply: String? = null,
+    @SerialName("created_at") val createdAt: String? = null,
+    @SerialName("decided_at") val decidedAt: String? = null
+)
+
+@Serializable
+data class PlanOfferDto(
+    val key: String,
+    val name: String,
+    val badge: String = "",
+    val color: String? = null,
+    val price: String? = null,
+    val description: String? = null,
+    val features: List<String> = emptyList(),
+    val limits: Map<String, Long?> = emptyMap()
+)
+
 /** `POST /api/auth/start` (since v1.6): whether the email has an account, and what it can sign in with. */
 @Serializable
 data class AuthStartDto(

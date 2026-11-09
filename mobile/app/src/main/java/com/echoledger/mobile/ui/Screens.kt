@@ -576,7 +576,23 @@ fun SessionScreen(
                     item(key = "transcript-head") {
                         Column(Modifier.padding(horizontal = Space.screen), verticalArrangement = Arrangement.spacedBy(Space.s3)) {
                             val available = t.views?.available.orEmpty()
-                            if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
+                            // Since v1.6: views not in the plan show its badge; a tap opens the plans.
+                            val viewsLock = appSettings.plan.lockFor("views")
+                            if (t.kind == "final" && t.status == "completed" && viewsLock != null) {
+                                var upgrade by remember { mutableStateOf(false) }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(Space.s2)
+                                ) {
+                                    Text(
+                                        "Roman Urdu and English",
+                                        color = LocalEchoColors.current.textMuted,
+                                        style = LocalEchoType.current.labelM
+                                    )
+                                    PlanBadge(viewsLock, onClick = { upgrade = true })
+                                }
+                                if (upgrade) UpgradeSheet(vm, appSettings.plan, viewsLock) { upgrade = false }
+                            } else if (t.kind == "final" && t.status == "completed" && available.isNotEmpty()) {
                                 ShowAsRow(available, showAs, views) { chooseView(it) }
                             }
                             FlowRow(
@@ -1065,7 +1081,15 @@ private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_
 /** The failure reason, plus the phone's own hint when nothing was captured. */
 internal fun failureText(t: TranscriptDto): String {
     val reason = t.error ?: "The speech provider could not process this recording."
-    return if (t.errorCode == "no_audio") "$reason Check Setup → Call capture (the helper must be running) and record again." else reason
+    return when (t.errorCode) {
+        "no_audio" -> "$reason Check Setup → Call capture (the helper must be running) and record again."
+
+        // Since v1.6 (the Free plan): transcription uses the person's own free Groq key.
+        "needs_transcription_key" ->
+            "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry."
+
+        else -> reason
+    }
 }
 
 /** Setup → Call capture: the guided test and "Copy diagnostics". */
