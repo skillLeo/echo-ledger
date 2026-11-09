@@ -382,6 +382,18 @@ for the plan (then the default plan). Every route checks them; the apps only sho
   `GET /api/security` lists it. Another person's device `404 not_found`. An older server answers `404`/`405`: the apps
   say to rename it in the console.
 
+### Signing a device in again (since v1.6, P3)
+- In the console a device row that is signed out, revoked or expired has **Sign in again**: a one-time pairing code
+  (the usual 8 characters, 10 minutes, single use, shown as a code and a QR) **bound to that row**.
+- The app redeems it with `POST /api/devices/register` as any pairing code (no app change). The answer is `201` with
+  `device.id` = **the same row**: it is active again (`signed_out_at` cleared, `status` `active`), keeps its name (a
+  chosen name stays) and its recordings, gets a new token, and the old tokens stay revoked. The request's
+  `install_id`, when sent, replaces the row's (the same phone installed again).
+- A bound code used by another platform than the row's (a desktop code on a phone) is `422 validation_failed`
+  (`errors.pairing_code`: "This code signs in <device name> again; use it on that device"). A bound code for a row
+  that was removed from the list meanwhile is `422` too. The person's device limit counts the row once (it was
+  already theirs). Another person's device is never offered and its id is never accepted (`404`).
+
 ### Upgrade requests (since v1.6, P1)
 - `POST /api/upgrade-requests` — `sessions:write`, throttled (5/day): `{"plan": "pro", "message": "…" | null}` →
   `201 {"id", "plan", "status": "pending", "message", "payment_instructions": "…", "created_at"}`. One pending
