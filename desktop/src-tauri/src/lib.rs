@@ -39,6 +39,7 @@ pub mod stt;
 pub mod translate;
 pub mod tray;
 pub mod updates;
+pub mod whatsapp;
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -473,6 +474,8 @@ pub fn run() {
             commands::import_voice_notes,
             commands::import_pick,
             commands::save_audio,
+            commands::save_audio_downloads,
+            commands::whatsapp_open,
             commands::copy_last_minutes,
             commands::library_list,
             commands::library_refresh,

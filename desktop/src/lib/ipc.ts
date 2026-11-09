@@ -1437,6 +1437,10 @@ export const api = {
     invoke<string | null>("export_transcript", { id, format, timestamps, speakers, view }),
   /** The recording's audio file, saved where the person chooses; null when they cancel. */
   saveAudio: (id: string) => invoke<string | null>("save_audio", { id }),
+  /** Send to WhatsApp → Text and voice (v1.6): the audio saved in Downloads without a dialog; its path. */
+  saveAudioToDownloads: (id: string) => invoke<string>("save_audio_downloads", { id }),
+  /** Send to WhatsApp (v1.6): opens wa.me with the text; true when it was too long and was cut (the core builds the address). */
+  whatsappOpen: (text: string) => invoke<boolean>("whatsapp_open", { text }),
   /** Show as (since v1.2): the Roman Urdu and English views and their state; `makeTranscriptViews` starts them. */
   transcriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views", { id }),
   makeTranscriptViews: (id: string) => invoke<TranscriptViewsState>("transcript_views_make", { id }),

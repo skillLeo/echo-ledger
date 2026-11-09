@@ -532,6 +532,28 @@ describe("LibraryView transcript", () => {
     expect(callsOf("transcript_detail")).toHaveLength(0);
   });
 
+  it("sends the recording to WhatsApp from its page and from its row's menu, the text as Copy text copies it (v1.6, P5.5)", async () => {
+    respond("whatsapp_open", false);
+    const { notify } = await renderLibrary();
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    fireEvent.click(within(detail()).getByRole("button", { name: "Send to WhatsApp" }));
+    const sheet = await screen.findByRole("dialog", { name: "Send to WhatsApp" });
+    expect(within(sheet).getByRole("button", { name: "Text and voice" })).toBeEnabled();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Text only" }));
+    await waitFor(() => expect(callsOf("whatsapp_open")).toHaveLength(1));
+    const sent = String(callsOf("whatsapp_open")[0].text);
+    expect(sent).toContain(TRANSCRIPTS["tr-a"].segments[0].text);
+    expect(writeText).toHaveBeenCalledWith(sent);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).not.toBeInTheDocument());
+    expect(notify).toHaveBeenCalledWith("Opening WhatsApp with the text");
+
+    // From another recording's row menu: it opens, and so does the sheet.
+    fireEvent.click(within(list()).getByRole("button", { name: "More for Client briefing" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Send to WhatsApp…" }));
+    expect(await screen.findByRole("dialog", { name: "Send to WhatsApp" })).toBeInTheDocument();
+    expect(within(detail()).getByRole("heading", { name: "Client briefing" })).toBeInTheDocument();
+  });
+
   it("shows the failure reason from the server for a failed transcript, without copy buttons", async () => {
     await renderLibrary();
     await selectItem("Google Meet standup");

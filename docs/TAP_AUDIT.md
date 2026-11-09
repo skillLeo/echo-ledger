@@ -42,7 +42,7 @@ column). Clicks only; a key that does the same is named in How.
 | 3 | Open the latest recording | 1 | 1 | Its row in the Library, or under **Recent recordings** on Home (new). |
 | 4 | Read it in Roman Urdu or English | 2 | 2 | Open → the view in **Show as**. The console's default view opens by itself (1). |
 | 5 | Copy the transcript | 2 | 2 | Open → **Copy text**. |
-| 6 | Send it to WhatsApp | 4 | **3** | Not on the computer yet (P5.5); today it is a share link: open → **Share** → **Make link**, which now copies the link at once (before: and then **Copy link**). From the open recording it is 2. |
+| 6 | Send it to WhatsApp | 4 | **3** | The row's **⋯** → **Send to WhatsApp…** → Text only, Text and voice, or Link (7 days); or open → the WhatsApp button → the choice. From the open recording it is 2. Before (a share link): open → **Share** → **Make link** → **Copy link**. |
 | 7 | Find a recording by a word in it | 2 | 2 | The Library's search (**/** focuses it) or the top bar's search (**Ctrl/⌘+K**) → (type) → the match, which plays from that moment. |
 | 8 | Keep or discard after a call (Ask me) | 1 | 1 | The after-call chip's **Keep** or **Discard**; Keep automatically (the default) needs none. |
 | 9 | Retry a failed transcription | 2 | 2 | Open → **Try again** in the failed notice (new; before: the Re-transcribe button in the header, 2, easy to miss). |
@@ -53,8 +53,8 @@ column). Clicks only; a key that does the same is named in How.
 | 14 | Play from a line | 2 | 2 | Open → the line (it plays from there). |
 | 15 | Group or sort the Library | 2 | 2 | **View** → the choice (Group by, Sort by and Density in one menu, the phone's names; before: the Group by or Sort by menu). |
 
-Top 10 at 2 or fewer: 9 of 10, as on the phone. The exception is **Send to WhatsApp**, a share link on the computer
-until P5.5: 3 from the Library, 2 from the open recording.
+Top 10 at 2 or fewer: 9 of 10, as on the phone. The exception is **Send to WhatsApp**: 3 from the Library, 2 from the
+open recording. The three ways of sending are different things, so the app asks rather than guesses.
 
 Other paths the shell shortened: **Plan & usage** is 2 from any page (the avatar menu; before Settings → Account and
 scrolling), **Devices** is one search away (**Ctrl/⌘+K** "devices", or **Find a page**) or 2 (Account → Devices; before

@@ -689,6 +689,9 @@ pictures in `docs/design/screens/desktop/`; these rows prove what a real window,
 | 16-P12 | Leave the app with 20 finished transcripts unread, 1 failed transcript and 2 calls waiting. | The bell and Activity say **3**, not 23; with 10 or more things that need you they say **9+**. |
 | 16-P13 | Account → Preferences → Times: 24-hour. | Every time in the Library, Home and Activity shows as 14:30; 12-hour brings back 2:30 PM. |
 | 16-P14 | Make a share link. | "Link made and copied": paste it in a browser at once, without pressing Copy link. |
+| 16-W1 | With WhatsApp Desktop installed (Windows and Mac), then without it: a recording → WhatsApp button → **Text only**, in Roman Urdu and in Urdu. | WhatsApp Desktop opens (without it, WhatsApp Web in the browser) with the text, Urdu letters intact; choose a chat and send. A 30-minute call: the message holds its start ending in "…", the app says the whole text is copied, and pasting gives all of it. |
+| 16-W2 | **Text and voice** on a call, then on a voice note. | The audio is in Downloads (a second time with "(2)"); the sheet says "Attach the saved voice file in WhatsApp"; attaching it as a Document sends a file that plays on the phone. |
+| 16-W3 | **Link (works for 7 days)**; open the link on the phone; look at it in Shared → My links. | WhatsApp opens with the title and the link; the page plays the recording; My links shows it expiring in 7 days. |
 
 ## Appendix B — Accessibility
 
