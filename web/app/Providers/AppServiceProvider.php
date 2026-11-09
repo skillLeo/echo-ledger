@@ -60,6 +60,7 @@ use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use League\Flysystem\Filesystem;
 use RuntimeException;
@@ -212,6 +213,19 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('auth-password', fn (Request $request) => Limit::perMinute(5)->by('auth-pw:'.$request->ip())
             ->response(fn (Request $request, array $headers) => response()->json(['message' => 'Too many sign-in attempts. Try again later.', 'code' => 'too_many_attempts'], 429, $headers)));
         RateLimiter::for('auth-token', fn (Request $request) => Limit::perMinute(10)->by('auth-token:'.$request->ip()));
+        // Since v1.6: the email-code sign-in. Asking about an address: 10 a minute per IP address and 5 per address, so
+        // probing many addresses is slow; the codes have their own limits per address and IP address (EmailCodes).
+        $email = fn (Request $request): string => hash('sha256', Str::lower(trim((string) $request->input('email'))));
+        RateLimiter::for('auth-start', fn (Request $request) => [
+            Limit::perMinute(10)->by('auth-start:'.$request->ip()),
+            Limit::perMinute(5)->by('auth-start-email:'.$email($request)),
+        ]);
+        RateLimiter::for('auth-code', fn (Request $request) => Limit::perMinute(10)->by('auth-code:'.$request->ip()));
+        RateLimiter::for('auth-code-verify', fn (Request $request) => [
+            Limit::perMinute(10)->by('auth-verify:'.$request->ip()),
+            Limit::perMinute(10)->by('auth-verify-email:'.$email($request)),
+        ]);
+        RateLimiter::for('auth-sign-up', fn (Request $request) => Limit::perMinute(10)->by('auth-sign-up:'.$request->ip()));
         RateLimiter::for('device-sign-in', fn (Request $request) => Limit::perMinute(30)->by('device-sign-in:'.$request->ip()));
         // The public account pages (since v1.5): /account/delete and the export download.
         RateLimiter::for('account', fn (Request $request) => Limit::perMinute(30)->by('account:'.$request->ip()));

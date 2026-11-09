@@ -138,8 +138,12 @@ describe('route coverage', function () {
         expect($open)->toBe([
             'GET /api/auth/options',
             'GET /api/recordings/{recording}/audio',
+            'POST /api/auth/code',
+            'POST /api/auth/code/verify',
             'POST /api/auth/device/token',
             'POST /api/auth/password',
+            'POST /api/auth/sign-up',
+            'POST /api/auth/start',
             'POST /api/devices/register',
             'POST /api/webhooks/stt/{provider}',
         ]);

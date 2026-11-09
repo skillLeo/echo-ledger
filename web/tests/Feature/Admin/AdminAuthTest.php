@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Filament\Auth\Login as AppLogin;
 use App\Models\CaptureSession;
 use App\Models\User;
 use Filament\Auth\Pages\Login;
@@ -40,18 +41,19 @@ it('redirects guests from a session detail page to the login page', function () 
     $this->get('/admin/sessions/'.$session->id)->assertRedirect(route('filament.admin.auth.login'));
 });
 
-it('renders the login form with email, password and remember me', function () {
+it('renders the email first, then the password and Keep me signed in for an account (since v1.6)', function () {
     $html = $this->get('/admin/login')->assertOk()->getContent();
+    expect($html)->toContain('wire:model="data.email"')->not->toContain('wire:model="data.password"')->toContain('EchoLedger')->toContain('Continue');
 
-    expect($html)
-        ->toContain('wire:model="data.email"')
-        ->toContain('wire:model="data.password"')
-        ->toContain('wire:model="data.remember"')
-        ->toContain('EchoLedger');
+    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')
+        ->assertSet('step', AppLogin::STEP_PASSWORD)
+        ->assertSeeHtml('wire:model="data.password"')->assertSeeHtml('wire:model="data.remember"')->assertSee('Email me a code instead');
 });
 
 it('offers a show and hide control on the password field', function () {
-    $html = $this->get('/admin/login')->assertOk()->getContent();
+    $this->makeAdmin(['email' => 'owner@example.test']);
+    $html = $this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')->html();
 
     expect($html)
         ->toContain('aria-label="Show password"')
@@ -63,9 +65,11 @@ it('offers a show and hide control on the password field', function () {
 
 it('offers no registration path while sign-up is off, and a password reset (since v1.5)', function () {
     $html = $this->get('/admin/login')->assertOk()->getContent();
-
-    expect($html)->not->toContain('/admin/register')->toContain('password-reset');
+    expect($html)->not->toContain('/admin/register');
     $this->get('/admin/register')->assertNotFound();
+
+    $this->makeAdmin(['email' => 'owner@example.test']);
+    expect($this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')->html())->toContain('password-reset');
 });
 
 it('signs a super admin in with the right credentials', function () {

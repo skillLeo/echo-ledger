@@ -103,6 +103,16 @@ they are tested. Send your admin the report from Device check if something diffe
 
 ## 3. Sign in on your devices
 
+**One way in, everywhere (since v1.6).** Type your email and press **Continue**.
+
+- **New here?** We email you a 6-digit code (it works for 10 minutes). Type it, then your name, accept the Terms and
+  the Privacy Policy, and your free account is ready, with its own private workspace. The console then shows **Get
+  the apps**: the phone and computer apps, signed in with the same email.
+- **You have an account?** Type your password, or press **Email me a code** to sign in without it. When your account
+  has two-step sign-in, the code from your authenticator app comes next.
+- **Continue with Google** works when the server offers it. A new code can be asked for after a minute; after 5 wrong
+  tries ask for a new one.
+
 **Sign in (phone, since v1.5).** On the phone's first screen, **Sign in to EchoLedger**: type the server address,
 your email and password, then the code from your authenticator app when it asks. **Sign in in the browser** does the
 same with Google or a passkey: the browser opens, you sign in there, and the phone is signed in when you come back.

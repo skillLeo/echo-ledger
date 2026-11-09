@@ -91,6 +91,21 @@ Open **Workspace** in the console.
 Each person sees their devices under **Profile → Devices** (phones, computers and console browsers, with Revoke) and
 can **Sign out everywhere**. A new device or a console sign-in from a new browser sends that person an email.
 
+### Sign-up (since v1.6)
+
+**Settings → Privacy & security → Sign-up.** Everyone signs up the same way: their email, a 6-digit code by email,
+their name and the Terms (no password needed; they can set one later with **Forgot password?**).
+
+- **Who can sign up:** On (anyone), Off (only people you add), or Invite only (an address with an invitation waiting;
+  the code proves it is theirs).
+- **Allowed email domains:** empty for any address, or only these domains. Throwaway addresses (the list in
+  `web/resources/data/disposable-email-domains.txt`, one domain a line) are always refused.
+- **New accounts a day from one network:** default 5.
+- **Turnstile** (Cloudflare's free check against robots) protects the web sign-up once its site key and secret are
+  saved in **API Credentials → Turnstile** (dash.cloudflare.com → Turnstile → Add widget for the console's domain).
+  Without them it is skipped. The apps do not show it; the limits per address and network protect them.
+- Codes: 10 minutes, 5 tries, a new one after 60 seconds, at most 5 an hour per address and 20 an hour per network.
+
 ## 4. Plans (super admin)
 
 **System → Plans.** Prices stay at 0 until billing comes (backlog).

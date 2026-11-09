@@ -51,6 +51,15 @@ Route::post('auth/password', [AuthController::class, 'password'])
     ->middleware('throttle:auth-password')->name('api.auth.password');
 Route::post('auth/device/token', [AuthController::class, 'deviceToken'])
     ->middleware('throttle:auth-token')->name('api.auth.device.token');
+// Since v1.6 (P1): the email first, then a 6-digit code by email; a new address then makes its account.
+Route::post('auth/start', [AuthController::class, 'start'])
+    ->middleware('throttle:auth-start')->name('api.auth.start');
+Route::post('auth/code', [AuthController::class, 'code'])
+    ->middleware('throttle:auth-code')->name('api.auth.code');
+Route::post('auth/code/verify', [AuthController::class, 'verifyCode'])
+    ->middleware('throttle:auth-code-verify')->name('api.auth.code.verify');
+Route::post('auth/sign-up', [AuthController::class, 'signUp'])
+    ->middleware('throttle:auth-sign-up')->name('api.auth.sign-up');
 
 Route::post('webhooks/stt/{provider}', SttWebhookController::class)
     ->middleware('throttle:webhooks')->name('api.webhooks.stt');

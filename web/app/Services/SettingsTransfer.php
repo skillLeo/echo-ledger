@@ -48,6 +48,8 @@ final class SettingsTransfer
         'unsure.note',
         'display.timezone',
         'signup.mode',
+        'signup.allowed_domains',
+        'signup.per_ip_day',
         'console.members',
         'mail.host',
         'mail.port',

@@ -106,11 +106,11 @@ it('titles console pages "Page - EchoLedger" and declares the language', functio
         ->and($html)->toMatch('/<html\s+lang="en"/');
 });
 
-it('titles the sign-in page "Login - EchoLedger" with a "Sign in" heading', function () {
+it('titles the sign-in page "Login - EchoLedger" with a "Sign in or create an account" heading (since v1.6)', function () {
     $html = $this->get('/admin/login')->assertOk()->getContent();
 
     expect($html)->toMatch('/<title>\s*Login\s*-\s*EchoLedger\s*<\/title>/')
-        ->and($html)->toMatch('/<h1[^>]*>\s*Sign in\s*<\/h1>/');
+        ->and($html)->toMatch('/<h1[^>]*>\s*Sign in or create an account\s*<\/h1>/');
 });
 
 it('loads the console assets from the app itself', function () {

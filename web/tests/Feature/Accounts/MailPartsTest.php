@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Mail\DeletionScheduledMail;
+use App\Mail\EmailCodeMail;
 use App\Mail\ExportReadyMail;
 use App\Mail\InvitationMail;
 use App\Mail\LoginAlertMail;
@@ -33,6 +34,7 @@ function everyMail(): array
         'deletion' => new DeletionScheduledMail('Nov 15', "$u/admin"),
         'transcript' => new TranscriptReadyMail('Call with Omar', "$u/s/1"),
         'test' => new TestMail('smtp.example.test'),
+        'email code' => new EmailCodeMail('123456', 'sign_up', 10),
     ];
 }
 

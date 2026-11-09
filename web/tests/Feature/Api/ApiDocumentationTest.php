@@ -84,7 +84,6 @@ function registeredApiRoutes(): array
  */
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 const NOT_SERVED_YET = [
-    'POST /api/auth/start', 'POST /api/auth/code', 'POST /api/auth/code/verify', 'POST /api/auth/sign-up',
     'GET /api/me/entitlements', 'PUT /api/me/transcription-key', 'DELETE /api/me/transcription-key',
     'POST /api/upgrade-requests', 'GET /api/upgrade-requests/latest',
 ];

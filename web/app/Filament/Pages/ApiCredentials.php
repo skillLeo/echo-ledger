@@ -104,12 +104,16 @@ class ApiCredentials extends Page
                 'openai' => 'OpenAI (optional)',
                 'gemini' => 'Google Gemini (optional, an Urdu challenger)',
                 'google' => 'Google sign-in (optional)',
+                'turnstile' => 'Turnstile (optional, the web sign-up\'s check against robots)',
             })->columns(2)->collapsible()->schema($inputs);
             if ($provider === 'groq') {
                 $section->description(fn (): ?string => self::groqUse());
             }
             if ($provider === 'gemini') {
                 $section->description('Use a key from a Google Cloud project with billing enabled (the paid tier): on the free tier Google may use the audio and transcripts to improve its products. Each piece of audio is uploaded for one request and deleted right after it.');
+            }
+            if ($provider === 'turnstile') {
+                $section->description('A free Cloudflare Turnstile widget for this console\'s domain (dash.cloudflare.com → Turnstile → Add widget). With both keys saved, the web sign-up asks for the check before it emails a code; without them it is skipped.');
             }
             if ($provider === 'google') {
                 $section->description('An OAuth client ID of type "Web application" from the Google Cloud console (APIs & Services → Credentials). Its authorised redirect URI: '.GoogleSignIn::redirectUri().' — Sign in with Google appears on the sign-in page once both values are saved.');

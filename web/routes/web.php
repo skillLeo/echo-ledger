@@ -37,6 +37,8 @@ Route::middleware('throttle:site')->group(function (): void {
     Route::get('/downloads', [DownloadsController::class, 'page'])->name('downloads');
     // The legal pages (drafts for review), linked from the site, the console and the apps.
     Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
+    // Since v1.6: the sign-up page's short address (docs/API.md "Sign-up and sign-in with an email code").
+    Route::get('/sign-up', [SiteController::class, 'signUp'])->name('sign-up');
     Route::get('/privacy', [LegalController::class, 'privacy'])->name('legal.privacy');
     Route::get('/downloads/android.json', [DownloadsController::class, 'android'])->name('downloads.android');
     Route::get('/downloads/desktop.json', [DownloadsController::class, 'desktop'])->name('downloads.desktop');

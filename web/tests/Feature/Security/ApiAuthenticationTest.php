@@ -147,8 +147,13 @@ it('exposes exactly the documented public API routes and guards every other one'
         'GET api/auth/options',
         'GET api/recordings/{recording}/audio',
         // Since v1.5: signing in with an account (the email and password, or the browser sign-in's code).
+        // Since v1.6: the email first, a code by email, and the new account's sign-up.
+        'POST api/auth/code',
+        'POST api/auth/code/verify',
         'POST api/auth/device/token',
         'POST api/auth/password',
+        'POST api/auth/sign-up',
+        'POST api/auth/start',
         'POST api/devices/register',
         'POST api/webhooks/stt/{provider}',
     ]);
