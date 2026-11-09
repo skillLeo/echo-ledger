@@ -96,7 +96,7 @@ describe("Settings → Account", () => {
     expect(within(region("Password & sign-in methods")).getByText("Off")).toBeInTheDocument();
     respond("server_page_open", undefined);
     fireEvent.click(within(region("Password & sign-in methods")).getByRole("button", { name: "Open Profile in the browser" }));
-    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin/profile", serverUrl: null }]));
+    await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]));
   });
 
   it("tells a viewer, in the documented sentence, that this computer does not record", async () => {

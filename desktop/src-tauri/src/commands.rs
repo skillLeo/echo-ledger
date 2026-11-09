@@ -52,6 +52,9 @@ pub struct AppStatus {
     /// The last Ready check (Phase 1C): ready to record calls, and how many problems; none before the first check.
     pub calls_ready: Option<bool>,
     pub ready_problems: usize,
+    /// What the server says to every app (v1.6, P2.7): an update this version needs, an announcement, maintenance,
+    /// and why uploads are waiting.
+    pub server: crate::server_notice::ServerNotices,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -105,6 +108,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         calls_ready,
         ready_problems,
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
+        server: state.server_notices(),
     }
 }
 
@@ -486,9 +490,10 @@ pub fn account_export_open(app: AppHandle, url: String) -> AppResult<()> {
 }
 
 /// The server's public pages the app links to (docs/API.md "Public pages and app downloads"), opened in the browser.
-/// The server's pages the apps open in the browser (v1.6 adds the console's admin panel, workspace and profile pages,
-/// for the avatar menu, the workspace switcher and Account → Password & sign-in methods).
-const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "admin/workspace", "admin/profile"];
+/// The server's pages the apps open in the browser (v1.6): the staff's admin panel (`admin`, the avatar menu, only for
+/// the super admin) and the customer app's workspace and profile pages (`app/…`, the workspace switcher and Account →
+/// Password & sign-in methods; the console moved them from `/admin` to `/app`, and old links redirect).
+const SERVER_PAGES: [&str; 7] = ["terms", "privacy", "account/delete", "downloads", "admin", "app/workspace", "app/profile"];
 
 /// `server_url` is the server the sign-in screen talks to (Terms and Privacy before signing in, v1.6); without it the
 /// signed-in server.
@@ -979,7 +984,15 @@ pub async fn refresh_library_inner(app: &AppHandle) -> AppResult<usize> {
     let state = app.state::<AppState>();
     let api = state.api()?;
     let mut cache = state.library.lock().await;
-    let changed = cache.refresh(&api).await?;
+    // In maintenance or refused (v1.6, P2.7) the Library stays as saved here, without an error: the banner says why.
+    let changed = match cache.refresh(&api).await {
+        Err(e) if state.note_hold(&e) => {
+            drop(cache);
+            crate::actions::emit_status(app);
+            return Ok(0);
+        }
+        other => other?,
+    };
     cache.save(&paths::library(&state.data_dir))?;
     let _ = app.emit("library:updated", changed);
     Ok(changed)

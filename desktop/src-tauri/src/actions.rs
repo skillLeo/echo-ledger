@@ -1378,7 +1378,8 @@ pub fn spawn_upload_worker(app: AppHandle) {
             let state = app.state::<crate::AppState>();
             let notified = state.upload_notify.notified();
             let _ = tokio::time::timeout(std::time::Duration::from_secs(30), notified).await;
-            if state.is_paired() {
+            // While the server holds the queue (maintenance, a refused version) nothing is asked until the hold is over.
+            if state.is_paired() && !state.uploads_held() {
                 run_upload_cycle(&app).await;
             }
         }
@@ -1426,10 +1427,17 @@ async fn run_upload_cycle(app: &AppHandle) {
             return;
         }
         Err(e) => {
+            state.note_hold(&e);
             eprintln!("[echoledger] upload cycle skipped: {e}");
             return;
         }
     };
+    // In maintenance or refused (v1.6, P2.7): everything waits here, quietly; the banner says why.
+    if state.uploads_held() {
+        emit_status(app);
+        emit_uploads(app);
+        return;
+    }
     if unknown {
         current = crate::owner::learn(&state, &api).await;
         pending_uploads = uploads.sendable(current.as_ref());
@@ -1454,6 +1462,10 @@ async fn run_upload_cycle(app: &AppHandle) {
             let _ = app.emit("app:error", UNPAIRED);
             return;
         }
+        if drain.stopped.as_ref().is_some_and(|e| state.note_hold(e)) {
+            emit_status(app);
+            return;
+        }
     }
 
     if !discards.is_empty() {
@@ -1467,6 +1479,10 @@ async fn run_upload_cycle(app: &AppHandle) {
         }
         if matches!(drain.stopped, Some(AppError::NotPaired)) {
             let _ = app.emit("app:error", UNPAIRED);
+            return;
+        }
+        if drain.stopped.as_ref().is_some_and(|e| state.note_hold(e)) {
+            emit_status(app);
             return;
         }
     }
@@ -1535,6 +1551,11 @@ async fn run_upload_cycle(app: &AppHandle) {
             Ok(UploadOutcome::Duplicate) => duplicates += 1,
             Err(AppError::NotPaired) => {
                 let _ = app.emit("app:error", UNPAIRED);
+                break;
+            }
+            // Maintenance began, or this version is refused: the rest of the queue waits too (no toast, no failure).
+            Err(e) if state.note_hold(&e) => {
+                emit_status(app);
                 break;
             }
             _ => {}
@@ -1608,9 +1629,34 @@ pub fn spawn_activity_poll(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
         loop {
             tokio::time::sleep(Duration::from_secs(60)).await;
+            refresh_config(&app).await;
             let _ = poll_activity(&app).await;
         }
     });
+}
+
+/// Reads `GET /api/config` (never refused, v1.6 P2.7) so the window's update, announcement and maintenance banners
+/// and the upload hold follow the server within a minute, whether or not anything waits to upload.
+async fn refresh_config(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    if !state.is_paired() {
+        return;
+    }
+    let Ok(api) = state.api() else { return };
+    let was_held = state.uploads_held();
+    match api.config().await {
+        Ok(config) => {
+            state.apply_config(config);
+            // Back from maintenance: what waited goes now rather than at the next 30-second turn.
+            if was_held && !state.uploads_held() {
+                state.upload_notify.notify_one();
+            }
+            emit_status(app);
+        }
+        Err(e) => {
+            state.note_hold(&e);
+        }
+    }
 }
 
 async fn poll_activity(app: &AppHandle) -> AppResult<()> {

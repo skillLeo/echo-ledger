@@ -24,7 +24,7 @@ export interface ShellPage extends PageEntry {
 const FIND_LIMIT = 8;
 
 export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, recording, places, folder, view, onPlace, projects, projectId, onProject,
-  sharedTab, onShared, onGo, onUpload, onHelp, pages, uploading, canUpload }: {
+  sharedTab, onShared, onGo, onUpload, onHelp, pages, uploading, uploadsWait = false, canUpload }: {
   tab: MainTab;
   collapsed: boolean;
   onCollapse: () => void;
@@ -48,6 +48,8 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
   pages: readonly ShellPage[];
   /** "Uploading 2 recordings…" while something is on its way. */
   uploading: string | null;
+  /** The server holds the uploads (v1.6, P2.7): the line says why, without the spinner. */
+  uploadsWait?: boolean;
   canUpload: boolean;
 }) {
   const [open, setOpen] = useState<Set<SidebarGroup>>(loadOpenGroups);
@@ -236,7 +238,9 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
       )}
       </div>
       <div className="sidebar-footer">
-        {uploading && !collapsed && <div className="footer-state small muted" aria-live="polite"><span className="spinner" aria-hidden="true" />{uploading}</div>}
+        {uploading && !collapsed && (
+          <div className={`footer-state small muted ${uploadsWait ? "waiting" : ""}`} aria-live="polite">{!uploadsWait && <span className="spinner" aria-hidden="true" />}{uploading}</div>
+        )}
         <button type="button" className="nav-btn footer-btn" title={collapsed ? "Help & shortcuts (?)" : undefined} onClick={onHelp}>
           <HelpIcon size={18} /><span className="nav-label">Help &amp; shortcuts</span><span className="kbd nav-kbd" aria-hidden="true">?</span>
         </button>

@@ -255,6 +255,7 @@ html[data-platform="macos"] .sidebar { padding-top: 40px; }
 .app.collapsed .nav-count { min-width: 16px; height: 16px; padding: 0 4px; font-size: 10px; }
 .sidebar-footer { flex: none; margin-top: auto; padding-top: var(--space-2); border-top: 1px solid var(--sb-border); display: grid; gap: 2px; }
 .footer-state { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3) var(--space-2); color: var(--sb-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.footer-state.waiting { white-space: normal; line-height: 1.4; }
 .footer-btn { height: 34px; font-size: var(--text-sm); }
 /* The edge that resizes the sidebar: 6 px wide, a line on hover and while dragging. */
 .sidebar-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
@@ -591,6 +592,12 @@ button.segment.active { background: var(--accent-soft); }
 .banner.danger > svg { color: var(--danger); }
 .banner.warn { background: color-mix(in srgb, var(--warning-fill) 18%, var(--surface)); }
 .banner.warn > svg { color: var(--warning); }
+/* What the server says to every app (v1.6, P2.7): an announcement in the accent's tint, maintenance quietly. */
+.banner.info { background: var(--accent-soft); }
+.banner.info > svg { color: var(--accent-text); }
+.banner.quiet { background: var(--surface-2); color: var(--text); }
+.banner.quiet > svg { color: var(--text-muted); }
+.banner-text .small { color: var(--text-muted); }
 .banner-close { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: var(--radius-full); background: transparent; color: var(--text-muted); cursor: pointer; }
 .banner-close:hover { background: var(--surface-3); color: var(--text); }
 /* The page's width decides (v1.6: the sidebar is 64–320 px, so the window's width alone cannot): MainApp sets

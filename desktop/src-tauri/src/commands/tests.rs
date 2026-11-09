@@ -376,3 +376,13 @@ fn the_screen_settings_page_opens_where_each_system_keeps_it() {
     assert_eq!(privacy_settings_url("screen", true), Some("x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"));
     assert_eq!(privacy_settings_url("screen", false), Some("ms-settings:privacy-graphicscapturewithoutborder"));
 }
+
+#[test]
+fn the_console_pages_are_the_customer_app_and_the_staff_panel() {
+    // v1.6: the console moved its customer pages from /admin to /app; /admin is the staff's panel.
+    for page in ["app/workspace", "app/profile", "admin", "downloads", "terms", "privacy", "account/delete"] {
+        assert!(SERVER_PAGES.contains(&page), "{page}");
+    }
+    assert!(!SERVER_PAGES.contains(&"admin/workspace") && !SERVER_PAGES.contains(&"admin/profile"));
+    assert!(!SERVER_PAGES.contains(&"app/../admin"), "only the listed pages open");
+}

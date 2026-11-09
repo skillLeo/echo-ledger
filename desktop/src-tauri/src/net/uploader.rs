@@ -286,6 +286,11 @@ pub fn after_attempt(item: &mut PendingUpload, was_verifying: bool, result: &App
             item.last_error = None;
         }
         Err(AppError::NotPaired) => item.state = resume.into(),
+        // Maintenance or a refused version (v1.6, P2.7): the item waits as it is; nothing failed, no attempt counts.
+        Err(e) if e.hold().is_some() => {
+            item.state = resume.into();
+            item.last_error = None;
+        }
         Err(e) => {
             item.attempts += 1;
             item.last_error = Some(e.to_string());
@@ -669,7 +674,7 @@ async fn send_chunks(
 }
 
 /// One chunk: transient failures (network, 408, 5xx) are retried after 2, 4 and 8 s; a 429 waits `Retry-After`
-/// without using up a retry; permanent answers return at once (A6.DR4).
+/// without using up a retry; permanent answers, maintenance and a refused version return at once (A6.DR4, v1.6).
 async fn send_chunk(api: &ApiClient, recording_id: &str, index: u64, bytes: Vec<u8>) -> AppResult<()> {
     let hash = sha256_hex(&bytes);
     let (mut retries, mut waits) = (0u32, 0u32);
@@ -680,7 +685,8 @@ async fn send_chunk(api: &ApiClient, recording_id: &str, index: u64, bytes: Vec<
                 waits += 1;
                 tokio::time::sleep(rate_limit_wait(&e)).await;
             }
-            Err(e) if e.is_permanent() => return Err(e),
+            // A permanent answer, or the server holding the work (maintenance, a refused version): no retry here.
+            Err(e) if e.is_permanent() || e.hold().is_some() => return Err(e),
             Err(e) if retries < MAX_CHUNK_RETRIES => {
                 retries += 1;
                 eprintln!("[echoledger] chunk {index} retry {retries}: {e}");
@@ -785,7 +791,7 @@ async fn settle(
                 _ => {}
             },
             Err(e) if e.status() == Some(404) && e.code() != Some("not_found") => return Ok(Settled::Deleted),
-            Err(e) if e.is_permanent() => return Err(e),
+            Err(e) if e.is_permanent() || e.hold().is_some() => return Err(e),
             Err(e) => eprintln!("[echoledger] checking recording {}: {e}", slot.id),
         }
         if Instant::now() + timing.poll_every > deadline {

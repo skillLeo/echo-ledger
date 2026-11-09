@@ -35,6 +35,7 @@ import { SuccessCheck } from "../../components/SuccessCheck";
 import type { Account, OneSided } from "../../lib/ipc";
 import { OPEN_SECTION_EVENT, forgetEntitlements, refreshEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
+import { isHoldMessage, ServerBanners } from "./ServerBanners";
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -255,7 +256,7 @@ export default function MainApp() {
     });
     const unlisten = [
       listen<AppStatus>("app:status", (e) => setStatus(e.payload)),
-      listen<string>("app:error", (e) => setToast({ text: e.payload, error: true })),
+      listen<string>("app:error", (e) => setToast({ text: e.payload, error: !isHoldMessage(e.payload) })),
       listen<string>("app:toast", (e) => setToast({ text: e.payload })),
       listenTo("capture:one_sided", (said) => said && setOneSided(said)),
       // Tray "Review recordings (N)" and the after-call chip's title, which opens its title field (contract 4.5).
@@ -466,7 +467,8 @@ export default function MainApp() {
     return () => window.clearTimeout(t);
   }, [toast]);
 
-  const notify = (text: string, error = false) => setToast({ text, error });
+  // The server holding the work (maintenance, a refused version) is news, never a failure (v1.6, P2.7).
+  const notify = (text: string, error = false) => setToast({ text, error: error && !isHoldMessage(text) });
   /** The Import button: the core's multi-select picker, then the sheet for the chosen files. */
   const pickImport = async () => {
     if (viewer.current) {
@@ -607,7 +609,11 @@ export default function MainApp() {
     { id: "help", label: "Help & shortcuts", keywords: "keys keyboard", open: () => setHelp(true) },
   ];
   const pageWidth = windowWidth - (collapsed ? SIDEBAR_RAIL : sidebarWidth);
-  const uploading = status.pendingUploads > 0 ? (status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`) : null;
+  // While the server holds the queue (v1.6, P2.7) the recordings wait; they are not on their way.
+  const waitingFor = status.server?.waiting === "maintenance" ? "the server is in maintenance" : status.server?.waiting === "update_required" ? "update EchoLedger" : null;
+  const uploading = status.pendingUploads === 0 ? null
+    : waitingFor ? `${status.pendingUploads === 1 ? "1 recording waits" : `${status.pendingUploads} recordings wait`}: ${waitingFor}`
+      : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
   const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
   return (
@@ -618,16 +624,17 @@ export default function MainApp() {
       <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
         recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
         projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
-        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} pages={pages} uploading={uploading} canUpload={canRecord} />
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} pages={pages} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
       <div className="main-col">
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
           onActivity={() => goTo("activity")} onAccount={() => openAccount("profile")} onPlan={() => openAccount("plan")}
           onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
-          onWorkspaces={() => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true))}
+          onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
           onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab} ${status.budget === "reached" || (status.budget === "warn" && !budgetWarnDismissed) ? "has-banner" : ""}`}>
           <UpdateBanner appStatus={status} notify={notify} />
+          <ServerBanners server={status.server} notify={notify} />
           {status.platform === "macos" && <PermissionLossNotice />}
           {oneSided && (
             <div className="banner warn one-sided-banner" role="alert" data-testid="one-sided">
@@ -680,7 +687,7 @@ export default function MainApp() {
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok) => void run(fn, ok)} pages={pages}
           extra={{ upload: canRecord ? () => void pickImport() : undefined, newProject, requestLink: () => setRequestSheet(true),
-            invite: () => void api.openServerPage("admin/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
+            invite: () => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true)), account: openAccount, help: () => setHelp(true) }}
           onOpenRecording={(id, ms) => openRecording(id, ms)} />
       )}
       {dragging && !importPaths && (

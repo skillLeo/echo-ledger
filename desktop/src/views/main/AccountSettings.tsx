@@ -69,7 +69,7 @@ export function SignInMethodsCard({ account, run, onSignedOut }: { account: Acco
     const signedOut = await run(api.signOutEverywhere, "Signed out everywhere");
     if (signedOut) onSignedOut(signedOut);
   };
-  const security = () => void run(() => api.openServerPage("admin/profile"));
+  const security = () => void run(() => api.openServerPage("app/profile"));
   return (
     <div className="card account-card">
       <b>Password &amp; sign-in methods</b>

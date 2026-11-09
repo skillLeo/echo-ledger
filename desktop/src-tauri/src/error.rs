@@ -37,7 +37,7 @@ const PLAIN_CODES: [&str; 12] = [
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 17] = [
+const CODE_TEXT: [(&str, &str); 19] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -57,7 +57,25 @@ const CODE_TEXT: [(&str, &str); 17] = [
     ("turnstile_failed", "The sign-up check did not pass. Try again in a moment."),
     ("invalid_key", "Groq did not accept this key. Copy it again from console.groq.com → API Keys, then paste it here."),
     ("request_pending", "You already asked for an upgrade. It is waiting for the owner to confirm it."),
+    // The server holds this computer's work for now (v1.6, P2.7): nothing failed, everything waits.
+    ("maintenance", MAINTENANCE_TEXT),
+    ("update_required", UPDATE_REQUIRED_TEXT),
 ];
+
+/// What the app says while the server is in maintenance (`503 maintenance`).
+pub const MAINTENANCE_TEXT: &str = "The server is in maintenance for a while. Your recordings wait on this computer and upload when it is back.";
+/// What the app says while the server refuses this version (`426 update_required`).
+pub const UPDATE_REQUIRED_TEXT: &str = "This version of EchoLedger is no longer accepted by the server. Update it: your recordings wait on this computer and upload after the update.";
+
+/// Why the server holds this computer's work for now (v1.6, P2.7): nothing failed, it waits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ServerHold {
+    /// `503 maintenance`: try again after `Retry-After`.
+    Maintenance,
+    /// `426 update_required`: try again after updating this app.
+    UpdateRequired,
+}
 
 /// The app's own sentence for a v1.5 error code, when it has one.
 pub fn code_text(code: &str) -> Option<&'static str> {
@@ -109,6 +127,16 @@ impl AppError {
         }
     }
 
+    /// The server holds the request for now (v1.6, P2.7): `503` with `maintenance`, or any `426` (Upgrade Required;
+    /// the server sends `update_required`). Such an answer is never a failure: the work waits and tries again.
+    pub fn hold(&self) -> Option<ServerHold> {
+        match self {
+            Self::Server { status: 503, code: Some(code), .. } if code == "maintenance" => Some(ServerHold::Maintenance),
+            Self::Server { status: 426, .. } => Some(ServerHold::UpdateRequired),
+            _ => None,
+        }
+    }
+
     /// The route is not on this server (`404 not_found` for an unknown route, `405 method_not_allowed` when only
     /// other methods exist): a server older than the feature. `404 client_not_found` and the like are real answers.
     pub fn is_missing_route(&self) -> bool {
@@ -131,6 +159,8 @@ impl AppError {
                 (400..500).contains(status)
                     && *status != 408
                     && *status != 429
+                    // 426: this version is refused for now; the same request goes through after the update.
+                    && *status != 426
                     && !matches!(code.as_deref(), Some("upload_incomplete" | "verification_failed"))
             }
             _ => false,
