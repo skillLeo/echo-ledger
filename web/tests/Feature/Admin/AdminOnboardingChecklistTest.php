@@ -36,7 +36,7 @@ function adminFinishSetup(User $admin): void
 }
 
 it('starts with every step to do on a fresh install', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
 
     expect(adminChecklist()->status($admin))->toBe([
         'two_factor' => false,
@@ -49,7 +49,7 @@ it('starts with every step to do on a fresh install', function () {
 });
 
 it('lists the steps in order with their links', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     $steps = Livewire::test(OnboardingChecklistWidget::class)->instance()->steps();
 
@@ -69,7 +69,7 @@ it('lists the steps in order with their links', function () {
 });
 
 it('ticks two-factor sign-in for an authenticator app or a passkey', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     expect(adminChecklist()->status($admin)['two_factor'])->toBeFalse();
 
     $admin->forceFill(['app_authentication_secret' => 'JBSWY3DPEHPK3PXP'])->save();
@@ -88,7 +88,7 @@ it('ticks two-factor sign-in for an authenticator app or a passkey', function ()
 });
 
 it('ticks the provider key once any provider has a key', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     $vault = app(CredentialVault::class);
 
     $vault->put('assemblyai', 'webhook_secret', 'only-a-webhook-secret');
@@ -99,7 +99,7 @@ it('ticks the provider key once any provider has a key', function () {
 });
 
 it('ticks certificate pins, the first device and a chosen retention', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     $settings = app(SettingsRepository::class);
 
     $settings->set('app.pins', ['sha256/'.str_repeat('B', 43).'=']);
@@ -111,14 +111,14 @@ it('ticks certificate pins, the first device and a chosen retention', function (
 });
 
 it('ignores certificate pins that devices could not use', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     app(SettingsRepository::class)->set('app.pins', ['not a pin']);
 
     expect(adminChecklist()->status($admin)['cert_pins'])->toBeFalse();
 });
 
 it('shows the checklist on the dashboard with the steps that are left', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     $this->get('/app')->assertOk()
         ->assertSee('Finish setting up')
@@ -130,7 +130,7 @@ it('shows the checklist on the dashboard with the steps that are left', function
 });
 
 it('counts the finished steps and drops their link', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai-secret-key-1234567890');
     Device::factory()->create(['user_id' => $admin->id]);
 
@@ -142,7 +142,7 @@ it('counts the finished steps and drops their link', function () {
 });
 
 it('disappears once every step is done', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     adminFinishSetup($admin);
 
     expect(adminChecklist()->complete($admin))->toBeTrue()
@@ -152,7 +152,7 @@ it('disappears once every step is done', function () {
 });
 
 it('comes back if a finished step is undone', function () {
-    $admin = $this->signInAsAdmin();
+    $admin = $this->signInAsAdmin(twoFactor: false);
     adminFinishSetup($admin);
     app(SettingsRepository::class)->set('app.pins', []);
 
@@ -160,7 +160,7 @@ it('comes back if a finished step is undone', function () {
 });
 
 it('can be dismissed and stays away', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
 
     Livewire::test(OnboardingChecklistWidget::class)->call('dismiss');
 
@@ -178,7 +178,7 @@ it('is for a super admin only', function () {
 });
 
 it('never reveals a credential in the checklist', function () {
-    $this->signInAsAdmin();
+    $this->signInAsAdmin(twoFactor: false);
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai-secret-key-1234567890');
 
     $html = $this->get('/app')->assertOk()->getContent();

@@ -26,10 +26,11 @@ trait AdminTestHelpers
     /** @var list<string> */
     private array $isolatedRoots = [];
 
-    public function makeAdmin(array $attributes = []): User
+    /** A super admin; since v1.6 with two-step sign-in on, which staff need before /admin opens, unless [$twoFactor] is false. */
+    public function makeAdmin(array $attributes = [], bool $twoFactor = true): User
     {
         $user = User::factory()->create($attributes);
-        $user->forceFill(['is_super_admin' => true])->save();
+        $user->forceFill(['is_super_admin' => true, 'app_authentication_secret' => $twoFactor ? 'JBSWY3DPEHPK3PXP' : null])->save();
 
         return $user->fresh();
     }
@@ -41,9 +42,9 @@ trait AdminTestHelpers
     }
 
     /** Signs a fresh super admin in and selects the admin panel for Livewire component tests. */
-    public function signInAsAdmin(array $attributes = []): User
+    public function signInAsAdmin(array $attributes = [], bool $twoFactor = true): User
     {
-        $admin = $this->makeAdmin($attributes);
+        $admin = $this->makeAdmin($attributes, $twoFactor);
         $this->actingAs($admin, 'web');
         Filament::setCurrentPanel('app');
 

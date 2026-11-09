@@ -48,6 +48,18 @@ class WorkspaceSettings extends Page implements HasTable
 {
     use InteractsWithTable;
 
+    /** What each role may do in a workspace (docs/API.md "Workspaces, roles and privacy"): owner, admin, member, viewer. */
+    public const ROLE_MATRIX = [
+        'Record, upload, import' => ['yes', 'yes', 'yes', 'no'],
+        'Sign in their own phones and computers' => ['yes', 'yes', 'yes', 'yes'],
+        'Their own recordings and projects: open, edit, share, delete' => ['yes', 'yes', 'yes', 'has none'],
+        'Shared with me: open, Save to my library' => ['yes', 'yes', 'yes', 'open only'],
+        'Invite and remove people, change roles' => ['yes', 'members and viewers', 'no', 'no'],
+        'Workspace usage: minutes and costs per person (never content)' => ['yes', 'yes', 'their own', 'no'],
+        'Revoke another person\'s device' => ['yes', 'yes', 'no', 'no'],
+        'Plan, workspace name, hand over, delete the workspace' => ['yes', 'no', 'no', 'no'],
+    ];
+
     /** People one account may add or invite in an hour (since v1.5). */
     public const ADDS_PER_HOUR = 20;
 
@@ -88,6 +100,8 @@ class WorkspaceSettings extends Page implements HasTable
             View::make('filament.pages.workspace-invitations')
                 ->visible(fn (): bool => $this->can('invite'))
                 ->viewData(fn (): array => ['invitations' => $this->openInvitations(), 'plan' => $this->planLine()]),
+            // Since v1.6 (P2.5): what each role may do here, as the admin panel shows staff roles.
+            View::make('filament.pages.workspace-roles-matrix')->viewData(fn (): array => ['rows' => self::ROLE_MATRIX, 'mine' => $this->roleOf($this->user())?->value]),
         ]);
     }
 

@@ -54,15 +54,19 @@ final class SecurityFixtures
         self::$diskRoots = [];
     }
 
+    /** A TOTP secret for test staff (base32; not a real account's). */
+    public const STAFF_TOTP_SECRET = 'JBSWY3DPEHPK3PXP';
+
     public static function user(array $attributes = []): User
     {
         return User::factory()->create($attributes);
     }
 
-    public static function superAdmin(array $attributes = []): User
+    /** The server's operator. Since v1.6 with two-step sign-in on, as every member of staff needs it before /admin opens. */
+    public static function superAdmin(array $attributes = [], bool $twoFactor = true): User
     {
         $user = User::factory()->create($attributes);
-        $user->forceFill(['is_super_admin' => true])->save();
+        $user->forceFill(['is_super_admin' => true, 'app_authentication_secret' => $twoFactor ? self::STAFF_TOTP_SECRET : null])->save();
 
         return $user->fresh();
     }

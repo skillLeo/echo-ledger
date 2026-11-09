@@ -136,7 +136,7 @@ it('does not let a device token open the console or its media route', function (
 });
 
 it('locks the login form after five attempts in a minute even when the sixth password is right', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
     Filament::setCurrentPanel('app');
     RateLimiter::clear('filament');
     Cache::flush();
@@ -151,7 +151,7 @@ it('locks the login form after five attempts in a minute even when the sixth pas
 });
 
 it('accepts the correct password when it is the first attempt', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
     Filament::setCurrentPanel('app');
     Cache::flush();
 
@@ -188,7 +188,7 @@ it('accepts the correct two-factor code on a first attempt', function () {
     expect(Auth::guard('web')->check())->toBeTrue();
 });
 it('gives the same answer for an unknown account and a wrong password', function () {
-    $admin = Fx::superAdmin(['password' => 'a-long-correct-password']);
+    $admin = Fx::superAdmin(['password' => 'a-long-correct-password'], twoFactor: false);
     Filament::setCurrentPanel('app');
     Cache::flush();
 

@@ -45,14 +45,14 @@ it('renders the email first, then the password and Keep me signed in for an acco
     $html = $this->get('/app/login')->assertOk()->getContent();
     expect($html)->toContain('wire:model="data.email"')->not->toContain('wire:model="data.password"')->toContain('EchoLedger')->toContain('Continue');
 
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     $this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')
         ->assertSet('step', AppLogin::STEP_PASSWORD)
         ->assertSeeHtml('wire:model="data.password"')->assertSeeHtml('wire:model="data.remember"')->assertSee('Email me a code instead');
 });
 
 it('offers a show and hide control on the password field', function () {
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     $html = $this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')->html();
 
     expect($html)
@@ -68,12 +68,12 @@ it('offers no registration path while sign-up is off, and a password reset (sinc
     expect($html)->not->toContain('/app/register');
     $this->get('/app/register')->assertNotFound();
 
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
     expect($this->panelComponent(AppLogin::class)->fillForm(['email' => 'owner@example.test'])->call('authenticate')->html())->toContain('password-reset');
 });
 
 it('signs a super admin in with the right credentials', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test']);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(Login::class)
         ->fillForm(['email' => 'owner@example.test', 'password' => 'password'])
@@ -86,7 +86,7 @@ it('signs a super admin in with the right credentials', function () {
 });
 
 it('rejects a wrong password and stays signed out', function () {
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(Login::class)
         ->fillForm(['email' => 'owner@example.test', 'password' => 'not-the-password'])
@@ -97,7 +97,7 @@ it('rejects a wrong password and stays signed out', function () {
 });
 
 it('rejects an unknown email with the same message as a wrong password', function () {
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $wrongPassword = $this->panelComponent(Login::class)
         ->fillForm(['email' => 'owner@example.test', 'password' => 'bad'])
@@ -159,7 +159,7 @@ it('denies a signed-in non-admin account access to the console', function () {
 });
 
 it('throttles repeated login attempts, even when the next password is right', function () {
-    $this->makeAdmin(['email' => 'owner@example.test']);
+    $this->makeAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $login = $this->panelComponent(Login::class);
     foreach (range(1, 5) as $attempt) {
@@ -176,7 +176,7 @@ it('throttles repeated login attempts, even when the next password is right', fu
 });
 
 it('only sets the remember-me cookie when the box is ticked', function () {
-    $admin = $this->makeAdmin(['email' => 'owner@example.test', 'remember_token' => null]);
+    $admin = $this->makeAdmin(['email' => 'owner@example.test', 'remember_token' => null], twoFactor: false);
     $recaller = auth()->guard('web')->getRecallerName();
 
     $this->panelComponent(Login::class)

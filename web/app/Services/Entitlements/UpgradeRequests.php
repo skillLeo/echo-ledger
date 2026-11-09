@@ -13,6 +13,7 @@ use App\Models\Workspace;
 use App\Services\ActivityFeed;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
+use App\Services\Staff\StaffAccess;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -78,9 +79,11 @@ final class UpgradeRequests
             ]);
         });
         $this->audit->record('upgrade_requested', $user->id, $request, "Asked for the {$plan->name} plan");
-        // The super admins see it in the bell (and on System → Upgrade requests).
-        User::query()->where('is_super_admin', true)->get()->each(fn (User $admin) => app(ActivityFeed::class)
-            ->post($admin, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}.", null, 'heroicon-o-arrow-trending-up'));
+        // Staff who answer them see it in the bell (and on Admin panel → Upgrade requests).
+        User::query()->where(fn ($q) => $q->where('is_super_admin', true)->orWhereNotNull('staff_role_id'))->get()
+            ->filter(fn (User $staff): bool => StaffAccess::can('upgrades.manage', $staff))
+            ->each(fn (User $staff) => app(ActivityFeed::class)
+                ->post($staff, 'upgrade_requested', 'Upgrade request', "{$user->name} ({$user->email}) asks for {$plan->name}.", null, 'heroicon-o-arrow-trending-up'));
 
         return $request;
     }

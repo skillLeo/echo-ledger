@@ -74,7 +74,7 @@ it('rejects an over-long name', function () {
 
 it('rejects an email that another account already uses', function () {
     $this->makeRegularUser(['email' => 'taken@example.test']);
-    $admin = $this->signInAsAdmin(['email' => 'owner@example.test']);
+    $admin = $this->signInAsAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(EditProfile::class)
         ->fillForm(['email' => 'taken@example.test'])
@@ -94,7 +94,7 @@ it('rejects a malformed email', function () {
 });
 
 it('keeps the same email without tripping the unique rule', function () {
-    $this->signInAsAdmin(['email' => 'owner@example.test']);
+    $this->signInAsAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(EditProfile::class)
         ->fillForm(['name' => 'Owner Renamed'])
@@ -103,7 +103,7 @@ it('keeps the same email without tripping the unique rule', function () {
 });
 
 it('changes the password when the current password is confirmed', function () {
-    $admin = $this->signInAsAdmin(['email' => 'owner@example.test']);
+    $admin = $this->signInAsAdmin(['email' => 'owner@example.test'], twoFactor: false);
 
     $this->panelComponent(EditProfile::class)
         ->fillForm([

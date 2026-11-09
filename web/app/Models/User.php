@@ -57,9 +57,11 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
  * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
+ * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
  * @property-read Workspace|null $currentWorkspace
+ * @property-read StaffRole|null $staffRole
  */
 #[Fillable(['name', 'email', 'password'])]
 #[Hidden(['password', 'remember_token', 'transcription_key', 'entitlement_overrides'])]
@@ -135,6 +137,12 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
         return $this->belongsTo(Workspace::class, 'current_workspace_id');
     }
 
+    /** @return BelongsTo<StaffRole, $this> */
+    public function staffRole(): BelongsTo
+    {
+        return $this->belongsTo(StaffRole::class);
+    }
+
     /** @return HasMany<Device, $this> */
     public function devices(): HasMany
     {
@@ -174,6 +182,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'suspended_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'support_access_until' => 'datetime',
+            'staff_role_id' => 'integer',
         ];
     }
 }

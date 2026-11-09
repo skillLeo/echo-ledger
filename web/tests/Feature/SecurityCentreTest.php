@@ -60,7 +60,7 @@ describe('the audit log', function () {
     });
 
     it('records password, two-step and provider credential changes without the secrets', function () {
-        $user = $this->signInAsAdmin();
+        $user = $this->signInAsAdmin(twoFactor: false);
         $user->update(['password' => 'a brand new password']);
         $user->saveAppAuthenticationSecret('JBSWY3DPEHPK3PXP');
         $user->saveAppAuthenticationSecret(null);

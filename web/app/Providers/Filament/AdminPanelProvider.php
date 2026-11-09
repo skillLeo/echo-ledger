@@ -9,6 +9,7 @@ use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\AuthenticateStaff;
+use App\Http\Middleware\EnsureStaffTwoFactor;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Enums\ThemeMode;
@@ -99,6 +100,8 @@ class AdminPanelProvider extends PanelProvider
             ])
             ->authMiddleware([
                 AuthenticateStaff::class,
+                // Since v1.6 (P2.5): every member of staff has two-step sign-in on.
+                EnsureStaffTwoFactor::class,
                 // A suspended account is signed out; one being deleted reaches only "Keep my account" in the app.
                 AccountGate::class,
             ], isPersistent: true);

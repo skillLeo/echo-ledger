@@ -125,6 +125,26 @@ their name and the Terms (no password needed; they can set one later with **Forg
 - **Device limit:** each plan's devices per person; one more is refused with "Your plan signs in 2 devices. Sign one
   out (Account → Devices), or upgrade."
 
+### Staff and their roles (since v1.6)
+
+**Admin panel → Staff** lists who works on EchoLedger. **Add staff** gives an existing account a role (they open the
+admin panel from their avatar menu); **Change role** and **Remove from staff** change it at once. The roles that come
+ready:
+
+| Role | May |
+|---|---|
+| Super admin | everything (the server's operator; needs no role) |
+| Admin | customers (see, change plans and limits, notes, support actions, delete), plans, upgrade requests, usage, the activity log, device reports; not API keys, Settings or Staff |
+| Support | see customers and their usage; the support actions (resend emails, reset two-step sign-in, sign out devices) |
+| Billing | plans and upgrade requests; see customers and usage |
+| Read-only | see customers, plans, usage and the activity log |
+
+**New role** makes one of your own; the **Permissions** matrix below the list has a box per permission and role and
+applies at once. Staff who may manage staff can give only what they have themselves and cannot change their own role.
+**Every member of staff needs two-step sign-in** (Profile → Two-step sign-in in the app) before the admin panel opens;
+without it /admin takes them to their profile. Workspace roles (owner, admin, member, viewer) are the customers' own:
+the app's Workspace page shows what each may do.
+
 ### Customers (since v1.6)
 
 **Admin panel → Customers** lists every account: name and email, the plan badge, status (Active, Suspended, Not

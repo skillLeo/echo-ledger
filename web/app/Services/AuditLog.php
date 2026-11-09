@@ -100,6 +100,7 @@ final class AuditLog
         'support_access_granted' => 'Support access turned on',
         'support_access_ended' => 'Support access turned off',
         'support_content_viewed' => 'Support opened a recording',
+        'staff_role_changed' => 'Staff or their roles changed',
         // Since v1.5: the Claude and ChatGPT connector.
         'connector_connected' => 'App connected',
         'connector_disconnected' => 'App disconnected',
