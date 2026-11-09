@@ -27,7 +27,7 @@ beforeEach(function () {
 });
 
 describe('navigation', function () {
-    it('has the phone\'s bottom bar with Library, Clients, Upload, Activity and More, the current page marked', function () {
+    it('has the phone\'s bottom tabs Home, Library, Record, Activity and More, the current page marked (since v1.6, P4.6)', function () {
         $html = $this->get(CaptureSessionResource::getUrl('index'))->assertOk()->getContent();
 
         $dom = new DOMDocument;
@@ -37,17 +37,17 @@ describe('navigation', function () {
 
         expect($nav)->not->toBeNull()->and($nav->getAttribute('aria-label'))->toBe('Main');
         $labels = array_map(fn (DOMNode $n): string => trim(preg_replace('/\s+/', ' ', $n->textContent)), iterator_to_array($nav->childNodes));
-        expect(implode('|', array_values(array_filter($labels))))->toBe('Library|Projects|Upload|Activity|More');
+        expect(implode('|', array_values(array_filter($labels))))->toBe('Home|Library|Record|Activity|More');
         $current = (new DOMXPath($dom))->query('.//*[@aria-current="page"]', $nav);
         expect($current->length)->toBe(1)->and(trim($current->item(0)->textContent))->toBe('Library');
         expect($html)->toContain('$store.sidebar.open()');
     });
 
-    it('shows the bottom bar only below 1024 px, where the sidebar becomes a drawer', function () {
+    it('shows the bottom tabs only up to 600 px, the phone\'s width (since v1.6, P4.6)', function () {
         $css = (string) file_get_contents(resource_path('css/filament/admin/theme.css'));
 
-        expect($css)->toMatch('/@media \(min-width: 1024px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
-            ->toMatch('/@media \(max-width: 1023\.98px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
+        expect($css)->toMatch('/@media \(min-width: 600\.02px\) \{\s*\.el-bottom-nav \{\s*display: none;/')
+            ->toMatch('/@media \(max-width: 600px\) \{\s*\.fi-body:has\(\.el-bottom-nav\) \.fi-main-ctn \{\s*padding-bottom:/');
         expect(Filament::getPanel('app')->isSidebarCollapsibleOnDesktop())->toBeTrue();
     });
 

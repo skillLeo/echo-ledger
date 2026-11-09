@@ -435,3 +435,32 @@ describe('Account in tabs (P4.5)', function () {
             ->call('savePassword')->assertHasFormErrors(['currentPassword' => 'required'], 'passwordForm');
     });
 });
+
+describe('the phone\'s bottom tabs (P4.6)', function () {
+    /** The labels of the bottom tabs. */
+    function bottomTabs(string $html): array
+    {
+        preg_match('/<nav class="el-bottom-nav".*?<\/nav>/s', $html, $nav);
+        preg_match_all('/<\/span>\s*([A-Z][a-z]+)\s*(?:<|$)/', $nav[0] ?? '', $m);
+
+        return $m[1];
+    }
+
+    it('are Home, Library, Record, Activity and More, Record opening the phone\'s recorder on the Upload page', function () {
+        $this->actingAs(Fx::user(), 'web');
+        $html = (string) $this->get('/app')->assertOk()->getContent();
+
+        expect(bottomTabs($html))->toBe(['Home', 'Library', 'Record', 'Activity', 'More'])
+            ->and($html)->toContain('href="'.e(url('/app/upload?record=1')).'"');
+    });
+
+    it('are Home, Library, Shared and More in the small console, with nothing that records or uploads', function () {
+        $owner = Fx::user();
+        $viewer = withoutWorkspace(Fx::user());
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($owner->current_workspace_id), $viewer, WorkspaceRole::Viewer);
+        $this->actingAs($viewer->fresh(), 'web');
+
+        expect(bottomTabs((string) $this->get('/app/sessions')->assertOk()->getContent()))->toBe(['Home', 'Library', 'Shared', 'More']);
+        $this->get('/app/upload?record=1')->assertForbidden();
+    });
+});
