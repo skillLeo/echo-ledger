@@ -701,7 +701,13 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
     /** The call-app package playing a voice call (its player is kept for the far-side checks); null for any other app. */
     private fun voiceCallApp(): String? {
         val pm = context.packageManager
-        for (config in audioManager.activePlaybackConfigurations) {
+
+        // A player that is playing first: the one of a call that ended a moment ago can still be listed (since v1.7.1).
+        // getPlayerState() is hidden like getClientUid(): 2 is PLAYER_STATE_STARTED.
+        fun playing(c: android.media.AudioPlaybackConfiguration) =
+            runCatching { c.javaClass.getMethod("getPlayerState").invoke(c) as Int == 2 }.getOrDefault(false)
+        val players = audioManager.activePlaybackConfigurations.sortedByDescending { playing(it) }
+        for (config in players) {
             if (config.audioAttributes.usage != AudioAttributes.USAGE_VOICE_COMMUNICATION) continue
             val uid = runCatching { config.javaClass.getMethod("getClientUid").invoke(config) as Int }.getOrNull() ?: continue
             val pkg = CallTargets.firstTarget(pm.getPackagesForUid(uid), callApps) ?: continue

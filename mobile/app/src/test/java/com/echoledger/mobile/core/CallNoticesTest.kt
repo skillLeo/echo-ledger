@@ -41,8 +41,19 @@ class CallNoticesTest {
         CallNotices.record(CallNotices.Notice("com.samsung.android.incallui", CallNotices.Kind.INCOMING, now + 1))
         assertEquals(CallNotices.Kind.RINGING_OUT, CallNotices.latest("com.whatsapp", sim = false, sinceMs = now - 1)?.kind)
         assertEquals(CallNotices.Kind.INCOMING, CallNotices.latest(null, sim = true, sinceMs = now - 1)?.kind)
-        assertNull(CallNotices.latest("com.whatsapp.w4b", sim = false, sinceMs = now - 1))
+        // Since v1.7.1 WhatsApp Business and WhatsApp see each other's notices; any other app does not.
+        assertEquals(CallNotices.Kind.RINGING_OUT, CallNotices.latest("com.whatsapp.w4b", sim = false, sinceMs = now - 1)?.kind)
+        assertNull(CallNotices.latest("us.zoom.videomeetings", sim = false, sinceMs = now - 1))
         assertEquals(2, seen.size)
         assertTrue(CallNotices.matches(seen[1], pkg = null, sim = true))
+    }
+
+    @Test
+    fun `WhatsApp's notice answers a call taken for WhatsApp Business, and the other way round (v1_7_1)`() {
+        val answered = CallNotices.Notice("com.whatsapp", CallNotices.Kind.ANSWERED, 1_000, 1_000)
+        org.junit.Assert.assertTrue(CallNotices.matches(answered, "com.whatsapp.w4b", sim = false))
+        org.junit.Assert.assertTrue(CallNotices.matches(answered.copy(pkg = "com.whatsapp.w4b"), "com.whatsapp", sim = false))
+        org.junit.Assert.assertFalse(CallNotices.matches(answered.copy(pkg = "us.zoom.videomeetings"), "com.whatsapp", sim = false))
+        org.junit.Assert.assertFalse(CallNotices.matches(answered, "com.whatsapp", sim = true))
     }
 }

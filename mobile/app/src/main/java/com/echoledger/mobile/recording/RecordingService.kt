@@ -737,6 +737,11 @@ class RecordingService : LifecycleService() {
         session.callPackage = if (sim) null else lastCallPackage
         val startMs = session.startedAt.toEpochMilli()
         fun apply(notice: CallNotices.Notice) {
+            // The twin app's notice (WhatsApp for WhatsApp Business): the call is in that app.
+            if (!sim && notice.pkg != session.callPackage) {
+                CaptureLog.add(this, "call app corrected", "${session.callPackage} → ${notice.pkg}")
+                session.callPackage = notice.pkg
+            }
             when (notice.kind) {
                 CallNotices.Kind.INCOMING -> gate.openAt(0, "incoming call answered")
                 CallNotices.Kind.ANSWERED -> gate.openAt((notice.answeredAtMs ?: startMs) - startMs, "call notification timer")

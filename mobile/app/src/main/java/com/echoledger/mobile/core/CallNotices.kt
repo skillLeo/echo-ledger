@@ -87,11 +87,21 @@ object CallNotices {
 
     /** The newest notice from [pkg] (a dialer for [sim]) since [sinceMs]. */
     @Synchronized
-    fun latest(pkg: String?, sim: Boolean, sinceMs: Long): Notice? =
-        recent.lastOrNull { it.atMs >= sinceMs && (if (sim) it.pkg in DIALERS else it.pkg == pkg) }
+    fun latest(pkg: String?, sim: Boolean, sinceMs: Long): Notice? = recent.lastOrNull { it.atMs >= sinceMs && matches(it, pkg, sim) }
 
-    /** Whether a notice belongs to the call being recorded (its app's package, or any dialer for a SIM call). */
-    fun matches(notice: Notice, pkg: String?, sim: Boolean): Boolean = if (sim) notice.pkg in DIALERS else notice.pkg == pkg
+    /**
+     * Apps installed side by side that are easily mistaken for each other at the start of a call (since v1.7.1: a
+     * WhatsApp call right after a WhatsApp Business one was taken for Business, so WhatsApp's own "ongoing call" notice,
+     * the answer signal, was ignored and the call was dropped as never answered).
+     */
+    private val TWINS = listOf(setOf("com.whatsapp", "com.whatsapp.w4b"))
+
+    /** The twin of [pkg] that a notice may come from instead, or null. */
+    fun twinOf(pkg: String?): Set<String> = TWINS.firstOrNull { pkg in it }.orEmpty()
+
+    /** Whether a notice belongs to the call being recorded (its app or that app's twin, or any dialer for a SIM call). */
+    fun matches(notice: Notice, pkg: String?, sim: Boolean): Boolean =
+        if (sim) notice.pkg in DIALERS else notice.pkg == pkg || notice.pkg in twinOf(pkg)
 
     @Synchronized
     internal fun clearForTest() {
