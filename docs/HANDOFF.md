@@ -2,6 +2,23 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
 
 # EchoLedger v1.1 — Handoff
 
+## v1.8 + v1.9 (from 2026-11-16): trust, call flow, launch; private screen share; Live Assist
+- **Plans (local only, in .git/info/exclude):** docs/PLAN_V1_8.md and docs/PLAN_V1_9.md, saved word for word from
+  Hassam's two prompts; his two research reports are docs/research/live-assist-report.md (local) and
+  docs/research/screen-share-privacy.md (committed, with the source links).
+- **Checklists (committed, single source of truth):** docs/FINISH_CHECKLIST_V1_8.md and docs/FINISH_CHECKLIST_V1_9.md,
+  each with its "Needs Hassam" list at the top.
+- **Order of work, as the v1.9 plan says:** v1.8 Step 0 → v1.9 Step 0 → **Phase S (private screen share) → shipped as
+  a v1.8.x release** → v1.8 P0 … P9 → tag v1.8.0 → v1.9 Phase L (Live Assist). The Live Assist answer card never ships
+  without Phase S.
+- **Rules carried from v1.6:** continuous run; after each item HANDOFF + checklist + commit + push; full suites per
+  phase; at most 2 helpers (desktop/, web/) in their own worktrees, phone and the API contract stay here; the S25 only
+  in phone windows (`pm install -r`, never uninstall or clear data); migrations backed up, rehearsed on a production
+  copy, reversible; no secrets; an isolation test per endpoint; words rule (never "undetectable", "stealth", "invisible
+  to proctors", "cheat", "bypass" in user-facing text); scope limit (hide from screen sharing only, never from other
+  software).
+- **Found 2026-11-16:** the GitHub repo is public (checked without signing in) → v1.8 Needs Hassam H1.
+
 ## v1.6 (2026-11-09): "SAAS DONE RIGHT + PROFESSIONAL APP SHELL"
 - **After the tag (2026-11-09, Hassam):** plans set on production (Free Rs 0; Pro Rs 2,999/month, 300 min; Ultra = the `business` key renamed, Rs 12,499/month, 900 min, 10 seats, $5 AI credits), priced from the measured cost (30 days: $7.38 for ~235 recorded min, most of it Claude views; planned at $0.03/min, Ultra $0.035, Rs 290/$, full use + about 15 %); the bank details in `upgrade.payment_instructions`; old values in `storage/app/private/plans-before-pricing-20261109-104318.json`. Terms and Privacy rewritten (`00f148c`) and live (backup `pre-legal-20261109-105310`). The notice rule (docs/DESIGN_SYSTEM.md "Notices") on the phone (`4e3edb0`); web (helper B2, `v161-web-notices`) and desktop (desktop helper, `v161-desktop-notices`) running.
 - **Keys restored (2026-11-12):** on 9 Nov 13:21 (server time) a browser autofill had saved one 9-character text into every empty-looking box of Admin → API Credentials, before the v1.6.4 guard existed: AssemblyAI (key, webhook secret), Groq, Anthropic, Google sign-in (client id, secret) and Turnstile (both) were overwritten, and Azure, OpenAI, whisper.cpp and two ElevenLabs webhook fields got the text though they had been empty. Symptoms from 10 Nov: "Show as" (Roman Urdu / Urdu / English) failed with Anthropic 401, the short-note check with Groq 401, the phone said "HTTP 401". With Hassam's go-ahead the 8 overwritten fields were restored from `pre-v1.6.3-20261109-125027/db.sql.gz` and the 5 others cleared (audited "Provider credentials restored…"); queue restarted; Groq, Anthropic, AssemblyAI and the Turnstile secret answered OK; the 10 failed "Show as" runs were queued again. Soniox, ElevenLabs and Gemini were pasted after the autofill and were not touched. The v1.6.4 guard (same text in two boxes, the admin's password, too short) now refuses such a save.

@@ -1,0 +1,132 @@
+# v1.9 finish checklist — private screen share + Live Assist
+
+Plan: docs/PLAN_V1_9.md (local only). Research: docs/research/screen-share-privacy.md. Phase S runs first, inside
+v1.8, and ships as a v1.8.x release; Phase L starts after the v1.8.0 tag. The Live Assist answer card never ships
+without Phase S.
+
+## Needs Hassam
+
+| # | What | Why | What to do |
+|---|---|---|---|
+| N1 | The product name (Baatly recommended, Mukalma backup) | The Android applicationId can never change after the first Play release | Check the domains, the @handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide (same as v1.8 H4) |
+| N2 | A VPS for the assist relay + its region (EU or Gulf, nearest to Pakistan) + its domain and TLS | Live streams need long-lived connections that shared hosting can't hold | Order the VPS and share the region |
+| N3 | Provider keys in Admin → API Credentials: Anthropic, OpenAI, Gemini, Groq, Moonshot, Soniox (translation on), AssemblyAI | The relay calls them | Paste them there yourself (never in chat) |
+| N4 | Assist-hour caps and prices for Pro and Ultra | Plans | Decide the caps (research suggests 10 h Pro, 40 h Ultra) |
+| N5 | Screen-share test windows on Windows and the Mac with a second device watching; a macOS 15 machine if possible | S0, S3 guided test, S7 matrix | Say "laptop free" / "Mac free" with a phone ready |
+| N6 | Phone windows for S5 and L5 | Device tests | Say "phone free" |
+| N7 | Review the privacy wording, the interview reminder, the consent line, store and website text; a short legal check on US/EU recording consent | Launch | Before the public launch |
+| N8 | Run the Pakistan latency benchmark | L9 | Run the script from docs/LATENCY_V1_9.md when it's ready |
+
+## Step 0
+- [x] PLAN_V1_9.md saved locally and excluded; this checklist committed; docs/research/screen-share-privacy.md
+  committed from the FACTS with the source links (2026-11-16).
+- [ ] The words rule in tools/repo-policy: "undetectable", "stealth", "invisible to proctors", "cheat", "bypass" fail
+  the build in user-facing strings (en, ur, ar). **Acceptance:** a test that plants each word in a fixture and fails,
+  and passes on the clean tree.
+- [ ] Scope limit recorded in HANDOFF and DESIGN_SYSTEM: windows are hidden from screen sharing only; never from other
+  software (no renamed processes, no hiding from window lists, no tricks against proctoring, lockdown browsers or
+  monitoring tools).
+
+## Phase S — Private screen share (ships as v1.8.x)
+- [ ] S0 Baseline before any change: on the Windows laptop and the Mac, whole-screen shares in Zoom, Meet (Chrome),
+  Teams, a Slack huddle and WhatsApp desktop with captions, the pill, the after-call card, Live Translate and the main
+  window open, watched from a second device (N5); the exact Windows build and macOS version; docs/SCREEN_SHARE_MATRIX.md
+  started (app × system × share mode → hidden / black / visible). **Acceptance:** the matrix's baseline rows.
+- [ ] S1 One `privacy` module owns the capture flag for every window (captions, dictation, pill, after-call, Live
+  Translate, the future Assist card, the main window by setting, any later window), set before the first show; the
+  scattered calls replaced; Settings → Privacy "Hide EchoLedger from screen sharing": All windows (default) / Only
+  floating windows / Off; the old `content_protection` migrated (someone who turned "Show during screen share" on keeps
+  floating windows visible and the main window visible); tray "Show EchoLedger in screen share for 10 minutes"; Live
+  Translate follows the setting unless its history shows the visible default was on purpose (then its own switch).
+  **Acceptance:** every window registers (test); migration test; the 10-minute demo returns to the setting (test).
+- [ ] S2 Windows: build number (RtlGetVersion); on 19041+ set `WDA_EXCLUDEFROMCAPTURE` and read it back for every
+  window (mismatch → amber + diagnostic); older builds → `WDA_MONITOR` black box by default with the amber line and a
+  "Black box" / "Show normally" setting; Remote Desktop (SM_REMOTESESSION) → amber line; a 5 s read-back while a
+  protected window is visible, re-set on change (no contents in logs). Mac: the macOS version recorded; status from the
+  Share Check. **Acceptance:** tests for the build gate, mismatch, RDP and the 5 s re-check.
+- [ ] S3 Share Check ("See what others see") from Settings → Privacy, the badge and onboarding, and by itself after an
+  app update, a system update, weekly and 2 min before a scheduled Live Assist call: a protected magenta test window and
+  an unprotected green control, the monitor captured like a meeting app (Windows: WGC CreateForMonitor + DXGI Desktop
+  Duplication; Mac: SCScreenshotManager display capture, nothing excluded), colours counted (tolerance 25): Pass =
+  control found and test 0; Fail = test found; Error = control missing (permission or capture failure, with a fix
+  button). Result shown as "What you see" / "What others see" with one plain line. The picture stays in memory only;
+  only {platform, OS build, app version, method, result} goes to the server, and only with diagnostics allowed, shown
+  as a matrix in the admin panel. Mac: the Screen Recording permission explained with "Open Settings". Guided test per
+  meeting app (test card, "I can see it" / "I can't see it"), saved per app + app version + macOS version, asked again
+  after their updates. **Acceptance:** pixel-counter tests on fixtures (pass / fail / error); API + isolation tests for
+  the diagnostics; the admin matrix test.
+- [ ] S4 Mac per-app setup and safety net: Zoom's "Advanced capture with window filtering" shown with screenshots
+  (labels checked in the latest Zoom); Zoom's current mode read read-only from its local settings if possible ("Zoom is
+  set up"); share-less tips and the second-display offer; whole-screen share detection from the window list (known
+  sharing bars of Zoom, Teams, Chrome/Edge/Brave/Safari, Slack, WhatsApp) + meeting detection, patterns in a
+  server-updatable config with fixture tests, unknown bars logged (titles only); in an unconfirmed app every window
+  orders out within 300 ms and returns when the share ends (cards continue on the phone when linked, L6); setting "I
+  share one window or a tab"; a plain warning before a scheduled call in an unconfirmed app. **Acceptance:** pattern
+  tests on window-list fixtures; the 300 ms hide test; MANUAL_QA on the Mac.
+- [ ] S5 Android card privacy: on Android 15+ `addScreenRecordingCallback` (DETECT_SCREEN_RECORDING) from the
+  component that owns the floating pill / card → VISIBLE collapses to a dot without text, NOT_VISIBLE restores; tested
+  on the S25 with a Meet share, a Zoom share, a WhatsApp video share, Samsung's screen recorder and single-app sharing
+  (N6), the best public signal documented if it doesn't fire for a floating window; on all versions a one-tap Hide on
+  the card and a Quick Settings tile "Hide EchoLedger cards"; setting "During screen sharing": Hide cards (default) /
+  Black box (FLAG_SECURE) / Show; no hidden or private APIs. **Acceptance:** unit tests for the states; the S25 results
+  in SCREEN_SHARE_MATRIX.md.
+- [ ] S6 Trust UX: a privacy badge on every floating window and the Assist card (Private / Not checked / Visible in
+  shares) from the last real check, a tap opens Share Check; on a Mac the per-app list; a "Hide all EchoLedger windows"
+  global shortcut (conflict-checked, not ⌘⌥H); Settings → Privacy page (switch and status, last check + Check now, the
+  one-window tip, the honest limits list); USER_GUIDE and website "Private notes" text + a link to the public matrix.
+  **Acceptance:** badge state tests; shortcut conflict tests; the copy in USER_GUIDE.
+- [ ] S7 Tests and release: unit tests (registration, migration, build gate, read-back mismatch, RDP, re-check, pixel
+  counter, sharing-bar patterns, badge states, words rule); Windows CI capture test (protected magenta + green control,
+  WGC and DXGI; skipped with a clear reason when the runner has no capture session, never a silent pass); the manual
+  matrix with Hassam (Zoom, Meet in Chrome, Teams, Slack huddle, WhatsApp desktop × Windows 11, Windows 10, the Mac,
+  macOS 15 if possible × whole screen / one window / tab; Zoom's three capture modes on the Mac); shipped as v1.8.x
+  (desktop installers + phone build). **Acceptance:** CI green; the matrix filled; the release recorded in HANDOFF.
+
+## Phase L — Live Assist (after v1.8.0)
+- [ ] L0 Inventory in PLAN_V1_9.md; the assist relay in services/assist-relay (Rust axum + tokio, HTTP/2 keep-alive;
+  Dockerfile + systemd unit per docs/DEPLOY_VPS.md; VPS = N2); brand constants in one place per app. **Acceptance:** the
+  relay builds and its tests pass; one product-name constant per app.
+- [ ] L1 Server: assist_preps, assist_prep_documents, assist_sessions (auto_saved), assist_turns, assist_suggestions,
+  assist_facts, assist_summaries, assist_reports (scoped, encrypted text, soft deletes); `/api/v1/assist/...` (preps
+  CRUD + documents, arm, start → relay URL + assist token ≤ 15 min + STT token, token refresh, batched turns, end,
+  report, practice/start; HMAC-signed relay endpoints for usage, facts, summary); plans in config (Free practice, Pro
+  Fast + Balanced with a cap, Ultra + Deep + Max); every LLM/STT call through the budget and usage tracking
+  ("live_assist"); the prompt pack in resources/prompts/assist/; no training on user data. **Acceptance:** CRUD,
+  isolation on every endpoint, plan gates, 402 on an exhausted budget with a fallback hint, token claims and TTL, HMAC,
+  log redaction.
+- [ ] L2 Relay: WebSocket protocol; Anthropic (caching, thinking off), OpenAI, Gemini Flash (thinking 0), Groq, Kimi
+  behind a flag; mode → model map in config; cache-ordered context; warm-up; speculative start (Other channel only,
+  ≥128 ms silence, cancel within 700 ms); draft → upgrade; background facts ledger and summary; budget downgrade (never
+  stopping captions); per-suggestion telemetry without content. **Acceptance:** context-order snapshots, speculative
+  cancel, SKIP, downgrade, auth rejection, mocked streaming, redaction; load test 50 sessions, overhead p95 < 30 ms.
+- [ ] L3 Live STT for assist: Soniox real-time (translation of the Other channel when language help is on), AssemblyAI
+  streaming as "English accuracy"; partials/finals per channel to the relay, finals batched to the server; the post-call
+  pipeline unchanged. **Acceptance:** channel routing, translation fields, reconnect with token refresh without losing
+  turns.
+- [ ] L4 Desktop: prep screen, Start now (auto_saved), Schedule (arm 2 min early, Share Check, meeting detection, 10 min
+  grace), the Assist card (privacy service, badge, click-through, drag/resize like the v1.8 captions, top-centre, per
+  monitor; question gloss, big first line, ≤ 3 bullets, "Say next", Them/Me captions strip, token-by-token), hotkeys
+  (conflict-checked), in-call controls, interview and consent reminders. **Acceptance:** component tests, scheduler and
+  auto_saved tests, e2e with a two-channel WAV fixture + mocked relay.
+- [ ] L5 Android: prep + Start now / Schedule (helper armed; mic-only fallback), the card in the floating pill (dot →
+  3 lines; Help now / Regenerate / Shorter / Urdu) under the S5 rules, relay WebSocket with token refresh, a compliant
+  foreground service type, no Accessibility. **Acceptance:** ViewModel/scheduler/gate tests, Compose UI tests; the S25
+  phone-window test (N6).
+- [ ] L6 Second screen: link a phone to a desktop session (QR or session list); cards and captions within 300 ms of
+  the desktop; screen kept awake; Android now, iPhone with v1.8 P8. **Acceptance:** latency test with a mocked relay.
+- [ ] L7 Report + practice: the post-session job (summary EN/UR, Q&A table with ratings and better answers, mistakes
+  and promises, coaching metrics, action items into project memory, follow-up email); practice mode (Free limited);
+  report views on console, desktop and phone; PDF/Markdown export; Ask over the session. **Acceptance:** report JSON
+  schema, coaching metrics on fixtures, isolation, budget accounting.
+- [ ] L8 Console: Preps, Sessions, Report, Assist settings, Usage & budget; admin latency p50/p95, cost per hour by
+  mode, error rates (no content), the Share Check matrix. **Acceptance:** Filament page tests, policies, isolation.
+- [ ] L9 Quality: the golden eval set (10 transcripts with traps) ≥ 90 % in Balanced; the latency benchmark script for
+  Pakistan (N8) → docs/LATENCY_V1_9.md; targets (p50 ≤ 1.5 s Fast, ≤ 2.0 s Balanced draft, ≤ 3.0 s Deep; relay p95 ≤
+  30 ms; no suggestions from the Me channel; cache hit ≥ 80 % after the 3rd suggestion). **Acceptance:** the eval
+  runner's report; CI with mocked providers.
+- [ ] L10 Release: full suites, web deployed, relay on the VPS, desktop installers, phone build; the Windows + Mac
+  rehearsal and the phone window; USER_GUIDE (Live Assist, Private notes), ADMIN_GUIDE, HANDOFF; tagged v1.9.0; the
+  final report with the monthly running cost per active user. **Acceptance:** recorded in HANDOFF.
+
+Backlog: a Chrome extension for locked work laptops (tab capture); calendar sync for scheduling; Live Assist for SIM
+calls on Samsung after v1.8 0.3.
