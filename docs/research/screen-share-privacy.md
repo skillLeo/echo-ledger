@@ -156,3 +156,9 @@ monitoring tools.
   ("Please use ScreenCaptureKit instead"), so apps built today capture only through ScreenCaptureKit; the automated
   capture needs the Screen Recording permission (without it ScreenCaptureKit answers "The user declined TCCs for
   application, window, display capture"), so the Mac result comes from the in-app Share Check and the guided test.
+- 2026-11-16, the same Mac with the permission granted: a `sharingType = .none` window (the flag Tauri's
+  `content_protected(true)` sets) was **left out** of `screencapture -x -m`, of a ScreenCaptureKit
+  `SCScreenshotManager` display capture with nothing excluded, of an `SCStream` display stream, and of that stream after
+  `updateContentFilter` changed its filter mid-capture (magenta 0 px every time; the unprotected green control found
+  every time). This matches the macOS 26.6.2 report and not the FB21115847 case, on this macOS 27.3 build; meeting
+  apps can still capture differently, so the per-app guided test stays. Details in SCREEN_SHARE_MATRIX.md.

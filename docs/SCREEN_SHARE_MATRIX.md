@@ -17,7 +17,15 @@ and its text show · **—** = not tested yet.
 
 | Date | System | App version | Method | Result | Notes |
 |---|---|---|---|---|---|
-| 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit display capture, `screencapture` | Not run | The process had no Screen Recording permission ("The user declined TCCs for application, window, display capture"); needs a Mac window with Hassam, or the in-app Share Check once the permission is granted |
+| 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit display capture, `screencapture` | Not run | First attempt: the process had no Screen Recording permission ("The user declined TCCs for application, window, display capture") |
+| 2026-11-16 | macOS 27.3 (26C5035r) | test harness (`sharingType = .none`, the flag Tauri's `content_protected(true)` sets) | `screencapture -x -m` | **Pass** | Protected magenta window 0 px; green control 153,600 px (its whole area at 2×) |
+| 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit `SCScreenshotManager`, display filter, nothing excluded | **Pass** | Magenta 0 px; green 153,600 px |
+| 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit `SCStream` (5 fps), display filter, nothing excluded | **Pass** | Magenta 0 px; green 152,004 px |
+| 2026-11-16 | macOS 27.3 (26C5035r) | test harness | The same stream after `updateContentFilter` (excluding no applications), then changed back | **Pass** | Magenta 0 px in both frames (the FB21115847 case did not show the window here); green 152,004 and 15,908 px (the second looks like a frame caught mid-change) |
+
+So on this Mac the window flag holds for ScreenCaptureKit display captures, streams and a mid-capture filter change.
+Meeting apps can still capture differently (another filter, another API, their own modes such as Zoom's "without window
+filtering"), so the meeting-app rows below still need the guided test with a second device.
 
 ## Meeting apps (whole screen / one window / tab)
 
