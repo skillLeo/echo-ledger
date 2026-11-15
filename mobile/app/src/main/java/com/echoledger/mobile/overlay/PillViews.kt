@@ -28,6 +28,7 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.RemoveCircleOutline
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.StopScreenShare
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -123,8 +124,20 @@ internal fun PillDot(s: PillState, modifier: Modifier = Modifier) {
     )
 }
 
+/** While EchoLedger's cards are private (shared, or hidden by the person): a plain grey dot with no text. */
+@Composable
+internal fun PrivateDot(modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(16.dp)
+            .background(PILL_MUTED, CircleShape)
+            .border(2.dp, PILL_BG, CircleShape)
+            .semantics { contentDescription = "EchoLedger cards are hidden. Tap to show them." }
+    )
+}
+
 /**
- * The open pill: a floating toolbar of 44 dp buttons (Captions · Pause · Stop · Discard · Shrink · Hide) under the clock
+ * The open pill: a floating toolbar of 44 dp buttons (Captions · Pause · Stop · Discard · Shrink · Hide · Hide cards) under the clock
  * and the language. A long-press shows a button's name; Stop asks for a second tap, because the toolbar lies over the
  * call app's own buttons.
  */
@@ -191,6 +204,11 @@ internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Mo
             }
             PillButton(Icons.Rounded.RemoveCircleOutline, "Shrink to a dot", showHint) { onEvent(PillEvent.ShrinkToDot) }
             PillButton(Icons.Rounded.VisibilityOff, "Hide controls (keeps recording)", showHint) { onEvent(PillEvent.HideControls) }
+            // Before sharing the screen (since v1.8.1): every EchoLedger card becomes a dot until tapped.
+            PillButton(Icons.Rounded.StopScreenShare, "Hide EchoLedger cards", showHint) {
+                onEvent(PillEvent.CloseMenu)
+                com.echoledger.mobile.core.ShareGuard.setHidden(true)
+            }
         }
     }
 }

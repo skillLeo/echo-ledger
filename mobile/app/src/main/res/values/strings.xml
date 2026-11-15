@@ -18,6 +18,7 @@
     <string name="shortcut_record_now">Record now</string>
     <string name="tile_game_translate">Game translate</string>
     <string name="tile_watch_translate">Watch translate</string>
+    <string name="tile_hide_cards">Hide EchoLedger cards</string>
     <string name="voice_keyboard_label">EchoLedger voice keyboard</string>
     <string name="caller_names_label">EchoLedger caller names</string>
     <string name="voice_keyboard_subtype">Dictation</string>

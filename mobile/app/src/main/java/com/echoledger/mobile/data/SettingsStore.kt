@@ -37,6 +37,8 @@ data class AppSettings(
     val closedAnnouncements: List<String> = emptyList(),
     /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
     val widgetHideTitles: Boolean = false,
+    /** Since v1.8.1, while EchoLedger's cards are seen in a screen share: "hide" (a dot), "black_box" (FLAG_SECURE) or "show". */
+    val screenShareMode: String = "hide",
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
     val settingsVersion: Int = 2,
     /** What happens to a recording nobody decided on within 60 s: "keep", "discard" or "wait" (same as the desktop). */

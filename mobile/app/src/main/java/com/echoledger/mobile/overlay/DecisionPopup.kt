@@ -14,6 +14,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -31,12 +32,14 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -79,6 +82,7 @@ object DecisionPopup {
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
     private var windowManager: WindowManager? = null
+    private var appContext: Context? = null
     private var timeout: Runnable? = null
 
     /** The id of the recording the chip is about; null when no chip is showing. */
@@ -106,6 +110,15 @@ object DecisionPopup {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
+                // Shared or hidden (since v1.8.1): a plain dot instead of the call's name; the timeout still runs.
+                if (!com.echoledger.mobile.core.ShareGuard.textVisible.collectAsState().value) {
+                    PrivateDot(
+                        Modifier.pointerInput(Unit) {
+                            detectTapGestures(onTap = { com.echoledger.mobile.core.ShareGuard.setHidden(false) })
+                        }
+                    )
+                    return@setContent
+                }
                 EchoLedgerTheme(themeMode) {
                     AfterCallChip(
                         title = title(rec),
@@ -139,7 +152,12 @@ object DecisionPopup {
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
             // Not focusable and not modal: touches outside the chip go to the app underneath.
             WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                if (com.echoledger.mobile.core.ShareGuard.secure(com.echoledger.mobile.core.ShareGuard.mode.value)) {
+                    WindowManager.LayoutParams.FLAG_SECURE
+                } else {
+                    0
+                },
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
@@ -153,6 +171,8 @@ object DecisionPopup {
         view = compose
         owner = lifecycleOwner
         windowManager = wm
+        ShareWatch.acquire(app)
+        appContext = app
         showingFor = rec.id
         showingMode = mode
         // Saved: the chip only goes (the call is kept already). Ask: nobody chose, so the call is kept.
@@ -166,11 +186,15 @@ object DecisionPopup {
     fun hide() {
         timeout?.let(handler::removeCallbacks)
         timeout = null
-        view?.let { v -> runCatching { windowManager?.removeView(v) } }
+        view?.let { v ->
+            runCatching { windowManager?.removeView(v) }
+            appContext?.let(ShareWatch::release)
+        }
         owner?.stop()
         view = null
         owner = null
         windowManager = null
+        appContext = null
         showingFor = null
         showingMode = null
     }

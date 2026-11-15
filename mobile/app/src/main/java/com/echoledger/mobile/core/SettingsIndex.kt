@@ -41,7 +41,7 @@ object SettingsIndex {
         Page("plan", ACCOUNT, "Plan & usage", listOf("plan")),
         Page("account", ACCOUNT, "Sign-in & security", emptyList()),
         Page("devices", ACCOUNT, "Devices", listOf("devices")),
-        Page("privacy", ACCOUNT, "Privacy & data", listOf("consent")),
+        Page("privacy", ACCOUNT, "Privacy & data", listOf("consent", "screen-share")),
         Page("help", SUPPORT, "Help", listOf("help")),
         Page("about", SUPPORT, "About", listOf("about", "this-phone"))
     ).filter { BuildConfig.CAPTURE_HELPER || !it.full }
@@ -101,6 +101,13 @@ object SettingsIndex {
         item("notifications.quiet", "notifications", "notifications", "Quiet hours", "do not disturb night silent from to"),
         item("lock.app", "lock", "app-lock", "App lock", "fingerprint face unlock screen lock pin security biometric"),
         item("lock.hide", "lock", "app-lock", "Hide in recent apps", "screenshots recents secure privacy widget titles home screen"),
+        item(
+            "privacy.share",
+            "privacy",
+            "screen-share",
+            "During screen sharing",
+            "screen share recording cast meeting cards dot black box hide"
+        ),
         item("storage.space", "storage", "storage", "Space used", "storage disk space full free up delete"),
         item("storage.kept", "storage", "storage", "How long recordings are kept", "retention deleted bin days"),
         item("plan.usage", "plan", "plan", "Plan & usage", "plan free pro ultra minutes limits devices storage usage"),

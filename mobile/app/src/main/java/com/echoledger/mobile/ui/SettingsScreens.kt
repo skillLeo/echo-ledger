@@ -657,6 +657,8 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
 
         "app-lock" -> AppLockSection(vm, settings)
 
+        "screen-share" -> ScreenShareSection(vm, settings)
+
         "devices" -> SecuritySection(load = {
             vm.security()
         }, revoke = { vm.revokeDevice(it) }, rename = { id, name -> vm.renameDevice(id, name) })
@@ -771,6 +773,51 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
                 onCheckedChange = { v -> vm.updateSettings { it.copy(consentAcknowledged = v) } },
                 modifier = Modifier.semantics { contentDescription = "I understand" }
             )
+        }
+    }
+}
+
+/**
+ * Settings → Privacy & data → During screen sharing (since v1.8.1). Android 15 and later tell the app when its cards
+ * are seen in a screen share or recording; earlier versions rely on the Hide button and the Quick Settings tile.
+ */
+@Composable
+private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
+    val choices = listOf(
+        "hide" to ("Hide cards" to "The recording pill, captions and other cards shrink to a small dot without text."),
+        "black_box" to ("Black box" to "The people watching see a black box where the cards are."),
+        "show" to ("Show" to "The cards stay as they are. Everyone watching can read them.")
+    )
+    SectionCard {
+        Text("During screen sharing", fontWeight = FontWeight.SemiBold)
+        Text(
+            if (android.os.Build.VERSION.SDK_INT >= 35) {
+                "What people watching your screen share or recording see of EchoLedger's floating cards."
+            } else {
+                "This version of Android does not say when the screen is shared, so use Hide on a card or the " +
+                    "\"Hide EchoLedger cards\" Quick Settings tile before you share. Black box always works."
+            },
+            color = Brand.Muted,
+            fontSize = 13.sp
+        )
+        val current = com.echoledger.mobile.core.ShareGuard.Mode.of(settings.screenShareMode).wire
+        choices.forEach { (value, text) ->
+            Row(
+                Modifier.fillMaxWidth()
+                    .selectable(
+                        selected = current == value,
+                        role = Role.RadioButton,
+                        onClick = { vm.updateSettings { it.copy(screenShareMode = value) } }
+                    )
+                    .padding(vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                RadioButton(selected = current == value, onClick = null)
+                Column(Modifier.padding(start = 8.dp)) {
+                    Text(text.first)
+                    Text(text.second, color = Brand.Muted, fontSize = 12.sp)
+                }
+            }
         }
     }
 }

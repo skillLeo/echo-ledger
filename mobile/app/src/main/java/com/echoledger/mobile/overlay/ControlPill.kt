@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.data.CaptionStyle
 import com.echoledger.mobile.recording.PillEvent
 import com.echoledger.mobile.recording.PillMachine
@@ -96,17 +97,39 @@ private abstract class OverlayWindow(protected val context: Context) {
         val compose = ComposeView(context).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent { content() }
+            setContent {
+                // Black box (Settings → During screen sharing): shares and recordings show black where the card is.
+                val mode by ShareGuard.mode.collectAsState()
+                LaunchedEffect(mode) { secure(ShareGuard.secure(mode)) }
+                content()
+            }
             setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) onOutside()
                 false
             }
             addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> onSized(v) }
         }
+        params.flags = if (ShareGuard.secure(ShareGuard.mode.value)) {
+            params.flags or WindowManager.LayoutParams.FLAG_SECURE
+        } else {
+            params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
+        }
         return runCatching { wm.addView(compose, params) }.onSuccess {
             view = compose
             owner = lifecycleOwner
+            ShareWatch.acquire(context)
         }.isSuccess
+    }
+
+    private fun secure(on: Boolean) {
+        val flags = if (on) {
+            params.flags or WindowManager.LayoutParams.FLAG_SECURE
+        } else {
+            params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
+        }
+        if (flags == params.flags) return
+        params.flags = flags
+        view?.let { runCatching { wm.updateViewLayout(it, params) } }
     }
 
     protected open fun onSized(v: View) = Unit
@@ -118,7 +141,10 @@ private abstract class OverlayWindow(protected val context: Context) {
     }
 
     open fun hide() {
-        view?.let { runCatching { wm.removeView(it) } }
+        view?.let {
+            runCatching { wm.removeView(it) }
+            ShareWatch.release(context)
+        }
         owner?.stop()
         view = null
         owner = null
@@ -208,6 +234,21 @@ class ControlPill(
                         dragBy(amount.x, amount.y)
                     }
                 }
+            val private = !ShareGuard.textVisible.collectAsState().value
+            if (private && s.mode != PillState.Mode.HIDDEN) {
+                // While shared or hidden: a plain dot, no clock, language or buttons. A tap brings back cards the
+                // person hid; while a share is seen in "Hide cards" mode they stay a dot until it ends.
+                val dot = Modifier
+                    .pointerInput(Unit) { detectTapGestures(onTap = { ShareGuard.setHidden(false) }) }
+                    .pointerInput(Unit) {
+                        detectDragGestures(onDragEnd = { dropped() }) { change, amount ->
+                            change.consume()
+                            dragBy(amount.x, amount.y)
+                        }
+                    }
+                PrivateDot(dot)
+                return
+            }
             when (s.mode) {
                 PillState.Mode.HIDDEN -> Unit
                 PillState.Mode.DOT -> PillDot(s, drag)
@@ -260,6 +301,8 @@ class CaptionPanel(
 
         @Composable
         private fun PanelContent() {
+            // Shared or hidden: the captions are not drawn at all (the pill's dot stays).
+            if (!ShareGuard.textVisible.collectAsState().value) return
             val f by feed.collectAsState()
             val s by language.collectAsState()
             val maxHeight = (screenHeight() * 0.30f / density).dp

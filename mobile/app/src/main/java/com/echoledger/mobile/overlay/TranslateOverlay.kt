@@ -48,6 +48,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.translate.BoxBackground
 import com.echoledger.mobile.translate.BoxGeometry
 import com.echoledger.mobile.translate.BoxPlacement
@@ -97,6 +98,23 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     private val fadeGrip = Runnable { gripFaded.value = true }
     private val closeToolbar = Runnable { hideToolbar() }
 
+    /** The cards are private (shared, or hidden by the person; since v1.8.1): the box is not drawn. */
+    private var private = false
+    private var stopWatching: (() -> Unit)? = null
+
+    /** FLAG_SECURE in "Black box" mode (Settings → During screen sharing). */
+    private fun secureBit() = if (ShareGuard.secure(ShareGuard.mode.value)) WindowManager.LayoutParams.FLAG_SECURE else 0
+
+    private fun shownVisibility() = if (private) View.INVISIBLE else View.VISIBLE
+
+    private fun applyPrivate(on: Boolean) {
+        private = on
+        val view = text ?: return
+        if (state == BoxState.HIDDEN) return
+        view.visibility = shownVisibility()
+        if (on) hideToolbar()
+    }
+
     val showing: Boolean get() = text != null
 
     /** Opens the windows at [placement] (or the default spot). False when "Display over other apps" is off. */
@@ -120,7 +138,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             rect.width,
             rect.height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            LOCKED_FLAGS,
+            LOCKED_FLAGS or secureBit(),
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -142,6 +160,8 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         boxParams = params
         attachDrag(view)
         if (this.showGrip) addGrip()
+        ShareWatch.acquire(context)
+        stopWatching = ShareGuard.observe { visible -> main.post { applyPrivate(!visible) } }
         return true
     }
 
@@ -150,8 +170,14 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         hideToolbar()
         grip?.let { runCatching { wm.removeView(it) } }
         grip = null
-        text?.let { runCatching { wm.removeView(it) } }
+        text?.let {
+            runCatching { wm.removeView(it) }
+            ShareWatch.release(context)
+        }
         text = null
+        stopWatching?.invoke()
+        stopWatching = null
+        private = false
         owner.stop()
     }
 
@@ -210,9 +236,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         paused.value = next == BoxState.PAUSED
         when (next) {
             BoxState.EDIT -> {
-                params.flags = EDIT_FLAGS
+                params.flags = EDIT_FLAGS or secureBit()
                 params.alpha = 1f
-                view.visibility = View.VISIBLE
+                view.visibility = shownVisibility()
                 view.setEditing(true)
             }
 
@@ -220,14 +246,14 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             BoxState.HIDDEN -> {
                 view.visibility = View.GONE
                 view.setEditing(false)
-                params.flags = LOCKED_FLAGS
+                params.flags = LOCKED_FLAGS or secureBit()
                 hideToolbar()
             }
 
             else -> {
-                params.flags = LOCKED_FLAGS
+                params.flags = LOCKED_FLAGS or secureBit()
                 params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
-                view.visibility = View.VISIBLE
+                view.visibility = shownVisibility()
                 view.setEditing(false)
             }
         }
@@ -370,7 +396,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     }
 
     private fun showToolbar() {
-        if (toolbar != null) return
+        if (toolbar != null || private) return
         val view = ComposeView(context).apply {
             setViewTreeLifecycleOwner(owner)
             setViewTreeSavedStateRegistryOwner(owner)

@@ -75,6 +75,10 @@ without Phase S.
   the card and a Quick Settings tile "Hide EchoLedger cards"; setting "During screen sharing": Hide cards (default) /
   Black box (FLAG_SECURE) / Show; no hidden or private APIs. **Acceptance:** unit tests for the states; the S25 results
   in SCREEN_SHARE_MATRIX.md.
+  - Code done 2026-11-16: `core/ShareGuard.kt` (state), `overlay/ShareWatch.kt` (callback while any card is
+    attached), pill / captions / after-call chip / Live Translate collapse or vanish, toolbar button "Hide EchoLedger
+    cards", tile `tile/HideCardsTileService.kt`, Settings → Privacy & data → During screen sharing (exported, reset
+    with General). `ShareGuardTest` passes. **Left:** the S25 run (N6) and its matrix rows.
 - [ ] S6 Trust UX: a privacy badge on every floating window and the Assist card (Private / Not checked / Visible in
   shares) from the last real check, a tap opens Share Check; on a Mac the per-app list; a "Hide all EchoLedger windows"
   global shortcut (conflict-checked, not ⌘⌥H); Settings → Privacy page (switch and status, last check + Check now, the

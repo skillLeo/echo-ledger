@@ -41,6 +41,12 @@ object SettingsCatalogue {
             "lock fingerprint face screen lock recents screenshots hide content security widget titles home screen"
         ),
         SettingsEntry("consent", SettingsGroup.General, "Privacy & consent", "consent law participants understand"),
+        SettingsEntry(
+            "screen-share",
+            SettingsGroup.General,
+            "During screen sharing",
+            "screen share sharing recording cast meeting cards dot black box hide private"
+        ),
         SettingsEntry("devices", SettingsGroup.General, "Devices", "revoke paired activity audit security"),
         SettingsEntry("storage", SettingsGroup.General, "Storage and retention", "storage disk space retention deleted bin days"),
         SettingsEntry(
@@ -118,7 +124,8 @@ object SettingsReset {
                 appLockEnabled = d.appLockEnabled,
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
-                widgetHideTitles = d.widgetHideTitles
+                widgetHideTitles = d.widgetHideTitles,
+                screenShareMode = d.screenShareMode
             )
 
             "language" -> s.copy(transcriptionLanguage = d.transcriptionLanguage)
@@ -150,6 +157,7 @@ object SettingsReset {
                 lockAfterMs = d.lockAfterMs,
                 secureScreen = d.secureScreen,
                 widgetHideTitles = d.widgetHideTitles,
+                screenShareMode = d.screenShareMode,
                 activityNotifications = d.activityNotifications,
                 quietHours = d.quietHours,
                 quietFrom = d.quietFrom,
