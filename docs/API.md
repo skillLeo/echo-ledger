@@ -454,6 +454,28 @@ make codes; customers can never list them. Every use is in the activity log.
 - The admin approves (the plan, until a date or not) or declines with a message; the person gets an email and an
   activity item (`kind`: `upgrade_approved` | `upgrade_declined`).
 
+### Screen-share privacy (since v1.8.1)
+EchoLedger's own windows stay out of screen shares where the system allows it, and the desktop app checks it on each
+computer (docs/research/screen-share-privacy.md, docs/SCREEN_SHARE_MATRIX.md). Two endpoints support that:
+- `POST /api/diagnostics/share-checks` — `config:read`, throttled (30/hour per device): one Share Check result,
+  sent only when the person allows diagnostics. Body: `{"platform": "windows" | "macos" | "android", "os_build":
+  "10.0.26100" (≤ 64), "app_version": "1.8.1" (≤ 32), "method": "wgc" | "dxgi" | "sck" | "readback" | "guided" |
+  "recording_callback", "result": "pass" | "fail" | "error", "reason": null | "permission_missing" |
+  "capture_failed" | "control_missing" | "old_windows" | "remote_desktop" | "flag_mismatch", "meeting_app": null |
+  "zoom" | "meet" | "teams" | "slack" | "whatsapp" | "other", "meeting_app_version": null | "6.4.1" (≤ 32),
+  "share_mode": null | "screen" | "window" | "tab"}` → `201 {"data": {"id"}}`; `422 validation_failed`. No pictures,
+  window titles or window contents are ever sent. The server keeps the result with the device and its person; staff
+  with the device-reports permission see them only as a matrix in Admin → Diagnostics → Screen-share checks (platform ×
+  OS build × app version × method or meeting app → pass / fail / error counts and the last date). Nobody else can read
+  them, and a person's own results are not listed back to any app.
+- `GET /api/config/share-bars` — `config:read`: the window patterns that mean "a screen share is running" (Zoom's
+  share toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bars, Slack and WhatsApp), so they can
+  change without an app release → `200 {"version": 1, "updated_at": "…", "patterns": [{"id":
+  "zoom-share-toolbar-mac", "app": "zoom", "platform": "macos", "owner": "^zoom\\.us$", "title": "…"}]}` with an
+  `ETag`; `If-None-Match` with the same tag → `304`. `owner` and `title` are regular expressions without look-behind
+  (they run in both Rust and JavaScript); a pattern matches a window whose owner name and title both match. The desktop
+  app keeps the last answer and ships the same file as its fallback.
+
 ### Payment receipts (since v1.7)
 A paid plan is bought by bank transfer. After `POST /api/upgrade-requests` the customer pays, sends a receipt (a
 screenshot or a PDF) and/or the bank's transaction ID, and staff approve or decline it in Admin → Upgrade requests.

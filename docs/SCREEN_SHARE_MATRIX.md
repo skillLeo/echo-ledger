@@ -39,5 +39,10 @@ filtering"), so the meeting-app rows below still need the guided test with a sec
 
 ## Windows in each test
 
+Baseline of the installed app before Phase S (v1.7.0 desktop build, macOS 27.3, read with `CGWindowListCopyWindowInfo`
+on 2026-11-16): the dictation overlay "EchoLedger dictation" reports sharing state 0 (left out of captures, as
+`content_protected(true)` sets); the main window reports sharing state 1 (captured, so visible in a whole-screen share).
+Live Translate is built with protection off (`create_translate_window`), so it is visible in shares too.
+
 Captions, the recording pill, the after-call card, Live Translate and the main window (and the Assist card once it
 exists).
