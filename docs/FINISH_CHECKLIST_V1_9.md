@@ -20,9 +20,11 @@ without Phase S.
 ## Step 0
 - [x] PLAN_V1_9.md saved locally and excluded; this checklist committed; docs/research/screen-share-privacy.md
   committed from the FACTS with the source links (2026-11-16).
-- [ ] The words rule in tools/repo-policy: "undetectable", "stealth", "invisible to proctors", "cheat", "bypass" fail
+- [x] The words rule in tools/repo-policy: "undetectable", "stealth", "invisible to proctors", "cheat", "bypass" fail
   the build in user-facing strings (en, ur, ar). **Acceptance:** a test that plants each word in a fixture and fails,
-  and passes on the clean tree.
+  and passes on the clean tree. **Done 2026-11-16:** `tools/repo-policy.test.mjs` "words rule" (planted English, Urdu
+  and Arabic forms caught; phone, desktop, Rust and web string literals that read as words, string resources, Blade
+  pages, USER_GUIDE and docs/store scanned; 26/26 pass).
 - [ ] Scope limit recorded in HANDOFF and DESIGN_SYSTEM: windows are hidden from screen sharing only; never from other
   software (no renamed processes, no hiding from window lists, no tricks against proctoring, lockdown browsers or
   monitoring tools).
@@ -32,6 +34,9 @@ without Phase S.
   Teams, a Slack huddle and WhatsApp desktop with captions, the pill, the after-call card, Live Translate and the main
   window open, watched from a second device (N5); the exact Windows build and macOS version; docs/SCREEN_SHARE_MATRIX.md
   started (app × system × share mode → hidden / black / visible). **Acceptance:** the matrix's baseline rows.
+  **Started 2026-11-16:** docs/SCREEN_SHARE_MATRIX.md with this Mac (macOS 27.3, 26C5035r; the SDK no longer has
+  `CGWindowListCreateImage`, so captures go through ScreenCaptureKit); the automated baseline needs the Screen Recording
+  permission and the meeting-app rows need N5.
 - [ ] S1 One `privacy` module owns the capture flag for every window (captions, dictation, pill, after-call, Live
   Translate, the future Assist card, the main window by setting, any later window), set before the first show; the
   scattered calls replaced; Settings → Privacy "Hide EchoLedger from screen sharing": All windows (default) / Only

@@ -151,3 +151,8 @@ monitoring tools.
 ## Verified here
 
 (Filled in as Phase S measures this repo's own builds; each entry names the machine, OS build, app version and method.)
+
+- 2026-11-16, Hassam's MacBook, macOS 27.3 (26C5035r): the macOS 27 SDK marks `CGWindowListCreateImage` unavailable
+  ("Please use ScreenCaptureKit instead"), so apps built today capture only through ScreenCaptureKit; the automated
+  capture needs the Screen Recording permission (without it ScreenCaptureKit answers "The user declined TCCs for
+  application, window, display capture"), so the Mac result comes from the in-app Share Check and the guided test.

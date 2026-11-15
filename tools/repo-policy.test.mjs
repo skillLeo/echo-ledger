@@ -430,3 +430,65 @@ describe('documentation', () => {
     assert.deepEqual(large, []);
   });
 });
+
+// Words rule (since v1.9, docs/research/screen-share-privacy.md): user-facing text says "private", "hidden from screen
+// share" and "private notes", never words that sell hiding or deceiving. English, Urdu and Arabic forms.
+const BANNED_WORDS = [
+  /\bundetectable\b/i,
+  /\bstealth(?:y|ily)?\b/i,
+  /\binvisible\s+to\s+proctors?\b/i,
+  /\bcheat(?:s|ed|ing|er|ers)?\b/i,
+  /\bbypass(?:es|ed|ing)?\b/i,
+  /دھوک[اہے]/u, // Urdu "dhoka" (deceit, cheating) in its usual endings
+  /(?:^|[\s،؟.,!?"'(])(?:ال)?غش(?:$|[\s،؟.,!?"')])/u, // Arabic "ghish" (cheating)
+];
+
+/** Which banned words `text` uses (the pattern sources); empty when it is clean. */
+export function bannedWordsIn(text) {
+  return BANNED_WORDS.filter((re) => re.test(text)).map((re) => re.source);
+}
+
+/**
+ * The text of a source file that people read: whole files for strings, pages and guides; for code, only the string
+ * literals that read as words (they contain a space), so identifiers, permission names and log keys never count.
+ */
+function userFacingText(path, text) {
+  if (/\.(xml|md)$/.test(path)) return text;
+  if (path.endsWith('.blade.php')) return text.replace(/\{\{--[\s\S]*?--\}\}/g, '');
+  const literals = text.match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g) ?? [];
+  return literals.filter((s) => s.includes(' ')).join('\n');
+}
+
+const USER_FACING = (p) =>
+  !/(^|\/)(tests?|__tests__|fixtures?)\//.test(p) &&
+  !/\.test\.(tsx?|mjs)$/.test(p) &&
+  (/^mobile\/app\/src\/main\/(java\/.*\.kt|res\/.*strings.*\.xml)$/.test(p) ||
+    /^desktop\/src\/.*\.(tsx?)$/.test(p) ||
+    /^desktop\/src-tauri\/src\/.*\.rs$/.test(p) ||
+    /^web\/(app\/.*\.php|resources\/views\/.*\.blade\.php|lang\/.*)$/.test(p) ||
+    /^docs\/(USER_GUIDE\.md|store\/.*\.md)$/.test(p));
+
+describe('words rule', () => {
+  test('the check finds each banned word, in English, Urdu and Arabic, and passes clean text', () => {
+    for (const planted of [
+      'An undetectable overlay',
+      'Stealth mode for interviews',
+      'Invisible to proctors',
+      'Cheat on your interview',
+      'Bypass the screen share',
+      'یہ دھوکہ ہے',
+      'هذا غش واضح',
+    ]) {
+      assert.notDeepEqual(bannedWordsIn(planted), [], planted);
+    }
+    assert.deepEqual(bannedWordsIn('Your notes stay private when you share your screen.'), []);
+    assert.deepEqual(bannedWordsIn('Hidden from screen share. Private notes.'), []);
+  });
+
+  test('no user-facing string uses a banned word', () => {
+    const offenders = textFiles
+      .filter(USER_FACING)
+      .flatMap((p) => bannedWordsIn(userFacingText(p, read(p))).map((w) => `${p}: ${w}`));
+    assert.deepEqual(offenders, []);
+  });
+});
