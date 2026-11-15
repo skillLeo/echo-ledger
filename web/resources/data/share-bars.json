@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated_at": "2026-11-16T00:00:00Z",
+  "note": "Windows that mean a screen share is running. owner and title are regular expressions without look-behind; flags \"i\" makes them case-insensitive. Version 1 is a starting set to confirm against real window lists (docs/SCREEN_SHARE_MATRIX.md); unknown sharing bars are logged on the computer, titles only.",
+  "patterns": [
+    { "id": "zoom-share-toolbar-mac", "app": "zoom", "platform": "macos", "owner": "^zoom\\.us$", "title": "share (toolbar|statusbar)", "flags": "i" },
+    { "id": "zoom-share-toolbar-win", "app": "zoom", "platform": "windows", "owner": "^zoom(\\.exe)?$", "title": "share (toolbar|statusbar)|you are screen sharing|you're sharing", "flags": "i" },
+    { "id": "teams-sharing-bar-mac", "app": "teams", "platform": "macos", "owner": "^microsoft teams", "title": "sharing (control bar|toolbar)|you're sharing|you are sharing|presenting", "flags": "i" },
+    { "id": "teams-sharing-bar-win", "app": "teams", "platform": "windows", "owner": "^(ms-teams|teams)(\\.exe)?$", "title": "sharing (control bar|toolbar)|you're sharing|you are sharing|presenting", "flags": "i" },
+    { "id": "chromium-sharing-bar-mac", "app": "meet", "platform": "macos", "owner": "^(google chrome|microsoft edge|brave browser|arc|opera|vivaldi)$", "title": "is sharing (your screen|a window|this tab|a tab|your entire screen)", "flags": "i" },
+    { "id": "chromium-sharing-bar-win", "app": "meet", "platform": "windows", "owner": "^(chrome|msedge|brave|opera|vivaldi)(\\.exe)?$", "title": "is sharing (your screen|a window|this tab|a tab|your entire screen)", "flags": "i" },
+    { "id": "slack-share-mac", "app": "slack", "platform": "macos", "owner": "^slack$", "title": "you're sharing|you are sharing|screen share", "flags": "i" },
+    { "id": "slack-share-win", "app": "slack", "platform": "windows", "owner": "^slack(\\.exe)?$", "title": "you're sharing|you are sharing|screen share", "flags": "i" },
+    { "id": "whatsapp-share-mac", "app": "whatsapp", "platform": "macos", "owner": "^whatsapp", "title": "you're sharing|you are sharing|screen sharing", "flags": "i" },
+    { "id": "whatsapp-share-win", "app": "whatsapp", "platform": "windows", "owner": "^whatsapp(\\.exe)?$", "title": "you're sharing|you are sharing|screen sharing", "flags": "i" }
+  ]
+}

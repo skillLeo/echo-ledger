@@ -472,8 +472,10 @@ computer (docs/research/screen-share-privacy.md, docs/SCREEN_SHARE_MATRIX.md). T
   share toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bars, Slack and WhatsApp), so they can
   change without an app release → `200 {"version": 1, "updated_at": "…", "patterns": [{"id":
   "zoom-share-toolbar-mac", "app": "zoom", "platform": "macos", "owner": "^zoom\\.us$", "title": "…"}]}` with an
-  `ETag`; `If-None-Match` with the same tag → `304`. `owner` and `title` are regular expressions without look-behind
-  (they run in both Rust and JavaScript); a pattern matches a window whose owner name and title both match. The desktop
+  `ETag`; `If-None-Match` with the same tag → `304`. `owner` and `title` are regular expressions without look-behind or inline
+  flags (they run in both Rust and JavaScript), with `"flags": "i"` for case-insensitive; a pattern matches a window
+  whose owner name and title both match. The file is web/resources/data/share-bars.json, the one copy for both the
+  server and the desktop app's fallback. The desktop
   app keeps the last answer and ships the same file as its fallback.
 
 ### Payment receipts (since v1.7)
