@@ -43,7 +43,8 @@ it('comes with Admin, Support, Billing and Read-only, and gives the super admin 
 it('opens to each role exactly the pages its permissions name', function () {
     $pages = ['/admin/customers' => 'customers.view', '/admin/plans' => 'plans.view', '/admin/upgrade-requests' => 'upgrades.manage',
         '/admin/server-usage' => 'usage.view', '/admin/api-credentials' => 'credentials.manage', '/admin/settings' => 'settings.manage',
-        '/admin/staff' => 'staff.manage', '/admin/device-reports' => 'devices.reports', '/admin/share-checks' => 'devices.reports'];
+        '/admin/staff' => 'staff.manage', '/admin/device-reports' => 'devices.reports', '/admin/share-checks' => 'devices.reports',
+        '/admin/missed-recordings' => 'devices.reports'];
     foreach (['admin', 'support', 'billing', 'read_only'] as $key) {
         $person = staffWith($key);
         $this->actingAs($person, 'web');

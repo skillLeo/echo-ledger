@@ -15,6 +15,8 @@ use App\Models\Client;
 use App\Models\ClientBrief;
 use App\Models\ClientFile;
 use App\Models\ClientMemoryItem;
+use App\Models\Device;
+use App\Models\MissedRecording;
 use App\Models\SentItem;
 use App\Models\Transcript;
 use App\Models\User;
@@ -22,12 +24,14 @@ use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Views\TranscriptViews;
 use Illuminate\Database\Seeder;
+use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Str;
 
 /**
  * Fills the demo library (DemoSeeder) with what the console's pages show when they are in use: a client workspace
  * (brief, memory, call notes, files), a suggested fix, a call waiting for Keep or Discard, a failed transcription,
- * an Urdu call with its Show as views, a share link, a request link and a recording a teammate sent. For local screenshots and walk-throughs only:
+ * an Urdu call with its Show as views, a share link, a request link, a recording a teammate sent and (since v1.8) calls the
+ * apps saw but did not record. For local screenshots and walk-throughs only:
  * `php artisan db:seed --class=ConsoleTourSeeder` after `php artisan db:seed`.
  */
 class ConsoleTourSeeder extends Seeder
@@ -128,5 +132,32 @@ class ConsoleTourSeeder extends Seeder
         $omar->forceFill(['email_verified_at' => now(), 'consent_seen_at' => now()])->save();
         SentItem::query()->create(['workspace_id' => $workspace, 'from_user_id' => $omar->id, 'to_user_id' => $user->id, 'kind' => 'session',
             'capture_session_id' => $urdu->id, 'title' => 'Invoice questions', 'note' => 'The part about Friday', 'sent_at' => now()->subDay()]);
+
+        $this->missedRecordings($user);
+    }
+
+    /** Calls the demo phone and laptop saw but did not record (v1.8): their Activity items and the admin counts. */
+    private function missedRecordings(User $user): void
+    {
+        $phone = Device::query()->where('user_id', $user->id)->where('platform', 'android')->first();
+        $laptop = Device::query()->where('user_id', $user->id)->where('platform', 'windows')->first();
+        foreach ([
+            [$phone, 'whatsapp', 'helper_not_armed', 6, 312],
+            [$laptop, 'zoom', 'mic_busy', 26 * 60, 1_930],
+            [$phone, 'whatsapp', 'helper_not_armed', 2 * 24 * 60, 95],
+            [$phone, 'phone_call', 'permission', 4 * 24 * 60, 45],
+            [$laptop, 'browser', 'detection', 9 * 24 * 60, 2_410],
+            [$phone, 'whatsapp_business', 'helper_not_armed', 12 * 24 * 60, 600],
+        ] as [$device, $app, $reason, $minutesAgo, $seconds]) {
+            if (! $device instanceof Device) {
+                continue;
+            }
+            $missed = MissedRecording::query()->create(['user_id' => $user->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id,
+                'client_ref' => (string) Str::uuid(), 'platform' => $device->platform->value, 'app_version' => '1.8.0', 'source_app' => $app,
+                'call_started_at' => now()->subMinutes($minutesAgo), 'call_duration_s' => $seconds, 'reason' => $reason]);
+            // Its Activity item says when the call ended, as an app that reported it at once would have it.
+            $user->notifications()->get()->filter(fn (DatabaseNotification $n): bool => ($n->data['viewData']['missed_recording_id'] ?? null) === $missed->id)
+                ->each(fn (DatabaseNotification $n) => $n->forceFill(['created_at' => $missed->call_started_at->copy()->addSeconds($seconds)])->save());
+        }
     }
 }
