@@ -183,8 +183,11 @@ data class CaptionStyle(
     }
 }
 
-/** Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset. */
-class SettingsStore(private val context: Context, private val cipher: SecretCipher) {
+/**
+ * Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset.
+ * [onSaved] hears every settings change [update] saved (the app graph passes it to screen-share privacy).
+ */
+class SettingsStore(private val context: Context, private val cipher: SecretCipher, private val onSaved: (AppSettings) -> Unit = {}) {
     private object Keys {
         val SETTINGS = stringPreferencesKey("settings_json")
         val TOKEN = stringPreferencesKey("device_token_enc")
@@ -196,9 +199,13 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     suspend fun current(): AppSettings = settings.first()
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
+        var saved: AppSettings? = null
         context.dataStore.edit { prefs ->
-            prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), transform(prefs.toSettings()))
+            val next = transform(prefs.toSettings())
+            prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
+            saved = next
         }
+        saved?.let(onSaved)
     }
 
     suspend fun saveToken(token: String) {

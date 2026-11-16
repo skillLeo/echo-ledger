@@ -14,7 +14,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -39,7 +38,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -49,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.echoledger.mobile.calls.Decisions
+import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.ui.EchoLedgerTheme
@@ -82,7 +81,6 @@ object DecisionPopup {
     private var view: ComposeView? = null
     private var owner: OverlayOwner? = null
     private var windowManager: WindowManager? = null
-    private var appContext: Context? = null
     private var timeout: Runnable? = null
 
     /** The id of the recording the chip is about; null when no chip is showing. */
@@ -110,13 +108,10 @@ object DecisionPopup {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
-                // Shared or hidden (since v1.8.1): a plain dot instead of the call's name; the timeout still runs.
-                if (!com.echoledger.mobile.core.ShareGuard.textVisible.collectAsState().value) {
-                    PrivateDot(
-                        Modifier.pointerInput(Unit) {
-                            detectTapGestures(onTap = { com.echoledger.mobile.core.ShareGuard.setHidden(false) })
-                        }
-                    )
+                // Hidden, or in a screen share Android reports (since v1.8.1): a grey dot instead of the call's name;
+                // the timeout still runs.
+                if (!ShareGuard.textVisible.collectAsState().value) {
+                    PrivateDot(onShow = { ShareGuard.setHidden(false) })
                     return@setContent
                 }
                 EchoLedgerTheme(themeMode) {
@@ -150,29 +145,22 @@ object DecisionPopup {
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            // Not focusable and not modal: touches outside the chip go to the app underneath.
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                if (com.echoledger.mobile.core.ShareGuard.secure(com.echoledger.mobile.core.ShareGuard.mode.value)) {
-                    WindowManager.LayoutParams.FLAG_SECURE
-                } else {
-                    0
-                },
+            // Not focusable and not modal: touches outside the card go to the app underneath. PrivateWindows adds
+            // FLAG_SECURE unless Settings → During screen sharing is Show.
+            FloatingWindow.AFTER_CALL_CARD.flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
             y = (BOTTOM_MARGIN_DP * metrics.density).toInt()
+            title = FloatingWindow.AFTER_CALL_CARD.title
         }
-        val added = runCatching { wm.addView(compose, params) }.isSuccess
-        if (!added) {
+        if (!PrivateWindows.add(wm, compose, params)) {
             lifecycleOwner.stop()
             return false
         }
         view = compose
         owner = lifecycleOwner
         windowManager = wm
-        ShareWatch.acquire(app)
-        appContext = app
         showingFor = rec.id
         showingMode = mode
         // Saved: the chip only goes (the call is kept already). Ask: nobody chose, so the call is kept.
@@ -186,15 +174,11 @@ object DecisionPopup {
     fun hide() {
         timeout?.let(handler::removeCallbacks)
         timeout = null
-        view?.let { v ->
-            runCatching { windowManager?.removeView(v) }
-            appContext?.let(ShareWatch::release)
-        }
+        view?.let { v -> windowManager?.let { PrivateWindows.remove(it, v) } }
         owner?.stop()
         view = null
         owner = null
         windowManager = null
-        appContext = null
         showingFor = null
         showingMode = null
     }

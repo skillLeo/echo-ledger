@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -124,22 +125,33 @@ internal fun PillDot(s: PillState, modifier: Modifier = Modifier) {
     )
 }
 
-/** While EchoLedger's cards are private (shared, or hidden by the person): a plain grey dot with no text. */
+/**
+ * While EchoLedger's floating windows are hidden (Hide EchoLedger windows, or a screen share Android reports): a plain
+ * 16 dp grey dot without text, in a 48 dp touch target. A tap, or TalkBack's double-tap, is [onShow]: "Show EchoLedger
+ * windows".
+ */
 @Composable
-internal fun PrivateDot(modifier: Modifier = Modifier) {
+internal fun PrivateDot(onShow: () -> Unit, modifier: Modifier = Modifier) {
     Box(
         modifier
-            .size(16.dp)
-            .background(PILL_MUTED, CircleShape)
-            .border(2.dp, PILL_BG, CircleShape)
-            .semantics { contentDescription = "EchoLedger cards are hidden. Tap to show them." }
-    )
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = SHOW_WINDOWS, onClick = onShow)
+            .semantics { contentDescription = "EchoLedger's floating windows are hidden" },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.size(16.dp).background(PILL_MUTED, CircleShape).border(2.dp, PILL_BG, CircleShape))
+    }
 }
 
+/** The action that takes every floating window off the screen at once, and its undo (docs/DESIGN_SYSTEM.md). */
+internal const val HIDE_WINDOWS = "Hide EchoLedger windows"
+internal const val SHOW_WINDOWS = "Show EchoLedger windows"
+
 /**
- * The open pill: a floating toolbar of 44 dp buttons (Captions · Pause · Stop · Discard · Shrink · Hide · Hide cards) under the clock
- * and the language. A long-press shows a button's name; Stop asks for a second tap, because the toolbar lies over the
- * call app's own buttons.
+ * The open recording controls: a floating toolbar of 44 dp buttons (Captions · Pause · Stop · Discard · Shrink · Hide ·
+ * Hide EchoLedger windows) under the clock and the language. A long-press shows a button's name; Stop asks for a second
+ * tap, because the toolbar lies over the call app's own buttons.
  */
 @Composable
 internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Modifier = Modifier, onEvent: (PillEvent) -> Unit = {}) {
@@ -204,8 +216,8 @@ internal fun PillToolbar(s: PillState, modifier: Modifier = Modifier, header: Mo
             }
             PillButton(Icons.Rounded.RemoveCircleOutline, "Shrink to a dot", showHint) { onEvent(PillEvent.ShrinkToDot) }
             PillButton(Icons.Rounded.VisibilityOff, "Hide controls (keeps recording)", showHint) { onEvent(PillEvent.HideControls) }
-            // Before sharing the screen (since v1.8.1): every EchoLedger card becomes a dot until tapped.
-            PillButton(Icons.Rounded.StopScreenShare, "Hide EchoLedger cards", showHint) {
+            // Before a screen share (since v1.8.1): every floating window becomes a grey dot until it is tapped.
+            PillButton(Icons.Rounded.StopScreenShare, HIDE_WINDOWS, showHint) {
                 onEvent(PillEvent.CloseMenu)
                 com.echoledger.mobile.core.ShareGuard.setHidden(true)
             }

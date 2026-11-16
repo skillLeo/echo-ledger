@@ -13,6 +13,7 @@ import android.view.MotionEvent
 import android.view.View
 import android.view.WindowInsets
 import android.view.WindowManager
+import androidx.annotation.VisibleForTesting
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -98,12 +99,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     private val fadeGrip = Runnable { gripFaded.value = true }
     private val closeToolbar = Runnable { hideToolbar() }
 
-    /** The cards are private (shared, or hidden by the person; since v1.8.1): the box is not drawn. */
+    /** The floating windows are hidden (by the person, or in a screen share Android reports; since v1.8.1): no box. */
     private var private = false
     private var stopWatching: (() -> Unit)? = null
-
-    /** FLAG_SECURE in "Black box" mode (Settings → During screen sharing). */
-    private fun secureBit() = if (ShareGuard.secure(ShareGuard.mode.value)) WindowManager.LayoutParams.FLAG_SECURE else 0
 
     private fun shownVisibility() = if (private) View.INVISIBLE else View.VISIBLE
 
@@ -134,11 +132,12 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             } else {
                 BoxGeometry.defaultBox(safe, (84 * density).toInt(), (520 * density).toInt())
             }
+        // Every window here opens and changes through PrivateWindows: FLAG_SECURE unless During screen sharing is Show.
         val params = WindowManager.LayoutParams(
             rect.width,
             rect.height,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            LOCKED_FLAGS or secureBit(),
+            FloatingWindow.LIVE_TRANSLATE.flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
@@ -150,9 +149,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             ) {
                 layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
             }
-            title = "EchoLedger Live Translate"
+            title = FloatingWindow.LIVE_TRANSLATE.title
         }
-        if (runCatching { wm.addView(view, params) }.isFailure) {
+        if (!PrivateWindows.add(wm, view, params)) {
             owner.stop()
             return false
         }
@@ -160,20 +159,17 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         boxParams = params
         attachDrag(view)
         if (this.showGrip) addGrip()
-        ShareWatch.acquire(context)
-        stopWatching = ShareGuard.observe { visible -> main.post { applyPrivate(!visible) } }
+        // The latest state when the post runs, so changes from other threads can never arrive out of order.
+        stopWatching = ShareGuard.observe { main.post { applyPrivate(!ShareGuard.textVisible.value) } }
         return true
     }
 
     fun hideAll() {
         main.removeCallbacksAndMessages(null)
         hideToolbar()
-        grip?.let { runCatching { wm.removeView(it) } }
+        grip?.let { PrivateWindows.remove(wm, it) }
         grip = null
-        text?.let {
-            runCatching { wm.removeView(it) }
-            ShareWatch.release(context)
-        }
+        text?.let { PrivateWindows.remove(wm, it) }
         text = null
         stopWatching?.invoke()
         stopWatching = null
@@ -200,7 +196,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             if (subtitles) params.y = safeArea().bottom - wanted - offsetPx
         }
         if (state != BoxState.EDIT) params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
-        runCatching { wm.updateViewLayout(view, params) }
+        PrivateWindows.update(wm, view, params)
         moveGrip()
     }
 
@@ -212,7 +208,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             val params = boxParams ?: return
             if (subtitles) {
                 params.y = safeArea().bottom - params.height - value
-                runCatching { wm.updateViewLayout(view, params) }
+                PrivateWindows.update(wm, view, params)
             }
         }
 
@@ -236,7 +232,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         paused.value = next == BoxState.PAUSED
         when (next) {
             BoxState.EDIT -> {
-                params.flags = EDIT_FLAGS or secureBit()
+                params.flags = EDIT_FLAGS
                 params.alpha = 1f
                 view.visibility = shownVisibility()
                 view.setEditing(true)
@@ -246,18 +242,18 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             BoxState.HIDDEN -> {
                 view.visibility = View.GONE
                 view.setEditing(false)
-                params.flags = LOCKED_FLAGS or secureBit()
+                params.flags = LOCKED_FLAGS
                 hideToolbar()
             }
 
             else -> {
-                params.flags = LOCKED_FLAGS or secureBit()
+                params.flags = LOCKED_FLAGS
                 params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
                 view.visibility = shownVisibility()
                 view.setEditing(false)
             }
         }
-        runCatching { wm.updateViewLayout(view, params) }
+        PrivateWindows.update(wm, view, params)
         grip?.visibility = if (next == BoxState.HIDDEN) View.GONE else View.VISIBLE
         wakeGrip()
     }
@@ -270,7 +266,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             if (text != null) addGrip()
         } else {
             hideToolbar()
-            grip?.let { runCatching { wm.removeView(it) } }
+            grip?.let { PrivateWindows.remove(wm, it) }
             grip = null
         }
     }
@@ -311,7 +307,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
                         params.x = startX + dx
                         params.y = startY + dy
                     }
-                    runCatching { wm.updateViewLayout(view, params) }
+                    PrivateWindows.update(wm, view, params)
                     moveGrip()
                 }
 
@@ -320,7 +316,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
                     params.x = placed.x
                     params.y = placed.y
                     params.width = placed.width
-                    runCatching { wm.updateViewLayout(view, params) }
+                    PrivateWindows.update(wm, view, params)
                     moveGrip()
                     val (sw, sh) = screen()
                     actions.onPlaced(BoxGeometry.toPlacement(placed, sw, sh))
@@ -369,10 +365,13 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             size,
             size,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            FloatingWindow.LIVE_TRANSLATE_GRIP.flags,
             PixelFormat.TRANSLUCENT
-        ).apply { gravity = Gravity.TOP or Gravity.START }
-        if (runCatching { wm.addView(view, params) }.isFailure) return
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            title = FloatingWindow.LIVE_TRANSLATE_GRIP.title
+        }
+        if (!PrivateWindows.add(wm, view, params)) return
         grip = view
         gripParams = params
         moveGrip()
@@ -386,7 +385,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         val size = (GRIP_DP * density).toInt()
         gp.x = (bp.x + bp.width - size / 2).coerceAtMost(screen().first - size)
         gp.y = (bp.y - size / 2).coerceAtLeast(0)
-        runCatching { wm.updateViewLayout(g, gp) }
+        PrivateWindows.update(wm, g, gp)
     }
 
     private fun wakeGrip() {
@@ -395,7 +394,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         main.postDelayed(fadeGrip, GRIP_FADE_MS)
     }
 
-    private fun showToolbar() {
+    /** The grip's long-press: the toolbar under the box (closes after [TOOLBAR_IDLE_MS] without a tap). */
+    @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+    internal fun showToolbar() {
         if (toolbar != null || private) return
         val view = ComposeView(context).apply {
             setViewTreeLifecycleOwner(owner)
@@ -435,20 +436,20 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             width,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH or
-                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
+            FloatingWindow.LIVE_TRANSLATE_TOOLBAR.flags,
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
             val bp = boxParams
             x = ((bp?.x ?: 0) + (bp?.width ?: 0) - width).coerceIn(margin, (screenW - width - margin).coerceAtLeast(margin))
             y = (bp?.y ?: 0) + (bp?.height ?: 0) + margin
+            title = FloatingWindow.LIVE_TRANSLATE_TOOLBAR.title
         }
         view.setOnTouchListener { _, e ->
             if (e.actionMasked == MotionEvent.ACTION_OUTSIDE) hideToolbar()
             false
         }
-        if (runCatching { wm.addView(view, params) }.isFailure) return
+        if (!PrivateWindows.add(wm, view, params)) return
         toolbar = view
         main.removeCallbacks(closeToolbar)
         main.postDelayed(closeToolbar, TOOLBAR_IDLE_MS)
@@ -456,7 +457,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
 
     private fun hideToolbar() {
         main.removeCallbacks(closeToolbar)
-        toolbar?.let { runCatching { wm.removeView(it) } }
+        toolbar?.let { PrivateWindows.remove(wm, it) }
         toolbar = null
     }
 
