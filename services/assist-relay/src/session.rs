@@ -202,6 +202,10 @@ struct Active {
     t0: Instant,
     requested_at: Instant,
     provider_first_token_at: Option<Instant>,
+    /// The model's latest word: for an answer held until complete, the model's share runs to here.
+    provider_last_token_at: Option<Instant>,
+    /// This answer is held until complete (`hold_until_complete`).
+    held: bool,
     first_sent_at: Option<Instant>,
     gate: SkipGate,
     text: String,
@@ -236,8 +240,12 @@ impl Active {
         let request = self.requested_at.saturating_duration_since(self.t0);
         let provider = self.provider_first_token_at.map(|at| at.saturating_duration_since(self.requested_at));
         let shown = self.first_sent_at.map(|at| at.saturating_duration_since(self.t0));
-        let overhead = match (shown, provider, self.visibility) {
-            (Some(shown), Some(provider), Visibility::Shown) => Some(shown.saturating_sub(provider)),
+        // The model's share of the wait for the first word on the card: to its first word, or, for an answer held
+        // until complete, to its last.
+        let model_share = if self.held { self.provider_last_token_at } else { self.provider_first_token_at }
+            .map(|at| at.saturating_duration_since(self.requested_at));
+        let overhead = match (shown, model_share, self.visibility) {
+            (Some(shown), Some(model), Visibility::Shown) => Some(shown.saturating_sub(model)),
             _ => None,
         };
         Latency {
@@ -927,6 +935,8 @@ impl Engine {
             t0,
             requested_at: Instant::now(),
             provider_first_token_at: None,
+            provider_last_token_at: None,
+            held: false,
             first_sent_at: None,
             gate: SkipGate::default(),
             text: String::new(),
@@ -1023,6 +1033,8 @@ impl Engine {
             return;
         };
         active.provider_first_token_at.get_or_insert(at);
+        active.provider_last_token_at = Some(at);
+        active.held = holds;
         active.text.push_str(text);
         if active.visibility == Visibility::Upgrade || holds {
             return;
@@ -1081,6 +1093,8 @@ impl Engine {
                 active.gate = SkipGate::default();
                 active.usage = None;
                 active.provider_first_token_at = None;
+                active.provider_last_token_at = None;
+                active.held = false;
                 if let Some((usage, cost)) = abandoned {
                     let (before, before_cost) = active.abandoned.unwrap_or_default();
                     active.abandoned = Some((add_usage(before, usage), before_cost.saturating_add(cost)));
