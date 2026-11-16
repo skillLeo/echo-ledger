@@ -210,6 +210,9 @@ struct Active {
     task: JoinHandle<()>,
     /// A shown draft: its upgrade. An upgrade: its draft.
     linked: Option<String>,
+    /// Attempts given up for the fallback model: their (estimated) usage and cost, already in the spend, added to this
+    /// suggestion's usage report.
+    abandoned: Option<(Usage, u64)>,
 }
 
 impl Active {
@@ -929,6 +932,7 @@ impl Engine {
             context,
             task,
             linked,
+            abandoned: None,
         };
         self.active.insert(id, active);
     }
@@ -1048,9 +1052,18 @@ impl Engine {
         if !active.gate.is_open()
             && let Some(fallback) = active.fallback.clone()
         {
-            // Nothing reached the card yet: the same suggestion on the fallback model.
-            let attempt = active.attempt + 1;
+            // Nothing reached the card yet: the same suggestion on the fallback model. The abandoned attempt is charged
+            // first (its estimate when the provider sent no counts), unless the provider turned the request away
+            // unprocessed (rate limited, or no key): that bills nothing.
             let config = self.config();
+            let abandoned = match error {
+                ProviderError::NotConfigured(_) | ProviderError::RateLimited => None,
+                _ => {
+                    let (usage, _) = active.usage();
+                    Some((usage, config.model(&active.model).map_or(0, |spec| cost_micros(spec, &usage))))
+                }
+            };
+            let attempt = active.attempt + 1;
             let max_output_tokens = config.modes.get(active.mode).max_output_tokens;
             let task = self.spawn_attempt(id, attempt, &fallback, &active.context, max_output_tokens, &active.origin);
             let provider = config.model(&fallback).map_or(active.provider, |spec| spec.provider);
@@ -1066,6 +1079,14 @@ impl Engine {
                 active.gate = SkipGate::default();
                 active.usage = None;
                 active.provider_first_token_at = None;
+                if let Some((usage, cost)) = abandoned {
+                    let (before, before_cost) = active.abandoned.unwrap_or_default();
+                    active.abandoned = Some((add_usage(before, usage), before_cost.saturating_add(cost)));
+                }
+            }
+            if let Some((_, cost)) = abandoned {
+                let model = self.active.get(id).map(|a| a.model.clone()).unwrap_or_default();
+                self.add_spend(cost, &model);
             }
             return;
         }
@@ -1348,6 +1369,11 @@ impl Engine {
         let (usage, estimated) = active.usage();
         let cost = self.config().model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
         self.add_spend(cost, &active.model);
+        // Abandoned attempts were charged when they were given up; the report counts them too.
+        let (usage, cost, estimated) = match active.abandoned {
+            Some((before, before_cost)) => (add_usage(before, usage), cost.saturating_add(before_cost), true),
+            None => (usage, cost, estimated),
+        };
         UsageReport {
             input_tokens: usage.input_tokens,
             cached_input_tokens: usage.cached_input_tokens,
@@ -1518,6 +1544,15 @@ impl Engine {
         }
         self.deps.telemetry.event(&SessionEvent::Warmed { session: self.session_id.clone(), model, cost_micros: cost, error });
         self.evaluate_mode(Why::Spend);
+    }
+}
+
+fn add_usage(a: Usage, b: Usage) -> Usage {
+    Usage {
+        input_tokens: a.input_tokens.saturating_add(b.input_tokens),
+        cached_input_tokens: a.cached_input_tokens.saturating_add(b.cached_input_tokens),
+        cache_write_tokens: a.cache_write_tokens.saturating_add(b.cache_write_tokens),
+        output_tokens: a.output_tokens.saturating_add(b.output_tokens),
     }
 }
 

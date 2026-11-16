@@ -294,6 +294,36 @@ async fn a_draft_replaced_mid_answer_loses_its_upgrade_once_i_speak() {
     assert_eq!(upgrade.outcome, Outcome::Discarded);
 }
 
+/// One Fast question whose Haiku attempt fails with `error` before its first word; the fallback's `suggestion_end`.
+async fn fallback_end(error: ProviderError, session: &str) -> (serde_json::Value, u64) {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims(session);
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    settle().await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Fail(error));
+    let before = h.state.registry.spent(session);
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let end = s.until("suggestion_end").await.pop().unwrap();
+    assert_eq!(end["model"], "openai/gpt-oss-120b");
+    (end, h.state.registry.spent(session) - before)
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_abandoned_attempt_is_charged_before_the_fallback_unless_it_was_turned_away() {
+    let (charged, spent_charged) = fallback_end(ProviderError::Unavailable, "s-abandon-1").await;
+    let (free, spent_free) = fallback_end(ProviderError::RateLimited, "s-abandon-2").await;
+    let input = |end: &serde_json::Value| end["usage"]["input_tokens"].as_u64().unwrap();
+    assert_eq!(charged["usage"]["estimated"], true, "the abandoned attempt is an estimate");
+    assert_eq!(free["usage"]["estimated"], false);
+    assert!(input(&charged) > input(&free), "{} vs {}", input(&charged), input(&free));
+    assert!(spent_charged > spent_free, "the spend counts the abandoned attempt: {spent_charged} vs {spent_free}");
+    let reported = |end: &serde_json::Value| (end["usage"]["cost_usd"].as_f64().unwrap() * 1_000_000.0).round() as u64;
+    assert_eq!(reported(&charged), spent_charged, "the report and the spend agree");
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_model_that_never_answers_ends_in_a_retryable_error_after_the_fallback() {
     let h = harness(RelayConfig::built_in());
