@@ -3,6 +3,8 @@
 
 #![allow(dead_code)]
 
+pub mod mock_http;
+
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -86,6 +88,22 @@ pub fn harness_with(config: RelayConfig, telemetry: Arc<dyn TelemetrySink>) -> H
         issuer: "echoledger".into(),
     });
     Harness { state, mocks, stats, telemetry: recorder, reports }
+}
+
+/// A relay on the given providers (the live clients against a local server, for example).
+pub fn harness_on(config: RelayConfig, providers: Providers) -> Harness {
+    let recorder = Recorder::default();
+    let reports = ReportRecorder::default();
+    let state = assist_relay::app_state(assist_relay::Parts {
+        config: Arc::new(Shared::new(config)),
+        pack: Pack::built_in(),
+        providers,
+        telemetry: Arc::new(recorder.clone()) as Arc<dyn TelemetrySink>,
+        reports: Arc::new(reports.clone()) as Arc<dyn ReportSink>,
+        secrets: vec![Secret::new(SECRET)],
+        issuer: "echoledger".into(),
+    });
+    Harness { state, mocks: BTreeMap::new(), stats: Arc::new(MockStats::default()), telemetry: recorder, reports }
 }
 
 /// One session's connection, driven through channels.

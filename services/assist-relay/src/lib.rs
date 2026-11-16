@@ -8,6 +8,7 @@ pub mod budget;
 pub mod config;
 pub mod context;
 pub mod domain;
+pub mod eval;
 pub mod internal;
 pub mod logging;
 pub mod pack;

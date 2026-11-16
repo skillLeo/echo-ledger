@@ -221,6 +221,110 @@ async fn a_failing_model_falls_back_before_the_first_token() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_model_that_breaks_mid_answer_is_replaced_by_the_fallback_model() {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims("s-break");
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Break(3));
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("suggestion_end").await;
+    let first = &of_type(&seen, "suggestion_start")[0];
+    let broken = first["suggestion_id"].as_str().unwrap();
+    assert_eq!(first["model"], "claude-haiku-5-5");
+    assert_eq!(text_of(&seen, broken), "Yes, I can ", "three words reached the card");
+    let end = seen.last().unwrap();
+    assert_eq!((end["suggestion_id"].as_str(), end["status"].as_str()), (Some(broken), Some("superseded")));
+
+    let replacement = s.next().await;
+    assert_eq!(replacement["type"], "suggestion_start");
+    assert_eq!(replacement["replaces"], broken);
+    assert_eq!(replacement["model"], "openai/gpt-oss-120b");
+    assert_eq!(replacement["turn_id"], "o-1");
+    let id = replacement["suggestion_id"].as_str().unwrap().to_owned();
+    let rest = s.until("suggestion_end").await;
+    let done = rest.last().unwrap();
+    assert_eq!((done["suggestion_id"].as_str(), done["status"].as_str()), (Some(id.as_str()), Some("done")));
+    assert!(text_of(&rest, &id).starts_with("Yes, I can answer that"));
+    // Timed from the same end of turn: the broken attempt's time counts.
+    assert!(done["latency"]["end_of_turn_to_first_token_ms"].as_f64().unwrap() > 350.0, "{done}");
+    let records = h.telemetry.suggestions();
+    assert!(records.iter().any(|r| r.suggestion == id && r.fallback_used));
+}
+
+/// A Balanced hard question whose Haiku draft breaks after three words: the fallback (gpt-oss) answers as the draft.
+async fn broken_draft(h: &Harness, s: &mut Driver, turn: &str) -> (String, String) {
+    ready(s).await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Break(3));
+    s.send(final_turn(turn, "other", HARD)).await;
+    let first = s.until("suggestion_end").await;
+    assert_eq!((first[0]["draft"].as_bool(), first.last().unwrap()["status"].as_str()), (Some(true), Some("superseded")));
+    let broken = first[0]["suggestion_id"].as_str().unwrap().to_owned();
+    let replacement = s.until("suggestion_end").await;
+    let start = &replacement[0];
+    assert_eq!(start["replaces"], broken.as_str());
+    assert_eq!((start["model"].as_str(), start["draft"].as_bool()), (Some("openai/gpt-oss-120b"), Some(true)), "still a draft");
+    assert_eq!(replacement.last().unwrap()["status"], "done");
+    (broken, start["suggestion_id"].as_str().unwrap().to_owned())
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_draft_replaced_mid_answer_keeps_its_upgrade() {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(claims("s-break-upgrade"));
+    let (_, fallback_id) = broken_draft(&h, &mut s, "o-21").await;
+    let upgrade = s.until("suggestion_end").await;
+    let start = &upgrade[0];
+    assert_eq!((start["kind"].as_str(), start["model"].as_str()), (Some("upgrade"), Some("claude-sonnet-5-5")));
+    assert_eq!(start["replaces"], fallback_id.as_str(), "it replaces the fallback's answer");
+    assert_eq!(text_of(&upgrade, start["suggestion_id"].as_str().unwrap()), mock_reply(Purpose::Answer, HARD));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_draft_replaced_mid_answer_loses_its_upgrade_once_i_speak() {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(claims("s-break-upgrade-me"));
+    broken_draft(&h, &mut s, "o-22").await;
+    s.send(json!({"type": "turn_partial", "turn_id": "m-22", "channel": "me", "text": "So at Acme I", "silence_ms": 0})).await;
+    let later = s.drain(Duration::from_secs(3)).await;
+    assert!(of_type(&later, "suggestion_start").is_empty(), "{later:?}");
+    let upgrade = h.telemetry.suggestions().into_iter().find(|r| r.trigger == Trigger::Upgrade).expect("an upgrade record");
+    assert_eq!(upgrade.outcome, Outcome::Discarded);
+}
+
+/// One Fast question whose Haiku attempt fails with `error` before its first word; the fallback's `suggestion_end`.
+async fn fallback_end(error: ProviderError, session: &str) -> (serde_json::Value, u64) {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims(session);
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    settle().await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Fail(error));
+    let before = h.state.registry.spent(session);
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let end = s.until("suggestion_end").await.pop().unwrap();
+    assert_eq!(end["model"], "openai/gpt-oss-120b");
+    (end, h.state.registry.spent(session) - before)
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_abandoned_attempt_is_charged_before_the_fallback_unless_it_was_turned_away() {
+    let (charged, spent_charged) = fallback_end(ProviderError::Unavailable, "s-abandon-1").await;
+    let (free, spent_free) = fallback_end(ProviderError::RateLimited, "s-abandon-2").await;
+    let input = |end: &serde_json::Value| end["usage"]["input_tokens"].as_u64().unwrap();
+    assert_eq!(charged["usage"]["estimated"], true, "the abandoned attempt is an estimate");
+    assert_eq!(free["usage"]["estimated"], false);
+    assert!(input(&charged) > input(&free), "{} vs {}", input(&charged), input(&free));
+    assert!(spent_charged > spent_free, "the spend counts the abandoned attempt: {spent_charged} vs {spent_free}");
+    let reported = |end: &serde_json::Value| (end["usage"]["cost_usd"].as_f64().unwrap() * 1_000_000.0).round() as u64;
+    assert_eq!(reported(&charged), spent_charged, "the report and the spend agree");
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_model_that_never_answers_ends_in_a_retryable_error_after_the_fallback() {
     let h = harness(RelayConfig::built_in());
     h.mock(ProviderKind::Anthropic).push(MockBehavior::Stall);
@@ -336,7 +440,8 @@ async fn going_back_to_an_earlier_token_never_restores_budget() {
     s.send(json!({"type": "token_refresh", "token": sign(&y)})).await;
     let answers = s.drain(Duration::from_millis(500)).await;
     assert_eq!(answers[0]["type"], "token_refreshed");
-    assert!(answers.iter().any(|m| m["type"] == "mode_changed" && m["to"] == "fast"), "{answers:?}");
+    let back = answers.iter().find(|m| m["type"] == "mode_changed").expect("a mode change");
+    assert_eq!((back["to"].as_str(), back["reason"].as_str()), (Some("fast"), Some("budget_restored")), "the plan caps it at fast, the budget is the change");
     use_up(&mut s, "y").await;
 
     // Back to the first token: it continues where it was, so nothing comes back.
@@ -369,6 +474,39 @@ async fn going_back_to_an_earlier_token_never_restores_budget() {
     // The connection in use was not replaced.
     s.send(json!({"type": "help_now"})).await;
     assert_eq!(s.next().await["code"], "budget_exhausted");
+}
+
+#[tokio::test(start_paused = true)]
+async fn practice_gets_fast_on_free_and_a_live_free_session_gets_captions_only() {
+    let h = harness(RelayConfig::built_in());
+    let mut practice = claims("s-practice");
+    practice.plan = assist_relay::domain::Plan::Free;
+    practice.practice = true;
+    let mut s = h.connect(practice);
+    let first = ready(&mut s).await;
+    assert_eq!((first["mode"].as_str(), first["practice"].as_bool()), (Some("fast"), Some(true)));
+    assert_eq!(first["allowed_modes"], json!(["fast"]), "practice is Fast only, whatever the plan");
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("suggestion_end").await;
+    assert_eq!((seen[0]["mode"].as_str(), seen.last().unwrap()["status"].as_str()), (Some("fast"), Some("done")));
+
+    let mut live = claims("s-free-live");
+    live.plan = assist_relay::domain::Plan::Free;
+    let mut s = h.connect(live);
+    let first = ready(&mut s).await;
+    assert_eq!((first["mode"].as_str(), first["allowed_modes"].clone()), (Some("captions_only"), json!([])));
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    assert!(s.drain(Duration::from_secs(2)).await.is_empty(), "no suggestion in a live Free session");
+    s.send(json!({"type": "help_now"})).await;
+    let refused = s.next().await;
+    assert_eq!(refused["code"], "budget_exhausted");
+    assert!(refused["message"].as_str().unwrap().contains("no live suggestions"), "{refused}");
+
+    // An Ultra practice session is Fast too: the plan's live modes don't apply.
+    let mut ultra = claims("s-ultra-practice");
+    ultra.practice = true;
+    let mut s = h.connect(ultra);
+    assert_eq!(ready(&mut s).await["allowed_modes"], json!(["fast"]));
 }
 
 #[tokio::test(start_paused = true)]

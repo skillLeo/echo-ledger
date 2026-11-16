@@ -36,9 +36,9 @@ What it measures:
 
 | Measure | How |
 |---|---|
-| First token | The app's clock: sending `turn_final` to receiving the first `token`. |
-| **Relay overhead** | **The first token minus the mock's known first-token delay** (350 ms for Haiku in Fast and Balanced, 700 ms for Sonnet in Deep): everything the relay, both sockets, the timers and the app's own scheduling add. This is the figure held against the 30 ms target. |
-| Relay overhead, relay's own measure | `suggestion_end.latency.relay_overhead_ms`: end of turn to the first token sent, minus the model's share as the relay saw it (`request_to_first_token_ms`). Shown for comparison; it leaves out the sockets and the timer slack. |
+| First token | The app's clock: sending `turn_final` to receiving the first `token`. **Held models count full-answer time:** Sonnet 5.5 (Deep) and Opus 5.5 are held until complete (`hold_until_complete`, so a refusal is never shown), so their first word on the card comes with their last. Deep's first token is the mock's whole answer: 700 ms, then a word every 18 ms. |
+| **Relay overhead** | **The app's first token minus the model's share**: Haiku's time to its first word (the mock's 350 ms) in Fast and Balanced, Sonnet's time to its last word in Deep. Everything the relay, both sockets, the timers and the app's own scheduling add. This is the figure held against the 30 ms target. |
+| Relay overhead, relay's own measure | `suggestion_end.latency.relay_overhead_ms`: end of turn to the first token sent, minus the model's share as the relay saw it (to the first word, or the last for a held answer). Shown for comparison; it leaves out the sockets and the timer slack. |
 | Memory per session | The relay's resident memory (`ps -o rss`), sampled every 100 ms: the peak with every session open, minus the idle relay, divided by the sessions. |
 | Clean shutdown | SIGTERM with every session open: every app must get close `1012`, the relay must log `stopped` and exit 0 within 6 s (it waits up to 5 s for sessions). |
 | Nothing unasked | Any `suggestion_start` that no question of the other person asked for (my own channel included). |
@@ -50,59 +50,56 @@ What it measures:
 |---|---|
 | Computer | MacBook Pro (MacBookPro18,1), Apple M1 Pro, 10 cores (8 performance, 2 efficiency), 32 GB |
 | System | macOS 27.3, rustc 1.99.1, release build (`lto = "thin"`) |
-| Load | Shared with other work: load average 25 to 70 during the runs |
+| Load | Shared with other work: load average 40 to 52 during these runs |
 | Network | Loopback (127.0.0.1); the apps and the relay on the same machine, competing for the same cores |
 
-Run on 2026-11-17 at commit `ebd2d790`.
+Run on 2026-11-17 at commit `49287a77` (Deep's Sonnet held until complete). The first runs, at `ebd2d790`, had Deep
+streaming; their Fast and Balanced numbers were the same.
 
 ## Results
 
 All four runs passed every target.
 
-**About "2 threads".** `--relay-threads 2` gives the relay's async runtime two worker threads, which approximates a
-2-vCPU VPS. It is not the same thing: the relay process can still run on the Mac's other cores, the load-test apps run
-on the same machine, and an M1 Pro core is faster than a typical VPS vCPU. Run the load test on the VPS itself before
-relying on its numbers there.
-
 ### The plan's 50 sessions, relay on one thread per core
 
 50 sessions, 8 questions each (400 answers), think 800 ms, ramp 2 s.
 
-| Mode | Answers | First token p50 / p95 ms | Relay overhead p50 / p95 ms (first token − mock delay) | Relay's own measure p50 / p95 ms |
+| Mode | Answers | First token p50 / p95 ms | Relay overhead p50 / p95 ms (first token − model's share) | Relay's own measure p50 / p95 ms |
 |---|---|---|---|---|
-| Fast | 136 | 351.8 / 356.4 | 1.8 / 6.4 | 0.10 / 0.10 |
-| Balanced (draft) | 136 | 351.9 / 357.9 | 1.9 / 7.9 | 0.10 / 0.20 |
-| Deep | 128 | 701.8 / 708.6 | 1.8 / 8.6 | 0.10 / 0.10 |
+| Fast | 136 | 352.3 / 369.1 | 0.53 / 17.97 | 0.10 / 0.20 |
+| Balanced (draft) | 136 | 352.2 / 367.6 | 0.50 / 16.14 | 0.10 / 0.20 |
+| Deep (held: full-answer time) | 128 | 1318.8 / 1360.3 | 0.52 / 14.89 | 0.10 / 0.20 |
 
 ### Against the targets (50 sessions, relay on 2 threads, approximating a 2-vCPU VPS)
 
 | Target | Plan | Result | Pass |
 |---|---|---|---|
 | Concurrent sessions | 50, every question answered, no errors | 50 ready, 400/400 answered, 0 errors | pass |
-| End of turn to first word, Fast | p50 ≤ 1.5 s (mocked) | p50 351.9 ms, p95 359.4 ms | pass |
-| End of turn to first word, Balanced draft | p50 ≤ 2.0 s (mocked) | p50 351.6 ms, p95 357.3 ms | pass |
-| End of turn to first word, Deep | p50 ≤ 3.0 s (mocked) | p50 701.7 ms, p95 704.6 ms | pass |
-| Relay overhead (first token − mock delay), Fast | p95 ≤ 30 ms | p50 1.9 ms, p95 9.4 ms | pass |
-| Relay overhead (first token − mock delay), Balanced | p95 ≤ 30 ms | p50 1.6 ms, p95 7.3 ms | pass |
-| Relay overhead (first token − mock delay), Deep | p95 ≤ 30 ms | p50 1.7 ms, p95 4.6 ms | pass |
+| End of turn to first word, Fast | p50 ≤ 1.5 s (mocked) | p50 352.0 ms, p95 360.4 ms | pass |
+| End of turn to first word, Balanced draft | p50 ≤ 2.0 s (mocked) | p50 351.8 ms, p95 354.7 ms | pass |
+| End of turn to first word, Deep (held: the full answer) | p50 ≤ 3.0 s (mocked) | p50 1314.9 ms, p95 1342.8 ms | pass |
+| Relay overhead (first token − model's share), Fast | p95 ≤ 30 ms | p50 0.34 ms, p95 9.40 ms | pass |
+| Relay overhead (first token − model's share), Balanced | p95 ≤ 30 ms | p50 0.34 ms, p95 2.74 ms | pass |
+| Relay overhead (first token − model's share), Deep | p95 ≤ 30 ms | p50 0.44 ms, p95 11.13 ms | pass |
 | Relay overhead, relay's own measure | p95 ≤ 30 ms | p95 0.20 ms | pass |
-| Memory per session | no target in the plan | 7.6 MiB idle, 18.3 MiB with 50 open: about 219 KiB per session | reported |
-| Clean shutdown | every app gets 1012, exit 0 | 50 × 1012, exit 0, 70 ms after SIGTERM, `stopped` logged | pass |
+| Memory per session | no target in the plan | 7.7 MiB idle, 18.5 MiB peak with 50 open: about 222 KiB per session | reported |
+| Clean shutdown | every app gets 1012, exit 0 | 50 × 1012, exit 0, 80 ms after SIGTERM, `stopped` logged | pass |
 | Zero suggestions from my own channel | 0 | 0 | pass |
 | No content in the relay's log | 0 lines | 0 lines (400 suggestion records checked) | pass |
 
 ### Headroom, relay on 2 threads (approximation, see above)
 
-| Sessions × questions | Answers | Relay overhead p95 ms, first token − mock delay (Fast · Balanced · Deep) | Relay's own measure p95 ms | Memory (open, per session) | Shutdown |
-|---|---|---|---|---|---|
-| 50 × 8 | 400/400 | 9.4 · 7.3 · 4.6 | 0.20 | 18.3 MiB, 219 KiB | 50 × 1012, exit 0, 70 ms |
-| 200 × 5 | 1000/1000 | 6.8 · 6.3 · 9.3 | 0.10 | 45.7 MiB, 200 KiB | 200 × 1012, exit 0, 67 ms |
-| 500 × 4 | 2000/2000 | 4.4 · 3.2 · 3.5 | 0.10 | 100.8 MiB, 191 KiB | 500 × 1012, exit 0, 67 ms |
+| Sessions × questions | Answers | Relay overhead p95 ms, first token − model's share (Fast · Balanced · Deep) | Relay's own measure p95 ms | Deep first word p50 ms (held) | Memory (open, per session) | Shutdown |
+|---|---|---|---|---|---|---|
+| 50 × 8 | 400/400 | 9.40 · 2.74 · 11.13 | 0.20 | 1314.9 | 18.5 MiB, 222 KiB | 50 × 1012, exit 0, 80 ms |
+| 200 × 5 | 1000/1000 | 10.29 · 8.67 · 9.76 | 0.10 | 1313.7 | 46.0 MiB, 196 KiB | 200 × 1012, exit 0, 68 ms |
+| 500 × 4 | 2000/2000 | 6.52 · 6.36 · 13.19 | 0.20 | 1318.4 | 100.5 MiB, 190 KiB | 500 × 1012, exit 0, 106 ms |
 
-The first token is the mock's delay (350 ms Haiku, 700 ms Sonnet) plus under 2 ms at p50 and under 10 ms at p95, and
-that does not grow between 50 and 500 sessions. (The load-test binary prints the relay's own measure and an app-side
-gap against the model's share as the relay saw it; the table above subtracts the known mock delay from the printed
-first-token times instead, which also counts the timer slack against the relay.)
+In Fast and Balanced the first word is the mock's first-token delay (350 ms) plus under a millisecond at p50 and under
+about 10 ms at p95. In Deep it is Sonnet's whole answer (about 1.3 s with the mock's 700 ms and 18 ms a word) plus the
+same small overhead: the price of never showing a refusal. Neither grows between 50 and 500 sessions. With a real
+model, Deep's first word is its full-answer time, which the latency benchmark (docs/LATENCY_V1_9.md) measures as
+"Answer p50" and holds against the 3 s target.
 
 ### What changed because of this test
 
@@ -115,8 +112,8 @@ delay in the other direction.
 
 ## What this does not measure
 
-- **Real models.** At the time of this run the relay's live providers answered `provider_not_configured`; the
-  streaming clients for Anthropic, OpenAI, Gemini and Groq were not built yet. TLS to the providers, their stream parsing and
+- **Real models.** The run uses the mocked models; the streaming clients for Anthropic, Groq, OpenAI and Gemini are
+  tested separately against a local stand-in (tests/providers.rs) and are not part of these numbers. TLS to the providers, their stream parsing and
   their real first-token times are not in these numbers. The real first-token times come from the L9 latency
   benchmark run from Pakistan (docs/LATENCY_V1_9.md).
 - **The network between the app and the relay**, and TLS at the reverse proxy: one round trip from Pakistan to the
