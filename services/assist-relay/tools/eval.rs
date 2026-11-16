@@ -128,6 +128,18 @@ fn main() -> ExitCode {
     if o.judge {
         models.push(JUDGE_MODEL.to_owned());
     }
+    println!(
+        "Live eval: {} transcripts in {} ({}){}.",
+        cases.len(),
+        o.mode.as_str(),
+        models.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", "),
+        if o.judge { ", with the model judge" } else { "" }
+    );
+    if !o.yes {
+        // Nothing is read from the environment before --yes.
+        println!("Nothing sent and no key read: this calls paid APIs (about 100 requests). Add --yes to run it.");
+        return ExitCode::from(2);
+    }
     let mut keys = BTreeMap::new();
     for model in &models {
         let Some(kind) = config.model(model).map(|spec| spec.provider) else { continue };
@@ -138,17 +150,6 @@ fn main() -> ExitCode {
             }
             None => println!("{variable} is not set: {model} will answer \"not configured\"."),
         }
-    }
-    println!(
-        "Live eval: {} transcripts in {} ({}){}.",
-        cases.len(),
-        o.mode.as_str(),
-        models.iter().map(|m| m.as_str()).collect::<Vec<_>>().join(", "),
-        if o.judge { ", with the model judge" } else { "" }
-    );
-    if !o.yes {
-        println!("Nothing sent: this calls paid APIs (about 100 requests). Add --yes to run it.");
-        return ExitCode::from(2);
     }
     let store = Arc::new(ProviderKeys::default());
     store.replace(keys);

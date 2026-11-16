@@ -171,14 +171,12 @@ fn main() -> ExitCode {
         }
     };
     let config = RelayConfig::built_in();
-    let mut keys = BTreeMap::new();
     let mut results = Vec::new();
     for (model, spec) in &config.models {
         if o.models.as_ref().is_some_and(|only| !only.contains(model)) {
             continue;
         }
-        let variable = key_variable(spec.provider);
-        let mut result = ModelResult {
+        results.push(ModelResult {
             model: model.clone(),
             provider: spec.provider.label(),
             modes: Mode::LADDER
@@ -190,24 +188,31 @@ fn main() -> ExitCode {
                 .map(|mode| mode.as_str())
                 .collect(),
             ..ModelResult::default()
-        };
+        });
+    }
+    if !o.yes {
+        // Nothing is read from the environment before --yes.
+        for r in &results {
+            let kind = config.model(&r.model).map_or(ProviderKind::Anthropic, |spec| spec.provider);
+            println!("{:<22} {:<10} needs {}", r.model, r.provider, key_variable(kind));
+        }
+        println!("\nNothing sent and no key read: this calls paid APIs ({} requests per model). Add --yes to run it.", o.rounds + 2);
+        return ExitCode::from(2);
+    }
+    let mut keys = BTreeMap::new();
+    for r in &mut results {
+        let Some(kind) = config.model(&r.model).map(|spec| spec.provider) else { continue };
+        let variable = key_variable(kind);
         match std::env::var(variable).ok().filter(|k| !k.trim().is_empty()) {
             Some(key) => {
-                keys.insert(spec.provider, key);
+                keys.insert(kind, key);
             }
-            None => result.skipped = Some(format!("{variable} not set")),
+            None => r.skipped = Some(format!("{variable} not set")),
         }
-        results.push(result);
-    }
-    for r in &results {
         println!("{:<22} {:<10} {}", r.model, r.provider, r.skipped.as_deref().unwrap_or("will be measured"));
     }
     if results.iter().all(|r| r.skipped.is_some()) {
         println!("\nNo provider key is set, so there is nothing to measure (and {} is left as it is).", o.out.display());
-        return ExitCode::from(2);
-    }
-    if !o.yes {
-        println!("\nNothing sent: this calls paid APIs ({} requests per model). Add --yes to run it.", o.rounds + 2);
         return ExitCode::from(2);
     }
     let runtime = match tokio::runtime::Builder::new_multi_thread().enable_all().build() {
