@@ -15,6 +15,7 @@ use App\Models\User;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\Library\ReadyNotices;
 use Filament\Facades\Filament;
+use Filament\Notifications\Notification as FilamentNotification;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
@@ -115,8 +116,15 @@ it('never lets another person ask about someone\'s recording', function () {
     // throwing; an action sent to it then has no page to run on.
     $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $theirs->id])->assertNotFound();
     expect($page->html())->not->toContain('Laptop call')->not->toContain('Notify me when ready');
-    // The action never ran: it counts every ask against the person's limit before anything else, and says something.
-    $page->call('notifyWhenReady')->assertNotNotified();
+    // The action never ran: there is no page to run it on. Livewire refuses the call (with APP_DEBUG on it throws and
+    // says why; off, it does nothing), and the action, which counts every ask against the person's limit before
+    // anything else and always says something, was not reached either way.
+    try {
+        $page->call('notifyWhenReady');
+    } catch (InvalidArgumentException $refused) {
+        expect($refused->getMessage())->toContain('Invalid Livewire snapshot');
+    }
+    FilamentNotification::assertNotNotified();
     expect(RateLimiter::attempts('notify-ready:'.$this->admin->id))->toBe(0)
         ->and(Cache::has('ready-notice:'.$theirs->id))->toBeFalse();
     // Nor through the service: only the owner can ask.
