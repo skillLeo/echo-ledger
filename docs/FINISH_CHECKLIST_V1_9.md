@@ -19,6 +19,10 @@ without Phase S.
 
 ## v1.8.1 release audit (2026-11-16)
 
+- 2026-11-16 evening: the desktop follow-up is merged (`dce18dfe`, reviewed: approve), with the Mac freeze found in
+  the Meet test fixed everywhere, the Mac menu bar fixes and EchoLedger as a normal Dock app. Waiting: CI builds,
+  then MAC-22 (release gate) and MAC-32 on the Mac; the phone re-review; the version bump; the delta audit.
+
 Three passes on the whole release diff (v1.7.0 `a6ac1b9b` → `fd088715`): security (2 major, 5 minor), UX/design (8 major,
 18 minor), reliability/performance (8 major, 20 minor). Every finding is fixed before the v1.8.1 release or written
 down here with the reason. IDs: S = security, U/u = UX, R = reliability.

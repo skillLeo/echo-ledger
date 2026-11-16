@@ -162,6 +162,13 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
     and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-16 · v1.8.1 desktop follow-up (the Mac freeze: no lock held across a main-thread wait + a whole-crate
+    source rule; tray generation; the menu on a click and the 14 pt badge with a rim on a Mac; EchoLedger a normal
+    Mac app: Dock, ⌘Tab, Force Quit, floating windows as non-activating panels, every quit keeps a recording, the
+    standard app menu) · `dce18dfe` (b-desktop-followup) · changes needed ×2 → fixed → approve (5 minor follow:
+    log when the activation setter is missing; refuse the panel switch if TaoWindow gains methods or a dealloc;
+    plain words in the Mac check; sharing state in WindowFacts with a smoke assert; MAC-22 also on macOS 14.4 and
+    15/26 if a machine is at hand) · release gate MAC-22 + MAC-32 on the device.
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
     jump only without a main window) · MAC-31 Finder path pass (16:25); Dock, Launchpad, ⌘W, ⌘M waiting.
   - 2026-11-16 · v1.8 0.2 server (missed recordings) · `d71195cb` · changes needed → fixed → approve (2 minor follow
