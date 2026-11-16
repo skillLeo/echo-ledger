@@ -50,8 +50,17 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     hide Transcribe, `transcribe_by_default` on finish, two error-table rows + ErrorEnvelopeTest 56). P2 WIP on
     b-web-p2-wip @019dfec0 (2.2 dedupe done + `transcripts:dedupe-check`; then 2.1 rows + backfill dry run, 2.3 fonts,
     2.4 snackbar).
-  - desktop-1 b-desktop: 0.1 → signing → key → 0.1c → 0.1b chain in its fix round (0.1b/0.1c blocker: Ctrl+Alt+S =
-    AltGr; detector copies beside a camera panel); P1 WIP on b-desktop-wip. Merge the whole chain after both re-reviews.
+  - desktop-1 b-desktop @a38e71b3 (round 2 done: f1df7d12…97c387f9, merged v1.1 at 3bebf5ff; cargo 1,408 + the bars test
+    since fixed on v1.1 `852822a5`; vitest 2,232): combined re-review = changes needed: [major] screens/detect.rs:324
+    (+ :52, :322, :12, test :571) moved-then-stopped content (≈6 s scrolling, 6+ quick flips, typing) is held as camera
+    ~30 s, so the page the presenter stops on is kept ~30 s late or never — release a region whose cells all went still
+    for 2–3 s (or don't let jumps / post-motion "busy" renew the hold), keep noise/speaker panels as camera; tests: 8 s
+    of 1-s flips, 8 s scrolling, 3-s sparse scroll, each then a held page, with no panel and beside each panel → kept
+    within ~3 s; one-slide-for-minutes still keeps 1; fix the doc + the :322 comment. Minors: actions.rs:364 clear a
+    stale capture_screen registration error after a successful hold (keep the layout note); shortcuts.rs:284 re-hold
+    Capture screen now after Reset/Import during a Windows call; PillApp.tsx:261 record a say-once reason only when
+    tray === "why"; screensWhy.ts:82 remember "project" per project id. P1 WIP on b-desktop-wip @67e61393. Merge the
+    whole chain (0.1 → signing → key → 0.1c → 0.1b) after this re-review approves.
   - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) reviewed = changes needed: [major]
     tray.rs:479 (+:226) a queued older draw can overwrite a newer one → a generation number taken first in
     commands::status (AtomicU64 SeqCst) passed through update(); TrayCache keeps the newest; changes() ignores older;
