@@ -104,7 +104,15 @@ object CallJournal {
          * A start that failed before a later start of the same call worked (the backup start): kept for diagnostics only,
          * the call's result is what that later recording became.
          */
-        val firstFailure: Failure? = null
+        val firstFailure: Failure? = null,
+        /**
+         * When the call was answered, as the recording's answer gate saw it (the call notification's timer, the other
+         * side speaking, the call log's talk time), and what showed it; null when no answer was seen (a call that only
+         * rang, or the gate gave up waiting). Since v1.8 this, not "both channels have audio", proves an answer: a
+         * ringback tone and your own voice fill both channels while a call still rings.
+         */
+        val answeredAtMs: Long? = null,
+        val answeredBy: String? = null
     ) {
         val finished: Boolean get() = result != null
 
@@ -259,6 +267,14 @@ object CallJournal {
     /** The call itself ended at [atMs] (the recording may still be saving). */
     fun ended(book: Book, id: String, atMs: Long): Book = change(book, id) { if (it.endedAtMs == null) it.copy(endedAtMs = atMs) else it }
 
+    /**
+     * The recording's answer gate saw the call answered at [atMs], shown by [by]: the first answer counts. A fact about
+     * the call, so it is kept also when it arrives with the call's end (the call log's talk time).
+     */
+    fun answered(book: Book, id: String, atMs: Long, by: String?): Book = change(book, id) {
+        if (it.answeredAtMs == null) it.copy(answeredAtMs = atMs, answeredBy = by?.take(NOTE)) else it
+    }
+
     fun mark(book: Book, kind: String, atMs: Long, value: String = ""): Book = book.copy(marks = book.marks + Mark(atMs, kind, value))
 
     /** The person's choices at [atMs], kept only when they changed. */
@@ -274,13 +290,19 @@ object CallJournal {
     }
 
     /**
-     * Older than [KEEP_DAYS] goes. The newest mark and settings from before the window stay, so the state at its start is
-     * still known; each list is capped so a phone with very many calls never grows the file without bound.
+     * Older than [KEEP_DAYS] goes. The newest mark and settings from before what is kept stay, so the state where the kept
+     * part begins is still known; each list is capped so a phone with very many calls never grows the file without
+     * bound. Calls dropped for room rather than for age (a heavy week: since v1.8 0.3 a SIM call can be two entries)
+     * take the journal's start with them: what became of them is no longer known, so no call before the oldest one kept
+     * is judged ([Book.since]).
      */
     fun rotate(book: Book, nowMs: Long): Book {
         val from = nowMs - KEEP_MS
-        val (oldMarks, marks) = book.marks.sortedBy { it.atMs }.partition { it.atMs < from }
-        // One mark in place of the old ones, saying how auto-record stood when the window begins.
+        val sortedMarks = book.marks.sortedBy { it.atMs }
+        // Room for the baseline: the newest marks of the window, one fewer than the cap.
+        val marks = sortedMarks.filter { it.atMs >= from }.takeLast(MAX_MARKS - 1)
+        val oldMarks = sortedMarks.take(sortedMarks.size - marks.size)
+        // One mark in place of the ones that go, saying how auto-record stood where the kept ones begin.
         val baseline = oldMarks.lastOrNull()?.let { last ->
             val state = book.serviceAt(last.atMs)
             when {
@@ -289,11 +311,17 @@ object CallJournal {
                 else -> Mark(last.atMs, State.DISARMED)
             }
         }
-        val (oldSettings, settings) = book.settings.sortedBy { it.atMs }.partition { it.atMs < from }
+        val sortedSettings = book.settings.sortedBy { it.atMs }
+        val settings = sortedSettings.filter { it.atMs >= from }.takeLast(MAX_MARKS - 1)
+        val oldSettings = sortedSettings.take(sortedSettings.size - settings.size)
+        val recent = book.calls.filter { it.atMs >= from }.sortedBy { it.atMs }
+        val calls = recent.takeLast(MAX_CALLS)
+        val since = if (calls.size < recent.size) maxOf(book.since, calls.first().atMs) else book.since
         return book.copy(
-            calls = book.calls.filter { it.atMs >= from }.sortedBy { it.atMs }.takeLast(MAX_CALLS),
-            marks = (listOfNotNull(baseline) + marks).takeLast(MAX_MARKS),
-            settings = (listOfNotNull(oldSettings.lastOrNull()) + settings).takeLast(MAX_MARKS)
+            since = since,
+            calls = calls,
+            marks = listOfNotNull(baseline) + marks,
+            settings = listOfNotNull(oldSettings.lastOrNull()) + settings
         )
     }
 
@@ -331,6 +359,9 @@ object CallJournal {
                 label + after + s.note?.let { " ($it)" }.orEmpty()
             }
             val first = call.firstFailure?.let { " (first start failed: ${it.reason})" }.orEmpty()
+            val answer = call.answeredAtMs?.let { at ->
+                " · answered " + seconds((at - call.atMs).coerceAtLeast(0)) + call.answeredBy?.let { " ($it)" }.orEmpty()
+            }.orEmpty()
             val end = when (Result.of(call.result)) {
                 Result.FAILED -> call.failure?.let {
                     " · stopped at ${Stage.of(it.stage)?.label ?: it.stage}: ${it.reason}, ${it.detail}"
@@ -342,7 +373,7 @@ object CallJournal {
 
                 else -> " · ${call.result}" + call.note?.let { ": $it" }.orEmpty() + call.keptMs?.let { " (${clockText(it)})" }.orEmpty()
             }
-            "${clock.format(Instant.ofEpochMilli(call.atMs))} $app$length · ${call.seenBy} · $stages$first$end"
+            "${clock.format(Instant.ofEpochMilli(call.atMs))} $app$length · ${call.seenBy} · $stages$first$answer$end"
         }
     }
 
@@ -422,6 +453,11 @@ object CallJournal {
     fun ended(context: Context, id: String) {
         val at = System.currentTimeMillis()
         update(context, at) { ended(it, id, at) }
+    }
+
+    /** The answer gate saw the call answered at [atMs] (from the captured audio's own clock, so passed in). */
+    fun answered(context: Context, id: String, atMs: Long, by: String?) {
+        update(context) { answered(it, id, atMs, by) }
     }
 
     fun mark(context: Context, kind: String, value: String = "") {

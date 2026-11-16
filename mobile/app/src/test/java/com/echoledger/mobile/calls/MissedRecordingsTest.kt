@@ -116,23 +116,83 @@ class MissedRecordingsTest {
     }
 
     @Test
-    fun `crash - the app stopped during the call`() {
+    fun `mic_busy, its twin - the same refused start is not missed when nothing says the call was answered`() {
+        val book = journalCall(ready(), "c1", "google_meet", t0, 600) {
+            CallJournal.fail(it, "c1", MissedReason.MIC_BUSY.wire, MissedReason.MIC_BUSY.detail, t0 + 400)
+        }
+        assertTrue("no notice, and the recording never started: it may only have rung", find(book).isEmpty())
+        assertTrue(
+            "auto-record was off for Meet then",
+            find(
+                CallJournal.choices(book, CallJournal.Choices(autoRecord = true, appsOff = listOf("google_meet")), t0 - 30 * min),
+                listOf(notice("google_meet", t0 + 2_000, 598))
+            ).isEmpty()
+        )
+    }
+
+    /** A call EchoLedger recorded until the app stopped: started, [answered] (its answer gate opened) or not, both sides heard. */
+    private fun crashed(answered: Boolean): Book {
         var b = journalCall(ready(), "c1", "whatsapp", t0, 240) {
-            CallJournal.stage(CallJournal.stage(it, "c1", Stage.STARTED, t0 + 400), "c1", Stage.BOTH_AUDIO, t0 + 2_000)
+            var j = CallJournal.stage(it, "c1", Stage.STARTED, t0 + 400)
+            if (answered) j = CallJournal.answered(j, "c1", t0 + 1_500, "the other side spoke")
+            CallJournal.stage(j, "c1", Stage.BOTH_AUDIO, t0 + 2_000)
         }
         b = CallJournal.processStarted(b, t0 + 120_000)
-        val found = find(b).single()
+        return b
+    }
+
+    @Test
+    fun `crash - the app stopped during the call`() {
+        val found = find(crashed(answered = true)).single()
         assertEquals(MissedReason.CRASH, found.reason)
         assertEquals(240L, found.durationS)
     }
 
     @Test
-    fun `crash - a call left open by a process that died is a crash even before the journal closed it`() {
+    fun `crash, its twin - both channels with sound but no answer seen is a call that only rang (the ringback and your voice)`() {
+        assertTrue(find(crashed(answered = false)).isEmpty())
+        // Its call notice says it was answered after all: then it is missed.
+        assertEquals(MissedReason.CRASH, find(crashed(answered = false), listOf(notice("whatsapp", t0 + 9_000, 231))).single().reason)
+    }
+
+    /** A call left open by a process that died, [answered] or not. */
+    private fun leftOpen(answered: Boolean, bothAudio: Boolean = true): Book {
         var b = CallJournal.seen(ready(), "c1", "whatsapp", Seen.HELPER, t0)
         b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 300)
-        b = CallJournal.stage(b, "c1", Stage.BOTH_AUDIO, t0 + 2_000)
-        b = CallJournal.mark(b, State.PROCESS_START, t0 + 30 * min)
-        assertEquals(MissedReason.CRASH, find(b).single().reason)
+        if (answered) b = CallJournal.answered(b, "c1", t0 + 1_000, "call notification timer")
+        if (bothAudio) b = CallJournal.stage(b, "c1", Stage.BOTH_AUDIO, t0 + 2_000)
+        return CallJournal.mark(b, State.PROCESS_START, t0 + 30 * min)
+    }
+
+    @Test
+    fun `crash - a call left open by a process that died is a crash even before the journal closed it`() {
+        assertEquals(MissedReason.CRASH, find(leftOpen(answered = true)).single().reason)
+    }
+
+    @Test
+    fun `crash, its twin - a call left open that was never seen answered is not missed`() {
+        assertTrue(find(leftOpen(answered = false)).isEmpty())
+    }
+
+    @Test
+    fun `a crash before both channels had audio, with no notice, stays unreported`() {
+        assertTrue(find(leftOpen(answered = false, bothAudio = false)).isEmpty())
+        assertTrue(
+            "and so does a recording that crashed before any sound",
+            find(
+                CallJournal.processStarted(
+                    journalCall(ready(), "c1", "whatsapp", t0, 240) {
+                        CallJournal.stage(
+                            it,
+                            "c1",
+                            Stage.STARTED,
+                            t0 + 400
+                        )
+                    },
+                    t0 + 120_000
+                )
+            ).isEmpty()
+        )
     }
 
     @Test
@@ -160,6 +220,21 @@ class MissedRecordingsTest {
             )
         }
         assertEquals(MissedReason.UNKNOWN, find(book, listOf(notice("whatsapp", t0 + 3_000, 297))).single().reason)
+    }
+
+    @Test
+    fun `unknown, its twin - a silent recording is not missed when the call was skipped as too short, or nothing says it was answered`() {
+        val book = journalCall(ready(), "c1", "whatsapp", t0, 300) {
+            CallJournal.fail(
+                CallJournal.stage(it, "c1", Stage.STARTED, t0 + 300),
+                "c1",
+                "unknown",
+                "No sound was captured, so the recording was not kept.",
+                t0 + 300_000
+            )
+        }
+        assertTrue("no notice, no answer seen", find(book).isEmpty())
+        assertTrue("8 s of talk, under Skip calls shorter than 10 s", find(book, listOf(notice("whatsapp", t0 + 292_000, 8))).isEmpty())
     }
 
     @Test
@@ -214,6 +289,37 @@ class MissedRecordingsTest {
     }
 
     @Test
+    fun `a heavy week whose calls the journal dropped for room is never judged by the call notices it no longer explains`() {
+        // 401 recorded WhatsApp calls in two days: the journal keeps the newest 400.
+        var b = ready()
+        for (i in 0..400) {
+            val at = t0 + i * 6 * min
+            b = journalCall(b, "c$i", "whatsapp", at, 60) { CallJournal.finish(it, "c$i", Result.KEPT, at + 61_000, keptMs = 58_000) }
+        }
+        val now = t0 + 401 * 6 * min + 60 * min
+        b = CallJournal.rotate(b, now)
+        assertEquals(CallJournal.MAX_CALLS, b.calls.size)
+        assertEquals("the journal now starts at the oldest call it kept", t0 + 6 * min, b.since)
+        // The first call's notice: what became of it is no longer known, so it is not judged.
+        val firstNotice = notice("whatsapp", t0 + 2_000, 58)
+        assertEquals(emptyList<MissedRecordings.Found>(), MissedRecordings.find(b, listOf(firstNotice), emptyList(), emptyList(), now))
+    }
+
+    @Test
+    fun `auto-record's state where the kept marks begin is still known when marks are dropped for room`() {
+        var b = ready() // armed with the helper ready, an hour before
+        for (i in 1..CallJournal.MAX_MARKS) {
+            b = CallJournal.mark(b, if (i % 2 == 1) State.HELPER_LOST else State.HELPER_READY, t0 + i * 1_000)
+        }
+        val at = t0 + CallJournal.MAX_MARKS * 1_000L + 500
+        val before = b.serviceAt(at)
+        val rotated = CallJournal.rotate(b, at)
+        assertTrue(rotated.marks.size <= CallJournal.MAX_MARKS)
+        assertEquals(before, rotated.serviceAt(at))
+        assertEquals("armed, as before the dropped marks", true, rotated.serviceAt(rotated.marks.first().atMs).armed)
+    }
+
+    @Test
     fun `a call still going on is never judged, however long it lasts`() {
         // 45 minutes into its recording: no end yet, and the live recording is not on the phone's list until it is saved.
         var b = CallJournal.seen(ready(), "c1", "whatsapp", Seen.HELPER, t0)
@@ -250,6 +356,7 @@ class MissedRecordingsTest {
     fun `a call with no end yet waits while a call or a recording is on, or its notice is still up`() {
         var b = CallJournal.seen(ready(), "c1", "whatsapp", Seen.HELPER, t0)
         b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 300)
+        b = CallJournal.answered(b, "c1", t0 + 1_000, "the other side spoke")
         b = CallJournal.stage(b, "c1", Stage.BOTH_AUDIO, t0 + 2_000)
         // A later call proves the first one over, but not while something is on.
         b = CallJournal.seen(b, "c2", "zoom", Seen.HELPER, t0 + 50 * min)
@@ -263,7 +370,8 @@ class MissedRecordingsTest {
     @Test
     fun `an open call is judged only when a later call or a restart proves it over, never while its recording saves`() {
         var b = journalCall(ready(), "c1", "whatsapp", t0, 300) {
-            CallJournal.stage(CallJournal.stage(it, "c1", Stage.STARTED, t0 + 300), "c1", Stage.BOTH_AUDIO, t0 + 2_000)
+            val started = CallJournal.stage(it, "c1", Stage.STARTED, t0 + 300)
+            CallJournal.stage(CallJournal.answered(started, "c1", t0 + 1_000, "the other side spoke"), "c1", Stage.BOTH_AUDIO, t0 + 2_000)
         }
         assertTrue("ended, still saving: no proof it was lost", find(b).isEmpty())
         b = CallJournal.seen(b, "c2", "zoom", Seen.HELPER, t0 + 30 * min)

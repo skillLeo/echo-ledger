@@ -163,8 +163,8 @@ object MissedRecordings {
             laterCall(book, call) -> MissedReason.UNKNOWN to MissedReason.UNKNOWN.detail
             else -> return null
         }
-        // Answered? A notice or call-log row of this very call says so; without one, only when EchoLedger itself heard
-        // both sides (a call that never started recording, or that only the audio mode saw, may have only rung).
+        // Answered? A notice or call-log row of this very call says so; without one, only when EchoLedger's own answer
+        // gate saw the answer (a call that never started recording, or that only the audio mode saw, may have only rung).
         val answered = sightings.filter { it.answered }
         if (answered.isEmpty() && (sightings.isNotEmpty() || !heardAnswered(call))) return null
         // Its length counts from the answer: the ringing is not the call.
@@ -178,9 +178,12 @@ object MissedRecordings {
         return Found(call.app, call.atMs, lengthMs?.let { it / 1000 }, reason, detail, endedAtMs = end, logOnly = logOnly)
     }
 
-    /** EchoLedger itself heard the call answered: both sides (or the one track) had sound; never in the audio mode alone. */
-    private fun heardAnswered(call: CallJournal.Call): Boolean =
-        call.seenBy != CallJournal.Seen.AUDIO && call.reached(CallJournal.Stage.BOTH_AUDIO)
+    /**
+     * EchoLedger itself saw the call answered: its recording's answer gate opened on an answer (never in the audio mode
+     * alone). "Both channels have audio" is no proof: while an outgoing call rings, the ringback tone and your own voice
+     * fill both channels.
+     */
+    private fun heardAnswered(call: CallJournal.Call): Boolean = call.seenBy != CallJournal.Seen.AUDIO && call.answeredAtMs != null
 
     /** When something proved [call] over: the next call the journal saw, or the app starting again; null without either. */
     private fun endProof(book: CallJournal.Book, call: CallJournal.Call): Long? {

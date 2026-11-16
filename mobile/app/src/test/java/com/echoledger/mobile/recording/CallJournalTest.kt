@@ -205,6 +205,32 @@ class CallJournalTest {
     }
 
     @Test
+    fun `a phone with very many calls starts its journal at the oldest call it kept`() {
+        var b = Book(since = t0 - day)
+        repeat(CallJournal.MAX_CALLS + 1) { i -> b = recorded(b, "c$i", t0 + i * 60_000L) }
+        val kept = CallJournal.rotate(b, t0 + (CallJournal.MAX_CALLS + 1) * 60_000L)
+        assertEquals(t0 + 60_000L, kept.since)
+        assertEquals("nothing dropped for room: the start stays", t0 - day, CallJournal.rotate(recorded(), t0 + day).since)
+    }
+
+    @Test
+    fun `the answer the recording's gate saw is kept once, also when it comes with the call's end`() {
+        var b = CallJournal.seen(Book(), "c1", "phone_call", Seen.HELPER, t0)
+        b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 400)
+        assertNull(b.call("c1")!!.answeredAtMs)
+        b = CallJournal.answered(b, "c1", t0 + 8_000, "the other side spoke")
+        b = CallJournal.answered(b, "c1", t0 + 9_000, "call log talk time")
+        assertEquals(t0 + 8_000, b.call("c1")!!.answeredAtMs)
+        assertEquals("the other side spoke", b.call("c1")!!.answeredBy)
+        var late = CallJournal.finish(CallJournal.seen(Book(), "c2", "phone_call", Seen.HELPER, t0), "c2", Result.KEPT, t0 + 60_000)
+        late = CallJournal.answered(late, "c2", t0 + 7_000, "call log talk time")
+        assertEquals(t0 + 7_000, late.call("c2")!!.answeredAtMs)
+        assertTrue(
+            CallJournal.describe(b, ZoneOffset.UTC).single().contains("· answered 8.0 s (the other side spoke)")
+        )
+    }
+
+    @Test
     fun `the diagnostics lines say each stage with its time, the result, and where a call stopped`() {
         var b = recorded()
         b = CallJournal.seen(b, "c2", "phone_call", Seen.AUDIO, t0 + 3_600_000)

@@ -2,6 +2,7 @@ package com.echoledger.mobile.calls
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -48,9 +49,11 @@ import kotlinx.coroutines.sync.withLock
  */
 class MissedRecordingWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
-        val fresh = detect(applicationContext)
-        if (fresh.isNotEmpty()) notify(applicationContext, fresh)
+        // A recording that turned up since the last look takes its item out first; what is found now is never covered
+        // (the detector checks the same recordings), so the notice names only calls that really were not recorded.
         withdrawCovered(applicationContext)
+        val fresh = detect(applicationContext)
+        if (fresh.isNotEmpty()) MissedNotice.post(applicationContext, fresh)
         if (MissedRecordingStore.all(applicationContext).any { it.waiting || it.serverCopyToRead }) {
             MissedUploadWorker.enqueue(applicationContext)
         }
@@ -60,7 +63,6 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
     companion object {
         private const val PERIODIC = "missed-recordings"
         private const val SOON = "missed-recordings-soon"
-        private const val NOTICE_ID = 7_460
 
         /** The app opening looks again at most this often (the hourly run and the one after each call do the rest). */
         const val OPEN_EVERY_MS = 10 * 60_000L
@@ -113,11 +115,11 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
          * Every item whose call turned out recorded after all (the Phone app's recording, imported late) is withdrawn,
          * sent or not: one the server has then has its server copy marked read by the uploader.
          */
-        fun withdrawCovered(context: Context) {
+        suspend fun withdrawCovered(context: Context) {
             val spans = spans(context) + MissedRecordings.recordedSpans(CallJournal.book(context))
-            MissedRecordingStore.all(context)
-                .filter { !it.withdrawn && MissedRecordings.coveredNow(it, spans) }
-                .forEach { MissedRecordingStore.withdraw(context, it.ref) }
+            val covered = MissedRecordingStore.all(context).filter { !it.withdrawn && MissedRecordings.coveredNow(it, spans) }
+            covered.forEach { MissedRecordingStore.withdraw(context, it.ref) }
+            if (covered.isNotEmpty()) MissedNotice.update(context)
         }
 
         /** Something may still be going on: a recording live or still saving, or a call (the phone's audio mode). */
@@ -162,38 +164,72 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(SOON, ExistingWorkPolicy.REPLACE, request)
         }
+    }
+}
 
-        /** "Missed recording", or "2 calls were not recorded"; a tap opens Activity. Its own switch and quiet hours apply. */
-        @SuppressLint("MissingPermission") // checked first
-        private suspend fun notify(context: Context, fresh: List<MissedItem>) {
-            val app = context.applicationContext as EchoLedgerApp
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
-                PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
-            if (!NotifyGate.allowed(app, NotifyCategory.READINESS)) return
-            val title = if (fresh.size == 1) "Missed recording" else "${fresh.size} calls were not recorded"
-            val text = MissedRecordings.body(fresh.first())
-            val open = PendingIntent.getActivity(
-                context,
-                NOTICE_ID,
-                Intent(context, MainActivity::class.java)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-                    .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_ACTIVITY),
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            val notification = NotificationCompat.Builder(context, NotifyCategory.READINESS.channelId)
-                .setSmallIcon(R.drawable.ic_stat_rec)
-                .setContentTitle(title)
-                .setContentText(text)
-                .setStyle(NotificationCompat.BigTextStyle().bigText(text))
-                .setContentIntent(open)
-                .setAutoCancel(true)
-                .build()
-            runCatching { NotificationManagerCompat.from(context).notify(NOTICE_ID, notification) }
+/**
+ * The one "Missed recording" notice (Call capture & readiness) and the items it names. When the items it names are
+ * withdrawn (their recording turned up after all: the Phone app's, imported late) or swiped away in Activity, it goes;
+ * when only some are, it quietly says what is left. A notice the person already cleared is never brought back.
+ */
+object MissedNotice {
+    const val ID = 7_460
+    private const val PREFS = "missed_recordings_detector"
+    private const val NAMED = "notice_refs"
+
+    /** "Missed recording", or "2 calls were not recorded"; a tap opens Activity. Its own switch and quiet hours apply. */
+    @SuppressLint("MissingPermission") // checked first
+    suspend fun post(context: Context, items: List<MissedItem>, quiet: Boolean = false) {
+        if (items.isEmpty()) return
+        val app = context.applicationContext as EchoLedgerApp
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        if (!NotifyGate.allowed(app, NotifyCategory.READINESS)) return
+        val title = if (items.size == 1) "Missed recording" else "${items.size} calls were not recorded"
+        val text = MissedRecordings.body(items.first())
+        val open = PendingIntent.getActivity(
+            context,
+            ID,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_ACTIVITY),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val notification = NotificationCompat.Builder(context, NotifyCategory.READINESS.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentIntent(open)
+            .setAutoCancel(true)
+            .setOnlyAlertOnce(true)
+            .setSilent(quiet)
+            .build()
+        prefs(context).edit().putString(NAMED, items.joinToString(",") { it.ref }).apply()
+        runCatching { NotificationManagerCompat.from(context).notify(ID, notification) }
+    }
+
+    /** After items were withdrawn or swiped away: the notice goes once none it names is left, else says what is left. */
+    suspend fun update(context: Context) {
+        val named = prefs(context).getString(NAMED, null)?.split(',')?.filter { it.isNotBlank() }.orEmpty()
+        if (named.isEmpty()) return
+        val left = MissedRecordingStore.all(context).filter { it.ref in named && !it.withdrawn && !it.dismissed }
+        if (left.size == named.size) return
+        val showing = runCatching {
+            context.getSystemService(NotificationManager::class.java).activeNotifications.any { it.id == ID }
+        }.getOrDefault(false)
+        if (left.isEmpty() || !showing) {
+            prefs(context).edit().remove(NAMED).apply()
+            runCatching { NotificationManagerCompat.from(context).cancel(ID) }
+        } else {
+            post(context, left, quiet = true)
         }
     }
+
+    private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 }
 
 /**
@@ -228,6 +264,7 @@ class MissedUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     }
                     if (MissedRecordings.coveredNow(item, spans)) {
                         MissedRecordingStore.withdraw(context, item.ref)
+                        MissedNotice.update(context)
                         continue
                     }
                     try {
@@ -267,6 +304,16 @@ class MissedUploadWorker(context: Context, params: WorkerParameters) : Coroutine
     }
 
     companion object {
+        /**
+         * The person read or swiped away the item [ref]: once the server has it, its server copy is to be marked read, so
+         * a run is queued now (online at once, or when the phone is next online), not left for the next hourly look.
+         */
+        suspend fun seen(context: Context, ref: String, dismissed: Boolean) {
+            if (dismissed) MissedRecordingStore.dismiss(context, ref) else MissedRecordingStore.markRead(context, ref)
+            if (MissedRecordingStore.all(context).any { it.ref == ref && it.serverCopyToRead }) enqueue(context)
+            MissedNotice.update(context)
+        }
+
         /** Sends what waits; while a run is waiting or going on it is kept (it also sends what is found meanwhile). */
         fun enqueue(context: Context) {
             val request = OneTimeWorkRequestBuilder<MissedUploadWorker>()

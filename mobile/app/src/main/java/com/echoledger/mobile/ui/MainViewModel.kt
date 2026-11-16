@@ -1000,19 +1000,25 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         runCatching { com.echoledger.mobile.calls.MissedRecordingWorker.onOpen(app) }
         // Since v1.8 (0.3): the Phone app's own recordings are watched for while their import is wanted and allowed.
         com.echoledger.mobile.calls.PhoneAppRecordings.sync(app, graph.settings.current())
-        if (store.forAccount(store.all(app), graph.settings.current().account).any { it.waiting }) {
+        val account = graph.settings.current().account
+        if (store.forAccount(store.all(app), account).any { it.waiting } ||
+            store.serverCopiesToRead(store.all(app), account).isNotEmpty()
+        ) {
             com.echoledger.mobile.calls.MissedUploadWorker.enqueue(app)
         }
     }
 
-    /** A missed recording was looked at (tapped, or its fix button): it leaves Needs action. */
+    /**
+     * A missed recording was looked at (tapped, or its fix button): it leaves Needs action, and its server copy is marked
+     * read through the API as soon as the phone is online, whether or not this list loaded that copy.
+     */
     fun readMissed(ref: String) = viewModelScope.launch(Dispatchers.IO) {
-        com.echoledger.mobile.calls.MissedRecordingStore.markRead(getApplication(), ref)
+        com.echoledger.mobile.calls.MissedUploadWorker.seen(getApplication(), ref, dismissed = false)
     }
 
-    /** Swiped away: it leaves Activity. */
+    /** Swiped away: it leaves Activity (its server copy is marked read as above). */
     fun dismissMissed(ref: String) = viewModelScope.launch(Dispatchers.IO) {
-        com.echoledger.mobile.calls.MissedRecordingStore.dismiss(getApplication(), ref)
+        com.echoledger.mobile.calls.MissedUploadWorker.seen(getApplication(), ref, dismissed = true)
     }
 
     /** The activity list; null when offline. */

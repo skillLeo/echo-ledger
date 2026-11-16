@@ -226,6 +226,112 @@ class RecordingServiceTest : AppTest() {
         assertTrue(call.endedAtMs != null)
     }
 
+    /** A helper that plays [pcm] (48 kHz stereo, left = this side, right = the other side) into the call's pipe at once. */
+    private class ScriptedHelper(private val pcm: ShortArray) : ICaptureHelper.Stub() {
+        var listener: ICallListener? = null
+
+        @Volatile private var sink: android.os.ParcelFileDescriptor? = null
+
+        /** Every byte went into the pipe (all but its last 64 KB, about a third of a second, has been read). */
+        @Volatile var written = false
+
+        override fun version() = 1
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
+            val mine = sink!!.dup()
+            this.sink = mine
+            Thread {
+                runCatching { java.io.FileOutputStream(mine.fileDescriptor).write(Pcm.toLittleEndianBytes(pcm)) }
+                written = true
+            }.start()
+            return true
+        }
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
+            startCapture(sink, sampleRate, micSource)
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = "[]"
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() {
+            runCatching { sink?.close() }
+        }
+        override fun setCallListener(listener: ICallListener?) {
+            this.listener = listener
+        }
+        override fun destroy() = Unit
+    }
+
+    private val rate = Pcm.CAPTURE_RATE
+
+    private fun tone(ms: Long): ShortArray = ShortArray((rate * ms / 1000).toInt()) { i ->
+        (kotlin.math.sin(2 * Math.PI * 425 * i / rate) * 0.2 * 32767).toInt().toShort()
+    }
+
+    private fun quiet(ms: Long): ShortArray = ShortArray((rate * ms / 1000).toInt())
+
+    /** Voiced speech stand-in: many harmonics of a gliding pitch with syllable-like loudness (as ConnectGateTest's). */
+    private fun speech(ms: Long): ShortArray {
+        val random = kotlin.random.Random(1)
+        var phase = 0.0
+        return ShortArray((rate * ms / 1000).toInt()) { i ->
+            val t = i.toDouble() / rate
+            phase += 2 * Math.PI * (130 + 40 * kotlin.math.sin(2 * Math.PI * 1.7 * t)) / rate
+            var v = 0.0
+            for (h in 1..24) v += kotlin.math.sin(phase * h) / 24
+            val syllable = 0.6 + 0.4 * kotlin.math.abs(kotlin.math.sin(2 * Math.PI * 3 * t))
+            ((v * syllable * 0.5 + random.nextDouble(-0.02, 0.02)) * 32767).toInt().toShort()
+        }
+    }
+
+    private fun join(vararg parts: ShortArray): ShortArray = parts.fold(ShortArray(0)) { a, b -> a + b }
+
+    private fun stereo(near: ShortArray, far: ShortArray): ShortArray =
+        ShortArray(minOf(near.size, far.size) * 2) { i -> if (i % 2 == 0) near[i / 2] else far[i / 2] }
+
+    /** A WhatsApp call through [helper] that lasts a little over 3 s; its journal entry once it is finished. */
+    private fun callThrough(helper: ScriptedHelper): CallJournal.Call {
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one
+        // A busy machine reads the pipe slowly: the call ends once its sound has been taken in.
+        pumpUntil("the call's sound to be read") { helper.written }
+        Thread.sleep(300)
+        helper.listener!!.onCallEnded()
+        pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        return CallJournal.book(app).calls.single()
+    }
+
+    /**
+     * v1.8 0.2 review: while an outgoing call rings, the ringback tone and your own voice fill both channels. That is
+     * neither "both channels have audio" nor an answer: the journal keeps the answer the recording's gate saw.
+     */
+    @Test
+    fun `a call that only rang has no answer and no both-channels stage in the journal, however loud the ringback`() {
+        val far = join(tone(1_000), quiet(2_000), tone(1_000), quiet(2_000))
+        val call = callThrough(ScriptedHelper(stereo(speech(6_000), far)))
+        assertEquals(null, call.answeredAtMs)
+        assertFalse(call.stages.map { it.stage }.toString(), call.reached(CallJournal.Stage.BOTH_AUDIO))
+        assertEquals("skipped", call.result)
+    }
+
+    @Test
+    fun `the answer the gate saw goes into the journal, and both channels count from it`() {
+        val far = join(tone(1_000), quiet(2_000), speech(4_000))
+        val call = callThrough(ScriptedHelper(stereo(join(quiet(3_000), speech(4_000)), far)))
+        assertEquals("the other side spoke", call.answeredBy)
+        val answeredAfterMs = call.answeredAtMs!! - call.atMs
+        assertTrue("answered $answeredAfterMs ms after the call was seen", answeredAfterMs in 2_500L..4_500L)
+        assertTrue(call.reached(CallJournal.Stage.BOTH_AUDIO))
+    }
+
     /**
      * A helper that refuses to record, the way it does when another app holds the microphone ([words] what it says, null
      * for nothing).

@@ -962,6 +962,7 @@ object PhoneAppRecordings {
         val covered = MissedRecordingStore.all(context)
             .filter { it.app == SourceApp.PHONE_CALL.wire && !it.withdrawn && MissedRecordings.coveredNow(it, recorded) }
         covered.forEach { MissedRecordingStore.withdraw(context, it.ref) }
+        if (covered.isNotEmpty()) MissedNotice.update(context)
         if (covered.any { it.sent }) runCatching { MissedUploadWorker.enqueue(context) }
         if (settings.deletePhoneAppCopy && Build.VERSION.SDK_INT >= 30) {
             prefs(context).edit().putString(DELETE, (pendingDeletes(context) + file.id).distinct().joinToString(",")).apply()

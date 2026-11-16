@@ -13,6 +13,7 @@ import com.echoledger.mobile.recording.CallJournal.Result
 import com.echoledger.mobile.recording.CallJournal.Seen
 import com.echoledger.mobile.recording.CallJournal.Stage
 import com.echoledger.mobile.testsupport.AppTest
+import com.echoledger.mobile.testsupport.storeRecording
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -83,6 +84,7 @@ class MissedRecordingWorkerTest : AppTest() {
         CallJournal.update(app, t) { b ->
             var j = CallJournal.seen(b, "c1", "whatsapp", Seen.HELPER, t)
             j = CallJournal.stage(j, "c1", Stage.STARTED, t + 400)
+            j = CallJournal.answered(j, "c1", t + 1_500, "the other side spoke")
             j = CallJournal.stage(j, "c1", Stage.BOTH_AUDIO, t + 2_000)
             CallJournal.seen(j, "c2", "zoom", Seen.HELPER, t + 40 * min)
         }
@@ -151,6 +153,98 @@ class MissedRecordingWorkerTest : AppTest() {
         ).single()
         MissedRecordingStore.stamp(app, previous = account, next = sara)
         assertEquals(account, MissedRecordingStore.all(app).single { it.ref == earlier.ref }.owner)
+    }
+
+    @Test
+    fun `a missed call belongs to the account signed in when it started, not the one signed in when it was found`() {
+        CallSightings.update(app) { listOf(seen("zoom", t, t + 300_000, "us.zoom.videomeetings")) }
+        val sara = Owner.of("https://echo.example", "sara@example.com")
+        // Sara signed in on this phone five minutes after Omar's call, before the detector looked.
+        MissedRecordingStore.stamp(app, previous = account, next = sara, atMs = t + 5 * min)
+        runBlocking { app.graph.settings.update { it.copy(account = sara) } }
+        assertEquals(account, detect(t + 10 * min).single().owner)
+        assertTrue("Sara never sees Omar's call", MissedRecordingStore.forAccount(MissedRecordingStore.all(app), sara).isEmpty())
+        // A call after her sign-in is hers.
+        CallSightings.update(app) { it + seen("whatsapp", t + 20 * min, t + 25 * min, "com.whatsapp") }
+        assertEquals(sara, detect(t + 30 * min).single().owner)
+    }
+
+    /** The journal began a day ago, with the person's choices of now (calls of the last hour are judged). */
+    private fun reachBack() {
+        val choices = CallJournal.choicesOf(runBlocking { app.graph.settings.current() })
+        CallJournal.update(app) { b ->
+            b.copy(
+                since = b.since - day,
+                settings =
+                    listOf(CallJournal.SettingsMark(b.since - day, choices)) + b.settings
+            )
+        }
+    }
+
+    /** The notice the hourly look posts, as the phone shows it (null once it is gone). */
+    private fun notice(): android.app.Notification? =
+        org.robolectric.Shadows.shadowOf(app.getSystemService(android.app.NotificationManager::class.java)).getNotification(7_460)
+
+    @Test
+    fun `the missed-recording notice goes once every call it names was recorded after all`() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        // A Zoom call half an hour ago that nothing recorded (the journal reaches back that far).
+        reachBack()
+        val at = System.currentTimeMillis() - 30 * min
+        CallSightings.update(app) { listOf(seen("zoom", at, at + 5 * min, "us.zoom.videomeetings")) }
+        fun look() = runBlocking { androidx.work.testing.TestListenableWorkerBuilder<MissedRecordingWorker>(app).build().doWork() }
+        look()
+        assertEquals("Missed recording", notice()?.extras?.getString(android.app.Notification.EXTRA_TITLE))
+        // Its recording turns up after all (imported late): the item is withdrawn, and the notice goes with it.
+        app.storeRecording(
+            id = "zoom-late",
+            sourceApp = "zoom",
+            startedAt = java.time.Instant.ofEpochMilli(at + 2_000).toString(),
+            endedAt = java.time.Instant.ofEpochMilli(at + 5 * min).toString(),
+            durationMs = 5 * min - 2_000
+        )
+        look()
+        assertTrue(MissedRecordingStore.all(app).single().withdrawn)
+        assertEquals(null, notice())
+    }
+
+    @Test
+    fun `of two calls the notice names, the one recorded after all leaves it and the other stays, quietly`() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        reachBack()
+        val at = System.currentTimeMillis() - 60 * min
+        CallSightings.update(app) {
+            listOf(seen("zoom", at, at + 5 * min, "us.zoom.videomeetings"), seen("whatsapp", at + 20 * min, at + 22 * min, "com.whatsapp"))
+        }
+        fun look() = runBlocking { androidx.work.testing.TestListenableWorkerBuilder<MissedRecordingWorker>(app).build().doWork() }
+        look()
+        assertEquals("2 calls were not recorded", notice()?.extras?.getString(android.app.Notification.EXTRA_TITLE))
+        app.storeRecording(
+            id = "zoom-late",
+            sourceApp = "zoom",
+            startedAt = java.time.Instant.ofEpochMilli(at + 2_000).toString(),
+            endedAt = java.time.Instant.ofEpochMilli(at + 5 * min).toString(),
+            durationMs = 5 * min - 2_000
+        )
+        look()
+        assertEquals("Missed recording", notice()?.extras?.getString(android.app.Notification.EXTRA_TITLE))
+        assertTrue(notice()!!.extras.getString(android.app.Notification.EXTRA_TEXT)!!.startsWith("WhatsApp call"))
+    }
+
+    @Test
+    fun `a report read on the phone after it was sent has its server copy marked read without waiting for the hourly look`() {
+        val sent = MissedRecordingStore.add(
+            app,
+            listOf(MissedRecordings.Found("zoom", t, 300, MissedReason.DETECTION, "")),
+            owner = account
+        )
+            .single()
+        MissedRecordingStore.sent(app, sent.ref, "mr_1")
+        val vm = com.echoledger.mobile.ui.MainViewModel(app).clearedAfterTest()
+        runBlocking { vm.readMissed(sent.ref).join() }
+        val upload = WorkManager.getInstance(app).getWorkInfosForUniqueWork("missed-upload").get(10, TimeUnit.SECONDS)
+        assertEquals(listOf(WorkInfo.State.ENQUEUED), upload.map { it.state })
+        assertTrue(MissedRecordingStore.all(app).single().serverCopyToRead)
     }
 
     @Test

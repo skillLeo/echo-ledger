@@ -1620,14 +1620,16 @@ class RecordingService : LifecycleService() {
             } else {
                 meLevel = Levels.rms(samples)
             }
-            heard()
             val gate = gate
             if (gate != null && gate.waiting) {
+                // Still ringing: a ringback tone and your own voice are not the call's sound yet (since v1.8).
                 val kept = gate.accept(bytes, length) ?: return
                 answered(gate)
+                heard()
                 write(kept, kept.size, Pcm.fromLittleEndianBytes(kept, kept.size))
                 return
             }
+            heard()
             write(bytes, length, samples)
         }
 
@@ -1635,15 +1637,40 @@ class RecordingService : LifecycleService() {
         private var otherHeard = false
         private var bothHeard = false
 
-        /** The capture journal's "both channels have audio": each side heard once (the one track, for a one-track call). */
-        private fun heard() {
+        /**
+         * The capture journal's "both channels have audio": each side heard once in what the recording keeps (the one
+         * track, for a one-track call), never while the call still rings in the answer gate.
+         */
+        private fun heard(me: Float = meLevel, other: Float = clientLevel) {
             if (bothHeard) return
-            if (meLevel >= Levels.HEARD) meHeard = true
-            if (clientLevel >= Levels.HEARD) otherHeard = true
+            if (me >= Levels.HEARD) meHeard = true
+            if (other >= Levels.HEARD) otherHeard = true
             if (meHeard && (otherHeard || channels == 1)) {
                 bothHeard = true
                 CallJournal.stage(this@RecordingService, id, CallJournal.Stage.BOTH_AUDIO, if (channels == 1) "one track" else null)
             }
+        }
+
+        /** [heard] over audio let through at once at the end of the capture, 20 ms at a time as the reader gives it. */
+        private fun heardIn(samples: ShortArray) {
+            val frame = Pcm.CAPTURE_RATE / 50 * channels
+            var i = 0
+            while (i < samples.size && !bothHeard) {
+                val block = samples.copyOfRange(i, minOf(samples.size, i + frame))
+                if (channels == 2) {
+                    val (me, other) = Pcm.deinterleave(block)
+                    heard(Levels.rms(me), Levels.rms(other))
+                } else {
+                    heard(Levels.rms(block), 0f)
+                }
+                i += frame
+            }
+        }
+
+        /** The gate saw the call answered: the capture journal keeps when (the proof the detector trusts), since v1.8. */
+        private fun journalAnswer(gate: ConnectGate) {
+            val at = gate.answeredAtMs ?: return
+            CallJournal.answered(this@RecordingService, id, startedAt.toEpochMilli() + at, gate.openedBy)
         }
 
         /** Audio that goes into the recording: the file, the level and speech counts, and (with [stream]) live captions. */
@@ -1666,6 +1693,7 @@ class RecordingService : LifecycleService() {
         /** The gate opened: say so in the capture log and on the pill, notification and Record tab. */
         private fun answered(gate: ConnectGate) {
             CaptureLog.add(this@RecordingService, "answered", "${gate.openedBy}; kept from ${gate.keptFromMs} ms")
+            journalAnswer(gate)
             main.post {
                 CallNotices.onNotice = null
                 detailAfterAnswer?.let { detail = it }
@@ -1687,8 +1715,14 @@ class RecordingService : LifecycleService() {
             gate?.takeIf { it.waiting }?.let { g ->
                 val rest = g.finish(answeredAtMs())
                 CaptureLog.add(this@RecordingService, "call ended unanswered or unseen", "${g.openedBy}; kept from ${g.keptFromMs} ms")
+                val samples = Pcm.fromLittleEndianBytes(rest, rest.size)
+                // Answered after all (a SIM call's talk time): its sound counts from the answer, like a gate that opened.
+                if (g.answeredAtMs != null) {
+                    journalAnswer(g)
+                    heardIn(samples)
+                }
                 // Not to the captions: they have stopped, and a call that only rang has nothing to say.
-                write(rest, rest.size, Pcm.fromLittleEndianBytes(rest, rest.size), stream = false)
+                write(rest, rest.size, samples, stream = false)
             }
             encoder.finish()
             debugWav?.close()

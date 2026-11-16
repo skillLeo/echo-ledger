@@ -8,6 +8,7 @@ import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 
 /**
@@ -32,8 +33,10 @@ object MissedRecordingStore {
     }
 
     /**
-     * New items for what the detector found under [owner] (the account signed in); returns them, each with its own
-     * `client_ref`. A call already here (its app family and start time) is never added twice.
+     * New items for what the detector found while [owner] is the account signed in; returns them, each with its own
+     * `client_ref`. Each belongs to the account that was signed in when its call started (a sign-in as someone else
+     * since then leaves it with the one before). A call already here (its app family and start time) is never added
+     * twice.
      */
     @Synchronized
     fun add(
@@ -44,6 +47,7 @@ object MissedRecordingStore {
     ): List<MissedItem> {
         if (found.isEmpty()) return emptyList()
         val before = all(context)
+        val switches = switches(context)
         val fresh = mutableListOf<MissedItem>()
         for (f in found) {
             val twice = (before + fresh).any {
@@ -59,7 +63,7 @@ object MissedRecordingStore {
                 reason = f.reason.wire,
                 detail = f.detail,
                 foundAtMs = nowMs,
-                owner = owner,
+                owner = accountAt(switches, f.startedAtMs, owner),
                 fix = fix,
                 endedAtMs = f.endedAtMs,
                 logOnly = f.logOnly
@@ -97,16 +101,42 @@ object MissedRecordingStore {
     }
 
     /**
-     * A sign-in as [next] after [previous]: when it is someone else, the items found without an account are stamped with
-     * [previous] (they were found under it), as recordings are, so they never show or go out under the new account.
+     * A sign-in as someone else at [atMs] (since v1.8): until then [previous] was the account here. Kept beside the items
+     * (no-backup storage, 31 days), never in the capture journal, which goes into "Copy diagnostics" without accounts.
+     */
+    @Serializable
+    data class Switch(val atMs: Long, val previous: Owner)
+
+    /**
+     * A sign-in as [next] after [previous] at [atMs]: when it is someone else, the items found without an account are
+     * stamped with [previous] (they were found under it), as recordings are, so they never show or go out under the new
+     * account; and the switch is remembered, so a call found later still belongs to the account it was made under.
      */
     @Synchronized
-    fun stamp(context: Context, previous: Owner?, next: Owner) {
+    fun stamp(context: Context, previous: Owner?, next: Owner, atMs: Long = System.currentTimeMillis()) {
         if (previous == null || previous.mayUploadAs(next)) return
+        val kept = (switches(context) + Switch(atMs, previous)).filter { it.atMs >= atMs - KEEP_MS }.takeLast(MAX_SWITCHES)
+        runCatching { writeAtomically(switchesFile(context), ApiJson.encodeToString(ListSerializer(Switch.serializer()), kept)) }
         val items = all(context)
         if (items.none { it.owner == null }) return
         save(context, items.map { if (it.owner == null) it.copy(owner = previous) else it })
     }
+
+    /**
+     * The account signed in when a call started at [atMs] (pure): the one a later sign-in as someone else replaced, else
+     * [current]. Without any switch after the call, it is the account here now.
+     */
+    fun accountAt(switches: List<Switch>, atMs: Long, current: Owner?): Owner? =
+        switches.filter { it.atMs > atMs }.minByOrNull { it.atMs }?.previous ?: current
+
+    @Synchronized
+    fun switches(context: Context): List<Switch> = runCatching {
+        ApiJson.decodeFromString(ListSerializer(Switch.serializer()), switchesFile(context).readText())
+    }.getOrDefault(emptyList())
+
+    private fun switchesFile(context: Context) = File(context.noBackupFilesDir, "missed-recordings-accounts.json")
+
+    private const val MAX_SWITCHES = 50
 
     /** What [current] sees and sends: its own items (and those found before any account was known). */
     fun forAccount(items: List<MissedItem>, current: Owner?): List<MissedItem> =
@@ -120,6 +150,7 @@ object MissedRecordingStore {
     fun clear(context: Context) {
         load(context)
         file?.delete()
+        switchesFile(context).delete()
         _items.value = emptyList()
     }
 
@@ -128,13 +159,15 @@ object MissedRecordingStore {
         val kept = list.filter { it.startedAtMs >= nowMs - KEEP_MS }.sortedByDescending { it.startedAtMs }.take(MAX)
         _items.value = kept
         val target = file ?: return
-        runCatching {
-            val tmp = File(target.parentFile, target.name + ".tmp")
-            tmp.writeText(ApiJson.encodeToString(ListSerializer(MissedItem.serializer()), kept))
-            if (!tmp.renameTo(target)) {
-                target.delete()
-                tmp.renameTo(target)
-            }
+        runCatching { writeAtomically(target, ApiJson.encodeToString(ListSerializer(MissedItem.serializer()), kept)) }
+    }
+
+    private fun writeAtomically(target: File, text: String) {
+        val tmp = File(target.parentFile, target.name + ".tmp")
+        tmp.writeText(text)
+        if (!tmp.renameTo(target)) {
+            target.delete()
+            tmp.renameTo(target)
         }
     }
 
