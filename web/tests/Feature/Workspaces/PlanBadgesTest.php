@@ -57,3 +57,18 @@ it('shows the badge and the sheet on Connected apps when the plan leaves the con
     SettingsContext::forget();
     expect((string) $this->get('/app/settings/devices')->assertOk()->getContent())->toContain('Not connected')->toContain('Ask an AI assistant')->not->toContain('feature=connector');
 });
+
+it('shows the locked Show as… with its badge in the button, never inside an attribute', function () {
+    Fx::fakeRecordingsDisk();
+    badgePlanFor((int) $this->person->current_workspace_id, 'free');
+    $session = Fx::session($this->person, null, ['language' => 'ur', 'status' => 'completed']);
+    Fx::readyRecording($session);
+    Fx::transcript($session, 'آپ کیسے ہیں')->update(['language' => 'ur']);
+
+    $html = (string) $this->get('/app/sessions/'.$session->id)->assertOk()->getContent();
+
+    // The badge's markup inside an attribute ends it early and spills the rest of the tag onto the page as text.
+    expect($html)->toContain('Show as… <span class="el-tag el-plan-badge">')
+        ->and(preg_match('/(?:title|aria-label)="[^"]*<span/', $html))->toBe(0);
+    Fx::cleanupDisks();
+});

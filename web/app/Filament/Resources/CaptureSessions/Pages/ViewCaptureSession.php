@@ -624,8 +624,10 @@ class ViewCaptureSession extends ViewRecord
                 && ! in_array(app(TranscriptViews::class)->state($transcript)['status'], ['ready'], true);
         };
         // Since v1.6 the views are a paid feature: without it the button carries the plan's badge and opens the sheet.
+        // Always with its words: the badge makes the label HTML, which Filament would write into the narrow icon
+        // button's title attribute, breaking the tag (and this button has no icon to show there anyway).
         if (! PlanLock::allows('views')) {
-            return PlanLock::sheet('show_as', 'views', 'Show as…')->labeledFrom('sm')->visible($visible);
+            return PlanLock::sheet('show_as', 'views', 'Show as…')->visible($visible);
         }
 
         return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
