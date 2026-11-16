@@ -1,0 +1,46 @@
+// The v2 components draw with the app's one icon family (components/Icons.tsx and ControlIcons.tsx: outline glyphs on
+// a 24-unit grid, one stroke, round ends, currentColor). This file only picks and names them; it draws nothing, so
+// the one-icon rule keeps holding. The size comes from CSS (.el-icon), never from a number here.
+export {
+  LucideSearchIcon as SearchIcon,
+  LucideXIcon as CloseIcon,
+  LucideCheckIcon as CheckIcon,
+  LucideChevronRightIcon as ChevronEndIcon,
+  LucideChevronLeftIcon as ChevronStartIcon,
+  LucideCircleAlertIcon as ErrorIcon,
+  LucideCircleCheckIcon as ReadyIcon,
+  LucideTriangleAlertIcon as WarningIcon,
+  LucideInfoIcon as InfoIcon,
+  LucideMicIcon as MicIcon,
+  LucidePhoneIcon as PhoneIcon,
+  LucideCaptionsIcon as CaptionsIcon,
+  LucideLanguagesIcon as LanguagesIcon,
+  LucideBellIcon as BellIcon,
+  LucideLockIcon as LockIcon,
+  LucideHardDriveIcon as StorageIcon,
+  LucideKeyboardIcon as KeyboardIcon,
+  LucidePaletteIcon as AppearanceIcon,
+  LucideShieldIcon as PrivacyIcon,
+  LucideCircleHelpIcon as HelpIcon,
+  LucideUserIcon as UserIcon,
+  LucideCreditCardIcon as PlanIcon,
+  LucideMonitorIcon as ScreenIcon,
+  LucideAudioLinesIcon as WaveIcon,
+  LucideFileTextIcon as TranscriptIcon,
+  LucideUploadIcon as ShareIcon,
+  LucideCircleDashedIcon as PendingIcon,
+  LucideClockIcon as ClockIcon,
+} from "../../components/Icons";
+export {
+  SourceAppIcon,
+  TrashIcon,
+  FolderIcon,
+  LibraryIcon,
+  HomeIcon,
+  SettingsIcon,
+  RecordIcon,
+  SparkleIcon,
+  InboxIcon,
+  SkipIcon,
+} from "../../components/Icons";
+export { PlayIcon, PauseIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
