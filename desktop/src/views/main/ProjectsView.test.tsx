@@ -667,7 +667,7 @@ describe("Ask", () => {
     respond("client_ask", { data: ANSWER });
     await renderProjects();
     tab("Notes");
-    // An Urdu question is typed right to left (v1.5 sweep).
+    // An Urdu question is typed right to left (since v1.5).
     expect(screen.getByRole("textbox", { name: "Question" })).toHaveAttribute("dir", "auto");
     fireEvent.change(screen.getByRole("textbox", { name: "Question" }), { target: { value: "  When do we launch?  " } });
     fireEvent.click(within(screen.getByRole("group", { name: "Answer in" })).getByRole("button", { name: "Roman Urdu" }));

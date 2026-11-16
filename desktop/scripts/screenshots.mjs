@@ -147,7 +147,7 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
-  // Batch 2 (D-013, D-014, D-040, D-041, D-044, D-052, D-062): no internal, debug or vendor text.
+  // D-013, D-014, D-040, D-041, D-044, D-052, D-062: no internal, debug or vendor text.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`record-recording${size}`, "record-recording", async (page) => page.waitForSelector(".record-controls"), viewport],
     [`library-free${size}`, "library&plan=free", async (page) => {
@@ -182,7 +182,7 @@ const SCREENS = [
       await page.getByTestId("library-list").getByText(/Call with \+92/).click();
       await page.waitForSelector(".detail .notice.error");
     }, viewport])),
-  // Batch 6 (D-001, D-120): the Calls page's app icons beside their names; a permission an older copy holds.
+  // D-001, D-120: the Calls page's app icons beside their names; a permission an older copy holds.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
     [`permissions-older-copy-mac${size}`, "library-lost-mac&older=1", async (page) => {
@@ -191,13 +191,13 @@ const SCREENS = [
       await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
     }, viewport],
   ]),
-  // Batch 5 (D-023, D-024, D-029, D-031, D-046, D-003): nothing clipped or pushed sideways in the Library.
+  // D-023, D-024, D-029, D-031, D-046, D-003: nothing clipped or pushed sideways in the Library.
   ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],
   ...[["-1100", { width: 1100, height: 740 }], ["-1300", { width: 1300, height: 800 }]].map(([size, viewport]) => [`library-long-language${size}`, "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
   }, viewport]),
-  // Batch 3 (D-121, D-007, D-090): whole controls, the workspace switcher, Settings' action rows.
+  // D-121, D-007, D-090: whole controls, the workspace switcher, Settings' action rows.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`workspace-menu${size}`, "library&plan=free", async (page) => {
       await page.waitForSelector(".app");
@@ -210,7 +210,7 @@ const SCREENS = [
       await page.waitForSelector(".set-action");
     }, viewport],
   ]),
-  // Batch 1 (D-045 … D-122, D-072): the app's own confirm dialog, at full size and at the smallest window.
+  // D-045 … D-122, D-072: the app's own confirm dialog, at full size and at the smallest window.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`confirm-delete-recording${size}`, "library&plan=free", async (page) => {
       await page.waitForSelector(".detail-title");
