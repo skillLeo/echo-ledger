@@ -24,11 +24,15 @@ class CallerNameListener : NotificationListenerService() {
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = read(sbn)
 
-    /** A call notification going away is the end of its call, for the missed-recording detector (since v1.8). */
+    /**
+     * A call notification going away is the end of its call, for the missed-recording detector (since v1.8); the file is
+     * written on the journal's I/O thread, at the time the notice went.
+     */
     override fun onNotificationRemoved(sbn: StatusBarNotification) {
         val pkg = sbn.packageName
         if (CallSightings.appOf(pkg) == null || sbn.notification.category != Notification.CATEGORY_CALL) return
-        CallSightings.update(this) { CallSightings.ended(it, pkg, System.currentTimeMillis()) }
+        val now = System.currentTimeMillis()
+        CallSightings.update(this) { CallSightings.ended(it, pkg, now) }
     }
 
     private fun read(sbn: StatusBarNotification) {

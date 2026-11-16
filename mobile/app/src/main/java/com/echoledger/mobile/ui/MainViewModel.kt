@@ -1263,8 +1263,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** The text "Copy diagnostics" puts on the clipboard (no audio, names or numbers). */
-    fun captureDiagnostics(): String {
+    /** The text "Copy diagnostics" puts on the clipboard (no audio, names or numbers), read off the main thread. */
+    suspend fun captureDiagnostics(): String = withContext(Dispatchers.IO) {
         val h = graph.helper.state.value
         val state = if (h.connected) {
             val caps = runCatching { graph.helper.helper?.capabilities() }.getOrNull()
@@ -1272,7 +1272,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             "not connected (${h.error ?: "never started"})"
         }
-        return com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state)
+        com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state)
     }
 
     fun connectShizuku() {

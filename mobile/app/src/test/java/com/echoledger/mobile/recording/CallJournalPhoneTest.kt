@@ -2,6 +2,8 @@ package com.echoledger.mobile.recording
 
 import com.echoledger.mobile.testsupport.AppTest
 import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -21,8 +23,28 @@ class CallJournalPhoneTest : AppTest() {
         // Two days later the first call is 8 days old.
         CallJournal.update(app, now + 2 * day) { b -> CallJournal.mark(b, CallJournal.State.ARMED, now + 2 * day, "helper ready") }
         assertEquals(listOf("new"), CallJournal.book(app).calls.map { it.id })
+        JournalIo.flush()
         val file = File(app.noBackupFilesDir, "call-journal.json").readText()
         assertFalse("rotated in the file too", file.contains("\"old\""))
+    }
+
+    @Test
+    fun `a journal or sightings change never waits for the file, and a read waits for every change before it`() {
+        val busy = CountDownLatch(1)
+        JournalIo.post { busy.await(10, TimeUnit.SECONDS) } // the I/O thread is busy writing
+        val started = System.nanoTime()
+        CallJournal.seen(app, "c1", "whatsapp", CallJournal.Seen.HELPER)
+        CallJournal.stage(app, "c1", CallJournal.Stage.BOTH_AUDIO) // as the audio reader thread does
+        com.echoledger.mobile.calls.CallSightings.update(app) {
+            com.echoledger.mobile.calls.CallSightings.answered(it, "com.whatsapp", 1L, 1L)
+        }
+        val tookMs = (System.nanoTime() - started) / 1_000_000
+        assertTrue("the caller did not wait for the busy thread: $tookMs ms", tookMs < 1_000)
+        val before = runCatching { File(app.noBackupFilesDir, "call-journal.json").readText() }.getOrDefault("")
+        assertFalse("nothing written yet", before.contains("\"c1\""))
+        busy.countDown()
+        assertEquals(listOf("detected", "both_audio"), CallJournal.book(app).call("c1")!!.stages.map { it.stage })
+        assertEquals(1, com.echoledger.mobile.calls.CallSightings.all(app).size)
     }
 
     @Test

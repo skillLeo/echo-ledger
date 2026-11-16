@@ -37,6 +37,7 @@ class CallSightingsTest : AppTest() {
         assertEquals(listOf("zoom", "whatsapp"), list.map { it.app })
         assertEquals("two days later the first is 8 days old", listOf("whatsapp"), CallSightings.rotate(list, t0 + 2 * day).map { it.app })
         CallSightings.update(app) { list }
+        com.echoledger.mobile.recording.JournalIo.flush()
         val stored = File(app.noBackupFilesDir, "call-sightings.json").readText()
         val keys = Regex("\"([a-zA-Z]+)\":").findAll(stored).map { it.groupValues[1] }.toSet()
         assertTrue("only the app, the package and the times: $keys", setOf("app", "startMs", "endMs", "pkg").containsAll(keys))

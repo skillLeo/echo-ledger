@@ -5,6 +5,7 @@ import com.echoledger.mobile.core.CallNotices
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.ApiJson
+import com.echoledger.mobile.recording.JournalIo
 import java.io.File
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -49,32 +50,45 @@ object CallSightings {
     fun sightings(list: List<Seen>): List<MissedRecordings.Sighting> =
         list.map { MissedRecordings.Sighting(it.app, it.startMs, it.endMs, answered = true, by = MissedRecordings.NOTIFICATION) }
 
-    // ---- on the phone -----------------------------------------------------------------------------------------------
+    // ---- on the phone (the file is read and written on the journal's I/O thread only) -------------------------------
 
-    @Synchronized
-    fun all(context: Context): List<Seen> = runCatching {
+    /** The sightings kept, with every change made before this call. */
+    fun all(context: Context): List<Seen> {
+        val app = context.applicationContext ?: context
+        return JournalIo.read { synchronized(this) { read(app) } }
+    }
+
+    /** Changes the sightings on the I/O thread (a call notification never waits for the file). */
+    fun update(context: Context, change: (List<Seen>) -> List<Seen>) {
+        val app = context.applicationContext ?: context
+        JournalIo.post {
+            synchronized(this) {
+                val before = read(app)
+                val after = change(before)
+                if (after != before) write(app, after)
+            }
+        }
+    }
+
+    fun clear(context: Context) {
+        val app = context.applicationContext ?: context
+        JournalIo.read { synchronized(this) { file(app).delete() } }
+    }
+
+    private fun read(context: Context): List<Seen> = runCatching {
         ApiJson.decodeFromString(ListSerializer(Seen.serializer()), file(context).readText())
     }.getOrDefault(emptyList())
 
-    @Synchronized
-    fun update(context: Context, change: (List<Seen>) -> List<Seen>) {
-        val before = all(context)
-        val after = change(before)
-        if (after == before) return
+    private fun write(context: Context, list: List<Seen>) {
         runCatching {
             val target = file(context)
             val tmp = File(target.parentFile, target.name + ".tmp")
-            tmp.writeText(ApiJson.encodeToString(ListSerializer(Seen.serializer()), after))
+            tmp.writeText(ApiJson.encodeToString(ListSerializer(Seen.serializer()), list))
             if (!tmp.renameTo(target)) {
                 target.delete()
                 tmp.renameTo(target)
             }
         }
-    }
-
-    @Synchronized
-    fun clear(context: Context) {
-        file(context).delete()
     }
 
     private fun file(context: Context) = File(context.noBackupFilesDir, "call-sightings.json")

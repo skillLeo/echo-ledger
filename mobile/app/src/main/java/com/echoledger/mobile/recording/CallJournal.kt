@@ -16,7 +16,8 @@ import kotlinx.serialization.Serializable
  * why a call it finds elsewhere (the call log, a call notification) was not recorded.
  *
  * Kept 7 days on the phone (no-backup storage) and included in "Copy diagnostics". Never names, numbers or audio: a call
- * is its app, its times, its lengths and reasons. Safe from any thread.
+ * is its app, its times, its lengths and reasons. Safe from any thread: the file is read and written on [JournalIo]'s
+ * thread only, so the caller never waits for the disk.
  */
 object CallJournal {
     /** The stages of a call, in order. A call by hand starts at [STARTED]. */
@@ -345,49 +346,85 @@ object CallJournal {
     private var file: File? = null
     private var book = Book()
 
-    /** The journal of [context]'s app, loaded once (a test's new app gets its own). */
-    @Synchronized
+    /** The journal of [context]'s app (a test's new app gets its own), with every change made before this call. */
     fun book(context: Context): Book {
-        load(context)
-        return book
+        val app = context.applicationContext ?: context
+        return JournalIo.read {
+            synchronized(this) {
+                load(app)
+                book
+            }
+        }
     }
 
-    @Synchronized
+    /** Changes the journal on its I/O thread: the caller never waits for the file. */
     fun update(context: Context, nowMs: Long = System.currentTimeMillis(), change: (Book) -> Book) {
-        load(context)
-        val next = rotate(change(book), nowMs)
-        if (next == book) return
-        book = next
-        save()
+        val app = context.applicationContext ?: context
+        JournalIo.post {
+            synchronized(this) {
+                load(app)
+                val next = rotate(change(book), nowMs)
+                if (next != book) {
+                    book = next
+                    save()
+                }
+            }
+        }
     }
 
-    fun seen(context: Context, id: String, app: String, seenBy: String) =
-        update(context) { seen(it, id, app, seenBy, System.currentTimeMillis()) }
+    // Each one takes its time when it is called, not when the I/O thread gets to it.
 
-    fun stage(context: Context, id: String, stage: Stage, note: String? = null) =
-        update(context) { stage(it, id, stage, System.currentTimeMillis(), note) }
+    fun seen(context: Context, id: String, app: String, seenBy: String) {
+        val at = System.currentTimeMillis()
+        update(context, at) { seen(it, id, app, seenBy, at) }
+    }
 
-    fun fail(context: Context, id: String, reason: String, detail: String) =
-        update(context) { fail(it, id, reason, detail, System.currentTimeMillis()) }
+    fun stage(context: Context, id: String, stage: Stage, note: String? = null) {
+        val at = System.currentTimeMillis()
+        update(context, at) { stage(it, id, stage, at, note) }
+    }
 
-    fun finish(context: Context, id: String, result: Result, note: String? = null, keptMs: Long? = null) =
-        update(context) { finish(it, id, result, System.currentTimeMillis(), note, keptMs) }
+    fun fail(context: Context, id: String, reason: String, detail: String) {
+        val at = System.currentTimeMillis()
+        update(context, at) { fail(it, id, reason, detail, at) }
+    }
 
-    fun ended(context: Context, id: String) = update(context) { ended(it, id, System.currentTimeMillis()) }
+    fun finish(context: Context, id: String, result: Result, note: String? = null, keptMs: Long? = null) {
+        val at = System.currentTimeMillis()
+        update(context, at) { finish(it, id, result, at, note, keptMs) }
+    }
 
-    fun mark(context: Context, kind: String, value: String = "") = update(context) { mark(it, kind, System.currentTimeMillis(), value) }
+    fun ended(context: Context, id: String) {
+        val at = System.currentTimeMillis()
+        update(context, at) { ended(it, id, at) }
+    }
 
-    fun choices(context: Context, choices: Choices) = update(context) { choices(it, choices, System.currentTimeMillis()) }
+    fun mark(context: Context, kind: String, value: String = "") {
+        val at = System.currentTimeMillis()
+        update(context, at) { mark(it, kind, at, value) }
+    }
+
+    fun choices(context: Context, choices: Choices) {
+        val at = System.currentTimeMillis()
+        update(context, at) { choices(it, choices, at) }
+    }
 
     /** Called once per process (EchoLedgerApp): closes what the last process left open. */
-    fun processStarted(context: Context) = update(context) { processStarted(it, System.currentTimeMillis()) }
+    fun processStarted(context: Context) {
+        val at = System.currentTimeMillis()
+        update(context, at) { processStarted(it, at) }
+    }
 
-    @Synchronized
     fun clear(context: Context) {
-        file = File(context.noBackupFilesDir, FILE)
-        file?.delete()
-        book = Book(since = System.currentTimeMillis())
-        save()
+        val app = context.applicationContext ?: context
+        JournalIo.read {
+            synchronized(this) {
+                file = File(app.noBackupFilesDir, FILE)
+                file?.delete()
+                book = Book(since = System.currentTimeMillis())
+                save()
+            }
+        }
     }
 
     private fun load(context: Context) {
