@@ -30,6 +30,8 @@ export {
   LucideUploadIcon as ShareIcon,
   LucideCircleDashedIcon as PendingIcon,
   LucideClockIcon as ClockIcon,
+  LucideLogOutIcon as SignOutIcon,
+  LucideSmartphoneIcon as DeviceIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,
