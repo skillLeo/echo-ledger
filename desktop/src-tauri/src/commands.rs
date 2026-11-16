@@ -2506,26 +2506,36 @@ pub async fn quit_and_reopen(app: AppHandle) -> AppResult<()> {
     app.restart()
 }
 
-/// The interface flags the window shows (contract 2.0.0-a), and whether newer ones wait for the end of a recording.
+/// The interface flags (contract 2.0.0-a) from the last config read, with no request: all off before the first one or
+/// from an older server. `{"ui_flags": {"<name>": bool, …}, "ui_classic": bool}`.
 #[tauri::command]
-pub fn get_ui_flags(state: State<'_, AppState>) -> crate::ui_flags::UiFlagsView {
-    state.ui_flags.view()
+pub fn ui_flags(state: State<'_, AppState>) -> crate::ui_flags::UiFlags {
+    crate::ui_flags::cached(&state)
 }
 
-/// "Switch back to classic" on or off (`PUT /api/account/ui`), then the config is read again. The new flags reach the
-/// window as `ui:flags` at once, or when a recording that runs has ended.
+/// "Switch back to classic" on or off: `PUT /api/account/ui`, its answer kept in the cached config and returned in the
+/// same shape; the config is then read again in the background, as the contract asks.
 #[tauri::command]
-pub async fn set_classic(app: AppHandle, classic: bool) -> AppResult<crate::ui_flags::UiFlagsView> {
+pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::ui_flags::UiFlags> {
     let state = app.state::<AppState>();
     let api = state.api()?;
     let answer = api.set_ui_classic(classic).await?;
-    match api.config().await {
-        Ok(config) => state.apply_config(config),
-        // The answer already holds the new flags when the config cannot be read right now.
-        Err(_) => state.ui_flags.offer(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic)),
+    if let Some(config) = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
+        config.ui_flags = answer.ui_flags.clone();
+        config.ui_classic = answer.ui_classic;
     }
     crate::actions::emit_status(&app);
-    Ok(state.ui_flags.view())
+    let reader = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = reader.state::<AppState>();
+        if let Ok(api) = state.api()
+            && let Ok(config) = api.config().await
+        {
+            state.apply_config(config);
+            crate::actions::emit_status(&reader);
+        }
+    });
+    Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
 }
 
 /// "Once per loss": the person has read the sentence.

@@ -71,8 +71,8 @@ pub struct AppState {
     pub token: Mutex<Option<String>>,
     pub token_store: Box<dyn TokenStore>,
     pub server_config: Mutex<Option<ServerConfig>>,
-    /// The interface flags the window has, and newer ones waiting for the end of a recording (contract 2.0.0-a).
-    pub ui_flags: ui_flags::UiFlagsState,
+    /// The interface flags last announced as `ui:flags` (contract 2.0.0-a).
+    pub ui_announced: ui_flags::Announced,
     pub capture: audio::CaptureController,
     pub live: stt::LiveCaptions,
     pub dictation_live: stt::LiveCaptions,
@@ -166,7 +166,7 @@ impl AppState {
             token: Mutex::new(token),
             token_store,
             server_config: Mutex::new(None),
-            ui_flags: ui_flags::UiFlagsState::default(),
+            ui_announced: ui_flags::Announced::default(),
             capture: audio::CaptureController::default(),
             live: stt::LiveCaptions::default(),
             dictation_live: stt::LiveCaptions::default(),
@@ -312,8 +312,6 @@ impl AppState {
         // The config is never refused, so it says whether the queue still waits: in maintenance or refused it holds
         // again, otherwise a hold from an earlier answer is over.
         *self.upload_hold.lock().unwrap_or_else(|p| p.into_inner()) = server_notice::hold_from_config(&config, std::time::Instant::now());
-        // The interface flags wait for the next status update, and for the end of a recording (`ui_flags::settle`).
-        self.ui_flags.offer(config.ui());
         *self.server_config.lock().unwrap_or_else(|p| p.into_inner()) = Some(config);
     }
 
@@ -575,8 +573,8 @@ pub fn run() {
             commands::mic_users,
             commands::mic_last_not_recorded,
             commands::quit_and_reopen,
-            commands::get_ui_flags,
-            commands::set_classic,
+            commands::ui_flags,
+            commands::ui_classic_set,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,

@@ -1,14 +1,16 @@
 //! The interface flags (contract 2.0.0-a, docs/API.md "Interface flags"): which redesigned screens this person sees,
 //! decided by the server and never on the device. `GET /api/config` carries `ui_flags` and `ui_classic`; a flag the
-//! app does not know is ignored and one the answer lacks (an older server) is off. `PUT /api/account/ui` sets "Switch
-//! back to classic", and the config is read again right after it.
+//! app does not know is ignored and one the answer lacks (an older server) is off.
 //!
-//! The config is read at start, every minute while the app runs (`actions::spawn_activity_poll`, so within a minute of
-//! a resume, well inside the contract's 15 minutes) and right after `set_classic`. A change waits while a recording
-//! runs: the window keeps the flags it has until the recording ends, then gets the new ones as `ui:flags`.
+//! The window asks with `ui_flags` (answered from the last config read, no request) and sets "Switch back to classic"
+//! with `ui_classic_set` (`PUT /api/account/ui`, which updates the cached config). Both answer
+//! `{"ui_flags": {"<name>": bool, …}, "ui_classic": bool}` (desktop/src/v2/flags.ts reads that shape), and `ui:flags`
+//! carries it whenever the cached flags change. The window reads them again on its next screen, never in the middle
+//! of a recording. The config is read at start, every minute while the app runs (so within a minute of a resume, well
+//! inside the contract's 15 minutes) and right after `ui_classic_set`.
 
 use std::collections::BTreeMap;
-use std::sync::{Mutex, MutexGuard};
+use std::sync::Mutex;
 
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
@@ -29,14 +31,15 @@ pub const KNOWN: [&str; 12] = [
     "live_assist",
 ];
 
-/// The event the window hears when the flags it shows change.
+/// The event the window hears when the cached flags change.
 pub const EVENT: &str = "ui:flags";
 
-/// The flags as the window uses them: every known flag, on or off, and the person's "classic" choice.
+/// The flags as the window reads them: every known flag, on or off, and the person's "classic" choice.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct UiFlags {
+    #[serde(rename = "ui_flags")]
     pub flags: BTreeMap<String, bool>,
+    #[serde(rename = "ui_classic")]
     pub classic: bool,
 }
 
@@ -69,66 +72,32 @@ impl UiFlags {
     }
 }
 
-/// What the window has and what waits for it.
+/// The flags of the last config read: all off before the first one.
+pub fn cached(state: &crate::AppState) -> UiFlags {
+    state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(crate::net::models::ServerConfig::ui).unwrap_or_default()
+}
+
+/// The flags last announced as `ui:flags`, to say only a change.
 #[derive(Default)]
-pub struct UiFlagsState {
-    applied: Mutex<UiFlags>,
-    waiting: Mutex<Option<UiFlags>>,
-}
+pub struct Announced(Mutex<Option<UiFlags>>);
 
-/// What the window gets (`get_ui_flags`, `set_classic`): the flags it shows, and whether newer ones wait for the end of
-/// a recording.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UiFlagsView {
-    #[serde(flatten)]
-    pub flags: UiFlags,
-    pub offers_classic_switch: bool,
-    pub waiting: bool,
-}
-
-fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|p| p.into_inner())
-}
-
-impl UiFlagsState {
-    /// Takes in the flags of a config just read: they wait to be applied unless they are what the window has.
-    pub fn offer(&self, flags: UiFlags) {
-        let same = *lock(&self.applied) == flags;
-        *lock(&self.waiting) = (!same).then_some(flags);
-    }
-
-    /// Applies what waits, unless a recording runs (pure decision, [`settle_decision`]); the new flags when they changed.
-    pub fn settle(&self, recording: bool) -> Option<UiFlags> {
-        let mut waiting = lock(&self.waiting);
-        let next = settle_decision(waiting.as_ref(), recording)?;
-        *waiting = None;
-        *lock(&self.applied) = next.clone();
-        Some(next)
-    }
-
-    pub fn view(&self) -> UiFlagsView {
-        let flags = lock(&self.applied).clone();
-        UiFlagsView { offers_classic_switch: flags.offers_classic_switch(), flags, waiting: lock(&self.waiting).is_some() }
-    }
-
-    pub fn applied(&self) -> UiFlags {
-        lock(&self.applied).clone()
+impl Announced {
+    /// The flags when they differ from the ones announced last (pure apart from remembering them); none the first
+    /// time when they are all off (nothing changed for the window, which starts with everything off).
+    pub fn changed(&self, now: UiFlags) -> Option<UiFlags> {
+        let mut last = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        let before = last.clone().unwrap_or_default();
+        *last = Some(now.clone());
+        (before != now).then_some(now)
     }
 }
 
-/// Whether waiting flags apply now (pure): never in the middle of a recording.
-pub fn settle_decision(waiting: Option<&UiFlags>, recording: bool) -> Option<UiFlags> {
-    if recording { None } else { waiting.cloned() }
-}
-
-/// Applies flags that wait, when no recording runs, and tells the window (`ui:flags`). Called with every status
-/// update, so the end of a recording applies what waited during it.
-pub fn settle(app: &AppHandle) {
+/// Tells the window (`ui:flags`) when the cached flags changed. Called with every status update, which follows every
+/// config read.
+pub fn announce(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    if let Some(flags) = state.ui_flags.settle(state.capture.is_recording()) {
-        let view = UiFlagsView { offers_classic_switch: flags.offers_classic_switch(), flags, waiting: false };
-        let _ = app.emit(EVENT, view);
+    if let Some(flags) = state.ui_announced.changed(cached(&state)) {
+        let _ = app.emit(EVENT, flags);
     }
 }
 
@@ -147,11 +116,20 @@ mod tests {
         assert!(!flags.flags.contains_key("ui_v2.future"), "a flag the app does not know is ignored");
         assert_eq!(flags.flags.len(), KNOWN.len(), "every known flag is listed");
         assert!(!flags.is_on("ui_v2.settings"), "missing from the answer: off");
-        // An older server, or a broken value: everything off.
         for raw in [None, Some(json!(null)), Some(json!([true])), Some(json!("on"))] {
             assert!(UiFlags::read(raw.as_ref(), false).flags.values().all(|on| !on), "{raw:?}");
         }
         assert_eq!(UiFlags::default(), UiFlags::read(None, false));
+    }
+
+    #[test]
+    fn the_window_gets_the_shape_its_adapter_reads() {
+        // desktop/src/v2/flags.ts: { ui_flags: { "<name>": bool, … }, ui_classic: bool }
+        let json = serde_json::to_value(UiFlags::read(Some(&json!({"ui_v2.shell": true})), true)).unwrap();
+        assert_eq!(json["ui_flags"]["ui_v2.shell"], true);
+        assert_eq!(json["ui_flags"]["live_assist"], false);
+        assert_eq!(json["ui_classic"], true);
+        assert_eq!(json.as_object().unwrap().len(), 2);
     }
 
     #[test]
@@ -162,34 +140,13 @@ mod tests {
     }
 
     #[test]
-    fn a_change_waits_for_the_end_of_a_recording_and_applies_once() {
-        let state = UiFlagsState::default();
+    fn only_a_change_is_announced() {
+        let announced = Announced::default();
+        assert_eq!(announced.changed(UiFlags::default()), None, "all off at first: the window already has that");
         let on = UiFlags::read(Some(&json!({"ui_v2.home": true})), false);
-        state.offer(on.clone());
-        assert!(state.view().waiting);
-        assert_eq!(state.settle(true), None, "never in the middle of a recording");
-        assert!(!state.view().flags.is_on("ui_v2.home"));
-        assert_eq!(state.settle(false), Some(on.clone()), "applied once the recording has ended");
-        assert!(state.view().flags.is_on("ui_v2.home"));
-        assert!(!state.view().waiting);
-        assert_eq!(state.settle(false), None, "said once");
-        // The same flags again: nothing to apply.
-        state.offer(on.clone());
-        assert_eq!(state.settle(false), None);
-        // A change that is taken back before it applied: nothing waits.
-        state.offer(UiFlags::default());
-        state.offer(on);
-        assert!(!state.view().waiting);
-    }
-
-    #[test]
-    fn the_window_gets_every_flag_with_its_name() {
-        let view = UiFlagsView { flags: UiFlags::read(Some(&json!({"ui_v2.shell": true})), true), offers_classic_switch: true, waiting: false };
-        let json = serde_json::to_value(view).unwrap();
-        assert_eq!(json["flags"]["ui_v2.shell"], true);
-        assert_eq!(json["flags"]["live_assist"], false);
-        assert_eq!(json["classic"], true);
-        assert_eq!(json["offersClassicSwitch"], true);
-        assert_eq!(json["waiting"], false);
+        assert_eq!(announced.changed(on.clone()), Some(on.clone()));
+        assert_eq!(announced.changed(on.clone()), None, "said once");
+        let classic = UiFlags::read(None, true);
+        assert_eq!(announced.changed(classic.clone()), Some(classic));
     }
 }
