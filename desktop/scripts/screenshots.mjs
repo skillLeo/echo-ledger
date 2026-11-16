@@ -155,6 +155,14 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // D-014 (lead's decision): why a call wasn't recorded, in plain words, in Calls & meetings.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`settings-calls-why${size}`, "settings", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Calls & meetings");
+    await page.getByTestId("why-not-recorded").waitFor();
+    await page.getByTestId("why-not-recorded").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(2300);
+  }, viewport]),
   // D-130: a failed transcript says why in the app's own words.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`library-failed${size}`, "library", async (page) => {
     await page.waitForSelector(".segments .segment");

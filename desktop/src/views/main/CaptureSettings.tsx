@@ -9,6 +9,7 @@ import {
   type CaptionStyle,
   type Corner,
   type InputDevice,
+  type MicUser,
   type PermissionsStatus,
   type Settings,
   type SettingsPatch,
@@ -19,6 +20,8 @@ import { meterLevel } from "../../lib/controls";
 import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
+import { decisionText, micTone, micUserName, notRecorded } from "../../lib/explainer";
+import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
@@ -90,6 +93,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
       <Section title="Websites">
         <LinkRow id="calls.sites" value={sites === 1 ? "1 rule" : `${sites} rules`} onOpen={onSites} chevron />
       </Section>
+      <WhyNotRecorded />
       {!consentRead && (
         <div className="set-reset"><button type="button" className="btn text" onClick={onConsent}>Read the recording consent notice</button></div>
       )}
@@ -99,6 +103,61 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
       })} />
     </>
   );
+}
+
+/** The last app using the microphone that was not recorded, kept while the window is open (the core keeps no list). */
+let lastNotRecorded: { user: MicUser; at: number } | null = null;
+
+/**
+ * "Why a call wasn't recorded" (A1.8; moved here from Home, D-014): each app using the microphone now and what EchoLedger
+ * does with it, in plain words, and the last one that was not recorded. Read every 2 s, only while this page is on screen
+ * (C9).
+ */
+function WhyNotRecorded() {
+  const [users, setUsers] = useState<MicUser[]>([]);
+  const [last, setLast] = useState(lastNotRecorded);
+  const shown = useWindowShown();
+  useEffect(() => {
+    if (!shown) return;
+    let alive = true;
+    const tick = () => api.micUsers().then((list) => {
+      if (!alive) return;
+      const now = Array.isArray(list) ? list : [];
+      setUsers(now);
+      const missed = now.find(notRecorded);
+      if (missed) {
+        lastNotRecorded = { user: missed, at: Date.now() };
+        setLast(lastNotRecorded);
+      }
+    }).catch(() => undefined);
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [shown]);
+  return (
+    <Section title="Why a call wasn't recorded" footer={<p>EchoLedger records a call when a call app uses your microphone and plays sound.</p>}>
+      <div className="set-row set-block" data-testid="why-not-recorded" aria-live="polite">
+        {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
+          <ul className="why-list">
+            {users.map((u, i) => (
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+            ))}
+          </ul>
+        )}
+        {last && !users.some((u) => u.name === last.user.name && notRecorded(u)) && (
+          <p className="small muted" data-testid="last-not-recorded">Last not recorded: <span dir="auto">{micUserName(last.user)}</span>, {decisionText(last.user).replace(/^Not recorded: /, "").replace(/^Not recorded$/, "no reason given")}.</p>
+        )}
+      </div>
+    </Section>
+  );
+}
+
+/** Tests start with nothing missed. */
+export function resetLastNotRecorded(): void {
+  lastNotRecorded = null;
 }
 
 /**

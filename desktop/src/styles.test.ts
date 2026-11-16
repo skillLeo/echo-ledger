@@ -201,7 +201,7 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     expect(prop(".queue-title", "text-overflow")).toBe("ellipsis");
     expect(prop(".queue-actions", "flex-wrap")).toBe("wrap");
     expect(prop(".queue-error", "overflow-wrap")).toBe("anywhere");
-    expect(prop(".mic-user-why", "overflow-wrap")).toBe("anywhere");
+    expect(prop(".why-list li", "overflow-wrap")).toBe("anywhere");
     expect(prop(".site-pattern", "overflow-wrap")).toBe("anywhere");
   });
 
