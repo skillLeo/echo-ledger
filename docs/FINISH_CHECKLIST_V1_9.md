@@ -8,10 +8,10 @@ without Phase S.
 
 | # | What | Why | What to do |
 |---|---|---|---|
-| N1 | The product name (Baatly recommended, Mukalma backup) | The Android applicationId can never change after the first Play release | Check the domains, the @handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide (same as v1.8 H4) |
-| N2 | A VPS for the assist relay + its region (EU or Gulf, nearest to Pakistan) + its domain and TLS | Live streams need long-lived connections that shared hosting can't hold | Order the VPS and share the region |
-| N3 | Provider keys in Admin → API Credentials: Anthropic, OpenAI, Gemini, Groq, Moonshot, Soniox (translation on), AssemblyAI | The relay calls them | Paste them there yourself (never in chat) |
-| N4 | Assist-hour caps and prices for Pro and Ultra | Plans | Decide the caps (research suggests 10 h Pro, 40 h Ultra) |
+| N1 | The product name (Baatly recommended, Mukalma backup) — D2 (2026-11-16): not final; checks in docs/NAME_CHECK.md (local); brand constants first (L0) | The Android applicationId can never change after the first Play release | Check the domains, the @handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide (same as v1.8 H4) |
+| N2 | A VPS for the assist relay — D3: one VPS, Ubuntu 24.04 LTS, 2 vCPU / 4–8 GB; Hassam runs `services/assist-relay/tools/latency-check` from home and buys the fastest region; until then the relay runs locally and in CI | Live streams need long-lived connections that shared hosting can't hold | Order the VPS and share the region |
+| N3 | Provider keys in Admin → API Credentials: Anthropic, OpenAI, Gemini, Groq, Moonshot, Soniox (translation on), AssemblyAI — D4: one exact list (provider, key, where, which feature) in HANDOFF; Hassam pastes them; never in chat | The relay calls them | Paste them there yourself (never in chat) |
+| N4 | Assist-hour caps and prices — decided D5: Free = Practice only, 30 min a month; Pro (Rs 2,999) = Fast + Balanced, 10 assist-hours a month; Ultra (Rs 12,499) = all modes, 40 assist-hours a month, fair use; config values, editable in admin; budget guards on every call | Plans | Decide the caps (research suggests 10 h Pro, 40 h Ultra) |
 | N5 | Screen-share test windows on Windows and the Mac with a second device watching; a macOS 15 machine if possible | S0, S3 guided test, S7 matrix | Say "laptop free" / "Mac free" with a phone ready |
 | N6 | Phone windows for S5 and L5 | Device tests | Say "phone free" |
 | N7 | Review the privacy wording, the interview reminder, the consent line, store and website text; a short legal check on US/EU recording consent | Launch | Before the public launch |
