@@ -58,6 +58,8 @@ pub struct AppStatus {
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
+    // Taken before anything is read: the tray drawing from a later read always wins over an earlier one queued behind it.
+    let generation = crate::tray::next_generation();
     let state = app.state::<AppState>();
     let settings = state.settings();
     let queue = UploadQueue::load(&paths::uploads(&state.data_dir));
@@ -83,7 +85,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -2813,11 +2815,17 @@ pub fn share_check_drawn(window: WebviewWindow) {
     privacy.drawn.notify_waiters();
 }
 
-/// The guided test's big card (Mac).
+/// The guided test's big card (Mac). A sync command runs on the main thread, where building a window deadlocks on
+/// Windows (WebView2), so it opens on a Mac only.
 #[tauri::command]
 pub fn share_check_card(app: AppHandle, window: WebviewWindow, open: bool) -> AppResult<()> {
     crate::privacy::from_main_window(window.label())?;
-    if open { crate::privacy::check::guided_open(&app) } else { crate::privacy::check::guided_close(&app); Ok(()) }
+    if !open {
+        crate::privacy::check::guided_close(&app);
+        return Ok(());
+    }
+    crate::privacy::check::guided_here(cfg!(target_os = "macos"))?;
+    crate::privacy::check::guided_open(&app)
 }
 
 /// "I can see it" (`visible`) or "I can't see it" for a meeting app.

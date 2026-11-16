@@ -119,6 +119,16 @@ claxon = "0.4"
 # Throw-away certificate chains for the SPKI pinning tests.
 rcgen = "0.14"
 tokio = { version = "1.54.1", features = ["net", "io-util", "macros", "rt-multi-thread", "time", "sync"] }
+# The main-thread rule (main_thread.rs) reads the crate's own sources: no lock is held while waiting for the main
+# thread. Already in the tree through Tauri's macros; `span-locations` gives the lines it names.
+syn = { version = "2.0.119", features = ["full", "visit"] }
+quote = "1.0.47"
+proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
+
+# AppKit on the main thread: the floating windows become panels, the delegate answers quits from outside (macOS).
+[[test]]
+name = "mac_appkit"
+harness = false
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

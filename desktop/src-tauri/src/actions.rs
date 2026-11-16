@@ -439,6 +439,19 @@ pub async fn stop_recording(app: &AppHandle, from_auto: bool) -> AppResult<()> {
     Ok(())
 }
 
+/// Before every quit (the menu bar icon's and the app menu's Quit, ⌘Q; on a Mac also the Dock's Quit, logging out,
+/// restarting and shutting down, `app_life`): a running recording is stopped and kept first, never lost. One keeping for
+/// every quit: a quit that comes while it runs waits for it (`app_life::QuitSave`).
+pub async fn save_before_quit(app: &AppHandle) {
+    crate::app_life::quit_save()
+        .run(|| async {
+            if app.state::<crate::AppState>().capture.is_recording() {
+                let _ = stop_recording_for_quit(app).await;
+            }
+        })
+        .await;
+}
+
 /// Quit while recording: the recording is stopped and kept, or (Ask me) waits for the next start; never discarded,
 /// nothing is shown.
 pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {

@@ -46,7 +46,7 @@ export function LiveTranslateCard({ run }: { run: <T>(fn: () => Promise<T>, ok?:
       </div>
       <p className="small muted">
         Translates one app's sound as it is heard: teammates in a game's voice chat, or a film. Works over borderless or
-        windowed games; exclusive full screen hides every overlay. A browser is heard with all its tabs. About $0.18 an hour.
+        windowed games, not exclusive full screen. A browser is heard with all its tabs. About $0.18 an hour.
       </p>
       <div className="translate-form">
         <label className="small">App
@@ -75,13 +75,13 @@ export function LiveTranslateCard({ run }: { run: <T>(fn: () => Promise<T>, ok?:
           </select>
         </label>
       </div>
-      {running && <p className="small muted">Ctrl+Shift+T moves the overlay (drag it, then Done); Ctrl+Shift+H hides it.</p>}
+      {running && <p className="small muted">Ctrl+Shift+T lets you move Live Translate (drag it, then Done); Ctrl+Shift+H hides it.</p>}
       {taken.length > 0 && <p className="small error-text">Another app already uses {taken.join(" and ")}: use the buttons here instead.</p>}
       {feed?.notice && <p className="small error-text">{feed.notice}</p>}
       <div className="card-actions">
         {running ? (
           <>
-            <button type="button" className="btn" onClick={() => run(translateApi.toggleLock)}>{feed?.locked ? "Move overlay" : "Lock overlay"}</button>
+            <button type="button" className="btn" onClick={() => run(translateApi.toggleLock)}>{feed?.locked ? "Move Live Translate" : "Lock Live Translate"}</button>
             <button type="button" className="btn primary" onClick={() => run(translateApi.stop)}>Stop</button>
           </>
         ) : (

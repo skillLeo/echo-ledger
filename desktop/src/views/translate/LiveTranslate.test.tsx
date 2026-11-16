@@ -43,12 +43,15 @@ describe("Live Translate card", () => {
 
   it("says where it works, and offers Move and Stop while it runs", async () => {
     render(<LiveTranslateCard run={run} />);
-    expect(screen.getByText(/exclusive full screen hides every overlay/)).toBeInTheDocument();
+    expect(screen.getByText(/borderless or windowed games, not exclusive full screen/)).toBeInTheDocument();
     expect(screen.getByText(/A browser is heard with all its tabs/)).toBeInTheDocument();
 
     await subscribed();
     await act(async () => emitEvent(TRANSLATE_FEED, feed()));
-    fireEvent.click(await screen.findByRole("button", { name: "Move overlay" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Move Live Translate" }));
+    expect(screen.getByText(/Ctrl\+Shift\+T lets you move Live Translate/)).toBeInTheDocument();
+    // docs/DESIGN_SYSTEM.md "Screen-share privacy names": the box is Live Translate, never an overlay.
+    expect(document.body.textContent ?? "").not.toMatch(/overlay/i);
     fireEvent.click(screen.getByRole("button", { name: "Stop" }));
 
     await waitFor(() => expect(callsOf("translate_stop")).toHaveLength(1));

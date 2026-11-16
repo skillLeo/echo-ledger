@@ -696,6 +696,11 @@ fn main_frame(app: &AppHandle) -> Option<(Bounds, Option<tauri::Monitor>)> {
     Some((frame, window.current_monitor().ok().flatten()))
 }
 
+/// The test with the phone is the Mac's (pure): its card opens there only.
+pub fn guided_here(macos: bool) -> AppResult<()> {
+    if macos { Ok(()) } else { Err(AppError::msg("The test with your phone is on the Mac. On Windows, Check screen-share privacy shows what others see.")) }
+}
+
 /// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app. It never
 /// takes the focus (the keyboard and VoiceOver stay on the question in the main window) and sits clear of the main
 /// window, so it never covers the answer buttons.
@@ -847,6 +852,8 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         Platform::Other => Vec::new(),
     };
     let mac_version = os_version();
+    // Read before the answer is put together: no lock is held while the displays are asked of the main thread below.
+    let share = privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone();
     let apps: Vec<AppRow> = if platform == Platform::Mac {
         MeetingApp::ALL
             .into_iter()
@@ -873,7 +880,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         main_in_share: privacy.main_in_share(settings.hide_from_sharing),
         share_number: privacy.share_number(),
         bar_on_screen: privacy.bar_holds(),
-        share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+        share,
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),
         check_due: due(&store, &os, version, Utc::now()),
@@ -913,6 +920,13 @@ pub fn diagnostics_text(app: &AppHandle) -> String {
     }
     for line in &s.lines {
         header.push(line.text.clone());
+    }
+    // A Mac: each open floating window's class and style (a non-activating panel floats over a full-screen meeting).
+    #[cfg(target_os = "macos")]
+    for label in crate::overlay::WINDOWS.into_iter().chain([crate::translate::WINDOW]) {
+        if let Some(facts) = app.get_webview_window(label).and_then(|window| crate::overlay::macos::window_facts(&window, label)) {
+            header.push(format!("The {}: {}", super::window_name(label), facts.line()));
+        }
     }
     diag::text(&header, &diag::read(&state.data_dir))
 }
@@ -1063,6 +1077,33 @@ mod tests {
         assert_eq!(overlap(card, top_right), 0.0, "{card:?}");
         // No main window on screen: centred.
         assert_eq!(card_frame(laptop, None), ((1512.0 - 640.0) / 2.0, (982.0 - 360.0) / 2.0, 640.0, 360.0));
+    }
+
+    #[test]
+    fn the_status_reads_its_locks_before_it_asks_the_main_thread() {
+        // The answer asks the main thread for the displays: a lock read in the same statement would be held across that
+        // wait (the kind of lock that froze the Mac build), so every lock is read before the answer is put together.
+        let source = include_str!("check.rs");
+        let status = &source[source.find("pub fn status(app: &AppHandle) -> PrivacyStatus {").unwrap()..];
+        let status = &status[..status.find("\n}\n").unwrap()];
+        let literal = &status[status.find("\n    PrivacyStatus {").expect("the answer is a PrivacyStatus literal")..];
+        assert!(literal.contains("app.available_monitors()"), "the displays are asked inside the answer");
+        for lock in [".lock()", "lock(&", ".read()", ".write()", ".try_lock()"] {
+            assert!(!literal.contains(lock), "`{lock}` inside the PrivacyStatus literal is held while the main thread is asked");
+        }
+        assert!(status.find("let share = privacy.share_seen.lock()").unwrap() < status.find("\n    PrivacyStatus {").unwrap(), "the share is read first");
+    }
+
+    #[test]
+    fn the_phone_test_card_opens_on_a_mac_only() {
+        assert!(guided_here(true).is_ok());
+        let refused = guided_here(false).unwrap_err().to_string();
+        assert!(refused.contains("on the Mac") && refused.contains("Check screen-share privacy"), "{refused}");
+        // The sync command asks before it builds the card (on Windows a window built there would deadlock).
+        let commands = include_str!("../commands.rs");
+        let card = &commands[commands.find("pub fn share_check_card(").unwrap()..];
+        let card = &card[..card.find("\n}\n").unwrap()];
+        assert!(card.find("guided_here(cfg!(target_os = \"macos\"))?").unwrap() < card.find("guided_open(&app)").unwrap());
     }
 
     #[test]

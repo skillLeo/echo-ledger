@@ -28,6 +28,17 @@ const USE: &str = "smoke";
 /// Exit codes other than 0: something failed to open, or the test ran out of time.
 pub const EXIT_WINDOW_FAILED: i32 = 2;
 pub const EXIT_TIMED_OUT: i32 = 3;
+/// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`).
+pub const EXIT_MAC_APP: i32 = 4;
+
+/// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
+/// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus).
+pub fn mac_app_problem(answers_quits: bool, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
+    if !answers_quits {
+        return Some("the application delegate does not answer applicationShouldTerminate:".into());
+    }
+    windows.iter().find(|w| !w.panel).map(|w| format!("the {} window is not a non-activating panel ({}, style 0x{:x})", w.label, w.class, w.style))
+}
 
 /// The test's own folder while it runs; everything that would touch the real one asks here first.
 static DIR: OnceLock<PathBuf> = OnceLock::new();
@@ -129,6 +140,24 @@ pub fn drive(app: tauri::AppHandle) {
             tokio::time::sleep(POLL).await;
         }
         say(&format!("ok: {} windows ready in {} ms", labels.len(), started.elapsed().as_millis()));
+        // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
+        #[cfg(target_os = "macos")]
+        {
+            use tauri::Manager;
+            let windows: Vec<crate::mac_check::WindowFacts> = overlay::WINDOWS
+                .iter()
+                .filter_map(|label| app.get_webview_window(label).and_then(|window| overlay::macos::window_facts(&window, label)))
+                .collect();
+            if windows.len() < overlay::WINDOWS.len() {
+                say("failed: a floating window could not be read");
+                finish(&dir, EXIT_MAC_APP);
+            }
+            if let Some(problem) = mac_app_problem(crate::app_life::mac::answers_quits(), &windows) {
+                say(&format!("failed: {problem}"));
+                finish(&dir, EXIT_MAC_APP);
+            }
+            say("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels");
+        }
         let _ = std::fs::remove_dir_all(&dir);
         app.exit(0);
     });
@@ -229,6 +258,17 @@ impl KeySource for NoKeys {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_mac_smoke_test_fails_without_the_quit_answer_or_the_panels() {
+        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true };
+        let good = [panel("overlay"), panel("pill")];
+        assert_eq!(mac_app_problem(true, &good), None);
+        assert!(mac_app_problem(false, &good).unwrap().contains("applicationShouldTerminate:"));
+        let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ..panel("pill") };
+        assert_eq!(mac_app_problem(true, &[panel("overlay"), plain]).unwrap(), "the pill window is not a non-activating panel (TaoWindow, style 0x0)");
+        assert_eq!(EXIT_MAC_APP, 4);
+    }
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| s.to_string()).collect()
