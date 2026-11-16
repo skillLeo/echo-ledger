@@ -1,6 +1,6 @@
 // What the v2 Library shows of the core's recordings (api.library(), the same list today's Library uses): the saved
 // views, the WhatsApp-style row and the day groups. Pure functions, so the rules are tested without a window.
-import type { LibraryItem } from "../../lib/ipc";
+import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { dayGroup, itemState, recordingName, searchItems, sortItems, type ItemState } from "../../lib/library";
 import { formatDuration, formatTime, rowDate, sourceAppLabel } from "../../lib/format";
 
@@ -78,4 +78,21 @@ export function rowModel(item: LibraryItem, now: Date = new Date()): RowModel {
   const at = item.started_at ? new Date(item.started_at) : null;
   const when = !at || Number.isNaN(at.getTime()) ? "" : sameDay(item.started_at, now) ? formatTime(at) : rowDate(item.started_at, now);
   return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app };
+}
+
+/** How long the server keeps a deleted recording (CaptureSession::BIN_HOURS on the server; docs/API.md "GET /api/bin"). */
+export const BIN_HOURS = 48;
+
+/** The bin's length from what the server sent (erase_at less deleted_at), else the server's 48 hours. */
+export function binHours(items: readonly Pick<BinItem, "deleted_at" | "erase_at">[]): number {
+  for (const b of items) {
+    const hours = Math.round((Date.parse(b.erase_at) - Date.parse(b.deleted_at)) / 3_600_000);
+    if (Number.isFinite(hours) && hours > 0) return hours;
+  }
+  return BIN_HOURS;
+}
+
+/** The Trash sentence, in the classic Library's words. */
+export function binSentence(hours: number): string {
+  return `Deleted recordings stay here for ${hours} hours, then their audio and transcripts are erased.`;
 }

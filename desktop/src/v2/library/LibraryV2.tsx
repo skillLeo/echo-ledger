@@ -4,12 +4,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type LibraryItem } from "../../lib/ipc";
-import { formatDuration, rowDate, sentenceDate } from "../../lib/format";
+import { formatDuration, rowDate } from "../../lib/format";
+import { eraseIn } from "../../views/main/LibraryOrganise";
 import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
-import { dayGroups, rowModel, viewCounts, viewItems, type SavedView } from "./model";
+import { binHours, binSentence, dayGroups, rowModel, viewCounts, viewItems, type SavedView } from "./model";
 import { RecordingPage } from "./RecordingPage";
 
 type Message = { id: number; text: string; action?: { label: string; run: () => void } };
@@ -155,12 +156,14 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
           ) : !bin ? (
             <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
           ) : bin.length === 0 ? (
-            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body="Deleted recordings stay here for 30 days, then they are erased." />
+            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin))} />
           ) : (
+            <>
+            <p className="el-secondary">{binSentence(binHours(bin))}</p>
             <List label="Deleted recordings">
               {bin.map((b) => (
                 <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}
-                  meta={`Deleted ${rowDate(b.deleted_at)} · erased on ${sentenceDate(b.erase_at)}`}
+                  meta={`Deleted ${rowDate(b.deleted_at)} · ${eraseIn(b.erase_at)}`}
                   control={
                     <span className="el-row__buttons">
                       <Button size="sm" onClick={() => void restore(b)}>Restore</Button>
@@ -170,6 +173,7 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
                   endTop={b.duration_ms ? <span className="el-num">{formatDuration(b.duration_ms)}</span> : undefined} />
               ))}
             </List>
+            </>
           )
         ) : error && !items ? (
           <EmptyState tone="error" icon={Icons.ErrorIcon} title="The library didn't load" body={error}

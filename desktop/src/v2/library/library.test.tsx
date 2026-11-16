@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript } from "../../test/fixtures";
-import { dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
+import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -33,7 +33,7 @@ const ITEMS: LibraryItem[] = [
 ];
 
 const BIN: BinItem[] = [
-  { id: "old", title: "Sadia Hassan · Zamzam Travels", client: null, started_at: at(10, 9, 40), duration_ms: 348_000, deleted_at: at(15, 12), erase_at: at(30 - 15 + 15, 12) },
+  { id: "old", title: "Sadia Hassan · Zamzam Travels", client: null, started_at: at(10, 9, 40), duration_ms: 348_000, deleted_at: at(16, 12), erase_at: at(18, 12) },
 ];
 
 describe("the Library's rules", () => {
@@ -57,6 +57,16 @@ describe("the Library's rules", () => {
     expect(rowModel(ITEMS[3], NOW).when).toBe("16 Nov");
     const transcribing = makeItem("t", { status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } });
     expect(rowModel(transcribing, NOW)).toMatchObject({ meta: "Zoom · Transcribing…", badge: null });
+  });
+});
+
+describe("Trash's length", () => {
+  it("is the server's: erase_at less deleted_at, else 48 hours, in the classic Library's words", () => {
+    expect(BIN_HOURS).toBe(48);
+    expect(binHours([])).toBe(48);
+    expect(binHours(BIN)).toBe(48);
+    expect(binHours([{ deleted_at: at(16, 12), erase_at: at(17, 12) }])).toBe(24);
+    expect(binSentence(48)).toBe("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
   });
 });
 
@@ -189,12 +199,16 @@ describe("LibraryV2", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Trash" })).toBeInTheDocument();
     const list = screen.getByRole("list", { name: "Deleted recordings" });
     expect(within(list).getByText("Sadia Hassan · Zamzam Travels")).toBeInTheDocument();
+    expect(screen.getByText("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.")).toBeInTheDocument();
+    expect(within(list).getByText(/Deleted 16 Nov · erased in 21 hours/)).toBeInTheDocument();
     fireEvent.click(within(list).getByRole("button", { name: 'Delete "Sadia Hassan · Zamzam Travels" forever' }));
     const dialog = screen.getByRole("alertdialog", { name: "Delete forever?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Delete forever" }));
     await act(flushAsync);
     expect(callsOf("bin_erase")).toEqual([{ id: "old" }]);
-    expect(screen.getByRole("region", { name: "Trash is empty" })).toBeInTheDocument();
+    const empty = screen.getByRole("region", { name: "Trash is empty" });
+    expect(empty).toHaveTextContent("Deleted recordings stay here for 48 hours, then their audio and transcripts are erased.");
+    expect(document.body).not.toHaveTextContent(/30 days/);
   });
 
   it("Restore from Trash says so and offers to open it", async () => {
