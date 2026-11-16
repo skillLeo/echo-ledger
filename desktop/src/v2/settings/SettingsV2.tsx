@@ -3,7 +3,7 @@
 // (lib/settingsIndex.ts) and jumps to it; a page opens today's page for that feature (its one home), scrolled to the
 // setting and highlighted.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { api, type Settings, type StorageInfo } from "../../lib/ipc";
+import { api, errorMessage, type Settings, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
 import { searchSettings } from "../../lib/settingsIndex";
 import { SETTINGS, breadcrumbOf, type SettingEntry } from "../../lib/settingsRegistry";
@@ -60,6 +60,7 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
   const [query, setQuery] = useState("");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [storage, setStorage] = useState<StorageInfo | null>(null);
+  const [autostartError, setAutostartError] = useState<string | null>(null);
   const entitlements = useEntitlements();
   const seq = useRef(1000);
 
@@ -96,8 +97,12 @@ export function SettingsV2({ available, section = null, renderPage, onSignOut, s
     if (id === "app.autostart") {
       return (
         <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title}
+          meta={autostartError ? <span className="el-row__error" role="alert">{autostartError}</span> : undefined}
           control={settings ? <Toggle label={entry.title} hideLabel checked={settings.autostart}
-            onChange={(on) => void api.updateSettings({ autostart: on }).then(setSettings, () => undefined)} /> : undefined} />
+            onChange={(on) => {
+              setAutostartError(null);
+              void api.updateSettings({ autostart: on }).then(setSettings, (e) => setAutostartError(errorMessage(e)));
+            }} /> : undefined} />
       );
     }
     return <ListRow key={id} compact icon={iconOf(id)} iconStyle="plain" title={entry.title} value={value(id)} chevron onClick={() => open(sectionFor(entry))} />;

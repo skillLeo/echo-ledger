@@ -72,6 +72,52 @@ const STATE_TEXT: Record<PermissionState, string> = {
   reopen: REOPEN,
 };
 
+/** Windows: the switch for the microphone is in Windows Settings, and Windows never says "not asked". */
+export const WINDOWS_OFF = "Off: turn on EchoLedger in Windows Settings";
+export const WINDOWS_CANNOT_TELL = "Windows doesn't say whether EchoLedger may use this. Check it in Windows Settings.";
+
+export type StepAction = "reopen" | "settings" | "allow";
+
+/** What one permission step says and offers, in order; the first action is the main one when `main` is set. */
+export interface StepPlan {
+  access: PermissionState;
+  words: string;
+  actions: StepAction[];
+  /** The action drawn as the filled button (none while nothing is urgent). */
+  main: StepAction | null;
+  /** "Open System Settings" or "Open Windows Settings". */
+  settingsLabel: string;
+  /** Show where the switch is ("System Settings → Privacy & Security → …"). */
+  showWhere: boolean;
+}
+
+/**
+ * The one rule for a permission step, for every screen that shows one (the classic step and Setup & health): the
+ * words (never a guess: D-120 allowed before, D-136 cannot tell) and the buttons. Allow only where asking works (a Mac
+ * that can say "not asked", or allowed before); Quit & reopen once, then the switch off and on (no endless loop).
+ */
+export function stepPlan(permissions: PermissionsStatus | null, kind: PermissionKind): StepPlan {
+  const access = accessOf(permissions, kind);
+  if (permissions?.platform === "windows") {
+    const words = access === "allowed" ? STATE_TEXT.allowed : access === "denied" ? WINDOWS_OFF : WINDOWS_CANNOT_TELL;
+    const actions: StepAction[] = access === "allowed" ? [] : ["settings"];
+    return { access, words, actions, main: actions[0] ?? null, settingsLabel: "Open Windows Settings", showWhere: false };
+  }
+  const before = access === "unknown" && !!permissions?.allowedBefore?.includes(kind);
+  const stuck = access === "reopen" && !!permissions?.reopenDidNotApply;
+  const untold = access === "unknown" && !canTellNotAsked(permissions, kind);
+  const plan = (words: string, actions: StepAction[], main: StepAction | null): StepPlan => ({
+    access, words, actions, main, settingsLabel: "Open System Settings", showWhere: access !== "allowed" && (access !== "reopen" || stuck),
+  });
+  if (access === "allowed") return plan(STATE_TEXT.allowed, [], null);
+  if (stuck) return plan(SWITCH_OFF_ON, ["settings"], "settings");
+  if (access === "reopen") return plan(REOPEN, ["reopen"], "reopen");
+  if (access === "denied") return plan(STATE_TEXT.denied, ["settings"], "settings");
+  if (before) return plan(ALLOWED_BEFORE, ["settings", "allow"], "settings");
+  if (untold) return plan(CANNOT_TELL, ["settings", "allow"], "settings");
+  return plan(STATE_TEXT.unknown, ["allow", "settings"], "allow");
+}
+
 /** The permissions as they stand: read when the window shows and again whenever it comes back into focus, which is what
  * coming back from System Settings looks like. `readAgain` asks for one more read when it changes. */
 export function usePermissions(readAgain?: string | null): [PermissionsStatus | null, (next: PermissionsStatus) => void] {
@@ -102,13 +148,8 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
   const [asking, setAsking] = useState(false);
   const [reopenRefused, setReopenRefused] = useState<string | null>(null);
   const text = PERMISSION_STEP[kind];
-  const access = accessOf(permissions, kind);
-  // Allowed before on this Mac, "not asked" now (D-120): System Settings first, where an old entry can be removed.
-  const before = access === "unknown" && !!permissions?.allowedBefore?.includes(kind);
-  // Reopened, and macOS still has not applied Screen Recording: switch it off and on there instead.
-  const stuck = access === "reopen" && !!permissions?.reopenDidNotApply;
-  // macOS does not say (no privacy call): no "Not asked yet", System Settings first (D-136).
-  const untold = access === "unknown" && !canTellNotAsked(permissions, kind);
+  const step = stepPlan(permissions, kind);
+  const access = step.access;
   const reopen = async () => {
     setReopenRefused(null);
     try {
@@ -117,9 +158,6 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       setReopenRefused(errorMessage(e));
     }
   };
-  const settingsButton = (main: boolean) => (
-    <button type="button" className={`btn ${main ? "primary" : access === "unknown" ? "ghost" : ""}`.trim()} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>
-  );
   const allow = async () => {
     setAsking(true);
     try {
@@ -130,6 +168,14 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       setAsking(false);
     }
   };
+  const button = (action: StepAction) => {
+    const cls = `btn${step.main === action ? " primary" : action === "settings" && access === "unknown" ? " ghost" : ""}`;
+    switch (action) {
+      case "reopen": return <button key={action} type="button" className={cls} onClick={() => void reopen()}>Quit &amp; reopen</button>;
+      case "allow": return <button key={action} type="button" className={cls} disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>;
+      case "settings": return <button key={action} type="button" className={cls} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>{step.settingsLabel}</button>;
+    }
+  };
   return (
     <div className="permission-step" data-testid={`permission-${kind}`}>
       {compact && <b>{text.title}</b>}
@@ -137,16 +183,11 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       {text.note && <p className="small muted" data-testid="permission-note">{text.note}</p>}
       <div className="permission-state small" data-testid={`permission-state-${kind}`}>
         <span className={`status-dot ${access === "allowed" ? "ok" : access === "denied" ? "failed" : access === "reopen" ? "ask" : ""}`} aria-hidden="true" />
-        {before ? ALLOWED_BEFORE : stuck ? SWITCH_OFF_ON : untold ? CANNOT_TELL : STATE_TEXT[access]}
+        {step.words}
       </div>
-      <div className="row permission-actions">
-        {access === "reopen" && !stuck && <button type="button" className="btn primary" onClick={() => void reopen()}>Quit &amp; reopen</button>}
-        {(before || stuck || untold) && settingsButton(true)}
-        {access === "unknown" && <button type="button" className="btn" disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>}
-        {(access === "denied" || (access === "unknown" && !before && !untold)) && settingsButton(false)}
-      </div>
+      <div className="row permission-actions">{step.actions.map(button)}</div>
       {reopenRefused && <p className="small error-text" role="alert">{reopenRefused}</p>}
-      {access !== "allowed" && (access !== "reopen" || stuck) && <p className="small muted">{text.where}</p>}
+      {step.showWhere && <p className="small muted">{text.where}</p>}
     </div>
   );
 }

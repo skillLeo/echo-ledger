@@ -60,23 +60,38 @@ export async function setClassic(classic: boolean): Promise<UiState> {
 
 /**
  * The flags in a view. Read at start and again whenever `screen` changes (a change applies on the next screen the
- * person opens), never while `recording` is true, so nothing switches under a running call.
+ * person opens), never while `recording` is true, so nothing switches under a running call. The third value is the
+ * `screen` the flags were last read for: a window that must not show stale flags waits until it equals its key.
  */
-export function useUiFlags(enabled: boolean, screen: string, recording: boolean): [UiState, (next: UiState) => void] {
+export function useUiFlags(enabled: boolean, screen: string, recording: boolean): [UiState, (next: UiState) => void, string | null] {
   const [state, setState] = useState<UiState>(ALL_OFF);
+  const [readFor, setReadFor] = useState<string | null>(null);
   const recordingRef = useRef(recording);
   recordingRef.current = recording;
   useEffect(() => {
     if (!enabled || recordingRef.current) return;
     let live = true;
     void readUiState().then((next) => {
-      if (live && !recordingRef.current) setState((prev) => (same(prev, next) ? prev : next));
+      if (!live || recordingRef.current) return;
+      setState((prev) => (same(prev, next) ? prev : next));
+      setReadFor(screen);
     });
     return () => {
       live = false;
     };
   }, [enabled, screen]);
-  return [state, setState];
+  return [state, setState, readFor];
+}
+
+/** How many times `on` turned from false to true (a window shown, a recording started): a key for useUiFlags. */
+export function useRisingCount(on: boolean): number {
+  const [count, setCount] = useState(0);
+  const last = useRef(false);
+  useEffect(() => {
+    if (on && !last.current) setCount((n) => n + 1);
+    last.current = on;
+  }, [on]);
+  return count;
 }
 
 function same(a: UiState, b: UiState): boolean {

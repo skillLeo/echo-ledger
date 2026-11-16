@@ -102,6 +102,20 @@ describe("SettingsV2", () => {
   });
 });
 
+describe("start-up", () => {
+  it("a failed change says why under the switch", async () => {
+    const { fail } = await import("../../test/tauri");
+    fail("update_settings", "This computer refused to start EchoLedger at sign-in.");
+    render(<SettingsV2 available={() => true} renderPage={() => null} />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("switch", { name: "Start when I sign in" }));
+    await act(flushAsync);
+    const row = screen.getByRole("list", { name: "Shortcuts & start-up" });
+    expect(within(row).getByRole("alert")).toHaveTextContent("This computer refused to start EchoLedger at sign-in.");
+    expect(screen.getByRole("switch", { name: "Start when I sign in" })).toHaveAttribute("aria-checked", "false");
+  });
+});
+
 describe("the app with ui_v2.settings", () => {
   it("Settings opens the new list; a page opens today's page and its back link returns", async () => {
     respond("app_status", makeStatus());

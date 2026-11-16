@@ -11,7 +11,7 @@ import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
 import "../controls.css";
-import { useUiFlags } from "../../v2/flags";
+import { useRisingCount, useUiFlags } from "../../v2/flags";
 
 // The pill in the new look (ui_v2.recording_controls), loaded only when its flag is on.
 const RecordingPillV2 = lazy(() => import("../../v2/controls/RecordingPill").then((m) => ({ default: m.RecordingPill })));
@@ -61,8 +61,10 @@ type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "lang
  */
 export default function PillApp() {
   const [rec, setRec] = useState<RecordingState | null>(null);
-  // Read when the pill opens, never switched in the middle of a recording (v2/flags.ts).
-  const [ui] = useUiFlags(true, "pill", !!rec?.active);
+  // The interface flags are read again at each recording's start, before the pill shows, and never in the middle of one
+  // (v2/flags.ts): a flag turned on or off, or "Switch back to classic", reaches the next recording.
+  const runKey = `run-${useRisingCount(!!rec?.active)}`;
+  const [ui, , flagsFor] = useUiFlags(true, runKey, false);
   const [visible, setVisible] = useState(false);
   const [anchor, setAnchor] = useState<TimerAnchor | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -307,7 +309,7 @@ export default function PillApp() {
     void saveDrag();
   };
 
-  if (!shown || !live || concealed) return <div className="pill-root" />;
+  if (!shown || !live || concealed || flagsFor !== runKey) return <div className="pill-root" />;
 
   const paused = live.paused;
   const label = sourceLabel(live.sourceApp);

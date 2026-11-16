@@ -168,3 +168,51 @@ describe("the windows with the flags", () => {
     expect(await screen.findByTestId("after-call-card")).toBeInTheDocument();
   });
 });
+
+describe("flags reach the overlay windows on their next show", () => {
+  const REC_ON: RecordingState = {
+    active: true, paused: false, elapsedMs: 10_000, sourceApp: "zoom", mode: "call", captions: false, levels: [0, 0],
+    auto: true, hidden: false, language: null, bluetoothMic: false, screens: null,
+  };
+
+  it("the pill: a flag turned on between two recordings shows the new pill on the next one, never mid-recording", async () => {
+    respond("ui_flags", { ui_flags: {} });
+    respond("recording_state", { ...REC_ON, active: false });
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    render(<PillApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("recording:state", REC_ON));
+    await act(flushAsync);
+    expect(screen.getByTestId("recording-pill")).toBeInTheDocument();
+    respond("ui_flags", { ui_flags: { "ui_v2.recording_controls": true } });
+    await act(() => emitEvent("recording:state", { ...REC_ON, elapsedMs: 11_000 }));
+    await act(flushAsync);
+    expect(screen.getByTestId("recording-pill")).toBeInTheDocument();
+    await act(() => emitEvent("recording:state", { ...REC_ON, active: false }));
+    await act(flushAsync);
+    await act(() => emitEvent("recording:state", REC_ON));
+    await act(flushAsync);
+    expect(await screen.findByTestId("recording-pill-v2")).toBeInTheDocument();
+    expect(callsOf("ui_flags")).toHaveLength(3);
+  });
+
+  it("the after-call window: switching back to classic between two shows draws the classic chip next time", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.after_call": true } });
+    respond("after_call_state", { saved: null, discarded: null, ask: null });
+    respond("set_hit_regions", null);
+    respond("window_ready", null);
+    render(<ReviewApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: ITEM }));
+    await act(flushAsync);
+    expect(await screen.findByTestId("after-call-card")).toBeInTheDocument();
+    respond("ui_flags", { ui_flags: {}, ui_classic: true });
+    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: null }));
+    await act(flushAsync);
+    await act(() => emitEvent("aftercall:state", { saved: null, discarded: null, ask: { ...ITEM, id: "p9" } }));
+    await act(flushAsync);
+    expect(screen.queryByTestId("after-call-card")).toBeNull();
+    expect(document.querySelector(".review-root")!.textContent).toMatch(/Call with Omar Farooq/);
+  });
+});

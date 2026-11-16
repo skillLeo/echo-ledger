@@ -1,9 +1,9 @@
 // Setup & health in the new look (ui_v2.setup_health): the permissions wizard, the Ready check and, on a Mac, the Mac
 // check, from the data today's app already reads (permissions_status, ready_last / ready_check, mac_check_last).
 import { useEffect, useState } from "react";
-import { api, errorMessage, type CheckItem, type CheckReport, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
+import { api, errorMessage, type CheckItem, type CheckReport, type PermissionKind, type PermissionsStatus } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
-import { ALLOWED_BEFORE, PERMISSION_STEP, accessOf, usePermissions } from "../../views/main/Permissions";
+import { PERMISSION_STEP, accessOf, stepPlan, usePermissions, type StepAction } from "../../views/main/Permissions";
 import { READY, readyHeadline, useReadyReport } from "../../views/main/ReadyCheck";
 import {
   Button, Card, EmptyState, HealthCheckRow, Icons, Loading, SetupStep, Skeleton, Status, Steps, type HealthState,
@@ -13,13 +13,6 @@ import {
 export function permissionKinds(platform: PermissionsStatus["platform"]): PermissionKind[] {
   return platform === "macos" ? ["microphone", "system_audio", "screen"] : ["microphone"];
 }
-
-const STATE_WORDS: Record<PermissionState, string> = {
-  allowed: "Allowed",
-  denied: "Off. Turn on EchoLedger in System Settings.",
-  unknown: "Not asked yet",
-  reopen: "Allowed. Quit and reopen EchoLedger to finish.",
-};
 
 /** The first step still to do (the wizard's current one); none when everything is allowed. */
 export function currentStep(permissions: PermissionsStatus | null, kinds: PermissionKind[]): PermissionKind | null {
@@ -56,23 +49,24 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
     }
   };
 
+  // The words and buttons come from the one rule every permission step follows (Permissions.tsx stepPlan).
   const stepActions = (kind: PermissionKind) => {
-    const access = accessOf(permissions, kind);
-    const before = access === "unknown" && !!permissions?.allowedBefore?.includes(kind);
-    const settings = (main: boolean) => (
-      <Button variant={main ? "primary" : "quiet"} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</Button>
-    );
-    return (
-      <div className="el-step__actions">
-        {access === "reopen" && <Button variant="primary" loading={busy === "reopen"} loadingLabel="Reopening…" onClick={() => void doing("reopen", () => api.quitAndReopen())}>Quit &amp; reopen</Button>}
-        {before && settings(true)}
-        {access === "unknown" && !before && (
-          <Button variant="primary" loading={busy === kind} loadingLabel="Asking…"
-            onClick={() => void doing(kind, async () => setPermissions(await api.permissionRequest(kind)))}>Allow</Button>
-        )}
-        {(access === "denied" || (access === "unknown" && !before)) && settings(access === "denied")}
-      </div>
-    );
+    const step = stepPlan(permissions, kind);
+    const button = (action: StepAction) => {
+      const variant = step.main === action ? "primary" : action === "settings" ? "quiet" : "secondary";
+      switch (action) {
+        case "reopen":
+          return <Button key={action} variant={variant} loading={busy === "reopen"} loadingLabel="Reopening…" onClick={() => void doing("reopen", () => api.quitAndReopen())}>Quit &amp; reopen</Button>;
+        case "allow":
+          return (
+            <Button key={action} variant={variant} loading={busy === kind} loadingLabel="Asking…"
+              onClick={() => void doing(kind, async () => setPermissions(await api.permissionRequest(kind)))}>Allow</Button>
+          );
+        case "settings":
+          return <Button key={action} variant={variant} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>{step.settingsLabel}</Button>;
+      }
+    };
+    return <div className="el-step__actions">{step.actions.map(button)}</div>;
   };
 
   return (
@@ -95,17 +89,16 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
           ) : (
             <Steps label="Permissions">
               {kinds.map((kind, i) => {
-                const access = accessOf(permissions, kind);
-                const before = access === "unknown" && !!permissions.allowedBefore?.includes(kind);
+                const step = stepPlan(permissions, kind);
                 const text = PERMISSION_STEP[kind];
                 return (
-                  <SetupStep key={kind} number={i + 1} title={text.title} state={before ? ALLOWED_BEFORE : STATE_WORDS[access]}
-                    done={access === "allowed"} current={kind === current} open={opened === kind}
+                  <SetupStep key={kind} number={i + 1} title={text.title} state={step.words}
+                    done={step.access === "allowed"} current={kind === current} open={opened === kind}
                     onToggle={() => setOpened(opened === kind ? null : kind)}>
                     <p>{text.forWhat}</p>
                     {text.note && <p className="el-caption">{text.note}</p>}
-                    {access !== "allowed" && access !== "reopen" && platform === "macos" && <p className="el-caption">{text.where}</p>}
-                    {access !== "allowed" && stepActions(kind)}
+                    {step.showWhere && <p className="el-caption">{text.where}</p>}
+                    {step.actions.length > 0 && stepActions(kind)}
                   </SetupStep>
                 );
               })}

@@ -224,6 +224,7 @@
 .el-row__value { display: flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); flex: none; max-inline-size: 45%; }
 .el-row__value-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-row__control { position: relative; flex: none; display: flex; align-items: center; }
+.el-row__error { color: var(--el-role-danger-default); white-space: normal; }
 .el-row__chevron { display: flex; color: var(--el-role-text-secondary); }
 
 /* ---- Chip and FilterBar ------------------------------------------------------------------------------------- */

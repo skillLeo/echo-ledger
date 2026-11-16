@@ -9,7 +9,8 @@ import { CheckIcon } from "../../components/ControlIcons";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { usePresence } from "../../lib/motion";
 import "../controls.css";
-import { useUiFlags } from "../../v2/flags";
+import { useRisingCount, useUiFlags } from "../../v2/flags";
+import { useWindowShown } from "../../lib/visibility";
 
 // The after-call card in the new look (ui_v2.after_call), loaded only when its flag is on.
 const AfterCallStackV2 = lazy(() => import("../../v2/controls/AfterCallStack").then((m) => ({ default: m.AfterCallStack })));
@@ -38,7 +39,6 @@ const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 export default function ReviewApp() {
   const [state, setState] = useState<AfterCallState>(EMPTY);
   const [ask, setAsk] = useState<AskPayload | null>(null);
-  const [ui] = useUiFlags(true, "review", false);
 
   useEffect(() => {
     let alive = true;
@@ -103,10 +103,15 @@ export default function ReviewApp() {
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
 
+  // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts).
+  const windowShown = useWindowShown();
+  const showKey = `show-${useRisingCount(windowShown && !!(ask || state.saved || state.discarded || state.ask))}`;
+  const [ui, , flagsFor] = useUiFlags(true, showKey, false);
+
   const concealed = useConcealed();
   useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.discarded?.id ?? null, state.ask?.id ?? null, chipKept, concealed]);
 
-  if (concealed) return <div className="review-root" />;
+  if (concealed || flagsFor !== showKey) return <div className="review-root" />;
   return (
     <div className="review-root">
       {ask ? (

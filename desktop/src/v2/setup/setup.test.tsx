@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { CheckReport, PermissionsStatus, ReadyReport } from "../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { SetupHealth, currentStep, permissionKinds } from "./SetupHealth";
+import { ALLOWED_BEFORE, CANNOT_TELL, SWITCH_OFF_ON, WINDOWS_CANNOT_TELL, WINDOWS_OFF, stepPlan } from "../../views/main/Permissions";
 import MainApp from "../../views/main/MainApp";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 
@@ -71,6 +72,61 @@ describe("the permissions wizard", () => {
     const head = within(steps[2]).getByRole("button", { expanded: false });
     fireEvent.click(head);
     expect(within(steps[2]).getByText(/Only for screen moments/)).toBeInTheDocument();
+  });
+});
+
+describe("the one rule for a permission step (shared with the classic step)", () => {
+  const steps = () => within(screen.getByRole("list", { name: "Permissions" })).getAllByRole("listitem");
+  const buttonsOf = (el: HTMLElement) => within(el).getAllByRole("button").filter((b) => !b.hasAttribute("aria-expanded")).map((b) => b.textContent);
+
+  it("when macOS cannot say: no guess, System Settings first", async () => {
+    expect(stepPlan({ ...MAC_PERMS, canTellNotAsked: false }, "system_audio")).toMatchObject({ words: CANNOT_TELL, actions: ["settings", "allow"], main: "settings" });
+    respond("permissions_status", { ...MAC_PERMS, canTellNotAsked: false });
+    await show();
+    const step = steps()[1];
+    expect(step).toHaveTextContent(CANNOT_TELL);
+    expect(step).not.toHaveTextContent(/Not asked/);
+    expect(buttonsOf(step)).toEqual(["Open System Settings", "Allow"]);
+    expect(within(step).getByRole("button", { name: "Open System Settings" })).toHaveClass("el-button--primary");
+  });
+
+  it("stuck after reopening: switch it off and on, never Quit & reopen again", async () => {
+    expect(stepPlan({ ...MAC_PERMS, screen: "reopen", reopenDidNotApply: true }, "screen")).toMatchObject({ words: SWITCH_OFF_ON, actions: ["settings"] });
+    expect(stepPlan({ ...MAC_PERMS, screen: "reopen" }, "screen")).toMatchObject({ actions: ["reopen"] });
+    respond("permissions_status", { ...MAC_PERMS, systemAudio: "allowed", screen: "reopen", reopenDidNotApply: true });
+    await show();
+    const step = steps()[2];
+    expect(step).toHaveTextContent(SWITCH_OFF_ON);
+    expect(within(step).queryByRole("button", { name: /Quit/ })).toBeNull();
+    expect(buttonsOf(step)).toEqual(["Open System Settings"]);
+  });
+
+  it("allowed before: says so and offers Allow, with System Settings as the main button", async () => {
+    respond("permissions_status", { ...MAC_PERMS, allowedBefore: ["system_audio"] });
+    respond("permission_request", { ...MAC_PERMS, systemAudio: "allowed" });
+    await show();
+    const step = steps()[1];
+    expect(step).toHaveTextContent(ALLOWED_BEFORE);
+    expect(buttonsOf(step)).toEqual(["Open System Settings", "Allow"]);
+    expect(within(step).getByRole("button", { name: "Open System Settings" })).toHaveClass("el-button--primary");
+    fireEvent.click(within(step).getByRole("button", { name: "Allow" }));
+    await act(flushAsync);
+    expect(callsOf("permission_request")).toEqual([{ kind: "system_audio" }]);
+  });
+
+  it("Windows: no Allow, Windows Settings by name, and no guess when Windows doesn't say", async () => {
+    const win: PermissionsStatus = { microphone: "unknown", browserAutomation: false, platform: "windows" };
+    expect(stepPlan(win, "microphone")).toMatchObject({ words: WINDOWS_CANNOT_TELL, actions: ["settings"], settingsLabel: "Open Windows Settings", showWhere: false });
+    expect(stepPlan({ ...win, microphone: "denied" }, "microphone").words).toBe(WINDOWS_OFF);
+    respond("permissions_status", win);
+    await show("windows");
+    const step = steps()[0];
+    expect(step).toHaveTextContent("Windows doesn't say whether EchoLedger may use this. Check it in Windows Settings.");
+    expect(step).not.toHaveTextContent(/Not asked|System Settings/);
+    expect(buttonsOf(step)).toEqual(["Open Windows Settings"]);
+    expect(within(step).queryByRole("button", { name: "Allow" })).toBeNull();
+    fireEvent.click(within(step).getByRole("button", { name: "Open Windows Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "microphone" }]);
   });
 });
 
