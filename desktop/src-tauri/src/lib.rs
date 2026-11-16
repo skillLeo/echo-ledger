@@ -6,6 +6,7 @@ pub mod activity;
 pub mod after_call;
 pub mod app_life;
 pub mod app_menu;
+pub mod assist;
 pub mod audio;
 pub mod call_guard;
 mod commands;
