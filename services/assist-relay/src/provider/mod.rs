@@ -4,6 +4,8 @@
 //! In this version the relay runs the deterministic mocks (`RELAY_PROVIDERS=mock`); every real provider answers
 //! "not configured" until the relay can read the keys from the server's Admin -> API Credentials.
 
+pub mod anthropic;
+pub mod http;
 pub mod mock;
 pub mod unconfigured;
 
