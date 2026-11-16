@@ -1111,14 +1111,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    /** Cancels an upload that has not started (or removes a failed one): nothing of it reaches the server. */
-    fun cancelUpload(id: String) = viewModelScope.launch(Dispatchers.IO) {
+    /**
+     * Deletes a recording that never reached the server (waiting to upload, or its upload failed). This phone has its
+     * only copy, so the Library and Record ask first (since v1.8.1, bugs P-002 and P-004). One that started uploading
+     * meanwhile is left alone; a server session its captions opened is deleted too.
+     */
+    fun deleteNotUploaded(id: String) = viewModelScope.launch(Dispatchers.IO) {
         val rec = graph.recordings.get(id) ?: return@launch
-        if (rec.state == "uploading") return@launch
-        com.echoledger.mobile.net.UploadWorker.cancel(getApplication(), id)
-        graph.recordings.delete(id)
+        if (rec.state == "uploading") {
+            _message.value = "It is uploading now, so it was not deleted. It will be in your Library in a moment."
+            return@launch
+        }
+        UploadWorker.cancel(getApplication(), id)
+        Decisions.apply(getApplication(), id, keep = false)
         reloadLocal()
-        _message.value = if (rec.state == "failed") "Removed" else "Upload cancelled"
+        _message.value = RECORDING_DELETED
     }
 
     /** Removes a row that only reported something (an import the Library already had). */
@@ -1636,6 +1643,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
+
+        const val RECORDING_DELETED = "Recording deleted"
 
         /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
         const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."

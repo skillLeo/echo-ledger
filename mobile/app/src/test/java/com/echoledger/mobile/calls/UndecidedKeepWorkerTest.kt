@@ -12,6 +12,7 @@ import com.echoledger.mobile.translate.TranslateStatus
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -55,6 +56,27 @@ class UndecidedKeepWorkerTest : AppTest() {
 
         runWorker()
         assertEquals("pending_decision", app.peekRecording("old")?.state)
+    }
+
+    @Test
+    fun `a call discarded from the chip goes once its Undo time is over, never sooner, even if its timer was lost`() {
+        // As after the app was killed during "Discarded · Undo": the time is on the phone with the call.
+        val now = System.currentTimeMillis()
+        app.storeRecording(id = "due", state = "pending_decision", startedAt = Instant.now().toString())
+        app.storeRecording(id = "later", state = "pending_decision", startedAt = Instant.now().toString())
+        runBlocking {
+            Decisions.discardLater(app, "due", nowMs = now - Decisions.DISCARD_AFTER_MS - 1_000)
+            Decisions.discardLater(app, "later", nowMs = now + 60_000)
+        }
+        val at = Instant.ofEpochMilli(now)
+        assertEquals(listOf("due"), Decisions.discardsDue(app.graph.recordings.all(), at))
+        assertTrue(Decisions.discardsDue(app.graph.recordings.all(), at.minusSeconds(60)).isEmpty())
+
+        assertEquals(ListenableWorker.Result.success(), runWorker())
+        assertNull(app.graph.recordings.get("due"))
+        assertFalse(app.graph.recordings.encryptedFile("due").exists())
+        assertEquals(Decisions.DISCARDING, app.peekRecording("later")?.state)
+        assertTrue("never sooner", app.graph.recordings.encryptedFile("later").exists())
     }
 
     @Test

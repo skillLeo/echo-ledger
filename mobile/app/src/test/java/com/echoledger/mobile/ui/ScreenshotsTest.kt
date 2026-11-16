@@ -18,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -878,8 +879,114 @@ class ScreenshotsTest : ScreenTest() {
                 }, onDiscard = {}, onUndo = {}, onTitle = {})
                 AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {
                 }, onDiscard = {}, onUndo = {}, onTitle = {})
+                // Since v1.8.1 (P-003): after Discard, the call can come back for 5 s before anything is deleted.
+                AfterCallChip("WhatsApp call", 272_000, DecisionPopup.Mode.DISCARDED, DecisionPopup.DISCARDED_MS, onKeep = {
+                }, onDiscard = {}, onUndo = {}, onTitle = {})
             }
         }
         capture("pill")
+    }
+
+    /** Captures every window (the screen with its menu, sheet or dialog) in the dark and then the light theme. */
+    private fun captureWindows(name: String) {
+        listOf("dark", "light").forEach { mode ->
+            themeMode = mode
+            compose.waitForIdle()
+            compose.mainClock.advanceTimeBy(1_000)
+            compose.waitForIdle()
+            com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-$name-$mode.png"))
+        }
+    }
+
+    private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    /** Two recordings on their way to the server: one waiting, one whose upload failed. */
+    private fun seedUploads() {
+        seedLibrary()
+        app.storeRecording(id = "q1", state = "queued", startedAt = "2026-10-24T10:20:00Z", durationMs = 272_000)
+        app.graph.recordings.update("q1") { it.copy(title = "Call with Omar") }
+        app.storeRecording(id = "f1", state = "failed", sourceApp = "phone_call", startedAt = "2026-10-24T10:05:00Z")
+        app.graph.recordings.update("f1") { it.copy(title = "Call with Sara") }
+    }
+
+    /** Uploads in the Library (since v1.8.1, P-002): no "hold to cancel"; the ⋮ (or a long press) has Retry and Delete. */
+    @Test
+    fun libraryUploads() {
+        seedUploads()
+        shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
+        pumpUntil("the uploads") { exists("Call with Sara") }
+        compose.onNodeWithContentDescription("More for Call with Sara").performClick()
+        compose.onNodeWithText("Delete recording…").assertExists()
+        captureWindows("library-uploads")
+    }
+
+    /** Delete on an upload asks first: it was never uploaded, so the phone has the only copy (P-002, P-004). */
+    @Test
+    fun libraryUploadDelete() {
+        seedUploads()
+        shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
+        pumpUntil("the uploads") { exists("Call with Sara") }
+        compose.onNodeWithContentDescription("More for Call with Sara").performClick()
+        compose.onNodeWithText("Delete recording…").performClick()
+        compose.onNodeWithText(DELETE_NOT_UPLOADED).assertExists()
+        captureWindows("library-upload-delete")
+    }
+
+    /** A failed upload on Record: Retry, and Delete (was Discard, which read like dismissing the error) (P-004). */
+    @Test
+    fun recordFailedUpload() {
+        runBlocking { app.pairLocally(server) }
+        app.storeRecording(id = "f1", state = "failed", sourceApp = "whatsapp_business", startedAt = "2026-10-24T14:05:00Z")
+        compose.mainClock.autoAdvance = false
+        shoot {
+            RecordScreen(
+                vm,
+                Capabilities(34, true, micPermission = true, notificationPermission = true, overlayPermission = true),
+                onSetup = {}
+            )
+        }
+        pumpUntil("the failed upload") {
+            compose.mainClock.advanceTimeByFrame()
+            exists("1 recording(s) could not be uploaded")
+        }
+        compose.onNodeWithText("Delete").performScrollTo()
+        captureWindows("record-failed-upload")
+    }
+
+    /** Revoke on a share link asks first: the link stops working for everyone who has it (P-005). */
+    @Test
+    fun shareRevoke() {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/sessions/S1/shares") {
+            Thread.sleep(500) // answered once the sheet is up, as over a network
+            FakeServer.json(200, """{"data":[{"id":"l1","active":true,"view_count":3,"expires_at":"2026-12-01T00:00:00Z"}]}""")
+        }
+        server.on("GET", "/api/sent", FakeServer.json(200, """{"data":[]}"""))
+        shoot { ShareSheet(vm, sessionId = "S1", clientId = null, title = "this recording", onDismiss = {}) }
+        pumpUntil("the link") {
+            compose.mainClock.advanceTimeByFrame() // the sheet's own window redraws on the next frame
+            exists("Revoke")
+        }
+        compose.onNodeWithText("Revoke").performScrollTo().performClick()
+        compose.onNodeWithText(ShareText.REVOKE_QUESTION).assertExists()
+        captureWindows("share-revoke")
+    }
+
+    /** Turn off on a request link asks first (P-005). */
+    @Test
+    fun requestLinkTurnOff() {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        server.on(
+            "GET",
+            "/api/request-links",
+            FakeServer.json(200, """{"data":[{"id":"r1","title":"Invoices from Acme","received":2,"expires_at":"2026-12-01T00:00:00Z"}]}""")
+        )
+        shoot { ProjectsScreen(vm, onOpenItem = {}) }
+        compose.onNodeWithContentDescription("Request files").performClick()
+        pumpUntil("the request link") { exists("Invoices from Acme") }
+        compose.onNodeWithText("Turn off").performClick()
+        compose.onNodeWithText(RequestLinkText.TURN_OFF_QUESTION).assertExists()
+        captureWindows("request-links-turn-off")
     }
 }
