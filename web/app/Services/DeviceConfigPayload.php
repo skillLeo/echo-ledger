@@ -7,6 +7,7 @@ namespace App\Services;
 use App\Enums\SttUseCase;
 use App\Models\Device;
 use App\Models\Plan;
+use App\Models\User;
 use App\Models\Workspace;
 use App\Services\LiveTranslate\LiveTranslateBudget;
 use App\Services\System\PlatformNotices;
@@ -97,7 +98,20 @@ final class DeviceConfigPayload
             'app_update' => app(PlatformNotices::class)->updateFor($device),
             'announcement' => app(PlatformNotices::class)->announcement(),
             'maintenance' => app(PlatformNotices::class)->maintenance(),
+            // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
+            // whether they chose "Switch back to classic".
+            ...self::uiFlags($device->user, $device->workspace_id),
         ];
+    }
+
+    /**
+     * `ui_flags` and `ui_classic` for [$user] in [$workspaceId] (GET /api/config, PUT /api/account/ui).
+     *
+     * @return array{ui_flags: array<string, bool>, ui_classic: bool}
+     */
+    public static function uiFlags(User $user, ?int $workspaceId): array
+    {
+        return ['ui_flags' => app(InterfaceFlags::class)->for($user, $workspaceId), 'ui_classic' => (bool) $user->ui_classic];
     }
 
     /**
