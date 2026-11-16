@@ -50,8 +50,11 @@
 .el-body-strong { font-weight: var(--el-text-body-strong-weight); }
 .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); color: var(--el-role-text-secondary); }
 .el-secondary { color: var(--el-role-text-secondary); }
-:lang(ur) .el-title-l, :lang(ur) .el-title-m, :lang(ur) .el-title-s { line-height: 1.9; }
-:lang(ur) .el-caption { font-size: var(--el-text-body-size); line-height: 2; }
+/* Nastaliq is taller than Latin: Urdu titles and captions get the next line height up, from the type tokens. */
+:lang(ur) .el-title-l { line-height: calc(var(--el-text-title-l-line) + var(--el-space-12)); }
+:lang(ur) .el-title-m { line-height: calc(var(--el-text-title-m-line) + var(--el-space-12)); }
+:lang(ur) .el-title-s { line-height: var(--el-text-urdu-body-line); }
+:lang(ur) .el-caption { font-size: var(--el-text-body-size); line-height: calc(var(--el-text-body-line) + var(--el-space-8)); }
 
 /* Numbers, durations and times stay left-to-right inside right-to-left text. */
 .el-num {
@@ -135,6 +138,7 @@
 
 /* ---- Select ------------------------------------------------------------------------------------------------- */
 .el-select { position: relative; min-inline-size: 0; }
+.el-select__label { cursor: pointer; align-self: flex-start; }
 .el-select__control {
   display: flex; align-items: center; gap: var(--el-space-8);
   inline-size: 100%;
@@ -150,7 +154,7 @@
 .el-select__value { flex: 1; min-inline-size: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-select__control > .el-icon { color: var(--el-role-text-secondary); }
 .el-menu {
-  position: absolute; z-index: 20;
+  position: absolute; z-index: var(--el-layer-menu);
   inset-block-start: calc(100% + var(--el-space-4));
   inset-inline-start: 0;
   min-inline-size: 100%;
@@ -253,7 +257,7 @@
 
 /* ---- Toast -------------------------------------------------------------------------------------------------- */
 .el-toast-region {
-  position: fixed; z-index: 40;
+  position: fixed; z-index: var(--el-layer-toast);
   inset-block-end: var(--el-space-24);
   inset-inline-start: 50%;
   translate: -50% 0;
@@ -282,7 +286,7 @@
 
 /* ---- Dialog and Sheet --------------------------------------------------------------------------------------- */
 .el-scrim {
-  position: fixed; inset: 0; z-index: 30;
+  position: fixed; inset: 0; z-index: var(--el-layer-dialog);
   display: flex; align-items: center; justify-content: center;
   padding: var(--el-space-24);
   background: var(--el-role-scrim-default);
@@ -325,7 +329,7 @@
   white-space: nowrap;
   background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary);
 }
-:lang(ur) .el-badge { line-height: 2; padding-block: 0; }
+:lang(ur) .el-badge { line-height: calc(var(--el-text-body-line) + var(--el-space-4)); padding-block: 0; }
 .el-badge--accent { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
 .el-badge--success { background: var(--el-role-success-soft); color: var(--el-role-success-default); }
 .el-badge--warning { background: var(--el-role-warning-soft); color: var(--el-role-warning-default); }

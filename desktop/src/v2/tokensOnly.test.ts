@@ -17,6 +17,9 @@ const RULES: [string, RegExp][] = [
   ["rgb/hsl colour", /\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/i],
   ["raw px value", /(?:^|[^\w-])-?\d*\.?\d+px\b/],
   ["gradient", /gradient\(/i],
+  ["raw relative length", /(?:^|[^\w.-])\d*\.?\d+(?:rem|em|vh|vw|vmin|vmax|dvh|svh|lvh|ch|ex|pt|pc|cm|mm|Q)\b/],
+  ["unitless line height or layer", /\b(?:line-height|z-index|lineHeight|zIndex)\s*:\s*["'`]?-?\d/],
+  ["numeric style value", /style=\{\{[^}]*\b[A-Za-z]+\s*:\s*-?\d/],
 ];
 
 /** The window breakpoints tokens.css defines (--el-breakpoint-*), as written there ("720px"). */
@@ -61,12 +64,24 @@ describe("v2 uses tokens only", () => {
       "inline-size: 0.5px;",
       'style={{ width: "240px" }}',
       "background: linear-gradient(90deg, var(--el-role-accent-default), transparent);",
+      "padding: 1.5rem;",
+      "margin-block: 2em;",
+      "block-size: 100vh;",
+      "max-inline-size: 60ch;",
+      "line-height: 1.9;",
+      "line-height: 2;",
+      "z-index: 20;",
+      "style={{ zIndex: 30 }}",
+      "style={{ width: 240 }}",
+      "style={{ lineHeight: \"1.5\" }}",
     ]) {
       expect(violations(planted), planted).not.toEqual([]);
     }
     expect(violations("padding: var(--el-space-12); color: var(--el-role-text-primary);")).toEqual([]);
     expect(violations("background: color-mix(in srgb, var(--el-role-text-primary) 40%, transparent);")).toEqual([]);
     expect(violations('<div id="root" className="el-row" />')).toEqual([]);
+    expect(violations("z-index: var(--el-layer-dialog); line-height: var(--el-text-body-line);")).toEqual([]);
+    expect(violations('meta: "Rate for 12 mm rebar, delivery to Gujranwala"')).toEqual([]);
   });
 
   it("lets a media query name a breakpoint from tokens.css, and no other width", () => {
