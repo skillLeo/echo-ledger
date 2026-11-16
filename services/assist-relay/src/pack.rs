@@ -215,10 +215,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_built_in_pack_is_1_0_2_for_contract_1_9_0_b() {
+    fn the_built_in_pack_is_1_0_2_for_contract_1_9_0_f() {
         let pack = Pack::built_in();
         assert_eq!(pack.version, "1.0.2");
-        assert_eq!(pack.contract, "1.9.0-b");
+        assert_eq!(pack.contract, "1.9.0-f");
         assert_eq!(
             pack.consent_line,
             "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?"

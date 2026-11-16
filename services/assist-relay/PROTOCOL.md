@@ -1,8 +1,7 @@
 # Live Assist relay protocol (protocol 1)
 
 The messages between an app and the relay in `services/assist-relay`, in detail. They follow the Live Assist contract
-**1.9.0-e** (docs/API_ASSIST.md), which wins where the two differ. The relay's names still differ from 1.9.0-e in the
-places listed under "Differences from contract 1.9.0-e" at the end; those wait for a decision on which side changes. Field names are snake_case, every error has a
+**1.9.0-f** (docs/API_ASSIST.md), which wins where the two differ. Field names are snake_case, every error has a
 machine-readable `code` and a plain-words `message`, durations are milliseconds and timestamps ISO-8601 UTC
 (`2026-11-16T09:15:00+00:00`).
 
@@ -171,7 +170,7 @@ The first message on every connection.
 - `speculative`: started on a partial, before the end of the turn.
 - `draft`: Balanced also sent this hard question to the upgrade model; an `upgrade` may replace it.
 - `replaces`: the suggestion this one takes the place of on the card (a rewrite, an upgrade, or the fallback model
-  after a broken answer; see below).
+  after a broken answer; see below). A fallback keeps the `kind` of what it replaces and is recognised by `replaces`.
 - Every `suggestion_start` is followed by exactly one of `suggestion_end`, `skip` or `error` with its
   `suggestion_id`.
 
@@ -192,7 +191,9 @@ the key words in `**bold**`, an optional `Say next:` line, and the language line
 ```
 
 - `status`: `done` | `cancelled` (the app cancelled it, or the other person kept talking within 700 ms of a
-  speculative start) | `superseded` (a newer suggestion took its place).
+  speculative start) | `superseded` (replaced: by the suggestion whose `replaces` names it, such as an upgrade or the
+  fallback after a broken answer, or by the next question's suggestion taking the card, which has `replaces: null`).
+  A suggestion that fails gets no `suggestion_end`: it ends with an `error` carrying its `suggestion_id`.
 - `model`: the model that answered (the fallback model when the first failed before showing anything).
 - `latency` counts from the "end of turn": when the relay read the message that started the suggestion.
   `request_to_first_token_ms` is the model's share; `relay_overhead_ms` the rest. Stages never reached are `null`.
@@ -272,8 +273,11 @@ gpt-oss-120b on Groq).
   in that suggestion's `usage`, marked `estimated`; a request the provider turned away unprocessed (rate limited, no
   key) costs nothing.
 - **Refusals are never shown** from models with safety classifiers (Sonnet 5.5 and Opus 5.5, `hold_until_complete`
-  in the settings): their answer is held until the stream ends, so a refusal there is a failure before anything is
-  shown. A streaming model (Haiku 5.5, gpt-oss) that refuses after words reached the card is handled as below.
+  in the model catalog): their answer is held until the stream ends, so a refusal there is a failure before anything
+  is shown. A streamed model (Haiku 5.5, gpt-oss) that refuses after words reached the card: the relay ends that
+  suggestion **at once**, at the refusal event (Anthropic's `message_delta` with `stop_reason: "refusal"`, Chat
+  Completions' `finish_reason: "content_filter"`), with `suggestion_end` `status: superseded`. The app clears its text
+  from the card at that moment, before the fallback's first token. Then the fallback starts as below.
 - **After words reached the card** (a dropped connection or a refusal mid-answer), the suggestion ends `superseded`
   and the fallback model answers the same request as a new suggestion with `replaces` set to it, timed from the same
   end of turn. The app replaces the card's text. A Balanced draft's upgrade carries over: the fallback's answer is the
@@ -293,16 +297,6 @@ gpt-oss-120b on Groq).
 | `4409` | Replaced by a newer connection for the same session: don't reconnect |
 
 The relay never sends `1000` itself.
-
-## Differences from contract 1.9.0-e (pending a decision)
-
-| Topic | Contract 1.9.0-e | The relay today |
-|---|---|---|
-| `suggestion_start.kind` | `answer`, `upgrade`, `rewrite`, `fallback` | `answer`, `help_now`, `regenerate`, `shorter`, `formal`, `translate`, `upgrade`. A fallback's replacement keeps the kind of what it replaces (usually `answer`) and is recognised by `replaces` |
-| `suggestion_end.status` | `complete`, `cancelled`, `superseded`, `failed` (then an `error`) | `done`, `cancelled`, `superseded`. A failed suggestion gets no `suggestion_end`: it ends with an `error` that carries its `suggestion_id` |
-| `superseded` | replaced by the suggestion whose `replaces` names it | also when the next question's suggestion takes the card (that one has `replaces: null`); and a final that changed the words of a speculative start that had already finished carries `replaces` |
-| `mode_changed.reason` | `budget`, `budget_restored`, `plan`, `assist_time` | the same, plus `requested` (the app changed `settings.mode`) |
-| Refusals never shown | always | held models only (Sonnet 5.5, Opus 5.5). A streaming model's refusal after shown words is visible until the fallback's first token replaces it |
 
 ## Still open
 

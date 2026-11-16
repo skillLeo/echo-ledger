@@ -1,4 +1,4 @@
-//! The WebSocket messages (PROTOCOL.md; contract 1.9.0-b, docs/API_ASSIST.md). One JSON object per text frame, named
+//! The WebSocket messages (PROTOCOL.md; contract 1.9.0-f, docs/API_ASSIST.md). One JSON object per text frame, named
 //! by `type`, with a per-direction `seq`.
 //!
 //! Every type that carries words someone said or wrote has a `Debug` that shows lengths only, so a stray `{:?}` can

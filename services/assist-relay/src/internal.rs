@@ -1,4 +1,4 @@
-//! The relay's side of the server's internal API (contract 1.9.0-b, "Internal (relay → server)").
+//! The relay's side of the server's internal API (contract 1.9.0-f, "Internal (relay → server)").
 //!
 //! Every request is signed with HMAC-SHA256 (the `assist_relay` secret) over
 //! `timestamp + "\n" + method + "\n" + path + "\n" + body`, sent as lowercase hex in `X-Assist-Signature` with the unix
