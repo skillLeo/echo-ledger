@@ -99,7 +99,7 @@ function UpgradeFlow({ e, feature, plan, step }: { e: Entitlements; feature: str
     if (request && requestStage(request) !== "approved") void refreshUpgradeRequest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.id]);
-  const guard = async () => !dirty || confirmAction({ title: "Close without sending?", body: "What you typed here is not kept.", confirm: "Close" });
+  const guard = async () => !dirty || confirmAction({ title: "Close without sending?", body: "What you typed here is not kept.", confirm: "Close", tone: "danger" });
   const update = (r: UpgradeRequest) => {
     setRequest(r);
     noteUpgradeRequest(r);

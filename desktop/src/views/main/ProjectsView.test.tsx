@@ -12,6 +12,7 @@ import { makeItem, makeScreen, anyTarget, sampleEntitlements } from "../../test/
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { forgetPictures } from "../../lib/screens";
 import { answerConfirm } from "../../test/confirm";
+import { ConfirmHost } from "./ConfirmHost";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -471,6 +472,19 @@ describe("Notes", () => {
     expect((sent.sections as Record<string, unknown>).goal).toBe("An online shop");
     expect(await screen.findByText("Payments")).toBeInTheDocument();
     expect(screen.getByText("Edited by you")).toBeInTheDocument();
+  });
+
+  it("asks in red before writing an edited brief again: the person's own edits would go", async () => {
+    respond("client_brief_refresh", { data: workspace().brief });
+    render(<ConfirmHost />);
+    await renderProjects({ ws: workspace({ brief: { ...workspace().brief!, edited: true } }) });
+    tab("Notes");
+    fireEvent.click(screen.getByRole("button", { name: "Make again" }));
+    const question = await screen.findByRole("alertdialog", { name: "Write the brief again?" });
+    expect(within(question).getByRole("button", { name: "Write again" })).toHaveClass("danger");
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    await flushAsync();
+    expect(callsOf("client_brief_refresh")).toEqual([]);
   });
 
   it("makes the brief again and asks every 5 s until it is written", async () => {

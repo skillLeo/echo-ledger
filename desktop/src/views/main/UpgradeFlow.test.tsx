@@ -84,6 +84,8 @@ describe("step 1: Upgrade", () => {
     fireEvent.change(within(sheet()).getByLabelText(/Note for our team/), { target: { value: "Invoice for Acme" } });
     fireEvent.click(within(sheet()).getByRole("button", { name: "Close" }));
     expect(await screen.findByRole("alertdialog", { name: "Close without sending?" })).toBeInTheDocument();
+    // What the person typed would be lost: the red button.
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Close" })).toHaveClass("danger");
     // Escape answers "no" once: the sheet stays with what was typed, and nothing asks again.
     fireEvent.keyDown(document.activeElement!, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());

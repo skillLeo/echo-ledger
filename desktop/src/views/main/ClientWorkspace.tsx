@@ -407,7 +407,7 @@ function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { w
     }
   };
   const makeAgain = async () => {
-    if (brief?.edited && !(await confirmAction({ title: "Write the brief again?", body: "It's written from the project's files and call notes. Your edits are replaced.", confirm: "Write again" }))) return;
+    if (brief?.edited && !(await confirmAction({ title: "Write the brief again?", body: "It's written from the project's files and call notes. Your edits are replaced.", confirm: "Write again", tone: "danger" }))) return;
     setBusy(true);
     try {
       const { data } = await api.refreshClientBrief(clientId);

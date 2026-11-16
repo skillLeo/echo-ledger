@@ -13,7 +13,9 @@
 //! never count. Whether a Space is full screen is read from the system's list of Spaces (each display's current Space and
 //! its type, as the window server keeps it); macOS has no public call for it, so the two functions are looked up when
 //! the app runs and, without them, EchoLedger simply keeps its Dock icon. It is read when the Space in use or the
-//! displays change, and, while there are several displays, when the pointer moves to another one; it is switched only
+//! displays change, and, while there are several displays, when the pointer moves to another one (a mouse-moved monitor:
+//! at most one cheap comparison per 200 ms against cached display frames, a Space read only when the display changes;
+//! nothing at all with one display); it is switched only
 //! when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test allows no other activation policy
 //! change anywhere.
 //!
@@ -66,6 +68,20 @@ pub fn watch_pointer_with(displays: usize) -> bool {
     displays > 1
 }
 
+/// How often the pointer's display is compared at most while it moves (a move is checked again once this has passed).
+pub const POINTER_EVERY: Duration = Duration::from_millis(200);
+
+/// Whether a pointer move is checked now (pure): the first one, or one [`POINTER_EVERY`] after the last check; a move
+/// in between is left to the check that follows it.
+pub fn check_pointer_now(last: Option<std::time::Instant>, now: std::time::Instant) -> bool {
+    last.is_none_or(|at| now.saturating_duration_since(at) >= POINTER_EVERY)
+}
+
+/// The display (its frame's corner) a point is on (pure), from the displays' frames (x, y, width, height).
+pub fn display_at(point: (f64, f64), frames: &[(f64, f64, f64, f64)]) -> Option<(i64, i64)> {
+    frames.iter().find(|(x, y, w, h)| point.0 >= *x && point.0 < x + w && point.1 >= *y && point.1 < y + h).map(|(x, y, _, _)| (*x as i64, *y as i64))
+}
+
 /// Whether the pointer moved to another display (pure): a new read is due then (the first known display counts).
 pub fn moved_to_another_display(before: Option<(i64, i64)>, now: Option<(i64, i64)>) -> bool {
     now.is_some() && before != now
@@ -78,7 +94,7 @@ pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
 
 #[cfg(target_os = "macos")]
 pub mod mac {
-    use super::{Dock, InUse, SETTLED, dock_for, moved_to_another_display, settle, space_type_of, watch_pointer_with};
+    use super::{Dock, InUse, SETTLED, check_pointer_now, display_at, dock_for, moved_to_another_display, settle, space_type_of, watch_pointer_with};
     use objc2::{MainThreadMarker, Message};
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
@@ -117,13 +133,26 @@ pub mod mac {
         static POINTER_MONITORS: std::cell::RefCell<Option<[Retained<AnyObject>; 2]>> = const { std::cell::RefCell::new(None) };
         /// The display the pointer was last on (its frame's corner).
         static POINTER_DISPLAY: std::cell::Cell<Option<(i64, i64)>> = const { std::cell::Cell::new(None) };
+        /// The displays' frames, read again only when displays change (`watch_pointer`).
+        static DISPLAY_FRAMES: std::cell::RefCell<Vec<(f64, f64, f64, f64)>> = const { std::cell::RefCell::new(Vec::new()) };
+        /// When a pointer move was last checked, and whether a check is already set for the end of a quick move.
+        static POINTER_CHECKED: std::cell::Cell<Option<std::time::Instant>> = const { std::cell::Cell::new(None) };
+        static POINTER_TRAILING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     }
 
     /// Watches which display the pointer is on while there are several (main thread): moving to another one reads
     /// again, as a Space change does. A mouse-moved monitor needs no permission (only key events would); the handler
     /// only compares the display, and reads only when it changed.
     fn watch_pointer(mtm: MainThreadMarker) {
-        let several = watch_pointer_with(NSScreen::screens(mtm).count());
+        let screens = NSScreen::screens(mtm);
+        let several = watch_pointer_with(screens.count());
+        DISPLAY_FRAMES.with(|frames| {
+            *frames.borrow_mut() = if several {
+                screens.iter().map(|s| s.frame()).map(|f| (f.origin.x, f.origin.y, f.size.width, f.size.height)).collect()
+            } else {
+                Vec::new()
+            };
+        });
         POINTER_MONITORS.with(|monitors| {
             let mut monitors = monitors.borrow_mut();
             match (several, monitors.is_some()) {
@@ -152,12 +181,31 @@ pub mod mac {
         });
     }
 
+    /// A pointer move (main thread): checked at most every [`POINTER_EVERY`](super::POINTER_EVERY) against the cached
+    /// frames; a move in between sets one check for the end of it, so a quick move that stops is never missed.
     fn pointer_moved() {
-        let Some(mtm) = MainThreadMarker::new() else { return };
+        if MainThreadMarker::new().is_none() {
+            return;
+        }
+        let now = std::time::Instant::now();
+        if !check_pointer_now(POINTER_CHECKED.get(), now) {
+            if !POINTER_TRAILING.replace(true)
+                && let Ok(when) = dispatch2::DispatchTime::try_from(super::POINTER_EVERY)
+            {
+                let _ = dispatch2::DispatchQueue::main().after(when, || {
+                    POINTER_TRAILING.set(false);
+                    pointer_check();
+                });
+            }
+            return;
+        }
+        pointer_check();
+    }
+
+    fn pointer_check() {
+        POINTER_CHECKED.set(Some(std::time::Instant::now()));
         let pointer = NSEvent::mouseLocation();
-        let now = NSScreen::screens(mtm).iter().map(|s| s.frame()).find(|f| {
-            pointer.x >= f.origin.x && pointer.x < f.origin.x + f.size.width && pointer.y >= f.origin.y && pointer.y < f.origin.y + f.size.height
-        }).map(|f| (f.origin.x as i64, f.origin.y as i64));
+        let now = DISPLAY_FRAMES.with(|frames| display_at((pointer.x, pointer.y), &frames.borrow()));
         if moved_to_another_display(POINTER_DISPLAY.replace(now), now) {
             *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
             check();
@@ -410,7 +458,25 @@ mod tests {
         assert!(watch.contains("addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved") && watch.contains("NSEvent::removeMonitor(&monitor)"), "on with several displays, off with one");
         assert!(body(&spaces, "    pub fn install() {").contains("watch_pointer(mtm)"));
         assert!(body(&spaces, "    fn observe(").contains("watch_pointer(mtm)"), "a display came or went");
-        assert!(body(&spaces, "    fn pointer_moved() {").contains("if moved_to_another_display("), "reads only when the display changed");
+        assert!(body(&spaces, "    fn pointer_check() {").contains("if moved_to_another_display("), "reads only when the display changed");
+        // Cheap per move: the frames are cached (read again only on a display change), at most one check per 200 ms.
+        let moved = body(&spaces, "    fn pointer_moved() {");
+        assert!(moved.contains("check_pointer_now(POINTER_CHECKED.get(), now)") && moved.contains("POINTER_TRAILING.replace(true)"));
+        assert!(!moved.contains("NSScreen::screens") && !body(&spaces, "    fn pointer_check() {").contains("NSScreen::screens"), "no display list per move");
+        assert!(watch.contains("DISPLAY_FRAMES.with("), "the frames are cached with the displays");
+    }
+
+    #[test]
+    fn a_moving_pointer_is_checked_at_most_every_200_ms_against_the_cached_displays() {
+        let t0 = std::time::Instant::now();
+        assert!(check_pointer_now(None, t0), "the first move");
+        assert!(!check_pointer_now(Some(t0), t0 + Duration::from_millis(150)), "within 200 ms: left to the check after it");
+        assert!(check_pointer_now(Some(t0), t0 + POINTER_EVERY));
+        let frames = [(0.0, 0.0, 1512.0, 982.0), (1512.0, -100.0, 1920.0, 1080.0)];
+        assert_eq!(display_at((10.0, 10.0), &frames), Some((0, 0)));
+        assert_eq!(display_at((1600.0, 500.0), &frames), Some((1512, -100)));
+        assert_eq!(display_at((5000.0, 10.0), &frames), None, "off every display");
+        assert_eq!(display_at((10.0, 10.0), &[]), None, "one display: nothing cached, nothing watched");
     }
 
     #[test]

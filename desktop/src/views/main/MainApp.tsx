@@ -45,7 +45,7 @@ import { StateBanner } from "../../components/StateBanner";
 import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
-import { confirmAction } from "../../lib/confirm";
+import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -215,6 +215,8 @@ export default function MainApp() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        // A question on screen is answered first: search never opens (or closes) behind it.
+        if (isConfirmOpen()) return;
         setPalette((open) => !open);
         return;
       }

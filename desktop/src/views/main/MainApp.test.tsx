@@ -732,6 +732,19 @@ describe("MainApp action runner", () => {
     await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
   });
 
+  it("leaves Ctrl/Cmd+K alone while a question is on screen: it is answered first", async () => {
+    await renderPaired();
+    fireEvent.click(nav("Settings"));
+    fireEvent.click(await within(await screen.findByRole("navigation", { name: "Settings" })).findByRole("button", { name: "Sign out" }));
+    const question = screen.getByRole("alertdialog", { name: "Sign out of this computer?" });
+    fireEvent.keyDown(document.activeElement!, { key: "k", ctrlKey: true });
+    fireEvent.keyDown(document.activeElement!, { key: "k", metaKey: true });
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+    expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
+  });
+
   it("signing out from Settings returns to the sign-in form", async () => {
     await renderPaired();
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
