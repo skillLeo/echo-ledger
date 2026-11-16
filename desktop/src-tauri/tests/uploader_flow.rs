@@ -1807,7 +1807,8 @@ fn the_queue_outcome_of_each_attempt() {
     });
     after_attempt(&mut item, false, &permanent);
     assert_eq!(item.state, states::FAILED);
-    assert_eq!(item.last_error.as_deref(), Some("Server returned 413: Payload Too Large"));
+    // The failure is kept in the app's words, never the server's text (D-135).
+    assert_eq!(item.last_error.as_deref(), Some("This file is too large for the server."));
 
     let mut paired_out = PendingUpload::default();
     after_attempt(&mut paired_out, false, &Err(AppError::NotPaired));
