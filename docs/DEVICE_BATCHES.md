@@ -93,3 +93,7 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 5. S-7 a whole-screen share in an app not yet confirmed (the windows leave within 300 ms and come back).
 6. S-8, S-9, S-10.
 7. MAC-31 (v1.8 0.4): opening EchoLedger again from Finder, Launchpad, Spotlight and the Dock opens its window.
+   The Finder path passed on 2026-11-16; Dock, Launchpad, ⌘W and ⌘M are left.
+8. v1.8.1 follow-up build (the freeze fix, the menu on a click, the badge, the Dock app): MAC-22 is a release gate
+   (full-screen Zoom and Meet, a recording running), then MAC-32 (Dock click, Dock Quit / ⌘Q twice / logout while
+   recording, start at login, ⌘H). One list for Hassam, about 20 minutes, all clicks written out in plain words.
