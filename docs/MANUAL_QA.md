@@ -670,7 +670,7 @@ second person or device to share a screen, and a slide deck with a few slides.
 | # | Check | Expected |
 |---|---|---|
 | SM-M1 | Mac: Settings → Screen moments on → **Allow Screen Recording**, approve in System Settings → Privacy & Security → Screen & System Audio Recording. | The app sees the permission without a restart; Settings explains that macOS asks again about once a month. |
-| SM-M2 | A Zoom call, then a Meet call in Chrome and in Safari, with the deck shared. | The pill's monitor chip says **Screens on**; "Screens on for this meeting" appears once. |
+| SM-M2 | A Zoom call, then a Meet call in Chrome and in Safari, with the deck shared. | The pill's monitor chip says **Screens on**; "Screens on for this meeting" appears once. (until v1.8 0.2d, Meet in Safari may not be matched to its window: its sound runs in com.apple.WebKit.GPU; the controls then say "Can't find the meeting window" with Capture the whole screen) |
 | SM-M3 | Change slides and wait about 2 s; on a new slide say "look at this page". | A screen is kept after each change, and at once after the words. |
 | SM-M4 | Minimise the meeting window, then Cmd-H. | The chip says screens are paused while the window is minimised or hidden; they resume when it is back. |
 | SM-M5 | Whole screen; open 1Password on the meeting's display, then move it to another display. | Screens pause, then resume. |

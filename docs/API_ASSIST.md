@@ -1,4 +1,4 @@
-# Live Assist contract — revision 1.9.0-a (draft)
+# Live Assist contract — revision 1.9.0-b (draft)
 
 The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is a draft
 until the L1 server work starts (after v1.8.0); then its HTTP part moves into [API.md](API.md) and the API
@@ -129,3 +129,8 @@ The relay's own draft of these messages is `services/assist-relay/PROTOCOL.md`; 
 First line at most 25 words in simple English; at most 3 bullets with the key words in bold; an optional "Say next";
 an optional Urdu / Roman Urdu line explaining the question; exactly `SKIP` when no reply is needed; never ask for
 something already said; consistent with the facts ledger; never invent experience, numbers or promises.
+
+The pack (web/resources/prompts/assist/, version 1.0.0) fixes two things the apps rely on: the language line starts
+with "Urdu:", "Roman Urdu:" or "Arabic:" (apps may style it apart), and the consent line for boss, client and general
+meetings is "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me.
+Is that okay with you?" (the honest version: it also suggests answers; Hassam reviews the wording before launch, N7).

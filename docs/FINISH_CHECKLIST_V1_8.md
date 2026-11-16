@@ -41,6 +41,11 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
 - [ ] 0.1 Screen moments: the exact cause found on Windows and the Mac (plan gating, the switch and project default, the
   Mac permission after updates, meeting detection, thresholds and cap, upload, server). **Acceptance:** a cause report
   in HANDOFF with evidence for each of a–f; a regression test per cause.
+  - 2026-11-16 production evidence (read-only, counts only): Hassam's workspace is on the business (Ultra) plan with
+    screen moments allowed (a: not the cause); 14 desktop recordings in 30 days and **0 screens ever** on the server;
+    the server's PHP has GD with WebP (f: not the cause). So no screen ever left the computers: the Mac's Screen
+    Recording permission lost with each unsigned update (c), silent capture failures and the end-of-call race (d, e) —
+    fixed on b-desktop (`31eb96ed`), in review fixes; Mac signing in CI follows.
 - [ ] 0.1b The pill shows a live "Screens N"; at 0 after 60 s of sharing it says why with a fix button; the after-call
   card and the Library row show the count. **Acceptance:** component tests for the count, the 60 s reason (each reason
   string) and the row icon.
@@ -62,7 +67,8 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   right after a WhatsApp Business call was taken for Business and dropped as unanswered, `c13a3dc7`.)
 - [ ] 0.2d Desktop: unrecognised meetings in a browser or app are never skipped silently: after 20 s of two-way audio a
   "Meeting detected — Record?" chip (Record / Not now / Never for this app). **Acceptance:** detection tests with
-  localized Meet titles, a PWA and Teams web.
+  localized Meet titles, a PWA, Teams web and Meet in Safari (its call sound runs in `com.apple.WebKit.GPU`, which can't
+  be tied to Safari by name; the open cause from 0.1).
 - [ ] 0.3 SIM calls on the S25: diagnosed (VOICE_CALL / uplink / downlink through the helper on One UI 8.5, Android
   16); if blocked, Samsung's own call recording imported right after each call (MediaStore watch), named from the
   contact or number, with the after-call card; nothing in Samsung's folder deleted unless chosen; other brands' folders
