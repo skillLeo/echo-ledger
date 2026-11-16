@@ -27,6 +27,11 @@ path = "tools/smoke.rs"
 name = "assist-relay-eval"
 path = "tools/eval.rs"
 
+# The latency benchmark the owner runs from Pakistan, opt-in with --yes (tools/latency.rs).
+[[bin]]
+name = "assist-relay-latency"
+path = "tools/latency.rs"
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 base64 = "0.22.1"
