@@ -147,6 +147,14 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
+  // Batch 2 (D-013, D-014, D-040, D-041, D-044, D-052, D-062): no internal, debug or vendor text.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`record-recording${size}`, "record-recording", async (page) => page.waitForSelector(".record-controls"), viewport],
+    [`library-free${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".segments .segment");
+      await page.waitForSelector("[data-testid=locked-premium_engines]");
+    }, viewport],
+  ]),
   // Batch 1 (D-045 … D-122, D-072): the app's own confirm dialog, at full size and at the smallest window.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`confirm-delete-recording${size}`, "library&plan=free", async (page) => {

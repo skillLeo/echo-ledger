@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -1391,7 +1391,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         </button>
                       </span>
                     )}
-                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="ElevenLabs · Gemini" />}
+                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
                     {alternateId && (
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
@@ -1448,7 +1448,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : (
                     <>
                       <div className="transcript-bar">
-                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
+                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
                         {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
                           && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
@@ -1480,13 +1480,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         )}
                         {/* Paid parts of a recording the plan leaves out (v1.6.2): in view with their badge. */}
                         {!readOnly && !screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
-                        {!readOnly && <LockedChip feature="connector" label="Ask Claude or ChatGPT" />}
+                        {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
                       {showAs !== "original" && (
                         <div className="small muted" role="status" data-testid="view-status" style={{ marginTop: 6 }}>
                           {views?.status === "ready"
-                            ? `${VIEW_LABELS[showAs]} view${views.model ? ` by ${views.model}` : ""}. The transcript itself is unchanged.`
+                            ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
                             : views?.status === "failed"
                               ? `The view could not be made: ${views.error ?? "try again later."}`
                               : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
@@ -1570,7 +1570,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
                     </div>
                   ) : (
-                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
+                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : transcriptStatusLine(finalStatus)}</div>
                   )
                 )}
                 {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}

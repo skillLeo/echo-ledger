@@ -518,7 +518,9 @@ describe("LibraryView transcript", () => {
     expect(panel.getByTestId("source-app")).toHaveTextContent("Zoom");
     expect(panel.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
     expect(panel.getByText(/Today · 9:30\s?AM · 2:05 · Acme Holdings/)).toBeInTheDocument();
-    expect(panel.getByText("Final transcript · AssemblyAI")).toBeInTheDocument();
+    expect(panel.getByText("Final transcript")).toBeInTheDocument();
+    // D-041: no provider or model anywhere on the page.
+    expect(detail()).not.toHaveTextContent(/AssemblyAI|universal|whisper|Groq Whisper/i);
     // The speaker block's avatar letter is decorative (aria-hidden), so it is left out of the row's cells.
     const rows = [...detail().querySelectorAll(".segment")].map((n) => [...n.children].filter((c) => !c.classList.contains("seg-avatar")).map((c) => c.textContent));
     expect(rows).toEqual([
@@ -551,11 +553,12 @@ describe("LibraryView transcript", () => {
 
   // pending / submitted / processing read "Transcribing…" everywhere (phase 1 contract, section 1 item 11).
   it.each([
-    [null, "Transcript not available yet."],
+    [null, "Not transcribed yet."],
     ["processing", "Transcribing…"],
     ["pending", "Transcribing…"],
     ["submitted", "Transcribing…"],
-    ["awaiting_device", "Transcript awaiting device"],
+    ["awaiting_device", "Waiting for the recording to finish uploading from the device that made it."],
+    ["not_started", "Not transcribed yet."],
   ])("explains a recording without a transcript (final status %s)", async (finalStatus, message) => {
     const pending = makeItem("p", { title: "Pending", status: "processing", transcript: { final_status: finalStatus, final_transcript_id: null, live_available: false, preview: null } });
     await renderLibrary([pending]);
@@ -649,7 +652,7 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).queryByTestId("locked-views")).not.toBeInTheDocument();
   });
 
-  it("keeps a recording's paid parts in view with their badges on a Free plan: double-check, screens, Claude and ChatGPT, premium engines (v1.6.2)", async () => {
+  it("keeps a recording's paid parts in view with their badges on a Free plan, named by what they do, never a vendor (v1.6.2, D-044)", async () => {
     resetEntitlementsForTests(sampleEntitlements("free"));
     const sheet = renderHook(() => useUpgradeSheet());
     try {
@@ -659,9 +662,10 @@ describe("LibraryView transcript", () => {
       const chips: [string, string, string][] = [
         ["double_check", "Double-check", "Pro"],
         ["screen_moments", "Screens", "Pro"],
-        ["connector", "Ask Claude or ChatGPT", "Pro"],
-        ["premium_engines", "ElevenLabs · Gemini", "Ultra"],
+        ["connector", "Ask an AI assistant", "Pro"],
+        ["premium_engines", "Premium engines", "Ultra"],
       ];
+      expect(detail()).not.toHaveTextContent(/Claude|ChatGPT|ElevenLabs|Gemini/);
       for (const [feature, label, badge] of chips) {
         const chip = within(detail()).getByTestId(`locked-${feature}`);
         expect(chip).toHaveTextContent(`${label}${badge}`);
@@ -1549,7 +1553,8 @@ describe("LibraryView Show as", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
     await flushAsync();
     expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument();
-    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Roman Urdu view by claude-opus-5-5. The transcript itself is unchanged.");
+    // D-040: never the model that wrote it.
+    expect(within(detail()).getByTestId("view-status")).toHaveTextContent(/^Roman Urdu view\. The transcript itself is unchanged\.$/);
     expect(callsOf("transcript_views_make")).toHaveLength(0);
 
     fireEvent.click(within(detail()).getByRole("button", { name: "English" }));

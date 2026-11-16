@@ -383,6 +383,15 @@ describe("Notes", () => {
     expect(screen.queryByRole("tab", { name: "AI notes" })).not.toBeInTheDocument();
   });
 
+  it("says EchoLedger writes the notes and reads the files, never the vendor (D-062)", async () => {
+    await renderProjects();
+    tab("Notes");
+    expect(screen.getByText(/^EchoLedger writes call notes after each kept recording of /)).toBeInTheDocument();
+    tab("Files");
+    expect(await screen.findByText(/EchoLedger reads them for the brief and for Ask\./)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Claude (writes|reads)/);
+  });
+
   it("hides the AI notes tab, the switch, Ask and Make again when the plan leaves AI notes out, and keeps the brief and memory", async () => {
     await renderProjects({ aiNotesInPlan: false });
     expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "Screens"]);

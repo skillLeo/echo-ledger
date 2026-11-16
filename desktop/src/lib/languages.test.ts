@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, usedBackupEngine } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -53,8 +53,10 @@ describe("languages", () => {
     expect(learnPrompt(null, "ur", "en")).toBeNull();
   });
 
-  it("names the language and engine of the final transcript and explains a wrong script", () => {
-    expect(engineLine({ final_language: "ur", final_provider_label: "Groq Whisper large-v3", final_model: "whisper-large-v3" })).toBe("Urdu · Groq Whisper large-v3 (whisper-large-v3)");
+  it("names the language of the final transcript, never its engine or model, and explains a wrong script (D-041)", () => {
+    expect(engineLine({ final_language: "ur", final_provider_label: "Groq Whisper large-v3", final_model: "whisper-large-v3" })).toBe("Urdu");
+    expect(engineLine({ final_language: "en", final_provider_label: "AssemblyAI", final_model: "universal-2" })).toBe("English");
+    expect(engineLine({ final_language: null, final_provider_label: "AssemblyAI" })).toBeNull();
     expect(engineLine({ final_language: null, final_provider_label: null })).toBeNull();
     expect(scriptWarning("devanagari")).toMatch(/Hindi letters came back/);
     expect(scriptWarning(null)).toBeNull();
@@ -112,5 +114,19 @@ describe("backup engine and waiting for the engine (v1.5)", () => {
     expect(retryReason("rate_limited", "Groq")).toBe("Groq has reached its limit for now. The transcript waits for it instead of using a less accurate engine.");
     expect(retryReason("unavailable", "Groq")).toBe("Groq is not answering. The transcript waits for it instead of using a less accurate engine.");
     expect(retryReason(null, "Groq")).toBeNull();
+  });
+});
+
+describe("the recording page's words for a transcript's state (D-052)", () => {
+  it("says each state in plain words, never the server's id", () => {
+    expect(transcriptStatusLine(null)).toBe("Not transcribed yet.");
+    expect(transcriptStatusLine("not_started")).toBe("Not transcribed yet.");
+    expect(transcriptStatusLine("awaiting_device")).toBe("Waiting for the recording to finish uploading from the device that made it.");
+    expect(transcriptStatusLine("completed")).toBe("No words were found in this recording.");
+    expect(transcriptStatusLine("failed")).toBe("Transcription failed.");
+    for (const odd of ["some_new_state", "queued_for_retry"]) {
+      expect(transcriptStatusLine(odd)).toBe("The transcript isn't ready yet.");
+      expect(transcriptStatusLine(odd)).not.toMatch(/_/);
+    }
   });
 });

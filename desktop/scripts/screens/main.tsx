@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -244,6 +244,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   // v1.6.2: a promo code for Pro, at half price.
   promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
+    // "record-recording": Home while a Zoom call records (no capture method, no list of apps; D-013, D-014).
+    recording: screen === "record-recording" ? makeRecording({ sourceApp: "zoom", backend: "core_audio_tap" }) : null,
+    levels: screen === "record-recording" ? [0.42, 0.31] : [0, 0],
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,
     deviceName: "Work laptop",

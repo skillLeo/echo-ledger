@@ -101,9 +101,30 @@ export function nextLanguage(value: string | null | undefined): LanguageChoice {
 
 /** "Urdu · Groq Whisper large-v3 (whisper-large-v3)" for the player; null before a final transcript exists. */
 export function engineLine(transcript: { final_language?: string | null; final_provider_label?: string | null; final_model?: string | null } | undefined): string | null {
-  if (!transcript?.final_provider_label) return null;
-  const engine = transcript.final_model ? `${transcript.final_provider_label} (${transcript.final_model})` : transcript.final_provider_label;
-  return `${languageLabel(transcript.final_language)} · ${engine}`;
+  // The language only (D-041): which provider or model transcribed it is never shown to people; nothing when the
+  // language is not known ("Transcribed in Auto" would say nothing).
+  const code = normalizeLanguage(transcript?.final_language);
+  return code ? languageLabel(code) : null;
+}
+
+/** What the recording page says when there is no transcript text (pure, D-052): plain words for every state, never the
+ * server's status id. The ones still being transcribed say so elsewhere (`transcribingLine`). */
+export function transcriptStatusLine(status: string | null | undefined): string {
+  switch (status) {
+    case null:
+    case undefined:
+    case "":
+    case "not_started":
+      return "Not transcribed yet.";
+    case "awaiting_device":
+      return "Waiting for the recording to finish uploading from the device that made it.";
+    case "completed":
+      return "No words were found in this recording.";
+    case "failed":
+      return "Transcription failed.";
+    default:
+      return "The transcript isn't ready yet.";
+  }
 }
 
 /**

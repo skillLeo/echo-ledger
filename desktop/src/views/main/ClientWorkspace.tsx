@@ -323,7 +323,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
           <div className="toggle">
             <div>
               <label htmlFor={`ai-notes-${client.id}`}>AI notes</label>
-              <div className="small muted" id={`ai-notes-hint-${client.id}`}>Claude writes call notes after each kept recording of {client.name}.</div>
+              <div className="small muted" id={`ai-notes-hint-${client.id}`}>EchoLedger writes call notes after each kept recording of {client.name}.</div>
             </div>
             <button id={`ai-notes-${client.id}`} type="button" role="switch" aria-checked={ws.client.ai_notes} aria-describedby={`ai-notes-hint-${client.id}`}
               className={`switch ${ws.client.ai_notes ? "on" : ""}`} disabled={busy} onClick={() => void toggleNotes()} />
@@ -738,7 +738,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     <>
       <div className={`file-drop ${over ? "over" : ""}`} data-testid="file-drop">
         <ImportIcon size={26} />
-        <span>Drop PDF, Word, text or Markdown files here. Claude reads them for the brief and for Ask.</span>
+        <span>Drop PDF, Word, text or Markdown files here. EchoLedger reads them for the brief and for Ask.</span>
         <div className="row">
           <button type="button" className="btn primary" onClick={() => void pick()}><PlusIcon size={16} />Add files</button>
           <button type="button" className="btn" aria-expanded={pasting} onClick={() => setPasting(!pasting)}>Paste instructions</button>
