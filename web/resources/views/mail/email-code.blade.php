@@ -1,7 +1,7 @@
 <x-mail::message>
 # {{ $signUp ? 'Your code to create your account' : 'Your code to sign in' }}
 
-Enter this code in EchoLedger:
+Enter this code in @brand:
 
 <x-mail::panel>
 {{ $code }}

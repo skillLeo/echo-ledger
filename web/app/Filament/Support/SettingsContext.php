@@ -192,7 +192,7 @@ final class SettingsContext
                 'keywords' => ['rename', 'remove', 'sign out device'], 'ru' => ['naam badlo']];
         }
         $features = app(Entitlements::class)->features($this->workspaceId(), $this->user->id);
-        foreach (Features::ALL as $key => $feature) {
+        foreach (Features::all() as $key => $feature) {
             $out[] = [...$base, 'id' => 'plan.feature.'.$key, 'title' => $feature['name'], 'page' => 'plan', 'kind' => 'info',
                 'description' => $feature['description'], 'keywords' => [], 'locked' => ! ($features[$key] ?? false), 'feature' => $key];
         }

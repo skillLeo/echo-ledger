@@ -34,6 +34,7 @@ use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ProviderEndpoints;
+use App\Support\Brand;
 use App\Support\UnsureMarkers;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -166,6 +167,7 @@ class Settings extends Page
             'mail_encryption' => isset(MailSettings::ENCRYPTIONS[$all['mail.encryption'] ?? '']) ? $all['mail.encryption'] : 'tls',
             'mail_username' => $all['mail.username'] ?? null,
             'mail_from_address' => $all['mail.from_address'] ?? null,
+            // Only a name saved here (the product's name is the placeholder), so saving the form never stores it.
             'mail_from_name' => $all['mail.from_name'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
@@ -526,7 +528,7 @@ class Settings extends Page
                                 ->visible(fn (): bool => app(CredentialVault::class)->has(...MailSettings::VAULT)),
                             TextInput::make('mail_from_address')->label('From address')->email()->maxLength(255)->placeholder('echoledger@example.com')
                                 ->helperText('Use an address of a domain whose DNS records allow this server (SPF, DKIM, DMARC).'),
-                            TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder('EchoLedger'),
+                            TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder(Brand::name()),
                             Actions::make([
                                 Action::make('sendTestEmail')->label('Send a test email')->icon(Heroicon::OutlinedPaperAirplane)->color('gray')
                                     ->modalHeading('Send a test email')
@@ -585,7 +587,7 @@ class Settings extends Page
             function () use ($document): void {
                 echo json_encode($document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
             },
-            'EchoLedger console settings '.now()->format('Y-m-d').'.json',
+            Brand::name().' console settings '.now()->format('Y-m-d').'.json',
             ['Content-Type' => 'application/json'],
         );
     }

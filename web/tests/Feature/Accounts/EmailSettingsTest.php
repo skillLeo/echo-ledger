@@ -140,6 +140,40 @@ it('sends every email through the saved SMTP server, with its encryption and sen
     expect(config('mail.default'))->toBe('array')->and(config('mail.from.address'))->not->toBe('echoledger@example.com');
 });
 
+it('sends from the product\'s name while no From name is saved, so a rename changes the sender', function () {
+    $this->signInAsAdmin();
+
+    // Nothing saved: the field is empty with the product's name as its placeholder, and saving the page keeps it empty.
+    $page = emailSettingsPage($this)->assertSet('data.mail_from_name', null)->assertSeeHtml('placeholder="EchoLedger"');
+    $page->fillForm(['mail_host' => 'mail.example.com', 'mail_from_address' => 'echoledger@example.com'])->call('save')->assertHasNoFormErrors();
+    $settings = app(SettingsRepository::class);
+    $settings->flush();
+    expect($settings->get('mail.from_name'))->toBeNull()
+        ->and(DB::table('settings')->where('key', 'mail.from_name')->value('value'))->toBeNull()
+        ->and(config('mail.from'))->toBe(['address' => 'echoledger@example.com', 'name' => 'EchoLedger']);
+
+    config(['echoledger.brand.name' => 'Nimbus Ledger']);
+    app(MailSettings::class)->apply();
+    expect(config('mail.from.name'))->toBe('Nimbus Ledger');
+    emailSettingsPage($this)->assertSet('data.mail_from_name', null)->assertSeeHtml('placeholder="Nimbus Ledger"');
+
+    // A saved name wins, and stays as it is through a rename.
+    emailSettingsPage($this)->fillForm(['mail_from_name' => 'Acme Support'])->call('save')->assertHasNoFormErrors();
+    config(['echoledger.brand.name' => 'Another Name']);
+    app(MailSettings::class)->apply();
+    expect(config('mail.from.name'))->toBe('Acme Support');
+});
+
+it('picks the sender\'s name: the saved one, else the product\'s name, else the .env file\'s', function () {
+    $env = ['address' => 'env@example.com', 'name' => 'Name from the env file'];
+
+    expect(MailSettings::from(['mail.from_name' => ' Acme Support '], $env)['name'])->toBe('Acme Support')
+        ->and(MailSettings::from(['mail.from_name' => '  '], $env)['name'])->toBe('EchoLedger')
+        ->and(MailSettings::from([], $env))->toBe(['address' => 'env@example.com', 'name' => 'EchoLedger']);
+    config(['echoledger.brand.name' => '']);
+    expect(MailSettings::from(['mail.from_name' => null], $env)['name'])->toBe('Name from the env file');
+});
+
 it('gives a running queue worker the latest SMTP server before each queued email', function () {
     app(MailSettings::class)->apply();
     expect(config('mail.default'))->toBe('array');

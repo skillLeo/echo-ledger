@@ -26,9 +26,9 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
 - [ ] **Phone** (b-phone, with the S5 follow-up): U7 names, u23 the dot's 48 dp target and TalkBack action, R6 the
   secure flag before the mode loads and on every mode change, R7 "Hide EchoLedger windows" kept across process death,
   R28 ShareGuard update() thread safety; screenshots (U8, phone part).
-- [ ] **Desktop** (one builder, after 0.4): S1 sharing-bar titles in logs, S4 Share Check commands only from the main
+- [x] **Desktop** (merged 2026-11-16 `5d9f9779`, reviewed twice; cargo 1,362, vitest 2,202; two minor follow-ups — the tray lock and the bar sentence — in b-desktop-reopen): S1 sharing-bar titles in logs, S4 Share Check commands only from the main
   window, S5 no silent re-set, U1–U5, U7 names, U8 screenshots, u9–u21, u24–u26, R1–R5, R9–R25, R27, R28-desktop.
-- [ ] **Web and guides** (web builder, after 0.2): S3 Share Check validation, u22 admin empty state, R24 the bare
+- [x] **Web and guides** (merged 2026-11-16 with L0/L1.5, reviewed twice; full pest 5,774): S3 Share Check validation, u22 admin empty state, R24 the bare
   "presenting" pattern in share-bars.json, R26 an index on the matrix columns and pruning (a new migration), U6 and
   the guide sentences (names, the hidden state, the test-pattern flash, the phone's Private/Show).
 - [x] **Lead:** S6/S7 the words check reads JSX text and one-word labels, with Urdu, Arabic and Roman Urdu forms
@@ -138,6 +138,10 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
     Merged `406db0de` (reviewed twice): every floating window is a black box (FLAG_SECURE) in screen shares, recordings and
     screenshots unless Settings → During screen sharing is Show; Hide EchoLedger windows (button + tile) for the session;
     one set of names (docs/DESIGN_SYSTEM.md). Waiting: the S25 retest with Meet, Zoom, WhatsApp (phone batch A–B).
+  - 2026-11-16 16:13 S25 retest of the merged build (phone batch A): A1–A5 and A7 pass. The window is SECURE and 100 %
+    black in screenshots and recordings in Private, also after a restart; Show shows the controls; Hide, the dot and
+    the tile work both ways (docs/SCREEN_SHARE_MATRIX.md). Waiting: A6 (Live Translate) and the Meet, Zoom and WhatsApp
+    viewers (batch B, with Hassam and a second screen).
 - [ ] S6 Trust UX: a privacy badge on every floating window and the Assist card (Private / Not checked / Visible in
   shares) from the last real check, a tap opens Share Check; on a Mac the per-app list; a "Hide all EchoLedger windows"
   global shortcut (conflict-checked, not ⌘⌥H); Settings → Privacy page (switch and status, last check + Check now, the

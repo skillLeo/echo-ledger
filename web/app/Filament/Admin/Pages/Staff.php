@@ -9,6 +9,7 @@ use App\Models\StaffRole;
 use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\Staff\StaffAccess;
+use App\Support\Brand;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
@@ -55,7 +56,7 @@ class Staff extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return 'Who works on EchoLedger and what each may do here. Everyone needs two-step sign-in before the admin panel opens.';
+        return 'Who works on '.Brand::name().' and what each may do here. Everyone needs two-step sign-in before the admin panel opens.';
     }
 
     public function content(Schema $schema): Schema

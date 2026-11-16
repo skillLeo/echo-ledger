@@ -22,7 +22,7 @@ final class OverridesForm
     public static function fields(): array
     {
         return [
-            Grid::make(['default' => 2])->schema(array_map(fn (string $f): Select => Select::make("override_feature_{$f}")->label(Plan::FEATURE_LABELS[$f])
+            Grid::make(['default' => 2])->schema(array_map(fn (string $f): Select => Select::make("override_feature_{$f}")->label(Plan::featureLabel($f))
                 ->options(['plan' => 'The plan\'s', 'on' => 'On', 'off' => 'Off'])->default('plan')->selectablePlaceholder(false), Plan::FEATURES)),
             Grid::make(['default' => 2])->schema(array_map(fn (string $l): TextInput => TextInput::make("override_limit_{$l}")->label(Features::LIMIT_LABELS[$l])
                 ->placeholder('The plan\'s')->helperText($l === 'storage_bytes' ? 'In GB. "none" for no limit.' : '"none" for no limit.')
@@ -89,7 +89,7 @@ final class OverridesForm
         foreach (Plan::FEATURES as $feature) {
             $choice = $form["override_feature_{$feature}"];
             if ($choice !== 'plan') {
-                $parts[] = Plan::FEATURE_LABELS[$feature].' '.$choice;
+                $parts[] = Plan::featureLabel($feature).' '.$choice;
             }
         }
         foreach (array_keys(Features::LIMITS) as $limit) {

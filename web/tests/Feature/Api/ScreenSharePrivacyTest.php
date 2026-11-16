@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 use App\Http\Controllers\Api\ShareBarsController;
+use App\Models\Device;
 use App\Models\ShareCheckResult;
+use App\Models\User;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\RateLimiter;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -19,6 +23,12 @@ function shareCheckBody(array $overrides = []): array
 {
     return ['platform' => 'windows', 'os_build' => '10.0.26100', 'app_version' => '1.8.1', 'method' => 'wgc', 'result' => 'pass',
         'reason' => null, 'meeting_app' => null, 'meeting_app_version' => null, 'share_mode' => null, ...$overrides];
+}
+
+/** A Windows computer: since the v1.8.1 audit (S3) a result is about the sending device's own platform. */
+function shareComputer(?User $owner = null, string $platform = 'windows'): Device
+{
+    return Fx::device($owner, ['platform' => $platform]);
 }
 
 /** @return array<string, mixed> */
@@ -48,15 +58,15 @@ describe('POST /api/diagnostics/share-checks', function () {
         $body = shareCheckBody();
         unset($body['reason'], $body['meeting_app'], $body['meeting_app_version'], $body['share_mode']);
 
-        $this->api(Fx::token(Fx::device()))->postJson('/api/diagnostics/share-checks', $body)->assertCreated();
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', $body)->assertCreated();
         expect(ShareCheckResult::query()->sole()->reason)->toBeNull();
     });
 
     it('stores a result only under the caller: ids in the body are never read', function () {
         $alice = Fx::user();
-        $aliceDevice = Fx::device($alice);
+        $aliceDevice = shareComputer($alice);
         $bob = Fx::user();
-        $bobDevice = Fx::device($bob);
+        $bobDevice = shareComputer($bob);
 
         $this->api(Fx::token($bobDevice))->postJson('/api/diagnostics/share-checks', shareCheckBody([
             'user_id' => $alice->id, 'device_id' => $aliceDevice->id, 'id' => 1,
@@ -67,7 +77,7 @@ describe('POST /api/diagnostics/share-checks', function () {
     });
 
     it('never stores a picture, a window title or any other field', function () {
-        $this->api(Fx::token(Fx::device()))->postJson('/api/diagnostics/share-checks', shareCheckBody([
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody([
             'image' => base64_encode('PICTURE-BYTES'), 'window_title' => 'SECRET-WINDOW-TITLE', 'contents' => 'SECRET-CONTENTS',
         ]))->assertCreated();
 
@@ -75,7 +85,7 @@ describe('POST /api/diagnostics/share-checks', function () {
     });
 
     it('refuses what is not a result', function (array $change) {
-        $this->api(Fx::token(Fx::device()))->postJson('/api/diagnostics/share-checks', shareCheckBody($change))
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody($change))
             ->assertStatus(422)->assertJsonPath('code', 'validation_failed');
         expect(ShareCheckResult::query()->count())->toBe(0);
     })->with([
@@ -92,22 +102,58 @@ describe('POST /api/diagnostics/share-checks', function () {
         'too long a meeting app version' => [['meeting_app_version' => str_repeat('6', 33)]],
         'an unknown share mode' => [['share_mode' => 'region']],
         'an array for a string' => [['os_build' => ['10']]],
+        // The v1.8.1 audit (S3): another platform than the device's own, and versions with more than version characters.
+        'a Mac result from a Windows computer' => [['platform' => 'macos', 'os_build' => '27.3', 'method' => 'sck']],
+        'an Android result from a Windows computer' => [['platform' => 'android', 'method' => 'recording_callback']],
+        'markup in the OS build' => [['os_build' => '<b>10.0</b>']],
+        'a line break in the OS build' => [['os_build' => "10.0\n26100"]],
+        'a quote in the app version' => [['app_version' => '1.8.1"']],
+        'a path in the app version' => [['app_version' => '../1.8.1']],
+        'a semicolon in the meeting app version' => [['meeting_app' => 'zoom', 'meeting_app_version' => '6.4.1;rm']],
+        'a window title as the meeting app version' => [['meeting_app' => 'teams', 'meeting_app_version' => 'Budget | Microsoft Teams']],
+        'letters from another script in the OS build' => [['os_build' => '10.0.٢٦١٠٠']],
+    ]);
+
+    it('says which field is wrong when the platform is not the device\'s own', function () {
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody(['platform' => 'macos', 'method' => 'sck']))
+            ->assertStatus(422)->assertJsonValidationErrors(['platform'])->assertJsonMissingValidationErrors(['os_build', 'app_version']);
+        expect(ShareCheckResult::query()->count())->toBe(0);
+    });
+
+    it('takes each platform from a device of that platform', function (string $platform, string $method, string $build) {
+        $this->api(Fx::token(shareComputer(platform: $platform)))->postJson('/api/diagnostics/share-checks', shareCheckBody(['platform' => $platform, 'method' => $method, 'os_build' => $build]))
+            ->assertCreated();
+        expect(ShareCheckResult::query()->sole()->platform)->toBe($platform);
+    })->with([
+        'Windows' => ['windows', 'dxgi', '10.0.26100'],
+        'a Mac' => ['macos', 'sck', '15.1 (24B83)'],
+        'a phone' => ['android', 'recording_callback', '16'],
+    ]);
+
+    it('takes the ways systems and apps write versions', function (array $change) {
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody($change))->assertCreated();
+    })->with([
+        'a build with a dot release' => [['os_build' => '10.0.26100.2605']],
+        'a build in brackets' => [['os_build' => '11 24H2 (26100)']],
+        'a pre-release app' => [['app_version' => '1.8.1-beta.2']],
+        'build metadata' => [['app_version' => '1.8.1+20261116_1']],
+        'a meeting app build' => [['meeting_app' => 'zoom', 'meeting_app_version' => '6.4.1 (61024)']],
     ]);
 
     it('accepts the longest values the contract allows', function () {
-        $this->api(Fx::token(Fx::device()))->postJson('/api/diagnostics/share-checks', shareCheckBody([
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody([
             'os_build' => str_repeat('1', 64), 'app_version' => str_repeat('1', 32), 'meeting_app_version' => str_repeat('6', 32), 'meeting_app' => 'other',
         ]))->assertCreated();
     });
 
     it('needs a device with config:read', function () {
         $this->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertUnauthorized();
-        $this->api(Fx::token(Fx::device(), ['library:read']))->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertForbidden();
+        $this->api(Fx::token(shareComputer(), ['library:read']))->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertForbidden();
         expect(ShareCheckResult::query()->count())->toBe(0);
     });
 
     it('slows a device down after thirty an hour, and only that device', function () {
-        $device = Fx::device();
+        $device = shareComputer();
         $token = Fx::token($device);
         RateLimiter::clear('share-check:'.$device->getAuthIdentifier());
         foreach (range(1, 30) as $_) {
@@ -115,7 +161,7 @@ describe('POST /api/diagnostics/share-checks', function () {
         }
         $this->api($token)->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertStatus(429)->assertHeader('Retry-After');
 
-        $this->api(Fx::token(Fx::device()))->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertCreated();
+        $this->api(Fx::token(shareComputer()))->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertCreated();
         expect(ShareCheckResult::query()->count())->toBe(31);
     });
 
@@ -129,7 +175,7 @@ describe('POST /api/diagnostics/share-checks', function () {
 
     it('keeps the results when the device is removed, and erases them with the person', function () {
         $user = Fx::user();
-        $device = Fx::device($user);
+        $device = shareComputer($user);
         $this->api(Fx::token($device))->postJson('/api/diagnostics/share-checks', shareCheckBody())->assertCreated();
 
         $device->delete();
@@ -137,6 +183,22 @@ describe('POST /api/diagnostics/share-checks', function () {
 
         $user->delete();
         expect(ShareCheckResult::query()->count())->toBe(0);
+    });
+
+    it('keeps a result 180 days, then the daily model:prune deletes it', function () {
+        $this->travelTo(Carbon::parse('2026-11-16 12:00:00'));
+        $device = shareComputer();
+        foreach (['old' => '2026-05-20 11:59:59', 'day-180' => '2026-05-20 12:00:01', 'recent' => '2026-11-15 09:00:00'] as $os => $at) {
+            ShareCheckResult::query()->create(['user_id' => $device->user_id, 'device_id' => $device->id, 'platform' => 'windows', 'os_build' => $os,
+                'app_version' => '1.8.1', 'method' => 'wgc', 'result' => 'pass'])->forceFill(['created_at' => Carbon::parse($at)])->save();
+        }
+
+        // The scheduled command names no model: it finds this one by itself.
+        Artisan::call('model:prune', ['--pretend' => true]);
+        expect(Artisan::output())->toContain(ShareCheckResult::class)->and(ShareCheckResult::query()->count())->toBe(3);
+
+        Artisan::call('model:prune');
+        expect(ShareCheckResult::query()->pluck('os_build')->all())->toEqualCanonicalizing(['day-180', 'recent']);
     });
 });
 
@@ -218,7 +280,24 @@ describe('GET /api/config/share-bars', function () {
             ->and($matches('windows', 'Zoom.exe', 'You are screen sharing'))->toBe('zoom-share-toolbar-win')
             ->and($matches('macos', 'Google Chrome', 'meet.google.com is sharing your screen.'))->toBe('chromium-sharing-bar-mac')
             ->and($matches('windows', 'ms-teams.exe', 'Sharing control bar'))->toBe('teams-sharing-bar-win')
+            ->and($matches('macos', 'Microsoft Teams', 'Sharing control bar | Microsoft Teams'))->toBe('teams-sharing-bar-mac')
             ->and($matches('macos', 'zoom.us', 'Zoom Meeting'))->toBeNull()
             ->and($matches('macos', 'Google Chrome', 'Inbox - Gmail'))->toBeNull();
+    });
+
+    it('never takes a Teams meeting called "Presenting …" for a sharing bar (the v1.8.1 audit, R24)', function () {
+        $matches = function (string $platform, string $owner, string $title): array {
+            return collect(shareBarsFile()['patterns'])->filter(fn (array $p): bool => $p['platform'] === $platform
+                && preg_match('~'.$p['owner'].'~u'.($p['flags'] ?? ''), $owner) === 1 && preg_match('~'.$p['title'].'~u'.($p['flags'] ?? ''), $title) === 1)
+                ->pluck('id')->values()->all();
+        };
+
+        foreach (['Presenting Q3 | Microsoft Teams', 'Presenting', 'Weekly sync (presenting slides) | Microsoft Teams'] as $title) {
+            expect($matches('macos', 'Microsoft Teams', $title))->toBe([], $title)
+                ->and($matches('windows', 'ms-teams.exe', $title))->toBe([], $title);
+        }
+        expect($matches('macos', 'Microsoft Teams', "You're sharing your screen"))->toBe(['teams-sharing-bar-mac'])
+            ->and($matches('windows', 'ms-teams.exe', 'You are sharing'))->toBe(['teams-sharing-bar-win'])
+            ->and(shareBarsFile()['version'])->toBeGreaterThanOrEqual(2);
     });
 });

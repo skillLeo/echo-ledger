@@ -14,6 +14,10 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 
 **Part A — from the Mac over adb (you keep the phone unlocked; tap only when a system prompt appears):**
 
+Run 2026-11-16 16:13–16:24 on the v1.1 build: A1–A5 and A7 pass (SCREEN_SHARE_MATRIX.md, "Retest with the merged S5
+build"); A6 waiting (the phone locked by its power key). Samsung's recorder can't be started over adb, so the captures
+use adb's recorder and screenshots; the overlay buttons are found with `uiautomator dump --windows`.
+
 | # | Step | Pass when |
 |---|---|---|
 | A1 | `dumpsys window windows`: every "EchoLedger …" window | SECURE next to each while the setting is Private |
@@ -33,10 +37,21 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 | B3 | Zoom: the phone shares its screen | As B1 |
 | B4 | WhatsApp video call with a second device or person, share the phone screen | As B1 |
 
-**Part C — v1.8 0.3, SIM calls (you make the calls):** with the helper connected, one incoming and one outgoing SIM
-call, an unsaved number, a 5-second call and two calls back to back. EchoLedger reads its capture log over adb after
-each: which audio source (VOICE_CALL, uplink, downlink) opened and whether both sides had sound. If One UI blocks them,
-the next build imports Samsung's own call recordings instead (Phone app → Settings → Record calls → Auto record).
+**Part C — v1.8 0.3, SIM calls through the Phone app's own recordings (you make the calls):**
+
+1. Setup: the full build; auto-record on; Record phone calls → Always; allow Call log, Contacts and Music and audio.
+   Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls. Check over adb:
+   `settings get system record_calls_automatically_on_off` = 1. Run `adb logcat -s EchoLedgerSim`.
+2. Calls: incoming from a saved contact (30 s); outgoing to a saved contact (30 s); an unsaved number (30 s — the
+   after-call card says "Call with <number>"); a 5-second call ("Not imported, shorter than 10 s"; then Skip calls
+   shorter than → Never, repeat: imported); two calls back to back (~20 s each: two recordings, each named right).
+3. Per call note: the `sim call:` line (which source opened, whether each side had sound), the `phone app recording:`
+   line, the card title, Settings "Last call …", one Library item with the right length, the files still in My Files →
+   Recordings → Call, and no "Missed recording".
+4. Once: `content query --uri content://media/external/audio/media --projection
+   relative_path:owner_package_name:date_added:date_modified:_size:duration --where "relative_path LIKE 'Recordings/Call%'"`
+   — the owner should be `com.samsung.android.dialer` or `com.samsung.android.incallui`; another package is a one-line
+   addition; null → the "Import this recording" flow appears instead.
 
 **Part D — v1.8 0.2 missed recordings (after the build with the detector is installed):**
 

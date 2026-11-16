@@ -14,6 +14,7 @@ use App\Http\Middleware\AuthenticateStaff;
 use App\Http\Middleware\EnsureStaffTwoFactor;
 use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
+use App\Support\Brand;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Enums\ThemeMode;
@@ -57,7 +58,7 @@ class AdminPanelProvider extends PanelProvider
         return $panel
             ->id('admin')
             ->path('admin')
-            ->brandName('EchoLedger admin')
+            ->brandName(fn (): string => Brand::adminName())
             ->brandLogo(fn (): View => view('filament.admin.brand'))
             ->brandLogoHeight('1.5rem')
             ->favicon(asset('favicon.svg'))

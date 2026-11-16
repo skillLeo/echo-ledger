@@ -21,6 +21,7 @@ use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
+use App\Support\Brand;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -75,7 +76,11 @@ final class ConsoleUploads
 
     public const DUPLICATE_MESSAGE = 'Already in your Library';
 
-    public const NOT_MEDIA_MESSAGE = 'This is not a sound or video file EchoLedger can read.';
+    /** What a file that is no sound or video gets (the product's name in it). */
+    public static function notMediaMessage(): string
+    {
+        return 'This is not a sound or video file '.Brand::name().' can read.';
+    }
 
     public function __construct(private readonly ChunkedUploadService $uploads) {}
 
@@ -129,7 +134,7 @@ final class ConsoleUploads
     {
         $mime = self::storedMime($file['name'], $file['type'] ?? null);
         if ($mime === null) {
-            throw new ApiError(422, 'unsupported_type', self::NOT_MEDIA_MESSAGE);
+            throw new ApiError(422, 'unsupported_type', self::notMediaMessage());
         }
         $sha = strtolower($file['sha256']);
         $size = (int) $file['size'];
@@ -354,6 +359,6 @@ final class ConsoleUploads
         }
         $recording->captureSession->delete();
 
-        throw new ApiError(422, 'not_audio', self::NOT_MEDIA_MESSAGE);
+        throw new ApiError(422, 'not_audio', self::notMediaMessage());
     }
 }

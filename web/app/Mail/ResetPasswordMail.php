@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** "Forgot password?" on the sign-in page: a link to choose a new password. */
 final class ResetPasswordMail extends AccountMail
 {
@@ -11,7 +13,7 @@ final class ResetPasswordMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return 'Reset your EchoLedger password';
+        return 'Reset your '.Brand::name().' password';
     }
 
     protected function template(): string

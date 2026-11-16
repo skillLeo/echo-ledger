@@ -226,8 +226,9 @@ export default function OverlayApp() {
         <div className="overlay-head" data-testid="caption-header">
           <span className={`status-dot ${state.live ? "live" : ""}`} />
           <span>{state.live ? "Live" : "Captions"}</span>
+          {/* Next to "Live", at full strength: what people watching a screen share see of these captions. */}
+          <PrivacyBadge compact />
           <div className="overlay-tools" data-hit={(!idle && !concealed) || undefined}>
-            <PrivacyBadge compact />
             <button className="icon-btn grip" title="Drag" onMouseDown={startDrag}><GripIcon size={14} /></button>
             <button className="icon-btn" title="Copy last 2 minutes" onClick={() => api.copyLastMinutes(2).catch(() => undefined)}><CopyIcon size={13} /></button>
             <button className="icon-btn" title="Hide captions" aria-label="Hide captions" onClick={() => api.hideCaptions().catch(() => undefined)}><CloseIcon size={14} /></button>

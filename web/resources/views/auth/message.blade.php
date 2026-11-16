@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', $title.' · EchoLedger')
+@section('title', $title.' · '.\App\Support\Brand::name())
 
 @section('content')
     @include('auth.form-styles')

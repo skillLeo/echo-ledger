@@ -41,13 +41,80 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   set (Flash option); Groq — set (fast-mode fallback; today Urdu transcription); Soniox — set (live STT default,
   translation on); AssemblyAI — set (live STT option); **OpenAI — empty** (optional provider in the relay); **Moonshot
   (Kimi) — no field yet** (added with the L1 server work; behind a flag until measured). None is needed before v1.9.
+- **PAUSED 2026-11-16 ~14:40 PKT (this account at 96% of its weekly usage; resets Thu 19 Nov 08:00 PKT; the first
+  account resets Fri 21 Nov 10:00 PKT). Resume each from here (review notes in the scratchpad may be gone after a
+  reboot; the branches hold the work):**
+  - web b-web @257f27ef (clean): P1 server+console done, review = changes needed (2 major: running transcripts not
+    counted in minutes_left; N+1 on GET /api/library; + minors; contract 1.8.0-f to write: own_key/needs_key, estimate
+    `skipped`, Re-transcribe as on audio_only = Transcribe, bulk rounds once, transcribe while uploading, shared items
+    hide Transcribe, `transcribe_by_default` on finish, two error-table rows + ErrorEnvelopeTest 56). P2 WIP on
+    b-web-p2-wip @019dfec0 (2.2 dedupe done + `transcripts:dedupe-check`; then 2.1 rows + backfill dry run, 2.3 fonts,
+    2.4 snackbar).
+  - desktop-1 b-desktop @a38e71b3 (round 2 done: f1df7d12…97c387f9, merged v1.1 at 3bebf5ff; cargo 1,408 + the bars test
+    since fixed on v1.1 `852822a5`; vitest 2,232): combined re-review = changes needed: [major] screens/detect.rs:324
+    (+ :52, :322, :12, test :571) moved-then-stopped content (≈6 s scrolling, 6+ quick flips, typing) is held as camera
+    ~30 s, so the page the presenter stops on is kept ~30 s late or never — release a region whose cells all went still
+    for 2–3 s (or don't let jumps / post-motion "busy" renew the hold), keep noise/speaker panels as camera; tests: 8 s
+    of 1-s flips, 8 s scrolling, 3-s sparse scroll, each then a held page, with no panel and beside each panel → kept
+    within ~3 s; one-slide-for-minutes still keeps 1; fix the doc + the :322 comment. Minors: actions.rs:364 clear a
+    stale capture_screen registration error after a successful hold (keep the layout note); shortcuts.rs:284 re-hold
+    Capture screen now after Reset/Import during a Windows call; PillApp.tsx:261 record a say-once reason only when
+    tray === "why"; screensWhy.ts:82 remember "project" per project id. P1 WIP on b-desktop-wip @67e61393. Merge the
+    whole chain (0.1 → signing → key → 0.1c → 0.1b) after this re-review approves.
+  - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) reviewed = changes needed: [major]
+    tray.rs:479 (+:226) a queued older draw can overwrite a newer one → a generation number taken first in
+    commands::status (AtomicU64 SeqCst) passed through update(); TrayCache keeps the newest; changes() ignores older;
+    test changes(gen 2,Y) then (gen 1,X) → Y stays (replace the try_lock asserts at :629/:633); [minor]
+    PrivacySettings.tsx:176/:186 follow hidden_line's order (line only when barOnScreen && !hiddenByShortcut; Show when
+    hiddenByShortcut || !barOnScreen; test); [minor] check.rs:851 a source check that the PrivacyStatus literal in
+    status() holds no .lock(); also PrivacySettings.tsx:45 still says "the pill".
+    NOTE: v1.1 has the merged audit with the tray-lock deadlock risk until this follow-up merges; 0.2b/0.2/0.2d review =
+    changes needed (4 blockers, false missed reports) — fixes D1–D5, D8–D10 on b-desktop-reopen-d-wip @d1bfd347
+    (regression tests pass), D6, D7, D11–D14 still to do.
+  - phone b-phone (clean): all 9 majors of the 0.2 re-review + 0.3 review fixed (`8c22e1bd` trust/security B1–B4,
+    `8398ad2e` A1, A2/B6, A3, B5, B16; each regression test fails on the old code); left: A4–A9 minors, B7–B15, B17, the
+    "heard both sides itself" wording, the full suite + repo-policy, then a re-review; B18 guide text is in its report
+    (ask it again on resume); P1 WIP on b-phone-p1-wip @91141de6 (+ "Delete must win over every timer").
+  - relay b-relay @f9e1f4c7: aligned with 1.9.0-b, 57/58 unit tests; next: the token-replay budget fix (decision: cap
+    remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
+    Dockerfile/systemd/README, clippy.
+  - Phone: the v1.1 build (phone code `5411d52e`) is INSTALLED on the S25 (16:13, `pm install -r`; settings kept).
+    Batch A: A1–A5 and A7 pass. A6 (Live Translate) is blocked by a bug for the phone builder: from the Watch
+    translate tile, with a video playing in Samsung's video player (USAGE_MEDIA, started, uid 10133) and the helper
+    ready, the app says "Nothing is playing yet" (twice, 16:36). LiveTranslateService takes that path only when
+    TranslateTargets finds no playing app with a uid, so look at what helper.players() returns on Android 17 (the
+    hidden getClientUid/getPlayerState getters) and add a test for it.
+  - Mac menu bar, Hassam 2026-11-16: the red recording icon "looks unprofessional, no padding". The red tile fills the
+    whole 18 pt icon edge to edge, so it looks cramped next to other items. Decision for the desktop builder (next
+    round, before v1.8.1): a smaller rounded red badge inside the 18 pt canvas (about 14 pt, centred, transparent
+    margin), the mark inset in it, amber when paused; a screenshot next to other menu bar items for the review.
+  - Mac meeting shares (S-5/S-6): Meet started 16:44 (Chrome, meeting jdd-cdmz-meb, the phone asked to join from the
+    Meet app over adb), paused before the share because Hassam took a call. Method from now on: the phone is the viewer
+    and `scratchpad/phone/meetmap.py` maps each EchoLedger window into the phone's view of the share and measures its
+    red recording dot, cropping only EchoLedger's small windows. The magenta panels tried first are retired: they
+    showed through EchoLedger's transparent windows on Hassam's screen, and a transparent window would read as a pass.
+    Next: a new Meet, the phone joins, Hassam clicks Join now, Admit, Share screen → Entire screen → Built-in
+    Retina Display → Share; then Zoom in each capture mode.
+  - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
+    as mac-backup-160). Measured: every window state 0 incl. TUINSWindow; the installed app's own Share Check passes as
+    itself (capture allowed through "Device Control and Data Access" on macOS 27). MAC-31's Finder path passed (16:25,
+    `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
+    and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
-    jump only without a main window) · waiting: MAC-31.
+    jump only without a main window) · MAC-31 Finder path pass (16:25); Dock, Launchpad, ⌘W, ⌘M waiting.
   - 2026-11-16 · v1.8 0.2 server (missed recordings) · `d71195cb` · changes needed → fixed → approve (2 minor follow
     in b-web) · contract 1.8.0-c · not deployed yet (next web deploy batches it with the audit fixes).
   - 2026-11-16 · v1.9 S5 phone (always secure, names, Hide for the session, audit U7/u23/R6/R28) · `406db0de` · changes
     needed → fixed → approve (7 minor follow in b-phone) · waiting: the S25 retest.
+  - 2026-11-16 · v1.8.1 audit, desktop half (S1, S4, S5, U1–U26, R1–R28) · `5d9f9779` · changes needed → fixed →
+    approve (2 minor follow in b-desktop-reopen) · CI building Windows + Mac.
+  - 2026-11-16 · web: v1.8.1 audit half + guide names, 0.2 follow-ups, v1.9 L0 brand constant (`config('echoledger.brand.name')`)
+    and L1.5 prompt pack 1.0.1 · merged up to `04c4376f` · reviewed (each re-reviewed) · full pest 5,774 · not deployed
+    yet (next deploy batches 0.2 server + these + two migrations: 2026_12_03 missed_recordings, 2026_12_04 share-check index).
+  - 2026-11-16 · the session moved to another account after the first one's weekly limit; the role agent types
+    (web-builder, desktop-builder, phone-builder, relay-builder, reviewer) load since then; every interrupted worker was
+    resumed where it stopped; the shared cargo target was cleared while nothing was building (13 GB).
 - **Phone, 2026-11-16 (S25, Android 17):** the screen-recording callback never fires for floating windows (only while
   an EchoLedger screen is in front); FLAG_SECURE gives a black box → the phone moves to "always secure" (b-phone). Mac:
   opening the running app from Finder/Dock shows nothing (no `RunEvent::Reopen` handler) → v1.8 0.4. The installed

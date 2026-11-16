@@ -96,6 +96,7 @@ describe('Admin → Diagnostics → Screen-share checks', function () {
 
     it('says so when nothing has arrived', function () {
         $this->actingAs(Fx::superAdmin(), 'web');
-        Livewire::test(ShareChecks::class)->assertSee('No screen-share checks yet');
+        Livewire::test(ShareChecks::class)->assertSee('No screen-share checks yet')
+            ->assertSee('In the desktop app: Settings → Screen-share privacy → Check screen-share privacy, with Send diagnostics on.')->assertDontSee('Check now');
     });
 });

@@ -109,7 +109,7 @@ final class SettingsRepository
         'mail.encryption' => 'tls',                  // tls (STARTTLS) | ssl | none
         'mail.username' => null,
         'mail.from_address' => null,
-        'mail.from_name' => 'EchoLedger',
+        'mail.from_name' => null,                    // null = the product's name (MailSettings::from), so a rename follows
         // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
         'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit

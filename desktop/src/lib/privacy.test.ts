@@ -6,10 +6,21 @@ const NOW = new Date(2026, 10, 16, 15, 0);
 
 describe("Share Check words", () => {
   it("says the result in one plain line, with the system and the day", () => {
+    // A Mac's pass says only what this check saw: each meeting app captures its own way.
     expect(resultLine("pass", null, "macOS 27.3", new Date(2026, 10, 16, 9, 0).toISOString(), "macos", NOW).text)
-      .toBe("Hidden. People who see your whole screen won't see EchoLedger. Checked on macOS 27.3, today.");
-    expect(resultLine("pass", null, "Windows 11 24H2", new Date(2026, 10, 15, 9, 0).toISOString(), "windows", NOW).text).toContain("Checked on Windows 11 24H2, yesterday.");
-    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW).text).toBe("Visible on this Mac in apps like Zoom and Teams. Use one-window sharing or your phone.");
+      .toBe("Hidden in this check. Each meeting app captures differently on a Mac: test yours below. Checked on macOS 27.3, today.");
+    expect(resultLine("pass", null, "macOS 27.3", NOW.toISOString(), "macos", NOW, [], "onboarding").text).toContain("test yours in Settings › Screen-share privacy");
+    expect(resultLine("pass", null, "Windows 11 24H2", new Date(2026, 10, 15, 9, 0).toISOString(), "windows", NOW).text)
+      .toBe("Hidden. People who see your whole screen won't see EchoLedger. Checked on Windows 11 24H2, yesterday.");
+    // A fail names only the apps here not confirmed hidden, and never promises the phone yet.
+    const apps = [
+      { app: "zoom", name: "Zoom", version: "7.1.9", state: "hidden", line: "Zoom: hidden", needsTest: false },
+      { app: "teams", name: "Teams", version: "25.1", state: "not_checked", line: "Teams: not checked", needsTest: true },
+      { app: "slack", name: "Slack", version: null, state: "not_checked", line: "Slack: not checked", needsTest: false },
+    ] as const;
+    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW, [...apps]).text).toBe("Visible on this Mac in Teams. Share one window or a tab instead.");
+    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW).text).toBe("Visible on this Mac in screen share. Share one window or a tab instead.");
+    expect(resultLine("fail", null, "Windows 11 24H2", NOW.toISOString(), "windows", NOW).text).toBe("Visible in screen share on this computer. Share one window or a tab instead.");
   });
 
   it("names the error and offers its fix", () => {
@@ -18,6 +29,14 @@ describe("Share Check words", () => {
     expect(permission.text).toMatch(/Screen Recording/);
     expect(resultLine("error", "capture_failed", "Windows 11 24H2", NOW.toISOString(), "windows", NOW).fix).toBe("try_again");
     expect(resultLine("error", "control_missing", "Windows 11 24H2", NOW.toISOString(), "windows", NOW).text).toMatch(/nothing was checked/);
+  });
+
+  it("says an older Windows' black box as private, and a covered test window as nothing checked", () => {
+    expect(resultLine("pass", "old_windows", "Windows 10 (build 18363)", NOW.toISOString(), "windows", NOW).text)
+      .toBe("Private: people see a black box instead of EchoLedger. Checked on Windows 10 (build 18363), today.");
+    const covered = resultLine("error", "covered", "macOS 27.3", NOW.toISOString(), "macos", NOW);
+    expect(covered.text).toBe("Another window covered the test window, so nothing was checked. Move it away and try again.");
+    expect(covered.fix).toBe("try_again");
   });
 
   it("dates older checks and says when nothing was checked", () => {
@@ -30,7 +49,7 @@ describe("Share Check words", () => {
   it("keeps to the words rule", () => {
     const words = [...Object.values(BADGE_LABEL), ...Object.values(BADGE_HINT)].join(" ").toLowerCase();
     for (const banned of ["undetectable", "stealth", "invisible", "cheat", "bypass"]) expect(words).not.toContain(banned);
-    expect(BADGE_LABEL).toEqual({ private: "Private", not_checked: "Not checked", visible: "Visible in shares" });
+    expect(BADGE_LABEL).toEqual({ private: "Private", black_box: "Black box", not_checked: "Not checked", visible: "Visible in screen share" });
   });
 });
 

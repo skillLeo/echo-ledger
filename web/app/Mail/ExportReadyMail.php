@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** "Export my data" finished: the ZIP's link, which works for 24 hours. */
 final class ExportReadyMail extends AccountMail
 {
@@ -11,7 +13,7 @@ final class ExportReadyMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return 'Your EchoLedger export is ready';
+        return 'Your '.Brand::name().' export is ready';
     }
 
     protected function template(): string

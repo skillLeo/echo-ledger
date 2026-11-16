@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** The account asked to be deleted: when it happens, and how to keep it until then. */
 final class DeletionScheduledMail extends AccountMail
 {
@@ -11,7 +13,7 @@ final class DeletionScheduledMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return "Your EchoLedger account will be deleted on {$this->date}";
+        return 'Your '.Brand::name()." account will be deleted on {$this->date}";
     }
 
     protected function template(): string

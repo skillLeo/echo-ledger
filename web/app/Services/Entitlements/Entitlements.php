@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Services\Usage\UsageLedger;
 use App\Services\Workspaces\PlanLimits;
+use App\Support\Brand;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -27,7 +28,7 @@ final class Entitlements
 {
     /** What `403 feature_not_in_plan` says for each feature. */
     public const LOCKED = [
-        'platform_transcription' => 'Transcription on EchoLedger is not in your plan: add your free Groq key in Account → Transcription key, or upgrade',
+        'platform_transcription' => 'Transcription on '.Brand::TOKEN.' is not in your plan: add your free Groq key in Account → Transcription key, or upgrade',
         'views' => 'Roman Urdu, English and Urdu views are not in your plan',
         'double_check' => 'Double-check is not in your plan',
         'screen_moments' => 'Screen moments are not in your plan',
@@ -37,6 +38,12 @@ final class Entitlements
         'live_translate' => 'Live Translate is not in your plan',
         'ai_notes' => 'AI notes are not in your plan',
     ];
+
+    /** What `403 feature_not_in_plan` says for [$feature], with the product's name where it has one. */
+    public static function lockedMessage(string $feature): string
+    {
+        return Brand::fill(self::LOCKED[$feature] ?? 'This is not in your plan');
+    }
 
     /** @var array<int, Plan> */
     private array $plans = [];
@@ -132,7 +139,7 @@ final class Entitlements
 
     public static function locked(string $feature): ApiError
     {
-        return new ApiError(403, 'feature_not_in_plan', self::LOCKED[$feature] ?? 'This is not in your plan', [
+        return new ApiError(403, 'feature_not_in_plan', self::lockedMessage($feature), [
             'feature' => $feature,
             'lowest_plan' => app(self::class)->lowestPlan($feature)?->key,
         ]);
@@ -214,7 +221,7 @@ final class Entitlements
         $workspace = Workspace::query()->find($workspaceId);
         $limits = app(PlanLimits::class);
         $features = [];
-        foreach (Features::ALL as $key => $feature) {
+        foreach (Features::all() as $key => $feature) {
             $features[$key] = [
                 'enabled' => $this->allows($workspaceId, $user->id, $key),
                 'name' => $feature['name'],

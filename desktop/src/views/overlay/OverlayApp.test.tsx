@@ -184,7 +184,8 @@ describe("caption overlay", () => {
     const { container } = await renderOverlay();
     await act(async () => emitEvent("overlay:visibility", true));
     expect(root(container)).not.toHaveClass("overlay-hidden");
-    expect(await screen.findByRole("button", { name: /Hidden from screen share/ })).toBeInTheDocument();
+    const badge = await screen.findByRole("button", { name: /hidden from screen share/i });
+    expect(badge.closest(".overlay-tools"), "next to Live at full strength, not among the faded tools").toBeNull();
     await act(async () => emitEvent("privacy:conceal", true));
     expect(root(container)).toHaveClass("overlay-hidden");
     await act(async () => emitEvent("privacy:conceal", false));

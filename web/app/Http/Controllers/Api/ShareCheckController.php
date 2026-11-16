@@ -7,6 +7,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Device;
 use App\Models\ShareCheckResult;
+use Closure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -14,7 +15,8 @@ use Illuminate\Validation\Rule;
 /**
  * POST /api/diagnostics/share-checks (since v1.8.1): one Share Check result, sent only when the person allows
  * diagnostics. The token decides the device and its person; ids in the body are never read, and anything else the body
- * carries (a picture, a window title) is dropped, never stored.
+ * carries (a picture, a window title) is dropped, never stored. Since the v1.8.1 audit (S3) the result is about the
+ * sending device's own platform, and the versions hold version characters only.
  */
 final class ShareCheckController extends Controller
 {
@@ -23,14 +25,14 @@ final class ShareCheckController extends Controller
         $device = $request->user();
         abort_unless($device instanceof Device, 401);
         $data = $request->validate([
-            'platform' => ['required', 'string', Rule::in(ShareCheckResult::PLATFORMS)],
-            'os_build' => ['required', 'string', 'max:64'],
-            'app_version' => ['required', 'string', 'max:32'],
+            'platform' => ['bail', 'required', 'string', Rule::in(ShareCheckResult::PLATFORMS), self::devicesOwn($device)],
+            'os_build' => ['required', 'string', 'max:64', 'regex:'.ShareCheckResult::VERSION_PATTERN],
+            'app_version' => ['required', 'string', 'max:32', 'regex:'.ShareCheckResult::VERSION_PATTERN],
             'method' => ['required', 'string', Rule::in(ShareCheckResult::METHODS)],
             'result' => ['required', 'string', Rule::in(ShareCheckResult::RESULTS)],
             'reason' => ['nullable', 'string', Rule::in(ShareCheckResult::REASONS)],
             'meeting_app' => ['nullable', 'string', Rule::in(ShareCheckResult::MEETING_APPS)],
-            'meeting_app_version' => ['nullable', 'string', 'max:32'],
+            'meeting_app_version' => ['nullable', 'string', 'max:32', 'regex:'.ShareCheckResult::VERSION_PATTERN],
             'share_mode' => ['nullable', 'string', Rule::in(ShareCheckResult::SHARE_MODES)],
         ]);
 
@@ -49,5 +51,15 @@ final class ShareCheckController extends Controller
         ]);
 
         return response()->json(['data' => ['id' => $result->id]], 201);
+    }
+
+    /** A Windows computer sends Windows results only: the platform is the token device's own. */
+    private static function devicesOwn(Device $device): Closure
+    {
+        return static function (string $attribute, mixed $value, Closure $fail) use ($device): void {
+            if ($value !== $device->platform->value) {
+                $fail('The :attribute field must be the platform of the device that sends it.');
+            }
+        };
     }
 }

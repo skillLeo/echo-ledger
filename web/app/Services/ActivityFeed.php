@@ -91,8 +91,11 @@ final class ActivityFeed
         // or a whole workspace's (its rows go by the foreign key, which tells nobody). An erased account's items go with
         // all its other notifications (AccountEraser).
         MissedRecording::deleted(fn (MissedRecording $m) => $feed()->forgetMissedRecordings($m->user_id, [$m->id]));
-        Workspace::deleting(fn (Workspace $w) => MissedRecording::query()->withoutGlobalScopes()->where('workspace_id', $w->id)->get(['id', 'user_id'])
-            ->groupBy('user_id')->each(fn ($rows, $userId) => $feed()->forgetMissedRecordings((int) $userId, $rows->pluck('id')->all())));
+        // A closure that answers nothing: `deleting` stops at the first listener that answers, and would skip the rest.
+        Workspace::deleting(function (Workspace $w) use ($feed): void {
+            MissedRecording::query()->withoutGlobalScopes()->where('workspace_id', $w->id)->get(['id', 'user_id'])
+                ->groupBy('user_id')->each(fn ($rows, $userId) => $feed()->forgetMissedRecordings((int) $userId, $rows->pluck('id')->all()));
+        });
     }
 
     public function transcriptChanged(Transcript $transcript, bool $created): void

@@ -5,6 +5,16 @@ declare(strict_types=1);
 return [
 
     /*
+    | The product's name as people read it (since v1.9, L0): the website, the console and the admin panel, emails,
+    | notifications and the messages the apps and the connector show. A rename is this one value (read through
+    | App\Support\Brand); the desktop and phone apps have their own brand files. Technical names never follow it: this
+    | `echoledger` namespace, the echoledger:// links, cookies, storage paths, webhook headers and release file names.
+    */
+    'brand' => [
+        'name' => 'EchoLedger',
+    ],
+
+    /*
     | Dedicated 32-byte key (base64) for encrypting recordings at rest.
     | Generate with `php artisan echoledger:key`. Back it up offline: losing it makes every
     | stored recording unreadable. It is intentionally NOT derived from APP_KEY.

@@ -11,6 +11,7 @@ use App\Filament\Support\SettingsContext;
 use App\Filament\Support\UpgradeFlow;
 use App\Models\User;
 use App\Services\Entitlements\PaymentProofs;
+use App\Support\Brand;
 use App\Support\Formats;
 use Filament\Actions\Action;
 use Filament\Panel;
@@ -50,7 +51,7 @@ class RequestStatus extends RequestPage
                 try {
                     app(PaymentProofs::class)->cancel($this->upgradeRequest(), $user);
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach EchoLedger. Try again.")->danger()->send();
+                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach ".Brand::name().'. Try again.')->danger()->send();
 
                     throw new Halt;
                 }

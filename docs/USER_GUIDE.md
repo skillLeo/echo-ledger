@@ -48,7 +48,8 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
    longer gets past this message.)
 3. EchoLedger lives in the menu bar (top right). Click its icon to open it, or right-click it for the menu. ⌘W closes the
    window and leaves EchoLedger in the menu bar, ⌘, opens Settings, and ⌘Q quits. The icon follows light and dark menu
-   bars and turns red while recording.
+   bars and turns red while recording. Opening EchoLedger again from Applications, Launchpad, Spotlight or the Dock while
+   it runs opens its window.
 4. A short setup goes through what macOS must allow, one step each, with a button to the right page of System Settings:
    - **Microphone:** your side of a call, voice notes and dictation.
    - **System audio:** the other side of a call (the sound this Mac plays).
@@ -56,8 +57,8 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
      macOS 15, macOS asks again about once a month whether EchoLedger may still see your screen. That is normal: choose
      **Allow**. If you miss it, screen moments pause and the recording goes on.
 
-**If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording pill and the
-captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
+**If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording controls and
+the captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
 recording that would hold nothing does not start and says why, even with the window closed: a shortcut or the menu-bar
 icon opens the window with the reason, and a meeting that cannot be recorded gets a notification.
 
@@ -68,9 +69,10 @@ once, in one sentence, with the same steps to set it up again.
 **Starting at login** is off until you turn it on in **Account → This computer**.
 
 **The Mac check.** **Account → This computer → Help & diagnostics → Run Mac check** looks at macOS, the permissions, the
-microphone, the other side of a call (with one soft tone), your meeting apps, the captions and pill, and screen moments,
-one at a time, and says how to fix what it finds. It does not run during a recording. **Copy report** gives you plain text
-with no names, and **Send to my admin** sends it to your workspace's admins, only when you press it.
+microphone, the other side of a call (with one soft tone), your meeting apps, the captions and the recording controls,
+and screen moments, one at a time, and says how to fix what it finds. It does not run during a recording. **Copy
+report** gives you plain text with no names, and **Send to my admin** sends it to your workspace's admins, only when you
+press it.
 
 A $99 a year Apple Developer ID fixes both of the above (the Open Anyway step and the forgotten permissions). The
 workflow that signs and notarizes the app already exists and starts working as soon as the certificate is in place.
@@ -391,7 +393,7 @@ Captions show what you and the other person say, while you talk.
 
 - **Windows:** press **Ctrl+Shift+Space** to show or hide them. They never take the keyboard focus, and clicks
   go through them.
-- **Phone:** captions appear as a small floating bubble.
+- **Phone:** captions appear in a small floating window.
 - On the computer, **Account → Calls & meetings → Captions** changes the size, the number of lines, the position, the colours and how fast they
   fade.
 - Captions are hidden from screen sharing with the rest of EchoLedger (see **Private notes** below).
@@ -403,23 +405,24 @@ Your notes stay on your screen. When you share your screen in Zoom, Meet or Team
 EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
 
 - **Settings → Screen-share privacy → Hide from screen sharing:** *All EchoLedger windows* (the default), *Only floating
-  windows* (captions, the recording pill, dictation, the after-call card, Live Translate; the main window shows), or
-  *Off*. If you had turned on *Show during screen share* before, EchoLedger keeps showing in shares until you change it.
+  windows* (captions, the recording controls, dictation, the after-call card, Live Translate; the main window shows), or
+  *Off*. If you had turned on *Show during screen share* before, EchoLedger keeps showing in screen share until you
+  change it.
 - **Check screen-share privacy** (also from the small badge on every floating window): EchoLedger opens a test window and
   a green square for a moment, captures your screen the way meeting apps do, and shows *What you see* next to *What others
   see* with one plain line. The picture stays on that page and is gone when you close it. The check runs again by itself
   after an app or system update and once a week.
-- The badge says **Private**, **Not checked** or **Visible in shares** (amber), from the last real check.
+- The badge says **Private**, **Not checked** or **Visible in screen share** (amber), from the last real check.
 - **Windows 10 version 2004 and later, Windows 11:** people see what is behind EchoLedger. On older Windows they see a
   black box where it is (the text stays private); choose *Show normally* if you prefer, or update Windows. In Remote
   Desktop, EchoLedger is visible to the remote side.
 - **Mac:** each meeting app captures the screen its own way, so test each one once with your phone (*Test with your
   phone*: join the meeting on the phone, share your whole screen, say whether you see the test card). In **Zoom**, open
   Settings › Share Screen › Advanced and set *Screen capture mode* to *Advanced capture with window filtering*. In Meet,
-  share a tab. When a whole-screen share starts in an app that is not confirmed, EchoLedger's windows step off the screen
-  until the share ends; turn on *I share one window or a tab* if you always share less.
-- **Show in shares for 10 minutes** (the tray or menu bar, or Settings) is for demos; it goes back by itself.
-- **Hide all EchoLedger windows:** Ctrl+Alt+Shift+P on Windows, ⌘⌥⇧P on a Mac (change it in Keyboard shortcuts).
+  share a tab. When you share your whole screen in an app that is not confirmed, EchoLedger's windows step off the screen
+  until the screen share ends; turn on *I share one window or a tab* if you always share less.
+- **Show in screen share for 10 minutes** (the tray or menu bar, or Settings) is for demos; it goes back by itself.
+- **Hide EchoLedger windows:** Ctrl+Alt+Shift+P on Windows, ⌘⌥⇧P on a Mac (change it in Keyboard shortcuts).
 - **Send diagnostics** (off by default) sends each check's system, app version, method and result, never a picture or a
   window title.
 - Share one window or a tab for the strongest privacy. EchoLedger is **not** hidden from cameras, projectors, Remote
@@ -428,14 +431,17 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
 
 **On the phone:** Settings → Privacy & data → **During screen sharing**:
 
-- **Hide cards** (default): the recording pill, captions, the after-call chip and Live Translate shrink to a small grey
-  dot without text.
-- **Black box**: people watching see a black box where the cards are.
-- **Show**: cards stay as they are.
+- **Private (black box)** (the default): people watching a screen share or a recording see a black box where
+  EchoLedger's floating windows are: the recording controls, captions, the after-call card and Live Translate. You see
+  them as usual. Screenshots you take show the same black box.
+- **Show**: everyone watching can read them.
 
-Android 15 and later notice a screen share or recording by themselves. On older Android, use **Hide EchoLedger cards**
-before sharing: it's a button on the open recording pill and a Quick Settings tile. Tap the dot (or the tile again) to
-show the cards.
+Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless you choose
+**Show**. To take the floating windows off your own screen too, tap **Hide EchoLedger windows**: it's a button on the
+open recording controls and a Quick Settings tile. They shrink to a grey dot; tap the dot, or the tile again, to show
+them (**Show EchoLedger windows**). They stay hidden until you show them again or EchoLedger restarts. In **Private (black
+box)**, on Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating
+windows also shrink to the grey dot until it ends.
 
 What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
 
@@ -446,8 +452,8 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
 
 - **Keep automatically** (the default): the call is kept and a small **"Saved · Call with Omar · 4:12 · Undo"**
   shows for 6 seconds. **Undo** deletes it; nothing has been uploaded yet.
-- **Ask me**: a small chip with the title, **✓** (keep) and **✕** (discard). Tap the title to rename it or pick a
-  client. If you do nothing, the call is kept after 10 seconds.
+- **Ask me**: a small after-call card with the title, **✓** (keep) and **✕** (discard). Tap the title to rename it or
+  pick a client. If you do nothing, the call is kept after 10 seconds.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
 **Skip calls shorter than** (10 seconds by default), and a call where nobody spoke. Activity shows one line,
@@ -464,8 +470,9 @@ under **Needs action** and the bell counts it until you open it, with the call's
 fix it. Only the app, the time, the length and the reason are sent, never names, numbers or audio, and the server
 deletes them, with their Activity item, 90 days after the call.
 
-The pill (the small bar at the top of the screen) and the notification on the phone have **Pause** and
-**Stop** buttons. Paused time is not recorded. While an outgoing call rings, the pill says **Waiting for an answer**.
+The recording controls (the small bar at the top of the screen) and the notification on the phone have **Pause** and
+**Stop** buttons. Paused time is not recorded. While an outgoing call rings, the recording controls say **Waiting for an
+answer**.
 
 A Bluetooth headset's microphone gives lower accuracy; EchoLedger says **"Accuracy is lower with Bluetooth mics"** when
 one is in use. Use the phone's or the laptop's own microphone for important calls.
@@ -474,7 +481,7 @@ one is in use. Use the phone's or the laptop's own microphone for important call
 
 A bookmark marks an important moment so you can find it later.
 
-- **Windows:** press **Ctrl+Shift+B** or click **Mark** on the pill.
+- **Windows:** press **Ctrl+Shift+B** or click **Mark** on the recording controls.
 - **Phone:** tap **Mark** in the notification or on the Record screen.
 - Pick a tag such as **Requirement**, **Budget**, **Deadline**, **Decision** or **Follow-up**. You can undo a
   bookmark for a few seconds.
@@ -563,8 +570,8 @@ if it could not be made), even if transcript emails are off in your profile; the
 ### Rename
 
 Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the
-recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named on its card
-(the pencil).
+recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named in the
+**Waiting for you** list (the pencil).
 
 **Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
 "Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
@@ -722,10 +729,10 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - **For a client:** give the client a default language. Every recording with that client uses it.
 - **For everything else:** the default in **Settings → General → Transcription language** (on the phone:
   **Settings → General → Transcription**).
-- **During a call:** tap the language chip (for example **UR**) on the desktop recording pill, or on the
-  phone next to the caption bubble or on the Record tab. Live captions switch to the new language; the
+- **During a call:** tap the language button (for example **UR**) on the desktop recording controls, or on the
+  phone next to the captions or on the Record tab. Live captions switch to the new language; the
   recording does not stop. The transcript switches language at that moment too.
-- **After the call:** the "Waiting for you" list (Ask me, or calls left from before) has the same chip; the
+- **After the call:** the "Waiting for you" list (Ask me, or calls left from before) has the same language button; the
   transcript uses whatever it shows when the call is kept. Calls kept automatically use the language of the call.
 - **Any time later:** open the recording (desktop Library, the phone's recording page or the console) and choose
   **Re-transcribe as…** with the language. The current transcript stays until the new one is ready; then the new
@@ -866,14 +873,17 @@ the transcript) know what "this page" or "click here" meant.
   Settings → Privacy & Security → Screen & System Audio Recording**. From macOS 15, macOS asks again about once a month
   whether EchoLedger may still see your screen: choose **Allow**. If you miss it, screen moments pause and the recording
   goes on. On Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
+- **On a Mac after an update:** if screen moments stop, open System Settings › Privacy & Security › Screen & System
+  Audio Recording and turn EchoLedger off and on again, or remove it with − and add it back. Settings › Screen moments
+  says when this happened.
 - **What is kept:** only during a meeting EchoLedger detected, or a recording you started, and by default only the
   meeting's window (Zoom, Teams, Google Meet in a browser, WhatsApp). A screen is kept when the picture changes and
   settles, or at once when someone says "this page", "click here", "yeh dekhein" and the like. At most about 120 an
   hour.
-- **Privacy:** the pill's monitor chip shows whether screens are on and pauses them with one tap. Screens pause by
-  themselves while the meeting window is minimised or hidden, and whenever an app on your excluded list is on the
-  screen (password managers are on it from the start). EchoLedger's own window is never in a screen. A project can
-  turn screens off for its meetings. Screens are encrypted on your computer until they are sent, and on your
+- **Privacy:** the monitor button on the recording controls shows whether screens are on and pauses them with one
+  tap. Screens pause by themselves while the meeting window is minimised or hidden, and whenever an app on your excluded
+  list is on the screen (password managers are on it from the start). EchoLedger's own window is never in a screen. A
+  project can turn screens off for its meetings. Screens are encrypted on your computer until they are sent, and on your
   server after that; they are deleted with their recording.
 - **In the transcript:** each screen sits under the line it was shown at ("Screen 7 · 14:32"). Click it to see it
   large, read the text on it, and play from that moment. A project's **Screens** tab collects all of them.
@@ -907,7 +917,7 @@ nothing is recorded or kept unless you switch saving on.
 - **Test translate** on each page plays a short sentence with the phone's own voice and shows the result, so you can
   set the box up without opening a game.
 - **On the computer** (Windows): the **Record** page → **Live Translate**: choose an app that is playing sound, Game or
-  Watch, the language, then **Start**. The overlay never takes the mouse; **Ctrl+Shift+T** lets you move it,
+  Watch, the language, then **Start**. Live Translate never takes the mouse; **Ctrl+Shift+T** lets you move it,
   **Ctrl+Shift+H** hides it. It works over borderless or windowed games, not exclusive full screen. A browser is heard
   with all its tabs.
 - **Quick Settings tiles** "Game translate" and "Watch translate", and the app icon's long-press menu, switch it on and

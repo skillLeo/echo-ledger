@@ -9,7 +9,9 @@ import { api } from "../../lib/ipc";
 export const TEST_COLOUR = "rgb(255, 0, 255)";
 export const TEST_DARK = "rgb(0, 0, 0)";
 export const CONTROL_COLOUR = "rgb(0, 200, 0)";
-export const CARD_TEXT = "If you can see this on your phone, EchoLedger is visible in your share.";
+export const CARD_TEXT = "If you can see this on your phone, EchoLedger is visible in your screen share.";
+/** The control is in every screen share by design: it says what the flash is. */
+export const CONTROL_TEXT = "EchoLedger is checking screen-share privacy";
 
 export default function ShareCheckWindow({ kind }: { kind: "test" | "control" | "card" }) {
   useEffect(() => {
@@ -33,5 +35,9 @@ export default function ShareCheckWindow({ kind }: { kind: "test" | "control" | 
   const style = kind === "test"
     ? { backgroundColor: TEST_DARK, backgroundImage: `conic-gradient(${TEST_COLOUR} 25%, ${TEST_DARK} 0 50%, ${TEST_COLOUR} 0 75%, ${TEST_DARK} 0)`, backgroundSize: "32px 32px" }
     : { backgroundColor: CONTROL_COLOUR };
-  return <div className="check-patch-window" data-testid={`check-${kind}`} style={style} aria-hidden="true" />;
+  return (
+    <div className="check-patch-window" data-testid={`check-${kind}`} style={style} aria-hidden="true">
+      {kind === "control" && <span className="check-control-text">{CONTROL_TEXT}</span>}
+    </div>
+  );
 }

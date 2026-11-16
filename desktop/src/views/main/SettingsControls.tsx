@@ -162,18 +162,27 @@ export function LinkRow({ id, title = titleOf(id), value, onOpen, external = fal
 }
 
 /** A row that does something at once ("Lock now", "Export my data"): the title in the text colour, never a link colour. */
-export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = false, label }: {
+export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = false, label, expanded }: {
   id: string;
   title?: string;
   value?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   label?: string;
+  /** A row that opens and closes what follows it in place: a chevron that turns, and `aria-expanded`. */
+  expanded?: boolean;
 }) {
+  const disclosure = expanded !== undefined;
+  const shown = value !== undefined && value !== null && value !== "";
   return (
-    <button type="button" className="set-row set-link" {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label}>
+    <button type="button" className="set-row set-link" {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
       <span className="set-title">{title}</span>
-      {value !== undefined && value !== null && value !== "" && <span className="set-end"><span className="set-value">{value}</span></span>}
+      {(shown || disclosure) && (
+        <span className="set-end">
+          {shown && <span className="set-value">{value}</span>}
+          {disclosure && <LucideChevronRightIcon size={16} className={`set-trail disclosure ${expanded ? "open" : ""}`.trim()} />}
+        </span>
+      )}
     </button>
   );
 }

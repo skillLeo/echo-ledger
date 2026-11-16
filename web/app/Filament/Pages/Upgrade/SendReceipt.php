@@ -10,6 +10,7 @@ use App\Filament\Support\UpgradeFlow;
 use App\Models\UpgradeRequestProof;
 use App\Models\User;
 use App\Services\Entitlements\PaymentProofs;
+use App\Support\Brand;
 use Filament\Panel;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use Livewire\WithFileUploads;
@@ -169,7 +170,7 @@ class SendReceipt extends RequestPage
             'proof_required' => 'Add a screenshot, or type the transaction ID.',
             'request_decided' => 'This request has already been decided.',
             'rate_limited' => 'Too many tries today. Please try again later.',
-            default => "Couldn't reach EchoLedger. Try again.",
+            default => "Couldn't reach ".Brand::name().'. Try again.',
         };
     }
 
