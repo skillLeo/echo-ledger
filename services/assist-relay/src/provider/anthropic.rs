@@ -37,11 +37,18 @@ pub struct Anthropic {
     keys: Arc<ProviderKeys>,
     http: reqwest::Client,
     retry: Retry,
+    tap: Option<http::Tap>,
 }
 
 impl Anthropic {
     pub fn new(base: &str, keys: Arc<ProviderKeys>, http: reqwest::Client, retry: Retry) -> Self {
-        Anthropic { base: base.trim_end_matches('/').to_owned(), keys, http, retry }
+        Anthropic { base: base.trim_end_matches('/').to_owned(), keys, http, retry, tap: None }
+    }
+
+    /// Copies every response body into `tap` (the smoke binary's `--record`).
+    pub fn with_tap(mut self, tap: http::Tap) -> Self {
+        self.tap = Some(tap);
+        self
     }
 
     fn post(&self, key: &crate::config::Secret, body: &Value) -> reqwest::RequestBuilder {
@@ -253,7 +260,8 @@ impl Provider for Anthropic {
         };
         let body = body(&request, false);
         let this = self.clone();
-        http::sse_stream(ProviderKind::Anthropic, self.retry, move || this.post(&key, &body), AnthropicDecoder::default())
+        let tap = self.tap.clone();
+        http::sse_stream(ProviderKind::Anthropic, self.retry, move || this.post(&key, &body), AnthropicDecoder::default(), tap)
     }
 
     fn warm(&self, request: CompletionRequest) -> BoxFuture<'static, Result<Usage, ProviderError>> {

@@ -17,6 +17,11 @@ path = "src/main.rs"
 name = "assist-relay-loadtest"
 path = "tools/loadtest.rs"
 
+# One real request to one model, opt-in (--yes) with a key from the environment at run time (tools/smoke.rs).
+[[bin]]
+name = "assist-relay-smoke"
+path = "tools/smoke.rs"
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 base64 = "0.22.1"

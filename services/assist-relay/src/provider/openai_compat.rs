@@ -34,12 +34,19 @@ pub struct OpenAiCompatible {
     keys: Arc<ProviderKeys>,
     http: reqwest::Client,
     retry: Retry,
+    tap: Option<http::Tap>,
 }
 
 impl OpenAiCompatible {
     /// `kind` is Groq or OpenAI; `base` is the address before `/v1/chat/completions`.
     pub fn new(kind: ProviderKind, base: &str, keys: Arc<ProviderKeys>, http: reqwest::Client, retry: Retry) -> Self {
-        OpenAiCompatible { kind, base: base.trim_end_matches('/').to_owned(), keys, http, retry }
+        OpenAiCompatible { kind, base: base.trim_end_matches('/').to_owned(), keys, http, retry, tap: None }
+    }
+
+    /// Copies every response body into `tap` (the smoke binary's `--record`).
+    pub fn with_tap(mut self, tap: http::Tap) -> Self {
+        self.tap = Some(tap);
+        self
     }
 
     fn post(&self, key: &Secret, body: &Value) -> reqwest::RequestBuilder {
@@ -187,7 +194,8 @@ impl Provider for OpenAiCompatible {
         };
         let body = body(&request);
         let this = self.clone();
-        http::sse_stream(kind, self.retry, move || this.post(&key, &body), ChatDecoder::default())
+        let tap = self.tap.clone();
+        http::sse_stream(kind, self.retry, move || this.post(&key, &body), ChatDecoder::default(), tap)
     }
 
     fn warm(&self, _request: CompletionRequest) -> BoxFuture<'static, Result<Usage, ProviderError>> {
