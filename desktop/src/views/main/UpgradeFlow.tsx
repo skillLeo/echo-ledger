@@ -17,6 +17,7 @@ import { CheckIcon } from "../../components/ControlIcons";
 import { LucideCopyIcon, LucideCheckIcon, LucideFileTextIcon, LucideXIcon, LucideUploadIcon } from "../../components/Icons";
 import { ConfirmDialog, useCopied } from "./SettingsControls";
 import { RequestCard } from "./Upgrade";
+import { confirmAction } from "../../lib/confirm";
 
 /** The most files one round sends (a round is the first send, then each new receipt staff ask for). */
 export const ROUND_MAX = 3;
@@ -38,10 +39,10 @@ export function UpgradeSheet() {
 }
 
 /** The sheet's frame: a header with the title and ×, the body that scrolls, a footer that stays. */
-function FlowSheet({ title, onClose, guard, footer, children }: { title: string; onClose: () => void; guard: () => boolean; footer?: ReactNode; children: ReactNode }) {
+function FlowSheet({ title, onClose, guard, footer, children }: { title: string; onClose: () => void; guard: () => Promise<boolean>; footer?: ReactNode; children: ReactNode }) {
   const titleId = useId();
   const close = () => {
-    if (guard()) onClose();
+    void guard().then((yes) => { if (yes) onClose(); });
   };
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
@@ -52,7 +53,7 @@ function FlowSheet({ title, onClose, guard, footer, children }: { title: string;
   });
   return createPortal(
     // A click beside the sheet is ignored while a field has text (nothing typed is lost by a stray click).
-    <div className="sheet-backdrop" onMouseDown={(ev) => { if (ev.target === ev.currentTarget && guard()) onClose(); }}>
+    <div className="sheet-backdrop" onMouseDown={(ev) => { if (ev.target === ev.currentTarget) void guard().then((yes) => { if (yes) onClose(); }); }}>
       <div className="sheet card upgrade-sheet flow-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="flow-head">
           <h2 id={titleId} className="sheet-title">{title}</h2>
@@ -97,7 +98,7 @@ function UpgradeFlow({ e, feature, plan, step }: { e: Entitlements; feature: str
     if (request && requestStage(request) !== "approved") void refreshUpgradeRequest();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request?.id]);
-  const guard = () => !dirty || window.confirm("Close without sending? What you typed here is not kept.");
+  const guard = async () => !dirty || confirmAction({ title: "Close without sending?", body: "What you typed here is not kept.", confirm: "Close" });
   const update = (r: UpgradeRequest) => {
     setRequest(r);
     noteUpgradeRequest(r);
@@ -126,7 +127,7 @@ function ChooseStep({ e, feature, plan, guard, onDirty, onMade }: {
   e: Entitlements;
   feature: string | null;
   plan: string | null;
-  guard: () => boolean;
+  guard: () => Promise<boolean>;
   onDirty: (dirty: boolean) => void;
   onMade: (r: UpgradeRequest) => void;
 }) {
@@ -302,7 +303,7 @@ function CopyRow({ label, value, copyText, copied, onCopy, mono = false }: { lab
   );
 }
 
-function PayStep({ e, request, name, guard, onReceipt, onBack }: { e: Entitlements; request: UpgradeRequest; name: string; guard: () => boolean; onReceipt: () => void; onBack: () => void }) {
+function PayStep({ e, request, name, guard, onReceipt, onBack }: { e: Entitlements; request: UpgradeRequest; name: string; guard: () => Promise<boolean>; onReceipt: () => void; onBack: () => void }) {
   const [copied, copy] = useCopied();
   const amount = amountOf(request, e.plans.find((p) => p.key === request.plan) ?? null);
   const payment = request.payment;
@@ -454,7 +455,7 @@ function ReceiptTile({ requestId, proof, local, index, total, onRemove, onRetry 
 
 function ReceiptStep({ request, guard, onDirty, onUpdate, onSent }: {
   request: UpgradeRequest;
-  guard: () => boolean;
+  guard: () => Promise<boolean>;
   onDirty: (dirty: boolean) => void;
   onUpdate: (r: UpgradeRequest) => void;
   onSent: (r: UpgradeRequest) => void;
@@ -677,7 +678,7 @@ function StatusStep({ e, request, name, onPay, onReceipt, onUpdate, onAgain }: {
   };
   const reduced = reducedMotion();
   return (
-    <FlowSheet title={`${name} request`} onClose={closeUpgradeSheet} guard={() => true}
+    <FlowSheet title={`${name} request`} onClose={closeUpgradeSheet} guard={async () => true}
       footer={<div className="flow-actions"><div className="flow-go">
         {open && <button type="button" className="btn text danger" onClick={() => setCancelling("ask")}>Cancel request</button>}
         <button type="button" className="btn ghost" onClick={() => closeUpgradeSheet()}>Done</button>
@@ -738,7 +739,7 @@ function ApprovedStep({ e, request }: { e: Entitlements; request: UpgradeRequest
   const on = planName(e.plans.find((p) => p.key === (request.approved_plan || request.plan)) ?? { key: request.approved_plan || request.plan, name: "" });
   const until = request.approved_until ?? null;
   return (
-    <FlowSheet title={`You're on ${on}`} onClose={closeUpgradeSheet} guard={() => true}
+    <FlowSheet title={`You're on ${on}`} onClose={closeUpgradeSheet} guard={async () => true}
       footer={<div className="flow-actions"><div className="flow-go"><button type="button" className="btn primary" onClick={() => closeUpgradeSheet()}>Done</button></div></div>}>
       <div className="approved" role="status" data-testid="upgrade-approved">
         <span className="approved-mark" aria-hidden="true"><CheckIcon size={22} /></span>

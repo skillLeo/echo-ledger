@@ -6,13 +6,16 @@ import type { PendingItem, SkipReason, SkippedItem, UploadItem } from "./ipc";
 export const NO_AUDIO_HINT = "Check your microphone and the audio device, then try again.";
 
 /** Confirmation before a waiting recording or a failed upload is thrown away. */
-export const DISCARD_CONFIRM = "Discard this recording? It can't be undone.";
+/** The confirm dialog's question for Discard (lib/confirm.ts). */
+export const DISCARD_QUESTION = { title: "Discard this recording?", body: "It can't be undone.", confirm: "Discard" } as const;
+/** The same for several at once. */
+export function discardAllQuestion(count: number) {
+  return count === 1 ? DISCARD_QUESTION : { title: `Discard all ${recordings(count)}?`, body: "It can't be undone.", confirm: "Discard all" };
+}
 
 const recordings = (count: number) => `${count} recording${count === 1 ? "" : "s"}`;
 
 /** Confirmation before every waiting recording is thrown away at once (one item reads like a single Discard). */
-export const discardAllConfirm = (count: number): string =>
-  count === 1 ? DISCARD_CONFIRM : `Discard all ${recordings(count)}? It can't be undone.`;
 
 /** The notice after Keep all / Discard all ("Kept 3 recordings"). */
 export const bulkNotice = (verb: "Kept" | "Discarded", count: number): string => `${verb} ${recordings(count)}`;

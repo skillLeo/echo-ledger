@@ -4,9 +4,9 @@ import { MAIN_LANGUAGES, MORE_LANGUAGES, learnPrompt, menuLabel, type LanguageCh
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
 import { fillWidth } from "../../lib/motion";
 import {
-  DISCARD_CONFIRM,
+  DISCARD_QUESTION,
   bulkNotice,
-  discardAllConfirm,
+  discardAllQuestion,
   failedUploads,
   heldLine,
   heldUploads,
@@ -21,6 +21,7 @@ import {
 } from "../../lib/pending";
 import { AlertIcon, AppTileIcon, HourglassIcon, ImportIcon, appKind } from "../../components/Icons";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 /** A `main:navigate` request to bring one waiting recording into view, optionally with its title open for editing. */
 export interface PendingFocus {
@@ -165,7 +166,7 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
   };
 
   const discard = async (item: PendingItem) => {
-    if (!window.confirm(DISCARD_CONFIRM)) return;
+    if (!(await confirmAction(DISCARD_QUESTION))) return;
     if (await perform(item.id, () => api.pendingDiscard(item.id), "Discarded")) drop(item.id);
   };
 
@@ -189,8 +190,8 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
 
   const keepAll = () => decideAll("Kept", (id) => api.pendingKeep(id));
 
-  const discardAll = () => {
-    if (!window.confirm(discardAllConfirm(pending.length))) return;
+  const discardAll = async () => {
+    if (!(await confirmAction(discardAllQuestion(pending.length)))) return;
     return decideAll("Discarded", (id) => api.pendingDiscard(id));
   };
 
@@ -254,13 +255,13 @@ export function LibraryQueue({ notify, focus, onFocusHandled }: { notify: Notify
 
   const discardUpload = async (item: UploadItem) => {
     // An imported file is still on the computer where it came from, so only a recording made here is asked about.
-    if (!item.imported && !window.confirm(DISCARD_CONFIRM)) return;
+    if (!item.imported && !(await confirmAction(DISCARD_QUESTION))) return;
     if (await perform(item.id, () => api.uploadDiscard(item.id), "Discarded")) setUploads((list) => list.filter((i) => i.id !== item.id));
   };
 
   /** Every recording that waits for one account, after one confirmation. */
   const discardHeld = async (items: UploadItem[]) => {
-    if (!window.confirm(discardAllConfirm(items.length))) return;
+    if (!(await confirmAction(discardAllQuestion(items.length)))) return;
     setBulkBusy(true);
     let done = 0;
     try {

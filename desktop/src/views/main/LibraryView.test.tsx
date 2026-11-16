@@ -6,6 +6,7 @@ import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, re
 import { makeEntitlements, makeItem, makeTranscript, anyTarget, sampleEntitlements } from "../../test/fixtures";
 import { OPEN_SECTION_EVENT, closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -1032,17 +1033,17 @@ describe("LibraryView copy", () => {
 
 describe("LibraryView delete", () => {
   it("asks for confirmation and does nothing when declined", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const confirm = answerConfirm().mockReturnValue(false);
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fireEvent.click(within(detail()).getByRole("button", { name: "Delete" }));
-    expect(confirm).toHaveBeenCalledWith("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.");
+    expect(confirm).toHaveBeenCalledWith("Delete this recording? It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.");
     expect(callsOf("delete_session")).toHaveLength(0);
     expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
   });
 
   it("deletes the session, reloads the library, clears the selection and confirms", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     respond("library_list", ITEMS.filter((i) => i.id !== "a"));
@@ -1055,7 +1056,7 @@ describe("LibraryView delete", () => {
   });
 
   it("reports a failed delete and keeps the recording", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fail("delete_session", "Server returned 403: This device may not delete sessions.");

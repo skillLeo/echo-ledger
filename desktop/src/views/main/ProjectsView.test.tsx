@@ -11,6 +11,7 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondW
 import { makeItem, makeScreen, anyTarget, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { forgetPictures } from "../../lib/screens";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -590,7 +591,7 @@ describe("Files", () => {
   it("pastes instructions and removes a file", async () => {
     respond("client_instructions_add", { data: { id: "f7", name: "House rules", mime: "text/plain", size_bytes: 30, pages: null, status: "ready", error: null, instructions: true, created_at: null } });
     respond("client_file_delete", undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     await renderProjects();
     tab("Files");
     fireEvent.click(screen.getByRole("button", { name: "Paste instructions" }));

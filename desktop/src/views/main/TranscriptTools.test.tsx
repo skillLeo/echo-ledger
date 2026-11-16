@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ExportMenu, HistoryPanel, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, VocabularyHint, WAVE_BARS, Waveform } from "./TranscriptTools";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -100,12 +101,12 @@ describe("editing tools (B7)", () => {
       { id: "r1", source: "original", author: null, created_at: "2026-10-25T09:00:00Z" },
     ] });
     const onRestore = vi.fn(async () => undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     render(<HistoryPanel transcriptId="t1" edited onRestore={onRestore} onClose={vi.fn()} />);
     expect(await screen.findByText("Original from the engine")).toBeInTheDocument();
     expect(screen.getByText("by Work laptop")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restore original" }));
-    expect(onRestore).toHaveBeenCalled();
+    await waitFor(() => expect(onRestore).toHaveBeenCalled());
   });
 
   it("offers no restore for a transcript that was never edited", async () => {

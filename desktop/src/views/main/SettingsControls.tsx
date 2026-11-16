@@ -7,6 +7,7 @@ import { titleOf } from "../../lib/settingsRegistry";
 import { reducedMotion } from "../../lib/motion";
 import { LucideChevronRightIcon, LucideExternalLinkIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
+import { confirmAction } from "../../lib/confirm";
 
 /** The attributes that make a row a search target. */
 export function rowAttrs(id: string): { id: string; "data-setting": string; tabIndex: number } {
@@ -237,7 +238,7 @@ export function EntityRow({ id, leading, title, sub, children, testId }: {
 export function ResetRow({ page, onReset }: { page: string; onReset: () => void }) {
   return (
     <div className="set-reset">
-      <button type="button" className="btn text" onClick={() => { if (window.confirm(`Reset ${page} to defaults?`)) onReset(); }}>Reset to defaults</button>
+      <button type="button" className="btn text" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: "Reset" }).then((yes) => { if (yes) onReset(); })}>Reset to defaults</button>
     </div>
   );
 }

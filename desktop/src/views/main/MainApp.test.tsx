@@ -6,6 +6,7 @@ import { makeEntitlements, makeItem, sampleEntitlements, makeNavigate, makePendi
 import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import type { AppStatus } from "../../lib/ipc";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -545,7 +546,7 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
   });
 
   it("signs out from the avatar menu after the confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     await renderPaired();
     fireEvent.click(screen.getByRole("button", { name: /^Account menu:/ }));

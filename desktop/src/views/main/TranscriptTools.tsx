@@ -8,6 +8,7 @@ import type { Bookmark } from "../../lib/library";
 import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../components/Icons";
 import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -250,7 +251,7 @@ export function HistoryPanel({ transcriptId, edited, onRestore, onClose }: {
         <div key={r.id} className="row small"><span>{REVISION_LABEL[r.source] ?? r.source}</span><span className="muted">{formatWhen(r.created_at)}</span>{r.author && <span className="muted">by {r.author}</span>}</div>
       ))}
       <div className="row">
-        {edited && <button type="button" className="btn danger ghost" onClick={() => { if (window.confirm("Put the engine’s original text back? Your edits stay in the history.")) void onRestore(); }}>Restore original</button>}
+        {edited && <button type="button" className="btn danger ghost" onClick={() => void confirmAction({ title: "Put the original text back?", body: "Your edits stay in the history.", confirm: "Restore" }).then((yes) => { if (yes) void onRestore(); })}>Restore original</button>}
         <button type="button" className="btn ghost" onClick={onClose}>Close</button>
       </div>
     </div>

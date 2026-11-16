@@ -8,6 +8,7 @@ import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond,
 import { makePrivacyStatus, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { findSetting, HELP_ARTICLES, SETTINGS, setting } from "../../lib/settingsRegistry";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -389,7 +390,7 @@ describe("rows that save", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "R", code: "KeyR", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
     });
     await waitFor(() => expect(callsOf("set_shortcut").at(-1)).toEqual({ action: "record_now", accelerator: "CommandOrControl+Shift+R" }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     await waitFor(() => expect(callsOf("reset_shortcuts")).toHaveLength(1));
   });

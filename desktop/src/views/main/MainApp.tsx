@@ -13,7 +13,8 @@ import { LibraryColumn, ProjectsColumn } from "./SecondaryColumn";
 import { HomeView } from "./HomeView";
 import { SharedView } from "./SharedView";
 import { RequestLinksSheet } from "./RequestLinks";
-import { settingsAvailability, settingsPages, signOutConfirm } from "./SettingsView";
+import { settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
+import { ConfirmHost } from "./ConfirmHost";
 import { roleOf } from "./AccountSettings";
 import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
@@ -44,6 +45,7 @@ import { StateBanner } from "../../components/StateBanner";
 import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -625,7 +627,7 @@ export default function MainApp() {
     setProjectRequest({ kind: "new", seq: ++navigations.current });
   };
   const signOut = async () => {
-    if (!window.confirm(signOutConfirm(status.pendingUploads))) return;
+    if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out" }))) return;
     const next = await run(api.unpair);
     if (next) setStatus(next);
   };
@@ -744,6 +746,7 @@ export default function MainApp() {
       {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onShortcuts={() => openAccount("shortcuts")} />}
       {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       <UpgradeSheet />
+      <ConfirmHost />
       {toastView}
     </div>
   );

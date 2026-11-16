@@ -5,6 +5,7 @@ import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makeMicUser, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -415,7 +416,7 @@ describe("RecordView pause, resume and cancel", () => {
 
   it("asks before cancelling and discards only when confirmed", async () => {
     respond("cancel_recording", makeStatus());
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     await setup({ recording: makeRecording() });
     fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
     expect(confirm).toHaveBeenCalledWith("Discard this recording? It can't be undone.");
