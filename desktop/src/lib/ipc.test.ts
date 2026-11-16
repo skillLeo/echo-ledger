@@ -60,6 +60,7 @@ describe("api wrappers", () => {
     ["recordingState", () => api.recordingState(), "recording_state", undefined],
     ["pendingList", () => api.pendingList(), "pending_list", undefined],
     ["pendingKeep", () => api.pendingKeep("p1"), "pending_keep", { id: "p1" }],
+    ["screensCaptureNow", () => api.screensCaptureNow(), "screens_capture_now", undefined],
     ["pendingKeepAudio", () => api.pendingKeepAudio("p1"), "pending_keep_audio", { id: "p1" }],
     ["pendingDiscard", () => api.pendingDiscard("p1"), "pending_discard", { id: "p1" }],
     ["pendingRename", () => api.pendingRename("p1", "Call with Acme"), "pending_rename", { id: "p1", title: "Call with Acme" }],

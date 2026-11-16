@@ -2077,6 +2077,16 @@ pub fn screens_pause(app: AppHandle, paused: bool) -> RecordingState {
     now
 }
 
+/// "Capture now" in the pill: the running recording keeps the screen at its next sample (about a second), whatever it
+/// shows; `recording:state` then carries the new count. A press while screens are paused or held keeps nothing.
+#[tauri::command]
+pub fn screens_capture_now(app: AppHandle) -> RecordingState {
+    app.state::<AppState>().screens.capture_now();
+    let now = recording_state_now(&app);
+    let _ = app.emit("recording:state", &now);
+    now
+}
+
 /// macOS: asks for Screen Recording (the system asks once; after that only System Settings changes it, which opens
 /// then). True when it is allowed now; always true on Windows.
 #[tauri::command]

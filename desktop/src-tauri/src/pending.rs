@@ -1,7 +1,7 @@
 //! Keep / Discard after a recording ends (A2.1-A2.6, v1.5 "After a call"). A finished recording that is not kept at
 //! once stays on this computer as a `PendingDecision` in `pending.json` (atomic writes, tolerant loading, restored at
-//! start) and is not uploaded. With "Ask me" the after-call chip shows it and it keeps itself at `keep_at`, 10 s later;
-//! one without `keep_at` (the chip was never shown, it was opened in the main window, or it is left from before v1.5)
+//! start) and is not uploaded. With "Ask me" the after-call chip shows it, and at `keep_at`, 12 s later, it saves
+//! itself as audio only (v1.8 P1); one without `keep_at` (the chip was never shown, it was opened in the main window, or it is left from before v1.5)
 //! waits in the Library's waiting list. Keep moves it to the upload queue; Discard deletes its files, uploads nothing,
 //! requests no transcript and queues its server session (if captions opened one) for deletion. The functions here
 //! touch only files, so the whole flow is unit-tested; `actions` adds locking, events and the after-call window.

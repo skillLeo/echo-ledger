@@ -665,6 +665,7 @@ pub fn run() {
             commands::link_open,
             commands::screens_status,
             commands::screens_pause,
+            commands::screens_capture_now,
             commands::screens_permission,
             commands::session_screens,
             commands::client_screens,

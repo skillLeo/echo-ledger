@@ -1829,6 +1829,8 @@ export const api = {
   screensStatus: () => invoke<ScreensStatus>("screens_status"),
   /** The pill's Screens chip: pause or resume screens of the running recording (the recording goes on). */
   screensPause: (paused: boolean) => invoke<RecordingState>("screens_pause", { paused }),
+  /** "Capture now": the running recording keeps the screen at its next sample; `recording:state` then has the count. */
+  screensCaptureNow: () => invoke<RecordingState>("screens_capture_now"),
   /** macOS: asks for Screen Recording, or opens System Settings once it was refused; true when allowed. */
   screensPermission: () => invoke<boolean>("screens_permission"),
   /** A recording's screens in time order; null on a server without screen moments. */

@@ -77,10 +77,17 @@ impl<'a> Sampler<'a> {
     /// and the hour's cap are filled in here. `words`: pointing words were heard since the last frame (taken when a
     /// frame is looked at, dropped while the capture holds).
     pub fn tick(&mut self, facts: Facts, wanted: &Wanted<'_>, now_ms: u64, words: &AtomicBool) -> Sample {
+        self.tick_asked(facts, wanted, now_ms, words, &AtomicBool::new(false))
+    }
+
+    /// [`Self::tick`], and `manual`: "Capture now" was pressed since the last frame. It keeps the next frame looked at;
+    /// a press while the capture is off or holds is dropped, so it never fires later by surprise.
+    pub fn tick_asked(&mut self, facts: Facts, wanted: &Wanted<'_>, now_ms: u64, words: &AtomicBool, manual: &AtomicBool) -> Sample {
         let facts = Facts { supported: self.system.supported(), permission: self.system.permission(), capped: self.detector.capped(now_ms), ..facts };
         let target = match gate(&facts) {
             Gate::Off(reason) => {
                 self.close();
+                manual.store(false, Ordering::SeqCst);
                 return Sample::Off(reason);
             }
             Gate::Hold(reason) => Err(reason),
@@ -91,6 +98,7 @@ impl<'a> Sampler<'a> {
             Err(reason) => {
                 self.close();
                 words.store(false, Ordering::SeqCst);
+                manual.store(false, Ordering::SeqCst);
                 return Sample::Held(reason);
             }
         };
@@ -122,7 +130,8 @@ impl<'a> Sampler<'a> {
             }
         };
         let words = words.swap(false, Ordering::SeqCst);
-        let kept = Luma::from_bgra(&frame.bgra, frame.width as usize, frame.height as usize, frame.stride).and_then(|luma| self.detector.observe(now_ms, &luma, words));
+        let manual = manual.swap(false, Ordering::SeqCst);
+        let kept = Luma::from_bgra(&frame.bgra, frame.width as usize, frame.height as usize, frame.stride).and_then(|luma| self.detector.observe_asked(now_ms, &luma, words, manual));
         match kept {
             Some(trigger) => Sample::Keep { frame, trigger },
             None => Sample::Watching,
@@ -231,6 +240,7 @@ mod tests {
                 Sample::Watching => "watch",
                 Sample::Keep { trigger: Trigger::Change, .. } => "change",
                 Sample::Keep { trigger: Trigger::Words, .. } => "words",
+                Sample::Keep { trigger: Trigger::Manual, .. } => "manual",
             })
             .collect()
     }
@@ -370,6 +380,43 @@ mod tests {
         // While the project is still being read nothing is kept either.
         assert!(matches!(sampler.tick(Facts { project: None, ..facts() }, &wanted, 5_000, &words), Sample::Held(HoldReason::Starting)));
         assert!(system.opened.lock().unwrap().is_empty());
+    }
+
+    fn ask(sampler: &mut Sampler<'_>, facts: Facts, wanted: &Wanted<'_>, at_s: u64, manual: &AtomicBool) -> &'static str {
+        match sampler.tick_asked(facts, wanted, at_s * 1_000, &AtomicBool::new(false), manual) {
+            Sample::Keep { trigger: Trigger::Manual, .. } => "manual",
+            Sample::Keep { .. } => "other",
+            Sample::Held(_) => "held",
+            Sample::Off(_) => "off",
+            Sample::Watching => "watch",
+        }
+    }
+
+    #[test]
+    fn capture_now_keeps_the_screen_at_the_next_sample_even_unchanged() {
+        let system = system();
+        let mut sampler = Sampler::new(&system);
+        let meeting = zoom();
+        let wanted = Wanted { mode: MEETING_WINDOW, meeting: Some(&meeting), excluded: &[], site_rules: &[] };
+        assert!(run(&mut sampler, facts(), &wanted, 0..4, &AtomicBool::new(false)).contains(&"change"), "the screen was kept once");
+        let manual = AtomicBool::new(true);
+        assert_eq!(ask(&mut sampler, facts(), &wanted, 4, &manual), "manual", "the same screen again, because it was asked for");
+        assert!(!manual.load(Ordering::SeqCst), "one press, one screen");
+        assert_eq!(ask(&mut sampler, facts(), &wanted, 5, &manual), "watch");
+    }
+
+    #[test]
+    fn a_press_while_screens_hold_is_dropped_not_kept_for_later() {
+        let system = system();
+        let mut sampler = Sampler::new(&system);
+        let meeting = zoom();
+        let wanted = Wanted { mode: MEETING_WINDOW, meeting: Some(&meeting), excluded: &[], site_rules: &[] };
+        let manual = AtomicBool::new(true);
+        assert_eq!(ask(&mut sampler, Facts { user_paused: true, ..facts() }, &wanted, 0, &manual), "held");
+        assert!(!manual.load(Ordering::SeqCst));
+        manual.store(true, Ordering::SeqCst);
+        assert_eq!(ask(&mut sampler, Facts { enabled: false, ..facts() }, &wanted, 1, &manual), "off");
+        assert!(!manual.load(Ordering::SeqCst), "nor while screens are off");
     }
 
     #[test]
