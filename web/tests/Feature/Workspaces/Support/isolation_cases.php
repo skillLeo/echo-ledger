@@ -6,6 +6,7 @@ use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionLabel;
 use App\Models\SessionMarker;
+use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
@@ -161,6 +162,11 @@ function isoApiCases(array $b): array
         // Writes only about the calling device: no id in the request, the device decides the workspace.
         'api.devices.report' => ['POST', '/api/devices/report', ['platform' => 'android', 'checks' => [['key' => 'voice_notes', 'state' => 'ok']]], 'list'],
         'api.config' => ['GET', '/api/config', [], 'list'],
+        // Since v1.8.1: a Share Check result about the calling device only (ids in the body are never read), and the
+        // server-wide sharing-bar patterns. No route reads results back.
+        'api.diagnostics.share-checks' => ['POST', '/api/diagnostics/share-checks', ['platform' => 'windows', 'os_build' => '10.0.26100', 'app_version' => '1.8.1', 'method' => 'wgc', 'result' => 'pass', 'device_id' => $b['device']->id, 'user_id' => $b['bob']->id],
+            fn (TestResponse $r): bool => $r->status() === 201 && ShareCheckResult::query()->where('device_id', $b['device']->id)->doesntExist()],
+        'api.config.share-bars' => ['GET', '/api/config/share-bars', [], 'list'],
         'api.security' => ['GET', '/api/security', [], 'list'],
         'api.clients' => ['GET', '/api/clients', [], 'list'],
         'api.stt.token' => ['POST', '/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $s], 404],
