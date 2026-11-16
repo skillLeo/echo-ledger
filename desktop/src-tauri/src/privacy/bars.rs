@@ -116,10 +116,17 @@ pub struct Found {
     pub mode: Mode,
 }
 
+/// Whether a window can be a sharing bar (pure). On a Mac every bar floats above the apps (layer 3 or 25 in the window
+/// lists): a window at the normal layer is a meeting window, a chat or a page, whatever its title says ("Presenting Q3 |
+/// Microsoft Teams", a tab titled "…is sharing your screen"). Windows' window list has no layers.
+pub fn can_be_bar(platform: &str, layer: i64) -> bool {
+    platform != "macos" || layer != 0
+}
+
 /// The share the window list shows, if any (pure).
 pub fn find(patterns: &Patterns, platform: &str, windows: &[Listed]) -> Option<Found> {
     let mut found: Option<Found> = None;
-    for w in windows {
+    for w in windows.iter().filter(|w| can_be_bar(platform, w.layer)) {
         if let Some(p) = patterns.matching(platform, &w.owner, &w.title) {
             let this = Found { pattern: p.id.clone(), app: p.app.clone(), mode: mode_of(&w.title) };
             // A whole-screen bar wins over a tab's.
@@ -208,6 +215,18 @@ mod tests {
         assert_eq!(p.list.len(), 1);
         assert_eq!(p.matching("macos", "zoom.us", "Share Toolbar").map(|p| p.id.as_str()), Some("good"));
         assert!(p.matching("windows", "zoom.us", "Share Toolbar").is_none(), "another platform");
+    }
+
+    #[test]
+    fn on_a_mac_only_a_floating_window_can_be_a_sharing_bar() {
+        let p = Patterns::fallback();
+        let meeting = Listed { owner: "Microsoft Teams".into(), title: "Presenting Q3 | Microsoft Teams".into(), layer: 0 };
+        assert!(p.matching("macos", &meeting.owner, &meeting.title).is_some(), "the title alone reads like Teams' bar");
+        assert_eq!(find(&p, "macos", std::slice::from_ref(&meeting)), None, "a meeting window at the normal layer is no bar");
+        assert_eq!(find(&p, "macos", &[Listed { layer: 3, ..meeting }]).map(|f| f.app), Some("teams".to_string()));
+        let tab = Listed { owner: "Google Chrome".into(), title: "meet.google.com is sharing your screen - how to stop it".into(), layer: 0 };
+        assert_eq!(find(&p, "macos", &[tab]), None, "a page's title is not Chrome's bar");
+        assert!(can_be_bar("windows", 0), "Windows' window list has no layers");
     }
 
     #[test]

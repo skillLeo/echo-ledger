@@ -6,7 +6,10 @@
 //! capture mode), so EchoLedger cannot read it and never writes another app's settings: Zoom counts as set up only
 //! once the guided test says so.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -166,12 +169,40 @@ pub fn bundle_version(bundle: &Path) -> Option<String> {
     (!version.is_empty()).then_some(version)
 }
 
-/// The installed version of a meeting app (Mac), none when it is not installed.
+/// The installed version of a meeting app (Mac), none when it is not installed. Read from the disk each time: the guided
+/// test keeps the version it answered for.
 pub fn installed_version(app: MeetingApp) -> Option<String> {
     if !cfg!(target_os = "macos") {
         return None;
     }
     bundle_path(app).and_then(|b| bundle_version(&b))
+}
+
+/// How long a version read from an app's bundle is believed: the safety net and the status ask for it often, and an
+/// app update shows within a minute.
+pub const VERSION_TTL: Duration = Duration::from_secs(60);
+
+/// The versions read lately (pure apart from `read`).
+#[derive(Debug, Default)]
+pub struct Versions(BTreeMap<MeetingApp, (Option<String>, Instant)>);
+
+impl Versions {
+    pub fn get(&mut self, app: MeetingApp, now: Instant, read: impl FnOnce(MeetingApp) -> Option<String>) -> Option<String> {
+        if let Some((version, at)) = self.0.get(&app)
+            && now.saturating_duration_since(*at) < VERSION_TTL
+        {
+            return version.clone();
+        }
+        let version = read(app);
+        self.0.insert(app, (version.clone(), now));
+        version
+    }
+}
+
+/// [`installed_version`], read again at most once a [`VERSION_TTL`] per app (no Info.plist or folder listing per look).
+pub fn version(app: MeetingApp) -> Option<String> {
+    static VERSIONS: Mutex<Versions> = Mutex::new(Versions(BTreeMap::new()));
+    VERSIONS.lock().unwrap_or_else(|p| p.into_inner()).get(app, Instant::now(), installed_version)
 }
 
 #[cfg(test)]
@@ -212,6 +243,23 @@ mod tests {
             "EchoLedger isn't confirmed hidden in Teams on this Mac. Run the 1-minute test, or share one window. During a whole-screen share, your answers move to your phone."
         );
         assert_eq!(warning_before_call(MeetingApp::Zoom, AppState::Hidden), None);
+    }
+
+    #[test]
+    fn a_version_is_read_once_a_minute_at_most() {
+        let mut versions = Versions::default();
+        let reads = std::cell::Cell::new(0);
+        let read = |_| {
+            reads.set(reads.get() + 1);
+            Some("7.1.9".to_string())
+        };
+        let start = Instant::now();
+        assert_eq!(versions.get(MeetingApp::Zoom, start, read).as_deref(), Some("7.1.9"));
+        assert_eq!(versions.get(MeetingApp::Zoom, start + Duration::from_secs(59), read).as_deref(), Some("7.1.9"));
+        assert_eq!(reads.get(), 1, "the safety net's looks read no Info.plist");
+        assert_eq!(versions.get(MeetingApp::Zoom, start + VERSION_TTL, read).as_deref(), Some("7.1.9"));
+        assert_eq!(reads.get(), 2, "an app update shows within a minute");
+        assert_eq!(versions.get(MeetingApp::Teams, start, |_| None), None, "not installed is kept too");
     }
 
     #[test]

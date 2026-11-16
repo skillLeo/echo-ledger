@@ -101,6 +101,24 @@
       "expect": null, "unknown": ["Safari is sharing your screen with meet.google.com"]
     },
     {
+      "name": "A Teams meeting titled like a presentation is not a share (a bar floats, a meeting window does not)",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Microsoft Teams", "title": "Presenting Q3 | Microsoft Teams", "layer": 0 },
+        { "owner": "Microsoft Teams", "title": "Chat | Microsoft Teams", "layer": 0 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
+      "name": "A browser tab whose title reads like a sharing bar is not a share",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Google Chrome", "title": "meet.google.com is sharing your screen - how to stop it", "layer": 0 },
+        { "owner": "Safari", "title": "Why Zoom says share toolbar", "layer": 0 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
       "name": "An ordinary desktop",
       "platform": "macos",
       "windows": [

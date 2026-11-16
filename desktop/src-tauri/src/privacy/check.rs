@@ -522,6 +522,7 @@ pub fn guided_answer(app: &AppHandle, meeting: MeetingApp, visible: bool) -> App
     let mut store = Store::load(&state.data_dir);
     store.guided.push(Guided { app: meeting, app_version: version.clone(), os_version: os_version(), visible, at: Utc::now() });
     store.save(&state.data_dir);
+    app.state::<Privacy>().note_guided_answer();
     diag::log(&state.data_dir, &format!("Guided test, {} {version}: {}.", meeting.name(), if visible { "visible" } else { "hidden" }));
     report(app, ShareCheckReport {
         platform: platform_wire().into(),
@@ -608,7 +609,15 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let now = std::time::Instant::now();
     let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result) };
     let badge = status::badge(&facts);
-    let lines = if platform == Platform::Windows { super::win::lines(build, remote, settings.old_windows_sharing, mismatch) } else { Vec::new() };
+    #[cfg(target_os = "macos")]
+    let permission = crate::screens::platform::macos::permission();
+    #[cfg(not(target_os = "macos"))]
+    let permission = true;
+    let lines = match platform {
+        Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch),
+        Platform::Mac => mac_lines(permission, super::watch::allowed(settings.hide_from_sharing, settings.share_one_window, false, false)),
+        Platform::Other => Vec::new(),
+    };
     let mac_version = os_version();
     let apps: Vec<AppRow> = if platform == Platform::Mac {
         MeetingApp::ALL
@@ -622,10 +631,6 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     } else {
         Vec::new()
     };
-    #[cfg(target_os = "macos")]
-    let permission = crate::screens::platform::macos::permission();
-    #[cfg(not(target_os = "macos"))]
-    let permission = true;
     PrivacyStatus {
         platform: platform_wire(),
         badge,
@@ -646,6 +651,17 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         permission,
         displays: app.available_monitors().map(|m| m.len()).unwrap_or(1),
     }
+}
+
+/// Without the Screen Recording permission other apps' window titles read empty, so the safety net can't see a share.
+pub const NO_PERMISSION_LINE: &str = "EchoLedger needs the Screen Recording permission to notice when you share your whole screen and hide its windows. Allow it in System Settings.";
+
+/// The Mac's amber lines (pure): the safety net can't work without the permission (said only while it is meant to).
+pub fn mac_lines(permission: bool, safety_net_on: bool) -> Vec<super::win::Line> {
+    if permission || !safety_net_on {
+        return Vec::new();
+    }
+    vec![super::win::Line { fix: Some(super::win::Fix::OpenSettings), ..super::win::Line::warning(NO_PERMISSION_LINE) }]
 }
 
 /// "Copy diagnostics": the system, the setting, the last checks and the log lines.
@@ -722,6 +738,17 @@ mod tests {
         // What is kept: results only, no picture.
         let text = std::fs::read_to_string(store_path(dir.path())).unwrap();
         assert!(!text.contains("data:image") && !text.contains("picture"));
+    }
+
+    #[test]
+    fn a_mac_without_screen_recording_is_told_the_safety_net_cannot_work() {
+        let lines = mac_lines(false, true);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, NO_PERMISSION_LINE);
+        assert_eq!(lines[0].fix, Some(super::super::win::Fix::OpenSettings), "with the button to System Settings");
+        assert!(lines[0].warning);
+        assert!(mac_lines(true, true).is_empty());
+        assert!(mac_lines(false, false).is_empty(), "the safety net is off anyway (Off, one window)");
     }
 
     #[test]

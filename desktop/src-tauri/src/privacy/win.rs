@@ -129,12 +129,29 @@ impl Watch {
     }
 }
 
-/// A status line of the Windows check, and whether it is a warning (amber).
+/// A status line of the privacy page, whether it is a warning (amber), and the one button that fixes it.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Line {
     pub warning: bool,
     pub text: String,
+    pub fix: Option<Fix>,
+}
+
+/// What a line's button does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Fix {
+    /// The system's Screen Recording settings (Mac).
+    OpenSettings,
+    /// Sets the capture flag of every window again (Windows, after something else changed it).
+    HideAgain,
+}
+
+impl Line {
+    pub fn warning(text: &str) -> Self {
+        Self { warning: true, text: text.into(), fix: None }
+    }
 }
 
 pub const OLD_WINDOWS_LINE: &str = "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.";
@@ -146,14 +163,14 @@ pub const MISMATCH_LINE: &str = "Windows didn't keep EchoLedger hidden from scre
 pub fn lines(build: Option<u32>, remote: bool, old: OldWindowsSharing, mismatch: bool) -> Vec<Line> {
     let mut out = Vec::new();
     if remote {
-        out.push(Line { warning: true, text: REMOTE_LINE.into() });
+        out.push(Line::warning(REMOTE_LINE));
     }
     if build.is_none_or(|b| b < EXCLUDE_BUILD) {
         let text = if old == OldWindowsSharing::BlackBox { OLD_WINDOWS_LINE } else { OLD_WINDOWS_SHOWN_LINE };
-        out.push(Line { warning: true, text: text.into() });
+        out.push(Line::warning(text));
     }
     if mismatch {
-        out.push(Line { warning: true, text: MISMATCH_LINE.into() });
+        out.push(Line::warning(MISMATCH_LINE));
     }
     out
 }
@@ -280,7 +297,7 @@ mod tests {
     #[test]
     fn remote_desktop_and_old_builds_give_amber_lines() {
         let remote = FakeWindows { build: Some(26_100), remote: true, ..Default::default() };
-        assert_eq!(lines(remote.build(), remote.remote_session(), OldWindowsSharing::BlackBox, false), vec![Line { warning: true, text: REMOTE_LINE.into() }]);
+        assert_eq!(lines(remote.build(), remote.remote_session(), OldWindowsSharing::BlackBox, false), vec![Line::warning(REMOTE_LINE)]);
         assert_eq!(lines(Some(18_363), false, OldWindowsSharing::BlackBox, false)[0].text, OLD_WINDOWS_LINE);
         assert_eq!(lines(Some(18_363), false, OldWindowsSharing::Show, false)[0].text, OLD_WINDOWS_SHOWN_LINE);
         assert!(lines(Some(26_100), false, OldWindowsSharing::BlackBox, false).is_empty(), "nothing to say");

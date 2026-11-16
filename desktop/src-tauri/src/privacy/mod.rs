@@ -13,7 +13,7 @@
 //! - Share Check ([`check`]): a protected magenta test window and an unprotected green control, the screen captured
 //!   the way meeting apps capture it, the colours counted ([`pixels`]).
 //! - Mac safety net ([`bars`], [`watch`]): a whole-screen share in a meeting app not confirmed hidden on this Mac
-//!   takes every EchoLedger window off the screen until it ends.
+//!   takes the floating windows (and the main window with "All EchoLedger windows") off the screen until it is over.
 
 pub mod apps;
 pub mod bars;
@@ -26,6 +26,7 @@ pub mod watch;
 pub mod win;
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -89,10 +90,21 @@ pub fn protected(kind: Kind, hiding: ShareHiding, demo: bool) -> bool {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum HideReason {
-    /// "Hide all EchoLedger windows" (the shortcut).
+    /// "Hide EchoLedger windows" (the shortcut, the tray, Settings).
     Person,
     /// A whole-screen share in a meeting app not confirmed hidden on this Mac (the safety net).
     Share,
+}
+
+/// Whether a window of `kind` must be off the screen for these reasons (pure): "Hide EchoLedger windows" takes every
+/// one off; a whole-screen share the floating windows, and the main window only when it is hidden from screen share too
+/// ("All EchoLedger windows"). The Share Check's windows are never put away.
+pub fn away(kind: Kind, reasons: &BTreeSet<HideReason>, hiding: ShareHiding) -> bool {
+    match kind {
+        Kind::Floating => !reasons.is_empty(),
+        Kind::Main => reasons.contains(&HideReason::Person) || (reasons.contains(&HideReason::Share) && hiding == ShareHiding::All),
+        Kind::Test | Kind::Control => false,
+    }
 }
 
 /// The privacy service's state (managed by Tauri before any window is built).
@@ -110,6 +122,10 @@ pub struct Privacy {
     pub drawn_labels: Mutex<BTreeSet<String>>,
     /// The share the Mac safety net saw last (its meeting app), for the status.
     pub share_seen: Mutex<Option<watch::Seen>>,
+    /// "Show EchoLedger windows" was chosen during a share: the safety net lets go at its next look.
+    share_release: AtomicBool,
+    /// Bumped by every guided-test answer, so the safety net reads the answers again at once.
+    guided_answers: AtomicU64,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -176,6 +192,27 @@ impl Privacy {
     pub fn concealed(&self) -> bool {
         !lock(&self.hidden).is_empty()
     }
+
+    pub fn reasons(&self) -> BTreeSet<HideReason> {
+        lock(&self.hidden).clone()
+    }
+
+    /// The person chose "Show EchoLedger windows" during a share (see [`watch::Watcher::release`]).
+    pub fn release_share(&self) {
+        self.share_release.store(true, Ordering::SeqCst);
+    }
+
+    pub fn take_share_release(&self) -> bool {
+        self.share_release.swap(false, Ordering::SeqCst)
+    }
+
+    pub fn guided_generation(&self) -> u64 {
+        self.guided_answers.load(Ordering::SeqCst)
+    }
+
+    pub fn note_guided_answer(&self) {
+        self.guided_answers.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 /// Sets the capture flag on a window's builder (before the first show) and registers the window. Every window
@@ -201,15 +238,15 @@ pub fn wanted_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<bool> {
     Some(shielded || protected(kind, state.settings().hide_from_sharing, privacy.demo_active(Instant::now())))
 }
 
-/// After a window was built: Windows sets and reads back its display affinity; a window built while EchoLedger's
-/// windows are off the screen goes off at once.
+/// After a window was built: Windows sets and reads back its display affinity; a window built while its kind is off
+/// the screen goes off at once.
 pub fn built<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
     let Some(privacy) = app.try_state::<Privacy>() else { return };
     let label = window.label().to_string();
     if let (Some(state), Some(kind), Some(protect)) = (app.try_state::<crate::AppState>(), privacy.kind_of(&label), wanted_for(app, &label)) {
         let settings = state.settings();
         enforce(app, window, protect, &settings);
-        if privacy.concealed() && matches!(kind, Kind::Main | Kind::Floating) {
+        if away(kind, &privacy.reasons(), settings.hide_from_sharing) {
             lock(&privacy.put_away).insert(label);
             put_away(window, true);
         }
@@ -277,6 +314,8 @@ pub fn apply_all<R: Runtime>(app: &AppHandle<R>) {
             enforce(app, &window, protect, &settings);
         }
     }
+    // The setting decides whether a share takes the main window off too.
+    reconcile(app);
     let _ = app.emit("privacy:changed", ());
 }
 
@@ -306,43 +345,44 @@ pub fn end_demo(app: &AppHandle) {
     crate::actions::emit_status(app);
 }
 
-/// "Hide all EchoLedger windows" (the shortcut): off the screen, and back on the next press.
+/// "Hide EchoLedger windows" (the shortcut): off the screen, and back on the next press.
 pub fn toggle_hide_all(app: &AppHandle) {
     let on = !app.state::<Privacy>().hidden_for(HideReason::Person);
     set_hidden(app, HideReason::Person, on);
 }
 
-/// Takes EchoLedger's windows off the screen for `reason`, or brings them back once no reason is left. Their pages stop
-/// drawing first (`privacy:conceal`), then each window is ordered out without closing (nothing is lost, and the app
-/// stays in the Dock, the menu bar, the tray and every window list).
+/// Takes EchoLedger's windows off the screen for `reason` ([`away`] says which), or brings them back once nothing
+/// keeps them off. The floating windows' pages stop drawing first (`privacy:conceal`), then each window is ordered out
+/// without closing (nothing is lost, and the app stays in the Dock, the menu bar, the tray and every window list).
 pub fn set_hidden<R: Runtime>(app: &AppHandle<R>, reason: HideReason, on: bool) {
     let privacy = app.state::<Privacy>();
-    if !privacy.set_hidden(reason, on) {
-        let _ = app.emit("privacy:changed", ());
-        return;
+    if privacy.set_hidden(reason, on) {
+        let _ = app.emit("privacy:conceal", privacy.concealed());
     }
-    let concealed = privacy.concealed();
-    let _ = app.emit("privacy:conceal", concealed);
-    let labels: Vec<String> = privacy.registered().into_iter().filter(|(_, k)| matches!(k, Kind::Main | Kind::Floating)).map(|(l, _)| l).collect();
-    if concealed {
-        let mut away = lock(&privacy.put_away);
-        for label in labels {
-            if let Some(window) = app.get_webview_window(&label)
-                && window.is_visible().unwrap_or(false)
-            {
-                put_away(&window, true);
-                away.insert(label);
-            }
-        }
-    } else {
-        let away: Vec<String> = std::mem::take(&mut *lock(&privacy.put_away)).into_iter().collect();
-        for label in away {
-            if let Some(window) = app.get_webview_window(&label) {
-                put_away(&window, false);
-            }
-        }
-    }
+    reconcile(app);
     let _ = app.emit("privacy:changed", ());
+}
+
+/// Puts every window where the reasons want it, on the main thread: there a window's state is read without a round trip
+/// (no lock is ever held across one) and two changes never cross. A window that must be off and is on screen is ordered
+/// out; one the service took off and that may come back is ordered in.
+pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let (Some(privacy), Some(state)) = (handle.try_state::<Privacy>(), handle.try_state::<crate::AppState>()) else { return };
+        let (reasons, hiding) = (privacy.reasons(), state.settings_with(|s| s.hide_from_sharing));
+        for (label, kind) in privacy.registered() {
+            let Some(window) = handle.get_webview_window(&label) else { continue };
+            let (off, taken) = (away(kind, &reasons, hiding), lock(&privacy.put_away).contains(&label));
+            if off && !taken && window.is_visible().unwrap_or(false) {
+                put_away(&window, true);
+                lock(&privacy.put_away).insert(label);
+            } else if !off && taken {
+                put_away(&window, false);
+                lock(&privacy.put_away).remove(&label);
+            }
+        }
+    });
 }
 
 /// Orders a window out, or back in front without taking focus (overlays are never `show()`n: tao would focus them).
@@ -458,6 +498,24 @@ mod tests {
         assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + DEMO), Some(true));
         assert_eq!(privacy.demo_left(start + DEMO), None);
         assert_eq!(DEMO, Duration::from_secs(600));
+    }
+
+    #[test]
+    fn a_share_takes_the_main_window_off_only_with_all_windows_and_the_person_takes_all() {
+        use HideReason::*;
+        let reasons = |list: &[HideReason]| list.iter().copied().collect::<BTreeSet<_>>();
+        for hiding in [ShareHiding::All, ShareHiding::Floating] {
+            assert!(away(Kind::Floating, &reasons(&[Share]), hiding), "{hiding:?}: the floating windows leave a share");
+            assert!(away(Kind::Main, &reasons(&[Person]), hiding), "{hiding:?}: Hide EchoLedger windows takes every window");
+            assert!(away(Kind::Floating, &reasons(&[Person]), hiding));
+        }
+        assert!(away(Kind::Main, &reasons(&[Share]), ShareHiding::All));
+        assert!(!away(Kind::Main, &reasons(&[Share]), ShareHiding::Floating), "Only floating windows: the main window stays");
+        for kind in [Kind::Main, Kind::Floating, Kind::Test, Kind::Control] {
+            assert!(!away(kind, &reasons(&[]), ShareHiding::All), "{kind:?}: nothing keeps it off");
+        }
+        assert!(!away(Kind::Test, &reasons(&[Person, Share]), ShareHiding::All), "the Share Check's windows are never put away");
+        assert!(!away(Kind::Control, &reasons(&[Person, Share]), ShareHiding::All));
     }
 
     #[test]

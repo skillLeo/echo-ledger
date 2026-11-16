@@ -208,6 +208,12 @@ impl AppState {
         self.lock_settings().clone()
     }
 
+    /// A look at a few settings without copying them all (the screen-share safety net reads two of them several times
+    /// a second). `f` must not reach the settings again.
+    pub fn settings_with<T>(&self, f: impl FnOnce(&Settings) -> T) -> T {
+        f(&self.lock_settings())
+    }
+
     /// The language of a recording: its chip when one was chosen on the pill, else the app's transcription language
     /// (none: the server uses the client's or the console default).
     pub fn recording_language(&self, client_ref: &str) -> Option<String> {
