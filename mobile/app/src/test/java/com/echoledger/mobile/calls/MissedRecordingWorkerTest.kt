@@ -209,6 +209,21 @@ class MissedRecordingWorkerTest : AppTest() {
     }
 
     @Test
+    fun `the missed-recording notice names only calls of the account signed in now`() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        reachBack()
+        val at = System.currentTimeMillis() - 30 * min
+        CallSightings.update(app) { listOf(seen("zoom", at, at + 5 * min, "us.zoom.videomeetings")) }
+        // Sara signed in after Omar's call, before the detector looked.
+        val sara = Owner.of("https://echo.example", "sara@example.com")
+        MissedRecordingStore.stamp(app, previous = account, next = sara, atMs = at + 10 * min)
+        runBlocking { app.graph.settings.update { it.copy(account = sara) } }
+        runBlocking { androidx.work.testing.TestListenableWorkerBuilder<MissedRecordingWorker>(app).build().doWork() }
+        assertEquals("found, and kept for Omar", account, MissedRecordingStore.all(app).single().owner)
+        assertEquals("Omar's missed call is not announced to Sara", null, notice())
+    }
+
+    @Test
     fun `of two calls the notice names, the one recorded after all leaves it and the other stays, quietly`() {
         org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         reachBack()
@@ -283,6 +298,21 @@ class MissedRecordingWorkerTest : AppTest() {
         )
         PendingImports.done(app, t - 5_000)
         assertTrue(PendingImports.waiting(app, farLater).isEmpty())
+    }
+
+    @Test
+    fun `a look that gives up ends only the waits that were there when its chain began`() {
+        val now = System.currentTimeMillis()
+        // Call A's look was queued; call B ended while it ran, and B's own look is queued behind it.
+        PendingImports.add(app, t, t + 60_000, nowMs = now)
+        PendingImports.add(app, t + 5 * min, t + 6 * min, nowMs = now + 1_000)
+        // A's look gives up (here: the import was switched off meanwhile).
+        runBlocking { app.graph.settings.update { it.copy(phoneAppImport = false) } }
+        val worker = androidx.work.testing.TestListenableWorkerBuilder<PhoneAppRecordings.Worker>(app)
+            .setInputData(androidx.work.workDataOf(PhoneAppRecordings.KEY_SCHEDULED_AT to now))
+            .build()
+        runBlocking { worker.doWork() }
+        assertEquals("B still waits for its own look", listOf((t + 5 * min)..(t + 6 * min)), PendingImports.waiting(app, now + 2_000))
     }
 
     @Test

@@ -158,7 +158,9 @@ fun EchoButton(
     kind: ButtonKind = ButtonKind.Primary,
     icon: ImageVector? = null,
     enabled: Boolean = true,
-    loading: Boolean = false
+    loading: Boolean = false,
+    /** Lines the label may take (one by default); a long label on a page with large text may take two. */
+    maxLines: Int = 1
 ) {
     val c = LocalEchoColors.current
     val interaction = remember { MutableInteractionSource() }
@@ -188,7 +190,7 @@ fun EchoButton(
             Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(Space.s2))
         }
-        Text(text, style = LocalEchoType.current.labelL, color = tint, maxLines = 1)
+        Text(text, style = LocalEchoType.current.labelL, color = tint, maxLines = maxLines)
     }
 }
 

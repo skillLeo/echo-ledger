@@ -86,11 +86,15 @@ object PendingImports {
         if (kept.size != all.size) write(context, kept)
     }
 
-    /** The import's looks after the calls are over: only the calls whose recording waits for the person still wait. */
+    /**
+     * The import's looks that began at [startedMs] are over: the calls that were waiting for them stop waiting. A call
+     * whose recording waits for the person still waits, and so does a call that ended after those looks began (its own
+     * look runs after them).
+     */
     @Synchronized
-    fun endLooks(context: Context) {
+    fun endLooks(context: Context, startedMs: Long = Long.MAX_VALUE) {
         val all = read(context)
-        val kept = all.filter { it.person }
+        val kept = all.filter { it.person || it.untilMs - MAX_WAIT_MS > startedMs }
         if (kept.size != all.size) write(context, kept)
     }
 

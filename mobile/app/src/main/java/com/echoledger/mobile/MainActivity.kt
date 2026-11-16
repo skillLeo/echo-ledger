@@ -339,7 +339,10 @@ class MainActivity : FragmentActivity() {
                 // Since v1.8: calls that were not recorded show in Activity as soon as the app opens.
                 vm.detectMissed()
                 if (android.os.Build.VERSION.SDK_INT >= 30 && lockState != LockState.Locked) {
-                    val copies = com.echoledger.mobile.calls.PhoneAppRecordings.takeDeletes(context, currentSettings)
+                    // Read off the main thread: it checks each recording on the disk.
+                    val copies = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.echoledger.mobile.calls.PhoneAppRecordings.takeDeletes(context, currentSettings)
+                    }
                     if (copies.isNotEmpty()) {
                         runCatching { android.provider.MediaStore.createDeleteRequest(contentResolver, copies).intentSender }
                             .getOrNull()

@@ -636,7 +636,7 @@ fun SessionScreen(
                             }
                             EchoButton("Copy for AI (marks unsure words)", {
                                 copy(withTimestamps = false, forAi = true)
-                            }, kind = ButtonKind.Text)
+                            }, kind = ButtonKind.Text, maxLines = 2)
                             Text(
                                 if (t.kind ==
                                     "final"

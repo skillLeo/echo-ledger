@@ -386,6 +386,26 @@ class PrivateWindowsTest : AppTest() {
     }
 
     @Test
+    fun `the notice asking to share the sound goes once Live Translate is on`() {
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        nm.notify(
+            com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_PROBLEM_ID,
+            androidx.core.app.NotificationCompat.Builder(app, com.echoledger.mobile.translate.LiveTranslateService.CHANNEL)
+                .setSmallIcon(com.echoledger.mobile.R.drawable.ic_stat_rec)
+                .setContentText("EchoLedger couldn't tell which app is playing, so Android asks to share the sound.")
+                .build()
+        )
+        val controller = buildService(
+            com.echoledger.mobile.translate.LiveTranslateService::class.java,
+            android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
+        ).create()
+        controller.get().openForTest(com.echoledger.mobile.translate.TranslateMode.WATCH)
+        idle()
+        assertEquals(null, shadowOf(nm).getNotification(com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_PROBLEM_ID))
+        controller.get().onStop()
+    }
+
+    @Test
     fun `turning the grip on while hidden adds no grip over the grey dot`() {
         ShareGuard.setHidden(true)
         val box = TranslateOverlay(app, subtitles = false, actions = NoActions)

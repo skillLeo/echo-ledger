@@ -573,18 +573,24 @@ private fun ImportRecordingDialog(
                                     runCatching { playing.release() }
                                     player = null
                                 } else {
+                                    // Prepared off the main thread: it plays once ready.
                                     player = runCatching {
                                         android.media.MediaPlayer().apply {
                                             setDataSource(
                                                 context,
                                                 com.echoledger.mobile.calls.PhoneAppRecordings.uris(listOf(f.id)).single()
                                             )
+                                            setOnPreparedListener { it.start() }
                                             setOnCompletionListener { mp ->
                                                 mp.release()
                                                 player = null
                                             }
-                                            prepare()
-                                            start()
+                                            setOnErrorListener { mp, _, _ ->
+                                                mp.release()
+                                                player = null
+                                                true
+                                            }
+                                            prepareAsync()
                                         }
                                     }.getOrNull()
                                 }

@@ -1,10 +1,16 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.collectAsState
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.data.CreateSessionRequest
 import com.echoledger.mobile.data.OpenSessionRequest
@@ -33,6 +39,39 @@ class TranscriptToolsTest : ScreenTest() {
     }
 
     private fun settings() = runBlocking { app.graph.settings.current() }
+
+    // ---- the action row (Export · Share link · Send · Send to WhatsApp) ----------------------------------------------
+
+    /** The row on a 360 dp wide phone at [fontScale]: every button keeps its label on a line, none is squeezed. */
+    private fun actionRow(fontScale: Float) {
+        show {
+            Box(Modifier.width(360.dp)) {
+                val density = androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides
+                        androidx.compose.ui.unit.Density(density.density, fontScale = fontScale)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        ExportShareRow(vm, "01JSESSION00000000000000A", "01JTRANSCRIPT000000000000A", hasAudio = true)
+                    }
+                }
+            }
+        }
+        compose.waitForIdle()
+        listOf("Export", "Share link", "Send", "Send to WhatsApp").forEach { label ->
+            val bounds = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
+            assertTrue("$label at ${fontScale}x: ${bounds.width} wide, ${bounds.height} high", bounds.width > bounds.height)
+        }
+    }
+
+    // Real text measuring (the default test graphics give text no width, and every button its minimum).
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun `on a 360 dp phone the action row keeps every label whole, Send to WhatsApp too`() = actionRow(1f)
+
+    @Test
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    fun `at twice the text size the action row still keeps every label whole`() = actionRow(2f)
 
     // ---- pure ---------------------------------------------------------------------------------------------------
 

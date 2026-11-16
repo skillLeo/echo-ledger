@@ -779,12 +779,13 @@ class RecordingService : LifecycleService() {
                 whenProblemSince(askedAt) { problem ->
                     val (reason, detail) = MissedReason.ofProblem(problem)
                     journalFailed(id, reason, detail)
-                    if (phone) {
-                        simCallSummary("nothing opened: ${problem ?: "no reason given"}")
+                    if (phone) simCallSummary("nothing opened: ${problem ?: "no reason given"}")
+                    if (phone && detail == MissedReason.PHONE_LINE) {
                         // The line the phone keeps for its own Phone app: never the helper advice (since v1.8 0.3).
                         com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(applicationContext, settings)
                             ?.let { Notifications.phoneLineNotRecorded(applicationContext, it) }
                     } else {
+                        // Any other reason (the microphone busy, a permission) keeps its own words and the Setup button.
                         Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
                     }
                 }
@@ -1382,6 +1383,13 @@ class RecordingService : LifecycleService() {
             if (isCall && stored != null && skip == null && !silent) {
                 if (oneSided != null && !phoneAppCovers) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
             }
+            // Your voice only, with the Phone app's two-sided copy on its way: this one waits for it, undecided and with no
+            // card, and the copy takes its place, so one call is one card and is transcribed once (since v1.8 0.3).
+            val held = stored != null && skip == null && !silent && oneSided != null && phoneAppCovers
+            if (held && stored != null) {
+                graph.recordings.update(stored.id) { it.copy(state = "pending_decision") }
+                CaptureLog.add(this, "recording held", "your voice only: the Phone app's two-sided copy takes its place")
+            }
             if (session.sourceApp == SourceApp.PHONE_CALL.wire) {
                 val sides = if (session.channels == 2) {
                     "me ${heard(session.levels.peakDb(0))}, other ${heard(session.levels.peakDb(1))}"
@@ -1450,10 +1458,10 @@ class RecordingService : LifecycleService() {
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {
-                    if (isCall) {
+                    if (isCall && !held) {
                         PostCallPrompt.show(this, stored, afterCall, themeMode)
                         oneSided?.takeUnless { phoneAppCovers }?.let { Notifications.onlyYourVoice(this, it) }
-                    } else {
+                    } else if (!isCall) {
                         UploadWorker.enqueue(this, stored.id)
                     }
                 }

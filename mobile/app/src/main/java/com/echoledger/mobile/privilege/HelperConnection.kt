@@ -51,6 +51,8 @@ class HelperConnection(private val context: Context) {
     val armState: StateFlow<String?> = _armState
 
     private val death = IBinder.DeathRecipient {
+        // A helper let go or replaced before its death notice came is no news: the one here now is alive.
+        if (helper?.asBinder()?.isBinderAlive == true) return@DeathRecipient
         helper = null
         _armState.value = null
         _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")
@@ -72,6 +74,7 @@ class HelperConnection(private val context: Context) {
      */
     fun lost(binder: ICaptureHelper) {
         if (helper?.asBinder() !== binder.asBinder()) return
+        runCatching { binder.asBinder().unlinkToDeath(death, 0) }
         helper = null
         _armState.value = null
         _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")

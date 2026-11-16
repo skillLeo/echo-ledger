@@ -168,12 +168,13 @@ class LiveTranslateService :
             val musicActive = runCatching { getSystemService(android.media.AudioManager::class.java).isMusicActive }.getOrDefault(false)
             val apps = if (mode == TranslateMode.GAME) prefs.game.games else prefs.watch.apps
             val pick = TranslateTargets.decide(mode, picked, apps, answer, musicActive)
-            // What the helper said and what was chosen, for Copy diagnostics (apps by package, no names or text).
+            // The choice first (the log keeps 300 characters of a line), then what the helper said of each player: uid,
+            // state and usage, no app names; only the app chosen or picked is named (since v1.8, for Copy diagnostics).
             if (helper != null) {
                 CaptureLog.add(
                     this@LiveTranslateService,
                     "translate",
-                    "${mode.key}: music active $musicActive; " + AudioProbe.lines(answer).joinToString(" | ") + " → " + pickText(pick)
+                    "${mode.key}: → ${pickText(pick)}; music active $musicActive; " + AudioProbe.lines(answer).joinToString(" | ")
                 )
             }
             // Never "nothing is playing" from an answer the helper could not give: Android shares the sound instead.
@@ -260,6 +261,8 @@ class LiveTranslateService :
 
     private fun showOverlay() {
         if (running.value == null) return
+        // On: a notice still asking to share the sound (or saying why it stopped before) is over (since v1.8).
+        getSystemService(NotificationManager::class.java).cancel(NOTIFICATION_PROBLEM_ID)
         val o = TranslateOverlay(this, subtitles = mode == TranslateMode.WATCH, actions = this)
         val landscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val placement = prefs.placements[BoxGeometry.key(packageName, landscape)]

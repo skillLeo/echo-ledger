@@ -864,6 +864,7 @@ private fun copyText(context: Context, label: String, text: String) {
  * A recording's call notes on its page (since 1.4): shown when written; otherwise "Write call notes" (English or
  * Roman Urdu). Tapping a line plays that moment ([onSeek]).
  */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun CallNotesSection(vm: MainViewModel, sessionId: String, onSeek: (Long) -> Unit) {
     val type = LocalEchoType.current
@@ -887,7 +888,11 @@ fun CallNotesSection(vm: MainViewModel, sessionId: String, onSeek: (Long) -> Uni
         Text("Call notes", style = type.titleM, color = c.text)
         notes?.let { NotesCard(it, onOpenAt = { _, ms -> onSeek(ms) }, showTitle = false) }
         if (notes == null || notes?.status in setOf("failed", "skipped")) {
-            Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
+            // Wraps onto the next line on a narrow screen or with large text, each button keeping its label (since v1.8).
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(Space.s2),
+                verticalArrangement = Arrangement.spacedBy(Space.s2)
+            ) {
                 ClientFiles.LANGUAGES.forEach { (code, label) ->
                     EchoButton(if (code == "en") "Write call notes" else "In $label", {
                         scope.launch { vm.makeNotes(sessionId, code)?.let { notes = it } }

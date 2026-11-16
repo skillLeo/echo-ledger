@@ -439,6 +439,35 @@ class MissedRecordingsTest {
     }
 
     @Test
+    fun `A1 with the dialer notice - a long answered call is reported once, never again for a redial seconds after it`() {
+        // A: answered for 10 minutes (its dialer notice from the answer to the end), and the phone line would not open.
+        var b = CallJournal.seen(ready(), "a", "phone_call", Seen.HELPER, t0)
+        b = CallJournal.stage(b, "a", Stage.ARMED, t0 + 100, "helper ready")
+        b = CallJournal.fail(b, "a", "unknown", MissedReason.PHONE_LINE, t0 + 200)
+        b = CallJournal.ended(b, "a", t0 + 600_000)
+        // B: the redial 5 s after A ended; it rang 30 s and nobody answered. Its phone line would not open either.
+        b = CallJournal.seen(b, "b", "phone_call", Seen.HELPER, t0 + 605_000)
+        b = CallJournal.stage(b, "b", Stage.ARMED, t0 + 605_100, "helper ready")
+        b = CallJournal.fail(b, "b", "unknown", MissedReason.PHONE_LINE, t0 + 605_200)
+        b = CallJournal.ended(b, "b", t0 + 635_000)
+        val dialerA = notice("phone_call", t0 + 5_000, 595)
+        val rowA = log(t0 - 3_000, 595)
+        val rowB = log(t0 + 604_000, 0, answered = false)
+        assertEquals("A only", listOf(t0), find(b, listOf(rowA, rowB, dialerA)).map { it.startedAtMs })
+        assertEquals("A only, before the redial's row is written", listOf(t0), find(b, listOf(rowA, dialerA)).map { it.startedAtMs })
+    }
+
+    @Test
+    fun `an answered redial's own notice still answers it`() {
+        var b = CallJournal.seen(ready(), "b", "phone_call", Seen.HELPER, t0)
+        b = CallJournal.stage(b, "b", Stage.ARMED, t0 + 100, "helper ready")
+        b = CallJournal.fail(b, "b", "unknown", MissedReason.PHONE_LINE, t0 + 200)
+        b = CallJournal.ended(b, "b", t0 + 60_000)
+        val found = find(b, listOf(notice("phone_call", t0 + 8_000, 52))).single()
+        assertEquals(t0, found.startedAtMs)
+    }
+
+    @Test
     fun `the ringing does not count toward Skip calls shorter than`() {
         fun call(talkS: Long): Book {
             var b = CallJournal.seen(ready(), "a1", "whatsapp", Seen.AUDIO, t0)

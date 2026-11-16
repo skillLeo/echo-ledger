@@ -489,6 +489,43 @@ class RecordingServiceTest : AppTest() {
             .map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }
         assertTrue(titles.toString(), titles.none { it == "Only your voice was recorded" })
         assertEquals("the Phone app's two-sided copy is looked for", 1, com.echoledger.mobile.calls.PendingImports.waiting(app).size)
+        // It waits for that copy undecided, with no card of its own: the copy replaces it, so one call is one card.
+        val own = app.graph.recordings.all().single()
+        assertEquals("pending_decision", own.state)
+        assertEquals(null, com.echoledger.mobile.overlay.DecisionPopup.showingFor)
+        val keptLater = androidx.work.WorkManager.getInstance(app)
+            .getWorkInfosForUniqueWork(
+                com.echoledger.mobile.calls.DecisionTimeoutWorker.workName(own.id)
+            ).get(10, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(keptLater.isEmpty())
+    }
+
+    /** v1.8 0.3 re-review: only the phone line's own failure gets the Phone app line; others keep their words and fix. */
+    @Test
+    fun `a phone call that could not start for another reason keeps its own words and the Setup button`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: mic: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        val notifications = shadowOf(app.getSystemService(android.app.NotificationManager::class.java))
+        pumpUntil("the notice") {
+            notifications.allNotifications.any { it.extras.getString(android.app.Notification.EXTRA_TITLE) == "Call not recorded" }
+        }
+        val text = notifications.allNotifications.single {
+            it.extras.getString(android.app.Notification.EXTRA_TITLE) == "Call not recorded"
+        }
+            .extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString()
+        assertTrue(text, text.contains("mic: did not start"))
+        assertTrue(
+            notifications.allNotifications.none {
+                it.extras.getString(android.app.Notification.EXTRA_TITLE) ==
+                    "Phone call not recorded"
+            }
+        )
     }
 
     /** v1.8 0.3 review: a SIM call EchoLedger recorded itself is not left waiting for the Phone app's copy. */

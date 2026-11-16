@@ -91,7 +91,7 @@ object MissedRecordings {
         val notices = recent.filter { it.by != CALL_LOG }
         val fromJournal = calls.mapNotNull { call ->
             val end = windowEnd(book, call, nowMs)
-            val match = listOfNotNull(rowOf[call.id]) + notices.filter { same(it.app, call.app) && overlapsCall(it, call.atMs, end) }
+            val match = listOfNotNull(rowOf[call.id]) + notices.filter { same(it.app, call.app) && answers(it, call.atMs, end) }
             judgeJournal(book, call, match, spans, nowMs, ongoing)
         }
         val paired = rowOf.values.toSet()
@@ -222,6 +222,13 @@ object MissedRecordings {
     /** Whether the call notice [s] reports the call EchoLedger saw from [atMs] to [endMs]: its answer-to-end overlaps it. */
     private fun overlapsCall(s: Sighting, atMs: Long, endMs: Long): Boolean =
         s.startMs <= endMs + SLACK_MS && (s.endMs ?: Long.MAX_VALUE) >= atMs - SLACK_MS
+
+    /**
+     * Whether the call notice [s] may say that the call EchoLedger saw from [atMs] to [endMs] was answered: it overlaps
+     * it and was answered no earlier than that call began. A long call's notice that ends a few seconds into the redial
+     * after it is that call's, never the redial's.
+     */
+    private fun answers(s: Sighting, atMs: Long, endMs: Long): Boolean = overlapsCall(s, atMs, endMs) && s.startMs >= atMs - SLACK_MS
 
     /** From the answer: a call-log row's talk time, a notice's time from the answer to its end (or the call's). */
     private fun answeredLength(s: Sighting, callEndMs: Long?): Long? = when (s.by) {
