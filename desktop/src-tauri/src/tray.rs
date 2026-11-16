@@ -191,9 +191,28 @@ struct MenuShape {
 pub enum Hidden {
     /// "Hide EchoLedger windows" (the shortcut, the tray, Settings).
     Person,
-    /// The Mac safety net, during a whole-screen share.
+    /// The Mac safety net, during a whole-screen share whose sharing bar is not on screen now (Zoom hid its controls,
+    /// the browser's bar was hidden): "Show EchoLedger windows" brings them back.
     Share,
+    /// The same with the sharing bar on screen: showing them would last until the next look, so the tray says when
+    /// they come back instead.
+    ShareBar,
 }
+
+/// The tray's line for the privacy service's reasons now (pure): the person's hide first, then a share.
+pub fn hidden_line(privacy: &crate::privacy::Privacy) -> Option<Hidden> {
+    use crate::privacy::HideReason;
+    if privacy.hidden_for(HideReason::Person) {
+        Some(Hidden::Person)
+    } else if privacy.bar_holds() {
+        Some(Hidden::ShareBar)
+    } else {
+        privacy.hidden_for(HideReason::Share).then_some(Hidden::Share)
+    }
+}
+
+/// While a sharing bar keeps the windows off: when they come back, and what keeps them on screen next time.
+pub const BACK_AFTER_SHARE: &str = "They come back when the screen share ends";
 
 #[derive(Default)]
 pub struct TrayCache {
@@ -224,6 +243,10 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
         Some(Hidden::Share) => {
             entries.push(Entry::Item { id: "hidden_share", label: "Hidden while you share your screen".into(), enabled: false, checked: None });
             entries.push(item("show_windows", "Show EchoLedger windows"));
+        }
+        Some(Hidden::ShareBar) => {
+            entries.push(Entry::Item { id: "hidden_share", label: "Hidden while you share your screen".into(), enabled: false, checked: None });
+            entries.push(Entry::Item { id: "back_after_share", label: BACK_AFTER_SHARE.into(), enabled: false, checked: None });
         }
     }
     entries.push(Entry::Separator);
@@ -565,6 +588,10 @@ mod tests {
         assert_eq!(&labels(&share)[..4], ["Open EchoLedger", "Hidden while you share your screen", "Show EchoLedger windows", "---"]);
         let line = menu_entries(&share).into_iter().find(|e| matches!(e, Entry::Item { id: "hidden_share", .. })).unwrap();
         assert!(matches!(line, Entry::Item { enabled: false, .. }), "the reason is not an action");
+        // With the sharing bar on screen "Show" would last until the next look: the tray says when they come back.
+        let bar = MenuShape { hidden: Some(Hidden::ShareBar), ..MenuShape::default() };
+        assert_eq!(&labels(&bar)[..4], ["Open EchoLedger", "Hidden while you share your screen", "They come back when the screen share ends", "---"]);
+        assert!(menu_entries(&bar).iter().all(|e| !matches!(e, Entry::Item { id: "show_windows", .. }) && !matches!(e, Entry::Item { id: "back_after_share", enabled: true, .. })));
     }
 
     #[test]

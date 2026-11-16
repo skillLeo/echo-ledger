@@ -204,6 +204,10 @@ pub struct Privacy {
     share_release: AtomicBool,
     /// Bumped by every guided-test answer, so the safety net reads the answers again at once.
     guided_answers: AtomicU64,
+    /// How many whole-screen shares took the windows off in this run: the main window's notice belongs to one share.
+    shares: AtomicU64,
+    /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
+    bar_on_screen: AtomicBool,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -265,14 +269,39 @@ impl Privacy {
         let mut hidden = lock(&self.hidden);
         let before = !hidden.is_empty();
         if on {
-            hidden.insert(reason);
+            if hidden.insert(reason) && reason == HideReason::Share {
+                self.shares.fetch_add(1, Ordering::SeqCst);
+            }
         } else {
             hidden.remove(&reason);
             if reason == HideReason::Share {
                 self.main_asked.store(false, Ordering::SeqCst);
+                self.bar_on_screen.store(false, Ordering::SeqCst);
             }
         }
         before != !hidden.is_empty()
+    }
+
+    /// The share that keeps the windows off now, counted from 1 in this run (0: none yet). A notice closed during one
+    /// share shows again in the next.
+    pub fn share_number(&self) -> u64 {
+        self.shares.load(Ordering::SeqCst)
+    }
+
+    /// What the safety net's last look saw: a sharing bar on screen or not.
+    pub fn set_bar_on_screen(&self, on: bool) {
+        self.bar_on_screen.store(on, Ordering::SeqCst);
+    }
+
+    /// A whole-screen share keeps the windows off and its sharing bar is on screen: "Show EchoLedger windows" would
+    /// bring nothing back (the next look takes them off again), so it is not offered.
+    pub fn bar_holds(&self) -> bool {
+        self.hidden_for(HideReason::Share) && self.bar_on_screen.load(Ordering::SeqCst)
+    }
+
+    /// The main window was closed: an open during the share is over with it.
+    pub fn main_closed(&self) {
+        self.main_asked.store(false, Ordering::SeqCst);
     }
 
     /// The person opened the main window (pure state, see [`opened_by_person`]).
@@ -289,9 +318,11 @@ impl Privacy {
         self.main_asked.load(Ordering::SeqCst)
     }
 
-    /// The main window may come on screen now: nothing keeps it off, or the person opened it during the share.
-    pub fn may_show_main(&self, hiding: ShareHiding) -> bool {
-        !away(Kind::Main, &self.reasons(), hiding, self.main_asked())
+    /// The main window may come on screen now: nothing keeps it off, or the person opened it during the share. A quiet
+    /// open (something the person did not ask to see it for) never counts their open: it stays off while a reason keeps
+    /// the main window off.
+    pub fn may_show_main(&self, hiding: ShareHiding, quiet: bool) -> bool {
+        !away(Kind::Main, &self.reasons(), hiding, self.main_asked() && !quiet)
     }
 
     /// The main window is on screen during a whole-screen share because the person opened it: it says so.
@@ -449,6 +480,82 @@ pub fn apply_all<R: Runtime>(app: &AppHandle<R>) {
     let _ = app.emit("privacy:changed", ());
 }
 
+/// A display as [`Points`] compares them: where it is, its size and its scale in thousandths (never its name).
+pub type Display = (i32, i32, u32, u32, u64);
+
+/// One of EchoLedger's own lifecycle points.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Point {
+    /// The computer woke from sleep.
+    Woke,
+    /// A display came, went or changed its size or scale.
+    Displays,
+}
+
+impl Point {
+    /// The line the privacy log keeps.
+    pub fn line(self) -> &'static str {
+        match self {
+            Point::Woke => "The computer woke from sleep: EchoLedger set every window's capture flag again.",
+            Point::Displays => "The displays changed: EchoLedger set every window's capture flag again.",
+        }
+    }
+}
+
+/// A wall-clock gap this much longer than the loop's period means the computer slept (or its clock was set).
+pub const WOKE_AFTER: Duration = Duration::from_secs(30);
+
+/// EchoLedger's own lifecycle points, where every capture flag is set again (the S5 decision record: a window built or
+/// shown, a display change, waking from sleep), so a flag the system dropped there is put back instead of being taken
+/// for a change by something else. Pure: the wall clock and the displays come in.
+#[derive(Debug, Default)]
+pub struct Points {
+    wall: Option<SystemTime>,
+    displays: Option<Vec<Display>>,
+}
+
+impl Points {
+    /// One look, `period` after the last one. `displays`: none when they could not be read (nothing is compared then).
+    pub fn tick(&mut self, wall: SystemTime, period: Duration, displays: Option<Vec<Display>>) -> Option<Point> {
+        let woke = self.wall.is_some_and(|last| wall.duration_since(last).is_ok_and(|gap| gap > period + WOKE_AFTER));
+        self.wall = Some(wall);
+        let changed = match displays {
+            Some(mut now) => {
+                now.sort_unstable();
+                let changed = self.displays.as_ref().is_some_and(|before| *before != now);
+                self.displays = Some(now);
+                changed
+            }
+            None => false,
+        };
+        if woke {
+            Some(Point::Woke)
+        } else if changed {
+            Some(Point::Displays)
+        } else {
+            None
+        }
+    }
+}
+
+/// The displays now, for [`Points`] (never on the main thread: the answer comes from it).
+pub fn displays<R: Runtime>(app: &AppHandle<R>) -> Option<Vec<Display>> {
+    let monitors = app.available_monitors().ok()?;
+    let out: Vec<Display> = monitors
+        .iter()
+        .map(|m| (m.position().x, m.position().y, m.size().width, m.size().height, (m.scale_factor() * 1000.0).round() as u64))
+        .collect();
+    (!out.is_empty()).then_some(out)
+}
+
+/// At one of EchoLedger's own lifecycle points: every flag is set again, and the log says why.
+pub fn at_point<R: Runtime>(app: &AppHandle<R>, point: Point) {
+    if let Some(state) = app.try_state::<crate::AppState>() {
+        diag::log(&state.data_dir, point.line());
+    }
+    apply_all(app);
+}
+
 /// "Hide again" (Windows): after something else on the computer changed an EchoLedger window's capture flag, the person
 /// sets every flag again. EchoLedger never does it by itself (see [`win`]).
 pub fn hide_again<R: Runtime>(app: &AppHandle<R>) {
@@ -458,11 +565,15 @@ pub fn hide_again<R: Runtime>(app: &AppHandle<R>) {
     apply_all(app);
 }
 
-/// A window is gone: what was read or set on it, and that it was put away, are forgotten.
+/// A window is gone: what was read or set on it, and that it was put away, are forgotten. The main window closed during a
+/// share takes the person's open with it: opened again by something else, it stays off until the share is over.
 pub fn destroyed<R: Runtime>(app: &AppHandle<R>, label: &str) {
     if let Some(privacy) = app.try_state::<Privacy>() {
         lock(&privacy.watch).forget(label);
         lock(&privacy.put_away).remove(label);
+        if label == crate::lifecycle::MAIN {
+            privacy.main_closed();
+        }
     }
 }
 
@@ -500,8 +611,9 @@ pub fn end_demo(app: &AppHandle) {
 }
 
 /// "Show EchoLedger windows" (the tray, Settings): "Hide EchoLedger windows" ends; during a whole-screen share the
-/// safety net lets go at its next look (a sharing bar still on screen takes the windows off again).
-pub fn show_windows<R: Runtime>(app: &AppHandle<R>) {
+/// safety net lets go at its next look. While the sharing bar is on screen it is not offered (the tray and Settings say
+/// the windows come back when the screen share ends), since the next look would take them off again.
+pub fn show_windows(app: &AppHandle) {
     let Some(privacy) = app.try_state::<Privacy>() else { return };
     if privacy.hidden_for(HideReason::Person) {
         set_hidden(app, HideReason::Person, false);
@@ -520,20 +632,23 @@ pub fn toggle_hide_all(app: &AppHandle) {
 /// Takes EchoLedger's windows off the screen for `reason` ([`away`] says which), or brings them back once nothing
 /// keeps them off. The floating windows' pages stop drawing first (`privacy:conceal`), then each window is ordered out
 /// without closing (nothing is lost, and the app stays in the Dock, the menu bar, the tray and every window list).
-pub fn set_hidden<R: Runtime>(app: &AppHandle<R>, reason: HideReason, on: bool) {
+/// Every change of a hide reason comes here (the shortcut, the tray, Settings, an open by the person, the safety net), so
+/// the tray's line and the pages follow it at once.
+pub fn set_hidden(app: &AppHandle, reason: HideReason, on: bool) {
     let privacy = app.state::<Privacy>();
     if privacy.set_hidden(reason, on) {
         let _ = app.emit("privacy:conceal", privacy.concealed());
     }
     reconcile(app);
     let _ = app.emit("privacy:changed", ());
+    crate::actions::emit_status(app);
 }
 
 /// The person opened the main window: the tray's Open, the app opened again (Dock, Finder, Launchpad, Spotlight), a
 /// second launch, a clicked notification, all through `lifecycle::show_main`. "Hide EchoLedger windows" ends; during a
 /// whole-screen share the main window is shown anyway with a line saying it may be in the screen share, and the floating
 /// windows stay off.
-pub fn opened_by_person<R: Runtime>(app: &AppHandle<R>) {
+pub fn opened_by_person(app: &AppHandle) {
     let Some(privacy) = app.try_state::<Privacy>() else { return };
     let opened = privacy.person_opened();
     if opened.end_person_hide {
@@ -541,14 +656,16 @@ pub fn opened_by_person<R: Runtime>(app: &AppHandle<R>) {
     } else if opened.during_share {
         reconcile(app);
         let _ = app.emit("privacy:changed", ());
+        crate::actions::emit_status(app);
     }
 }
 
 /// Whether the main window may come on screen now (`lifecycle::reveal_main`): an automatic reveal (a rebuilt window's
-/// page drawing) never brings it back while windows are kept off.
-pub fn may_show_main<R: Runtime>(app: &AppHandle<R>) -> bool {
+/// page drawing) never brings it back while windows are kept off, and a quiet open stays off while a reason keeps the
+/// main window off, even when the person opened it earlier in the share.
+pub fn may_show_main<R: Runtime>(app: &AppHandle<R>, quiet: bool) -> bool {
     let (Some(privacy), Some(state)) = (app.try_state::<Privacy>(), app.try_state::<crate::AppState>()) else { return true };
-    privacy.may_show_main(state.settings_with(|s| s.hide_from_sharing))
+    privacy.may_show_main(state.settings_with(|s| s.hide_from_sharing), quiet)
 }
 
 /// Puts every window where the reasons want it, on the main thread: there a window's state is read without a round trip
@@ -620,12 +737,22 @@ fn put_away<R: Runtime>(window: &WebviewWindow<R>, away: bool) {
 
 /// Windows: every 5 s each visible window's flag is read back against what EchoLedger set. The windows are looked up on
 /// the main thread when the check runs (where they are built and destroyed), so a window that went meanwhile is not
-/// read. A flag that changed is logged (which window and what was read, never what it shows) and left as it is.
+/// read. A flag that changed is logged (which window and what was read, never what it shows) and left as it is. Waking
+/// from sleep and a display change are EchoLedger's own lifecycle points: there every flag is set again first.
 #[cfg(windows)]
 pub fn spawn_recheck(app: AppHandle) {
     tauri::async_runtime::spawn(async move {
+        let mut points = Points::default();
         loop {
             tokio::time::sleep(win::RECHECK_EVERY).await;
+            // Woken from sleep, or the displays changed: EchoLedger sets every flag again before anything is read back,
+            // so the system dropping a flag there never reads as a change by something else.
+            let reader = app.clone();
+            let shown = tokio::task::spawn_blocking(move || displays(&reader)).await.ok().flatten();
+            if let Some(point) = points.tick(SystemTime::now(), win::RECHECK_EVERY, shown) {
+                at_point(&app, point);
+                continue;
+            }
             let (tx, rx) = std::sync::mpsc::channel();
             let checker = app.clone();
             let _ = app.run_on_main_thread(move || {
@@ -735,26 +862,26 @@ mod tests {
         // A whole-screen share took the windows off ("All EchoLedger windows").
         let p = Privacy::new();
         p.set_hidden(Share, true);
-        assert!(!p.may_show_main(ShareHiding::All), "a rebuilt main window's page drawing does not bring it back");
+        assert!(!p.may_show_main(ShareHiding::All, false), "a rebuilt main window's page drawing does not bring it back");
         assert!(!p.main_in_share(ShareHiding::All));
         // The person opens EchoLedger again (the Dock, Finder, the tray's Open, a clicked notification).
         assert_eq!(p.person_opened(), Opened { end_person_hide: false, during_share: true });
-        assert!(p.may_show_main(ShareHiding::All), "shown anyway: the person asked");
+        assert!(p.may_show_main(ShareHiding::All, false), "shown anyway: the person asked");
         assert!(p.main_in_share(ShareHiding::All), "with the line that it may be in the screen share");
         assert!(floating_away(&p), "the floating windows stay off");
         // The share is over: the next share starts without that open.
         p.set_hidden(Share, false);
         assert!(!p.main_asked());
         p.set_hidden(Share, true);
-        assert!(!p.may_show_main(ShareHiding::All));
+        assert!(!p.may_show_main(ShareHiding::All, false));
 
         // Hide EchoLedger windows: an open by the person ends it (`opened_by_person` turns the reason off).
         let p = Privacy::new();
         p.set_hidden(Person, true);
-        assert!(!p.may_show_main(ShareHiding::Floating));
+        assert!(!p.may_show_main(ShareHiding::Floating, false));
         assert_eq!(p.person_opened(), Opened { end_person_hide: true, during_share: false });
         p.set_hidden(Person, false);
-        assert!(p.may_show_main(ShareHiding::Floating) && !floating_away(&p), "everything comes back");
+        assert!(p.may_show_main(ShareHiding::Floating, false) && !floating_away(&p), "everything comes back");
         assert!(!p.main_in_share(ShareHiding::All));
     }
 
@@ -833,6 +960,128 @@ mod tests {
             }
         }
         assert!(builders >= 4, "the main window, the overlays, the check's patches and its card: {builders}");
+    }
+
+    #[test]
+    fn closing_the_main_window_during_a_share_ends_the_person_s_open_and_quiet_opens_stay_off() {
+        use HideReason::*;
+        let p = Privacy::new();
+        p.set_hidden(Share, true);
+        p.person_opened();
+        assert!(p.may_show_main(ShareHiding::All, false));
+        assert!(!p.may_show_main(ShareHiding::All, true), "a quiet open never counts the person's open");
+        // The person closes the main window while the share goes on; something else opens it again later.
+        p.main_closed();
+        assert!(!p.main_asked() && !p.main_in_share(ShareHiding::All));
+        assert!(!p.may_show_main(ShareHiding::All, false), "a rebuilt window's page drawing stays off");
+        assert!(!p.may_show_main(ShareHiding::All, true));
+        // Hide EchoLedger windows: quiet opens stay off too; with nothing hidden they show.
+        let p = Privacy::new();
+        p.set_hidden(Person, true);
+        assert!(!p.may_show_main(ShareHiding::Off, true));
+        p.set_hidden(Person, false);
+        assert!(p.may_show_main(ShareHiding::All, true));
+        // "Only floating windows": a share never kept the main window off.
+        p.set_hidden(Share, true);
+        assert!(p.may_show_main(ShareHiding::Floating, true));
+    }
+
+    #[test]
+    fn each_share_has_its_own_number_and_a_bar_on_screen_holds_the_windows() {
+        use HideReason::*;
+        let p = Privacy::new();
+        assert_eq!(p.share_number(), 0);
+        p.set_hidden(Share, true);
+        p.set_hidden(Share, true);
+        assert_eq!(p.share_number(), 1, "the same share");
+        p.set_bar_on_screen(true);
+        assert!(p.bar_holds(), "Show EchoLedger windows can't bring them back now");
+        p.set_bar_on_screen(false);
+        assert!(!p.bar_holds(), "the bar is hidden while the meeting goes on: Show works");
+        p.set_bar_on_screen(true);
+        p.set_hidden(Share, false);
+        assert!(!p.bar_holds(), "over with the share");
+        p.set_hidden(Share, true);
+        assert_eq!(p.share_number(), 2, "the next share");
+        assert!(!p.bar_holds(), "until the safety net sees its bar");
+        // The person's hide is not a share.
+        p.set_hidden(Person, true);
+        assert_eq!(p.share_number(), 2);
+    }
+
+    #[test]
+    fn waking_and_a_display_change_are_lifecycle_points() {
+        let start = SystemTime::now();
+        let one = vec![(0, 0, 2560, 1440, 2000)];
+        let two = vec![(2560, 0, 1920, 1080, 1000), (0, 0, 2560, 1440, 2000)];
+        let mut points = Points::default();
+        assert_eq!(points.tick(start, win::RECHECK_EVERY, Some(one.clone())), None, "the first look has nothing to compare");
+        let mut at = start;
+        for _ in 0..3 {
+            at += Duration::from_secs(5);
+            assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(one.clone())), None, "every 5 s, nothing changed");
+        }
+        at += Duration::from_secs(9);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(one.clone())), None, "a slow tick is not a sleep");
+        at += Duration::from_secs(8 * 3600);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(one.clone())), Some(Point::Woke), "the lid was closed overnight");
+        at += Duration::from_secs(5);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(two.clone())), Some(Point::Displays), "a display was plugged in");
+        let mut reversed = two.clone();
+        reversed.reverse();
+        at += Duration::from_secs(5);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(reversed)), None, "the same displays in another order");
+        at += Duration::from_secs(5);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, None), None, "unread displays compare nothing");
+        at += Duration::from_secs(5);
+        assert_eq!(points.tick(at, win::RECHECK_EVERY, Some(vec![(0, 0, 2560, 1440, 1000)])), Some(Point::Displays), "a scale change");
+        assert!(Point::Woke.line().contains("set every window's capture flag again"));
+        // Windows sets every flag again before anything is read back; the Mac's safety net looks every 5 s.
+        let recheck = body_of(include_str!("mod.rs"), "pub fn spawn_recheck(");
+        assert!(recheck.find("points.tick(").unwrap() < recheck.find("privacy.watch).tick(").unwrap(), "set again before the read-back");
+        assert!(include_str!("watch.rs").contains("points.tick(std::time::SystemTime::now(), PERMISSION_EVERY, super::displays(&app))"));
+    }
+
+    /// The body of `fn name` in `text` (from its line to the next item at the same indentation).
+    fn body_of<'a>(text: &'a str, name: &str) -> &'a str {
+        let start = text.find(name).unwrap_or_else(|| panic!("{name} not found"));
+        let rest = &text[start..];
+        let end = rest.find("\n}\n").map_or(rest.len(), |e| e + 3);
+        &rest[..end]
+    }
+
+    #[test]
+    fn the_tray_follows_every_change_of_a_hide_reason() {
+        let source = include_str!("mod.rs");
+        // One door: the person's hide (the shortcut, the tray, Settings), an open by the person and the safety net all
+        // change a reason through `set_hidden`, which refreshes the status the tray's line is drawn from.
+        assert!(body_of(source, "pub fn set_hidden(app").contains("crate::actions::emit_status(app);"));
+        assert!(body_of(source, "pub fn toggle_hide_all(").contains("set_hidden(app, HideReason::Person, on)"));
+        let opened = body_of(source, "pub fn opened_by_person(");
+        assert!(opened.contains("set_hidden(app, HideReason::Person, false)") && opened.contains("crate::actions::emit_status(app);"));
+        assert!(include_str!("../actions.rs").contains("(Action::HideAll, true) => {\n            crate::privacy::toggle_hide_all(&app);"), "the shortcut");
+        assert!(include_str!("../commands.rs").contains("crate::privacy::toggle_hide_all(&app);"), "Settings' Hide now");
+        assert!(include_str!("watch.rs").contains("super::set_hidden(&app, super::HideReason::Share, step.hide);"), "the safety net");
+        // Nothing else changes a reason behind the door's back.
+        let mut files = Vec::new();
+        sources(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+        for file in &files {
+            let text = std::fs::read_to_string(file).unwrap();
+            let code = text.split("#[cfg(test)]").next().unwrap_or("");
+            let direct = code.matches("privacy.set_hidden(").count() + code.matches("p.set_hidden(").count();
+            let allowed = if file.ends_with("privacy/mod.rs") { 1 } else { 0 };
+            assert_eq!(direct, allowed, "{}: a hide reason changed outside privacy::set_hidden", file.display());
+        }
+        // And the tray draws the line from the reasons.
+        let p = Privacy::new();
+        p.set_hidden(HideReason::Person, true);
+        assert_eq!(crate::tray::hidden_line(&p), Some(crate::tray::Hidden::Person));
+        p.set_hidden(HideReason::Person, false);
+        assert_eq!(crate::tray::hidden_line(&p), None);
+        p.set_hidden(HideReason::Share, true);
+        assert_eq!(crate::tray::hidden_line(&p), Some(crate::tray::Hidden::Share));
+        p.set_bar_on_screen(true);
+        assert_eq!(crate::tray::hidden_line(&p), Some(crate::tray::Hidden::ShareBar));
     }
 
     #[test]

@@ -190,6 +190,9 @@ impl Slots {
 pub struct WindowLifecycle {
     slots: Mutex<Slots>,
     main_view: Mutex<Option<String>>,
+    /// The main window being built was asked for quietly (`show_main_quietly`) and by nobody else since: when its page
+    /// is ready it is revealed only if nothing keeps it off, whatever the person opened before.
+    main_quiet: std::sync::atomic::AtomicBool,
 }
 
 impl WindowLifecycle {
@@ -262,7 +265,7 @@ pub fn ready(app: &AppHandle, label: &str) {
         eprintln!("[echoledger] {label} window ready {} ms after it was asked for", latency.as_millis());
     }
     if label == MAIN && phase == Phase::Ready {
-        reveal_main(app);
+        reveal_main(app, quiet_open(app));
     }
     if let Some(generation) = ready.expire {
         schedule_expiry(app, label, generation);
@@ -286,32 +289,45 @@ pub fn keep_dictation_warm(app: &AppHandle, bound: bool) {
 /// (`privacy::opened_by_person`).
 pub fn show_main(app: &AppHandle) {
     crate::privacy::opened_by_person(app);
-    open_main(app);
+    open_main(app, false);
 }
 
 /// Opens the main window for something the person did not ask to see it for (a refused start that could not be said in
-/// a notification): while windows are kept off it stays off, and what it was opened for waits in its page.
+/// a notification): while a reason keeps the main window off it stays off (even when the person opened it earlier in
+/// the share), and what it was opened for waits in its page.
 pub fn show_main_quietly(app: &AppHandle) {
-    open_main(app);
+    open_main(app, true);
 }
 
-fn open_main(app: &AppHandle) {
+fn quiet_open(app: &AppHandle) -> bool {
+    app.state::<WindowLifecycle>().main_quiet.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Whether the main window built now is revealed as a quiet open (pure): a quiet open that builds it is quiet; any open
+/// by the person since makes it theirs; a quiet open of a window already being built leaves it as it was.
+pub fn quiet_after(was_quiet: bool, builds: bool, quiet: bool) -> bool {
+    if !quiet { false } else if builds { true } else { was_quiet }
+}
+
+fn open_main(app: &AppHandle, quiet: bool) {
     let (build, phase) = {
         let mut slots = slots(app);
         (slots.show(MAIN, "open", Instant::now()), slots.phase(MAIN))
     };
+    let flag = &app.state::<WindowLifecycle>().main_quiet;
+    flag.store(quiet_after(flag.load(std::sync::atomic::Ordering::SeqCst), build, quiet), std::sync::atomic::Ordering::SeqCst);
     if build {
         spawn_build(app, MAIN);
     } else if phase == Phase::Ready {
-        reveal_main(app);
+        reveal_main(app, quiet);
     }
 }
 
 /// Puts the main window on screen and in front: after an open by the person, when a freshly built window's page has
 /// drawn, or by the fallback. While windows are kept off (a whole-screen share the person did not open it during, "Hide
-/// EchoLedger windows") a reveal brings nothing back.
-fn reveal_main(app: &AppHandle) {
-    if !crate::privacy::may_show_main(app) {
+/// EchoLedger windows") a reveal brings nothing back, and a quiet one never does while a reason keeps it off.
+fn reveal_main(app: &AppHandle, quiet: bool) {
+    if !crate::privacy::may_show_main(app, quiet) {
         return;
     }
     if let Some(window) = app.get_webview_window(MAIN) {
@@ -410,7 +426,7 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;
         let shown = app.get_webview_window(MAIN).and_then(|w| w.is_visible().ok());
         if shown == Some(false) && slots(&app).in_use(MAIN) {
-            reveal_main(&app);
+            reveal_main(&app, quiet_open(&app));
         }
     });
     Ok(())
@@ -550,6 +566,19 @@ mod tests {
         let lifecycle = include_str!("lifecycle.rs");
         let quiet = &lifecycle[lifecycle.find("pub fn show_main_quietly(").unwrap()..];
         assert!(!quiet[..quiet.find("\n}\n").unwrap()].contains("opened_by_person"));
+        assert!(quiet[..quiet.find("\n}\n").unwrap()].contains("open_main(app, true)"), "it reveals as a quiet open");
+    }
+
+    #[test]
+    fn a_main_window_built_for_a_quiet_open_stays_quiet_until_the_person_opens_it() {
+        assert!(quiet_after(false, true, true), "a quiet open that builds the window: revealed only if nothing keeps it off");
+        assert!(!quiet_after(true, false, false), "the person opens it meanwhile: it is theirs");
+        assert!(!quiet_after(false, false, true), "a quiet open while the person's build runs leaves it theirs");
+        assert!(quiet_after(true, false, true));
+        assert!(!quiet_after(true, true, false), "the person's open builds it");
+        // Every reveal says which it is: the page drawing and the fallback use what the open was.
+        let code = include_str!("lifecycle.rs").split("#[cfg(test)]").next().unwrap();
+        assert_eq!(code.matches("reveal_main(app, quiet_open(app))").count() + code.matches("reveal_main(&app, quiet_open(&app))").count(), 2);
     }
 
     #[test]

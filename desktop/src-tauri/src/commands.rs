@@ -79,13 +79,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
-    let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| {
-        if p.hidden_for(crate::privacy::HideReason::Person) {
-            Some(crate::tray::Hidden::Person)
-        } else {
-            p.hidden_for(crate::privacy::HideReason::Share).then_some(crate::tray::Hidden::Share)
-        }
-    });
+    let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());

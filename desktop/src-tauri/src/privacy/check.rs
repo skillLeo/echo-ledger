@@ -628,7 +628,77 @@ pub fn spawn_auto(app: AppHandle) {
 
 // ---- The guided test (Mac) ---------------------------------------------------------------------------------------------
 
-/// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app.
+/// A window's bounds in logical points: x, y, width, height.
+pub type Bounds = (f64, f64, f64, f64);
+
+/// The test card's size: big enough to read on a phone in a screen share, and the smallest it is made to fit beside
+/// the main window (16:9 both).
+pub const CARD_SIZE: (f64, f64) = (640.0, 360.0);
+pub const CARD_SMALLEST: (f64, f64) = (480.0, 270.0);
+const CARD_MARGIN: f64 = 16.0;
+
+fn overlap(a: Bounds, b: Bounds) -> f64 {
+    let w = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
+    let h = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
+    if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
+}
+
+/// Where the phone-test card goes on `screen` (pure): beside the main window where it fits, right, left, below or above
+/// it (made smaller down to [`CARD_SMALLEST`] to fit), so it never covers the question and its answer buttons; with no
+/// room beside it, the smallest card in a top corner of the screen (the one that covers less of the window, the left
+/// one on a tie): there it covers the window's title and the top of its page, while the question is the page's last
+/// section. Centred only when there is no main window.
+pub fn card_frame(screen: Bounds, main: Option<Bounds>) -> Bounds {
+    let (sx, sy, sw, sh) = screen;
+    let Some(m) = main else {
+        let (w, h) = CARD_SIZE;
+        return (sx + (sw - w) / 2.0, sy + (sh - h) / 2.0, w, h);
+    };
+    let fit = |room_w: f64, room_h: f64| -> Option<(f64, f64)> {
+        let w = CARD_SIZE.0.min(room_w).min(room_h * 16.0 / 9.0);
+        (w >= CARD_SMALLEST.0).then_some((w, w * 9.0 / 16.0))
+    };
+    let clamp_y = |h: f64| (m.1 + (m.3 - h) / 2.0).clamp(sy + CARD_MARGIN, sy + sh - h - CARD_MARGIN);
+    let clamp_x = |w: f64| (m.0 + (m.2 - w) / 2.0).clamp(sx + CARD_MARGIN, sx + sw - w - CARD_MARGIN);
+    let full_h = sh - 2.0 * CARD_MARGIN;
+    let full_w = sw - 2.0 * CARD_MARGIN;
+    let right = sx + sw - (m.0 + m.2) - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(right, full_h) {
+        return (m.0 + m.2 + CARD_MARGIN, clamp_y(h), w, h);
+    }
+    let left = m.0 - sx - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(left, full_h) {
+        return (m.0 - CARD_MARGIN - w, clamp_y(h), w, h);
+    }
+    let below = sy + sh - (m.1 + m.3) - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(full_w, below) {
+        return (clamp_x(w), m.1 + m.3 + CARD_MARGIN, w, h);
+    }
+    let above = m.1 - sy - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(full_w, above) {
+        return (clamp_x(w), m.1 - CARD_MARGIN - h, w, h);
+    }
+    let (w, h) = CARD_SMALLEST;
+    let top_left = (sx + CARD_MARGIN, sy + CARD_MARGIN, w, h);
+    let top_right = (sx + sw - w - CARD_MARGIN, sy + CARD_MARGIN, w, h);
+    if overlap(top_right, m) < overlap(top_left, m) { top_right } else { top_left }
+}
+
+/// The main window's frame in logical points and the display it is on, when it is on screen.
+fn main_frame(app: &AppHandle) -> Option<(Bounds, Option<tauri::Monitor>)> {
+    let window = app.get_webview_window(crate::lifecycle::MAIN)?;
+    if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
+        return None;
+    }
+    let scale = window.scale_factor().ok()?;
+    let (at, size) = (window.outer_position().ok()?, window.outer_size().ok()?);
+    let frame = (f64::from(at.x) / scale, f64::from(at.y) / scale, f64::from(size.width) / scale, f64::from(size.height) / scale);
+    Some((frame, window.current_monitor().ok().flatten()))
+}
+
+/// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app. It never
+/// takes the focus (the keyboard and VoiceOver stay on the question in the main window) and sits clear of the main
+/// window, so it never covers the answer buttons.
 pub fn guided_open(app: &AppHandle) -> AppResult<()> {
     if app.get_webview_window(GUIDED_CARD).is_some() {
         return Ok(());
@@ -636,19 +706,24 @@ pub fn guided_open(app: &AppHandle) -> AppResult<()> {
     if RUNNING.load(Ordering::SeqCst) {
         return Err(AppError::msg("Wait for the check to finish, then test with your phone."));
     }
-    let (origin, size) = app.primary_monitor().ok().flatten().map_or(((0.0, 0.0), (1280.0, 800.0)), |m| {
+    let (main, shown_on) = main_frame(app).map_or((None, None), |(frame, monitor)| (Some(frame), monitor));
+    // The display the main window is on (the primary one without it).
+    let monitor = shown_on.or_else(|| app.primary_monitor().ok().flatten());
+    let screen = monitor.map_or((0.0, 0.0, 1280.0, 800.0), |m| {
         let s = m.scale_factor();
-        ((f64::from(m.position().x) / s, f64::from(m.position().y) / s), (f64::from(m.size().width) / s, f64::from(m.size().height) / s))
+        (f64::from(m.position().x) / s, f64::from(m.position().y) / s, f64::from(m.size().width) / s, f64::from(m.size().height) / s)
     });
-    let (w, h) = (640.0, 360.0);
+    let (x, y, w, h) = card_frame(screen, main);
     let builder = WebviewWindowBuilder::new(app, GUIDED_CARD, WebviewUrl::App("index.html".into()))
         .title("EchoLedger test card")
         .inner_size(w, h)
-        .position(origin.0 + (size.0 - w) / 2.0, origin.1 + (size.1 - h) / 2.0)
+        .position(x, y)
         .decorations(false)
         .resizable(false)
         .always_on_top(true)
         .skip_taskbar(true)
+        .focused(false)
+        .focusable(false)
         .visible(true);
     super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(())
@@ -727,6 +802,10 @@ pub struct PrivacyStatus {
     pub hidden_for_share: bool,
     /// The person opened the main window during that share: it says it may be in the screen share.
     pub main_in_share: bool,
+    /// Which share that is, counted in this run: the notice closed in one share shows again in the next.
+    pub share_number: u64,
+    /// The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends).
+    pub bar_on_screen: bool,
     pub share: Option<super::watch::Seen>,
     pub last_check: Option<LastCheck>,
     pub check_running: bool,
@@ -792,6 +871,8 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         hidden_by_shortcut: privacy.hidden_for(super::HideReason::Person),
         hidden_for_share: privacy.hidden_for(super::HideReason::Share),
         main_in_share: privacy.main_in_share(settings.hide_from_sharing),
+        share_number: privacy.share_number(),
+        bar_on_screen: privacy.bar_holds(),
         share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),
@@ -943,6 +1024,54 @@ mod tests {
         // What is kept: results only, no picture.
         let text = std::fs::read_to_string(store_path(dir.path())).unwrap();
         assert!(!text.contains("data:image") && !text.contains("picture"));
+    }
+
+    #[test]
+    fn the_phone_test_card_sits_clear_of_the_main_window() {
+        let laptop = (0.0, 0.0, 1512.0, 982.0);
+        // The main window on the left half: the card beside it, full size, level with it.
+        let left_half = (0.0, 38.0, 756.0, 900.0);
+        let card = card_frame(laptop, Some(left_half));
+        assert_eq!((card.2, card.3), CARD_SIZE);
+        assert_eq!(card.0, 756.0 + 16.0);
+        assert_eq!(overlap(card, left_half), 0.0);
+        // Settings' usual size in the middle of a laptop: no room beside it, so the smallest card in the top left
+        // corner, over the window's title and the top of the page, well above the question at the page's end.
+        let middle = (256.0, 120.0, 1000.0, 740.0);
+        let card = card_frame(laptop, Some(middle));
+        assert_eq!(card, (16.0, 16.0, CARD_SMALLEST.0, CARD_SMALLEST.1));
+        assert!(card.1 + card.3 <= middle.1 + middle.3 / 2.0, "it covers at most the window's top part");
+        // On a wider screen the same window has room to its right, at a smaller size.
+        let wide = card_frame((0.0, 0.0, 1920.0, 1080.0), Some((300.0, 120.0, 1000.0, 740.0)));
+        assert_eq!(overlap(wide, (300.0, 120.0, 1000.0, 740.0)), 0.0, "{wide:?}");
+        assert!(wide.2 >= CARD_SMALLEST.0 && (wide.2 / wide.3 - 16.0 / 9.0).abs() < 1e-9);
+        // A wide window high up: below it.
+        let top = (100.0, 40.0, 1300.0, 520.0);
+        let card = card_frame(laptop, Some(top));
+        assert!(card.1 >= 40.0 + 520.0 && overlap(card, top) == 0.0, "{card:?}");
+        // Full screen: the smallest card in the top left corner, never centred over the question.
+        let full = (0.0, 0.0, 1512.0, 982.0);
+        let card = card_frame(laptop, Some(full));
+        assert_eq!(card, (16.0, 16.0, CARD_SMALLEST.0, CARD_SMALLEST.1));
+        assert!(card.1 + card.3 < 982.0 / 2.0, "the top half only");
+        // The main window kept to the left: the top right corner covers less of it.
+        let narrow_left = (0.0, 0.0, 1300.0, 982.0);
+        assert_eq!(card_frame(laptop, Some(narrow_left)).0, 1512.0 - 480.0 - 16.0);
+        // A main window pushed to the top right: the corner that covers the least of it.
+        let top_right = (900.0, 0.0, 612.0, 600.0);
+        let card = card_frame((0.0, 0.0, 1100.0, 650.0), Some(top_right));
+        assert_eq!(overlap(card, top_right), 0.0, "{card:?}");
+        // No main window on screen: centred.
+        assert_eq!(card_frame(laptop, None), ((1512.0 - 640.0) / 2.0, (982.0 - 360.0) / 2.0, 640.0, 360.0));
+    }
+
+    #[test]
+    fn the_phone_test_card_never_takes_the_focus() {
+        let source = include_str!("check.rs");
+        let open = &source[source.find("pub fn guided_open(").unwrap()..];
+        let open = &open[..open.find("\n}\n").unwrap()];
+        assert!(open.contains(".focused(false)") && open.contains(".focusable(false)"), "the keyboard and VoiceOver stay on the question");
+        assert!(open.contains("card_frame(screen, main)"), "placed clear of the main window");
     }
 
     #[test]

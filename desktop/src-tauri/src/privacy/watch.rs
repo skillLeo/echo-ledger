@@ -170,6 +170,8 @@ impl Latch {
 pub struct Step {
     /// The windows must be off the screen now.
     pub hide: bool,
+    /// This read saw a sharing bar that takes the windows off ("Show EchoLedger windows" can't bring them back now).
+    pub bar: bool,
     /// The share for the status: the one seen now, or the one that keeps the windows off.
     pub seen: Option<Seen>,
     /// Lines about bars no pattern knows, new this run (the loop logs each once).
@@ -183,6 +185,8 @@ pub struct Watcher {
     latch: Latch,
     holding: Option<Seen>,
     logged: BTreeSet<String>,
+    /// The last read saw a sharing bar that takes the windows off.
+    bar: bool,
 }
 
 impl Watcher {
@@ -195,6 +199,7 @@ impl Watcher {
     pub fn release(&mut self) {
         self.latch.release();
         self.holding = None;
+        self.bar = false;
     }
 
     /// One look. `read` is the window list; none when the system did not answer (an empty list counts as that: the Dock
@@ -202,10 +207,10 @@ impl Watcher {
     pub fn look(&mut self, s: &Situation, read: Option<&[Listed]>, patterns: &Patterns, confirmed: impl FnOnce(MeetingApp) -> bool, now: Instant) -> Step {
         if !s.allowed || !s.permission {
             self.release();
-            return Step { hide: false, seen: None, unknown: Vec::new(), next: period(s, false) };
+            return Step { hide: false, bar: false, seen: None, unknown: Vec::new(), next: period(s, false) };
         }
         let Some(windows) = read.filter(|w| !w.is_empty()) else {
-            return Step { hide: self.latch.on(), seen: self.holding.clone(), unknown: Vec::new(), next: period(s, self.latch.on()) };
+            return Step { hide: self.latch.on(), bar: self.bar, seen: self.holding.clone(), unknown: Vec::new(), next: period(s, self.latch.on()) };
         };
         let found = super::bars::find(patterns, "macos", windows);
         let unknown = super::bars::unknown(patterns, "macos", windows).iter().map(super::bars::unknown_line).filter(|line| self.logged.insert(line.clone())).collect();
@@ -218,7 +223,8 @@ impl Watcher {
         if !hide {
             self.holding = None;
         }
-        Step { hide, seen: if hide { self.holding.clone() } else { seen }, unknown, next: period(s, hide) }
+        self.bar = hid_now;
+        Step { hide, bar: hid_now, seen: if hide { self.holding.clone() } else { seen }, unknown, next: period(s, hide) }
     }
 }
 
@@ -288,12 +294,17 @@ pub fn spawn(app: tauri::AppHandle) {
             let mut permission = (crate::screens::platform::macos::permission(), Instant::now());
             let mut watcher = Watcher::default();
             let mut confirmed = Confirmed::default();
+            let mut points = super::Points::default();
             loop {
                 let now = Instant::now();
                 if now.saturating_duration_since(permission.1) >= PERMISSION_EVERY {
                     permission = (crate::screens::platform::macos::permission(), now);
                     // The system makes windows of its own in this process later (TextInputUI's, once a page loaded).
                     super::seal_others(&app);
+                    // Woken from sleep, or the displays changed: every flag is set again (EchoLedger's own lifecycle points).
+                    if let Some(point) = points.tick(std::time::SystemTime::now(), PERMISSION_EVERY, super::displays(&app)) {
+                        super::at_point(&app, point);
+                    }
                 }
                 if now.saturating_duration_since(patterns_at) >= PATTERNS_EVERY {
                     patterns = super::bars::current(&state.data_dir);
@@ -329,8 +340,13 @@ pub fn spawn(app: tauri::AppHandle) {
                     *seen = step.seen.clone();
                     changed
                 };
+                let bar_before = privacy.bar_holds();
+                privacy.set_bar_on_screen(step.bar);
                 if step.hide != privacy.hidden_for(super::HideReason::Share) {
-                    super::set_hidden(&app, super::HideReason::Share, step.hide);
+                    super::set_hidden(&app, super::HideReason::Share, step.hide); // the tray and the pages follow
+                } else if privacy.bar_holds() != bar_before {
+                    // "Show EchoLedger windows" comes back once the bar is hidden, and goes while it is on screen.
+                    let _ = app.emit("privacy:changed", ());
                     crate::actions::emit_status(&app);
                 } else if seen_changed {
                     let _ = app.emit("privacy:changed", ());
@@ -493,12 +509,28 @@ mod tests {
     }
 
     #[test]
+    fn each_look_says_whether_the_sharing_bar_is_on_screen() {
+        let mut w = Watcher::default();
+        let t0 = Instant::now();
+        let first = w.look(&watching(MEETING), Some(&desk(true)), &patterns(), |_| false, t0);
+        assert!(first.hide && first.bar, "the bar is there: Show is not offered");
+        // Zoom hides its controls while the share goes on: still off, but Show can bring them back now.
+        let hidden_bar = w.look(&watching(MEETING), Some(&desk(false)), &patterns(), |_| false, t0 + Duration::from_secs(1));
+        assert!(hidden_bar.hide && !hidden_bar.bar);
+        // A read the system did not answer keeps what the last one saw.
+        w.look(&watching(MEETING), Some(&desk(true)), &patterns(), |_| false, t0 + Duration::from_secs(2));
+        assert!(w.look(&watching(MEETING), None, &patterns(), |_| false, t0 + Duration::from_secs(3)).bar);
+        w.release();
+        assert!(!w.look(&watching(MEETING), None, &patterns(), |_| false, t0 + Duration::from_secs(4)).bar);
+    }
+
+    #[test]
     fn turning_the_safety_net_off_or_losing_the_permission_lets_the_windows_back_and_clears_the_share() {
         let mut w = Watcher::default();
         let t0 = Instant::now();
         assert!(w.look(&watching(MEETING), Some(&desk(true)), &patterns(), |_| false, t0).hide);
         let off = w.look(&Situation { allowed: false, ..watching(MEETING) }, None, &patterns(), |_| false, t0);
-        assert_eq!(off, Step { hide: false, seen: None, unknown: Vec::new(), next: IDLE_POLL }, "no share stays in the status");
+        assert_eq!(off, Step { hide: false, bar: false, seen: None, unknown: Vec::new(), next: IDLE_POLL }, "no share stays in the status");
         assert!(!w.hidden());
         assert!(w.look(&watching(MEETING), Some(&desk(true)), &patterns(), |_| false, t0).hide);
         let no_permission = w.look(&Situation { permission: false, ..watching(MEETING) }, None, &patterns(), |_| false, t0);
