@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.0-b (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 1.8.0-c (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -184,19 +184,19 @@ a new one replaces the last. Any role may send one, a viewer too.
 `429 rate_limited`. The console shows them under System → Device reports: the super admin every device's, owners and
 admins those of their workspace.
 
-### `POST /api/devices/missed-recordings` — `config:read`, throttled (60/hour/device) (since v1.8, contract 1.8.0-b)
+### `POST /api/devices/missed-recordings` — `config:read`, throttled (60/hour/device) (since v1.8, contract 1.8.0-c)
 A call the app saw but did not record (v1.8 P0 0.2). The app sends one when its missed-recording detector compares a
 call event with its recordings and finds none. It never sends names, phone numbers or audio; the call is described only
 by its app, its time and how long it lasted.
 ```json
 {"client_ref": "c1f0…", "platform": "android", "app_version": "1.8.0", "source_app": "whatsapp",
  "call_started_at": "2026-11-16T09:12:00Z", "call_duration_s": 312,
- "reason": "helper_not_armed", "detail": "The helper was not connected when the call started."}
+ "reason": "helper_not_armed"}
 ```
 - Required: `client_ref`, `platform`, `source_app`, `call_started_at`, `reason`. Optional: `app_version` (at most 32),
-  `call_duration_s` (0–86400 or null), `detail`.
-- `client_ref`: the app's own id for the event (UUID, at most 64), so a retry never makes a second item: the same
-  device + `client_ref` → `200` with the existing id (also when two copies arrive at once).
+  `call_duration_s` (0–86400 or null). Any other key (an older app's `detail`) is ignored and never stored.
+- `client_ref`: the app's own opaque id for the event (`^[A-Za-z0-9._:-]{1,64}$`; a UUID fits), so a retry never makes
+  a second item: the same device + `client_ref` → `200` with the existing id (also when two copies arrive at once).
 - `platform` as elsewhere; `source_app`: a session `source_app` wire value (the table under Sessions: `whatsapp`,
   `whatsapp_business`, `whatsapp_web`, `google_meet`, `zoom`, `microsoft_teams`, `telegram`, `signal`, `messenger`,
   `instagram`, `skype`, `slack`, `discord`, `phone_call`, `voice_note`, `other`), or `browser` for a meeting in a browser
@@ -204,8 +204,7 @@ by its app, its time and how long it lasted.
 - `call_started_at`: ISO-8601, at most 30 days old; a device clock up to 5 minutes ahead is accepted and stored as the
   server's time.
 - `reason`: `helper_not_armed` | `permission` | `detection` | `mic_busy` | `crash` | `plan` | `unknown`.
-- `detail`: at most 300 characters or null, plain words for the person (no user content). The app shows its own fix
-  button (it knows the reason).
+- The app shows its own words and fix button for the reason; the server keeps no free text.
 - `201 {"data": {"id": "…"}}` (or `200` for a repeated `client_ref`); `422 validation_failed`; `429 rate_limited`.
 - The server adds an activity item `kind: "missed_recording"` for the device's person: title "Missed recording", body
   "<app> call · <length> · <reason phrase>" (reason phrases: helper_not_armed "The helper was not connected", permission
@@ -214,8 +213,9 @@ by its app, its time and how long it lasted.
   the item also carries `reason` and `missed_recording_id`; its `at` is when the server received it. It **needs
   action**: every app counts it in the unread badge and shows it in its "Needs action" group, like failed transcripts.
 - Admin: Diagnostics → Missed recordings (staff with the device-reports permission; there is no owner/admin view since
-  v1.6): counts per device and reason over the last 7 and 30 days. No call details beyond the stored fields.
-- Rows are deleted after 90 days (call data), and with the person or the workspace.
+  v1.6): counts per device, reason, system and the app version that reported it, over the last 7 and 30 days. No call
+  details beyond the stored fields.
+- Rows are deleted 90 days after the call, and with the person or the workspace; the activity item goes with its row.
 - Isolation: a device only ever writes its own events; body ids are ignored.
 
 ### Signing in with an account (since v1.5)
