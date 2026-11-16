@@ -15,6 +15,8 @@ on:
     paths:
       - 'desktop/**'
       - 'docs/api-samples/**'
+      # The sharing-bar patterns the app is built with (privacy/bars.rs).
+      - 'web/resources/data/share-bars.json'
       - '.github/workflows/desktop-windows.yml'
   workflow_dispatch:
 
@@ -161,6 +163,10 @@ jobs:
       - name: Run the smoke test
         shell: pwsh
         run: ./desktop/scripts/smoke-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
+
+      - name: Share Check (a protected magenta window and a green control, captured with WGC and DXGI)
+        shell: pwsh
+        run: ./desktop/scripts/share-check-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
 
       - name: Run it again as a person would on their own PC, without the runner's folder
         shell: pwsh
