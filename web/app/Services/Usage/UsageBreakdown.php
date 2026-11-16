@@ -99,6 +99,7 @@ final class UsageBreakdown
      *
      * @return array{totals: array{minutes: float, input_tokens: int, output_tokens: int, cost_usd: float},
      *     providers: list<array{key: string, label: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float, use_cases: list<array{key: string, label: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float}>}>,
+     *     uses: list<array{key: string, label: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float}>,
      *     people: list<array{id: int, name: string, email: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float, plan_percent: float|null}>,
      *     workspaces: list<array{id: int, name: string, plan: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float, minutes_percent: float|null, storage_percent: float|null, ai_percent: float|null}>}
      */
@@ -109,6 +110,7 @@ final class UsageBreakdown
         $totals = $empty;
         $providers = [];
         $useCases = [];
+        $uses = [];
         $people = [];
         $workspaces = [];
         foreach ($this->rows($from, $to, $workspaceId, $userId) as $row) {
@@ -118,6 +120,7 @@ final class UsageBreakdown
             $totals = self::add($totals, $line);
             $providers[$key] = self::add($providers[$key] ?? $empty, $line);
             $useCases[$key][$useCase] = self::add($useCases[$key][$useCase] ?? $empty, $line);
+            $uses[$useCase] = self::add($uses[$useCase] ?? $empty, $line);
             $people[(int) $row->user_id] = self::add($people[(int) $row->user_id] ?? $empty, $line);
             $workspaces[(int) $row->workspace_id] = self::add($workspaces[(int) $row->workspace_id] ?? $empty, $line);
         }
@@ -125,6 +128,8 @@ final class UsageBreakdown
         return [
             'totals' => self::rounded($totals),
             'providers' => $this->providerRows($providers, $useCases),
+            // Since v1.8.1 (W-001): the same numbers per use, every provider together.
+            'uses' => self::useRows($uses),
             'people' => $this->peopleRows($people, $workspaceId),
             'workspaces' => $this->workspaceRows($workspaces),
         ];
@@ -154,15 +159,22 @@ final class UsageBreakdown
     }
 
     /**
-     * The same numbers as CSV rows: one line per person, workspace and provider (with its use cases).
+     * The same numbers as CSV rows: one line per person, workspace and provider (with its use cases). Without
+     * [$byProvider] (the console's Usage page, since v1.8.1, W-001) one line per use instead, every provider together:
+     * which provider did what is for the admin panel only.
      *
      * @return list<list<string|int|float>>
      */
-    public function csv(Carbon $from, Carbon $to, ?int $workspaceId = null, ?int $userId = null): array
+    public function csv(Carbon $from, Carbon $to, ?int $workspaceId = null, ?int $userId = null, bool $byProvider = true): array
     {
         $report = $this->report($from, $to, $workspaceId, $userId);
         $rows = [['Section', 'Name', 'Detail', 'Minutes', 'Tokens read', 'Tokens written', 'Cost (US$)', '% of plan minutes']];
-        foreach ($report['providers'] as $provider) {
+        if (! $byProvider) {
+            foreach ($report['uses'] as $use) {
+                $rows[] = ['Use', self::cell($use['label']), '', $use['minutes'], $use['input_tokens'], $use['output_tokens'], $use['cost_usd'], ''];
+            }
+        }
+        foreach ($byProvider ? $report['providers'] : [] as $provider) {
             $rows[] = ['Provider', self::cell($provider['label']), '', $provider['minutes'], $provider['input_tokens'], $provider['output_tokens'], $provider['cost_usd'], ''];
             foreach ($provider['use_cases'] as $useCase) {
                 $rows[] = ['Use case', self::cell($provider['label']), self::cell($useCase['label']), $useCase['minutes'], $useCase['input_tokens'], $useCase['output_tokens'], $useCase['cost_usd'], ''];
@@ -307,6 +319,23 @@ final class UsageBreakdown
             usort($cases, fn (array $a, array $b): int => $b['cost_usd'] <=> $a['cost_usd'] ?: $a['label'] <=> $b['label']);
             $rows[] = ['key' => $key, 'label' => self::PROVIDERS[$key] ?? SttProviderKey::tryFrom($key)?->getLabel() ?? $key, ...self::rounded($provider), 'use_cases' => $cases];
         }
+
+        return $rows;
+    }
+
+    /**
+     * Every use with what it took, by cost: what the work was, never which provider did it.
+     *
+     * @param  array<string, array{minutes: float, input_tokens: int, output_tokens: int, cost_usd: float}>  $uses
+     * @return list<array{key: string, label: string, minutes: float, input_tokens: int, output_tokens: int, cost_usd: float}>
+     */
+    private static function useRows(array $uses): array
+    {
+        $rows = [];
+        foreach ($uses as $key => $sum) {
+            $rows[] = ['key' => (string) $key, 'label' => self::USE_CASE_LABELS[$key] ?? (string) $key, ...self::rounded($sum)];
+        }
+        usort($rows, fn (array $a, array $b): int => $b['cost_usd'] <=> $a['cost_usd'] ?: $a['label'] <=> $b['label']);
 
         return $rows;
     }

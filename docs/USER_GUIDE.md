@@ -861,7 +861,9 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
 
 ## 15. Usage and budget
 
-- The console **Usage** page shows the minutes and the cost for each month, per provider, device and client.
+- The console **Usage** page shows the minutes and the cost for each month: the totals (streaming and final minutes,
+  the recordings, what an hour of recording cost, Double-check), and per person, device, project and language.
+  **Download CSV** gives the same numbers, one line per use.
 - Your administrator sets a **monthly limit** in the console **Settings → Storage**. At 80% you get a message. At 100% new
   captions and new transcripts stop, but your recording carries on and is kept on your device.
 

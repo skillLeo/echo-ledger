@@ -11,6 +11,9 @@
     };
     $cell = 'padding:.5rem .75rem;border-top:1px solid var(--gray-200);';
     $num = $cell.'text-align:right;font-variant-numeric:tabular-nums;';
+    // Every engine together (since v1.8.1, W-001).
+    $all = $report['all'];
+    $anyUsage = $all['streaming_minutes'] + $all['final_minutes'] + $all['cost_usd'] > 0 || $all['recordings'] > 0;
 @endphp
 
 <div style="display:flex;flex-direction:column;gap:1.5rem">
@@ -71,20 +74,20 @@
     @include('filament.pages.usage-trend', ['trend' => $trend])
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(20rem,1fr));gap:1rem">
-        <x-filament::section heading="By provider" description="Billed minutes: audio minutes × billed channels. Per recorded hour: what an hour of recording cost with that engine (final transcripts).">
-            @if ($report['providers'] === [])
+        {{-- Since v1.8.1 (W-001) every engine together: which provider did what is for the admin panel only. --}}
+        <x-filament::section heading="Totals" description="Billed minutes: audio minutes × billed channels. Per recorded hour: what an hour of recording cost (final transcripts).">
+            @if (! $anyUsage)
                 <p style="opacity:.6">No usage in {{ $report['label'] }}.</p>
             @else
-                <div style="overflow-x:auto">
-                    <table style="width:100%;font-size:.85rem;border-collapse:collapse">
-                        <thead><tr style="text-align:left;opacity:.7"><th style="padding:.5rem .75rem">Provider</th><th style="padding:.5rem .75rem;text-align:right">Streaming</th><th style="padding:.5rem .75rem;text-align:right">Final</th><th style="padding:.5rem .75rem;text-align:right">Recordings</th><th style="padding:.5rem .75rem;text-align:right">Per recorded hour</th><th style="padding:.5rem .75rem;text-align:right">Cost</th></tr></thead>
-                        <tbody>
-                            @foreach ($report['providers'] as $row)
-                                <tr><td style="{{ $cell }}">{{ $row['label'] }}</td><td style="{{ $num }}">{{ $min($row['streaming_minutes']) }}</td><td style="{{ $num }}">{{ $min($row['final_minutes']) }}</td><td style="{{ $num }}">{{ $row['recordings'] }}</td><td style="{{ $num }}">{{ $row['per_hour_usd'] === null ? '—' : '$'.number_format($row['per_hour_usd'], 3) }}</td><td style="{{ $num }}">{{ $usd($row['cost_usd']) }}@if ($row['check_usd'] > 0)<div style="font-size:.7rem;opacity:.6">incl. {{ $usd($row['check_usd']) }} Double-check</div>@endif</td></tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
+                <table style="width:100%;font-size:.85rem;border-collapse:collapse" data-usage-totals>
+                    <tbody>
+                        <tr><td style="{{ $cell }}">Streaming</td><td style="{{ $num }}">{{ $min($all['streaming_minutes']) }} min</td></tr>
+                        <tr><td style="{{ $cell }}">Final</td><td style="{{ $num }}">{{ $min($all['final_minutes']) }} min</td></tr>
+                        <tr><td style="{{ $cell }}">Recordings</td><td style="{{ $num }}">{{ number_format($all['recordings']) }}</td></tr>
+                        <tr><td style="{{ $cell }}">Per recorded hour</td><td style="{{ $num }}">{{ $all['per_hour_usd'] === null ? '—' : '$'.number_format($all['per_hour_usd'], 3) }}</td></tr>
+                        <tr><td style="{{ $cell }}">Cost</td><td style="{{ $num }}">{{ $usd($all['cost_usd']) }}@if ($all['check_usd'] > 0)<div style="font-size:.7rem;opacity:.6">incl. {{ $usd($all['check_usd']) }} Double-check</div>@endif</td></tr>
+                    </tbody>
+                </table>
             @endif
         </x-filament::section>
 

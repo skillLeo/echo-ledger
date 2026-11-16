@@ -83,9 +83,10 @@ const VENDOR_NAMES_ALLOWED = [
     'app/Http/Controllers/Api/LiveTranslateTokenController.php' => 'Live Translate\'s key and credit',
     // The pattern that keeps them from people, never shown itself.
     'app/Support/ProviderText.php' => 'the names it hides',
-    // The Usage pages' cost per provider.
-    'app/Services/Usage/UsageBreakdown.php' => 'the cost per provider',
-    'app/Services/Usage/UsageReport.php' => 'the cost per provider',
+    // The admin panel's cost per provider (Server usage, a customer's page); the console's Usage page shows the month
+    // only added up, and its CSV per use (W-001).
+    'app/Services/Usage/UsageBreakdown.php' => 'the admin panel\'s cost per provider',
+    'app/Services/Usage/UsageReport.php' => 'the month per engine, for the ledger\'s checks; the console adds it up',
     // A person adds the connector in Claude or ChatGPT themselves, and the website says where it works.
     'resources/views/auth/connector-consent.blade.php' => 'the person adds the connector there',
     'resources/views/site/home.blade.php' => 'where the connector works',

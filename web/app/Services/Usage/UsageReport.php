@@ -47,6 +47,7 @@ final class UsageReport
      * @return array{month: string, label: string,
      *     totals: array{minutes: float, cost_usd: float, streaming_minutes: float, final_minutes: float, free_minutes: float},
      *     providers: list<array{provider: string, label: string, streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}>,
+     *     all: array{streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float},
      *     devices: list<array{name: string, minutes: float, cost_usd: float}>,
      *     clients: list<array{name: string, minutes: float, cost_usd: float}>,
      *     languages: list<array{language: string, label: string, recordings: int, minutes: float, cost_usd: float, check_usd: float}>,
@@ -124,6 +125,9 @@ final class UsageReport
             'label' => $start->format('F Y'),
             'totals' => $totals,
             'providers' => $this->providerRows($providers),
+            // Since v1.8.1 (W-001): the same numbers for every engine together, as the console's Usage page shows them.
+            // Which provider did what is for the admin panel only.
+            'all' => $this->allRow($providers),
             'devices' => $this->deviceRows($workspaceId, $devices),
             'clients' => $this->clientRows($workspaceId, $sessions),
             // Since v1.5 (Phase 1C): what each language costs this month, and the double-check's part of it.
@@ -171,6 +175,34 @@ final class UsageReport
         usort($rows, fn (array $a, array $b): int => ($b['streaming_minutes'] + $b['final_minutes']) <=> ($a['streaming_minutes'] + $a['final_minutes']));
 
         return $rows;
+    }
+
+    /**
+     * The rows added up: minutes, cost and Double-check of everything, then the recordings a speech engine transcribed
+     * and what one recorded hour cost with them (final transcripts, as each engine row has it; the AI's views and notes
+     * have no audio). No provider in it.
+     *
+     * @param  array<string, array{streaming_minutes: float, final_minutes: float, cost_usd: float, check_usd: float, final_usd: float, audio_ms: int, sessions: array<string, true>}>  $providers
+     * @return array{streaming_minutes: float, final_minutes: float, cost_usd: float, recordings: int, per_hour_usd: float|null, check_usd: float}
+     */
+    private function allRow(array $providers): array
+    {
+        $sum = fn (array $rows, string $key): float => (float) array_sum(array_column($rows, $key));
+        $engines = array_filter($providers, fn (string|int $key): bool => SttProviderKey::tryFrom((string) $key) !== null, ARRAY_FILTER_USE_KEY);
+        $audioMs = (int) $sum($engines, 'audio_ms');
+        $sessions = [];
+        foreach ($engines as $v) {
+            $sessions += $v['sessions'];
+        }
+
+        return [
+            'streaming_minutes' => $sum($providers, 'streaming_minutes'),
+            'final_minutes' => $sum($providers, 'final_minutes'),
+            'cost_usd' => $sum($providers, 'cost_usd'),
+            'recordings' => count($sessions),
+            'per_hour_usd' => $audioMs > 0 ? round($sum($engines, 'final_usd') / ($audioMs / 3_600_000), 3) : null,
+            'check_usd' => $sum($providers, 'check_usd'),
+        ];
     }
 
     /**

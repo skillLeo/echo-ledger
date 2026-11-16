@@ -27,9 +27,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 use UnitEnum;
 
 /**
- * Usage dashboard (B20): one month from the usage ledger (minutes by provider, streaming and final, cost, devices,
- * clients), the plan meters, and for the server admin the A5 monthly cap of the whole server. Since v1.5 owners and
- * admins see the workspace's numbers per person (never content), a member only their own, a viewer none of it.
+ * Usage dashboard (B20): one month from the usage ledger (minutes, streaming and final, cost, devices, clients), the
+ * plan meters, and for the server admin the A5 monthly cap of the whole server. Since v1.5 owners and admins see the
+ * workspace's numbers per person (never content), a member only their own, a viewer none of it. Since v1.8.1 (W-001)
+ * every engine together: which provider did what is in the admin panel (Server usage) only.
  */
 class Usage extends Page
 {
@@ -76,7 +77,8 @@ class Usage extends Page
             Action::make('exportCsv')->label('Download CSV')->icon(Heroicon::OutlinedArrowDownTray)->color('gray')
                 ->action(function (): StreamedResponse {
                     [$from, $to] = $this->range();
-                    $rows = app(UsageBreakdown::class)->csv($from, $to, (int) CurrentWorkspace::id(), $this->ownOnly());
+                    // Per use, never per provider (since v1.8.1, W-001): the provider breakdown is the admin panel's.
+                    $rows = app(UsageBreakdown::class)->csv($from, $to, (int) CurrentWorkspace::id(), $this->ownOnly(), byProvider: false);
 
                     return self::csvResponse($rows, 'usage-'.$from->format('Y-m').'.csv');
                 }),

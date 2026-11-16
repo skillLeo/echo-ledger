@@ -273,7 +273,9 @@ instructions** text is shown instead, as before.
 - **Budget alert** (since v1.6): a monthly budget in US$. Staff who see usage get a notice in the bell and an email when
   this month's estimated cost passes 80% of it, and again at 100%, once each a month. It only warns; the monthly limit
   in Settings is what stops transcription.
-- **Usage** (owners and admins): their workspace per person. A member sees only their own.
+- **Usage** (owners and admins): their workspace per person. A member sees only their own. Since v1.8.1 it shows the
+  totals of every engine together and its CSV one line per use: which provider did what is only here, in **Server
+  usage** (choose the workspace).
 - Activity shows "at 80 %" and "reached" once a month for minutes, storage and AI credits.
 
 **Limits on a server with customers.** Use each plan's minutes, not only the server-wide monthly budget in Settings. The
