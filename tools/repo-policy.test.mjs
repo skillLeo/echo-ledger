@@ -468,7 +468,7 @@ export function bannedWordsIn(text) {
  * literals that read as words (they contain a space), so identifiers, permission names and log keys never count.
  */
 function userFacingText(path, text) {
-  if (/\.(xml|md)$/.test(path)) return text;
+  if (/\.(xml|md|txt)$/.test(path) || /^web\/resources\/prompts\//.test(path)) return text;
   if (path.endsWith('.blade.php')) return text.replace(/\{\{--[\s\S]*?--\}\}/g, '');
   const literals = text.match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g) ?? [];
   // JSX text between tags (most of the desktop UI) and one-word labels count too (release audit, 2026-11-16).
@@ -486,7 +486,8 @@ const USER_FACING = (p) =>
     /^desktop\/src\/.*\.(tsx?)$/.test(p) ||
     /^desktop\/src-tauri\/src\/.*\.rs$/.test(p) ||
     /^web\/(app\/.*\.php|resources\/views\/.*\.blade\.php|lang\/.*)$/.test(p) ||
-    /^docs\/(USER_GUIDE\.md|store\/.*\.md)$/.test(p));
+    /^docs\/(USER_GUIDE\.md|store\/.*\.md)$/.test(p) ||
+    /^web\/resources\/prompts\/.*\.(md|json|txt)$/.test(p));
 
 describe('words rule', () => {
   test('the check finds each banned word, in English, Urdu and Arabic, and passes clean text', () => {

@@ -129,3 +129,7 @@ The relay's own draft of these messages is `services/assist-relay/PROTOCOL.md`; 
 First line at most 25 words in simple English; at most 3 bullets with the key words in bold; an optional "Say next";
 an optional Urdu / Roman Urdu line explaining the question; exactly `SKIP` when no reply is needed; never ask for
 something already said; consistent with the facts ledger; never invent experience, numbers or promises.
+
+The pack (web/resources/prompts/assist/, version 1.0.0) fixes two things the apps rely on: the language line starts
+with "Urdu:", "Roman Urdu:" or "Arabic:" (apps may style it apart), and the consent line for boss, client and general
+meetings is "Just so you know: I record this call and use an assistant for notes. Is that okay with you?".
