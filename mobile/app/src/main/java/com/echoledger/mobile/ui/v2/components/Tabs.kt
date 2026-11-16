@@ -71,7 +71,7 @@ fun EchoTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit, mo
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = EchoTokens.Space.s8)
-                            .height(V2Size.tabIndicator)
+                            .height(EchoTokens.Component.tabsIndicator)
                             .background(if (selected) c.accent else Color.Transparent)
                     )
                 }
@@ -92,12 +92,12 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(EchoTokens.Component.buttonRadius),
         color = c.bgSurface,
-        border = BorderStroke(V2Size.hairline, c.borderStrong)
+        border = BorderStroke(EchoTokens.Border.hairline, c.borderStrong)
     ) {
         Row(Modifier.height(IntrinsicSize.Min).selectableGroup()) {
             options.forEachIndexed { index, label ->
                 val selected = index == selectedIndex
-                if (index > 0) Box(Modifier.width(V2Size.hairline).fillMaxHeight().background(c.borderStrong))
+                if (index > 0) Box(Modifier.width(EchoTokens.Border.hairline).fillMaxHeight().background(c.borderStrong))
                 Row(
                     Modifier
                         .weight(1f)
@@ -109,7 +109,7 @@ fun EchoSegmented(options: List<String>, selectedIndex: Int, onSelect: (Int) -> 
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    if (selected) Icon(EchoIcons.Check, null, Modifier.size(V2Size.iconSm), tint = c.accentText)
+                    if (selected) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md), tint = c.accentText)
                     Text(
                         label,
                         style = EchoV2.type.label,
@@ -154,7 +154,7 @@ fun EchoBottomBar(destinations: List<EchoDestination>, selectedKey: String, onSe
                             .padding(horizontal = EchoTokens.Space.s16, vertical = EchoTokens.Space.s4),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(d.icon, null, Modifier.size(V2Size.icon), tint = if (selected) c.accentText else c.textSecondary)
+                        Icon(d.icon, null, Modifier.size(EchoTokens.Icon.lg), tint = if (selected) c.accentText else c.textSecondary)
                     }
                     Text(
                         d.label,

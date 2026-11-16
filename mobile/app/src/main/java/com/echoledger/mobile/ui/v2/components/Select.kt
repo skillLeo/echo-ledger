@@ -69,7 +69,7 @@ fun <T> EchoSelect(
                     .fillMaxWidth()
                     .defaultMinSize(minHeight = EchoTokens.Layout.controlHeightMobile)
                     .border(
-                        if (open) V2Size.focusRing else V2Size.hairline,
+                        if (open) EchoTokens.Focus.width else EchoTokens.Border.hairline,
                         if (open) c.accentFocus else c.borderStrong,
                         shape
                     )
@@ -84,7 +84,7 @@ fun <T> EchoSelect(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f).padding(vertical = EchoTokens.Space.s8)
                 )
-                Icon(EchoIcons.Expand, null, Modifier.size(V2Size.icon), tint = c.textSecondary)
+                Icon(EchoIcons.Expand, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
             }
         }
         DropdownMenu(
@@ -92,7 +92,7 @@ fun <T> EchoSelect(
             onDismissRequest = { open = false },
             shape = RoundedCornerShape(EchoTokens.Component.menuRadius),
             containerColor = c.bgOverlay,
-            border = BorderStroke(V2Size.hairline, c.borderDefault)
+            border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
         ) {
             options.forEach { option ->
                 val isSelected = option == selected
@@ -103,7 +103,7 @@ fun <T> EchoSelect(
                         onSelect(option)
                     },
                     trailingIcon = if (isSelected) {
-                        { Icon(EchoIcons.Check, null, Modifier.size(V2Size.icon), tint = c.accentText) }
+                        { Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.lg), tint = c.accentText) }
                     } else {
                         null
                     },

@@ -8,12 +8,13 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsEnabled
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
@@ -142,15 +143,16 @@ class ComponentBehaviourTest {
     }
 
     @Test
-    fun aLoadingButtonIgnoresTapsAndSaysSo() {
+    fun aLoadingButtonIsDisabledAndSaysWhatItIsDoing() {
         var taps = 0
         var loading by mutableStateOf(true)
-        show { EchoButton("Upload", { taps++ }, loading = loading) }
-        compose.onNodeWithText("Upload").performClick()
+        show { EchoButton("Upload", { taps++ }, loading = loading, loadingText = "Uploading") }
+        compose.onNodeWithText("Upload").assertDoesNotExist()
+        compose.onNodeWithText("Uploading").assertIsNotEnabled().performClick()
         assertEquals(0, taps)
         compose.onNode(SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "Loading")).assertExists()
         loading = false
-        compose.onNodeWithText("Upload").performClick()
+        compose.onNodeWithText("Upload").assertIsEnabled().performClick()
         assertEquals(1, taps)
     }
 
@@ -229,19 +231,19 @@ class ComponentBehaviourTest {
     }
 
     @Test
-    fun dynamicColourChangesTheAccentButNeverRecordOrDanger() {
-        val wallpaper = androidx.compose.material3.lightColorScheme(primary = Color(0xFF6750A4), error = Color(0xFF00FF00))
-        for (fixed in listOf(EchoV2Colors.Light, EchoV2Colors.Dark)) {
-            val dynamic = fixed.withDynamicAccent(wallpaper)
-            assertEquals(Color(0xFF6750A4), dynamic.accent)
-            assertEquals(fixed.record, dynamic.record)
-            assertEquals(fixed.danger, dynamic.danger)
-            assertEquals(fixed.success, dynamic.success)
-            assertEquals(fixed.warning, dynamic.warning)
-            assertEquals(fixed.danger, dynamic.toMaterial().error)
+    fun coloursAreTheTokensWithNoWallpaperColour() {
+        for ((colors, tokens) in listOf(
+            EchoV2Colors.Light to EchoTokens.Light.accentDefault,
+            EchoV2Colors.Dark to EchoTokens.Dark.accentDefault
+        )) {
+            assertEquals(tokens, colors.accent)
+            assertEquals(colors.accent, colors.toMaterial().primary)
+            assertEquals(colors.danger, colors.toMaterial().error)
         }
         assertEquals(EchoTokens.Light.recordDefault, EchoV2Colors.Light.record)
         assertEquals(EchoTokens.Dark.dangerDefault, EchoV2Colors.Dark.danger)
+        // EchoV2Theme has no dynamic-colour switch at all.
+        assertFalse(EchoV2Colors::class.java.methods.any { it.name.contains("dynamic", ignoreCase = true) })
     }
 
     @Test

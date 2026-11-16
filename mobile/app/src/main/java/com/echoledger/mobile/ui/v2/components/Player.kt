@@ -76,7 +76,7 @@ fun EchoPlayer(
                 onValueChange = { onSeek((it * durationMs).toLong()) },
                 thumb = { Box(Modifier.size(EchoTokens.Space.s16).background(c.accent, CircleShape)) },
                 track = { state ->
-                    Canvas(Modifier.fillMaxWidth().height(V2Size.handleHeight)) {
+                    Canvas(Modifier.fillMaxWidth().height(EchoTokens.Component.sheetHandleHeight)) {
                         val y = size.height / 2
                         drawLine(c.borderDefault, Offset(0f, y), Offset(size.width, y), size.height, StrokeCap.Round)
                         drawLine(c.accent, Offset(0f, y), Offset(size.width * state.value, y), size.height, StrokeCap.Round)
@@ -110,7 +110,11 @@ fun EchoPlayer(
                         .semantics { contentDescription = if (playing) labels.pause else labels.play }
                 ) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(if (playing) EchoIcons.Pause else EchoIcons.Play, null, Modifier.size(V2Size.icon + EchoTokens.Space.s8))
+                        Icon(
+                            if (playing) EchoIcons.Pause else EchoIcons.Play,
+                            null,
+                            Modifier.size(EchoTokens.Icon.lg + EchoTokens.Space.s8)
+                        )
                     }
                 }
                 EchoIconButton(

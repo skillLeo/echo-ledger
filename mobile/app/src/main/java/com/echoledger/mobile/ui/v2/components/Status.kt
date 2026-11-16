@@ -44,7 +44,7 @@ fun EchoStatus(label: String, kind: EchoStatusKind, modifier: Modifier = Modifie
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
     ) {
-        Box(Modifier.size(V2Size.statusDot).background(ink, CircleShape))
+        Box(Modifier.size(EchoTokens.Component.statusDotSize).background(ink, CircleShape))
         Text(label, style = EchoV2.type.captionStrong, color = ink, maxLines = 1)
     }
 }

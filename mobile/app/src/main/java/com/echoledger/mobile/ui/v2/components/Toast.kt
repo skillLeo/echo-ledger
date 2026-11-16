@@ -84,11 +84,11 @@ fun EchoToastHost(state: EchoToastState, modifier: Modifier = Modifier) {
     val accessibility = LocalAccessibilityManager.current
     LaunchedEffect(data) {
         val time = accessibility?.calculateRecommendedTimeoutMillis(
-            V2Size.TOAST_MS,
+            EchoTokens.Component.toastDurationMs.toLong(),
             containsIcons = false,
             containsText = true,
             containsControls = data.actionLabel != null
-        ) ?: V2Size.TOAST_MS
+        ) ?: EchoTokens.Component.toastDurationMs.toLong()
         delay(time)
         data.dismiss()
     }

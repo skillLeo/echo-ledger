@@ -36,7 +36,7 @@ fun EchoEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
     ) {
-        Icon(icon, null, Modifier.size(V2Size.iconLg), tint = c.textSecondary)
+        Icon(icon, null, Modifier.size(EchoTokens.Icon.xl), tint = c.textSecondary)
         Text(
             title,
             style = EchoV2.type.titleS,

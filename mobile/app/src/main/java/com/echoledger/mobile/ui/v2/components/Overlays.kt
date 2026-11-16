@@ -27,6 +27,7 @@ import androidx.compose.ui.semantics.paneTitle
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.window.Dialog
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.PhoneDialogRadius
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import kotlinx.coroutines.launch
 
@@ -64,7 +65,7 @@ fun EchoDialogContent(
     val c = EchoV2.colors
     Surface(
         modifier = modifier.fillMaxWidth().semantics { paneTitle = title },
-        shape = RoundedCornerShape(EchoTokens.Component.dialogRadius),
+        shape = RoundedCornerShape(PhoneDialogRadius),
         color = c.bgOverlay,
         contentColor = c.textPrimary,
         shadowElevation = EchoTokens.Space.s16
@@ -148,7 +149,7 @@ private fun SheetHandle() {
     ) {
         Box(
             Modifier
-                .size(V2Size.handleWidth, V2Size.handleHeight)
+                .size(EchoTokens.Component.sheetHandleWidth, EchoTokens.Component.sheetHandleHeight)
                 .background(EchoV2.colors.borderStrong, RoundedCornerShape(EchoTokens.Component.chipRadius))
         )
     }

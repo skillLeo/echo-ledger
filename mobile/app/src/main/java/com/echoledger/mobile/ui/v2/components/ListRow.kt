@@ -56,7 +56,7 @@ fun EchoListRow(
     Row(
         modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = if (tall) V2Size.rowMobileTall else EchoTokens.Layout.rowMobile)
+            .defaultMinSize(minHeight = if (tall) EchoTokens.Component.listRowHeightMobileTall else EchoTokens.Layout.rowMobile)
             .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
             .semantics(mergeDescendants = true) {}
             .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
@@ -74,7 +74,7 @@ fun EchoListRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f)
                 )
-                titleEnd?.let { Text(it, style = type.caption, color = c.textSecondary, maxLines = 1) }
+                titleEnd?.let { Text(it, style = type.mono, color = c.textSecondary, maxLines = 1) }
             }
             if (meta != null || metaEnd != null || status != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
@@ -124,7 +124,7 @@ fun EchoSettingRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
         ) {
-            icon?.let { Icon(it, null, Modifier.size(V2Size.icon), tint = c.textSecondary) }
+            icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
                 Text(title, style = type.body, color = c.textPrimary)
                 subtitle?.let { Text(it, style = type.meta, color = c.textSecondary) }
@@ -151,13 +151,13 @@ fun EchoAvatar(modifier: Modifier = Modifier, icon: ImageVector? = null, initial
     val c = EchoV2.colors
     Box(
         modifier
-            .size(V2Size.avatar)
+            .size(EchoTokens.Component.avatarSize)
             .background(c.bgSubtle, CircleShape)
             .then(if (contentDescription != null) Modifier.semantics { this.contentDescription = contentDescription } else Modifier),
         contentAlignment = Alignment.Center
     ) {
         when {
-            icon != null -> Icon(icon, null, Modifier.size(V2Size.iconSm), tint = c.textSecondary)
+            icon != null -> Icon(icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary)
             initials != null -> Text(initials, style = EchoV2.type.label, color = c.textPrimary, maxLines = 1)
         }
     }
@@ -188,8 +188,8 @@ fun EchoDivider(modifier: Modifier = Modifier, inset: Boolean = false) {
     Box(
         modifier
             .fillMaxWidth()
-            .padding(start = if (inset) EchoTokens.Layout.pagePaddingMobile + V2Size.avatar + EchoTokens.Space.s16 else EchoTokens.Space.s0)
-            .height(V2Size.hairline)
+            .padding(start = if (inset) DividerInset else EchoTokens.Space.s0)
+            .height(EchoTokens.Border.hairline)
             .background(EchoV2.colors.borderDefault)
     )
 }
@@ -203,8 +203,11 @@ fun EchoCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
         shape = RoundedCornerShape(EchoTokens.Component.cardRadius),
         color = c.bgSurface,
         contentColor = c.textPrimary,
-        border = BorderStroke(V2Size.hairline, c.borderDefault)
+        border = BorderStroke(EchoTokens.Border.hairline, c.borderDefault)
     ) {
         Column(Modifier.padding(EchoTokens.Space.s16), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12), content = content)
     }
 }
+
+/** Where an inset divider starts: after the page padding, the avatar and the gap. */
+private val DividerInset = EchoTokens.Layout.pagePaddingMobile + EchoTokens.Component.avatarSize + EchoTokens.Space.s16

@@ -1,6 +1,5 @@
 package com.echoledger.mobile.ui.v2.theme
 
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -8,18 +7,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
@@ -30,7 +25,7 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
  * The colour roles of the v2 design system (docs/v2/DESIGN_SYSTEM.md) for one theme. Components read these, never the
- * raw palette. [record], [danger], [success] and [warning] are fixed: dynamic colour never changes them.
+ * raw palette. v2 takes no wallpaper colours: the accent stays teal and the surfaces stay neutral.
  */
 @Immutable
 data class EchoV2Colors(
@@ -120,19 +115,6 @@ data class EchoV2Colors(
         }
     }
 
-    /**
-     * Dynamic colour: the wallpaper's scheme replaces the accent family only. Surfaces stay neutral (calm by default)
-     * and the record, danger, success and warning colours keep their fixed values.
-     */
-    fun withDynamicAccent(scheme: ColorScheme): EchoV2Colors = copy(
-        accent = scheme.primary,
-        accentSoft = scheme.primaryContainer,
-        accentText = scheme.primary,
-        accentFocus = scheme.primary,
-        textOnAccent = scheme.onPrimary,
-        inverseAccent = scheme.inversePrimary
-    )
-
     /** The Material 3 scheme of these roles, so stock Material parts (ripples, sliders, menus) agree with them. */
     fun toMaterial(): ColorScheme {
         val base = if (isDark) darkColorScheme() else lightColorScheme()
@@ -198,11 +180,11 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     val titleM = EchoTokens.Type.titleM.face()
     val titleS = EchoTokens.Type.titleS.face()
 
-    /** Default text on the phone: 16 sp at the body weight. */
-    val body = EchoTokens.Type.titleS.copy(fontWeight = EchoTokens.Type.body.fontWeight).face()
+    /** Default text on the phone: body.mobile, 16/24. */
+    val body = EchoTokens.Type.bodyMobile.face()
 
     /** Row titles and emphasis on the phone: 16 sp, strong. */
-    val bodyStrong = EchoTokens.Type.titleS.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face()
+    val bodyStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight).face()
 
     /** Meta lines and supporting text: 14 sp. */
     val meta = EchoTokens.Type.body.face()
@@ -308,25 +290,16 @@ fun systemEchoLanguage(): EchoLanguage =
 
 /**
  * The v2 theme: EchoTokens mapped onto Material 3. Light or dark follows the system unless [darkTheme] says otherwise.
- * [dynamicColor] (Android 12 and later) takes the accent from the wallpaper; brand and status colours stay fixed.
+ * There is no wallpaper (dynamic) colour: the accent stays teal and the surfaces stay neutral.
  * [language] sets the text face, the components' own words and the layout direction (Urdu is right to left).
  */
 @Composable
 fun EchoV2Theme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false,
     language: EchoLanguage = systemEchoLanguage(),
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
-    val colors = remember(darkTheme, dynamicColor) {
-        val fixed = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
-        if (dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            fixed.withDynamicAccent(if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context))
-        } else {
-            fixed
-        }
-    }
+    val colors = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
     val type = if (language == EchoLanguage.Urdu) EchoV2Type.Urdu else EchoV2Type.System
     val strings = if (language == EchoLanguage.Urdu) EchoV2Strings.Urdu else EchoV2Strings.English
     val direction = if (language.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
@@ -340,11 +313,17 @@ fun EchoV2Theme(
     }
 }
 
-/** Material shape classes on the token radii: fields and buttons, cards and menus, dialogs, sheets. */
+/** Dialogs on the phone share the sheet radius (16), so the phone uses three radii. */
+val PhoneDialogRadius = EchoTokens.Component.sheetRadius
+
+/**
+ * Material shape classes on the phone's three radii: 4 (buttons, fields), 8 (cards, menus) and 16 (sheets and
+ * dialogs). The pill (chips, avatars) does not count.
+ */
 private val EchoV2Shapes = Shapes(
     extraSmall = RoundedCornerShape(EchoTokens.Component.fieldRadius),
     small = RoundedCornerShape(EchoTokens.Component.buttonRadius),
     medium = RoundedCornerShape(EchoTokens.Component.menuRadius),
-    large = RoundedCornerShape(EchoTokens.Component.dialogRadius),
+    large = RoundedCornerShape(PhoneDialogRadius),
     extraLarge = RoundedCornerShape(EchoTokens.Component.sheetRadius)
 )

@@ -40,16 +40,16 @@ fun EchoChip(label: String, selected: Boolean, onClick: () -> Unit, modifier: Mo
         shape = RoundedCornerShape(EchoTokens.Component.chipRadius),
         color = if (selected) c.accentSoft else c.bgSurface,
         contentColor = if (selected) c.accentText else c.textPrimary,
-        border = BorderStroke(V2Size.hairline, if (selected) c.accent else c.borderStrong)
+        border = BorderStroke(EchoTokens.Border.hairline, if (selected) c.accent else c.borderStrong)
     ) {
         Row(
             Modifier
-                .defaultMinSize(minHeight = V2Size.chipHeight)
+                .defaultMinSize(minHeight = EchoTokens.Component.chipHeight)
                 .padding(horizontal = EchoTokens.Space.s12),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
         ) {
-            if (selected) Icon(EchoIcons.Check, null, Modifier.size(V2Size.iconSm))
+            if (selected) Icon(EchoIcons.Check, null, Modifier.size(EchoTokens.Icon.md))
             Text(label, style = EchoV2.type.label, maxLines = 1)
         }
     }

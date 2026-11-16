@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -53,8 +52,9 @@ private fun buttonColors(kind: EchoButtonKind, enabled: Boolean): ButtonColors {
 }
 
 /**
- * A text button, 48 dp high (the touch minimum). While [loading] it shows a spinner, says "Loading" to screen readers
- * and ignores taps, so a second tap can't send the action twice.
+ * A text button, 48 dp high (the touch minimum). While [loading] it is disabled and its label becomes [loadingText]
+ * ("Loading" by default, or the task: "Uploading"), so a second tap can't send the action twice. No spinner: the only
+ * looping animation in v2 is the recording dot.
  */
 @Composable
 fun EchoButton(
@@ -64,13 +64,14 @@ fun EchoButton(
     kind: EchoButtonKind = EchoButtonKind.Primary,
     enabled: Boolean = true,
     loading: Boolean = false,
+    loadingText: String = EchoV2.strings.loading,
     icon: ImageVector? = null
 ) {
-    val colors = buttonColors(kind, enabled)
+    val colors = buttonColors(kind, enabled && !loading)
     val loadingLabel = EchoV2.strings.loading
     Surface(
-        onClick = { if (!loading) onClick() },
-        enabled = enabled,
+        onClick = onClick,
+        enabled = enabled && !loading,
         modifier = modifier
             .defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin)
             .semantics {
@@ -80,7 +81,7 @@ fun EchoButton(
         shape = RoundedCornerShape(EchoTokens.Component.buttonRadius),
         color = colors.container,
         contentColor = colors.content,
-        border = colors.border?.let { BorderStroke(V2Size.hairline, it) }
+        border = colors.border?.let { BorderStroke(EchoTokens.Border.hairline, it) }
     ) {
         Row(
             Modifier
@@ -89,17 +90,9 @@ fun EchoButton(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.CenterHorizontally)
         ) {
-            when {
-                loading -> CircularProgressIndicator(
-                    Modifier.size(V2Size.spinner),
-                    color = colors.content,
-                    strokeWidth = V2Size.focusRing
-                )
-
-                icon != null -> Icon(icon, contentDescription = null, Modifier.size(V2Size.iconSm))
-            }
+            if (icon != null && !loading) Icon(icon, contentDescription = null, Modifier.size(EchoTokens.Icon.md))
             Text(
-                text,
+                if (loading) loadingText else text,
                 style = EchoV2.type.label,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(vertical = EchoTokens.Space.s8)
@@ -133,7 +126,7 @@ fun EchoIconButton(
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(icon, contentDescription = null, Modifier.size(V2Size.icon))
+            Icon(icon, contentDescription = null, Modifier.size(EchoTokens.Icon.lg))
         }
     }
 }
@@ -154,7 +147,7 @@ fun EchoActionItem(icon: ImageVector, label: String, onClick: () -> Unit, modifi
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
         ) {
-            Icon(icon, contentDescription = null, Modifier.size(V2Size.icon))
+            Icon(icon, contentDescription = null, Modifier.size(EchoTokens.Icon.lg))
             Text(label, style = EchoV2.type.caption, maxLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
         }
     }

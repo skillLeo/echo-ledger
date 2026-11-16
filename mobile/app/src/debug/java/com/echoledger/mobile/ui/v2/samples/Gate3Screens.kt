@@ -54,7 +54,7 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /*
  * The Gate 3 sample screens (docs/v2/DESIGN_SYSTEM.md): Library, a recording and Settings, built only from the v2
- * components with real-looking content. They are not wired to the app; the ui_v2.* flags decide that later.
+ * components with real-looking content. They live in the debug source set and never ship.
  */
 
 private const val FILTER_TODAY = "today"

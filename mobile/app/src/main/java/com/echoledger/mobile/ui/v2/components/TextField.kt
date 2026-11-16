@@ -59,7 +59,7 @@ fun EchoTextField(
         focused -> c.accentFocus
         else -> c.borderStrong
     }
-    val borderWidth = if (focused || error != null) V2Size.focusRing else V2Size.hairline
+    val borderWidth = if (focused || error != null) EchoTokens.Focus.width else EchoTokens.Border.hairline
     BasicTextField(
         value = value,
         onValueChange = onValueChange,
@@ -86,7 +86,7 @@ fun EchoTextField(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
                 ) {
-                    leadingIcon?.let { Icon(it, null, Modifier.size(V2Size.iconSm), tint = c.textSecondary) }
+                    leadingIcon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary) }
                     Box(Modifier.weight(1f)) {
                         if (value.isEmpty() && placeholder != null) {
                             Text(placeholder, style = type.body, color = c.textSecondary, maxLines = 1)
@@ -96,7 +96,7 @@ fun EchoTextField(
                 }
                 when {
                     error != null -> Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
-                        Icon(EchoIcons.Error, null, Modifier.size(V2Size.iconSm), tint = c.danger)
+                        Icon(EchoIcons.Error, null, Modifier.size(EchoTokens.Icon.md), tint = c.danger)
                         Text(error, style = type.meta, color = c.danger)
                     }
 
@@ -140,7 +140,7 @@ fun EchoSearchField(
                     .defaultMinSize(minHeight = EchoTokens.Layout.controlHeightMobile)
                     .background(c.bgSubtle, RoundedCornerShape(EchoTokens.Component.fieldRadius))
                     .border(
-                        if (focused) V2Size.focusRing else V2Size.hairline,
+                        if (focused) EchoTokens.Focus.width else EchoTokens.Border.hairline,
                         if (focused) c.accentFocus else c.bgSubtle,
                         RoundedCornerShape(EchoTokens.Component.fieldRadius)
                     )
@@ -148,7 +148,7 @@ fun EchoSearchField(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
             ) {
-                Icon(EchoIcons.Search, null, Modifier.size(V2Size.icon), tint = c.textSecondary)
+                Icon(EchoIcons.Search, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary)
                 Box(Modifier.weight(1f)) {
                     if (query.isEmpty()) Text(placeholder, style = type.body, color = c.textSecondary, maxLines = 1)
                     inner()

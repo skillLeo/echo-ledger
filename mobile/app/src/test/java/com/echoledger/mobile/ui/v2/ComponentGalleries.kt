@@ -95,7 +95,7 @@ private fun Buttons(ur: Boolean) = Gallery {
     EchoButton(t(ur, "Share to WhatsApp", "واٹس ایپ پر شیئر کریں"), {}, pad, kind = EchoButtonKind.Secondary, icon = EchoIcons.Share)
     EchoButton(t(ur, "Not now", "ابھی نہیں"), {}, pad, kind = EchoButtonKind.Quiet)
     EchoButton(t(ur, "Delete 3 recordings", "3 ریکارڈنگز حذف کریں"), {}, pad, kind = EchoButtonKind.Danger)
-    EchoButton(t(ur, "Uploading", "اپ لوڈ ہو رہی ہے"), {}, pad, loading = true)
+    EchoButton(t(ur, "Upload", "اپ لوڈ کریں"), {}, pad, loading = true, loadingText = t(ur, "Uploading", "اپ لوڈ ہو رہی ہے"))
     EchoButton(t(ur, "Upgrade", "اپ گریڈ کریں"), {}, pad, enabled = false)
     Row(pad, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
         EchoIconButton(EchoIcons.Search, t(ur, "Search", "تلاش"), {})
