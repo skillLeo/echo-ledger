@@ -1220,6 +1220,8 @@ export interface PendingItem {
   language?: TranscriptionLanguage | null;
   /** Who the call was with (a meeting window's title), for "Call with <name>" while it has no title. */
   callerName?: string | null;
+  /** Screens kept for this recording on this computer (the after-call card's "3 screens"). */
+  screens?: number;
 }
 
 /** A kept recording in the upload queue. */
@@ -1269,6 +1271,8 @@ export interface RecordingState {
   missing?: MissingPermission[];
   /** One of its devices is gone, or changed a moment ago (since v1.5). */
   deviceNote?: DeviceNote | null;
+  /** Who the call is with, once its meeting window's title says; null until then. */
+  callerName?: string | null;
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or

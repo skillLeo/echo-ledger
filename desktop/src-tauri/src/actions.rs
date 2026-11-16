@@ -787,7 +787,7 @@ fn after_decision(app: &AppHandle, id: &str) {
 
 pub fn pending_items(app: &AppHandle) -> Vec<pending::PendingItem> {
     let state = app.state::<crate::AppState>();
-    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items();
+    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir));
     items.sort_by(|a, b| b.ended_at.cmp(&a.ended_at));
     items
 }
@@ -805,7 +805,8 @@ pub fn after_call_state(app: &AppHandle) -> AfterCallState {
         let now = Instant::now();
         (surfaces.saved(now).cloned(), surfaces.discarded(now).cloned(), surfaces.chip().map(str::to_string))
     };
-    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(PendingDecision::item));
+    let screens = crate::screens::store::ScreenStore::in_dir(&state.data_dir);
+    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(|d| d.item_with_screens(&screens)));
     AfterCallState { saved, discarded, ask }
 }
 
@@ -946,7 +947,7 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// The account a finished recording was made under, when another account signed in while it ran (cleared with it).
@@ -1007,7 +1008,7 @@ pub fn pending_set_language(app: &AppHandle, id: &str, language: Option<String>)
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// The pill's language chip. With live captions on, the caption stream reconnects in the new language; the
@@ -1059,7 +1060,7 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// Shows the main window on a view (tray "Review recordings", the chip's title).

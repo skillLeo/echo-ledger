@@ -79,6 +79,14 @@ pub struct PendingItem {
     pub language: Option<String>,
     /// Who the call was with (a meeting window's title), for "Call with <name>" while it has no title.
     pub caller_name: Option<String>,
+    /// Screens kept for this recording on this computer (the after-call card's "3 screens"); they upload with it.
+    pub screens: usize,
+}
+
+/// The name of who the running recording `client_ref` is with, from the caller noted for it (none for a caller noted
+/// for another recording, or a blank name).
+pub fn running_caller_name(noted: Option<&(String, CallerDto)>, client_ref: &str) -> Option<String> {
+    noted.filter(|(r, _)| r == client_ref).and_then(|(_, c)| c.name.as_deref()).map(str::trim).filter(|n| !n.is_empty()).map(str::to_string)
 }
 
 /// What `from_recording` needs besides the finished files.
@@ -307,7 +315,13 @@ impl PendingDecision {
             deadline_at: self.keep_at.map(|d| d.to_rfc3339()),
             language: self.language.clone(),
             caller_name: self.caller_name().map(str::to_string),
+            screens: 0,
         }
+    }
+
+    /// [`Self::item`] with the number of screens `screens` holds for this recording.
+    pub fn item_with_screens(&self, screens: &crate::screens::store::ScreenStore) -> PendingItem {
+        PendingItem { screens: screens.count(&self.client_ref), ..self.item() }
     }
 
     /// The open server session captions created for this recording, if any.
@@ -382,9 +396,18 @@ impl PendingStore {
 
     /// The UI list, newest first (a recording on its way out is not on it).
     pub fn ui_items(&self) -> Vec<PendingItem> {
+        self.listed().into_iter().map(PendingDecision::item).collect()
+    }
+
+    /// [`Self::ui_items`] with each recording's screens counted in `screens`.
+    pub fn ui_items_with_screens(&self, screens: &crate::screens::store::ScreenStore) -> Vec<PendingItem> {
+        self.listed().into_iter().map(|d| d.item_with_screens(screens)).collect()
+    }
+
+    fn listed(&self) -> Vec<&PendingDecision> {
         let mut items: Vec<&PendingDecision> = self.items.iter().filter(|d| !d.discarding()).collect();
         items.sort_by_key(|d| std::cmp::Reverse(d.created_at));
-        items.into_iter().map(PendingDecision::item).collect()
+        items
     }
 
     /// Recordings that wait for the person (the tray, the sidebar and the Library's waiting line count these).

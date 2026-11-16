@@ -1226,6 +1226,8 @@ pub struct RecordingState {
     pub missing: Vec<crate::permissions::Missing>,
     /// One of its devices is gone, or changed a moment ago (Phase 1B).
     pub device_note: Option<crate::audio::devices::DeviceNote>,
+    /// Who the call is with, once its meeting window's title says (since v1.2's caller names); none until then.
+    pub caller_name: Option<String>,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -1263,6 +1265,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         screens: info.as_ref().and_then(|_| state.screens.pill()),
         missing: if info.is_some() { state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clone() } else { Vec::new() },
         device_note: if info.is_some() { state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()) } else { None },
+        caller_name: info.as_ref().and_then(|i| crate::pending::running_caller_name(state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref(), &i.client_ref)),
     }
 }
 

@@ -601,6 +601,36 @@ fn a_waiting_recording_carries_the_callers_name_for_its_title() {
 }
 
 #[test]
+fn the_pill_names_the_caller_of_the_running_recording_only() {
+    use desktop_lib::net::models::CallerDto;
+    let noted = |name: &str| ("ref-now".to_string(), CallerDto { name: Some(name.into()), number: None, source: Some("window_title".into()) });
+    assert_eq!(pending::running_caller_name(Some(&noted(" Omar ")), "ref-now").as_deref(), Some("Omar"));
+    assert_eq!(pending::running_caller_name(Some(&noted("Omar")), "ref-next"), None, "noted for another recording");
+    assert_eq!(pending::running_caller_name(Some(&noted(" ")), "ref-now"), None);
+    assert_eq!(pending::running_caller_name(None, "ref-now"), None, "not known yet");
+}
+
+#[test]
+fn a_waiting_call_counts_its_own_screens() {
+    use desktop_lib::screens::store::{ScreenKey, ScreenStore};
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "a", None, Utc::now())).unwrap();
+    files.add(decision(root.path(), "b", None, Utc::now() - chrono::Duration::minutes(1))).unwrap();
+    let store = ScreenStore::in_dir(root.path());
+    let key = ScreenKey::from_bytes(&[7; 32]);
+    for at in [1_000, 2_000, 3_000] {
+        store.add("ref-a", &key, format!("webp {at}").as_bytes(), at, 1920, 1080, "change", Utc::now()).unwrap();
+    }
+    let loaded = files.load();
+    assert_eq!(loaded.find("a").unwrap().item_with_screens(&store).screens, 3, "\"3 screens\" on the after-call card");
+    let listed: Vec<(String, usize)> = loaded.ui_items_with_screens(&store).into_iter().map(|i| (i.id, i.screens)).collect();
+    assert_eq!(listed, vec![("a".to_string(), 3), ("b".to_string(), 0)]);
+    let json = serde_json::to_value(loaded.find("a").unwrap().item_with_screens(&store)).unwrap();
+    assert_eq!(json["screens"], 3);
+}
+
+#[test]
 fn rename_trims_and_limits_the_title() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());
