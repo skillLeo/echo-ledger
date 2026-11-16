@@ -22,6 +22,10 @@ block_tokens = 1500
 recent_turns = 8
 # Documents beyond this estimate are refused in context_update (send retrieval chunks instead).
 max_document_tokens = 60000
+# The most older transcript a session keeps, in blocks (about 3 hours of speech): past it the oldest blocks are dropped
+# together, down to three quarters of this, and the running summary covers them. It bounds a request and a session's
+# memory alike.
+max_transcript_tokens = 40000
 
 [budget]
 # Step down to a cheaper mode when the budget left covers fewer suggestions than this in the current mode.

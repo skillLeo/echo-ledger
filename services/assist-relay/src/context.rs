@@ -31,6 +31,8 @@ pub mod asks {
     /// `{language}` is "Urdu", "Roman Urdu" or "Arabic".
     pub const TRANSLATE: &str =
         "Explain the previous suggestion in {language} in one or two simple lines, then give the English line to say.";
+    /// Before the first block, once the oldest blocks were dropped.
+    pub const EARLIER_DROPPED: &str = "(The earliest parts of the call are left out; the running summary covers them.)";
     /// Fast mode leaves the older transcript out.
     pub const OLDER_LEFT_OUT: &str = "(not included in this mode; the running summary covers it)";
 }
@@ -201,8 +203,15 @@ struct Block {
     tokens: u32,
 }
 
+/// Turns already in blocks that are kept as turns too (for help now on a turn id, and the last thing each side said).
+const KEPT_BLOCK_TURNS: usize = 48;
+
 /// The final turns of the call. Turns older than the last few go into blocks; a block closes at about `block_tokens`
 /// and never changes after that.
+///
+/// A session's transcript is bounded: the full blocks hold at most `max_transcript_tokens` (past it the oldest are
+/// dropped together, down to three quarters, so the cached prefix changes rarely), and only the last
+/// [`KEPT_BLOCK_TURNS`] turns already in blocks are kept as turns. Parts keep their numbers after a drop.
 #[derive(Clone)]
 pub struct Transcript {
     turns: Vec<TranscriptTurn>,
@@ -210,8 +219,11 @@ pub struct Transcript {
     in_blocks: usize,
     full: Vec<Block>,
     open: Block,
+    /// Full blocks dropped from the front.
+    dropped: usize,
     block_tokens: u32,
     recent_turns: usize,
+    max_tokens: u32,
 }
 
 impl fmt::Debug for Transcript {
@@ -227,8 +239,10 @@ impl Transcript {
             in_blocks: 0,
             full: Vec::new(),
             open: Block::default(),
+            dropped: 0,
             block_tokens: config.block_tokens,
             recent_turns: config.recent_turns,
+            max_tokens: config.max_transcript_tokens.max(config.block_tokens),
         }
     }
 
@@ -244,8 +258,36 @@ impl Transcript {
             self.in_blocks += 1;
             if self.open.tokens >= self.block_tokens {
                 self.full.push(std::mem::take(&mut self.open));
+                self.drop_oldest_blocks();
             }
         }
+        if self.in_blocks > 2 * KEPT_BLOCK_TURNS {
+            let forget = self.in_blocks - KEPT_BLOCK_TURNS;
+            self.turns.drain(..forget);
+            self.in_blocks -= forget;
+        }
+    }
+
+    fn drop_oldest_blocks(&mut self) {
+        let mut total = self.full_block_tokens();
+        if total <= self.max_tokens {
+            return;
+        }
+        let target = self.max_tokens / 4 * 3;
+        let mut drop = 0;
+        while total > target && drop + 1 < self.full.len() {
+            total -= self.full[drop].tokens;
+            drop += 1;
+        }
+        self.full.drain(..drop);
+        self.dropped += drop;
+    }
+
+    /// The text this transcript holds, in bytes (turns and blocks).
+    pub fn held_bytes(&self) -> usize {
+        self.turns.iter().map(|t| t.text.len() + t.turn_id.len()).sum::<usize>()
+            + self.full.iter().map(|b| b.text.len()).sum::<usize>()
+            + self.open.text.len()
     }
 
     pub fn len(&self) -> usize {
@@ -337,11 +379,17 @@ impl ContextBuilder<'_> {
         ];
         let mut blocks: Vec<(String, bool)> = Vec::new();
         if scope == TranscriptScope::Full {
+            let first = transcript.dropped + 1;
             for (index, full) in transcript.full.iter().enumerate() {
-                blocks.push((format!("Part {}\n{}", index + 1, full.text), true));
+                blocks.push((format!("Part {}\n{}", first + index, full.text), true));
             }
             if !transcript.open.text.is_empty() {
-                blocks.push((format!("Part {}\n{}", transcript.full.len() + 1, transcript.open.text), false));
+                blocks.push((format!("Part {}\n{}", first + transcript.full.len(), transcript.open.text), false));
+            }
+            if transcript.dropped > 0
+                && let Some((text, _)) = blocks.first_mut()
+            {
+                *text = format!("{}\n\n{text}", asks::EARLIER_DROPPED);
             }
         }
         if blocks.is_empty() {
@@ -492,6 +540,48 @@ mod tests {
         }
         assert!(transcript.full.iter().all(|b| b.tokens >= config.block_tokens));
         assert_eq!(transcript.latest().len(), config.recent_turns);
+    }
+
+    #[test]
+    fn a_long_call_keeps_a_bounded_transcript_and_request() {
+        let config = RelayConfig::built_in().context;
+        let pack = Pack::built_in();
+        let mut transcript = Transcript::new(&config);
+        // Ten hours of the longest turns the protocol allows, far beyond the cap.
+        let long = "word ".repeat(799);
+        for id in 0..3000 {
+            transcript.push(TranscriptTurn {
+                turn_id: format!("t{id}"),
+                channel: if id % 2 == 0 { Channel::Other } else { Channel::Me },
+                text: format!("turn {id} {long}"),
+                start_ms: Some(id as u64 * 12_000),
+            });
+            assert!(transcript.full_block_tokens() <= config.max_transcript_tokens, "turn {id}");
+        }
+        assert!(transcript.dropped > 0);
+        assert!(transcript.turns.len() <= 2 * KEPT_BLOCK_TURNS + config.recent_turns);
+        assert!(transcript.held_bytes() < 1024 * 1024, "{} bytes held", transcript.held_bytes());
+        assert!(transcript.find("t2999").is_some() && transcript.find("t5").is_none());
+
+        let context = ContextBuilder { pack: &pack, config: &config }.build(
+            &CallContext::default(),
+            &transcript,
+            Task::Answer { turn_id: None, text: "And the budget?", partial: false },
+            TranscriptScope::Full,
+        );
+        let blocks: u32 = context.segments.iter().filter(|s| s.kind == SegmentKind::TranscriptBlock).map(|s| s.tokens).sum();
+        assert!(blocks <= config.max_transcript_tokens + 200, "{blocks} transcript tokens in one request");
+        let text = context.text();
+        assert!(text.contains(asks::EARLIER_DROPPED));
+        assert!(!text.contains("Part 1\n"), "the dropped parts are gone and the rest keep their numbers");
+
+        // Between drops, the blocks kept never change, so their cache stays valid.
+        let before: Vec<String> = transcript.full.iter().map(|b| b.text.clone()).collect();
+        let dropped = transcript.dropped;
+        transcript.push(TranscriptTurn { turn_id: "x".into(), channel: Channel::Other, text: "short".into(), start_ms: None });
+        if transcript.dropped == dropped {
+            assert!(before.iter().zip(&transcript.full).all(|(a, b)| a == &b.text));
+        }
     }
 
     #[test]

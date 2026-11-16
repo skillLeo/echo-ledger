@@ -57,6 +57,13 @@ pub struct ContextConfig {
     pub block_tokens: u32,
     pub recent_turns: usize,
     pub max_document_tokens: u32,
+    /// The most transcript a session keeps in blocks (and so sends in one request); past it the oldest blocks go.
+    #[serde(default = "default_max_transcript_tokens")]
+    pub max_transcript_tokens: u32,
+}
+
+fn default_max_transcript_tokens() -> u32 {
+    40_000
 }
 
 #[derive(Debug, Clone, Deserialize)]
