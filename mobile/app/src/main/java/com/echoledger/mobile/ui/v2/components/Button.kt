@@ -29,8 +29,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
-/** What a button does: the one main action, a second action, a quiet text action, or a destructive one. */
-enum class EchoButtonKind { Primary, Secondary, Quiet, Danger }
+/**
+ * What a button does: the one main action, a second action, a quiet text action (accent), a plain text action (the
+ * text colour, for a neutral choice such as Delete beside Save), or a destructive one.
+ */
+enum class EchoButtonKind { Primary, Secondary, Quiet, Plain, Danger }
 
 private data class ButtonColors(val container: Color, val content: Color, val border: Color?)
 
@@ -39,7 +42,7 @@ private fun buttonColors(kind: EchoButtonKind, enabled: Boolean): ButtonColors {
     val c = EchoV2.colors
     if (!enabled) {
         return when (kind) {
-            EchoButtonKind.Quiet -> ButtonColors(c.clear, c.textDisabled, null)
+            EchoButtonKind.Quiet, EchoButtonKind.Plain -> ButtonColors(c.clear, c.textDisabled, null)
             else -> ButtonColors(c.bgSubtle, c.textDisabled, null)
         }
     }
@@ -47,6 +50,7 @@ private fun buttonColors(kind: EchoButtonKind, enabled: Boolean): ButtonColors {
         EchoButtonKind.Primary -> ButtonColors(c.accent, c.textOnAccent, null)
         EchoButtonKind.Secondary -> ButtonColors(c.bgSurface, c.textPrimary, c.borderStrong)
         EchoButtonKind.Quiet -> ButtonColors(c.clear, c.accentText, null)
+        EchoButtonKind.Plain -> ButtonColors(c.clear, c.textPrimary, null)
         EchoButtonKind.Danger -> ButtonColors(c.danger, c.textOnAccent, null)
     }
 }
@@ -86,7 +90,15 @@ fun EchoButton(
         Row(
             Modifier
                 .defaultMinSize(minHeight = EchoTokens.Layout.controlHeightMobile)
-                .padding(horizontal = if (kind == EchoButtonKind.Quiet) EchoTokens.Space.s12 else EchoTokens.Space.s16),
+                .padding(
+                    horizontal = if (kind == EchoButtonKind.Quiet ||
+                        kind == EchoButtonKind.Plain
+                    ) {
+                        EchoTokens.Space.s12
+                    } else {
+                        EchoTokens.Space.s16
+                    }
+                ),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8, Alignment.CenterHorizontally)
         ) {

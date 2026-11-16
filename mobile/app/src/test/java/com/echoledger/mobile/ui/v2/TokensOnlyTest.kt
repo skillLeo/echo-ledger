@@ -71,7 +71,10 @@ class TokensOnlyTest {
         }
         assertTrue("no v2 sources found from ${File(".").absolutePath}", files.size > 10)
         val problems = files.flatMap { f ->
-            findings(f.readText(), inTheme = "theme" in f.path.split(File.separatorChar)).map { "${f.path}:$it" }
+            findings(f.readText(), inTheme = "theme" in f.path.split(File.separatorChar))
+                // The recording dot is the one thing that loops (docs/v2/DESIGN_SYSTEM.md "Motion"), in its own file.
+                .filterNot { f.name == "RecordingDot.kt" && it.endsWith("looping animation") }
+                .map { "${f.path}:$it" }
         }
         assertTrue(problems.joinToString("\n"), problems.isEmpty())
     }
