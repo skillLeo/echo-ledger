@@ -1068,6 +1068,21 @@ mod tests {
     }
 
     #[test]
+    fn the_status_reads_its_locks_before_it_asks_the_main_thread() {
+        // The answer asks the main thread for the displays: a lock read in the same statement would be held across that
+        // wait (the kind of lock that froze the Mac build), so every lock is read before the answer is put together.
+        let source = include_str!("check.rs");
+        let status = &source[source.find("pub fn status(app: &AppHandle) -> PrivacyStatus {").unwrap()..];
+        let status = &status[..status.find("\n}\n").unwrap()];
+        let literal = &status[status.find("\n    PrivacyStatus {").expect("the answer is a PrivacyStatus literal")..];
+        assert!(literal.contains("app.available_monitors()"), "the displays are asked inside the answer");
+        for lock in [".lock()", "lock(&", ".read()", ".write()", ".try_lock()"] {
+            assert!(!literal.contains(lock), "`{lock}` inside the PrivacyStatus literal is held while the main thread is asked");
+        }
+        assert!(status.find("let share = privacy.share_seen.lock()").unwrap() < status.find("\n    PrivacyStatus {").unwrap(), "the share is read first");
+    }
+
+    #[test]
     fn the_phone_test_card_never_takes_the_focus() {
         let source = include_str!("check.rs");
         let open = &source[source.find("pub fn guided_open(").unwrap()..];

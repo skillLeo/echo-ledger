@@ -4,6 +4,7 @@
 //! coloured tile of its own, and a dot in the template's ink means uploading or attention (`look`).
 
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use serde::Serialize;
 use tauri::image::Image;
@@ -214,30 +215,44 @@ pub fn hidden_line(privacy: &crate::privacy::Privacy) -> Option<Hidden> {
 /// While the sharing bar keeps the windows off (R1): the tray and Settings › Screen-share privacy say exactly this.
 pub const HIDDEN_WHILE_SHARING: &str = "Hidden while you share your screen. They come back when the meeting ends.";
 
-#[derive(Default)]
-pub struct TrayCache {
-    shape: Mutex<Option<MenuShape>>,
-    state: Mutex<Option<TrayState>>,
+/// Numbers the status reads the tray is drawn from (`commands::status` takes one before it reads anything).
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+/// The number of a status read about to start: a higher one began later, so it saw every change made before it began.
+pub fn next_generation() -> u64 {
+    GENERATION.fetch_add(1, Ordering::SeqCst) + 1
 }
 
+/// What the tray shows, and the status read it came from.
+#[derive(Default)]
+struct Drawn {
+    generation: u64,
+    state: Option<TrayState>,
+    shape: Option<MenuShape>,
+}
+
+#[derive(Default)]
+pub struct TrayCache(Mutex<Drawn>);
+
 impl TrayCache {
-    /// What the tray must change to show `state` and `shape`, kept as what it shows. The locks are let go when this
-    /// returns: the tray calls that follow wait for the main thread, and none may wait while holding them.
-    fn changes(&self, state: TrayState, shape: MenuShape) -> (Option<TrayState>, Option<MenuShape>) {
-        let state = {
-            let mut last = self.state.lock().unwrap_or_else(|p| p.into_inner());
-            let changed = *last != Some(state);
-            *last = Some(state);
-            changed.then_some(state)
-        };
-        let shape = {
-            let mut current = self.shape.lock().unwrap_or_else(|p| p.into_inner());
-            let changed = current.as_ref() != Some(&shape);
-            if changed {
-                *current = Some(shape.clone());
-            }
-            changed.then_some(shape)
-        };
+    /// What the tray must change to show `state` and `shape` from status read `generation`, kept as what it shows. A read
+    /// older than the one shown changes nothing: several threads queue drawings on the main thread, and one read earlier
+    /// can arrive after a newer one. The lock is let go when this returns: the tray calls that follow wait for the main
+    /// thread, and none may wait while holding it.
+    fn changes(&self, generation: u64, state: TrayState, shape: MenuShape) -> (Option<TrayState>, Option<MenuShape>) {
+        let mut drawn = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        if generation < drawn.generation {
+            return (None, None);
+        }
+        drawn.generation = generation;
+        let state = (drawn.state != Some(state)).then(|| {
+            drawn.state = Some(state);
+            state
+        });
+        let shape = (drawn.shape.as_ref() != Some(&shape)).then(|| {
+            drawn.shape = Some(shape.clone());
+            shape
+        });
         (state, shape)
     }
 }
@@ -337,10 +352,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     app.manage(TrayCache::default());
     let shape = MenuShape::default();
     let menu = build_menu(app, &shape)?;
-    *app.state::<TrayCache>()
-        .shape
-        .lock()
-        .unwrap_or_else(|p| p.into_inner()) = Some(shape);
+    app.state::<TrayCache>().0.lock().unwrap_or_else(|p| p.into_inner()).shape = Some(shape);
 
     let mut builder = TrayIconBuilder::with_id(TRAY_ID)
         .tooltip(tooltip(TrayState::Idle))
@@ -454,10 +466,11 @@ pub struct Switches {
     pub hidden: Option<Hidden>,
 }
 
-/// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
+/// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `generation`: the status read it
+/// comes from ([`next_generation`]), so an older one queued behind it never draws over it; `mic_note`: the recording is a
 /// voice note spoken into the microphone; `viewer`: the viewer sentence when this computer may not record.
 #[allow(clippy::too_many_arguments)]
-pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches, viewer: Option<String>) {
+pub fn update(app: &AppHandle, generation: u64, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches, viewer: Option<String>) {
     let recording = matches!(state, TrayState::Recording | TrayState::Paused);
     let shape = MenuShape {
         recording,
@@ -476,16 +489,16 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
     // refreshes the status while other threads (the safety net, uploads) do too, so nobody holds the tray's locks while
     // waiting for the main thread. On the main thread itself this runs at once.
     let handle = app.clone();
-    let _ = app.run_on_main_thread(move || draw(&handle, state, shape));
+    let _ = app.run_on_main_thread(move || draw(&handle, generation, state, shape));
 }
 
-/// On the main thread: what changed is decided under the cache's locks ([`TrayCache::changes`]), let go before the tray is
+/// On the main thread: what changed is decided under the cache's lock ([`TrayCache::changes`]), let go before the tray is
 /// touched.
-fn draw(app: &AppHandle, state: TrayState, shape: MenuShape) {
+fn draw(app: &AppHandle, generation: u64, state: TrayState, shape: MenuShape) {
     let (Some(cache), Some(tray)) = (app.try_state::<TrayCache>(), app.tray_by_id(TRAY_ID)) else {
         return;
     };
-    let (state, shape) = cache.changes(state, shape);
+    let (state, shape) = cache.changes(generation, state, shape);
     if let Some(state) = state {
         let _ = tray.set_tooltip(Some(tooltip(state)));
         if let Some(base) = tray_base(app) {
@@ -617,23 +630,30 @@ mod tests {
     }
 
     #[test]
-    fn the_tray_decides_under_its_locks_and_draws_after_letting_them_go() {
+    fn the_tray_draws_what_changed_and_never_an_older_status_over_a_newer_one() {
         let cache = TrayCache::default();
         let idle = MenuShape::default();
-        assert_eq!(cache.changes(TrayState::Idle, idle.clone()), (Some(TrayState::Idle), Some(idle.clone())), "the first draw");
-        assert_eq!(cache.changes(TrayState::Idle, idle.clone()), (None, None), "nothing changed: nothing is drawn");
+        assert_eq!(cache.changes(1, TrayState::Idle, idle.clone()), (Some(TrayState::Idle), Some(idle.clone())), "the first draw");
+        assert_eq!(cache.changes(2, TrayState::Idle, idle.clone()), (None, None), "nothing changed: nothing is drawn");
         let hidden = MenuShape { hidden: Some(Hidden::Person), ..MenuShape::default() };
-        assert_eq!(cache.changes(TrayState::Idle, hidden.clone()), (None, Some(hidden)));
-        assert_eq!(cache.changes(TrayState::Recording, MenuShape { hidden: Some(Hidden::Person), ..MenuShape::default() }).0, Some(TrayState::Recording));
-        // The locks are free once the decision is made, from any thread.
-        assert!(cache.state.try_lock().is_ok() && cache.shape.try_lock().is_ok());
-        let shared = std::sync::Arc::new(TrayCache::default());
-        let other = std::sync::Arc::clone(&shared);
-        std::thread::spawn(move || other.changes(TrayState::Paused, MenuShape::default())).join().unwrap();
-        assert!(shared.state.try_lock().is_ok() && shared.shape.try_lock().is_ok());
+        assert_eq!(cache.changes(3, TrayState::Idle, hidden.clone()), (None, Some(hidden.clone())));
+
+        // Two threads read the status, the later read (Y: recording, hidden) is queued on the main thread first, the
+        // earlier one (X: idle, shown) after it: Y stays.
+        let cache = TrayCache::default();
+        let (x, y) = ((TrayState::Idle, idle.clone()), (TrayState::Recording, hidden.clone()));
+        assert_eq!(cache.changes(2, y.0, y.1.clone()), (Some(y.0), Some(y.1.clone())));
+        assert_eq!(cache.changes(1, x.0, x.1.clone()), (None, None), "an older read changes nothing");
+        assert_eq!(cache.changes(2, y.0, y.1.clone()), (None, None), "Y is what the tray shows");
+        assert_eq!(cache.changes(3, x.0, x.1.clone()), (Some(x.0), Some(x.1)), "a newer read draws again");
+        // The numbers go up, from any thread.
+        let first = next_generation();
+        let other = std::thread::spawn(next_generation).join().unwrap();
+        assert!(other > first && next_generation() > other);
+        assert!(include_str!("commands.rs").contains("pub fn status(app: &AppHandle) -> AppStatus {\n    // Taken before anything is read: the tray drawing from a later read always wins over an earlier one queued behind it.\n    let generation = crate::tray::next_generation();\n    let state = app.state::<AppState>();"), "taken first in commands::status");
 
         // Structurally: the update any thread calls takes no lock and posts the drawing to the main thread, and no lock
-        // is held across a call that waits for the main thread.
+        // is held across a call that waits for the main thread (main_thread.rs holds the whole crate to that).
         let code = include_str!("tray.rs").split("#[cfg(test)]").next().unwrap();
         let body = |name: &str| {
             let at = code.find(name).unwrap_or_else(|| panic!("{name}"));
