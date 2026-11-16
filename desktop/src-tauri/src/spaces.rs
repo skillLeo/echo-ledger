@@ -13,8 +13,9 @@
 //! never count. Whether a Space is full screen is read from the system's list of Spaces (each display's current Space and
 //! its type, as the window server keeps it); macOS has no public call for it, so the two functions are looked up when
 //! the app runs and, without them, EchoLedger simply keeps its Dock icon. It is read when the Space in use or the
-//! displays change, and switched only when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test
-//! allows no other activation policy change anywhere.
+//! displays change, and, while there are several displays, when the pointer moves to another one; it is switched only
+//! when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test allows no other activation policy
+//! change anywhere.
 //!
 //! "Open EchoLedger" from the menu brings an open main window to the Space in use (`MoveToActiveSpace` while it opens,
 //! then the window's own behaviour again), so a Dock click or ⌘Tab later still goes to the window where it is.
@@ -60,6 +61,16 @@ pub fn space_type_of(uuid: &str, displays: &[(String, i64)]) -> Option<i64> {
     displays.iter().find(|(id, _)| id.eq_ignore_ascii_case(uuid)).map(|(_, t)| *t).or(one)
 }
 
+/// Whether the pointer's display is watched (pure): only while there are several displays to move between.
+pub fn watch_pointer_with(displays: usize) -> bool {
+    displays > 1
+}
+
+/// Whether the pointer moved to another display (pure): a new read is due then (the first known display counts).
+pub fn moved_to_another_display(before: Option<(i64, i64)>, now: Option<(i64, i64)>) -> bool {
+    now.is_some() && before != now
+}
+
 /// One read against the read before it (pure): the Dock to apply now (only when both agree), and whether to read again.
 pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
     if before == Some(now) { (Some(now), false) } else { (None, true) }
@@ -67,12 +78,12 @@ pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
 
 #[cfg(target_os = "macos")]
 pub mod mac {
-    use super::{Dock, InUse, SETTLED, dock_for, settle, space_type_of};
+    use super::{Dock, InUse, SETTLED, dock_for, moved_to_another_display, settle, space_type_of, watch_pointer_with};
     use objc2::{MainThreadMarker, Message};
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
     use objc2_app_kit::{
-        NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSScreen, NSWindow,
+        NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSEventMask, NSScreen, NSWindow,
         NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification,
     };
     use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType, CFUUID};
@@ -96,12 +107,71 @@ pub mod mac {
         observe(&NSWorkspace::sharedWorkspace().notificationCenter(), space);
         observe(&NSNotificationCenter::defaultCenter(), screens);
         later(AFTER_LAUNCH);
+        if let Some(mtm) = MainThreadMarker::new() {
+            watch_pointer(mtm);
+        }
+    }
+
+    thread_local! {
+        /// The mouse-moved monitors (another app's events, then EchoLedger's own), while there are several displays.
+        static POINTER_MONITORS: std::cell::RefCell<Option<[Retained<AnyObject>; 2]>> = const { std::cell::RefCell::new(None) };
+        /// The display the pointer was last on (its frame's corner).
+        static POINTER_DISPLAY: std::cell::Cell<Option<(i64, i64)>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// Watches which display the pointer is on while there are several (main thread): moving to another one reads
+    /// again, as a Space change does. A mouse-moved monitor needs no permission (only key events would); the handler
+    /// only compares the display, and reads only when it changed.
+    fn watch_pointer(mtm: MainThreadMarker) {
+        let several = watch_pointer_with(NSScreen::screens(mtm).count());
+        POINTER_MONITORS.with(|monitors| {
+            let mut monitors = monitors.borrow_mut();
+            match (several, monitors.is_some()) {
+                (true, false) => {
+                    let global = block2::RcBlock::new(|_: NonNull<NSEvent>| pointer_moved());
+                    let local = block2::RcBlock::new(|event: NonNull<NSEvent>| {
+                        pointer_moved();
+                        event.as_ptr()
+                    });
+                    let global = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved, &global);
+                    // SAFETY: the block hands every event back unchanged.
+                    let local = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved, &local) };
+                    if let (Some(global), Some(local)) = (global, local) {
+                        *monitors = Some([global, local]);
+                    }
+                }
+                (false, true) => {
+                    for monitor in monitors.take().into_iter().flatten() {
+                        // SAFETY: a monitor NSEvent returned above.
+                        unsafe { NSEvent::removeMonitor(&monitor) };
+                    }
+                    POINTER_DISPLAY.set(None);
+                }
+                _ => {}
+            }
+        });
+    }
+
+    fn pointer_moved() {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let pointer = NSEvent::mouseLocation();
+        let now = NSScreen::screens(mtm).iter().map(|s| s.frame()).find(|f| {
+            pointer.x >= f.origin.x && pointer.x < f.origin.x + f.size.width && pointer.y >= f.origin.y && pointer.y < f.origin.y + f.size.height
+        }).map(|f| (f.origin.x as i64, f.origin.y as i64));
+        if moved_to_another_display(POINTER_DISPLAY.replace(now), now) {
+            *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            check();
+        }
     }
 
     fn observe(centre: &NSNotificationCenter, name: &NSNotificationName) {
         let block = block2::RcBlock::new(|_: NonNull<NSNotification>| {
             *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
             check();
+            // A display came or went: the pointer is watched only while there are several.
+            if let Some(mtm) = MainThreadMarker::new() {
+                watch_pointer(mtm);
+            }
         });
         // SAFETY: no object filter; the main queue (the check needs it); the block lives as long as the observation, which
         // is the app's run.
@@ -325,6 +395,22 @@ mod tests {
         assert_eq!(space_type_of("unknown", &displays), None, "a display the list does not know: nothing decided");
         // "Displays have separate Spaces" off: one list for all displays.
         assert_eq!(space_type_of(A, &[("Main".to_string(), FULL_SCREEN_SPACE)]), Some(FULL_SCREEN_SPACE));
+    }
+
+    #[test]
+    fn the_pointer_moving_to_another_display_reads_again_only_while_there_are_several() {
+        assert!(!watch_pointer_with(1), "one display: nothing is watched");
+        assert!(watch_pointer_with(2));
+        assert!(moved_to_another_display(None, Some((0, 0))), "the first known display");
+        assert!(moved_to_another_display(Some((0, 0)), Some((1512, 0))), "to the second display");
+        assert!(!moved_to_another_display(Some((1512, 0)), Some((1512, 0))), "moving on the same display reads nothing");
+        assert!(!moved_to_another_display(Some((0, 0)), None), "between displays (no display under it)");
+        let spaces = code("spaces.rs");
+        let watch = body(&spaces, "    fn watch_pointer(");
+        assert!(watch.contains("addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved") && watch.contains("NSEvent::removeMonitor(&monitor)"), "on with several displays, off with one");
+        assert!(body(&spaces, "    pub fn install() {").contains("watch_pointer(mtm)"));
+        assert!(body(&spaces, "    fn observe(").contains("watch_pointer(mtm)"), "a display came or went");
+        assert!(body(&spaces, "    fn pointer_moved() {").contains("if moved_to_another_display("), "reads only when the display changed");
     }
 
     #[test]
