@@ -471,6 +471,19 @@ class MissedRecordingsTest {
     }
 
     @Test
+    fun `a call the helper saw minutes into it and then lost is reported once, from the journal, not again by its notice`() {
+        // Answered at t0; the helper came back 3 minutes in, recorded, and the app stopped during the call.
+        var b = journalCall(ready(), "c1", "whatsapp", t0 + 180_000, 420) {
+            var j = CallJournal.stage(it, "c1", Stage.STARTED, t0 + 180_400)
+            j = CallJournal.answered(j, "c1", t0 + 181_000, "call notification timer")
+            CallJournal.stage(j, "c1", Stage.BOTH_AUDIO, t0 + 182_000)
+        }
+        b = CallJournal.processStarted(b, t0 + 400_000)
+        val found = find(b, listOf(notice("whatsapp", t0, 600)))
+        assertEquals(listOf(MissedReason.CRASH), found.map { it.reason })
+    }
+
+    @Test
     fun `an answered redial's own notice still answers it`() {
         var b = CallJournal.seen(ready(), "b", "phone_call", Seen.HELPER, t0)
         b = CallJournal.stage(b, "b", Stage.ARMED, t0 + 100, "helper ready")
