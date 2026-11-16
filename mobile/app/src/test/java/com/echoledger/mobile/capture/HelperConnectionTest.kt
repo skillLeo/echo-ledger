@@ -266,6 +266,23 @@ class HelperConnectionTest : AppTest() {
         assertFalse(connection.state.value.connected)
     }
 
+    @Test
+    fun `a helper let go never clears the next one when its death notice comes late`() {
+        val connection = connection()
+        val first = Helper(2000)
+        connection.attach(first, "adb")
+        connection.lost(first)
+        val next = Helper(2000)
+        connection.attach(next, "shizuku")
+        // The first one's death notice arrives now.
+        val death = HelperConnection::class.java.getDeclaredField("death").apply {
+            isAccessible = true
+        }.get(connection) as android.os.IBinder.DeathRecipient
+        death.binderDied()
+        assertTrue(connection.helper === next)
+        assertTrue(connection.state.value.connected)
+    }
+
     /** A binder whose process is gone. */
     private class GoneBinder : android.os.IBinder {
         override fun getInterfaceDescriptor(): String = "com.echoledger.mobile.capture.ICaptureHelper"

@@ -117,10 +117,11 @@ class WatchTargetTest : AppTest() {
             helperBuild = 461_000
         )
         assertEquals(
+            "each player by uid, state, usage and where they were read; no app names",
             listOf(
                 "helper build 461000",
-                "uid 10133 (text) · started (text) · Media · film · allows capture · piid 2215 · com.samsung.android.video",
-                "uid unknown (none) · state unknown (none) · Media · film · allows capture · piid 2216"
+                "uid 10133 (text) · started (text) · Media",
+                "uid unknown (none) · state unknown (none) · Media"
             ),
             AudioProbe.lines(answer)
         )

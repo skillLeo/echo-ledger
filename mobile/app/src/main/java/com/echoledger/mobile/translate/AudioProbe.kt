@@ -162,15 +162,14 @@ object AudioProbe {
     }
 
     /**
-     * What the helper returned for one player, for the probe and Copy diagnostics (no names, numbers or text):
-     * "uid 10133 (getter) · started (text) · Media · film · allows capture · piid 57 · com.samsung.android.video".
+     * What the helper returned for one player, for the capture log and Copy diagnostics: its uid, state and usage, and
+     * where the uid and the state were read ("text": the player's description; "none": not at all) — "uid 10133 (text)
+     * · started (text) · Media". Never an app's name: only the app chosen or picked is named, by the caller.
      */
-    fun line(p: ProbePlayer): String = listOfNotNull(
-        if (p.uid > 0) "uid ${p.uid}" + p.uidFrom.from() else "uid unknown" + p.uidFrom.from(),
+    fun line(p: ProbePlayer): String = listOf(
+        (if (p.uid > 0) "uid ${p.uid}" else "uid unknown") + p.uidFrom.from(),
         state(p.state) + p.stateFrom.from(),
-        describe(p),
-        p.piid.takeIf { it >= 0 }?.let { "piid $it" },
-        p.packageName
+        usage(p.usage)
     ).joinToString(" · ")
 
     private fun String?.from(): String = if (this == null || this == "getter") "" else " ($this)"

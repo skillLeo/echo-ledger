@@ -1292,9 +1292,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         } else {
             "not connected (${h.error ?: "never started"})"
         }
-        // Since v1.8: what the helper says of each player now (uid, state, usage), as Live Translate reads it.
+        // Since v1.8: what the helper says of each player now (uid, state, usage), as Live Translate reads it; only the
+        // apps picked for Live Translate are named.
         val players = if (h.connected) com.echoledger.mobile.translate.AudioProbe.lines(graph.helper.players()) else emptyList()
-        com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state, players)
+        val lt = graph.settings.current().liveTranslate
+        val picked = (lt.watch.apps + lt.game.games).distinct()
+        com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state, players, picked)
     }
 
     fun connectShizuku() {

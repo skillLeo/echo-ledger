@@ -652,7 +652,7 @@ class ScreenshotsTest : ScreenTest() {
         shoot { AudioProbeSheet(vm, helperReady = true, onDismiss = {}) }
         pumpUntil("the players") { runCatching { compose.onNodeWithText("An app the helper can't name").assertExists() }.isSuccess }
         compose.onNodeWithText("Media · film · allows capture · uid 10133 · started").assertExists()
-        compose.onNodeWithText("uid unknown (none) · state unknown (none) · Media · music · allows capture · piid 2216").assertExists()
+        compose.onNodeWithText("uid unknown (none) · state unknown (none) · Media").assertExists()
         themeMode = "dark"
         compose.mainClock.advanceTimeBy(500)
         compose.waitForIdle()

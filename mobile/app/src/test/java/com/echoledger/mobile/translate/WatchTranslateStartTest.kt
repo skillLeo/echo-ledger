@@ -79,6 +79,28 @@ class WatchTranslateStartTest : AppTest() {
     }
 
     @Test
+    fun `the capture log says the choice first and names no app but the one chosen`() {
+        CaptureLog.clear(app)
+        app.graph.helper.attach(
+            Helper(
+                """[{"uid":10133,"uid_from":"text","packages":["com.samsung.android.video"],"usage":1,"content_type":3,
+                    "capture_policy":1,"state":2,"state_from":"text","piid":2215},
+                   {"uid":10300,"uid_from":"getter","packages":["com.spotify.music"],"usage":1,"content_type":2,
+                    "capture_policy":1,"state":3,"state_from":"getter","piid":2216}]"""
+            ),
+            source = "adb"
+        )
+        val controller = buildService(LiveTranslateService::class.java, LiveTranslateService.startIntent(app, TranslateMode.WATCH)).create()
+        controller.startCommand(0, 1)
+        pumpUntil("the choice to be logged") { CaptureLog.lines(app).any { it.contains(" translate: ") } }
+        val line = CaptureLog.lines(app).last { it.contains(" translate: ") }
+        assertTrue(line, line.substringAfter(" translate: ").startsWith("watch: → listening to com.samsung.android.video"))
+        assertFalse("another app's name is more than the diagnosis needs: $line", line.contains("spotify"))
+        assertTrue(line, line.contains("uid 10300 · paused · Media"))
+        LiveTranslateService.stop(app)
+    }
+
+    @Test
     fun `with everything readable and nothing playing, it still says so`() {
         app.graph.helper.attach(
             Helper(
