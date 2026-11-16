@@ -1,0 +1,145 @@
+# Live Assist relay settings: models, modes, timing and limits (README, "Settings").
+# Secrets never go in this file: the token secret comes from the environment, provider keys from the server's
+# Admin -> API Credentials.
+#
+# Prices are USD per million tokens, read from the providers' pricing pages on 2026-11-16:
+#   https://platform.claude.com/docs/en/about-claude/pricing
+#   https://console.groq.com/docs/models
+#   https://developers.openai.com/api/docs/pricing
+#   https://ai.google.dev/gemini-api/docs/pricing
+# Check them again before changing a budget. They only feed the relay's budget guard; the server bills from its own table.
+
+[speculative]
+# An Other-channel partial that looks like a question starts a suggestion after this much reported silence.
+min_silence_ms = 128
+# More speech within this window after a speculative start cancels it and waits for the next pause.
+restart_window_ms = 700
+
+[context]
+# Older transcript is cut into blocks of about this many tokens; a full block never changes, so it stays cached.
+block_tokens = 1500
+# The newest final turns, sent word for word after the blocks.
+recent_turns = 8
+# Documents beyond this estimate are refused in context_update (send retrieval chunks instead).
+max_document_tokens = 60000
+# The most older transcript a session keeps, in blocks (about 3 hours of speech): past it the oldest blocks are dropped
+# together, down to three quarters of this, and the running summary covers them. It bounds a request and a session's
+# memory alike.
+max_transcript_tokens = 40000
+
+[budget]
+# Step down to a cheaper mode when the budget left covers fewer suggestions than this in the current mode.
+reserve_suggestions = 3
+# Output tokens assumed for one suggestion when estimating its cost.
+expected_output_tokens = 160
+# Share of Balanced suggestions that also go to the upgrade model (hard questions), for the estimate only.
+upgrade_share = 0.3
+
+[session]
+# A session survives a dropped connection this long; a reconnect with a valid token resumes it.
+resume_grace_secs = 120
+ping_interval_secs = 20
+# No frame from the app for this long closes the connection (4408).
+idle_timeout_secs = 60
+# Cache warming after a context change, at most this often.
+warm_min_interval_secs = 60
+
+[limits]
+max_message_bytes = 2097152
+max_turn_chars = 4000
+max_field_chars = 20000
+max_documents = 20
+max_document_chars = 400000
+max_facts = 200
+messages_per_second = 40
+burst = 80
+# Open connections at once, for the whole relay. A session needs about 0.2 MiB and at most about 1 MiB, so 1000 fit
+# in the systemd unit's 2 GB with room to spare (DEPLOY.md); more answer 503 relay_busy and the app tries again.
+max_connections = 1000
+
+# Mode -> model. Each plan's modes come from the assist token; Max is Ultra only.
+[modes.fast]
+primary = "claude-haiku-5-5"
+fallback = "openai/gpt-oss-120b"
+transcript = "recent"
+max_output_tokens = 300
+
+[modes.balanced]
+primary = "claude-haiku-5-5"
+fallback = "openai/gpt-oss-120b"
+# Hard questions (see [upgrade]) also go to this model; its answer replaces the draft unless I already started speaking.
+upgrade = "claude-sonnet-5-5"
+transcript = "full"
+max_output_tokens = 400
+
+[modes.deep]
+primary = "claude-sonnet-5-5"
+fallback = "claude-haiku-5-5"
+transcript = "full"
+max_output_tokens = 500
+
+[modes.max]
+primary = "claude-opus-5-5"
+fallback = "claude-sonnet-5-5"
+transcript = "full"
+max_output_tokens = 600
+
+[upgrade]
+# A question is hard when it has at least this many words or contains one of these phrases.
+min_words = 14
+phrases = [
+  "why", "how would", "how do you", "explain", "describe", "walk me through", "tell me about a time",
+  "what would you do", "difference between", "compare",
+  "kyun", "kyon", "kaise", "samjhao",
+  "کیوں", "کیسے", "سمجھائیں",
+  "لماذا", "كيف", "اشرح",
+]
+
+# Models. `options` go to the provider as they are: thinking stays off where the model allows it (Opus 5.5 cannot turn
+# it off, so it runs at the lowest effort). `mock` is the latency of the mocked model (RELAY_PROVIDERS=mock).
+
+[models."claude-haiku-5-5"]
+provider = "anthropic"
+first_token_timeout_ms = 2500
+price = { input = 0.10, cache_write = 0.125, cache_read = 0.01, output = 0.50 }
+long_context = { above_tokens = 100000, input = 0.50, cache_write = 0.625, cache_read = 0.05, output = 2.50 }
+options = { effort = "low", thinking = "disabled" }
+mock = { first_token_ms = 350, token_ms = 12 }
+
+[models."claude-sonnet-5-5"]
+provider = "anthropic"
+first_token_timeout_ms = 4000
+price = { input = 2.00, cache_write = 2.50, cache_read = 0.10, output = 10.00 }
+options = { effort = "low", thinking = "between_tools" }
+mock = { first_token_ms = 700, token_ms = 18 }
+
+[models."claude-opus-5-5"]
+provider = "anthropic"
+first_token_timeout_ms = 6000
+price = { input = 4.00, cache_write = 5.00, cache_read = 0.20, output = 20.00 }
+options = { effort = "low" }
+mock = { first_token_ms = 1100, token_ms = 25 }
+
+[models."openai/gpt-oss-120b"]
+provider = "groq"
+first_token_timeout_ms = 2000
+price = { input = 0.15, cache_write = 0.15, cache_read = 0.15, output = 0.60 }
+options = { reasoning_effort = "low" }
+mock = { first_token_ms = 200, token_ms = 4 }
+
+# Not in any mode yet: measured first (L9 latency benchmark), then added to the map.
+[models."gpt-6-luna"]
+provider = "openai"
+enabled = false
+first_token_timeout_ms = 2500
+price = { input = 0.10, cache_write = 0.125, cache_read = 0.01, output = 0.50 }
+mock = { first_token_ms = 400, token_ms = 10 }
+
+[models."gemini-3.8-flash"]
+provider = "gemini"
+enabled = false
+first_token_timeout_ms = 2500
+# The price from 1 January 2027 (until then it is half), so the guard never underestimates.
+price = { input = 1.50, cache_write = 1.50, cache_read = 0.15, output = 7.50 }
+options = { thinking_budget = 0 }
+mock = { first_token_ms = 450, token_ms = 10 }

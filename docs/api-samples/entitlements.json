@@ -80,8 +80,8 @@
         },
         "connector": {
             "enabled": true,
-            "name": "Claude and ChatGPT",
-            "description": "Ask Claude or ChatGPT about your recordings.",
+            "name": "Ask an AI assistant",
+            "description": "Ask your AI assistant about your recordings.",
             "cost": "paid",
             "lowest_plan": "pro"
         },
@@ -95,7 +95,7 @@
         "premium_engines": {
             "enabled": true,
             "name": "Premium engines",
-            "description": "ElevenLabs and Gemini for the hardest calls and languages.",
+            "description": "Extra transcription engines for the hardest calls and languages.",
             "cost": "paid",
             "lowest_plan": "business"
         },
@@ -193,7 +193,7 @@
             "price": "Ask for the price",
             "price_pkr": 2999,
             "price_text": "Rs 2,999 a month",
-            "description": "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and Claude or ChatGPT.",
+            "description": "Transcripts made for you, Roman Urdu and English views, double-check, screen moments and asking an AI assistant.",
             "features": [
                 "platform_transcription",
                 "views",

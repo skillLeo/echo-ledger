@@ -209,12 +209,28 @@ const SCREENS = [
   // possibility with System Settings first, and Screen Recording switched on while EchoLedger ran (Quit & reopen).
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
-    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
+    // "reopen-did-not-apply": EchoLedger was reopened and macOS still has not applied it: switch it off and on instead.
+    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"], ["reopen-did-not-apply", "reopen=2"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
       await page.waitForSelector("[data-testid=permission-loss]");
       await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
       await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
-      if (state === "reopen") await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
+      if (state.startsWith("reopen")) await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
     }, viewport]),
+    // D-136: no privacy call on this macOS: nothing said that cannot be read, System Settings first.
+    [`permissions-untold-mac${size}`, "library-lost-mac&untold=1", async (page) => {
+      await page.waitForSelector("[data-testid=permission-loss]");
+      await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
+      await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
+      await page.getByTestId("permission-system_audio").scrollIntoViewIfNeeded();
+    }, viewport],
+    // The Mac check's Screen Recording step has the same Quit & reopen.
+    [`settings-mac-check-reopen${size}`, "settings-mac-check&reopen=1", async (page) => {
+      await settingsReady(page);
+      await nav(page, "Help");
+      await page.getByRole("button", { name: /^Mac check/ }).click();
+      await page.waitForSelector("[data-testid=check-screen_permission]");
+      await page.getByTestId("check-screen_permission").scrollIntoViewIfNeeded();
+    }, viewport],
     // The Ready check and the top bar never say "Microphone allowed" or "Calls: Ready" in that state.
     [`record-allowed-before-mac${size}`, "record&older=1", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row"), viewport],
   ]),
@@ -229,11 +245,13 @@ const SCREENS = [
     await page.waitForSelector(".segments .seg-check");
     await page.locator(".segments .seg-check").scrollIntoViewIfNeeded();
   }, viewport]),
-  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button.
-  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`library-untitled${size}`, "library&untitled=1", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".detail-title").waitFor();
-  }, viewport]),
+  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button. In a
+  // narrow window the list and the page are one under the other: the row is scrolled into view, and "-page" shows the
+  // heading (a screen whose untitled recording is not in view is not taken).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].flatMap(([size, viewport]) => [
+    [`library-untitled${size}`, "library&untitled=1", async (page) => showUntitled(page, size ? "row" : "both"), viewport],
+    ...(size ? [[`library-untitled-page${size}`, "library&untitled=1", async (page) => showUntitled(page, "heading"), viewport]] : []),
+  ]),
   // D-121: the Library's row opened its folders in a narrow window; widened until the page's own column shows, the
   // sidebar's copy has closed (the full-size window, the column on the page).
   ["sidebar-library-widened", "library", async (page) => {
@@ -353,22 +371,10 @@ const SCREENS = [
     await page.getByRole("button", { name: /^Account menu:/ }).click();
     await page.waitForSelector(".shell-pop");
   }],
-  ["help", "library", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
-    await page.waitForSelector(".help-sheet");
-  }],
-  // D-079: Help fits the smallest window, at 200 % text too; the lists scroll, the x and buttons stay.
-  ["help-narrow", "library", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
-    await page.waitForSelector(".help-sheet");
-  }, { width: 860, height: 560 }],
-  ["help-narrow-text200", "library", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
-    await page.waitForSelector(".help-sheet");
-  }, { width: 860, height: 560, scale: 2 }],
+  // D-079, D-133: Help fits the window at every size and text size: the lists scroll, the x and the buttons stay on
+  // screen (a screen whose buttons are not inside the sheet is not taken).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }],
+    ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`help${size}`, "library", openHelp, viewport]),
   ["sidebar-rail", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.getByRole("button", { name: "Collapse the sidebar" }).click();
@@ -732,6 +738,39 @@ async function launch() {
 }
 
 /** Waits for the page's fonts and lets it settle, then takes the picture. */
+/** The untitled recording in view (D-031): its row in the list, its page's heading, or both; throws when it is not. */
+async function showUntitled(page, what) {
+  await page.waitForSelector(".segments .segment");
+  const row = page.getByTestId("library-list").locator(".item-title", { hasText: /^Recording$/ });
+  const heading = page.locator(".detail-title", { hasText: /^Recording/ });
+  if (what === "row") await row.scrollIntoViewIfNeeded();
+  if (what === "heading") await heading.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const wanted = what === "both" ? [row, heading] : [what === "row" ? row : heading];
+  for (const target of wanted) {
+    const box = await target.boundingBox();
+    const size = page.viewportSize();
+    if (!box || box.y < 0 || box.y + box.height > size.height || box.x < 0 || box.x + box.width > size.width) {
+      throw new Error("the untitled recording is not in view");
+    }
+  }
+}
+
+/** Opens Help & shortcuts from the sidebar and checks its buttons are on screen, inside the sheet (D-133). */
+async function openHelp(page) {
+  await page.waitForSelector(".segments .segment");
+  await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
+  await page.waitForSelector(".help-sheet");
+  const outside = await page.evaluate(() => {
+    const sheet = document.querySelector(".help-sheet").getBoundingClientRect();
+    return [...document.querySelectorAll(".help-actions .btn")].filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.top < sheet.top || r.bottom > sheet.bottom || r.left < sheet.left || r.right > sheet.right;
+    }).map((b) => b.textContent);
+  });
+  if (outside.length) throw new Error(`Help's buttons are not on screen: ${outside.join(", ")}`);
+}
+
 async function shoot(page, file) {
   // No hover state left from the last click (a row's menu button, a tooltip).
   await page.mouse.move(0, 0);

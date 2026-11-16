@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decisionText, lastNotRecordedLine, micTone, micUserName, notRecorded, seenWhen } from "./explainer";
+import { decisionText, lastNotRecordedLine, micTone, micUserName, notRecorded, sameMicApp, seenWhen } from "./explainer";
 import type { IgnoreReason, MicDecision } from "./ipc";
 import { makeMicUser } from "../test/fixtures";
 import detectRs from "../../src-tauri/src/detect/mod.rs?raw";
@@ -91,6 +91,12 @@ describe("the last app not recorded, as the core kept it (D-014)", () => {
     expect(seenWhen(new Date(2026, 10, 16, 9, 30).toISOString(), now)).toBe("yesterday at 9:30 am");
     expect(seenWhen(new Date(2026, 10, 9, 18, 0).toISOString(), now)).toBe("on 9 Nov at 6:00 pm");
     expect(seenWhen("not a time", now)).toBe("");
+  });
+
+  it("counts the same program on the same website as one app, as the core does", () => {
+    expect(sameMicApp({ name: "zoom.us", site: null }, { name: "zoom.us", site: null })).toBe(true);
+    expect(sameMicApp({ name: "chrome.exe", site: "a.example" }, { name: "chrome.exe", site: "b.example" })).toBe(false);
+    expect(sameMicApp({ name: "Krisp", site: null }, { name: "zoom.us", site: null })).toBe(false);
   });
 
   it("says which app, when and why, in one line", () => {

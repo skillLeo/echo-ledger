@@ -33,9 +33,9 @@ function prop(selector: string, name: string, list: CSSRule[] = rules): string {
   return values[values.length - 1] ?? "";
 }
 
+/** The rules of every block with this media condition, in order (a condition can have more than one block). */
 function media(condition: string): CSSRule[] {
-  const rule = rules.find((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition);
-  return rule ? Array.from(rule.cssRules) : [];
+  return rules.filter((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition).flatMap((r) => Array.from(r.cssRules));
 }
 
 type Theme = "dark" | "light";
@@ -424,12 +424,31 @@ describe("a chip's word and its select are one control (D-121)", () => {
   });
 });
 
+describe("the stacked Library at 200 % text (D-137)", () => {
+  it("keeps the player in its place in a narrow, short page, so it never covers the list", () => {
+    expect(prop(".player-dock", "position")).toBe("sticky");
+    expect(prop(".app.narrow .detail .player-dock", "position", media("(max-height: 480px)"))).toBe("static");
+  });
+});
+
 describe("Help fits the window (D-079)", () => {
   it("is never taller than the room under the backdrop's top gap, and only its lists scroll", () => {
     expect(prop(".help-sheet", "max-height")).toBe("calc(90vh - var(--space-4))");
     expect(prop(".sheet-backdrop", "padding")).toMatch(/^10vh /);
     expect(prop(".help-sheet .help-body", "overflow-y")).toBe("auto");
     expect(prop(".help-sheet", "overflow")).toBe("hidden");
+  });
+
+  it("keeps its buttons on screen at every text size: stuck to the bottom edge in a short window (D-133)", () => {
+    // A short window (200 % text): the whole sheet scrolls, the title sticks to the top and the buttons to the bottom.
+    const short = media("(max-height: 480px)");
+    expect(prop(".help-sheet", "overflow-y", short)).toBe("auto");
+    expect(prop(".help-sheet .sheet-head", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "bottom", short)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".help-sheet .help-actions", "background", short)).toBe("inherit");
+    // Close stays at the end of its line when the buttons wrap.
+    expect(prop(".help-sheet .help-actions > .btn:last-child", "margin-inline-start")).toBe("auto");
   });
 });
 

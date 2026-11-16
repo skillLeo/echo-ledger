@@ -30,14 +30,14 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
 
 /// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
 /// client workspace's AI budget and key, docs/API.md): shown as they are.
-const PLAIN_CODES: [&str; 13] = [
-    "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "views_unavailable", "ai_budget_reached", "ai_unavailable", "no_client",
+const PLAIN_CODES: [&str; 11] = [
+    "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "ai_budget_reached", "no_client",
     "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached", "promo_other_plan",
 ];
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 20] = [
+const CODE_TEXT: [(&str, &str); 34] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -62,7 +62,40 @@ const CODE_TEXT: [(&str, &str); 20] = [
     // The server holds this computer's work for now (v1.6, P2.7): nothing failed, everything waits.
     ("maintenance", MAINTENANCE_TEXT),
     ("update_required", UPDATE_REQUIRED_TEXT),
+    // The live captions' and Live Translate's tokens (D-135): the server's text names the engine and its key.
+    ("provider_not_configured", NO_SPEECH_ENGINE_TEXT),
+    ("provider_error", SPEECH_ENGINE_UNREACHABLE_TEXT),
+    // The server's text names the AI vendor and its key: the app's own words instead.
+    ("views_unavailable", "The other views of this transcript aren't available yet: the transcript must be finished, and AI must be set up on the server."),
+    ("ai_unavailable", "AI isn't set up on the server yet. Ask the person who runs the console."),
+    // The other documented refusals (docs/API.md "Error codes"), so their meaning stays without the server's text.
+    ("current_device", "This is the device you are using. Sign it out in its own settings instead."),
+    ("nothing_to_export", "None of these recordings has a finished transcript."),
+    ("restore_expired", "This recording can no longer be restored: its 48 hours in Recently deleted are over."),
+    ("too_many_open_uploads", "Too many recordings are still uploading from this computer. Let them finish, then try again."),
+    ("too_many_open_sessions", "Too many recordings of this computer are still open on the server. Finish or discard them, then try again."),
+    ("duplicate_recording", "This file is already in your Library."),
+    ("cannot_retranscribe", "This recording's audio isn't on the server yet, so it can't be transcribed again. Try again once it has uploaded."),
+    ("too_large", "This file is too large for the server."),
+    ("too_many_labels", "A recording can have 20 labels at most. Remove one first."),
+    ("session_required", "Captions need a recording to belong to. Start the recording again."),
 ];
+
+/// `503 provider_not_configured` from `stt/token` and `live-translate/token` (docs/API.md), in the app's words.
+pub const NO_SPEECH_ENGINE_TEXT: &str = "No speech engine is set up for this language yet.";
+/// `502 provider_error` from the same tokens: the engine refused or could not be reached.
+pub const SPEECH_ENGINE_UNREACHABLE_TEXT: &str = "The speech engine could not be reached. Try again in a moment.";
+
+/// Any other coded answer (D-135): the server's own text is never shown, as it can name an engine or a key; the app says
+/// what kind of refusal it was. `validation_failed` (field errors written for people) and the plain codes above are kept.
+fn coded_text(status: u16) -> &'static str {
+    match status {
+        404 | 410 => "That is no longer on the server.",
+        429 => "The server is busy.",
+        500.. => "The server could not do this right now. Try again later.",
+        _ => "The server did not accept this.",
+    }
+}
 
 /// What the app says about a promo code the server does not take (`422 invalid_promo_code`).
 pub const INVALID_PROMO_TEXT: &str = "This promo code does not work: it is not known, it has ended or been used up, or you have used it already.";
@@ -89,6 +122,9 @@ pub fn code_text(code: &str) -> Option<&'static str> {
 
 fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs: &Option<u64>) -> String {
     let message = message.trim();
+    if code == Some("rate_limited") {
+        return format!("The server is busy.{}", retry_hint(retry_after_secs));
+    }
     if let Some(text) = code.and_then(code_text) {
         return text.to_string();
     }
@@ -100,7 +136,10 @@ fn server_text(status: u16, message: &str, code: Option<&str>, retry_after_secs:
         Some(c) if PLAIN_CODES.contains(&c) && !message.is_empty() => message.to_string(),
         // An answer without a message (a proxy's empty 502, say) gives the status, not "Server returned 502: ".
         _ if message.is_empty() => format!("Server returned {status}.{}", retry_hint(retry_after_secs)),
-        _ => format!("Server returned {status}: {message}{}", retry_hint(retry_after_secs)),
+        // Field errors are written for people: the message alone (the status says nothing to them).
+        Some("validation_failed") => format!("{message}{}", retry_hint(retry_after_secs)),
+        None => format!("Server returned {status}: {message}{}", retry_hint(retry_after_secs)),
+        Some(_) => format!("{}{}", coded_text(status), retry_hint(retry_after_secs)),
     }
 }
 
@@ -245,7 +284,7 @@ mod server_text_tests {
 
     #[test]
     fn other_answers_keep_the_status() {
-        assert_eq!(server(422, "The pairing code is invalid.", Some("validation_failed")).to_string(), "Server returned 422: The pairing code is invalid.");
+        assert_eq!(server(422, "The pairing code is invalid.", Some("validation_failed")).to_string(), "The pairing code is invalid.");
         assert_eq!(server(403, "", Some("storage_limit_reached")).to_string(), "Server returned 403.");
     }
 
@@ -256,7 +295,35 @@ mod server_text_tests {
         assert!(server(409, "Duplicate.", Some("rule_exists")).to_string().starts_with("Another project already has this rule."));
         assert_eq!(server(404, "No query results", Some("rule_not_found")).to_string(), "That filing rule is no longer there.");
         assert!(server(404, "Recipient missing", Some("recipient_not_found")).to_string().contains("nothing was sent"));
-        assert_eq!(server(404, "Not found", Some("client_not_found")).to_string(), "Server returned 404: Not found", "older codes keep their text");
+        // Any other code: the app's words, never the server's text (D-135).
+        assert_eq!(server(404, "Not found", Some("client_not_found")).to_string(), "That is no longer on the server.");
+    }
+
+    #[test]
+    fn a_coded_answer_never_shows_the_server_s_text_which_can_name_an_engine() {
+        // D-135: the captions' and Live Translate's tokens without an engine set up.
+        let none = server(503, "AssemblyAI is not configured. Add its API key on API Credentials.", Some("provider_not_configured"));
+        assert_eq!(none.to_string(), "No speech engine is set up for this language yet.");
+        let refused = server(502, "Soniox refused the request: invalid key", Some("provider_error"));
+        assert_eq!(refused.to_string(), "The speech engine could not be reached. Try again in a moment.");
+        // A code the app has no words for: what kind of refusal, never the text.
+        for (status, said) in [(500, "The server could not do this right now. Try again later."), (409, "The server did not accept this."), (410, "That is no longer on the server.")] {
+            let answer = server(status, "ElevenLabs (scribe_v1) said: quota", Some("something_new")).to_string();
+            assert_eq!(answer, said);
+        }
+        // The AI answers (the server's real sentences name the vendor and its key).
+        let views = server(409, "Claude declined to write the views for this transcript.", Some("views_unavailable"));
+        assert_eq!(views.to_string(), "The other views of this transcript aren't available yet: the transcript must be finished, and AI must be set up on the server.");
+        let ai = server(409, "Add the Anthropic key under API Credentials to use client notes, the brief and Ask.", Some("ai_unavailable"));
+        assert_eq!(ai.to_string(), "AI isn't set up on the server yet. Ask the person who runs the console.");
+        for text in [views.to_string(), ai.to_string()] {
+            assert!(!text.contains("Claude") && !text.contains("Anthropic") && !text.contains("API Credentials"), "{text}");
+        }
+        let busy = AppError::Server { status: 429, message: "Groq rate limit".into(), code: Some("rate_limited".into()), retry_after_secs: Some(30) };
+        assert_eq!(busy.to_string(), "The server is busy. Try again in 30 s.");
+        for text in [none.to_string(), refused.to_string(), busy.to_string()] {
+            assert!(!text.contains("AssemblyAI") && !text.contains("Soniox") && !text.contains("Groq") && !text.contains("API Credentials"), "{text}");
+        }
     }
 
     #[test]

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Auth\EditProfile;
+use App\Filament\Support\FailedUpload;
 use App\Jobs\TranscribeFinalJob;
 use App\Models\AuditEvent;
 use App\Models\Plan;
@@ -219,5 +220,22 @@ describe('re-transcribing a Free recording', function () {
         $made = Transcript::query()->findOrFail($again['transcript']['id']);
         expect($made->status)->toBe(TranscriptStatus::Completed)->and($made->meta['own_key'] ?? false)->toBeTrue()
             ->and($sent)->not->toBeEmpty()->each->toBe('Bearer '.OWN_KEY);
+    });
+
+    it('says the person\'s own key was refused, in words that send them to it, and hands it to no other engine', function () {
+        $this->user->forceFill(['transcription_key' => OWN_KEY, 'transcription_key_provider' => 'groq', 'transcription_key_last4' => '3f9a'])->save();
+        Http::fake(['api.groq.com/openai/v1/audio/transcriptions' => Http::response(['error' => ['message' => 'Invalid API Key', 'type' => 'invalid_request_error']], 401)]);
+
+        $failed = startFinal($this);
+        $sentence = 'Groq did not accept your key. Check it in Account → Transcription key, then try again.';
+
+        expect($failed->status)->toBe(TranscriptStatus::Failed)->and($failed->error_code)->toBe('own_key_rejected')
+            ->and($failed->provider)->toBe('groq');
+        $this->asToken($this->token)->getJson("/api/transcripts/{$failed->id}")->assertOk()
+            ->assertJsonPath('error_code', 'own_key_rejected')->assertJsonPath('error', $sentence);
+        $item = collect($this->asToken($this->token)->getJson('/api/activity')->assertOk()->json('data'))->firstWhere('kind', 'transcript_failed');
+        expect($item['body'])->toEndWith(': '.$sentence)
+            ->and(FailedUpload::for($failed->captureSession->fresh()))
+            ->toBe(['title' => 'Groq did not accept your key', 'detail' => 'Check it in Account → Transcription key, then press Retry.', 'retry' => 'transcribe']);
     });
 });

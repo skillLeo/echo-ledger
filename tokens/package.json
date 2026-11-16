@@ -1,0 +1,14 @@
+{
+  "name": "echoledger-tokens",
+  "private": true,
+  "type": "module",
+  "description": "EchoLedger design values: one source, built for the web console, the desktop app and the Android app.",
+  "scripts": {
+    "build": "node build.mjs",
+    "check": "node build.mjs --check",
+    "test": "node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "style-dictionary": "4.4.0"
+  }
+}

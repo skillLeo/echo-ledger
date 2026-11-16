@@ -314,8 +314,10 @@ const commands: Record<string, (args: Args) => unknown> = {
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),
-  mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
-  // What the core kept: a Zoom call earlier today, not recorded because its switch is off (D-014).
+  // A noise filter holds the microphone all the time, beside the Meet tab and an editor (D-014).
+  mic_users: () => [makeMicUser({ name: "Krisp", app: null, playsAudio: false, site: null, decision: "ignored", reason: "unknown_app" }), makeMicUser(),
+    makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
+  // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
   mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
   translate_apps: () => [],
   translate_status: () => screen.startsWith("controls-translate") ? {
@@ -330,10 +332,13 @@ const commands: Record<string, (args: Args) => unknown> = {
   permissions_status: () => (mac
     ? {
         // "&older=1": the microphone was allowed before on this Mac and reads "not asked" now (D-120); "&reopen=1": Screen
-        // Recording was switched on in System Settings while EchoLedger ran.
+        // Recording was switched on in System Settings while EchoLedger ran; "&reopen=2": and a reopen did not apply it.
         microphone: onboarding || older ? "unknown" : "allowed",
-        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
-        screen: onboarding ? "denied" : params.get("reopen") === "1" ? "reopen" : "allowed",
+        // "&untold=1": this macOS lacks the privacy call, so system audio and Screen Recording read unknown (D-136).
+        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : params.get("untold") === "1" ? "unknown" : "allowed",
+        screen: onboarding ? "denied" : params.get("reopen") ? "reopen" : params.get("untold") === "1" ? "unknown" : "allowed",
+        canTellNotAsked: params.get("untold") !== "1",
+        reopenDidNotApply: params.get("reopen") === "2",
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
@@ -353,7 +358,10 @@ const commands: Record<string, (args: Args) => unknown> = {
           { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null },
           { key: "microphone_permission", title: "Microphone permission", state: "ok", detail: "Allowed.", fix: null },
           { key: "system_audio_permission", title: "System audio permission", state: "off", detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } },
-          { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
+          // "&reopen=1": Screen Recording allowed while EchoLedger ran, with the step's own Quit & reopen.
+          params.get("reopen") === "1"
+            ? { key: "screen_permission", title: "Screen Recording permission", state: "limited", detail: "Allowed in System Settings. Quit and reopen EchoLedger to finish.", fix: { label: "Quit & reopen", settings: "screen", reopen: true } }
+            : { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
           { key: "microphone_test", title: "Microphone test", state: "ok", detail: "Heard your microphone (loudest about -28 dB).", fix: null },
           { key: "system_audio_test", title: "System audio test", state: "off", detail: "Not tested: system audio is off for EchoLedger.", fix: { label: "Open System Settings", settings: "system_audio" } },
           { key: "meeting_apps", title: "Meeting apps", state: "ok", detail: "Installed: Zoom, Chrome, Safari. Not installed: Teams, WhatsApp, Edge, Arc. EchoLedger recognises all of them.", fix: null },

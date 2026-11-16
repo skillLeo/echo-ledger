@@ -39,7 +39,8 @@ final class RomanUrduCheck extends Command
         $limit = max(1, min(500, (int) $this->option('limit')));
         $generate = (bool) $this->option('generate');
         if ($generate && ! $views->configured()) {
-            $this->error(TranscriptViews::missingKeyMessage());
+            // For the operator, who adds that key: the apps' own message says it in plain words (D-129).
+            $this->error('--generate needs the Anthropic key. Add it under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials');
 
             return self::FAILURE;
         }

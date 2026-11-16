@@ -148,6 +148,11 @@ stdout_logfile=/var/log/echoledger-worker.log
 Start them with `supervisorctl reread && supervisorctl update`. Every deploy ends with `php artisan queue:restart`,
 so the workers pick up the new code.
 
+Since v1.8.1, after that restart, wait until the old workers have finished their jobs (`supervisorctl status` shows
+them restarted), then run `php artisan echoledger:plain-failure-notifications` once more. It rewrites any
+"Transcription failed" notification an old worker posted during the deploy into plain words; it is safe to run
+again (`--dry-run` shows what it would change).
+
 ## Scheduler (cron)
 
 The same single line as on shared hosting, for the `www-data` user:

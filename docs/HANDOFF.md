@@ -994,3 +994,34 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - P8.2 signed APK: needs the release keystore and its password (never stored in files; pass via environment at build time).
 - P8.3 production deploy: needs SSH access; take a database backup first; never run seeders on production; never rotate `ECHOLEDGER_RECORDINGS_KEY`; server PHP CLI is `/opt/alt/php84/usr/bin/php`; run `composer install` (new dependency web-auth/webauthn-lib) and migrations; APP_URL must be the final HTTPS host (passkeys are tied to it).
 - Clicking a desktop notification to open a recording works only in installed builds (the OS starts the app by its id).
+
+## 2026-11-17 — 5-day sprint adopted (Tue 17 → Sat 21 Nov, Sun 22 buffer)
+- For this week the local sprint file docs/SPRINT_NOV17.md wins over the roadmap's order; the quality rules stay. The
+  design system goes first and in parallel: v1.8.0, v1.9 Live Assist and the v2.0 redesign are built together, behind
+  the `ui_v2.*` and `live_assist` flags. Gate 1 is a 15-line note, Gate 2 is approved as written in the plan, Gate 3
+  (the visual direction) is the only stop, tonight.
+- Day 1 freeze (`68e9bc76`): tokens/ (W3C token JSON, the Style Dictionary build into web/resources/css/tokens.css,
+  desktop/src/tokens.css and EchoTokens.kt, contrast and drift tests), contract 2.0.0-a (interface flags,
+  `PUT /api/account/ui`), 1.8.1-b (`own_key_rejected`, the wider `recording_missing`), API_ASSIST.md 1.9.0-c. After the
+  freeze, only the lead changes them, with a bump.
+- Lanes: web (b-web-181b review fixes, then L1), relay (b-relay: tests, load test, deploy notes), desktop UI
+  (b-desktop-ui: v2 components + Gate 3 screens), desktop core (b-desktop-batches/b-mac-signing: D-133–D-135, signing),
+  phone UI (b-phone-ui: v2 components + Gate 3 screens), phone core (b-phone-sweep: fix-now batches). Two reviewers:
+  A for web/ and services/, B for desktop/ and mobile/.
+- The Apple Silicon CI job was cancelled three times for lack of GitHub capacity; Mac builds are made locally on the
+  owner's Mac (Rust at ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin, not on PATH) until a runner is free.
+- Daily device slot 20:00–21:30 PKT.
+- Merged `773762d3`: b-mac-signing at the reviewed 6699a83c. The self-signed identity is used only on main, v1.1 and v*
+  tags; the release script signs a freshly packed archive of the checked app. Open, logged for later: move the two
+  signing secrets into a GitHub environment that only release refs can use (needs the owner's repo settings).
+- Decided: the pill shape ("full") does not count toward the three corner radii (4/8/12).
+- Merged `132df07c` (b-desktop-batches at the reviewed ec4f6c34): D-133–D-137 and the review minors; every coded
+  error in the app's own words (no vendor names), `own_key_rejected` with "Check my Groq key", `recording_missing`
+  without a retry. Merged `52e49da1` (b-mac-signing-2 at 23e35a08): the archive check follows links on disk and
+  refuses filesystem name twins. The first v1.1 CI run after this proves self-signed signing without trust settings.
+- Merged `6fcfc953` (b-web-181b at the reviewed 5f9ede63): the web v1.8.1 fixes (W-001–W-003, D-129/D-131 on the
+  server, own_key_rejected, recording_missing only for missing or undecryptable audio, plain token errors, the
+  provider kept out of exports, one cost source). Deploy notes: run `echoledger:plain-failure-notifications` after
+  `queue:restart` and drained workers (VPS) or a minute after `migrate` (shared hosting).
+- Merged `b16bfa64` (b-relay at the reviewed 266df3ca): the Live Assist relay with auth, the budget per token,
+  the capped context, connection limits, the load test and the deploy notes; the streaming clients are next.

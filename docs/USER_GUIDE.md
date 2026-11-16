@@ -46,10 +46,12 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
    **System Settings → Privacy & Security**, scroll down to Security and click **Open Anyway** next to EchoLedger, and
    confirm with your password or Touch ID. After that it opens normally. (On macOS 15 and later, right-click → Open no
    longer gets past this message.)
-3. EchoLedger lives in the menu bar (top right). Click its icon to open it, or right-click it for the menu. ⌘W closes the
-   window and leaves EchoLedger in the menu bar, ⌘, opens Settings, and ⌘Q quits. The icon follows light and dark menu
-   bars and turns red while recording. Opening EchoLedger again from Applications, Launchpad, Spotlight or the Dock while
-   it runs opens its window.
+3. EchoLedger is in the Dock and in the menu bar (top right). Click its Dock icon to open its window; click the menu
+   bar icon for its menu (**Open EchoLedger** opens the window). ⌘W closes the window and EchoLedger keeps running in
+   the Dock and the menu bar; ⌘, opens Settings. To quit, press ⌘Q, choose **Quit EchoLedger** from the menu bar icon,
+   or right-click the Dock icon and choose **Quit**; a recording that is running is stopped and kept first. The menu bar
+   icon follows light and dark menu bars and shows a red badge while recording (amber while paused). Opening EchoLedger
+   again from Applications, Launchpad, Spotlight or the Dock while it runs opens its window.
 4. A short setup goes through what macOS must allow, one step each, with a button to the right page of System Settings:
    - **Microphone:** your side of a call, voice notes and dictation.
    - **System audio:** the other side of a call (the sound this Mac plays).
@@ -59,12 +61,15 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
 
 **If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording controls and
 the captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
-recording that would hold nothing does not start and says why, even with the window closed: a shortcut or the menu-bar
-icon opens the window with the reason, and a meeting that cannot be recorded gets a notification.
+recording that would hold nothing does not start and says why, even with the window closed: a shortcut or
+**Record now** in the menu bar icon's menu opens the window with the reason, and a meeting that cannot be recorded
+gets a notification.
 
-**Updates and permissions.** Because the app is not signed with an Apple Developer ID yet, macOS may forget its
-permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so
-once, in one sentence, with the same steps to set it up again.
+**Updates and permissions (since v1.8.1).** The Mac app is now always signed with the same certificate. The update to
+1.8.1 asks once more for the **Microphone**, **System audio** and **Screen recording**, and your saved sign-in may ask
+once to use the keychain (choose **Always Allow**). After that they stay allowed through later updates. EchoLedger still
+looks at them every time it starts; if one that was allowed has gone, it says so once, in one sentence, with the same
+steps to set it up again.
 
 **Starting at login** is off until you turn it on in **Account → This computer**.
 
@@ -74,8 +79,9 @@ and screen moments, one at a time, and says how to fix what it finds. It does no
 report** gives you plain text with no names, and **Send to my admin** sends it to your workspace's admins, only when you
 press it.
 
-A $99 a year Apple Developer ID fixes both of the above (the Open Anyway step and the forgotten permissions). The
-workflow that signs and notarizes the app already exists and starts working as soon as the certificate is in place.
+Later, an Apple Developer ID ($99 a year) removes the **Open Anyway** step when EchoLedger is first installed; the
+permissions already stay allowed across updates without it. The workflow that signs and notarizes the app with it
+already exists and starts working as soon as the certificate is in place.
 
 ## 2. Install the phone app
 
@@ -191,8 +197,8 @@ signed-out ones. While the **Sign in a device** code is open, it says **Waiting 
 Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
 **Sign in again** on a device that is signed out, revoked or expired shows a code and a QR code for that device only
 (10 minutes, once): scan it in the app on that phone or computer and it comes back on the same row, with its name and
-recordings. Where your plan leaves something out (a project's AI notes and Ask, Claude and ChatGPT under **Connected
-apps**), the plan's badge shows with **See plans**.
+recordings. Where your plan leaves something out (a project's AI notes and Ask, **Ask an AI assistant** under
+**Connected apps**), the plan's badge shows with **See plans**.
 
 **Your devices (phone, since v1.6).** **You → Devices** lists the same devices with their readable names. **Rename**
 works on any of them, this phone too; **Sign out** signs another one out at once.
@@ -349,9 +355,33 @@ EchoLedger can start recording when a call starts.
   It works while auto-record is on and the call capture helper is running. Allow **Call log** and **Contacts** so each
   recording gets the number and the contact's name ("Call with Omar Khan"), and is filed under that client.
   **Tell the other person before you record a phone call. In many places the law needs their consent.** Some phones
-  give both voices on one track; the transcript then cannot tell who spoke. Some phone makers (Samsung among them)
-  keep the phone line for their own Phone app. EchoLedger then says "The phone line gave no sound" and the SIM call
-  cannot be recorded on that phone.
+  give both voices on one track; the transcript then cannot tell who spoke.
+
+  **SIM calls through the Phone app's own recordings.** Some phone makers (Samsung among them) keep the phone line for
+  their own Phone app, so EchoLedger can't hear it. Let the Phone app record every call, and EchoLedger brings each
+  recording in right after the call:
+  - On a Galaxy: **Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls**. On Xiaomi, Redmi and
+    POCO: **Phone app → Settings → Call recording → Record calls automatically → All numbers**.
+    **Settings → Auto-record apps** has **Open the Phone app's settings**, and on a Galaxy says whether Auto record
+    calls is on.
+  - Allow **Music and audio** and **Call log** when asked, and leave **Import the Phone app's recordings** on.
+  - The recording comes in as the call's, named after the contact or the number ("Call with Omar Khan"), with the
+    after-call card, and is kept and transcribed like any other recording. A call that ended a while ago, or one that
+    comes in while you are on another call, comes in without the card: one notification says how many came in.
+  - Only calls you asked EchoLedger to record come in (**Record phone calls** on **Always**, or **Record** chosen when
+    asked), and only files the phone's own Phone app made during the call. When EchoLedger heard both sides itself,
+    its own recording is kept and the Phone app's copy stays where it is.
+  - When the phone doesn't say which app made a file, the call waits for you in **Settings → Auto-record apps**:
+    **Import this recording** shows the file's name and length, with **Play**, before anything is brought in;
+    **Not this call** leaves it.
+  - Nothing in the Phone app's folder is deleted or moved unless you turn on
+    **Delete the Phone app's copy after import** (Android 11 and later). Then, once the recording is safely in
+    EchoLedger, Android asks you before each delete. If you delete the recording before it reached EchoLedger, the
+    Phone app's copy is kept.
+  - After a call EchoLedger couldn't hear, it says so once, quietly, with what to do. While the Phone app's recording
+    is on its way, it says nothing.
+  - On phones whose Phone app keeps its recordings to itself (a Pixel with Google's Phone app), SIM calls cannot be
+    recorded; Settings says so in one line.
 
 The **Record** screen always explains the last decision, for example "Ignored: dictation".
 
@@ -452,8 +482,10 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
 
 - **Keep automatically** (the default): the call is kept and a small **"Saved · Call with Omar · 4:12 · Undo"**
   shows for 6 seconds. **Undo** deletes it; nothing has been uploaded yet.
-- **Ask me**: a small after-call card with the title, **✓** (keep) and **✕** (discard). Tap the title to rename it or
-  pick a client. If you do nothing, the call is kept after 10 seconds.
+- **Ask me**: a small after-call card with the title, **✓** (keep) and **Discard** (a bin on the computer, **✕** on
+  the phone). Tap the title to rename it or pick a client. On the computer, **Discard** can be undone for a few
+  seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. If you do
+  nothing, the call is kept after 10 seconds.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
 **Skip calls shorter than** (10 seconds by default), and a call where nobody spoke. Activity shows one line,
@@ -598,8 +630,9 @@ VTT subtitles, or JSON. Urdu and Hindi text keep the right shape and direction.
 4. Copy the link. It is shown only once.
 
 A project's link shows its recordings, newest first; each opens like a recording's link. You can revoke a link at
-any time and it stops working at once. **Shares** (in the console) and the share sheet in the apps list every link
-with its views and when it was last opened.
+any time; it stops working at once for everyone who has it. On the computer and in the console, **Revoke** asks first.
+**Shares** (in the console) and the share sheet in the apps list every link with its views and when it was last
+opened.
 
 **Send to WhatsApp (computer, since v1.6).** On a recording, the WhatsApp button next to **Share**, or **⋯ → Send to
 WhatsApp…** on its row, offers three ways, as on the phone:
@@ -722,8 +755,8 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - Words and lines the engine was not sure of have a **dotted underline** in the desktop app, the phone app and the
   console. Tap or click one to hear it. The text stays exactly as the engine heard it.
 - **Double-check** (console: **Settings → Engine per language**, off by default): a second engine listens again to
-  up to 12 of those lines. Where it heard something different, its words appear in grey under the line, for example
-  "Groq Whisper large-v3 heard: …". You decide; the transcript is not changed. Each checked line costs well under
+  up to 12 of those lines. Where it heard something different, its words appear in grey under the line (in the
+  console: "Second engine heard: …"). You decide; the transcript is not changed. Each checked line costs well under
   one cent.
 
 - **For a client:** give the client a default language. Every recording with that client uses it.
@@ -740,11 +773,13 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - If you change the language for a recording with a client, EchoLedger asks **"Use Urdu for Acme from now on?"**.
   **Yes** makes it that client's default.
 
-The library, the player and exports show the language and the engine that wrote the transcript. If an Urdu
+The library, the player and exports show the language of the transcript. If an Urdu
 transcript comes back in Hindi letters (or the other way round), the recording page says **Wrong script detected**:
 one tap transcribes it again with the next engine. Search finds Urdu words however the engine spelled them, and
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
-console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
+console and choose **Re-transcribe as…** with its language: the server picks the engine. **Compare versions** shows
+the current and the second version side by side, and you keep the better one. (Your server's administrator can also
+compare engines by name.)
 
 ### Show as: Roman Urdu, English and Urdu
 
@@ -755,7 +790,7 @@ recording and press **Show as…**; after a minute or two the player shows **Ori
 the link in a view. In the desktop Library and on the phone's recording page the same switch writes the views on the
 first tap and shows them when ready (exports from there follow the view on screen). Urdu shows in Nastaliq letters and
 Arabic in Naskh. The views are
-written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
+written by AI (your administrator adds its key) and are labelled as views: the transcript itself never
 changes. If you edit the transcript, make the views again. To open transcripts in a view by default (for example always
 Roman Urdu), choose it in **Settings → Engine per language → Open transcripts as**; the original stays one tap away.
 
@@ -783,8 +818,8 @@ project with billing on).
 
 Urdu and mixed (Auto) recordings are never handed to a weaker engine because the best one is busy. When it is rate
 limited or down, the recording waits and is tried again (after 2, 4, 8, 16, then every 30 minutes), up to **6 hours**
-(**Settings → Engine per language → Urdu waits for its best engine up to**). The recording page says **"Waiting for
-Groq — retrying at 2:05 pm"** meanwhile. Only after the wait does the next engine write it, and the recording then
+(**Settings → Engine per language → Urdu waits for its best engine up to**). The recording page says **"Waiting to
+transcribe — retrying at 2:05 pm"** meanwhile. Only after the wait does the next engine write it, and the recording then
 says **"Backup engine — Re-transcribe?"**; **Re-transcribe** tries the best engine again. English and the other
 languages still move to the next engine at once. The console's **API Credentials → Groq** row shows your plan's
 limits and this hour's use; EchoLedger paces its requests to stay under them.
@@ -831,7 +866,9 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
 
 ## 15. Usage and budget
 
-- The console **Usage** page shows the minutes and the cost for each month, per provider, device and client.
+- The console **Usage** page shows the minutes and the cost for each month: the totals (streaming and final minutes,
+  the recordings, what an hour of recording cost, Double-check), and per person, device, project and language.
+  **Download CSV** gives the same numbers, one line per use.
 - Your administrator sets a **monthly limit** in the console **Settings → Storage**. At 80% you get a message. At 100% new
   captions and new transcripts stop, but your recording carries on and is kept on your device.
 
@@ -853,7 +890,7 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
   feature, in the same order as the server, with a line on what it does: a tick when your plan has it, otherwise its
   badge. The line at the top says how many your plan has ("Your plan has 6 of 15 features"). Locked features stay in
   view where they would be: the **AI notes** and **Screens** tabs of a project and **Ask** on its Notes, the **Keep
-  screen moments** switch, **Double-check**, **Screens**, **Ask Claude or ChatGPT** and the premium engines on a
+  screen moments** switch, **Double-check**, **Screens**, **Ask an AI assistant** and **Premium engines** on a
   recording, **Invite people** in the workspace menu and the command palette, and **Live Translate**. Clicking one opens
   the plans for that feature, never the feature itself.
 - **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Account →
@@ -894,7 +931,7 @@ the transcript) know what "this page" or "click here" meant.
   **Export → Meeting pack** makes a PDF (the transcript with each screen at its moment; Claude and ChatGPT read both)
   or a ZIP with the transcript, the pictures and, if you like, the audio.
 
-## 15c. Ask Claude or ChatGPT about your recordings (since v1.5)
+## 15c. Ask an AI assistant about your recordings (since v1.5)
 
 Add EchoLedger as a connector in Claude or ChatGPT, and you can ask them things like "What did Omar ask for on Tuesday's
 call?". They read what you can open in the apps, and nothing else: they cannot record, change, share or delete
@@ -913,7 +950,9 @@ nothing is recorded or kept unless you switch saving on.
   never takes a touch: every tap goes to the game. Tap the small dot beside it to move or resize it (it locks again
   after 5 seconds); hold the dot for Pause, Hide, text size, opacity, the original line, the language and Stop.
 - **Watch translate** (phone): films and videos get subtitles in Urdu (or English, Arabic…). Apps that protect their
-  videos, such as Netflix, do not allow it and say so.
+  videos, such as Netflix, do not allow it and say so. If the capture helper can't tell which app is playing, Watch
+  translate asks Android to share the sound instead (the same question as without the helper): tap **Start now**.
+  **You → General → Help & diagnostics → Audio probe** shows what the helper sees.
 - **Test translate** on each page plays a short sentence with the phone's own voice and shows the result, so you can
   set the box up without opening a game.
 - **On the computer** (Windows): the **Record** page → **Live Translate**: choose an app that is playing sound, Game or

@@ -62,6 +62,12 @@ final class ClientWorkspace
     /** A file's `error` when its stored original cannot be read. */
     public const UNREADABLE = 'The file could not be read.';
 
+    /**
+     * `409 ai_unavailable`: no AI key on the server. Plain words for whoever reads it in an app (since v1.8.1, D-129);
+     * the person who runs the server finds the key on API Credentials.
+     */
+    public const NOT_SET_UP = 'AI is not set up on this server yet. Whoever runs it adds the AI key under API Credentials.';
+
     /** How many passages one question carries (about 8 000 tokens). */
     private const PASSAGES = 12;
 
@@ -112,7 +118,7 @@ final class ClientWorkspace
     public function assertCanSpend(int $workspaceId): void
     {
         if (! $this->configured()) {
-            throw new ApiError(409, 'ai_unavailable', 'AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
+            throw new ApiError(409, 'ai_unavailable', self::NOT_SET_UP);
         }
         $budget = $this->budget($workspaceId);
         if ($budget['spent_usd'] >= $budget['budget_usd']) {
@@ -671,7 +677,7 @@ final class ClientWorkspace
                 $language,
             );
         } catch (Throwable $e) {
-            throw new ApiError(502, 'provider_error', 'Claude could not answer right now. Try again in a minute.');
+            throw new ApiError(502, 'provider_error', 'The AI could not answer right now. Try again in a minute.');
         }
         $this->bill($client, 'ask', $result);
         $citations = [];

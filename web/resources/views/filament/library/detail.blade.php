@@ -56,7 +56,11 @@
                     <div @class(['el-banner', 'el-banner-danger' => $row['status']['tone'] === 'danger'])>
                         @svg($row['status']['icon'], ['aria-hidden' => 'true'])
                         <span class="el-banner-body">
-                            {{ $row['status']['label'] }}@if ($final?->error && $row['status']['tone'] === 'danger'): {{ $final->error }}@endif
+                            {{-- Why it failed in plain words; the engine's own words for the server's operator only (D-131). --}}
+                            {{ $row['status']['label'] }}@if ($row['status']['tone'] === 'danger' && $final?->failureText() !== null): {{ $final->failureText() }}@endif
+                            @if ($row['status']['tone'] === 'danger' && \App\Services\Workspaces\ConsoleAccess::operator() && filled($final?->error))
+                                <span class="el-muted" style="display: block; font-size: 12px" data-engine-error>{{ $final->error }}</span>
+                            @endif
                         </span>
                     </div>
                 @endif

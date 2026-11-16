@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, canTryAgain, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, canTryAgain, needsKeyAction, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -146,9 +146,19 @@ describe("why a transcription failed, in the app's own words (D-130)", () => {
     expect(failureLine("something_new")).toBe("Something went wrong while transcribing this recording.");
   });
 
+  it("uses contract 1.8.1-b's sentences for a refused own key and audio not on the server", () => {
+    expect(failureLine("own_key_rejected")).toBe("Groq did not accept your key. Check it in Account → Transcription key, then try again.");
+    expect(failureLine("recording_missing")).toBe("The audio did not fully reach the server, or it is no longer stored.");
+    expect(needsKeyAction("own_key_rejected")).toBe(true);
+    expect(needsKeyAction("needs_transcription_key")).toBe(true);
+    expect(needsKeyAction("provider_rejected")).toBe(false);
+  });
+
   it("offers Try again only where trying again can fix it", () => {
-    for (const code of ["no_audio", "needs_transcription_key", "budget_exceeded", "provider_not_configured"]) expect(canTryAgain(code), code).toBe(false);
-    for (const code of ["provider_unreachable", "provider_rejected", "provider_timeout", "interrupted", "recording_missing", "something_new", null]) {
+    for (const code of ["no_audio", "needs_transcription_key", "own_key_rejected", "budget_exceeded", "provider_not_configured", "recording_missing"]) {
+      expect(canTryAgain(code), code).toBe(false);
+    }
+    for (const code of ["provider_unreachable", "provider_rejected", "provider_timeout", "interrupted", "something_new", null]) {
       expect(canTryAgain(code), String(code)).toBe(true);
     }
   });

@@ -1,0 +1,119 @@
+{
+  "role": {
+    "bg": {
+      "canvas": {
+        "$type": "color",
+        "$value": "{color.ink.900}"
+      },
+      "surface": {
+        "$type": "color",
+        "$value": "{color.ink.850}"
+      },
+      "subtle": {
+        "$type": "color",
+        "$value": "{color.ink.800}"
+      },
+      "overlay": {
+        "$type": "color",
+        "$value": "{color.ink.800}"
+      }
+    },
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.ink.700}"
+      },
+      "strong": {
+        "$type": "color",
+        "$value": "{color.ink.500}"
+      }
+    },
+    "text": {
+      "primary": {
+        "$type": "color",
+        "$value": "{color.ink.100}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{color.ink.300}"
+      },
+      "on-accent": {
+        "$type": "color",
+        "$value": "{color.teal.950}"
+      },
+      "disabled": {
+        "$type": "color",
+        "$value": "{color.ink.500}"
+      }
+    },
+    "accent": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.teal.500}"
+      },
+      "hover": {
+        "$type": "color",
+        "$value": "{color.teal.100}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.teal.950}"
+      },
+      "text": {
+        "$type": "color",
+        "$value": "{color.teal.500}"
+      },
+      "focus": {
+        "$type": "color",
+        "$value": "{color.teal.500}"
+      }
+    },
+    "record": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.red.400}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.red.950}"
+      }
+    },
+    "success": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.green.400}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.green.950}"
+      }
+    },
+    "warning": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.amber.400}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.amber.950}"
+      }
+    },
+    "danger": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.red.400}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.red.950}"
+      }
+    },
+    "scrim": {
+      "default": {
+        "$type": "color",
+        "$value": "#00000099",
+        "$description": "Behind dialogs and sheets"
+      }
+    }
+  }
+}
