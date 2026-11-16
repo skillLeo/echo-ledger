@@ -366,6 +366,15 @@ export const LucideCopyIcon = (p: IconProps) => (
   <Svg {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></Svg>
 );
 export const LucideCheckIcon = L(["M20 6 9 17l-5-5"]);
+/** Screen-share privacy, "Visible in shares": an open eye. */
+export const LucideEyeIcon = L(["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"], () => <circle cx="12" cy="12" r="3" />);
+/** Screen-share privacy: an eye crossed out (EchoLedger is left out of what others see). */
+export const LucideEyeOffIcon = L([
+  "M10.733 5.076a10.744 10.744 0 0 1 11.205 6.575 1 1 0 0 1 0 .696 10.747 10.747 0 0 1-1.444 2.49",
+  "M14.084 14.158a3 3 0 0 1-4.242-4.242",
+  "M17.479 17.499a10.75 10.75 0 0 1-15.417-5.151 1 1 0 0 1 0-.696 10.75 10.75 0 0 1 4.446-5.143",
+  "m2 2 20 20",
+]);
 export const LucideFileTextIcon = L(["M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z", "M14 2v4a2 2 0 0 0 2 2h4", "M10 9H8", "M16 13H8", "M16 17H8"]);
 export const LucideXIcon = L(["M18 6 6 18", "m6 6 12 12"]);
 export const LucideExternalLinkIcon = L(["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"]);
@@ -403,7 +412,7 @@ export const LucideLogOutIcon = L(["M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4", "m
 export const ROOT_ICONS: Record<string, (p: IconProps) => ReactNode> = {
   calls: LucidePhoneIcon, mic: LucideMicIcon, captions: LucideCaptionsIcon, screen: LucideMonitorIcon, voice: LucideAudioLinesIcon,
   "transcription.language": LucideLanguagesIcon, words: LucideBookAIcon, key: LucideKeyRoundIcon,
-  appearance: LucidePaletteIcon, notifications: LucideBellIcon, lock: LucideLockIcon, storage: LucideHardDriveIcon, shortcuts: LucideKeyboardIcon, "app.autostart": LucidePowerIcon,
+  share_privacy: LucideEyeOffIcon, appearance: LucidePaletteIcon, notifications: LucideBellIcon, lock: LucideLockIcon, storage: LucideHardDriveIcon, shortcuts: LucideKeyboardIcon, "app.autostart": LucidePowerIcon,
   profile: LucideUserIcon, plan: LucideCreditCardIcon, security: LucideShieldIcon, devices: LucideMonitorSmartphoneIcon, privacy: LucideDatabaseIcon,
   help: LucideCircleHelpIcon, about: LucideInfoIcon,
 };

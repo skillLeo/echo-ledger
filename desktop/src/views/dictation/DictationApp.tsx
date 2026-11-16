@@ -4,6 +4,8 @@ import { announceReady, listenTo, subscribeCaptions } from "../../lib/ipc";
 import { meterLevel } from "../../lib/controls";
 import { fillWidth } from "../../lib/motion";
 import { playTone } from "../../lib/sounds";
+import { useConcealed } from "../../lib/privacy";
+import { PrivacyBadge } from "../../components/PrivacyBadge";
 
 /**
  * How long the box stays when a dictation ended while it was still shown (it could not start: not paired, no
@@ -23,6 +25,7 @@ export default function DictationApp() {
   const [level, setLevel] = useState(0);
   const [holding, setHolding] = useState(false);
   const [ended, setEnded] = useState(false);
+  const concealed = useConcealed();
   const textRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -73,9 +76,10 @@ export default function DictationApp() {
   }, [finals, partial]);
 
   return (
-    <div className={`overlay-root ${visible ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
+    <div className={`overlay-root ${visible && !concealed ? "" : "overlay-hidden"}`} style={{ alignItems: "flex-start" }}>
       <div className="overlay-card dictation-card">
         <div className="overlay-head">
+          <PrivacyBadge compact interactive={false} />
           {!ended && <span className="listening"><span /><span /><span /></span>}
           <span>{ended ? "Dictation did not start" : holding ? "Dictating — let go of the shortcut to insert" : "Dictating — press the shortcut again to insert"}</span>
         </div>

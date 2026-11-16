@@ -1696,17 +1696,17 @@ span.privacy-badge { cursor: default; }
 .privacy-badge.visible { color: var(--warning); }
 .privacy-badge:focus-visible { outline: 2px solid var(--accent-strong); outline-offset: 1px; }
 .rec-actions .privacy-badge, .overlay-tools .privacy-badge, .overlay-head .privacy-badge { height: 20px; padding: 0 5px; background: transparent; }
-.review-badge { display: flex; justify-content: flex-end; padding: 0 var(--space-1) var(--space-1); }
-.review-badge .privacy-badge { background: rgba(24, 25, 27, 0.78); }
+/* The floating windows are dark in both themes: the dark theme's green and amber read on them. */
+.rec-actions .privacy-badge, .overlay-card .privacy-badge, .review-badge .privacy-badge, .translate-badge .privacy-badge { color: #b0b4ba; }
+.rec-actions .privacy-badge.private, .overlay-card .privacy-badge.private, .review-badge .privacy-badge.private, .translate-badge .privacy-badge.private { color: #3dd68c; }
+.rec-actions .privacy-badge.visible, .overlay-card .privacy-badge.visible, .review-badge .privacy-badge.visible, .translate-badge .privacy-badge.visible { color: #ffca16; }
+.review-badge { align-self: flex-end; display: flex; }
+.review-badge .privacy-badge { background: rgba(24, 25, 27, 0.86); }
 .translate-badge { position: absolute; top: 6px; right: 8px; }
 .translate-overlay { position: relative; }
-.privacy-lines { margin: calc(var(--space-2) * -1) 0 var(--space-4); }
+.privacy-lines { margin: 0 0 var(--space-4); }
 .privacy-line { margin: 0 0 var(--space-1); color: var(--text-muted); font-size: var(--text-sm); }
 .privacy-line.warning { color: var(--warning); }
-.privacy-steps { margin: calc(var(--space-2) * -1) 0 var(--space-5); color: var(--text-muted); font-size: var(--text-sm); }
-.privacy-steps p { margin: 0 0 var(--space-1); }
-.privacy-steps ol { margin: 0; padding-left: var(--space-5); display: flex; flex-wrap: wrap; gap: 2px var(--space-5); }
-.privacy-steps li { color: var(--text); }
 .check-run { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-4); }
 .check-run .privacy-line { margin: 0; }
 .check-result { display: grid; gap: var(--space-3); margin-bottom: var(--space-5); padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
@@ -1729,3 +1729,6 @@ html[data-window="share-check-test"], html[data-window="share-check-test"] body,
 html[data-window="share-check-control"], html[data-window="share-check-control"] body { background: transparent; margin: 0; overflow: hidden; }
 .check-card { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 40px; background: #ff00ff; color: #fff; text-align: center; }
 .check-card p { margin: 0; font-size: 34px; line-height: 1.25; font-weight: 700; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); }
+.onboarding-privacy { display: grid; justify-items: start; gap: var(--space-2); margin: var(--space-4) 0; }
+.onboarding-privacy .settings-group-title { margin: 0; }
+.onboarding-privacy p { margin: 0; }

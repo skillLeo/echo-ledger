@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { announceReady, api, errorMessage, listenTo, type AfterCallState, type AskAnswer, type AskPayload, type PendingItem, type SavedToast } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
+import { useConcealed } from "../../lib/privacy";
+import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { afterCallTitle, alwaysIgnoreLabel, askSeconds, askSubject, reviewDuration, secondsLeft } from "../../lib/controls";
 import { CloseIcon, MicIcon, SourceAppIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
@@ -92,14 +94,17 @@ export default function ReviewApp() {
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
 
-  useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.ask?.id ?? null, chipKept]);
+  const concealed = useConcealed();
+  useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.ask?.id ?? null, chipKept, concealed]);
 
+  if (concealed) return <div className="review-root" />;
   return (
     <div className="review-root">
       {ask ? (
         <AskChip key={ask.id} ask={ask} onClose={closeAsk} />
       ) : (
         <div className="after-stack">
+          {(saved.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}
           {saved.item && <SavedPill key={saved.item.id} saved={saved.item} leaving={saved.leaving} onGone={dropSaved} />}
           {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={setKeptId} />}
         </div>

@@ -36,6 +36,9 @@ const MACOS: Record<string, string> = {
   "Cmd+Alt+R": "reloads the page from the server in Safari",
   "Cmd+Shift+N": "opens a private window in browsers",
   "Cmd+Shift+T": "reopens the last closed tab in browsers",
+  "Cmd+H": "hides the app in front",
+  "Cmd+Alt+H": "hides every other app (Hide Others)",
+  "Cmd+M": "minimises the window",
 };
 
 /** "CommandOrControl+Shift+c" → "Ctrl+Shift+C" (or Cmd on macOS), in a fixed modifier order. */

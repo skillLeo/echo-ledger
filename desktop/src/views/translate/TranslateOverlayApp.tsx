@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { TRANSLATE_FEED, type TranslateFeed, tailText, translateApi } from "../../lib/translate";
+import { useConcealed } from "../../lib/privacy";
+import { PrivacyBadge } from "../../components/PrivacyBadge";
 
 /**
  * The Live Translate overlay window (v1.3): game voice chat in a dark box at the top, or video subtitles at the
@@ -8,13 +10,14 @@ import { TRANSLATE_FEED, type TranslateFeed, tailText, translateApi } from "../.
  */
 export default function TranslateOverlayApp() {
   const [feed, setFeed] = useState<TranslateFeed | null>(null);
+  const concealed = useConcealed();
   useEffect(() => {
     let stop: (() => void) | undefined;
     void translateApi.status().then((f) => f && setFeed(f)).catch(() => undefined);
     void listen<TranslateFeed>(TRANSLATE_FEED, (e) => setFeed(e.payload)).then((u) => (stop = u));
     return () => stop?.();
   }, []);
-  if (!feed || feed.hidden || feed.status === "stopped") return null;
+  if (!feed || feed.hidden || feed.status === "stopped" || concealed) return null;
   const subtitles = feed.mode === "watch";
   const text = feed.notice ?? tailText(feed.text, subtitles ? 160 : 220);
   const waiting = !feed.notice && !feed.text && !feed.partial;
@@ -25,6 +28,7 @@ export default function TranslateOverlayApp() {
       aria-live="polite"
       dir="auto"
     >
+      <span className="translate-badge"><PrivacyBadge compact interactive={!feed.locked} /></span>
       {!subtitles && feed.original && <div className="translate-original" dir="auto">{tailText(feed.original, 90)}</div>}
       <div className="translate-text" dir="auto">
         {waiting ? <span className="translate-dots" aria-label="Listening">…</span> : text}

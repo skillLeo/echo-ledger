@@ -23,6 +23,7 @@ import { AboutPage, AppearancePage, HelpPage, LanguagePage, ShortcutsPage, Techn
 import { PlanUsagePage, ThisMonth, TranscriptionKeyPage, canUpgrade } from "./Upgrade";
 import { AccountHeader, StateRow, stateRow } from "./ProfileCard";
 import { MacCheckCard } from "./MacCheck";
+import { ShareCheckPage, SharePrivacyPage, sharePrivacyValue } from "./PrivacySettings";
 
 /** Root rows that are a single setting but open a page of their own on the desktop (a select needs room). */
 const ROW_PAGES: ReadonlySet<string> = new Set(["transcription.language"]);
@@ -279,6 +280,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
       case "words": return s ? (s.clientId ? clients.find((c) => c.id === s.clientId)?.name ?? "A project" : "None") : "";
       case "key": return e?.transcription_key?.set ? "Added" : "Not added";
       case "appearance": return optionLabel("appearance.theme", themeChoice);
+      case "share_privacy": return sharePrivacyValue(s ?? null);
       case "notifications": return s ? notificationsValue(s) : "";
       case "lock": return s ? (s.appLock ? "On" : "Off") : "";
       case "storage": return storageValue(e?.limits.storage_bytes?.used ?? storage?.recordings_bytes, e?.limits.storage_bytes?.limit ?? status.plan.storageBytes);
@@ -299,11 +301,12 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
       "captions.position": s.overlayCorner, "captions.width": s.captionStyle.width, "captions.autohide": String(s.captionStyle.autoHideSeconds), "screen.target": s.screenTarget,
       "voice.shortcut_mode": s.dictationMode, "voice.output": s.dictationOutput, "appearance.theme": themeChoice, "appearance.sidebar": prefs.sidebarStyle,
       "appearance.density": prefs.density, "appearance.clock": prefs.clock, "lock.after": String(s.lockAfterMinutes),
+      "share_privacy.hiding": s.hideFromSharing, "share_privacy.old_windows": s.oldWindowsSharing,
     };
     if (entry.id in choice) return optionLabel(entry.id, choice[entry.id] ?? "");
     const on: Record<string, boolean> = {
       "calls.auto": s.autoMode, "calls.ask_unknown": s.askUnknownApps, "calls.browser_tabs": s.browserAutomation, "mic.far_side_warning": s.farSideWarning,
-      "captions.enabled": s.captionsOnRecord, "captions.compact": s.captionStyle.compact, "screen.enabled": s.screenMoments,
+      "captions.enabled": s.captionsOnRecord, "share_privacy.one_window": s.shareOneWindow, "share_privacy.diagnostics": s.sendDiagnostics, "captions.compact": s.captionStyle.compact, "screen.enabled": s.screenMoments,
       "voice.cleanup": s.dictationCleanup, "voice.sounds": s.dictationSounds, "notifications.enabled": s.activityNotifications, "notifications.quiet": s.quietHours, "lock.enabled": s.appLock,
     };
     if (entry.id in on) return on[entry.id] ? "On" : "Off";
@@ -439,6 +442,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     "transcription.language": () => needSettings((s) => <LanguagePage settings={s} patch={patch} />),
     words: () => needSettings((s) => <WordsPage settings={s} patch={patch} />),
     key: () => (e ? <TranscriptionKeyPage e={e} /> : null),
+    share_privacy: () => needSettings((s) => <SharePrivacyPage settings={s} patch={patch} onCheck={() => open("share_privacy.check")} />),
+    "share_privacy.check": () => <ShareCheckPage />,
     appearance: () => <AppearancePage theme={themeChoice} onTheme={chooseTheme} prefs={prefs} setPref={setPref} />,
     notifications: () => needSettings((s) => <NotificationsPage settings={s} patch={patch} run={run} />),
     lock: () => needSettings((s) => <LockPage settings={s} patch={patch} run={run} />),

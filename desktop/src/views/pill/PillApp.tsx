@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNo
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
+import { useConcealed } from "../../lib/privacy";
+import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { fillHeight } from "../../lib/motion";
 import { languageChip, languageLabel, nextLanguage } from "../../lib/languages";
 import { elapsedAt, formatTimer, isTwoChannel, meterLevel, missingShort, nextAnchor, sourceLabel, type TimerAnchor } from "../../lib/controls";
@@ -190,7 +192,8 @@ export default function PillApp() {
   const missing = shown && !missingDismissed ? missingShort(live?.missing, live?.mode) : null;
   const deviceNote = shown ? live?.deviceNote ?? null : null;
   const tray = mark ? "mark" : deviceNote?.warning ? "device" : missing ? "missing" : farSide && running ? "warn" : deviceNote ? "device" : bluetooth && shown ? "bluetooth" : screensNotice && shown && live?.screens?.on ? "screens" : null;
-  useHitRegions([shown, confirming, tray]);
+  const concealed = useConcealed();
+  useHitRegions([shown, confirming, tray, concealed]);
 
   /** Runs one command at a time; on failure shows the message and resyncs with the core. */
   const run = async (action: Action, command: () => Promise<unknown>) => {
@@ -297,7 +300,7 @@ export default function PillApp() {
     void saveDrag();
   };
 
-  if (!shown || !live) return <div className="pill-root" />;
+  if (!shown || !live || concealed) return <div className="pill-root" />;
 
   const paused = live.paused;
   const label = sourceLabel(live.sourceApp);
@@ -335,6 +338,7 @@ export default function PillApp() {
           </span>
         ) : (
           <span className="rec-actions">
+            <PrivacyBadge compact />
             <PillButton label={paused ? "Resume recording" : "Pause recording"} onClick={togglePause}>
               {paused ? <PlayIcon size={14} /> : <PauseIcon size={14} />}
             </PillButton>
