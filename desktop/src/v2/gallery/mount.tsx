@@ -17,10 +17,10 @@ export function mountGallery(root: HTMLElement, search = location.search) {
   html.style.colorScheme = params.theme;
   html.lang = params.lang;
   document.body.classList.add("g-body");
-  document.title = `EchoLedger v2: ${params.screen}`;
+  document.title = `EchoLedger v2: ${params.screen} (${params.state})`;
   createRoot(root).render(
     <StrictMode>
-      <Gallery screen={params.screen} lang={params.lang} />
+      <Gallery screen={params.screen} lang={params.lang} state={params.state} />
     </StrictMode>,
   );
 }

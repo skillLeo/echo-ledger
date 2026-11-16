@@ -1,13 +1,15 @@
 import { useMemo, useState } from "react";
-import { Badge, Button, Chip, EmptyState, FilterBar, Icons, List, ListRow, ListSection, SearchField, Toast, ToastRegion } from "../../components";
+import { Badge, Button, Chip, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow, Toast, ToastRegion } from "../../components";
 import { COPY, type Lang } from "../content";
+import { STATE_COPY, type ScreenState } from "../states";
 
 type Filter = "all" | "today" | "untranscribed" | "voice";
 
 /** Gate 3 (a): the Library as a list of recordings, WhatsApp-style rows, quick filters and an Undo toast. */
-export function LibraryScreen({ lang, toast = true }: { lang: Lang; toast?: boolean }) {
+export function LibraryScreen({ lang, state = "ready", toast = state === "ready" }: { lang: Lang; state?: ScreenState; toast?: boolean }) {
   const t = COPY[lang].library;
-  const rows = COPY[lang].rows;
+  const st = STATE_COPY[lang].library;
+  const rows = state === "ready" ? COPY[lang].rows : [];
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [showToast, setShowToast] = useState(toast);
@@ -36,15 +38,23 @@ export function LibraryScreen({ lang, toast = true }: { lang: Lang; toast?: bool
         </div>
       </header>
       <div className="g-tools">
-        <SearchField label={t.search} value={query} onChange={setQuery} />
-        <FilterBar label={t.filters}>
+        <SearchField label={t.search} value={query} onChange={setQuery} disabled={state !== "ready"} />
+        {state === "ready" && <FilterBar label={t.filters}>
           {chip("all", t.all, false)}
           {chip("today", t.today)}
           {chip("untranscribed", t.untranscribed)}
           {chip("voice", t.voiceNotes)}
-        </FilterBar>
+        </FilterBar>}
       </div>
-      {shown.length === 0 ? (
+      {state === "loading" ? (
+        <Loading label={st.loading} className="g-list-loading">
+          {Array.from({ length: 7 }, (_, i) => <SkeletonRow key={i} />)}
+        </Loading>
+      ) : state === "error" ? (
+        <EmptyState tone="error" icon={Icons.ErrorIcon} title={st.errorTitle} body={st.errorBody} action={<Button variant="primary">{st.retry}</Button>} />
+      ) : rows.length === 0 ? (
+        <EmptyState icon={Icons.LibraryIcon} title={st.emptyTitle} body={st.emptyBody} action={<Button>{t.importFiles}</Button>} />
+      ) : shown.length === 0 ? (
         <EmptyState icon={Icons.SearchIcon} title={t.emptyTitle} body={t.emptyBody}
           action={<Button onClick={() => { setFilter("all"); setQuery(""); }}>{t.clear}</Button>} />
       ) : (

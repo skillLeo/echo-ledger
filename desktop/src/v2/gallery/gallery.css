@@ -39,3 +39,14 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 .g-group { display: flex; flex-direction: column; gap: var(--el-space-8); }
 .g-group__title { padding-inline: var(--el-space-4); }
 .g-rows { padding: var(--el-space-4); }
+
+.g-list-loading { gap: 0; }
+.g-recording-loading { gap: var(--el-space-12); }
+.g-segment-skeleton {
+  display: grid; grid-template-columns: calc(var(--el-space-64) * 2) 1fr; gap: var(--el-space-16);
+  padding-block: var(--el-space-12); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+.g-segment-skeleton > span { display: flex; flex-direction: column; gap: var(--el-space-8); }
+.g-segment-skeleton > .el-skeleton { inline-size: 60%; }
+.g-settings-loading { gap: var(--el-space-16); }
+.g-profile-error > .el-empty { padding: var(--el-space-24); }

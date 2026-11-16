@@ -7,7 +7,7 @@ import { SettingsScreen } from "./screens/Settings";
 import "./gallery.css";
 
 /** The Gate 3 sample screens in the app's frame: the sidebar and one page, in the chosen language and direction. */
-export function Gallery({ screen, lang }: Pick<GalleryParams, "screen" | "lang">) {
+export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "screen" | "lang"> & { state?: GalleryParams["state"] }) {
   const nav = COPY[lang].nav;
   const page = screen === "settings" ? "settings" : "library";
   return (
@@ -21,9 +21,9 @@ export function Gallery({ screen, lang }: Pick<GalleryParams, "screen" | "lang">
         <NavItem icon={Icons.SettingsIcon} label={nav.settings} current={page === "settings"} />
       </Sidebar>
       <main className="g-main">
-        {screen === "library" && <LibraryScreen lang={lang} />}
-        {screen === "recording" && <RecordingScreen lang={lang} />}
-        {screen === "settings" && <SettingsScreen lang={lang} />}
+        {screen === "library" && <LibraryScreen lang={lang} state={state} />}
+        {screen === "recording" && <RecordingScreen lang={lang} state={state} />}
+        {screen === "settings" && <SettingsScreen lang={lang} state={state} />}
       </main>
     </div>
   );

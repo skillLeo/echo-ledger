@@ -9,10 +9,10 @@ import { Gallery } from "./Gallery";
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("the gallery guard", () => {
-  it("reads the screen, theme and language, with safe defaults", () => {
-    expect(galleryParams("?v2gallery")).toEqual({ screen: "library", theme: "light", lang: "en" });
-    expect(galleryParams("?v2gallery&screen=settings&theme=dark&lang=ur")).toEqual({ screen: "settings", theme: "dark", lang: "ur" });
-    expect(galleryParams("?screen=<x>&lang=fr")).toEqual({ screen: "library", theme: "light", lang: "en" });
+  it("reads the screen, theme, language and state, with safe defaults", () => {
+    expect(galleryParams("?v2gallery")).toEqual({ screen: "library", theme: "light", lang: "en", state: "ready" });
+    expect(galleryParams("?v2gallery&screen=settings&theme=dark&lang=ur&state=error")).toEqual({ screen: "settings", theme: "dark", lang: "ur", state: "error" });
+    expect(galleryParams("?screen=<x>&lang=fr&state=broken")).toEqual({ screen: "library", theme: "light", lang: "en", state: "ready" });
   });
 
   it("main.tsx reaches the gallery only behind an inline development-build check, and imports nothing of it", () => {
@@ -120,5 +120,43 @@ describe("the Gate 3 screens", () => {
     expect(root).toHaveAttribute("lang", "ur");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toMatch(/[؀-ۿ]/);
     expect(screen.getByRole("navigation", { name: "مرکزی" })).toBeInTheDocument();
+  });
+});
+
+describe("the designed states (template rule 12)", () => {
+  it.each(["library", "recording", "settings"] as const)("%s loading is one busy status with still shapes", (name) => {
+    const { container } = render(<Gallery screen={name} lang="en" state="loading" />);
+    const busy = screen.getByRole("status", { busy: true });
+    expect(busy).toHaveTextContent(/^Loading/);
+    expect(busy.querySelectorAll(".el-skeleton").length).toBeGreaterThan(2);
+    for (const shape of container.querySelectorAll(".el-skeleton")) expect(shape).toHaveAttribute("aria-hidden", "true");
+  });
+
+  it.each([
+    ["library", "The library didn't load"],
+    ["recording", "This recording didn't open"],
+    ["settings", "Your account didn't load"],
+  ] as const)("%s error is announced with its one fix", (name, title) => {
+    render(<Gallery screen={name} lang="en" state="error" />);
+    const alert = screen.getByRole("alert");
+    expect(within(alert).getByRole("heading", { name: title })).toBeInTheDocument();
+    expect(within(alert).getAllByRole("button")).toHaveLength(1);
+  });
+
+  it.each([
+    ["library", "No recordings yet", "Import"],
+    ["recording", "Not transcribed yet", "Transcribe"],
+    ["settings", "No settings match", "Clear search"],
+  ] as const)("%s empty says what goes here and offers one action", (name, title, action) => {
+    render(<Gallery screen={name} lang="en" state="empty" />);
+    const empty = screen.getByRole("region", { name: title });
+    expect(within(empty).getByRole("button", { name: new RegExp(action) })).toBeInTheDocument();
+  });
+
+  it.each(["loading", "empty", "error"] as const)("the %s states are in Urdu too", (state) => {
+    render(<Gallery screen="library" lang="ur" state={state} />);
+    const text = document.querySelector(".g-main")!.textContent ?? "";
+    expect(text).toMatch(/[؀-ۿ]/);
+    expect(text).not.toMatch(/Loading|didn't|No recordings/);
   });
 });

@@ -5,9 +5,11 @@ export type GalleryParams = {
   screen: "library" | "recording" | "settings";
   theme: "light" | "dark";
   lang: "en" | "ur";
+  /** The screen as it is, or its loading, empty or error state (template rule 12). */
+  state: "ready" | "loading" | "empty" | "error";
 };
 
-/** ?v2gallery&screen=library|recording|settings&theme=light|dark&lang=en|ur (text size: the browser's zoom). */
+/** ?v2gallery&screen=library|recording|settings&theme=light|dark&lang=en|ur&state=ready|loading|empty|error (text size: the browser's zoom). */
 export function galleryParams(search: string): GalleryParams {
   const p = new URLSearchParams(search);
   const screen = p.get("screen");
@@ -15,5 +17,6 @@ export function galleryParams(search: string): GalleryParams {
     screen: screen === "recording" || screen === "settings" ? screen : "library",
     theme: p.get("theme") === "dark" ? "dark" : "light",
     lang: p.get("lang") === "ur" ? "ur" : "en",
+    state: (["loading", "empty", "error"] as const).find((v) => v === p.get("state")) ?? "ready",
   };
 }

@@ -515,3 +515,31 @@
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }
 }
+
+/* ---- Skeleton, Loading, Progress ---------------------------------------------------------------------------- */
+/* Still shapes in the hairline colour, so they read on the canvas and on a card in both themes; nothing moves. */
+.el-loading { display: flex; flex-direction: column; gap: var(--el-space-4); }
+.el-skeleton {
+  display: block; flex: none;
+  block-size: var(--el-space-12);
+  border-radius: var(--el-radius-sm);
+  background: var(--el-role-border-default);
+}
+.el-skeleton--title { block-size: var(--el-space-24); }
+.el-skeleton--block { block-size: var(--el-space-64); border-radius: var(--el-radius-md); }
+.el-skeleton--circle { inline-size: var(--el-space-40); block-size: var(--el-space-40); border-radius: var(--el-radius-full); }
+.el-skeleton--w-full:not(.el-skeleton--circle) { inline-size: 100%; }
+.el-skeleton--w-long { inline-size: 80%; }
+.el-skeleton--w-medium { inline-size: 55%; }
+.el-skeleton--w-short { inline-size: 30%; }
+.el-skeleton-row__main { gap: var(--el-space-8); }
+.el-skeleton-row__end { inline-size: var(--el-space-48); gap: var(--el-space-8); }
+.el-progress {
+  inline-size: 100%;
+  block-size: var(--el-space-4);
+  border-radius: var(--el-radius-full);
+  background: var(--el-role-border-default);
+  overflow: hidden;
+}
+.el-progress__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); border-radius: inherit; }
+.el-empty--error .el-empty__icon { color: var(--el-role-danger-default); }

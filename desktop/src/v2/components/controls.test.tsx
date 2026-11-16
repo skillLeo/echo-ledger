@@ -7,6 +7,7 @@ import { Select } from "./Select";
 import { Checkbox, RadioGroup, Toggle } from "./choices";
 import { Badge, Status } from "./Badge";
 import { EmptyState } from "./EmptyState";
+import { Loading, Progress, Skeleton, SkeletonRow } from "./Skeleton";
 import { SearchIcon, TrashIcon } from "./icons";
 
 describe("Button", () => {
@@ -183,5 +184,29 @@ describe("Badge, Status, EmptyState", () => {
     render(<EmptyState icon={SearchIcon} title="No recordings match" body="Try another word." action={<Button>Clear filters</Button>} />);
     expect(screen.getByRole("heading", { name: "No recordings match" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "No recordings match" })).toContainElement(screen.getByRole("button", { name: "Clear filters" }));
+  });
+});
+
+describe("Skeleton, Loading, Progress", () => {
+  it("loading is one busy status named in words; its shapes are hidden and still", () => {
+    const { container } = render(<Loading label="Loading recordings"><SkeletonRow /><Skeleton shape="title" width="short" /></Loading>);
+    expect(screen.getByRole("status", { busy: true })).toHaveTextContent("Loading recordings");
+    const shapes = container.querySelectorAll(".el-skeleton");
+    expect(shapes.length).toBe(6);
+    for (const s of shapes) expect(s.closest("[aria-hidden=true]")).not.toBeNull();
+    expect(container.querySelector("[class*=shimmer], [class*=spin]")).toBeNull();
+  });
+
+  it("progress is a determinate bar with its value in words", () => {
+    render(<Progress label="Transcribing" value={3} max={8} valueText="3 of 8 parts" />);
+    const bar = screen.getByRole("progressbar", { name: "Transcribing" });
+    expect(bar).toHaveAttribute("aria-valuenow", "3");
+    expect(bar).toHaveAttribute("aria-valuetext", "3 of 8 parts");
+    expect(bar.firstElementChild).toHaveStyle({ inlineSize: "37.5%" });
+  });
+
+  it("an error empty state is announced", () => {
+    render(<EmptyState tone="error" title="The library didn't load" action={<Button>Try again</Button>} />);
+    expect(screen.getByRole("alert")).toHaveTextContent("The library didn't load");
   });
 });
