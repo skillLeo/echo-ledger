@@ -29,7 +29,7 @@ use assist_relay::internal::ProviderKeys;
 use assist_relay::pack::Pack;
 use assist_relay::protocol::Brief;
 use assist_relay::provider::{
-    Anthropic, CompletionRequest, Endpoints, OpenAiCompatible, Provider, Purpose, Retry, StreamEvent, Usage, http,
+    Anthropic, CompletionRequest, Endpoints, Gemini, OpenAiCompatible, Provider, Purpose, Retry, StreamEvent, Usage, http,
 };
 use futures_util::StreamExt;
 use tokio::time::Instant;
@@ -121,10 +121,7 @@ async fn run(o: Options, config: RelayConfig, spec: assist_relay::config::ModelS
         ProviderKind::Openai => {
             Arc::new(OpenAiCompatible::new(ProviderKind::Openai, &endpoints.openai, keys, client, Retry::default()).with_tap(tap.clone()))
         }
-        ProviderKind::Gemini => {
-            eprintln!("assist-relay-smoke: the Gemini client is not built yet");
-            return ExitCode::from(2);
-        }
+        ProviderKind::Gemini => Arc::new(Gemini::new(&endpoints.gemini, keys, client, Retry::default()).with_tap(tap.clone())),
     };
 
     // A small interview context, the same shape the relay sends.

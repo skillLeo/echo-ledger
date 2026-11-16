@@ -1,11 +1,11 @@
 //! Model providers behind one trait: a streaming completion that is cancelled by dropping its stream, and a warm-up
 //! that opens the connection and writes the cache for a session's fixed prefix.
 //!
-//! Real providers: Anthropic (Messages API), Groq and OpenAI (Chat Completions); Gemini answers "not configured"
-//! until its client is built. Keys come from the server (Admin -> API Credentials) and live in memory only. The
+//! Real providers: Anthropic (Messages API), Groq and OpenAI (Chat Completions), Gemini (streamGenerateContent). Keys come from the server (Admin -> API Credentials) and live in memory only. The
 //! deterministic mocks (`RELAY_PROVIDERS=mock`) stand in for all of them in tests and the load test.
 
 pub mod anthropic;
+pub mod gemini;
 pub mod http;
 pub mod mock;
 pub mod openai_compat;
@@ -25,6 +25,7 @@ use crate::domain::ProviderKind;
 use crate::internal::ProviderKeys;
 
 pub use anthropic::Anthropic;
+pub use gemini::Gemini;
 pub use http::Retry;
 pub use mock::{MockBehavior, MockProvider, MockStats};
 pub use openai_compat::OpenAiCompatible;
@@ -160,7 +161,7 @@ impl Default for Endpoints {
             anthropic: anthropic::BASE_URL.to_owned(),
             groq: openai_compat::GROQ_BASE_URL.to_owned(),
             openai: openai_compat::OPENAI_BASE_URL.to_owned(),
-            gemini: "https://generativelanguage.googleapis.com".to_owned(),
+            gemini: gemini::BASE_URL.to_owned(),
         }
     }
 }
@@ -173,7 +174,7 @@ pub struct Providers {
 
 impl Providers {
     /// The real providers, reading their keys from `keys` (filled from the server's Admin -> API Credentials) at each
-    /// request. A provider without a key answers "not configured". Gemini is not built yet.
+    /// request. A provider without a key answers "not configured".
     pub fn live(keys: Arc<ProviderKeys>, endpoints: &Endpoints, retry: Retry) -> Self {
         let client = http::client();
         let mut by_kind: BTreeMap<ProviderKind, Arc<dyn Provider>> = BTreeMap::new();
@@ -181,7 +182,7 @@ impl Providers {
         for (kind, base) in [(ProviderKind::Groq, &endpoints.groq), (ProviderKind::Openai, &endpoints.openai)] {
             by_kind.insert(kind, Arc::new(OpenAiCompatible::new(kind, base, keys.clone(), client.clone(), retry)));
         }
-        by_kind.insert(ProviderKind::Gemini, Arc::new(Unconfigured::new(ProviderKind::Gemini)));
+        by_kind.insert(ProviderKind::Gemini, Arc::new(Gemini::new(&endpoints.gemini, keys.clone(), client.clone(), retry)));
         Providers { by_kind }
     }
 

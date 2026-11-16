@@ -1,0 +1,7 @@
+: Written by hand from the documented streamGenerateContent (alt=sse) format (not a recording of real traffic).
+: Replace it with a recording from assist-relay-smoke --record when a key is available.
+
+data: {"candidates":[{"content":{"parts":[{"text":"One month,"}],"role":"model"},"index":0}],"usageMetadata":{"promptTokenCount":1900,"totalTokenCount":1900},"modelVersion":"gemini-3.8-flash","responseId":"fixture"}
+
+data: {"candidates":[{"content":{"parts":[{"text":" from Gemini."}],"role":"model"},"finishReason":"STOP","index":0}],"usageMetadata":{"promptTokenCount":1900,"cachedContentTokenCount":1024,"candidatesTokenCount":6,"totalTokenCount":1906},"modelVersion":"gemini-3.8-flash","responseId":"fixture"}
+

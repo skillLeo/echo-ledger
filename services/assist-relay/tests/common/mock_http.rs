@@ -17,6 +17,7 @@ use tokio::time::Instant;
 pub const ANTHROPIC: &str = "/v1/messages";
 pub const GROQ: &str = "/groq/openai/v1/chat/completions";
 pub const OPENAI: &str = "/openai/v1/chat/completions";
+pub const GEMINI_FLASH: &str = "/gemini/v1beta/models/gemini-3.8-flash:streamGenerateContent";
 
 #[derive(Debug, Clone)]
 pub enum Reply {

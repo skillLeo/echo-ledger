@@ -15,7 +15,7 @@ use assist_relay::domain::{Mode, ProviderKind};
 use assist_relay::internal::ProviderKeys;
 use assist_relay::pack::Pack;
 use assist_relay::provider::{CompletionRequest, ProviderError, Providers, Purpose, Retry, StreamEvent, Usage};
-use common::mock_http::{ANTHROPIC, GROQ, MockHttp, Reply};
+use common::mock_http::{ANTHROPIC, GEMINI_FLASH, GROQ, MockHttp, OPENAI, Reply};
 use common::*;
 use futures_util::StreamExt;
 use serde_json::json;
@@ -28,6 +28,8 @@ fn keys() -> Arc<ProviderKeys> {
     keys.replace(BTreeMap::from([
         (ProviderKind::Anthropic, "test-anthropic-key".to_owned()),
         (ProviderKind::Groq, "test-groq-key".to_owned()),
+        (ProviderKind::Openai, "test-openai-key".to_owned()),
+        (ProviderKind::Gemini, "test-gemini-key".to_owned()),
     ]));
     keys
 }
@@ -254,4 +256,35 @@ async fn without_keys_the_app_is_told_to_ask_its_admin_and_the_vendor_stays_in_t
     let record = h.telemetry.suggestions().pop().expect("a record");
     assert_eq!((record.provider, record.error), (ProviderKind::Groq, Some("provider_not_configured")), "the fallback's provider, in the log");
     assert!(server.requests(ANTHROPIC).is_empty() && server.requests(GROQ).is_empty());
+}
+
+#[tokio::test]
+async fn openai_and_gemini_stream_text_and_usage() {
+    let server = MockHttp::start().await;
+    server.push(OPENAI, Reply::sse("openai_answer.sse"));
+    server.push(GEMINI_FLASH, Reply::sse("gemini_answer.sse"));
+    let providers = live(&server);
+
+    let (text, usage, error) = collect(&providers, ProviderKind::Openai, "gpt-6-luna").await;
+    assert_eq!((text.as_str(), error), ("One month, from OpenAI.", None));
+    assert_eq!(usage, Some(Usage { input_tokens: 108, cached_input_tokens: 1792, cache_write_tokens: 0, output_tokens: 6 }));
+    assert_eq!(server.requests(OPENAI)[0].headers["authorization"], "Bearer test-openai-key");
+
+    let (text, usage, error) = collect(&providers, ProviderKind::Gemini, "gemini-3.8-flash").await;
+    assert_eq!((text.as_str(), error), ("One month, from Gemini.", None));
+    assert_eq!(usage, Some(Usage { input_tokens: 876, cached_input_tokens: 1024, cache_write_tokens: 0, output_tokens: 6 }));
+    let sent = &server.requests(GEMINI_FLASH)[0];
+    assert_eq!(sent.headers["x-goog-api-key"], "test-gemini-key");
+    assert_eq!(sent.body["generationConfig"]["thinkingConfig"], json!({"thinkingBudget": 0}));
+    assert_eq!(sent.body["generationConfig"]["maxOutputTokens"], 300);
+    assert!(sent.body["systemInstruction"]["parts"][0]["text"].as_str().unwrap().contains("Live Assist"));
+    assert!(sent.body["contents"][0]["parts"][0]["text"].as_str().unwrap().contains(QUESTION));
+}
+
+#[tokio::test]
+async fn gemini_dropped_before_its_finish_reason_is_a_broken_connection() {
+    let server = MockHttp::start().await;
+    server.push(GEMINI_FLASH, Reply::cut("gemini_answer.sse", 1));
+    let (text, _, error) = collect(&live(&server), ProviderKind::Gemini, "gemini-3.8-flash").await;
+    assert_eq!((text.as_str(), error), ("One month,", Some(ProviderError::Unavailable)));
 }
