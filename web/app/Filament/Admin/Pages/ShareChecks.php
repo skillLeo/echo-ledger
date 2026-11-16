@@ -79,7 +79,7 @@ class ShareChecks extends Page implements HasTable
         return $table
             ->query(fn (): Builder => self::matrix())
             ->emptyStateHeading('No screen-share checks yet')
-            ->emptyStateDescription('Settings → Screen-share privacy → Check screen-share privacy, with Send diagnostics on.')
+            ->emptyStateDescription('In the desktop app: Settings → Screen-share privacy → Check screen-share privacy, with Send diagnostics on.')
             ->columns([
                 TextColumn::make('platform')->label('System')
                     ->formatStateUsing(fn (ShareCheckResult $record): string => (self::PLATFORMS[$record->platform] ?? $record->platform).' '.$record->os_build),

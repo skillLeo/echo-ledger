@@ -1127,15 +1127,25 @@ it('adds one index on what the screen-share matrix groups by, keeps every result
     $rows = fn (): array => $db->table('share_check_results')->orderBy('id')->get()->map(fn (object $r): array => (array) $r)->all();
     $before = $rows();
 
+    $narrow = ['share_check_results_matrix_index', 'share_check_results_meeting_index', 'share_check_results_result_index'];
+    $columns = fn (): array => collect($db->getSchemaBuilder()->getIndexes('share_check_results'))->mapWithKeys(fn (array $i): array => [$i['name'] => $i['columns']])->all();
+    $first = $columns();
+    expect(array_intersect_key($first, array_flip($narrow)))->toHaveCount(3);
+
     cycleArtisan('migrate', ['--step' => 1]);
     $index = collect($db->getSchemaBuilder()->getIndexes('share_check_results'))->firstWhere('name', 'share_check_results_group_index');
     expect($index)->not->toBeNull()
         ->and($index['columns'])->toBe(['platform', 'os_build', 'app_version', 'method', 'meeting_app', 'meeting_app_version', 'share_mode', 'result', 'created_at'])
         ->and($index['unique'])->toBeFalse()
+        // It takes the place of the three narrower ones; the date's own index stays for pruning.
+        ->and(array_intersect($indexes(), $narrow))->toBe([])
+        ->and($indexes())->toContain('share_check_results_created_at_index')
         ->and($rows())->toBe($before);
 
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SHARE_CHECK_INDEX]);
-    expect($indexes())->not->toContain('share_check_results_group_index')->and($rows())->toBe($before);
+    expect($indexes())->not->toContain('share_check_results_group_index')
+        ->and(array_intersect_key($columns(), array_flip($narrow)))->toBe(array_intersect_key($first, array_flip($narrow)))
+        ->and($rows())->toBe($before);
     cycleArtisan('migrate', ['--step' => 1]);
-    expect($indexes())->toContain('share_check_results_group_index');
+    expect($indexes())->toContain('share_check_results_group_index')->and(array_intersect($indexes(), $narrow))->toBe([]);
 });
