@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, canTryAgain, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -144,5 +144,12 @@ describe("why a transcription failed, in the app's own words (D-130)", () => {
       expect(line).not.toMatch(/AssemblyAI|Gemini|ElevenLabs|Groq|Soniox|provider/i);
     }
     expect(failureLine("something_new")).toBe("Something went wrong while transcribing this recording.");
+  });
+
+  it("offers Try again only where trying again can fix it", () => {
+    for (const code of ["no_audio", "needs_transcription_key", "budget_exceeded", "provider_not_configured"]) expect(canTryAgain(code), code).toBe(false);
+    for (const code of ["provider_unreachable", "provider_rejected", "provider_timeout", "interrupted", "recording_missing", "something_new", null]) {
+      expect(canTryAgain(code), String(code)).toBe(true);
+    }
   });
 });

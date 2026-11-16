@@ -632,16 +632,17 @@ describe("LibraryView transcript", () => {
   });
 
   it.each([
-    ["provider_rejected", "AssemblyAI returned no transcript id.", "The transcription service couldn't transcribe this recording."],
-    ["provider_not_configured", "AssemblyAI is not configured. Add its API key on API Credentials.", "Transcription isn't set up on the server yet. Ask the person who runs the console."],
-    ["budget_exceeded", "Monthly transcription limit reached", "This month's transcription limit was reached."],
-  ])("says a %s failure in the app's own words, never the server's (D-130)", async (code, error, said) => {
+    ["provider_rejected", "AssemblyAI returned no transcript id.", "The transcription service couldn't transcribe this recording.", true],
+    ["provider_not_configured", "AssemblyAI is not configured. Add its API key on API Credentials.", "Transcription isn't set up on the server yet. Ask the person who runs the console.", false],
+    ["budget_exceeded", "Monthly transcription limit reached", "This month's transcription limit was reached.", false],
+  ])("says a %s failure in the app's own words, never the server's, with Try again only if it can help (D-130)", async (code, error, said, tryAgain) => {
     TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error, error_code: code });
     await renderLibrary();
     await selectItem("Google Meet standup");
     const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
     expect(notice).toHaveTextContent(said);
     expect(notice).not.toHaveTextContent(/AssemblyAI|API Credentials|Gemini/);
+    expect(within(notice).queryAllByRole("button", { name: "Try again" })).toHaveLength(tryAgain ? 1 : 0);
   });
 
   // DR18 client (contract 5.3 item 5): the server says no audio was captured; the desktop says what to check.

@@ -175,12 +175,13 @@ const SCREENS = [
     await page.getByTestId("why-not-recorded").scrollIntoViewIfNeeded();
     await page.waitForTimeout(2300);
   }, viewport]),
-  // D-130: a failed transcript says why in the app's own words.
-  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`library-failed${size}`, "library", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.getByTestId("library-list").getByText(/Call with \+92/).click();
-    await page.waitForSelector(".detail .notice.error");
-  }, viewport]),
+  // D-130: a failed transcript says why in the app's own words; this month's limit offers no Try again.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [["", "library"], ["-budget", "library&failure=budget_exceeded"]]
+    .map(([kind, screen]) => [`library-failed${kind}${size}`, screen, async (page) => {
+      await page.waitForSelector(".segments .segment");
+      await page.getByTestId("library-list").getByText(/Call with \+92/).click();
+      await page.waitForSelector(".detail .notice.error");
+    }, viewport])),
   // Batch 6 (D-001, D-120): the Calls page's app icons beside their names; a permission an older copy holds.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],

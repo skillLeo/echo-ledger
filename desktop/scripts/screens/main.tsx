@@ -284,7 +284,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   shared_with_me: () => ({ data: SHARED }),
   request_links: () => ({ data: REQUESTS }),
   session_detail: ({ id }) => ({ id, playback_url: audioUrl, markers: id === "r5" ? [{ id: "mk1", at_ms: 95_000, tag: "Budget", note: "Phase one estimate" }] : [], speaker_names: { Me: "You", Client: "Sara (Acme)" } }),
-  transcript_detail: ({ id }) => TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null },
+  // `&failure=<error_code>`: the failed call fails for that reason instead (D-130: Try again only where it can help).
+  transcript_detail: ({ id }) => (id === "t-r4" && params.get("failure") ? { ...TRANSCRIPTS["t-r4"], error_code: params.get("failure") }
+    : TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null }),
   transcript_views: () => VIEWS,
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),

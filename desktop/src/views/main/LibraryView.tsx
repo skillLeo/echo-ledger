@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, canTryAgain, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -1434,8 +1434,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {/* What happened in the app's own words per `error_code` (D-130; the server's message can name a provider);
                           the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
-                      {/* One click to try again (v1.6, P6), in the same language; not when the key is missing or nothing was heard. */}
-                      {!readOnly && transcript.error_code !== "no_audio" && transcript.error_code !== "needs_transcription_key" && (
+                      {/* One click to try again (v1.6, P6), in the same language; not when trying again cannot fix it. */}
+                      {!readOnly && canTryAgain(transcript.error_code) && (
                         <div className="notice-hint"><button type="button" className="btn compact" onClick={() => void retranscribeSame()}>Try again</button></div>
                       )}
                       {/* The Free plan (v1.6): transcribed with the person's own Groq key, and none is added yet. */}

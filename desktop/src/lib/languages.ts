@@ -199,3 +199,12 @@ export function failureLine(code: string | null | undefined): string {
       return "Something went wrong while transcribing this recording.";
   }
 }
+
+/** Failures that trying again as it was cannot fix (D-130): nothing was heard, no key is added yet, this month's limit is
+ * reached, or the server has no transcription set up. Each needs something else first, so they offer no Try again. */
+const NOT_FIXED_BY_TRYING_AGAIN = ["no_audio", "needs_transcription_key", "budget_exceeded", "provider_not_configured"];
+
+/** Whether a failed transcription offers Try again (pure): yes for anything a second try can fix, an unknown code too. */
+export function canTryAgain(code: string | null | undefined): boolean {
+  return !NOT_FIXED_BY_TRYING_AGAIN.includes(code ?? "");
+}
