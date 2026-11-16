@@ -112,6 +112,8 @@ function secDeviceGuardedRoutes(): array
         'GET sessions/{id}/pack' => ['GET', '/api/sessions/'.Fx::MISSING_ID.'/pack', 'library:read'],
         'POST account/sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', 'sessions:write'],
         'GET account' => ['GET', '/api/account', 'config:read'],
+        // Since 2.0.0-a: the person's "Switch back to classic".
+        'PUT account/ui' => ['PUT', '/api/account/ui', 'config:read'],
         'DELETE account' => ['DELETE', '/api/account', 'sessions:write'],
         'POST account/export' => ['POST', '/api/account/export', 'library:read'],
         'GET account/export/{id}' => ['GET', '/api/account/export/'.Fx::MISSING_ID, 'library:read'],
@@ -176,7 +178,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(106);
+    expect($guarded)->toBe(107);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {
