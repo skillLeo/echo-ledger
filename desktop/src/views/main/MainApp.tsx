@@ -56,6 +56,7 @@ const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
 const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
+const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -754,9 +755,9 @@ export default function MainApp() {
           <div className="el-root el-embedded">
             <SettingsV2 available={settingsAvailable} section={settingsSection} onSignOut={() => void signOut()} setupHealth={ui.flags["ui_v2.setup_health"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
-              renderPage={(section, onHome) => (
-                <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />
-              )} />
+              renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
+                ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
+                : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
       )}

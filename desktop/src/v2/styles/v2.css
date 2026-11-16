@@ -525,6 +525,39 @@
 .el-shell__main > .el-empty { margin-block: auto; }
 .el-shell__main > .content { flex: 1 1 auto; min-block-size: 0; }
 
+/* ---- HealthCheckRow and SetupStep -------------------------------------------------------------------------- */
+.el-health { display: flex; align-items: flex-start; gap: var(--el-space-12); padding: var(--el-space-12); }
+.el-health + .el-health { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-health__mark { display: flex; padding-block-start: var(--el-space-2); }
+.el-health--ok .el-health__mark { color: var(--el-role-success-default); }
+.el-health--limited .el-health__mark { color: var(--el-role-warning-default); }
+.el-health--problem .el-health__mark { color: var(--el-role-danger-default); }
+.el-health__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-health__title { font-weight: var(--el-text-body-strong-weight); }
+.el-health__action { flex: none; display: flex; gap: var(--el-space-8); }
+.el-steps { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
+.el-step { display: flex; gap: var(--el-space-12); padding: var(--el-space-12); }
+.el-step + .el-step { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-step__number {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-space-24); block-size: var(--el-space-24);
+  border-radius: var(--el-radius-full);
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
+  color: var(--el-role-text-secondary);
+  font-size: var(--el-text-caption-size); font-weight: var(--el-text-body-strong-weight);
+}
+.el-step--current .el-step__number { border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); }
+.el-step--done .el-step__number { background: var(--el-role-success-soft); border-color: transparent; color: var(--el-role-success-default); }
+.el-step__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-step__head {
+  display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-2);
+  padding: 0; border: 0; background: transparent; text-align: start; color: inherit;
+}
+button.el-step__head { cursor: pointer; }
+.el-step__title { font-weight: var(--el-text-body-strong-weight); }
+.el-step__body { display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-step__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
 .el-page--wide { max-inline-size: calc(var(--el-space-64) * 15); }
@@ -552,6 +585,9 @@
 .el-group { display: flex; flex-direction: column; gap: var(--el-space-8); }
 .el-group__title { padding-inline: var(--el-space-4); }
 .el-group__rows { padding: var(--el-space-4); }
+.el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
+.el-health-list { margin: 0; padding: 0; list-style: none; }
+.el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
 .el-group__progress { padding: 0 var(--el-space-12) var(--el-space-8); }
 .el-settings-top { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 11); margin-block-end: var(--el-space-24); }
 

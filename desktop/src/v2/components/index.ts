@@ -13,6 +13,7 @@ export { Badge, Status, type Tone, type StatusKind } from "./Badge";
 export { Toggle, Checkbox, Radio, RadioGroup } from "./choices";
 export { EmptyState } from "./EmptyState";
 export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";
+export { HealthCheckRow, SetupStep, Steps, type HealthState } from "./health";
 export { Tabs, Segmented } from "./Tabs";
 export { Card, Avatar, Sidebar, NavItem } from "./layout";
 export { Player, Transcript, clock, type Segment } from "./media";
