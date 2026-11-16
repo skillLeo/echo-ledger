@@ -477,6 +477,39 @@ async fn going_back_to_an_earlier_token_never_restores_budget() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn practice_gets_fast_on_free_and_a_live_free_session_gets_captions_only() {
+    let h = harness(RelayConfig::built_in());
+    let mut practice = claims("s-practice");
+    practice.plan = assist_relay::domain::Plan::Free;
+    practice.practice = true;
+    let mut s = h.connect(practice);
+    let first = ready(&mut s).await;
+    assert_eq!((first["mode"].as_str(), first["practice"].as_bool()), (Some("fast"), Some(true)));
+    assert_eq!(first["allowed_modes"], json!(["fast"]), "practice is Fast only, whatever the plan");
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("suggestion_end").await;
+    assert_eq!((seen[0]["mode"].as_str(), seen.last().unwrap()["status"].as_str()), (Some("fast"), Some("done")));
+
+    let mut live = claims("s-free-live");
+    live.plan = assist_relay::domain::Plan::Free;
+    let mut s = h.connect(live);
+    let first = ready(&mut s).await;
+    assert_eq!((first["mode"].as_str(), first["allowed_modes"].clone()), (Some("captions_only"), json!([])));
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    assert!(s.drain(Duration::from_secs(2)).await.is_empty(), "no suggestion in a live Free session");
+    s.send(json!({"type": "help_now"})).await;
+    let refused = s.next().await;
+    assert_eq!(refused["code"], "budget_exhausted");
+    assert!(refused["message"].as_str().unwrap().contains("no live suggestions"), "{refused}");
+
+    // An Ultra practice session is Fast too: the plan's live modes don't apply.
+    let mut ultra = claims("s-ultra-practice");
+    ultra.practice = true;
+    let mut s = h.connect(ultra);
+    assert_eq!(ready(&mut s).await["allowed_modes"], json!(["fast"]));
+}
+
+#[tokio::test(start_paused = true)]
 async fn assist_time_running_out_leaves_captions_only() {
     let h = harness(RelayConfig::built_in());
     let mut short = claims("s-time");

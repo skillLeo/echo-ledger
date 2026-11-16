@@ -54,7 +54,8 @@ Authorization: Bearer <assist token>
 A compact JWS, HS256 only (`alg: none`, other algorithms and `crit` headers are refused), signed with the
 `assist_relay` secret (during a rotation the previous secret is accepted too: DEPLOY.md). Claims: `iss`
 `"echoledger"`, `aud` `"assist-relay"`, `sub` (user), `ws` (workspace), `sid` (session), `plan` (`free` | `pro` |
-`ultra`; the relay checks it again: Pro allows `fast` and `balanced`, Ultra every mode, Free no live suggestions),
+`ultra`; the relay checks it again for live sessions: Pro allows `fast` and `balanced`, Ultra every mode, Free no live
+suggestions; a Practice session, `practice: true`, gets `fast` on every plan, Free included, within its allowance),
 `modes` (allowed), `models` (allowed ids: primary, fallback and upgrade models alike), `budget.seconds_left` and
 `budget.cents_left` (what is left when the server mints the token; the relay counts down from the token's first
 arrival), `practice`, `iat`, `exp` (`exp − iat` at most 900 s, 30 s of clock leeway), `jti`.

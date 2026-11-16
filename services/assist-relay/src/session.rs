@@ -847,6 +847,8 @@ impl Engine {
             if origin.explicit() {
                 let message = if self.assist_used_up {
                     "Suggestions are off: this plan's assist time is used up. Captions continue."
+                } else if allowed_modes(&self.config(), &self.claims).is_empty() {
+                    "Suggestions are off: this plan has no live suggestions (Practice has them). Captions continue."
                 } else {
                     "Suggestions are off: this session's budget is used up. Captions continue."
                 };
