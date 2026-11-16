@@ -33,6 +33,7 @@ import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
 import com.echoledger.mobile.ui.v2.library.V2TrashScreen
 import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
+import com.echoledger.mobile.ui.v2.setup.V2SetupHealthScreen
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
@@ -204,5 +205,11 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
 /** Settings › Setup & health: the v2 wizard and checks with `ui_v2.setup_health`, else the classic setup. */
 @Composable
 private fun SetupPage(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens, highlight: String?, onBack: () -> Unit) {
-    classic.setup(onBack)
+    var classicSetup by remember { mutableStateOf(!flags.isOn(UiFlags.SETUP_HEALTH)) }
+    if (classicSetup) {
+        // Sign-in and the test call live on the classic setup screens until their own v2 pages exist.
+        classic.setup { if (flags.isOn(UiFlags.SETUP_HEALTH)) classicSetup = false else onBack() }
+    } else {
+        V2SetupHealthScreen(vm, highlight, onSignIn = { classicSetup = true }, onTestCall = { classicSetup = true }, onBack = onBack)
+    }
 }

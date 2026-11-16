@@ -20,6 +20,7 @@ import com.echoledger.mobile.ui.v2.library.V2RecordingContent
 import com.echoledger.mobile.ui.v2.library.V2TrashContent
 import com.echoledger.mobile.ui.v2.settings.AppearancePage
 import com.echoledger.mobile.ui.v2.settings.V2SettingsRoot
+import com.echoledger.mobile.ui.v2.setup.V2SetupHealthContent
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.Profile
 import com.echoledger.mobile.ui.v2.shell.ProfileState
@@ -218,5 +219,15 @@ class V2ScreenShotsTest {
     @Test
     fun settingsV2Appearance() = shootAll("settings-v2-appearance") { _, _ ->
         AppearancePage(AppSettings(), {}, UiFlags(mapOf("ui_v2.shell" to true)), {}, "appearance.theme", {})
+    }
+
+    @Test
+    fun setupAfterRestart() = shootAll("setup-after-restart") { _, _ ->
+        V2SetupHealthContent(SetupHealthFixtures.afterRestart, null, {}, {}, {}, {})
+    }
+
+    @Test
+    fun setupReady() = shootAll("setup-ready") { _, _ ->
+        V2SetupHealthContent(SetupHealthFixtures.allReady, null, {}, {}, {}, {})
     }
 }
