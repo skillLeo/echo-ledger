@@ -6,7 +6,7 @@ use std::sync::Arc;
 use assist_relay::config::{ProviderMode, RelayConfig, Settings, Shared};
 use assist_relay::internal::{InternalApi, NoReports, ProviderKeys, ReportSink, Reporter, spawn_provider_refresh};
 use assist_relay::pack::Pack;
-use assist_relay::provider::{MockStats, Providers};
+use assist_relay::provider::{Endpoints, MockStats, Providers, Retry};
 use assist_relay::telemetry::LogSink;
 
 fn main() -> ExitCode {
@@ -50,12 +50,13 @@ async fn run(settings: Settings) -> ExitCode {
         },
     };
     let config = Arc::new(Shared::new((*file).clone()));
+    // With a server, the provider keys and the model catalog come from it, and usage goes back to it. Without one,
+    // there are no keys and every live provider answers "not configured".
+    let keys = Arc::new(ProviderKeys::default());
     let providers = match settings.providers {
-        ProviderMode::Live => Providers::live(),
+        ProviderMode::Live => Providers::live(keys.clone(), &Endpoints::default(), Retry::default()),
         ProviderMode::Mock => Providers::mock(&file, Arc::new(MockStats::default())).0,
     };
-    // With a server, the provider keys and the model catalog come from it, and usage goes back to it.
-    let keys = Arc::new(ProviderKeys::default());
     let reports: Arc<dyn ReportSink> = match &settings.server_url {
         None => Arc::new(NoReports),
         Some(url) => match InternalApi::new(url, settings.secrets.clone()) {

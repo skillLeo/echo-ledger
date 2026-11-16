@@ -15,8 +15,8 @@
 
 use std::sync::Arc;
 
-use futures_util::FutureExt;
 use futures_util::future::BoxFuture;
+use futures_util::{FutureExt, StreamExt};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -31,7 +31,7 @@ pub const API_VERSION: &str = "2026-10-21";
 /// The user turn of a warm-up after the cached prefix (nothing is generated).
 const WARM_PLACEHOLDER: &str = "(warm-up: no answer needed)";
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Anthropic {
     base: String,
     keys: Arc<ProviderKeys>,
@@ -252,7 +252,7 @@ impl Provider for Anthropic {
             return futures_util::stream::once(async { Err(ProviderError::NotConfigured(ProviderKind::Anthropic)) }).boxed();
         };
         let body = body(&request, false);
-        let this = Anthropic { base: self.base.clone(), keys: self.keys.clone(), http: self.http.clone(), retry: self.retry };
+        let this = self.clone();
         http::sse_stream(ProviderKind::Anthropic, self.retry, move || this.post(&key, &body), AnthropicDecoder::default())
     }
 
@@ -261,7 +261,7 @@ impl Provider for Anthropic {
             return async { Err(ProviderError::NotConfigured(ProviderKind::Anthropic)) }.boxed();
         };
         let body = body(&request, true);
-        let this = Anthropic { base: self.base.clone(), keys: self.keys.clone(), http: self.http.clone(), retry: self.retry };
+        let this = self.clone();
         async move {
             let response = http::send(ProviderKind::Anthropic, this.retry, || this.post(&key, &body)).await?;
             let bytes = response.bytes().await.map_err(|_| ProviderError::Unavailable)?;
@@ -271,8 +271,6 @@ impl Provider for Anthropic {
         .boxed()
     }
 }
-
-use futures_util::StreamExt as _;
 
 #[cfg(test)]
 mod tests {
