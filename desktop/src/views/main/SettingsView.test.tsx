@@ -428,12 +428,12 @@ describe("Sign out", () => {
     respond("unpair", makeStatus({ paired: false }));
     const { onUnpaired } = await setup({ status: { pendingUploads: 2 } });
     fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
-    const dialog = screen.getByRole("dialog", { name: "Sign out of this computer?" });
+    const dialog = screen.getByRole("alertdialog", { name: "Sign out of this computer?" });
     expect(dialog).toHaveTextContent("2 recordings haven't uploaded yet.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(callsOf("unpair")).toHaveLength(0);
     fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(onUnpaired).toHaveBeenCalled());
   });
 });

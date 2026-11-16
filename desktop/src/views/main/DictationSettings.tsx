@@ -134,7 +134,7 @@ export function HistoryPage() {
     }
   };
   const clear = async () => {
-    if (!(await confirmAction({ title: "Clear your recent dictations?", body: "They're deleted from this computer.", confirm: "Clear" }))) return;
+    if (!(await confirmAction({ title: "Clear your recent dictations?", body: "They're deleted from this computer.", confirm: "Clear", tone: "danger" }))) return;
     try {
       await api.clearDictationHistory();
       setEntries([]);

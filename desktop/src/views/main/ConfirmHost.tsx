@@ -8,7 +8,7 @@ export function ConfirmHost() {
   useEffect(() => hostConfirm(setQuestion), []);
   if (!question) return null;
   return (
-    <ConfirmDialog title={question.title} body={question.body} confirm={question.confirm} cancel={question.cancel}
+    <ConfirmDialog title={question.title} body={question.body} confirm={question.confirm} cancel={question.cancel} tone={question.tone ?? "primary"}
       onConfirm={() => question.answer(true)} onClose={() => question.answer(false)} />
   );
 }

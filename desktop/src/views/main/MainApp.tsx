@@ -627,7 +627,7 @@ export default function MainApp() {
     setProjectRequest({ kind: "new", seq: ++navigations.current });
   };
   const signOut = async () => {
-    if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out" }))) return;
+    if (!(await confirmAction({ title: "Sign out of this computer?", body: signOutBody(status.pendingUploads) ?? undefined, confirm: "Sign out", tone: "danger" }))) return;
     const next = await run(api.unpair);
     if (next) setStatus(next);
   };

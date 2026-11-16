@@ -523,7 +523,7 @@ export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
     }
   };
   const remove = async () => {
-    if (!(await confirmAction({ title: "Remove your Groq key?", body: "New recordings won't be transcribed until you add a key or upgrade.", confirm: "Remove" }))) return;
+    if (!(await confirmAction({ title: "Remove your Groq key?", body: "New recordings won't be transcribed until you add a key or upgrade.", confirm: "Remove", tone: "danger" }))) return;
     setBusy(true);
     setProblem(null);
     try {

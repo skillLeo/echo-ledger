@@ -183,7 +183,7 @@ function DeleteAccountDialog({ account, onAccount, onClose }: { account: Account
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const secretId = useId();
-  const confirm = async (e: React.FormEvent) => {
+  const confirmDelete = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -199,7 +199,7 @@ function DeleteAccountDialog({ account, onAccount, onClose }: { account: Account
   };
   return (
     <Sheet title="Delete your account?" onClose={onClose} busy={busy}>
-      <form className="column account-delete" onSubmit={(e) => void confirm(e)} aria-label="Confirm deleting your account">
+      <form className="column account-delete" onSubmit={(e) => void confirmDelete(e)} aria-label="Confirm deleting your account">
         <p>We delete your account and everything only you own after 7 days. You can cancel by signing in before then.</p>
         <label htmlFor={secretId} className="small muted">{useCode ? "Two-step code" : "Your password"}</label>
         <input id={secretId} className="input" type={useCode ? "text" : "password"} inputMode={useCode ? "numeric" : undefined}

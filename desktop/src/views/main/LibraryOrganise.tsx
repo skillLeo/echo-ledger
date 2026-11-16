@@ -383,7 +383,7 @@ export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => v
               </div>
               <button type="button" className="btn small" disabled={busy === b.id} onClick={() => void act(b.id, () => api.restoreSession(b.id), "Restored")}>Restore</button>
               <button type="button" className="btn danger ghost small" disabled={busy === b.id}
-                onClick={() => void confirmAction({ title: "Delete this recording now?", body: "It can't be undone.", confirm: "Delete now" }).then((yes) => { if (yes) void act(b.id, () => api.eraseFromBin(b.id), "Erased"); })}>Delete now</button>
+                onClick={() => void confirmAction({ title: "Delete this recording now?", body: "It can't be undone.", confirm: "Delete now", tone: "danger" }).then((yes) => { if (yes) void act(b.id, () => api.eraseFromBin(b.id), "Erased"); })}>Delete now</button>
             </div>
           ))}
         </div>

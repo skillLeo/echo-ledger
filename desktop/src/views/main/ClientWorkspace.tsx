@@ -725,7 +725,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     }
   };
   const remove = async (file: ClientFile) => {
-    if (!(await confirmAction({ title: `Remove ${file.name} from this project?`, confirm: "Remove" }))) return;
+    if (!(await confirmAction({ title: `Remove ${file.name} from this project?`, confirm: "Remove", tone: "danger" }))) return;
     try {
       await api.deleteClientFile(clientId, file.id);
       onChange({ ...ws, files: ws.files.filter((f) => f.id !== file.id) });

@@ -226,7 +226,7 @@ describe("Plan & usage", () => {
     respond("entitlements_get", sampleEntitlements("free"));
     page({ ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("awaiting_payment") });
     fireEvent.click(screen.getByRole("button", { name: "Cancel request" }));
-    const dialog = screen.getByRole("dialog", { name: "Cancel this request?" });
+    const dialog = screen.getByRole("alertdialog", { name: "Cancel this request?" });
     expect(dialog).toHaveTextContent("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.");
     expect(within(dialog).getByRole("button", { name: "Keep request" })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel request" }));

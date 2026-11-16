@@ -17,7 +17,7 @@ import { CheckIcon } from "../../components/ControlIcons";
 import { LucideCopyIcon, LucideCheckIcon, LucideFileTextIcon, LucideXIcon, LucideUploadIcon } from "../../components/Icons";
 import { ConfirmDialog, useCopied } from "./SettingsControls";
 import { RequestCard } from "./Upgrade";
-import { confirmAction } from "../../lib/confirm";
+import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 
 /** The most files one round sends (a round is the first send, then each new receipt staff ask for). */
 export const ROUND_MAX = 3;
@@ -46,7 +46,8 @@ function FlowSheet({ title, onClose, guard, footer, children }: { title: string;
   };
   useEffect(() => {
     const onKey = (ev: KeyboardEvent) => {
-      if (ev.key === "Escape") close();
+      // While a question is on screen its own Escape answers it; the sheet behind leaves it alone.
+      if (ev.key === "Escape" && !isConfirmOpen()) close();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -57,7 +58,7 @@ function FlowSheet({ title, onClose, guard, footer, children }: { title: string;
       <div className="sheet card upgrade-sheet flow-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId}>
         <div className="flow-head">
           <h2 id={titleId} className="sheet-title">{title}</h2>
-          <button type="button" className="btn ghost icon-only" aria-label="Close" onClick={() => onClose()}><LucideXIcon size={18} /></button>
+          <button type="button" className="btn ghost icon-only" aria-label="Close" onClick={close}><LucideXIcon size={18} /></button>
         </div>
         <div className="flow-body">{children}</div>
         {footer && <div className="flow-foot">{footer}</div>}

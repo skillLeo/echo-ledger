@@ -682,7 +682,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const screensAfter = useMemo(() => screensByLine(transcript?.segments ?? [], screens ?? []), [transcript, screens]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
   const deleteScreen = async (screen: ScreenMoment) => {
-    if (!current || !(await confirmAction({ title: `Delete screen ${screen.index}?`, body: "The recording and its transcript stay.", confirm: "Delete" }))) return;
+    if (!current || !(await confirmAction({ title: `Delete screen ${screen.index}?`, body: "The recording and its transcript stay.", confirm: "Delete", tone: "danger" }))) return;
     try {
       await api.deleteScreen(current.id, screen.id);
       setScreenOpen(null);
@@ -984,7 +984,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const remove = async (id: string) => {
-    if (!(await confirmAction({ title: "Delete this recording?", body: "It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.", confirm: "Delete" }))) return;
+    if (!(await confirmAction({ title: "Delete this recording?", body: "It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.", confirm: "Delete", tone: "danger" }))) return;
     try {
       await api.deleteSession(id);
       // Deleting another row from its menu leaves the open recording open.

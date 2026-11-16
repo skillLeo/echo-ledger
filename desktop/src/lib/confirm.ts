@@ -11,6 +11,8 @@ export interface ConfirmQuestion {
   /** The button that does it ("Delete", "Sign out"). */
   confirm: string;
   cancel?: string;
+  /** "danger" (red) only for what deletes, discards or signs out; "primary" otherwise (the default). */
+  tone?: "danger" | "primary";
 }
 
 export type PendingQuestion = ConfirmQuestion & { answer: (yes: boolean) => void };
@@ -43,6 +45,11 @@ export function confirmAction(question: ConfirmQuestion): Promise<boolean> {
     current = pending;
     showing(pending);
   });
+}
+
+/** Whether a question is on screen (a sheet behind it leaves its keys alone meanwhile). */
+export function isConfirmOpen(): boolean {
+  return current !== null;
 }
 
 /** Tests answer every question at once (and see what was asked); null puts the dialog back. */

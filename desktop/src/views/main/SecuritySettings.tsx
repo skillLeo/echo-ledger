@@ -224,7 +224,7 @@ export function DevicesPage({ run }: { run: Run }) {
   const { devices, error, reload } = useSecurityOverview();
   const [renaming, setRenaming] = useState<SecurityDevice | null>(null);
   const revoke = async (d: SecurityDevice) => {
-    if (!(await confirmAction({ title: `Sign out ${d.name}?`, body: "It will need to sign in again.", confirm: "Sign out" }))) return;
+    if (!(await confirmAction({ title: `Sign out ${d.name}?`, body: "It will need to sign in again.", confirm: "Sign out", tone: "danger" }))) return;
     const ok = await run(() => api.revokeDevice(d.id), `${d.name} signed out`);
     if (ok !== undefined) reload();
   };

@@ -67,7 +67,7 @@ describe("waitingSummary", () => {
 
 describe("bulk copy", () => {
   it("counts recordings in the Discard all question and the notices", () => {
-    expect(discardAllQuestion(4)).toEqual({ title: "Discard all 4 recordings?", body: "It can't be undone.", confirm: "Discard all" });
+    expect(discardAllQuestion(4)).toEqual({ title: "Discard all 4 recordings?", body: "It can't be undone.", confirm: "Discard all", tone: "danger" });
     expect(discardAllQuestion(1)).toBe(DISCARD_QUESTION);
     expect(bulkNotice("Kept", 3)).toBe("Kept 3 recordings");
     expect(bulkNotice("Discarded", 1)).toBe("Discarded 1 recording");
@@ -142,7 +142,7 @@ describe("upload filters", () => {
 describe("copy", () => {
   it("matches the contract", () => {
     expect(NO_AUDIO_HINT).toBe("Check your microphone and the audio device, then try again.");
-    expect(DISCARD_QUESTION).toEqual({ title: "Discard this recording?", body: "It can't be undone.", confirm: "Discard" });
+    expect(DISCARD_QUESTION).toEqual({ title: "Discard this recording?", body: "It can't be undone.", confirm: "Discard", tone: "danger" });
   });
 });
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, listenTo, type AppStatus, type InputDevice, type MicUser } from "../../lib/ipc";
 import { processName, sourceAppLabel } from "../../lib/format";
 import { explainMicUser, micTone } from "../../lib/explainer";
@@ -110,8 +110,13 @@ export function RecordView({ status, run, onImport }: {
   const [mic, sys] = status.levels;
   const what = recording ? (recording.mode === "mic_note" ? "voice note" : sourceAppLabel(recording.sourceApp)) : "";
   const bluetooth = useBluetoothMic(recording?.clientRef ?? null);
+  // Discard asks first; it discards only the recording it asked about (another may have started meanwhile).
+  const recordingNow = useRef(recording?.clientRef ?? null);
+  recordingNow.current = recording?.clientRef ?? null;
   const cancel = async () => {
-    if (await confirmAction(DISCARD_QUESTION)) void run(api.cancelRecording);
+    const asked = recordingNow.current;
+    if (!asked || !(await confirmAction(DISCARD_QUESTION))) return;
+    if (recordingNow.current === asked) void run(api.cancelRecording);
   };
   // A viewer (v1.5) opens what is shared with them and records nothing; Live Translate records nothing either.
   if (isViewer(status) && !recording) {
