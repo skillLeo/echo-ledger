@@ -69,6 +69,8 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   menu bar icon opens it). `lib.rs` handles `RunEvent::Opened` and `ExitRequested` but not `RunEvent::Reopen`, which
   macOS sends to the running copy (found by Hassam 2026-11-16 on the installed v1.6.0). **Acceptance:** Reopen with no
   visible window shows and focuses the main window; a test for the handler; checked on the Mac.
+  - Code merged 2026-11-16 (`10c7a743`, reviewed; cargo 1,312 passed): the decision uses whether the MAIN window is on
+    screen (macOS counts the always-built dictation box as visible). Waiting: MAC-31 on a build with it (Mac batch).
 
 ## P1 — Before, during, after a call
 - [ ] 1.1 Calls always recorded as audio when Ready; transcribed only with permission. One after-call card (phone:

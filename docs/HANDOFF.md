@@ -41,6 +41,9 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   set (Flash option); Groq — set (fast-mode fallback; today Urdu transcription); Soniox — set (live STT default,
   translation on); AssemblyAI — set (live STT option); **OpenAI — empty** (optional provider in the relay); **Moonshot
   (Kimi) — no field yet** (added with the L1 server work; behind a flag until measured). None is needed before v1.9.
+- **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
+    jump only without a main window) · waiting: MAC-31.
 - **Phone, 2026-11-16 (S25, Android 17):** the screen-recording callback never fires for floating windows (only while
   an EchoLedger screen is in front); FLAG_SECURE gives a black box → the phone moves to "always secure" (b-phone). Mac:
   opening the running app from Finder/Dock shows nothing (no `RunEvent::Reopen` handler) → v1.8 0.4. The installed
