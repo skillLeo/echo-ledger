@@ -25,7 +25,20 @@ describe("a banner about something still true (docs/DESIGN_SYSTEM.md Notices 3)"
     expect(screen.queryByTestId("calls")).not.toBeInTheDocument();
   });
 
-  it("stays closed until its state changes or the app starts again", () => {
+  it("stays closed after a restart, until its state changes", async () => {
+    const first = render(banner("mic-off"));
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+    first.unmount();
+    // A new start reads what was closed from this computer.
+    vi.resetModules();
+    const again = await import("./StateBanner");
+    const view = render(<again.StateBanner id="calls" state="mic-off" testId="calls">Calls are not being recorded</again.StateBanner>);
+    expect(screen.queryByTestId("calls")).not.toBeInTheDocument();
+    view.rerender(<again.StateBanner id="calls" state="detection-off" testId="calls">Calls are not being recorded</again.StateBanner>);
+    expect(screen.getByTestId("calls")).toBeInTheDocument();
+  });
+
+  it("stays closed until its state changes", () => {
     const view = render(banner("mic-off"));
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("calls")).not.toBeInTheDocument();

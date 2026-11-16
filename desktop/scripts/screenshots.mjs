@@ -241,6 +241,37 @@ const SCREENS = [
   ["settings-overview-pro-pending", "settings&plan=pro&request=awaiting_payment", settingsReady],
   ["settings-overview-deleting", "settings&plan=free&deleting=1", settingsReady],
   ["settings-narrow", "settings&plan=free", settingsReady, { width: 860, height: 560 }],
+  // The Settings list at Hassam's 1000 pt window, the search focused (its ring and the switches whole), a plan with no
+  // monthly limit (no empty bar), and the same at 200 % text (the page zoomed twice: half the room in points).
+  ["settings-1000", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1000, height: 700 }],
+  ["settings-1100", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1100, height: 740 }],
+  ["settings-text200", "settings&plan=ultra&unlimited=1", settingsReady, { width: 1100, height: 740, scale: 2 }],
+  ["settings-narrow-text200", "settings&plan=ultra&unlimited=1", settingsReady, { width: 860, height: 560, scale: 2 }],
+  ["settings-search-recovered", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("recovered recording");
+    await page.waitForSelector("[data-testid=settings-results]");
+  }],
+  // One search: the sidebar's opens the window's search, which says where it looked.
+  ["search-from-sidebar", "library&plan=free", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().click();
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("recovered recording");
+    await page.waitForTimeout(600);
+  }],
+  ["search-from-sidebar-narrow", "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().click();
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("devices");
+    await page.waitForTimeout(600);
+  }, { width: 860, height: 560 }],
+  // Two banners want the place: the more important one shows, in one sentence with its button.
+  ["library-banners-mac", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]")],
+  ["library-banners-mac-narrow", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 860, height: 560 }],
+  ["library-banners-mac-text200", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 1100, height: 740, scale: 2 }],
+  // A recovered recording keeps its chip after its transcript renamed it.
+  ["library-recovered", "library-recovered", async (page) => page.waitForSelector(".recovered-chip")],
+  ["library-recovered-narrow", "library-recovered", async (page) => page.waitForSelector(".recovered-chip"), { width: 860, height: 560 }],
   ["settings-narrow-page", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Notifications"); }, { width: 860, height: 560 }],
   ["plan-free", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
   ["plan-free-plans", "settings&plan=free", async (page) => {
@@ -552,16 +583,26 @@ await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await launch();
 await mkdir(out, { recursive: true });
+const failed = [];
 try {
   for (const [name, screen, prepare, viewport] of SCREENS) {
     if (only && !only.some((o) => name.startsWith(o))) continue;
     for (const theme of ["light", "dark"]) {
-      const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
+      // `scale`: the text that much larger (the page zoomed: the same window holds 1/scale of the points).
+      const scale = viewport?.scale ?? 1;
+      const size = viewport ? { width: Math.round(viewport.width / scale), height: Math.round(viewport.height / scale) } : { width: 1440, height: 900 };
+      const page = await browser.newPage({ viewport: size, deviceScaleFactor: scale, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
       const [screenName, ...extra] = screen.split("&");
       await page.goto(`${base}scripts/screens/index.html?screen=${screenName}&theme=${theme}${extra.length ? `&${extra.join("&")}` : ""}`);
-      await prepare(page);
-      await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+      try {
+        await prepare(page);
+        await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+      } catch (e) {
+        // One screen that cannot be reached says so and the rest are still taken; the run fails at the end.
+        failed.push(`${name}-${theme}`);
+        console.error(`${name}-${theme}: ${e.message.split("\n")[0]}`);
+      }
       await page.close();
     }
   }
@@ -580,4 +621,8 @@ try {
 } finally {
   await browser.close();
   await server.close();
+}
+if (failed.length) {
+  console.error(`Not taken: ${failed.join(", ")}`);
+  process.exitCode = 1;
 }

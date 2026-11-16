@@ -9,6 +9,7 @@ import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
+import { useBannerTurn } from "../../components/BannerSlot";
 
 export interface PermissionStepText {
   title: string;
@@ -164,9 +165,10 @@ export function PermissionLossNotice() {
     dismiss();
   }, [dismiss]);
   const lost = permissions?.lost;
+  const shown = useBannerTurn("permission-loss", !!lost && !dismissed);
   return (
     <>
-      {lost && !dismissed && (
+      {shown && (
         <Notice kind="banner" tone="warn" className="banner warn" role="status" testId="permission-loss" icon={<AlertIcon size={16} />} timeoutMs={null}
           onOpen={() => setGuide(true)} onDismiss={dismiss}
           actions={<button type="button" className="btn compact" onClick={() => setGuide(true)}>Set up</button>}>

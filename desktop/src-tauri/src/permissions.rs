@@ -208,7 +208,7 @@ impl Memory {
             [first, second] => format!("{first} and {second}"),
             [first, second, third, ..] => format!("{first}, {second} and {third}"),
         };
-        Some(format!("macOS no longer lets EchoLedger use {list}, which can happen after an update. Setting it up again takes a moment."))
+        Some(format!("macOS no longer lets EchoLedger use {list}."))
     }
 }
 
@@ -352,7 +352,8 @@ mod tests {
         let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone] };
         let line = two.sentence().unwrap();
         assert!(line.contains("the microphone and system audio"), "{line}");
-        assert_eq!(line.matches('.').count(), 2);
+        // One short sentence on the banner (its Set up button opens the steps).
+        assert_eq!(line, "macOS no longer lets EchoLedger use the microphone and system audio.");
         assert_eq!(Memory::default().sentence(), None);
     }
 

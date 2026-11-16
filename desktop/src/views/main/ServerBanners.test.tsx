@@ -57,7 +57,11 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     render(<ServerBanners server={{ ...NONE, appUpdate: { ...UPDATE, refused: true }, waiting: "update_required" }} notify={vi.fn()} />);
     const banner = screen.getByTestId("app-update");
     expect(banner).toHaveClass("danger");
-    expect(banner).toHaveTextContent("The server no longer accepts this version: your recordings wait on this computer and upload after the update.");
+    // One short sentence on the banner; the details behind Learn more.
+    const details = within(banner).getByText("The server no longer accepts this version: your recordings wait on this computer and upload after the update.");
+    expect(details).not.toBeVisible();
+    fireEvent.click(within(banner).getByRole("button", { name: "Learn more" }));
+    expect(details).toBeVisible();
     expect(within(banner).queryByRole("button", { name: /Close/ })).not.toBeInTheDocument();
   });
 
@@ -70,6 +74,7 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     expect(banner).toHaveTextContent("Upgrading the database.");
     expect(banner).toHaveTextContent("Recordings and uploads wait on this computer and go when it is back.");
     expect(banner).toHaveTextContent(/Back about/);
+    expect(within(banner).getByText(/Recordings and uploads wait/)).not.toBeVisible();
   });
 
   it("closes an announcement for its text, remembers it, and shows the next one", () => {

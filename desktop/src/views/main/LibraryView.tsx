@@ -37,6 +37,7 @@ import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
 import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -166,6 +167,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const sort = choice.sort;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState<Record<string, number>>(loadOpened);
+  const recovered = useRecovered();
   const [selected, setSelected] = useState<string | null>(initialSelected);
   // The page pattern (v1.6, P4.4): List or Table, the table's columns, the row the keys are on, and the density
   // (Account → Preferences, here too as on the phone's View sheet).
@@ -1275,6 +1277,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         <div className="item-main">
                           <div className="item-line">
                             <span className="item-title" data-motion="title">{item.title}</span>
+                            {recovered.has(item.id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>
                           </div>

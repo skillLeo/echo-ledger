@@ -1,7 +1,7 @@
 // The golden queries of the shared settings search rules, as they come out on the desktop's registry (no phone-only
 // rows), plus normalising, folding, the fuzzy pass, pins, availability and the limits.
 import { describe, expect, it } from "vitest";
-import { distance, firstSentence, fold, normalise, searchSettings } from "./settingsIndex";
+import { closeEnough, distance, firstSentence, fold, normalise, searchSettings } from "./settingsIndex";
 import { breadcrumbOf, depthOf, pathOf, setting, SETTINGS } from "./settingsRegistry";
 
 const ids = (q: string, available?: Parameters<typeof searchSettings>[1]) => searchSettings(q, available).settings.map((r) => r.entry.id);
@@ -156,6 +156,18 @@ describe("golden queries", () => {
     expect(answer.settings).toEqual([]);
     expect(answer.closest.map((e) => e.id)).not.toContain("appearance.theme");
     expect(answer.closest.map((e) => e.id)).toContain("calls");
+  });
+
+  it("suggests only genuine misspellings: never unrelated pages for a word three edits away (Hassam's \"recovered recording\")", () => {
+    for (const query of ["recovered recording", "recovered"]) {
+      const answer = searchSettings(query);
+      expect(answer.settings).toEqual([]);
+      expect(answer.closest, query).toEqual([]);
+    }
+    expect(closeEnough("kaal", 2)).toBe(true);
+    expect(closeEnough("recovered", 3)).toBe(false);
+    expect(closeEnough("mic", 2)).toBe(false);
+    expect(closeEnough("notifcations", 2)).toBe(true);
   });
 
   it("values are never searched, and nonsense has no closest matches", () => {

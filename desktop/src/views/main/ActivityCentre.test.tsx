@@ -24,6 +24,15 @@ describe("activity page (B18)", () => {
   }
   beforeEach(() => respond("pending_list", []));
 
+  it("marks a recovered recording's notification Recovered", async () => {
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    respond("recovered_sessions", ["s1"]);
+    renderPage();
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).toHaveTextContent("Recovered"));
+    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveTextContent("Recovered");
+  });
+
   it("lists the notifications with the unread one marked, and hands the list to the badge", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     const { onItems } = renderPage();

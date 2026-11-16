@@ -14,6 +14,7 @@ import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction 
 import { PageHeader } from "../../components/Page";
 import { CheckIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
+import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 
 /** What is on its way (Phase 1C, C4): uploads with their %, and recordings being transcribed, the Library's words. */
 export interface InProgressRow {
@@ -194,12 +195,13 @@ export function ActivityView({ status, notify, onOpenRecording, onReview, onItem
   // What the badge counts (lib/badge.ts), for the page's one line.
   const needsYou = actionCount(items, Math.max(pending.length, status.pendingDecisions));
 
+  const recovered = useRecovered();
   const row = (i: ActivityItem) => (
     <li key={i.id}>
       <button type="button" className={`activity-item ${i.read ? "" : "unread"}`} onClick={() => void choose(i)}>
         <ActivityTile kind={i.kind} />
         <span className="activity-main">
-          <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span>{i.title}</span></span>
+          <span className="activity-title">{!i.read && <span className="unread-dot" aria-label="Unread" />}<span>{i.title}</span>{i.session_id && recovered.has(i.session_id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}</span>
           <span className="activity-body">{i.body}</span>
         </span>
         {i.at && <span className="item-time">{shortWhen(i.at)}</span>}

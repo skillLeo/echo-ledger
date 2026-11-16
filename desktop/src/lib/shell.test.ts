@@ -64,7 +64,7 @@ describe("12- or 24-hour times everywhere (Account → Preferences; MANUAL_QA 16
   });
 });
 
-describe("Find a page", () => {
+describe("pages found by name (the window's search)", () => {
   const pages = [
     { id: "home", label: "Home", keywords: "record ready" },
     { id: "devices", label: "Devices", group: "Account", keywords: "phones computers" },

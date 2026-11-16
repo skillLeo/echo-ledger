@@ -160,7 +160,8 @@ describe("command palette (B9)", () => {
     respond("search_library", { data: [], next_page: null });
     const props = renderPalette();
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "zzzz" } });
-    await waitFor(() => expect(screen.getByText("Nothing matches.")).toBeInTheDocument());
+    // It says where it looked (recordings and transcripts too), once the recordings' search has answered.
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Nothing matches “zzzz” in recordings, transcripts, settings or pages."));
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Escape" });
     expect(props.onClose).toHaveBeenCalled();
   });

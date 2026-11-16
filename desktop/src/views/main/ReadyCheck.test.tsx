@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ReadyCheckCard, ReadyChip, chipText, readyHeadline } from "./ReadyCheck";
 import MainApp from "./MainApp";
 import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
@@ -114,7 +114,12 @@ describe("in the app", () => {
     await emitEvent("capture:one_sided", { title: "Only your voice was recorded", reason: "Nothing was heard from the call app.", fix: "Play the test sound in Settings → Recording." });
     const banner = screen.getByTestId("one-sided");
     expect(banner).toHaveTextContent("Only your voice was recorded");
-    expect(banner).toHaveTextContent("Nothing was heard from the call app. Play the test sound");
+    // One sentence and its fix; why and how behind Learn more.
+    const details = within(banner).getByText("Nothing was heard from the call app. Play the test sound in Settings → Recording.");
+    expect(details).not.toBeVisible();
+    fireEvent.click(within(banner).getByRole("button", { name: "Learn more" }));
+    expect(details).toBeVisible();
+    expect(within(banner).getByRole("button", { name: "Ready check" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByTestId("one-sided")).not.toBeInTheDocument();
   });

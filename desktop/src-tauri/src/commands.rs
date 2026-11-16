@@ -2737,6 +2737,12 @@ pub fn skipped_list(app: AppHandle) -> Vec<crate::skipped::SkippedItem> {
     crate::actions::skipped_items(&app)
 }
 
+/// The server sessions of recordings recovered after a restart (the Library's and Activity's "Recovered" mark).
+#[tauri::command]
+pub fn recovered_sessions(app: AppHandle) -> Vec<String> {
+    crate::recovered::sessions(&app.state::<crate::AppState>().data_dir)
+}
+
 /// Restore on the skipped line: the call is kept and uploaded like any other.
 #[tauri::command]
 pub fn skipped_restore(app: AppHandle, id: String) -> AppResult<()> {

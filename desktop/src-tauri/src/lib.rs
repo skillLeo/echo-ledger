@@ -30,6 +30,7 @@ pub mod plan;
 pub mod privacy;
 pub mod projects;
 pub mod readiness;
+pub mod recovered;
 pub mod receipts;
 pub mod recovery;
 pub mod refusal;
@@ -683,6 +684,7 @@ pub fn run() {
             commands::after_call_state,
             commands::saved_undo,
             commands::skipped_list,
+            commands::recovered_sessions,
             commands::skipped_restore,
             commands::window_ready,
             commands::main_view_get,

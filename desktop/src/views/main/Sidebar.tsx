@@ -1,13 +1,14 @@
-// The sidebar (v1.6, P4.1): "Find a page" at the top, then Home · Library (its smart folders) · Projects (the pinned
+// The sidebar (v1.6, P4.1): Search at the top (the window's one search, the palette: recordings, settings, pages and
+// commands), then Home · Library (its smart folders) · Projects (the pinned
 // ones) · Activity · Shared (with me, my links, request links) · Upload, and at the bottom Help & shortcuts, Settings and
 // Collapse sidebar. 240 px by default, 200–320 by dragging its edge (kept on this computer), or a 64 px icon rail ("[").
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type { ClientFolder, SmartFolder } from "../../lib/ipc";
 import type { LibraryPlace, LibraryView } from "../../lib/folders";
 import type { MainTab } from "../../lib/mainView";
-import { clampSidebar, findPages, loadOpenGroups, saveOpenGroups, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, type PageEntry, type SidebarGroup } from "../../lib/shell";
+import { clampSidebar, loadOpenGroups, saveOpenGroups, SIDEBAR_DEFAULT, SIDEBAR_MAX, SIDEBAR_MIN, type PageEntry, type SidebarGroup } from "../../lib/shell";
 import { badgeLabel, badgeSpoken } from "../../lib/badge";
-import { BellIcon, ChevronRightIcon, CloseIcon, FolderIcon, HelpIcon, HomeIcon, ImportIcon, LibraryIcon, LinkIcon, RequestFilesIcon, SearchIcon, ShareIcon, SettingsIcon, SidebarIcon, UsersIcon } from "../../components/Icons";
+import { BellIcon, ChevronRightIcon, FolderIcon, HelpIcon, HomeIcon, ImportIcon, LibraryIcon, LinkIcon, RequestFilesIcon, SearchIcon, ShareIcon, SettingsIcon, SidebarIcon, UsersIcon } from "../../components/Icons";
 import { BrandMark } from "../../components/BrandMark";
 import { PlaceList } from "./SecondaryColumn";
 import { DROP_ATTRIBUTE } from "../../lib/dragMove";
@@ -16,15 +17,18 @@ import { DROP_ATTRIBUTE } from "../../lib/dragMove";
 export type SharedTab = "with-me" | "links" | "requests";
 export const SHARED_TABS: readonly (readonly [SharedTab, string])[] = [["with-me", "With me"], ["links", "My links"], ["requests", "Request links"]];
 
-/** A page "Find a page" opens. */
+/** A page the search (the palette) opens by name. */
 export interface ShellPage extends PageEntry {
   open: () => void;
 }
 
-const FIND_LIMIT = 8;
+/** The search's name for screen readers and its tooltip: one search for everything, the same as the top bar's. */
+export function sidebarSearchLabel(keys: string): string {
+  return `Search recordings, settings and pages (${keys})`;
+}
 
 export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, recording, places, folder, view, onPlace, projects, projectId, onProject,
-  sharedTab, onShared, onGo, onUpload, onHelp, pages, uploading, uploadsWait = false, canUpload }: {
+  sharedTab, onShared, onGo, onUpload, onHelp, onSearch, searchKeys, uploading, uploadsWait = false, canUpload }: {
   tab: MainTab;
   collapsed: boolean;
   onCollapse: () => void;
@@ -45,7 +49,10 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
   onGo: (tab: MainTab) => void;
   onUpload: () => void;
   onHelp: () => void;
-  pages: readonly ShellPage[];
+  /** Opens the window's search (the palette, the same as the top bar's and Ctrl/⌘+K). */
+  onSearch: () => void;
+  /** "⌘K" or "Ctrl+K". */
+  searchKeys: string;
   /** "Uploading 2 recordings…" while something is on its way. */
   uploading: string | null;
   /** The server holds the uploads (v1.6, P2.7): the line says why, without the spinner. */
@@ -53,10 +60,6 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
   canUpload: boolean;
 }) {
   const [open, setOpen] = useState<Set<SidebarGroup>>(loadOpenGroups);
-  const [query, setQuery] = useState("");
-  const [findIndex, setFindIndex] = useState(0);
-  const findRef = useRef<HTMLInputElement | null>(null);
-  const findList = useId();
   const toggleGroup = (group: SidebarGroup) => setOpen((current) => {
     const next = new Set(current);
     if (next.has(group)) next.delete(group);
@@ -64,23 +67,6 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
     saveOpenGroups(next);
     return next;
   });
-  const found = findPages(pages, query).slice(0, FIND_LIMIT);
-  const chosen = Math.min(findIndex, Math.max(0, found.length - 1));
-  const openPage = (page: ShellPage | undefined) => {
-    if (!page) return;
-    setQuery("");
-    setFindIndex(0);
-    page.open();
-  };
-  // "Find a page" from the rail: the sidebar opens and the field takes the keys.
-  const [focusFind, setFocusFind] = useState(false);
-  useEffect(() => {
-    if (focusFind && !collapsed) {
-      findRef.current?.focus();
-      setFocusFind(false);
-    }
-  }, [focusFind, collapsed]);
-
   const pinned = (projects ?? []).filter((p) => p.pinned);
   const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id) => (
     <button type="button" className={`nav-btn ${current ? "active" : ""}`} aria-current={current ? "page" : undefined}
@@ -134,46 +120,16 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
       </div>
       <div className="sidebar-main">
       {collapsed ? (
-        <button type="button" className="nav-btn find-rail" title="Find a page" aria-label="Find a page" onClick={() => { onCollapse(); setFocusFind(true); }}>
+        <button type="button" className="nav-btn find-rail" title={sidebarSearchLabel(searchKeys)} aria-label={sidebarSearchLabel(searchKeys)} onClick={onSearch}>
           <SearchIcon size={18} />
         </button>
       ) : (
-        <div className="find-page">
-          <label className="searchbox compact find-box">
-            <SearchIcon size={16} />
-            <input ref={findRef} value={query} placeholder="Find a page" aria-label="Find a page" role="combobox" aria-expanded={query.trim().length > 0}
-              aria-controls={findList} aria-activedescendant={found[chosen] ? `${findList}-${found[chosen].id}` : undefined}
-              onChange={(e) => { setQuery(e.target.value); setFindIndex(0); }}
-              onKeyDown={(e) => {
-                if (e.key === "Escape") {
-                  if (query) e.stopPropagation();
-                  setQuery("");
-                } else if (e.key === "ArrowDown") {
-                  e.preventDefault();
-                  setFindIndex((chosen + 1) % Math.max(1, found.length));
-                } else if (e.key === "ArrowUp") {
-                  e.preventDefault();
-                  setFindIndex((chosen - 1 + found.length) % Math.max(1, found.length));
-                } else if (e.key === "Enter") {
-                  e.preventDefault();
-                  openPage(found[chosen]);
-                }
-              }} />
-            {query && <button type="button" className="clear" aria-label="Clear" onClick={() => setQuery("")}><CloseIcon size={14} /></button>}
-          </label>
-        </div>
+        <button type="button" className="sidebar-search" aria-label={sidebarSearchLabel(searchKeys)} title={sidebarSearchLabel(searchKeys)} onClick={onSearch}>
+          <SearchIcon size={16} />
+          <span className="sidebar-search-text">Search</span>
+          <span className="kbd" aria-hidden="true">{searchKeys}</span>
+        </button>
       )}
-      {!collapsed && query.trim() ? (
-        <ul id={findList} className="find-results" role="listbox" aria-label="Pages">
-          {found.length === 0 && <li className="small muted find-empty" role="presentation">No page matches.</li>}
-          {found.map((page, i) => (
-            <li key={page.id} id={`${findList}-${page.id}`} role="option" aria-selected={i === chosen} className={`find-result ${i === chosen ? "active" : ""}`}
-              onMouseEnter={() => setFindIndex(i)} onMouseDown={(e) => { e.preventDefault(); openPage(page); }}>
-              <span className="find-label">{page.label}</span>{page.group && <span className="find-group small muted">{page.group}</span>}
-            </li>
-          ))}
-        </ul>
-      ) : (
         <nav className="nav" aria-label="Main">
           <div className="nav-group">
             {navButton("record", "Home", <HomeIcon size={20} filled={tab === "record"} />, recording && <span className="status-dot live" aria-hidden="true" />)}
@@ -235,7 +191,6 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
             </div>
           )}
         </nav>
-      )}
       </div>
       <div className="sidebar-footer">
         {uploading && !collapsed && (
