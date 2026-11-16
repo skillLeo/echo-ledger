@@ -678,6 +678,12 @@ class MainActivity : FragmentActivity() {
                                                                 tab = TAB_YOU
                                                             }
 
+                                                            // Auto-record was not running: the Ready check turns it on.
+                                                            com.echoledger.mobile.calls.MissedFix.TURN_ON -> {
+                                                                readyFix = ReadyFix.TURN_ON
+                                                                showReady = true
+                                                            }
+
                                                             else -> showReady = true
                                                         }
                                                     },

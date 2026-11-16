@@ -51,7 +51,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.calls.MissedFix
 import com.echoledger.mobile.calls.MissedItem
-import com.echoledger.mobile.calls.MissedReason
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
 import com.echoledger.mobile.data.LibraryItem
@@ -81,8 +80,9 @@ import kotlinx.coroutines.launch
  * The Activity tab (since v1.3): Needs action (calls waiting for Keep or Discard, and problems not seen yet), Today and
  * Earlier. Tapping an item marks it read and opens its recording; "Mark all as read" clears the badge.
  *
- * Since v1.8 this phone's missed recordings ([missed]) are items too, with the reason in plain words and a fix button
- * ([onFix]); the server's copy of one ("missed_recording", once it is reported) is not shown twice.
+ * Since v1.8 this phone's missed recordings ([missed]) are items too, with the reason in plain words (shown on the phone
+ * only: contract 1.8.0-e sends no free text) and a fix button ([onFix]); the server's copy of one ("missed_recording",
+ * once it is reported) is not shown twice.
  */
 @Composable
 fun ActivityScreen(
@@ -227,7 +227,7 @@ fun ActivityScreen(
                         onClick = { settleMissed(row, dismiss = false) },
                         onFix = {
                             settleMissed(row, dismiss = false)
-                            onFix(MissedReason.of(row.reason).fix)
+                            onFix(row.button)
                         }
                     )
                 }
@@ -250,12 +250,13 @@ fun ActivityScreen(
                 }) { i, row ->
                     if (row is MissedItem) {
                         DismissibleRow(onDismiss = { settleMissed(row, dismiss = true) }) {
+                            // Already read: tapping the row does nothing more, so it takes no tap (its button still works).
                             MissedRecordingRow(
                                 row,
                                 today,
                                 divider = i < rows.lastIndex,
-                                onClick = {},
-                                onFix = { onFix(MissedReason.of(row.reason).fix) }
+                                onClick = null,
+                                onFix = { onFix(row.button) }
                             )
                         }
                     } else {
@@ -271,10 +272,11 @@ fun ActivityScreen(
 
 /**
  * One missed recording of this phone (since v1.8): "Missed recording", the call ("WhatsApp call · 5:12"), why in plain
- * words, and the button that fixes it (the Ready check, the call test, or the plans).
+ * words (on the phone only), and the button that fixes it (the Ready check or Turn on, the call test, or the plans).
+ * [onClick] null: the row takes no tap.
  */
 @Composable
-internal fun MissedRecordingRow(item: MissedItem, today: LocalDate, divider: Boolean, onClick: () -> Unit, onFix: () -> Unit) {
+internal fun MissedRecordingRow(item: MissedItem, today: LocalDate, divider: Boolean, onClick: (() -> Unit)?, onFix: () -> Unit) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
     val app = com.echoledger.mobile.core.SourceApp.from(item.app)
@@ -285,7 +287,7 @@ internal fun MissedRecordingRow(item: MissedItem, today: LocalDate, divider: Boo
     Column(Modifier.fillMaxWidth()) {
         Row(
             Modifier.fillMaxWidth()
-                .clickable(onClick = onClick)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
                 .padding(horizontal = Space.screen, vertical = Space.s3),
             verticalAlignment = Alignment.Top
         ) {
@@ -312,7 +314,7 @@ internal fun MissedRecordingRow(item: MissedItem, today: LocalDate, divider: Boo
                 Text(call, style = type.labelM, color = c.textMuted)
                 Text(item.detail, style = type.labelM.copy(fontWeight = FontWeight.Normal), color = c.textMuted)
                 EchoButton(
-                    MissedReason.of(item.reason).fix.label,
+                    item.button.label,
                     onFix,
                     modifier = Modifier.padding(top = Space.s2),
                     kind = ButtonKind.Secondary

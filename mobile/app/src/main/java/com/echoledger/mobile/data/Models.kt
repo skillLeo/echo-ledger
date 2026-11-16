@@ -821,7 +821,10 @@ data class ActivityItemDto(
     @SerialName("session_id") val sessionId: String? = null,
     val read: Boolean = false,
     val at: String? = null,
-    /** Since v1.8 (contract 1.8.0-b), on `missed_recording` items: why the call was not recorded. */
+    /**
+     * Since v1.8 (contract 1.8.0-e), on `missed_recording` items: why the call was not recorded, as the reason's wire
+     * value (the phone shows its own sentence for it; the server keeps no free text).
+     */
     val reason: String? = null,
     @SerialName("missed_recording_id") val missedRecordingId: String? = null
 )

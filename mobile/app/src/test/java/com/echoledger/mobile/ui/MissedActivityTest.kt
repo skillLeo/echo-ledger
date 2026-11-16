@@ -1,6 +1,8 @@
 package com.echoledger.mobile.ui
 
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -138,6 +140,35 @@ class MissedActivityTest : ScreenTest() {
         compose.onAllNodesWithText("Needs action").assertCountEquals(0)
         compose.onNodeWithText("Check permissions").assertExists()
         assertEquals(0, ActivityBadge.needs(emptyList(), listOf(missed("r1", MissedReason.PERMISSION, read = true))))
+    }
+
+    @Test
+    fun `one already read takes no tap, an unread one does, and both keep their button`() {
+        showActivity(listOf(missed("r1", MissedReason.PERMISSION, read = true)))
+        pumpUntil("the list") { runCatching { compose.onNodeWithText("Missed recording").assertExists() }.isSuccess }
+        compose.onNodeWithText("Missed recording").assertHasNoClickAction()
+        compose.onNodeWithText("Check permissions").assertHasClickAction()
+    }
+
+    @Test
+    fun `an unread one takes a tap that marks it read`() {
+        showActivity(listOf(missed("r1", MissedReason.PERMISSION)))
+        pumpUntil("the list") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        compose.onNodeWithText("Missed recording").assertHasClickAction().performClick()
+        assertEquals(listOf("r1"), reads)
+    }
+
+    @Test
+    fun `auto-record that was not running is turned on from the item`() {
+        val off = missed(
+            "r1",
+            MissedReason.HELPER_NOT_ARMED
+        ).copy(detail = "Auto-record was not running when the call started.", fix = MissedFix.TURN_ON.name)
+        showActivity(listOf(off))
+        pumpUntil("the list") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        compose.onNodeWithText("Auto-record was not running when the call started.").assertExists()
+        compose.onNodeWithText("Turn on").performClick()
+        assertEquals(listOf(MissedFix.TURN_ON), fixes)
     }
 
     @Test
