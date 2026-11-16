@@ -1127,10 +1127,18 @@ it('adds one index on what the screen-share matrix groups by, keeps every result
     $rows = fn (): array => $db->table('share_check_results')->orderBy('id')->get()->map(fn (object $r): array => (array) $r)->all();
     $before = $rows();
 
-    $narrow = ['share_check_results_matrix_index', 'share_check_results_meeting_index', 'share_check_results_result_index'];
-    $columns = fn (): array => collect($db->getSchemaBuilder()->getIndexes('share_check_results'))->mapWithKeys(fn (array $i): array => [$i['name'] => $i['columns']])->all();
-    $first = $columns();
-    expect(array_intersect_key($first, array_flip($narrow)))->toHaveCount(3);
+    // The first migration's three narrower indexes, as it made them (none unique).
+    $original = ['share_check_results_matrix_index' => ['platform', 'os_build', 'app_version', 'method'],
+        'share_check_results_meeting_index' => ['meeting_app', 'meeting_app_version', 'share_mode'],
+        'share_check_results_result_index' => ['result']];
+    $narrow = array_keys($original);
+    $described = fn (): array => collect($db->getSchemaBuilder()->getIndexes('share_check_results'))->mapWithKeys(fn (array $i): array => [$i['name'] => $i])->all();
+    $asMade = function () use ($described, $original): void {
+        $now = array_intersect_key($described(), $original);
+        expect(array_map(fn (array $i): array => $i['columns'], $now))->toEqual($original)
+            ->and(array_filter($now, fn (array $i): bool => (bool) $i['unique']))->toBe([]);
+    };
+    $asMade();
 
     cycleArtisan('migrate', ['--step' => 1]);
     $index = collect($db->getSchemaBuilder()->getIndexes('share_check_results'))->firstWhere('name', 'share_check_results_group_index');
@@ -1143,9 +1151,8 @@ it('adds one index on what the screen-share matrix groups by, keeps every result
         ->and($rows())->toBe($before);
 
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_SHARE_CHECK_INDEX]);
-    expect($indexes())->not->toContain('share_check_results_group_index')
-        ->and(array_intersect_key($columns(), array_flip($narrow)))->toBe(array_intersect_key($first, array_flip($narrow)))
-        ->and($rows())->toBe($before);
+    expect($indexes())->not->toContain('share_check_results_group_index')->and($rows())->toBe($before);
+    $asMade();
     cycleArtisan('migrate', ['--step' => 1]);
     expect($indexes())->toContain('share_check_results_group_index')->and(array_intersect($indexes(), $narrow))->toBe([]);
 });

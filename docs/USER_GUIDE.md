@@ -439,8 +439,8 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
 Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless you choose
 **Show**. To take the floating windows off your own screen too, tap **Hide EchoLedger windows**: it's a button on the
 open recording controls and a Quick Settings tile. They shrink to a grey dot; tap the dot, or the tile again, to show
-them (**Show EchoLedger windows**). They stay hidden until you show them again or EchoLedger restarts. In Private (black
-box), on Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating
+them (**Show EchoLedger windows**). They stay hidden until you show them again or EchoLedger restarts. In **Private (black
+box)**, on Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating
 windows also shrink to the grey dot until it ends.
 
 What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
