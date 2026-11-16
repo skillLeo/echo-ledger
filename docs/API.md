@@ -3,6 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
+**Contract revision: 1.8.0-a (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
 - `GET /api/config` gains `api_version` and a `usage` block (monthly usage and limit).
@@ -181,6 +183,30 @@ a new one replaces the last. Any role may send one, a viewer too.
 `failed`, `detail` at most 300 characters or null. `201 {"data": {"reported_at": "…"}}`; `422 validation_failed`;
 `429 rate_limited`. The console shows them under System → Device reports: the super admin every device's, owners and
 admins those of their workspace.
+
+### `POST /api/devices/missed-recordings` — `config:read`, throttled (60/hour/device) (since v1.8, contract 1.8.0-a)
+A call the app saw but did not record (v1.8 P0 0.2). The app sends one when its missed-recording detector compares a
+call event with its recordings and finds none. It never sends names, phone numbers or audio; the call is described only
+by its app, its time and how long it lasted.
+```json
+{"client_ref": "c1f0…", "platform": "android", "app_version": "1.8.0", "source_app": "whatsapp",
+ "call_started_at": "2026-11-16T09:12:00Z", "call_duration_s": 312,
+ "reason": "helper_not_armed", "detail": "The helper was not connected when the call started."}
+```
+- `client_ref`: the app's own id for the event (UUID, at most 64), so a retry never makes a second item (same device +
+  `client_ref` → `200` with the existing id).
+- `platform` as elsewhere; `source_app` the session `source_app` wire values (`phone`, `whatsapp`, `whatsapp_business`,
+  `meet`, `zoom`, `teams`, `slack`, `browser`, `other`); `call_started_at` ISO-8601, not in the future, at most 30 days
+  old; `call_duration_s` 0–86400 or null.
+- `reason`: `helper_not_armed` | `permission` | `detection` | `mic_busy` | `crash` | `plan` | `unknown`.
+- `detail`: at most 300 characters or null, plain words for the person (no user content).
+- `201 {"data": {"id": "…"}}` (or `200` for a repeated `client_ref`); `422 validation_failed`; `429 rate_limited`.
+- The server adds an activity item `kind: "missed_recording"` for the device's person: title "Missed recording", body
+  e.g. "WhatsApp call · 5:12 · The helper was not connected", with `reason` and `missed_recording_id` in the item.
+  `GET /api/activity` returns them like other items. The fix button is the app's own (it knows the reason).
+- Admin: Diagnostics → Missed recordings counts per device and reason (last 7 and 30 days); staff with the
+  device-reports permission; owners and admins see their workspace's devices. No call details beyond the fields above.
+- Isolation: a device only ever writes its own events; another workspace's ids are `404`.
 
 ### Signing in with an account (since v1.5)
 People have their own accounts (email and password, or Google), and a phone or computer signs in to its owner's
