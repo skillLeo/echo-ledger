@@ -1332,13 +1332,20 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .help-sheet { width: min(620px, calc(100vw - 48px)); max-height: calc(90vh - var(--space-4)); display: flex; flex-direction: column; overflow: hidden; }
 .help-sheet .help-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: var(--space-3); align-content: start; }
 .help-sheet .help-actions { flex: none; flex-wrap: wrap; }
+/* Close stays at the end of its line when the buttons wrap (the spacer before it can stay on the line above). */
+.help-sheet .help-actions > .btn:last-child { margin-inline-start: auto; }
 .sheet-head { display: flex; align-items: center; gap: var(--space-2); }
 .sheet-head .sheet-title { flex: 1; min-width: 0; }
-/* A short window (200 % text in the smallest one): the whole sheet scrolls, its title and x stay at the top. */
+/* A short window (200 % text in the smallest one): the whole sheet scrolls, its title and x stay at the top and its
+   buttons at the bottom (D-133), so they are on screen at every text size, as in a taller window. */
 @media (max-height: 480px) {
   .help-sheet { overflow-y: auto; }
   .help-sheet .help-body { flex: none; overflow: visible; }
   .help-sheet .sheet-head { position: sticky; top: calc(-1 * var(--space-5)); z-index: 1; margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-5)) 0; padding: var(--space-5) var(--space-5) var(--space-2); background: inherit; }
+  .help-sheet .help-actions { position: sticky; bottom: calc(-1 * var(--space-5)); z-index: 1; margin: 0 calc(-1 * var(--space-5)) calc(-1 * var(--space-5)); padding: var(--space-2) var(--space-5) var(--space-3); gap: var(--space-1) var(--space-2); background: inherit; border-top: 1px solid var(--border); }
+  /* Compact there, so the list keeps its room between the title and the buttons. */
+  .help-sheet .help-actions .btn { height: 30px; padding: 0 var(--space-3); font-size: var(--text-sm); }
+  .help-sheet .help-body > .help-head:first-child { margin-top: 0; }
 }
 .help-head { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
 .key-list { margin: 0; display: grid; gap: 0; }

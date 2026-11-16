@@ -431,6 +431,18 @@ describe("Help fits the window (D-079)", () => {
     expect(prop(".help-sheet .help-body", "overflow-y")).toBe("auto");
     expect(prop(".help-sheet", "overflow")).toBe("hidden");
   });
+
+  it("keeps its buttons on screen at every text size: stuck to the bottom edge in a short window (D-133)", () => {
+    // A short window (200 % text): the whole sheet scrolls, the title sticks to the top and the buttons to the bottom.
+    const short = media("(max-height: 480px)");
+    expect(prop(".help-sheet", "overflow-y", short)).toBe("auto");
+    expect(prop(".help-sheet .sheet-head", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "bottom", short)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".help-sheet .help-actions", "background", short)).toBe("inherit");
+    // Close stays at the end of its line when the buttons wrap.
+    expect(prop(".help-sheet .help-actions > .btn:last-child", "margin-inline-start")).toBe("auto");
+  });
 });
 
 describe("the Library and recording page never clip or scroll sideways", () => {
