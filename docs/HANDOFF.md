@@ -188,6 +188,12 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   shows a full-screen Space, and the menu bar menu must open over full-screen apps; it hides nothing from any other
   software. The reviewer checks for a public alternative; if one works, switch to it. Private macOS calls in use:
   _setPreventsActivation: (floating panels) and CGSCopyManagedDisplaySpaces (Spaces) — no others without a decision here.
+- v1.8.1 DEPLOY NOTES (from the web review, 2026-11-17): the D-131 migration (2026_12_05_000002, rewrites sent
+  "Transcription failed" items into plain words; down() is a deliberate no-op — the raw text is never restored) must run
+  AFTER `queue:restart` and after the workers have drained (a worker on old code could post a raw item after the
+  rewrite, kept 90–180 days); on shared hosting wait ≥ 60 s, on a VPS until the 900 s job limit passes or the queue is
+  idle. Also check production's Pro plan description on the Plans page (the D-129 migration only rewrites unedited
+  text). Phone bug to log: Revoke on the phone acts at once (TranscriptTools.kt:315-317, Projects.kt:754).
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-17 · desktop S0/S1 round (D-105 S0 after-call Discard with Undo and delayed delete; D-072 S1 Revoke asks;
     the app's own accessible confirm dialog replacing all window.confirm: D-045, D-085, D-093, D-101, D-122) +
