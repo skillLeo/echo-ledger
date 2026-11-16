@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -24,15 +25,20 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
+import com.echoledger.mobile.ui.v2.components.EchoBanner
+import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoCard
 import com.echoledger.mobile.ui.v2.components.EchoDestination
+import com.echoledger.mobile.ui.v2.components.EchoEmptyState
+import com.echoledger.mobile.ui.v2.components.EchoErrorState
 import com.echoledger.mobile.ui.v2.components.EchoFilter
 import com.echoledger.mobile.ui.v2.components.EchoFilterBar
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
@@ -42,6 +48,9 @@ import com.echoledger.mobile.ui.v2.components.EchoPlayer
 import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
+import com.echoledger.mobile.ui.v2.components.EchoSkeletonBlock
+import com.echoledger.mobile.ui.v2.components.EchoSkeletonCircle
+import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoSwitch
@@ -62,8 +71,14 @@ private const val FILTER_UNTRANSCRIBED = "untranscribed"
 
 /** Library › All recordings: search, quick filters, WhatsApp-style rows, the bottom bar. */
 @Composable
-fun SampleLibraryScreen(content: SampleContent, modifier: Modifier = Modifier, initialFilters: Set<String> = emptySet()) {
+fun SampleLibraryScreen(
+    content: SampleContent,
+    modifier: Modifier = Modifier,
+    initialFilters: Set<String> = emptySet(),
+    state: SampleState = SampleState.Content
+) {
     val c = EchoV2.colors
+    val copy = SampleStateCopy.of(content.language)
     var query by remember(content) { mutableStateOf("") }
     var filters by remember(content) { mutableStateOf(initialFilters) }
     val shown = content.items.filter { item ->
@@ -100,20 +115,18 @@ fun SampleLibraryScreen(content: SampleContent, modifier: Modifier = Modifier, i
             onToggle = { key -> filters = if (key in filters) filters - key else filters + key },
             modifier = Modifier.padding(vertical = EchoTokens.Space.s4)
         )
-        LazyColumn(Modifier.weight(1f)) {
-            items(shown, key = { it.title }) { item ->
-                val source = content.sourceNames.getValue(item.source)
-                EchoListRow(
-                    title = item.title,
-                    meta = item.meta,
-                    titleEnd = item.time,
-                    metaEnd = { Text(formatClock(item.durationMs), style = EchoV2.type.mono, color = c.textSecondary) },
-                    status = item.status?.let { (label, kind) -> { EchoStatus(label, kind) } },
-                    leading = { EchoAvatar(icon = item.source.icon, contentDescription = source) },
-                    tall = true,
-                    onClick = {}
-                )
+        when (state) {
+            SampleState.Loading -> EchoSkeletonList(7, Modifier.weight(1f))
+
+            SampleState.Empty -> Box(Modifier.weight(1f)) {
+                EchoEmptyState(copy.noRecordingsTitle, copy.noRecordingsBody, icon = EchoIcons.Library, actionLabel = copy.setUpRecording)
             }
+
+            SampleState.Error -> Box(Modifier.weight(1f)) {
+                EchoErrorState(copy.libraryErrorTitle, copy.libraryErrorBody, actionLabel = copy.tryAgain)
+            }
+
+            SampleState.Content -> LibraryList(content, shown)
         }
         EchoBottomBar(
             destinations = listOf(
@@ -128,10 +141,31 @@ fun SampleLibraryScreen(content: SampleContent, modifier: Modifier = Modifier, i
     }
 }
 
+@Composable
+private fun ColumnScope.LibraryList(content: SampleContent, shown: List<SampleRecording>) {
+    val c = EchoV2.colors
+    LazyColumn(Modifier.weight(1f)) {
+        items(shown, key = { it.title }) { item ->
+            val source = content.sourceNames.getValue(item.source)
+            EchoListRow(
+                title = item.title,
+                meta = item.meta,
+                titleEnd = item.time,
+                metaEnd = { Text(formatClock(item.durationMs), style = EchoV2.type.mono, color = c.textSecondary) },
+                status = item.status?.let { (label, kind) -> { EchoStatus(label, kind) } },
+                leading = { EchoAvatar(icon = item.source.icon, contentDescription = source) },
+                tall = true,
+                onClick = {}
+            )
+        }
+    }
+}
+
 /** A recording: its title and source, the player, the actions, then the transcript with speakers. */
 @Composable
-fun SampleRecordingScreen(content: SampleContent, modifier: Modifier = Modifier) {
+fun SampleRecordingScreen(content: SampleContent, modifier: Modifier = Modifier, state: SampleState = SampleState.Content) {
     val c = EchoV2.colors
+    val copy = SampleStateCopy.of(content.language)
     var position by remember { mutableLongStateOf(221_000L) }
     var playing by remember { mutableStateOf(false) }
     var tab by remember { mutableIntStateOf(0) }
@@ -139,6 +173,10 @@ fun SampleRecordingScreen(content: SampleContent, modifier: Modifier = Modifier)
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(title = "", onBack = {}) {
             EchoIconButton(EchoIcons.More, EchoV2.strings.more, onClick = {})
+        }
+        if (state == SampleState.Loading) {
+            RecordingSkeleton()
+            return@Column
         }
         LazyColumn(Modifier.weight(1f)) {
             item {
@@ -160,7 +198,11 @@ fun SampleRecordingScreen(content: SampleContent, modifier: Modifier = Modifier)
                             color = c.textSecondary,
                             modifier = Modifier.weight(1f, fill = false)
                         )
-                        EchoStatus(content.transcribed, EchoStatusKind.Success)
+                        when (state) {
+                            SampleState.Empty -> EchoStatus(copy.untranscribed, EchoStatusKind.Neutral)
+                            SampleState.Error -> EchoStatus(copy.failed, EchoStatusKind.Danger)
+                            else -> EchoStatus(content.transcribed, EchoStatusKind.Success)
+                        }
                     }
                     EchoPlayer(
                         positionMs = position,
@@ -187,19 +229,63 @@ fun SampleRecordingScreen(content: SampleContent, modifier: Modifier = Modifier)
                 }
             }
             item { EchoTabs(content.tabs, tab, onSelect = { tab = it }) }
-            items(content.transcript) { line ->
-                EchoTranscriptLine(line.speaker, line.time, line.text, isMe = line.isMe)
+            when (state) {
+                SampleState.Empty -> item {
+                    EchoEmptyState(
+                        copy.noTranscriptTitle,
+                        copy.noTranscriptBody,
+                        icon = EchoIcons.Transcribe,
+                        actionLabel = copy.transcribe
+                    )
+                }
+
+                SampleState.Error -> item {
+                    EchoErrorState(copy.transcriptFailedTitle, copy.transcriptFailedBody, actionLabel = copy.tryAgain)
+                }
+
+                else -> items(content.transcript) { line ->
+                    EchoTranscriptLine(line.speaker, line.time, line.text, isMe = line.isMe)
+                }
             }
             item { Spacer(Modifier.height(EchoTokens.Space.s24)) }
         }
     }
 }
 
+/** The recording page while it loads: the title, meta, player and transcript as static blocks. */
+@Composable
+private fun ColumnScope.RecordingSkeleton() {
+    val loading = EchoV2.strings.loading
+    Column(
+        Modifier
+            .weight(1f)
+            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
+            .clearAndSetSemantics { contentDescription = loading },
+        verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+    ) {
+        EchoSkeletonBlock(fraction = 0.55f, height = EchoTokens.Space.s32)
+        EchoSkeletonBlock(fraction = 0.7f, height = EchoTokens.Space.s16)
+        EchoSkeletonBlock(Modifier.padding(top = EchoTokens.Space.s16), height = EchoTokens.Border.strong + EchoTokens.Border.strong)
+        Row(Modifier.fillMaxWidth().padding(vertical = EchoTokens.Space.s16), horizontalArrangement = Arrangement.Center) {
+            EchoSkeletonCircle(size = EchoTokens.Space.s64)
+        }
+        EchoSkeletonBlock(Modifier.padding(top = EchoTokens.Space.s32), fraction = 0.3f, height = EchoTokens.Space.s16)
+        repeat(4) { i ->
+            EchoSkeletonBlock(Modifier.padding(top = EchoTokens.Space.s16), fraction = 0.25f)
+            EchoSkeletonBlock(fraction = listOf(0.95f, 0.8f, 0.9f, 0.7f)[i], height = EchoTokens.Space.s16)
+            EchoSkeletonBlock(fraction = listOf(0.6f, 0.45f, 0.7f, 0.5f)[i], height = EchoTokens.Space.s16)
+        }
+    }
+}
+
 /** Settings: search, the profile card with the plan and Upgrade, then plain grouped rows with values at the end. */
 @Composable
-fun SampleSettingsScreen(content: SampleContent, modifier: Modifier = Modifier) {
+fun SampleSettingsScreen(content: SampleContent, modifier: Modifier = Modifier, state: SampleState = SampleState.Content) {
     val c = EchoV2.colors
-    var query by remember { mutableStateOf("") }
+    val copy = SampleStateCopy.of(content.language)
+    var query by remember(content, state) { mutableStateOf(if (state == SampleState.Empty) copy.settingsQuery else "") }
+    val matching = content.groups.map { g -> g to g.rows.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) } }
+        .filter { it.second.isNotEmpty() }
     val switches =
         remember(content) {
             mutableStateOf(content.groups.flatMap { g -> g.rows.mapNotNull { r -> r.switch?.let { r.title to it } } }.toMap())
@@ -215,51 +301,69 @@ fun SampleSettingsScreen(content: SampleContent, modifier: Modifier = Modifier) 
                     modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile)
                 )
             }
-            item {
-                EchoCard(
-                    Modifier.padding(
-                        start = EchoTokens.Layout.pagePaddingMobile,
-                        end = EchoTokens.Layout.pagePaddingMobile,
-                        top = EchoTokens.Space.s16
+            if (state == SampleState.Loading) item { ProfileSkeleton() }
+            if (state == SampleState.Error) {
+                item {
+                    EchoBanner(
+                        copy.accountError,
+                        EchoBannerKind.Error,
+                        Modifier.padding(
+                            start = EchoTokens.Layout.pagePaddingMobile,
+                            end = EchoTokens.Layout.pagePaddingMobile,
+                            top = EchoTokens.Space.s16
+                        ),
+                        actionLabel = copy.tryAgain
                     )
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+                }
+            }
+            if (matching.isEmpty()) {
+                item { EchoEmptyState(copy.noSettingsTitle, copy.noSettingsBody, icon = EchoIcons.Search) }
+            }
+            if (state == SampleState.Content) {
+                item {
+                    EchoCard(
+                        Modifier.padding(
+                            start = EchoTokens.Layout.pagePaddingMobile,
+                            end = EchoTokens.Layout.pagePaddingMobile,
+                            top = EchoTokens.Space.s16
+                        )
                     ) {
-                        EchoAvatar(initials = content.profileName.initials())
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                content.profileName,
-                                style = EchoV2.type.bodyStrong,
-                                color = c.textPrimary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                content.profileEmail,
-                                style = EchoV2.type.metaLatin,
-                                color = c.textSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+                        ) {
+                            EchoAvatar(initials = content.profileName.initials())
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    content.profileName,
+                                    style = EchoV2.type.bodyStrong,
+                                    color = c.textPrimary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    content.profileEmail,
+                                    style = EchoV2.type.metaLatin,
+                                    color = c.textSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-                    ) {
-                        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
-                            EchoStatus(content.plan, EchoStatusKind.Accent)
-                            Text(content.usage, style = EchoV2.type.meta, color = c.textSecondary)
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
+                        ) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+                                EchoStatus(content.plan, EchoStatusKind.Accent)
+                                Text(content.usage, style = EchoV2.type.meta, color = c.textSecondary)
+                            }
+                            EchoButton(content.upgrade, onClick = {})
                         }
-                        EchoButton(content.upgrade, onClick = {})
                     }
                 }
             }
-            content.groups.forEach { group ->
-                val rows = group.rows.filter { query.isBlank() || it.title.contains(query, ignoreCase = true) }
-                if (rows.isEmpty()) return@forEach
+            matching.forEach { (group, rows) ->
                 item(key = group.title) { EchoSectionHeader(group.title) }
                 rows.forEach { row ->
                     item(key = group.title + row.title) {
@@ -284,6 +388,27 @@ fun SampleSettingsScreen(content: SampleContent, modifier: Modifier = Modifier) 
             }
             item { Spacer(Modifier.height(EchoTokens.Space.s32)) }
         }
+    }
+}
+
+/** The profile card while the account loads. */
+@Composable
+private fun ProfileSkeleton() {
+    val loading = EchoV2.strings.loading
+    EchoCard(
+        Modifier
+            .padding(start = EchoTokens.Layout.pagePaddingMobile, end = EchoTokens.Layout.pagePaddingMobile, top = EchoTokens.Space.s16)
+            .clearAndSetSemantics { contentDescription = loading }
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
+            EchoSkeletonCircle()
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                EchoSkeletonBlock(fraction = 0.5f, height = EchoTokens.Space.s16)
+                EchoSkeletonBlock(fraction = 0.7f)
+            }
+        }
+        EchoSkeletonBlock(fraction = 0.3f, height = EchoTokens.Space.s20)
+        EchoSkeletonBlock(fraction = 0.8f)
     }
 }
 

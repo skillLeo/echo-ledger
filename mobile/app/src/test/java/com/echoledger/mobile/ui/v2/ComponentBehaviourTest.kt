@@ -13,12 +13,14 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -244,6 +246,12 @@ class ComponentBehaviourTest {
         assertEquals(EchoTokens.Dark.dangerDefault, EchoV2Colors.Dark.danger)
         // EchoV2Theme has no dynamic-colour switch at all.
         assertFalse(EchoV2Colors::class.java.methods.any { it.name.contains("dynamic", ignoreCase = true) })
+    }
+
+    @Test
+    fun aSkeletonIsReadAsLoadingOnce() {
+        show { com.echoledger.mobile.ui.v2.components.EchoSkeletonList(3) }
+        compose.onAllNodesWithContentDescription("Loading").assertCountEquals(1)
     }
 
     @Test

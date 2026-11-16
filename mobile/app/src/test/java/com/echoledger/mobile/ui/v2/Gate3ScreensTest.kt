@@ -13,6 +13,7 @@ import com.echoledger.mobile.ui.v2.samples.SampleContent
 import com.echoledger.mobile.ui.v2.samples.SampleLibraryScreen
 import com.echoledger.mobile.ui.v2.samples.SampleRecordingScreen
 import com.echoledger.mobile.ui.v2.samples.SampleSettingsScreen
+import com.echoledger.mobile.ui.v2.samples.SampleState
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -27,7 +28,8 @@ import org.robolectric.annotation.GraphicsMode
 
 /**
  * The Gate 3 sample screens at the Galaxy S25's size (1080 x 2340 px, 420 dpi): Library, a recording and Settings, each
- * light and dark, in English and in Urdu. Recorded to docs/v2/gate3/phone/ (`-Proborazzi.test.record=true`).
+ * light and dark, in English and in Urdu, and their empty, loading and error states (docs/v2/gate3/phone/states/).
+ * Recorded with `-Proborazzi.test.record=true`.
  */
 @RunWith(RobolectricTestRunner::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
@@ -41,7 +43,7 @@ class Gate3ScreensTest {
     private var dark by mutableStateOf(false)
     private var language by mutableStateOf(EchoLanguage.English)
 
-    private fun shootAll(name: String, screen: @Composable (SampleContent) -> Unit) {
+    private fun shootAll(name: String, dir: File = outDir, screen: @Composable (SampleContent) -> Unit) {
         compose.setContent {
             EchoV2Theme(darkTheme = dark, language = language) { screen(SampleContent.of(language)) }
         }
@@ -53,7 +55,7 @@ class Gate3ScreensTest {
                 val file = "$name-${if (isDark) "dark" else "light"}-${if (lang == EchoLanguage.Urdu) "ur" else "en"}.png"
                 val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
                 assertEquals("$file width", 1080, bitmap.width, 2f)
-                compose.onRoot().captureRoboImage(File(outDir, file))
+                compose.onRoot().captureRoboImage(File(dir, file))
             }
         }
     }
@@ -69,4 +71,33 @@ class Gate3ScreensTest {
 
     @Test
     fun settings() = shootAll("settings") { SampleSettingsScreen(it) }
+
+    private val statesDir = File(outDir, "states")
+
+    @Test
+    fun libraryEmpty() = shootAll("library-empty", statesDir) { SampleLibraryScreen(it, state = SampleState.Empty) }
+
+    @Test
+    fun libraryLoading() = shootAll("library-loading", statesDir) { SampleLibraryScreen(it, state = SampleState.Loading) }
+
+    @Test
+    fun libraryError() = shootAll("library-error", statesDir) { SampleLibraryScreen(it, state = SampleState.Error) }
+
+    @Test
+    fun recordingEmpty() = shootAll("recording-empty", statesDir) { SampleRecordingScreen(it, state = SampleState.Empty) }
+
+    @Test
+    fun recordingLoading() = shootAll("recording-loading", statesDir) { SampleRecordingScreen(it, state = SampleState.Loading) }
+
+    @Test
+    fun recordingError() = shootAll("recording-error", statesDir) { SampleRecordingScreen(it, state = SampleState.Error) }
+
+    @Test
+    fun settingsEmpty() = shootAll("settings-empty", statesDir) { SampleSettingsScreen(it, state = SampleState.Empty) }
+
+    @Test
+    fun settingsLoading() = shootAll("settings-loading", statesDir) { SampleSettingsScreen(it, state = SampleState.Loading) }
+
+    @Test
+    fun settingsError() = shootAll("settings-error", statesDir) { SampleSettingsScreen(it, state = SampleState.Error) }
 }

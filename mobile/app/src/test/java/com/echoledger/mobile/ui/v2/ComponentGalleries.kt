@@ -17,6 +17,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
+import com.echoledger.mobile.ui.v2.components.EchoBanner
+import com.echoledger.mobile.ui.v2.components.EchoBannerKind
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoButtonKind
@@ -26,6 +28,7 @@ import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoDialogContent
 import com.echoledger.mobile.ui.v2.components.EchoDivider
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
+import com.echoledger.mobile.ui.v2.components.EchoErrorState
 import com.echoledger.mobile.ui.v2.components.EchoFilter
 import com.echoledger.mobile.ui.v2.components.EchoFilterBar
 import com.echoledger.mobile.ui.v2.components.EchoIconButton
@@ -38,6 +41,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSegmented
 import com.echoledger.mobile.ui.v2.components.EchoSelect
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoSheetContent
+import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
 import com.echoledger.mobile.ui.v2.components.EchoStatus
 import com.echoledger.mobile.ui.v2.components.EchoStatusKind
 import com.echoledger.mobile.ui.v2.components.EchoSwitch
@@ -70,6 +74,7 @@ object ComponentGalleries {
         "checkbox" to { ur -> Checkboxes(ur) },
         "radio" to { ur -> Radios(ur) },
         "empty-state" to { ur -> EmptyStates(ur) },
+        "loading-error" to { ur -> LoadingAndErrors(ur) },
         "tabs-segmented" to { ur -> TabsAndSegmented(ur) },
         "bars" to { ur -> Bars(ur) },
         "player-transcript" to { ur -> PlayerAndTranscript(ur) }
@@ -303,6 +308,31 @@ private fun EmptyStates(ur: Boolean) = Gallery {
         t(ur, "No untranscribed recordings", "کوئی ریکارڈنگ ٹرانسکرپٹ کے بغیر نہیں"),
         t(ur, "Everything from today has a transcript.", "آج کی ہر ریکارڈنگ کا ٹرانسکرپٹ بن چکا ہے۔"),
         actionLabel = t(ur, "Show all recordings", "تمام ریکارڈنگز دکھائیں")
+    )
+}
+
+@Composable
+private fun LoadingAndErrors(ur: Boolean) = Gallery {
+    EchoSkeletonList(2)
+    EchoBanner(
+        t(ur, "You're offline. Showing recordings saved on this phone.", "آپ آف لائن ہیں۔ اس فون پر محفوظ ریکارڈنگز دکھائی جا رہی ہیں۔"),
+        EchoBannerKind.Info,
+        pad
+    )
+    EchoBanner(
+        t(ur, "WhatsApp recording needs setup.", "واٹس ایپ ریکارڈنگ کا سیٹ اپ باقی ہے۔"),
+        EchoBannerKind.Warning,
+        pad,
+        actionLabel = t(ur, "Set up", "سیٹ اپ")
+    )
+    EchoErrorState(
+        t(ur, "Couldn't load your recordings", "ریکارڈنگز لوڈ نہیں ہو سکیں"),
+        t(
+            ur,
+            "Check the internet connection. Recordings on this phone are safe.",
+            "انٹرنیٹ کنکشن چیک کریں۔ اس فون پر موجود ریکارڈنگز محفوظ ہیں۔"
+        ),
+        actionLabel = t(ur, "Try again", "دوبارہ کوشش کریں")
     )
 }
 
