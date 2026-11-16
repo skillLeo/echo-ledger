@@ -2815,11 +2815,17 @@ pub fn share_check_drawn(window: WebviewWindow) {
     privacy.drawn.notify_waiters();
 }
 
-/// The guided test's big card (Mac).
+/// The guided test's big card (Mac). A sync command runs on the main thread, where building a window deadlocks on
+/// Windows (WebView2), so it opens on a Mac only.
 #[tauri::command]
 pub fn share_check_card(app: AppHandle, window: WebviewWindow, open: bool) -> AppResult<()> {
     crate::privacy::from_main_window(window.label())?;
-    if open { crate::privacy::check::guided_open(&app) } else { crate::privacy::check::guided_close(&app); Ok(()) }
+    if !open {
+        crate::privacy::check::guided_close(&app);
+        return Ok(());
+    }
+    crate::privacy::check::guided_here(cfg!(target_os = "macos"))?;
+    crate::privacy::check::guided_open(&app)
 }
 
 /// "I can see it" (`visible`) or "I can't see it" for a meeting app.

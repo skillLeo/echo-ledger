@@ -696,6 +696,11 @@ fn main_frame(app: &AppHandle) -> Option<(Bounds, Option<tauri::Monitor>)> {
     Some((frame, window.current_monitor().ok().flatten()))
 }
 
+/// The test with the phone is the Mac's (pure): its card opens there only.
+pub fn guided_here(macos: bool) -> AppResult<()> {
+    if macos { Ok(()) } else { Err(AppError::msg("The test with your phone is on the Mac. On Windows, Check screen-share privacy shows what others see.")) }
+}
+
 /// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app. It never
 /// takes the focus (the keyboard and VoiceOver stay on the question in the main window) and sits clear of the main
 /// window, so it never covers the answer buttons.
@@ -1080,6 +1085,18 @@ mod tests {
             assert!(!literal.contains(lock), "`{lock}` inside the PrivacyStatus literal is held while the main thread is asked");
         }
         assert!(status.find("let share = privacy.share_seen.lock()").unwrap() < status.find("\n    PrivacyStatus {").unwrap(), "the share is read first");
+    }
+
+    #[test]
+    fn the_phone_test_card_opens_on_a_mac_only() {
+        assert!(guided_here(true).is_ok());
+        let refused = guided_here(false).unwrap_err().to_string();
+        assert!(refused.contains("on the Mac") && refused.contains("Check screen-share privacy"), "{refused}");
+        // The sync command asks before it builds the card (on Windows a window built there would deadlock).
+        let commands = include_str!("../commands.rs");
+        let card = &commands[commands.find("pub fn share_check_card(").unwrap()..];
+        let card = &card[..card.find("\n}\n").unwrap()];
+        assert!(card.find("guided_here(cfg!(target_os = \"macos\"))?").unwrap() < card.find("guided_open(&app)").unwrap());
     }
 
     #[test]

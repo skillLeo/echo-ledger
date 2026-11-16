@@ -119,6 +119,24 @@ pub fn demo_tick(current: Option<Demo>, mine: Demo, now: Instant, wall: SystemTi
     }
 }
 
+/// A window as people know it (pure; docs/DESIGN_SYSTEM.md "Screen-share privacy names"), for the lines the privacy log
+/// keeps and "Copy diagnostics" hands out: never a window's internal label.
+pub fn window_name(label: &str) -> &'static str {
+    match label {
+        crate::lifecycle::MAIN => "main window",
+        crate::overlay::OVERLAY => "captions",
+        crate::overlay::DICTATION => "dictation box",
+        crate::overlay::PILL => "recording controls",
+        crate::overlay::REVIEW => "after-call card",
+        crate::translate::WINDOW => "Live Translate",
+        ASSIST => "Live Assist card",
+        CHECK_TEST => "test window of the check",
+        CHECK_CONTROL => "green square of the check",
+        GUIDED_CARD => "test card",
+        _ => "floating window",
+    }
+}
+
 /// Whether a window of `kind` is left out of screen shares (pure). Live Translate follows the floating windows: its
 /// history (`git log -S create_translate_window`) shows the window was built unprotected with the same builder and no
 /// reason given, not as a choice, so it follows the setting like the others.
@@ -436,6 +454,11 @@ fn enforce<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: b
     }
 }
 
+/// The privacy log's line when a window's capture flag reads back other than EchoLedger set it (pure; `read` as shown).
+pub fn mismatch_line(label: &str, read: String, wanted: u32) -> String {
+    format!("The capture flag of the {} read {read} right after EchoLedger set 0x{wanted:x}.", window_name(label))
+}
+
 /// Windows, on the main thread: sets one window's affinity and reads it back; records the result and logs a mismatch.
 /// True when it reads as wanted.
 #[cfg(windows)]
@@ -444,7 +467,7 @@ pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isiz
     if let win::Readback::Mismatch { read, .. } = readback {
         let read = read.map_or_else(|| "nothing".to_string(), |r| format!("0x{r:x}"));
         if let Some(state) = app.try_state::<crate::AppState>() {
-            diag::log(&state.data_dir, &format!("The {label} window's capture flag read {read} right after EchoLedger set 0x{wanted:x}."));
+            diag::log(&state.data_dir, &mismatch_line(label, read, wanted));
         }
         check::report_mismatch(app);
     }
@@ -1082,6 +1105,44 @@ mod tests {
         assert_eq!(crate::tray::hidden_line(&p), Some(crate::tray::Hidden::Share));
         p.set_bar_on_screen(true);
         assert_eq!(crate::tray::hidden_line(&p), Some(crate::tray::Hidden::ShareBar));
+    }
+
+    #[test]
+    fn the_privacy_log_names_windows_the_way_people_know_them() {
+        // "Copy diagnostics" hands these lines out: docs/DESIGN_SYSTEM.md's names, never a window's internal label.
+        let internal = ["pill", "overlay", "chip", "toast", "popup", "bubble", "review", "share-check"];
+        let mut labels: Vec<&str> = KNOWN.iter().map(|(label, _)| *label).collect();
+        labels.push("notes");
+        for label in labels {
+            let name = window_name(label);
+            let lines = [
+                mismatch_line(label, "0x0".into(), 0x11),
+                win::Changed { label: label.into(), set: 0x11, read: Some(0) }.line(),
+                win::Changed { label: label.into(), set: 0x11, read: None }.line(),
+            ];
+            for line in lines {
+                assert!(line.contains(name), "{line}");
+                let words: Vec<String> = line.split(|c: char| !c.is_alphanumeric() && c != '-').map(str::to_lowercase).collect();
+                for word in internal {
+                    assert!(!words.iter().any(|w| w.starts_with(word)), "{label}: `{word}` in {line}");
+                }
+                if !name.to_lowercase().contains(&label.to_lowercase()) {
+                    assert!(!words.contains(&label.to_lowercase()), "{label}: the internal label in {line}");
+                }
+            }
+        }
+        assert_eq!(window_name(crate::overlay::PILL), "recording controls");
+        assert_eq!(window_name(crate::overlay::OVERLAY), "captions");
+        assert_eq!(window_name(crate::overlay::REVIEW), "after-call card");
+        assert_eq!(window_name(crate::translate::WINDOW), "Live Translate");
+        assert_eq!(window_name("notes"), "floating window", "a window added later");
+        // The log lines are made only there.
+        for (file, source) in [("mod.rs", include_str!("mod.rs")), ("win.rs", include_str!("win.rs"))] {
+            let code = source.split("\n#[cfg(test)]\nmod tests").next().unwrap();
+            for raw in ["The {label} window", "The {} window's", "\"The {} window"] {
+                assert!(!code.contains(raw), "{file}: a line made with the label itself");
+            }
+        }
     }
 
     #[test]

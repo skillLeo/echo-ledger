@@ -186,8 +186,8 @@ fn overlays_never_activate_echoledger_and_stay_out_of_its_window_lists() {
     for applied in ["setStyleMask(NSWindowStyleMask(mac_overlay_style(ns_window.styleMask().0)))", "setExcludedFromWindowsMenu(true)", "setCollectionBehavior(NSWindowCollectionBehavior(MAC_OVERLAY_BEHAVIOUR))", "setLevel(MAC_OVERLAY_LEVEL)", "setCanHide(false)"] {
         assert!(keep.contains(applied), "{applied}");
     }
-    // Every overlay gets it: the recording controls, captions, dictation, the after-call card, the meeting prompt and
-    // Live Translate are all built by `create_overlay` or `create_translate_window`, never focusable.
+    // Every floating window gets it: the recording controls, captions, dictation, the after-call card and Live Translate
+    // are all built by `create_overlay` or `create_translate_window`, never focusable.
     let overlay = include_str!("../src/overlay/mod.rs");
     assert_eq!(overlay.matches("macos::keep_above_everything(&window);").count(), 2);
     assert!(overlay.contains(".focused(false)\n        .focusable(false)"));

@@ -97,7 +97,7 @@ pub struct Changed {
 impl Changed {
     pub fn line(&self) -> String {
         let read = self.read.map_or_else(|| "nothing".to_string(), |r| format!("0x{r:x}"));
-        format!("The {} window's capture flag read {read} instead of 0x{:x}, changed by something else on this computer: left as it is until Hide again.", self.label, self.set)
+        format!("The capture flag of the {} read {read} instead of 0x{:x}, changed by something else on this computer: left as it is until Hide again.", super::window_name(&self.label), self.set)
     }
 }
 
@@ -362,7 +362,7 @@ mod tests {
         assert_eq!(changed, vec![Changed { label: "pill".into(), set: WDA_EXCLUDEFROMCAPTURE, read: Some(WDA_NONE) }]);
         assert_eq!(windows.sets.borrow().len(), sets, "never set again by itself");
         assert_eq!(windows.get(1), Some(WDA_NONE), "left as it is");
-        assert_eq!(changed[0].line(), "The pill window's capture flag read 0x0 instead of 0x11, changed by something else on this computer: left as it is until Hide again.");
+        assert_eq!(changed[0].line(), "The capture flag of the recording controls read 0x0 instead of 0x11, changed by something else on this computer: left as it is until Hide again.");
         assert!(watch.any_mismatch() && watch.changed_outside(), "visible in screen share");
         assert_eq!(lines(Some(22_631), false, OldWindowsSharing::BlackBox, true, true), vec![Line { fix: Some(Fix::HideAgain), ..Line::warning(CHANGED_OUTSIDE_LINE) }]);
 
