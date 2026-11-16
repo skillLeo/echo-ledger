@@ -1,17 +1,28 @@
 //! Anthropic's Messages API, streamed (`POST /v1/messages`, `stream: true`).
 //!
-//! - The context's system segments go in `system`, the rest in one user message, block by block, with
-//!   `cache_control` after each segment the context marks (rules, memory, the last full transcript block: at most 3
-//!   of the 4 breakpoints the API allows). The prefix up to a breakpoint is byte-identical from one request to the
-//!   next, so it is read from the cache.
-//! - The model's `options` from the settings: `effort` goes to `output_config.effort`, `thinking` to
-//!   `thinking.type` (`disabled` for Haiku 5.5 at low effort; `between_tools` for Sonnet 5.5, which refuses
-//!   `disabled`; Opus 5.5 can't turn thinking off and gets no `thinking` at all); anything else goes to the request
-//!   as it is. No sampling parameters are sent.
-//! - Text arrives in `content_block_delta` / `text_delta`; thinking blocks are never shown. `stop_reason: "refusal"`
-//!   is a declined request: the session drops what it showed and falls back.
-//! - The warm-up sends the prefix up to the last breakpoint with `max_tokens: 0` (no stream): the API writes the
-//!   cache and answers at once, with no output tokens.
+//! API facts this client relies on (Anthropic's API reference, checked 2026-11; section names in brackets):
+//! - [Versioning] `anthropic-version: 2026-10-21` is current. From that version `temperature`, `top_p` and `top_k`
+//!   are a 400 on every model, so no request carries them, whatever the settings say.
+//! - [Effort] `output_config: {"effort": …}` is generally available, with no beta header. The default differs by
+//!   model (Haiku 5.5 and Opus 5.5: medium; Sonnet 5.5: high), so every model in the settings sets it explicitly.
+//! - [Extended thinking] Haiku 5.5 accepts `thinking: {"type": "disabled"}` at effort high or below. Sonnet 5.5 refuses
+//!   `disabled` (400); `{"type": "between_tools"}` turns its thinking off, only at effort high or below and with no
+//!   other field in the object. Opus 5.5 can't turn thinking off at any effort (400): it gets no `thinking` and is
+//!   controlled by effort alone.
+//! - [Prompt caching] `cache_control: {"type": "ephemeral"}` on a block caches the prefix up to it; at most 4
+//!   breakpoints; the prefix must be byte-identical to hit. The relay places explicit breakpoints only, never the
+//!   top-level automatic one.
+//! - [Prompt caching, pre-warming] `max_tokens: 0` writes the cache and returns at once with no output; it is an
+//!   invalid request together with `stream: true`, so the warm-up does not stream. It sends the same `thinking` and
+//!   effort as real requests, or it warms an entry they never read.
+//! - [Streaming messages] text arrives in `content_block_delta` / `text_delta`; thinking blocks are never shown; an
+//!   `error` event can arrive mid-stream.
+//! - [Handling stop reasons] `stop_reason: "refusal"` (Sonnet 5.5 and Opus 5.5 run safety classifiers) arrives in
+//!   `message_delta` at the end of the stream. It is a failed attempt: the session falls back, and a refused answer is
+//!   never kept, reported or rewritten.
+//!
+//! The context's system segments go in `system`, the rest in one user message, block by block, with `cache_control`
+//! after each segment the context marks (rules, memory, the last full transcript block: at most 3 breakpoints).
 
 use std::sync::Arc;
 
@@ -101,6 +112,7 @@ pub fn body(request: &CompletionRequest, warm: bool) -> Value {
     }
     let mut body = Map::new();
     body.insert("model".into(), json!(request.model));
+    // [Prompt caching, pre-warming] max_tokens 0 only without stream.
     body.insert("max_tokens".into(), json!(if warm { 0 } else { request.max_output_tokens }));
     if !warm {
         body.insert("stream".into(), json!(true));
@@ -109,11 +121,17 @@ pub fn body(request: &CompletionRequest, warm: bool) -> Value {
         body.insert("system".into(), Value::Array(system));
     }
     body.insert("messages".into(), json!([{"role": "user", "content": user}]));
+    // The same options for the warm-up and the real request, so both hit one cache entry.
     for (name, value) in &request.options {
         match (name.as_str(), value) {
+            // [Versioning] 2026-10-21: sampling parameters are a 400 on every model.
+            ("temperature" | "top_p" | "top_k", _) => {}
+            // [Effort] GA, no beta header; inside output_config, not top-level.
             ("effort", value) => {
                 body.insert("output_config".into(), json!({"effort": http::json_of(value)}));
             }
+            // [Extended thinking] "disabled" (Haiku 5.5, effort <= high) or "between_tools" (Sonnet 5.5, effort <= high,
+            // no other field); Opus 5.5 has no thinking option in the settings.
             ("thinking", toml::Value::String(kind)) => {
                 body.insert("thinking".into(), json!({"type": kind}));
             }
@@ -339,6 +357,37 @@ mod tests {
         assert_eq!(warm["system"], full["system"], "the same bytes up to the breakpoint");
         let user = warm["messages"][0]["content"].as_array().unwrap();
         assert_eq!(user.last().unwrap()["text"], WARM_PLACEHOLDER);
+    }
+
+    #[test]
+    fn no_request_carries_sampling_parameters_and_the_warm_up_matches_real_traffic() {
+        for model in ["claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"] {
+            let mut request = request(model);
+            // Even settings that ask for them.
+            request.options.insert("temperature".into(), toml::Value::Float(0.2));
+            request.options.insert("top_p".into(), toml::Value::Float(0.9));
+            request.options.insert("top_k".into(), toml::Value::Integer(40));
+            let full = body(&request, false);
+            let warm = body(&request, true);
+            for (name, sent) in [("request", &full), ("warm-up", &warm)] {
+                for key in ["temperature", "top_p", "top_k"] {
+                    assert!(sent.get(key).is_none(), "{model} {name} sends {key}");
+                }
+                assert!(sent.get("cache_control").is_none(), "{model} {name}: explicit breakpoints only");
+                assert_eq!(sent["output_config"], json!({"effort": "low"}), "{model} {name}: effort set explicitly");
+            }
+            assert!(warm.get("stream").is_none(), "{model}: max_tokens 0 is invalid with stream");
+            assert_eq!(warm["max_tokens"], 0);
+            assert_eq!(warm.get("thinking"), full.get("thinking"), "{model}: the warm-up sends the same thinking");
+            // The cached prefix is byte-identical: the system blocks, and the last block of the warm-up's shared part
+            // carries the breakpoint.
+            assert_eq!(warm["system"], full["system"]);
+            let marked: Vec<&Value> = warm["system"].as_array().unwrap().iter().filter(|b| b.get("cache_control").is_some()).collect();
+            assert!(!marked.is_empty());
+            assert_eq!(warm["system"].as_array().unwrap().last().unwrap()["cache_control"], json!({"type": "ephemeral"}));
+        }
+        let sonnet = body(&request("claude-sonnet-5-5"), false);
+        assert_eq!(sonnet["thinking"], json!({"type": "between_tools"}), "no other field with between_tools");
     }
 
     #[test]
