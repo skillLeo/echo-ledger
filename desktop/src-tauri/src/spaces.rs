@@ -6,7 +6,7 @@
 //! has its menu open over it, as a menu bar app's does; switching when the menu opens is too late. A click on the icon
 //! never activates EchoLedger or shows a window (tray.rs); only "Open EchoLedger" does.
 //!
-//! Decision (the lead's; the one exception to "EchoLedger is a normal Mac app", app_life.rs): EchoLedger goes without
+//! Product decision (the one exception to "EchoLedger is a normal Mac app", app_life.rs): EchoLedger goes without
 //! its Dock icon only while the display in use (the one under the pointer) shows another app in a real full-screen
 //! Space, where the Dock is hidden anyway, and gets it back as soon as it does not. A full-screen app on another display,
 //! a window merely filling a display (zoomed under an auto-hiding menu bar) and EchoLedger's own full-screen window

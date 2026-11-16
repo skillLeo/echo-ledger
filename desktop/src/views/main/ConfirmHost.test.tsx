@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { confirmAction } from "../../lib/confirm";
 import { ConfirmHost } from "./ConfirmHost";
 
-describe("the app's own confirm dialog (UI sweep rule 2)", () => {
+describe("the app's own confirm dialog, never the browser's", () => {
   it("asks in the window's dialog and answers with the button pressed", async () => {
     render(<ConfirmHost />);
     let answer: Promise<boolean> = Promise.resolve(false);

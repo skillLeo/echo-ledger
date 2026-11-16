@@ -162,12 +162,12 @@ const SCREENS = [
     await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("new");
     await page.waitForTimeout(600);
   }, viewport]),
-  // Review: a Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
+  // A Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],
     [`plan-free-rows${size}`, "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); await page.getByRole("button", { name: /^Promo code/ }).scrollIntoViewIfNeeded(); }, viewport],
   ]),
-  // D-014 (lead's decision): why a call wasn't recorded, in plain words, in Calls & meetings.
+  // D-014: why a call wasn't recorded, in plain words, in Calls & meetings.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`settings-calls-why${size}`, "settings", async (page) => {
     await settingsReady(page);
     await nav(page, "Calls & meetings");
@@ -366,7 +366,7 @@ const SCREENS = [
   ["library-banners-mac", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]")],
   ["library-banners-mac-narrow", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 860, height: 560 }],
   ["library-banners-mac-text200", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 1100, height: 740, scale: 2 }],
-  // Review (c2cd2044): Settings' list and search, the sidebar's Search button and a banner with Learn more open, at the
+  // Settings' list and search, the sidebar's Search button and a banner with Learn more open, at the
   // smallest window and at 200 % text.
   ...[["", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }]].flatMap(([size, viewport]) => [
     [`review-settings-list${size || "-narrow"}`, "settings&plan=ultra&unlimited=1", settingsReady, viewport],

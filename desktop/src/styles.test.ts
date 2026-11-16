@@ -433,7 +433,7 @@ describe("Help fits the window (D-079)", () => {
   });
 });
 
-describe("the Library and recording page never clip or scroll sideways (batch 5)", () => {
+describe("the Library and recording page never clip or scroll sideways", () => {
   it("lets no search field be wider than its place, with minimums only where they are needed (D-003)", () => {
     expect(prop(".searchbox", "min-width")).toMatch(/^0(px)?$/);
     expect(prop(".library-toolbar .library-search", "min-width")).toBe("160px");
