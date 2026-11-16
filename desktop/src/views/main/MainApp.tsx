@@ -57,6 +57,7 @@ const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })))
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
+const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -438,6 +439,7 @@ export default function MainApp() {
   const entitlements = useEntitlements();
   // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
+  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
   useEffect(() => {
     const open = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -721,7 +723,7 @@ export default function MainApp() {
     <>
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
-          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} />
+          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} />
         </Suspense>
       )}
       {tab === "library" && !ui.flags["ui_v2.library"] && (
@@ -737,7 +739,26 @@ export default function MainApp() {
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
           aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
       )}
-      {tab === "record" && (
+      {tab === "record" && ui.flags["ui_v2.home"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <HomeV2 status={status} onRecord={canRecord && !status.recording ? record : undefined} onStop={status.recording ? record : undefined}
+              onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
+              onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
+              onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
+              onAction={(a) => {
+                if (a === "failed") openLibraryView("failed");
+                else if (a === "waiting") openLibraryView("waiting");
+                else if (a === "missed") goTo("activity");
+                else {
+                  openFolder(null);
+                  setLibraryViewV2({ view: "untranscribed", seq: ++navigations.current });
+                }
+              }} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "record" && !ui.flags["ui_v2.home"] && (
         <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
           onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
           onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />

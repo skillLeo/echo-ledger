@@ -4,3 +4,4 @@ export { LibraryV2 } from "./library/LibraryV2";
 export { AccountCard, StorageCard, ClassicSwitch } from "./settings/AccountCard";
 export { SettingsV2 } from "./settings/SettingsV2";
 export { SetupHealth } from "./setup/SetupHealth";
+export { HomeV2 } from "./home/HomeV2";

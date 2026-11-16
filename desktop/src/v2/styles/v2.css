@@ -634,6 +634,11 @@ button.el-step__head { cursor: pointer; }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
+.el-home-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-12); padding: var(--el-space-16); }
+.el-home-check { flex-direction: column; gap: var(--el-space-2); }
+.el-home-empty { padding-block-start: var(--el-space-12); }
+.el-home-usage { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-8); padding: var(--el-space-16); }
+.el-step > .el-button { align-self: center; }
 .el-group__progress { padding: 0 var(--el-space-12) var(--el-space-8); }
 .el-settings-top { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 11); margin-block-end: var(--el-space-24); }
 

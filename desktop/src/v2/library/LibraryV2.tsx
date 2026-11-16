@@ -20,9 +20,11 @@ export type LibraryV2Props = {
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number } | null;
+  /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
+  viewRequest?: { view: SavedView; seq: number } | null;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: LibraryV2Props) {
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
@@ -63,6 +65,12 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
   useEffect(() => {
     if (view === "trash") void loadBin();
   }, [view, loadBin]);
+  useEffect(() => {
+    if (viewRequest) {
+      setOpenId(null);
+      setView(viewRequest.view);
+    }
+  }, [viewRequest]);
   useEffect(() => {
     if (openRequest) {
       setView("all");
