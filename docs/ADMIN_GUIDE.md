@@ -330,6 +330,40 @@ check or the Mac's Run Mac check: the maker, model, system version, app version 
 unless the person taps it. Use it to see what works on your team's phones. The list of checks a teammate should run is in
 [MANUAL_QA.md](MANUAL_QA.md), "Teammate phone check".
 
+## 9b. Screen-share checks (since v1.8.1)
+
+**Admin panel → Diagnostics → Screen-share checks** (staff with the device-reports permission) shows whether
+EchoLedger's windows stayed out of screen shares, from the Share Check results people's apps sent with diagnostics
+allowed. Results never carry pictures, window titles or window contents, and the page never shows who sent them.
+
+- **One row per group:** the system and its OS build, the app version and the way of checking (Windows Graphics
+  Capture, Desktop Duplication, ScreenCaptureKit, the flag read-back, a guided test with a meeting app, or the phone's
+  screen recording signal). A guided test also names the meeting app, its version and what was shared (whole screen,
+  one window or a tab).
+- **Pass** = the test window was not in the capture (people would see the app behind it). **Fail** = it was visible.
+  **Error** = the check could not run (no Screen Recording permission, the capture failed, or the control window was
+  missing), so it says nothing about privacy. **Last check** is the newest result of the row.
+- **Filters:** the system, and a result (the rows with at least one result of that kind; their other counts stay).
+- **What to do with it:** a Fail on a system or meeting app that the [screen-share matrix](SCREEN_SHARE_MATRIX.md) marks
+  Hidden means something changed (a system or meeting-app update); test it by hand and update the matrix and the
+  privacy text in the apps. Many Errors on one build usually mean a permission or capture problem in that app version.
+
+### The sharing-bar patterns
+
+The desktop app recognises a screen share that is running by the windows meeting apps show while sharing (Zoom's share
+toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bar, Slack, WhatsApp). The patterns are in
+[web/resources/data/share-bars.json](../web/resources/data/share-bars.json), served to the apps at
+`GET /api/config/share-bars`, so a meeting app's new bar needs no app release:
+
+1. Edit the file: each pattern has an `id` (unique), the `app`, the `platform` (`macos` or `windows`), and `owner` and
+   `title`, regular expressions for the window's owner name and title (both must match), with `"flags": "i"` for
+   case-insensitive. No look-behind, look-ahead or inline flags such as `(?i)`: the same text runs in the desktop app's
+   Rust and JavaScript.
+2. Raise `"version"` by one and set `"updated_at"`.
+3. Run the web tests (`ScreenSharePrivacyTest` checks the file's shape and that every pattern compiles), commit and
+   deploy. The apps pick it up on their next look (the answer can be kept for 5 minutes); no app release is needed.
+   The desktop app's fallback is this same file, so the next desktop release carries the new version too.
+
 ## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in
