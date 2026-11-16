@@ -25,6 +25,8 @@ use App\Http\Controllers\Api\ScreenController;
 use App\Http\Controllers\Api\SearchController;
 use App\Http\Controllers\Api\SecurityController;
 use App\Http\Controllers\Api\SessionController;
+use App\Http\Controllers\Api\ShareBarsController;
+use App\Http\Controllers\Api\ShareCheckController;
 use App\Http\Controllers\Api\ShareController;
 use App\Http\Controllers\Api\SttTokenController;
 use App\Http\Controllers\Api\SttWebhookController;
@@ -80,6 +82,9 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('devices/report', DeviceReportController::class)->middleware(['abilities:config:read', 'throttle:device-report'])->name('api.devices.report');
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
+        // Screen-share privacy (v1.8.1): a Share Check result about this device only, and the sharing-bar patterns.
+        Route::post('diagnostics/share-checks', ShareCheckController::class)->middleware(['abilities:config:read', 'throttle:share-check'])->name('api.diagnostics.share-checks');
+        Route::get('config/share-bars', ShareBarsController::class)->middleware('abilities:config:read')->name('api.config.share-bars');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
