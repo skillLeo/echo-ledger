@@ -131,11 +131,20 @@ enum class NotifyCategory(
         /** The category of an activity item from the server (`GET /api/activity` `kind`); unknown kinds are Other. */
         fun forActivity(kind: String?): NotifyCategory = when (kind) {
             "transcript_ready", "transcript_failed" -> TRANSCRIPTION
+
             "views_ready", "view_ready", "enhancement_ready" -> ENHANCEMENT
+
             "upload_failed" -> UPLOADS
+
+            // A call that was not recorded (since v1.8): recording calls did not work, so it is about readiness.
+            "missed_recording" -> READINESS
+
             "shared_with_you", "invitation" -> SHARING
+
             "device_paired", "sign_in", "password_changed", "two_factor" -> ACCOUNT
+
             "budget_warn", "budget_reached" -> USAGE
+
             else -> OTHER
         }
 

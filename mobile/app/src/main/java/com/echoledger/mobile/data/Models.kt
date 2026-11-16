@@ -820,8 +820,18 @@ data class ActivityItemDto(
     val body: String = "",
     @SerialName("session_id") val sessionId: String? = null,
     val read: Boolean = false,
-    val at: String? = null
+    val at: String? = null,
+    /** Since v1.8 (contract 1.8.0-b), on `missed_recording` items: why the call was not recorded. */
+    val reason: String? = null,
+    @SerialName("missed_recording_id") val missedRecordingId: String? = null
 )
+
+/** `POST /api/devices/missed-recordings` (since v1.8): the server's id for the report. */
+@Serializable
+data class MissedRecordingAnswer(val data: MissedRecordingRef)
+
+@Serializable
+data class MissedRecordingRef(val id: String)
 
 @Serializable
 data class ActivityResponse(val data: List<ActivityItemDto> = emptyList(), @SerialName("unread_count") val unreadCount: Int = 0)

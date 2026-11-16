@@ -441,6 +441,79 @@ class ScreenshotsTest : ScreenTest() {
         capture("activity")
     }
 
+    /**
+     * Activity with missed recordings (v1.8 0.2): this phone's own, with why in plain words and the button that fixes it,
+     * above a missed recording the laptop reported.
+     */
+    @Test
+    fun activityMissed() {
+        val now = System.currentTimeMillis()
+        val missed = listOf(
+            com.echoledger.mobile.calls.MissedItem(
+                "r1",
+                "whatsapp",
+                now - 25 * 60_000,
+                312,
+                "helper_not_armed",
+                "Auto-record was not running when the call started.",
+                now
+            ),
+            com.echoledger.mobile.calls.MissedItem(
+                "r2",
+                "phone_call",
+                now - 3 * 60 * 60_000,
+                94,
+                "detection",
+                com.echoledger.mobile.calls.MissedReason.DETECTION.detail,
+                now
+            )
+        )
+        val today = java.time.LocalDate.now().toString()
+        val items = listOf(
+            ActivityItemDto(
+                "a1",
+                "missed_recording",
+                "Missed recording",
+                "Zoom call · 31:02 · The call was not detected",
+                null,
+                false,
+                "${today}T06:40:00+00:00",
+                reason = "detection",
+                missedRecordingId = "from-the-laptop"
+            ),
+            ActivityItemDto(
+                "a2",
+                "transcript_ready",
+                "Transcript ready",
+                "Weekly sync with Northwind",
+                "s2",
+                true,
+                "${today}T05:10:00+00:00"
+            )
+        )
+        shoot { ActivityScreen(load = { ActivityResponse(items, 1) }, markRead = { 0 }, onOpen = {}, onUnread = {}, missed = missed) }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        capture("activity-missed")
+    }
+
+    /** What "Start the helper" opens: the Ready check, with the helper's problem and its one-tap fix. */
+    @Test
+    fun missedFixReadyCheck() {
+        shoot {
+            ReadyCheckSheet(vm, ReadinessFixtures.HELPER_STOPPED, onDismiss = {}, onSetup = {}, onRecheck = {})
+        }
+        compose.waitForIdle()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-light.png"))
+        compose.onNodeWithText("Open Shizuku").assertExists()
+    }
+
     @Test
     fun recordLive() {
         runBlocking { app.pairLocally(server) }

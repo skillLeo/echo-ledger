@@ -6,6 +6,7 @@ import android.content.Context
 import android.provider.Settings
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
+import com.echoledger.mobile.calls.CallSightings
 import com.echoledger.mobile.core.CallNotices
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.CallerNames
@@ -22,6 +23,13 @@ class CallerNameListener : NotificationListenerService() {
     }
 
     override fun onNotificationPosted(sbn: StatusBarNotification) = read(sbn)
+
+    /** A call notification going away is the end of its call, for the missed-recording detector (since v1.8). */
+    override fun onNotificationRemoved(sbn: StatusBarNotification) {
+        val pkg = sbn.packageName
+        if (CallSightings.appOf(pkg) == null || sbn.notification.category != Notification.CATEGORY_CALL) return
+        CallSightings.update(this) { CallSightings.ended(it, pkg, System.currentTimeMillis()) }
+    }
 
     private fun read(sbn: StatusBarNotification) {
         readCallState(sbn)
@@ -42,6 +50,7 @@ class CallerNameListener : NotificationListenerService() {
         if (pkg !in CallTargets.KNOWN.keys && pkg !in CallNotices.DIALERS) return
         val n = sbn.notification
         val extras = n.extras
+        val now = System.currentTimeMillis()
         CallNotices.classify(
             pkg = pkg,
             isCallCategory = n.category == Notification.CATEGORY_CALL,
@@ -49,8 +58,14 @@ class CallerNameListener : NotificationListenerService() {
             chronometer = extras.getBoolean(Notification.EXTRA_SHOW_CHRONOMETER, false),
             whenMs = n.`when`,
             text = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString(),
-            nowMs = System.currentTimeMillis()
-        )?.let(CallNotices::record)
+            nowMs = now
+        )?.let { notice ->
+            CallNotices.record(notice)
+            // An answered call is a call the missed-recording detector compares with the recordings (since v1.8).
+            if (notice.kind == CallNotices.Kind.ANSWERED) {
+                CallSightings.update(this) { CallSightings.answered(it, pkg, notice.answeredAtMs ?: now, now) }
+            }
+        }
     }
 
     companion object {

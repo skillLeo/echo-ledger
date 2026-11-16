@@ -74,6 +74,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _pending = MutableStateFlow<List<LocalRecording>>(emptyList())
     val pending: StateFlow<List<LocalRecording>> = _pending.asStateFlow()
 
+    /** This phone's missed recordings (since v1.8): Activity's items with their fix button. */
+    val missed: StateFlow<List<com.echoledger.mobile.calls.MissedItem>> = com.echoledger.mobile.calls.MissedRecordingStore.items
+
     private val _clients = MutableStateFlow<List<ClientDto>>(emptyList())
     val clients: StateFlow<List<ClientDto>> = _clients.asStateFlow()
 
@@ -545,6 +548,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 graph.library.refresh()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
+            com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication())
             SelfUpdate.schedule(getApplication())
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
@@ -974,6 +978,28 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             graph.library.markOpenedLocally(item.id)
             runCatching { graph.api()?.markOpened(item.id) }
         }
+    }
+
+    /**
+     * Looks for missed recordings now (since v1.8; the app opened): new ones join Activity at once, and their reports go
+     * out when online.
+     */
+    fun detectMissed() = viewModelScope.launch(Dispatchers.IO) {
+        val app = getApplication<EchoLedgerApp>()
+        runCatching { com.echoledger.mobile.calls.MissedRecordingWorker.detect(app) }
+        if (com.echoledger.mobile.calls.MissedRecordingStore.all(app).any { it.waiting }) {
+            com.echoledger.mobile.calls.MissedUploadWorker.enqueue(app)
+        }
+    }
+
+    /** A missed recording was looked at (tapped, or its fix button): it leaves Needs action. */
+    fun readMissed(ref: String) = viewModelScope.launch(Dispatchers.IO) {
+        com.echoledger.mobile.calls.MissedRecordingStore.markRead(getApplication(), ref)
+    }
+
+    /** Swiped away: it leaves Activity. */
+    fun dismissMissed(ref: String) = viewModelScope.launch(Dispatchers.IO) {
+        com.echoledger.mobile.calls.MissedRecordingStore.dismiss(getApplication(), ref)
     }
 
     /** The activity list; null when offline. */

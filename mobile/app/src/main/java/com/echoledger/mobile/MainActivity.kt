@@ -213,6 +213,10 @@ class MainActivity : FragmentActivity() {
         var activityUnread by rememberSaveable { mutableIntStateOf(0) }
         val live by RecordingService.live.collectAsState()
         val pending by vm.pending.collectAsState()
+        val missed by vm.missed.collectAsState()
+
+        /** A Settings page to open (since v1.8: a missed recording's "See plans"). */
+        var settingsPage by remember { mutableStateOf<String?>(null) }
         var openItemId by rememberSaveable { mutableStateOf<String?>(null) }
         var openItemCache by remember { mutableStateOf<LibraryItem?>(null) }
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -325,6 +329,8 @@ class MainActivity : FragmentActivity() {
                     vm.refresh()
                     vm.retryPending() // an upload waiting out a back-off restarts as soon as the app is opened
                 }
+                // Since v1.8: calls that were not recorded show in Activity as soon as the app opens.
+                vm.detectMissed()
             }
         }
 
@@ -346,6 +352,11 @@ class MainActivity : FragmentActivity() {
             if (open == OPEN_SETUP) {
                 showItem(null)
                 showSetup = true
+            }
+            if (open == OPEN_ACTIVITY) {
+                showItem(null)
+                showSetup = false
+                tab = TAB_ACTIVITY
             }
             if (open == OPEN_READY) {
                 showReady = true
@@ -419,7 +430,7 @@ class MainActivity : FragmentActivity() {
         val unlocked = loaded && lockState == LockState.Unlocked
         // The Activity badge: only what needs me, unread problems (once unlocked and paired) plus calls waiting for a decision.
         LaunchedEffect(unlocked, settings.paired) {
-            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.needs(it.data) }
+            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.server(it.data, missed) }
         }
         BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
             showItem(null)
@@ -515,7 +526,10 @@ class MainActivity : FragmentActivity() {
                                     if (it.key ==
                                         TAB_ACTIVITY
                                     ) {
-                                        it.copy(badge = activityUnread + pending.count { p -> p.state == "pending_decision" })
+                                        it.copy(
+                                            badge = activityUnread + ActivityBadge.local(missed) +
+                                                pending.count { p -> p.state == "pending_decision" }
+                                        )
                                     } else {
                                         it
                                     }
@@ -650,10 +664,34 @@ class MainActivity : FragmentActivity() {
                                                     onOpenWaiting = { showWaiting = true },
                                                     scrollToTop = reselected,
                                                     skipped = pending.filter { it.state == com.echoledger.mobile.calls.SkippedCalls.STATE },
-                                                    onRestore = { vm.restoreSkipped(it) }
+                                                    onRestore = { vm.restoreSkipped(it) },
+                                                    missed = missed,
+                                                    onFix = { fix ->
+                                                        when (fix) {
+                                                            com.echoledger.mobile.calls.MissedFix.TEST -> {
+                                                                showItem(null)
+                                                                showSetup = true
+                                                            }
+
+                                                            com.echoledger.mobile.calls.MissedFix.PLANS -> {
+                                                                settingsPage = "plan"
+                                                                tab = TAB_YOU
+                                                            }
+
+                                                            else -> showReady = true
+                                                        }
+                                                    },
+                                                    onMissedRead = { vm.readMissed(it) },
+                                                    onMissedDismiss = { vm.dismissMissed(it) }
                                                 )
 
-                                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true }, home = reselected)
+                                                TAB_YOU -> SettingsScreen(
+                                                    vm,
+                                                    onSetup = { showSetup = true },
+                                                    home = reselected,
+                                                    openPage = settingsPage,
+                                                    onPageOpened = { settingsPage = null }
+                                                )
 
                                                 else -> LibraryScreen(
                                                     vm,
@@ -700,6 +738,9 @@ class MainActivity : FragmentActivity() {
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"
+
+        /** The Activity tab (since v1.8): from the missed-recording notice. */
+        const val OPEN_ACTIVITY = "activity"
 
         /** The package of the app a voice note was shared from (since v1.5): "Back to WhatsApp" on its page. */
         const val EXTRA_SOURCE_APP = "source_app"

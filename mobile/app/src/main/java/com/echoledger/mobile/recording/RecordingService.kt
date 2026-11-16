@@ -510,7 +510,10 @@ class RecordingService : LifecycleService() {
             }
             if (!inCall) {
                 warnedThisCall = false
-                audioCallId?.let { CallJournal.ended(this@RecordingService, it) }
+                audioCallId?.let {
+                    CallJournal.ended(this@RecordingService, it)
+                    com.echoledger.mobile.calls.MissedRecordingWorker.soon(this@RecordingService)
+                }
                 audioCallId = null
             }
             backupIfMissed(ready)
@@ -602,7 +605,11 @@ class RecordingService : LifecycleService() {
             CallJournal.seen(this, event.recordingId, event.app.wire, CallJournal.Seen.HELPER)
             CallJournal.stage(this, event.recordingId, CallJournal.Stage.ARMED, "helper ready")
         }
-        if (event is CallEvent.CallEnded) journalCallId?.let { CallJournal.ended(this, it) }
+        if (event is CallEvent.CallEnded) {
+            journalCallId?.let { CallJournal.ended(this, it) }
+            // The missed-recording detector looks at this call once its recording is saved.
+            com.echoledger.mobile.calls.MissedRecordingWorker.soon(this)
+        }
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
             when (PhoneCalls.mode(settings.phoneCalls)) {
