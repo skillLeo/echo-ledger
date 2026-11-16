@@ -165,6 +165,7 @@ fn main() -> ExitCode {
             totals.passed += one.passed;
             totals.total += one.total;
             totals.failures.extend(one.failures);
+            totals.verdicts.extend(one.verdicts);
         }
         totals
     });
@@ -193,5 +194,13 @@ fn main() -> ExitCode {
             Err(error) => eprintln!("Could not write {}: {error}", path.display()),
         }
     }
-    if totals.overall() >= 0.9 { ExitCode::SUCCESS } else { ExitCode::FAILURE }
+    // The verdict needs the judge: without it the rule score is only an upper bound (exit code 3: no verdict).
+    match &judge {
+        Some(judge) if assist_relay::eval::run::judged(&scores, &totals, judge).2 >= 0.9 => ExitCode::SUCCESS,
+        Some(_) => ExitCode::FAILURE,
+        None => {
+            println!("No verdict: the L9 sign-off at 90 % requires --judge. Exit code 3.");
+            ExitCode::from(3)
+        }
+    }
 }

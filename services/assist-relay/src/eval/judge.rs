@@ -2,6 +2,7 @@
 //! the rules can't see. Opt-in (`assist-relay-eval --live --judge --yes`), never in CI. It asks one model, per answer,
 //! whether every claim about Me is supported by what was known at that point, and expects `PASS` or `FAIL: <claim>`.
 
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use futures_util::StreamExt;
@@ -25,6 +26,8 @@ pub struct JudgeTotals {
     pub total: u32,
     /// Turn and the judge's reason, for each FAIL.
     pub failures: Vec<String>,
+    /// `transcript/turn` -> the judge passed it.
+    pub verdicts: BTreeMap<String, bool>,
 }
 
 impl JudgeTotals {
@@ -92,7 +95,9 @@ pub async fn judge_case(provider: &Arc<dyn Provider>, model: &str, options: &tom
             }
         }
         totals.total += 1;
-        if verdict.trim().eq_ignore_ascii_case("PASS") {
+        let passed = verdict.trim().eq_ignore_ascii_case("PASS");
+        totals.verdicts.insert(format!("{}/{turn_id}", case.id), passed);
+        if passed {
             totals.passed += 1;
         } else {
             totals.failures.push(format!("{}/{turn_id}: {}", case.id, verdict.trim()));

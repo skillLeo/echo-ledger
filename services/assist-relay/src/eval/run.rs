@@ -369,35 +369,133 @@ pub async fn ci_check(cases: &[Case]) -> Vec<String> {
     problems
 }
 
-/// A Markdown report: the totals against the 90 % target, then each transcript.
+/// "Nothing invented" with the model judge: an answer passes when the rules don't fail it and the judge passes it
+/// (an answer the judge did not see counts as failed). Returns the rule-and-judge rate and the overall score with it.
+pub fn judged(scores: &[CaseScore], totals: &Totals, judge: &super::judge::JudgeTotals) -> (u32, u32, f64) {
+    let (mut passed, mut total) = (0u32, 0u32);
+    for score in scores {
+        for (turn, _, results) in &score.turns {
+            for r in results.iter().filter(|r| r.category == Category::NothingInvented) {
+                total += 1;
+                let judge_passed = judge.verdicts.get(&format!("{}/{turn}", score.id)).copied().unwrap_or(false);
+                if r.passed && judge_passed {
+                    passed += 1;
+                }
+            }
+        }
+    }
+    let rates: Vec<f64> = Category::ALL
+        .iter()
+        .filter_map(|c| if *c == Category::NothingInvented { (total > 0).then(|| f64::from(passed) / f64::from(total)) } else { totals.rate(*c) })
+        .collect();
+    let overall = if rates.is_empty() { 0.0 } else { rates.iter().sum::<f64>() / rates.len() as f64 };
+    (passed, total, overall)
+}
+
+/// A Markdown report. The rule scores are an UPPER BOUND: rules can't see an invented fact without a number or a
+/// listed phrase. The L9 verdict (90 % overall) is given only with the model judge.
 pub fn report(scores: &[CaseScore], totals: &Totals, judge: Option<&super::judge::JudgeTotals>) -> String {
     let pct = |rate: Option<f64>| rate.map_or("n/a".to_owned(), |r| format!("{:.1} %", r * 100.0));
-    let mut text = String::from("| Check | Passed | Rate |\n|---|---|---|\n");
+    let mut text = String::from(
+        "Rule scores are an **upper bound**: the rules check numbers, listed claims, re-asks and SKIP, but an invented \
+         fact with no number (\"I've used Kotlin on Android projects\") passes them. Answers with such a claim are \
+         counted as passed and listed as not checkable by rules; only the model judge decides them.\n\n\
+         | Check | Passed | Rate |\n|---|---|---|\n",
+    );
     for category in Category::ALL {
         let (passed, total) = totals.by_category.get(&category).copied().unwrap_or_default();
-        text.push_str(&format!("| {} | {passed}/{total} | {} |\n", category.label(), pct(totals.rate(category))));
+        let bound = if category == Category::NothingInvented { " (upper bound)" } else { "" };
+        text.push_str(&format!("| {}{bound} | {passed}/{total} | {} |\n", category.label(), pct(totals.rate(category))));
     }
     text.push_str(&format!("| SKIP precision (recall) | | {} ({}) |\n", pct(totals.skip_precision()), pct(totals.skip_recall())));
-    if let Some(judge) = judge {
-        text.push_str(&format!("| Model judge: nothing invented (opt-in) | {}/{} | {} |\n", judge.passed, judge.total, pct(judge.rate())));
+    text.push_str(&format!("| Not checkable by rules (left to the judge) | {} | |\n", totals.unchecked));
+    text.push_str(&format!("| Rule score overall (**upper bound**) | | {:.1} % |\n", totals.overall() * 100.0));
+    match judge {
+        Some(judge) => {
+            let (passed, total, overall) = judged(scores, totals, judge);
+            text.push_str(&format!(
+                "| Nothing invented, rules and model judge | {passed}/{total} | {} |\n",
+                pct((total > 0).then(|| f64::from(passed) / f64::from(total)))
+            ));
+            text.push_str(&format!(
+                "| **Overall with the judge: the L9 verdict** | | **{:.1} %: {}** (target 90 %) |\n",
+                overall * 100.0,
+                if overall >= 0.9 { "pass" } else { "below target" }
+            ));
+        }
+        None => text.push_str(
+            "\n**No verdict.** The L9 sign-off at 90 % requires the model judge: run again with `--judge`. The rule \
+             score above is an upper bound, not a pass.\n",
+        ),
     }
-    let overall = totals.overall();
-    text.push_str(&format!(
-        "| **Overall** (mean of the checks) | | **{:.1} %** ({}, target 90 %) |\n",
-        overall * 100.0,
-        if overall >= 0.9 { "pass" } else { "below target" }
-    ));
     if totals.failed_turns > 0 {
         text.push_str(&format!("\n{} turns got no suggestion or an error.\n", totals.failed_turns));
     }
-    text.push_str("\n| Transcript | Turns | Failed checks |\n|---|---|---|\n");
+    text.push_str("\n| Transcript | Turns | Failed checks | Not checkable by rules |\n|---|---|---|---|\n");
     for score in scores {
         let failed: Vec<String> = score
             .turns
             .iter()
             .flat_map(|(turn, _, results)| results.iter().filter(|r| !r.passed).map(move |r| format!("{turn} {}: {}", r.category.label(), r.detail)))
             .collect();
-        text.push_str(&format!("| {} | {} | {} |\n", score.id, score.turns.len(), if failed.is_empty() { "none".into() } else { failed.join("<br>") }));
+        let unchecked: Vec<String> = score
+            .turns
+            .iter()
+            .flat_map(|(turn, _, results)| results.iter().filter(|r| r.unchecked).map(move |r| format!("{turn}: {}", r.detail)))
+            .collect();
+        let list = |items: Vec<String>| if items.is_empty() { "none".to_owned() } else { items.join("<br>") };
+        text.push_str(&format!("| {} | {} | {} | {} |\n", score.id, score.turns.len(), list(failed), list(unchecked)));
     }
     text
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::eval::judge::JudgeTotals;
+    use crate::eval::score::CheckResult;
+
+    fn score(unchecked: bool) -> (Vec<CaseScore>, Totals) {
+        let results = vec![
+            CheckResult { category: Category::FirstLine, passed: true, unchecked: false, detail: String::new() },
+            CheckResult { category: Category::NothingInvented, passed: true, unchecked, detail: "not checkable by rules: x".into() },
+        ];
+        let scores = vec![CaseScore { id: "case".into(), turns: vec![("o-1".into(), Output::Answer("I've used it.".into()), results)] }];
+        let mut totals = Totals::default();
+        for (_, _, results) in &scores[0].turns {
+            for r in results {
+                let entry = totals.by_category.entry(r.category).or_default();
+                entry.1 += 1;
+                if r.passed {
+                    entry.0 += 1;
+                }
+                if r.unchecked {
+                    totals.unchecked += 1;
+                }
+            }
+        }
+        (scores, totals)
+    }
+
+    #[test]
+    fn without_the_judge_there_is_no_verdict_and_the_rule_score_is_an_upper_bound() {
+        let (scores, totals) = score(true);
+        let text = report(&scores, &totals, None);
+        assert!(text.contains("upper bound") && text.contains("No verdict") && text.contains("--judge"), "{text}");
+        assert!(!text.contains("pass**") && !text.contains("below target"), "{text}");
+        assert!(text.contains("Not checkable by rules (left to the judge) | 1"), "{text}");
+    }
+
+    #[test]
+    fn with_the_judge_an_unchecked_claim_it_fails_counts_as_invented() {
+        let (scores, totals) = score(true);
+        let mut judge = JudgeTotals::default();
+        judge.verdicts.insert("case/o-1".into(), false);
+        let (passed, total, overall) = judged(&scores, &totals, &judge);
+        assert_eq!((passed, total), (0, 1));
+        assert!(overall < 0.9);
+        assert!(report(&scores, &totals, Some(&judge)).contains("below target"));
+        judge.verdicts.insert("case/o-1".into(), true);
+        assert!(report(&scores, &totals, Some(&judge)).contains(": pass**"));
+    }
 }
