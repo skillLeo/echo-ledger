@@ -22,6 +22,8 @@ function secDeviceGuardedRoutes(): array
     return [
         'POST devices/rotate-token' => ['POST', '/api/devices/rotate-token', null],
         'POST devices/report' => ['POST', '/api/devices/report', null],
+        // Since v1.8: a call the device saw but did not record.
+        'POST devices/missed-recordings' => ['POST', '/api/devices/missed-recordings', 'config:read'],
         // Since v1.8.1: screen-share privacy.
         'POST diagnostics/share-checks' => ['POST', '/api/diagnostics/share-checks', 'config:read'],
         'GET config/share-bars' => ['GET', '/api/config/share-bars', 'config:read'],
@@ -174,7 +176,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(105);
+    expect($guarded)->toBe(106);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

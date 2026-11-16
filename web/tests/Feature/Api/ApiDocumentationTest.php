@@ -86,7 +86,7 @@ function registeredApiRoutes(): array
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
 const SERVED_BEFORE_DOCUMENTED = [];
 
-const NOT_SERVED_YET = ['POST /api/devices/missed-recordings', 'POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
+const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();

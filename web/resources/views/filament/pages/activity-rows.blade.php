@@ -1,4 +1,4 @@
-{{-- Activity rows: tile, title (a dot while unread), time, and the line under it. --}}
+{{-- Activity rows: tile, title (a dot while unread), time, and the line under it (a missed recording's may take two: it ends with why). --}}
 <ul class="el-rows" role="list">
     @foreach ($items as $item)
         <li class="el-row-item">
@@ -11,7 +11,7 @@
                         </span>
                         <time class="el-row-time" datetime="{{ $item['at'] }}" title="{{ $item['full_time'] }}">{{ $item['time'] }}</time>
                     </span>
-                    <span class="el-row-sub"><span class="el-row-meta">{{ $item['body'] }}</span></span>
+                    <span class="el-row-sub"><span @class(['el-row-meta', 'el-row-meta-wraps' => $item['kind'] === 'missed_recording'])>{{ $item['body'] }}</span></span>
                 </span>
             </button>
         </li>

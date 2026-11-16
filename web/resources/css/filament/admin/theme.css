@@ -981,6 +981,16 @@ thead .fi-ta-selection-cell {
     font-variant-numeric: tabular-nums;
 }
 
+/* A missed recording's line ends with why it was missed (since v1.8): on a phone it takes a second line rather than
+   lose the reason. */
+.el-row-sub > .el-row-meta.el-row-meta-wraps {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+}
+
 /* Failed uploads (since v1.6, P5.3): what went wrong and what happens next, under the row's second line. */
 .el-row-problem {
     display: block;

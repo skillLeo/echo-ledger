@@ -30,7 +30,7 @@ final class StaffAccess
         'settings.manage' => 'Server settings, sign-up, app versions, announcements, maintenance',
         'staff.manage' => 'Staff and their roles',
         'audit.view' => 'See the activity log',
-        'devices.reports' => 'Read device reports, screen-share checks and the Accuracy Lab',
+        'devices.reports' => 'Read device reports, screen-share checks, missed recordings and the Accuracy Lab',
     ];
 
     public static function isStaff(?User $user = null): bool

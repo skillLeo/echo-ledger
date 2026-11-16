@@ -200,6 +200,8 @@ class AppServiceProvider extends ServiceProvider
         // A device check is sent by hand; ten an hour is plenty for one device.
         RateLimiter::for('device-report', fn (Request $request) => Limit::perHour(10)->by('device-report:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('share-check', fn (Request $request) => Limit::perHour(30)->by('share-check:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since v1.8: one report per call a device saw but did not record; sixty an hour is far more than a day of calls.
+        RateLimiter::for('missed-recording', fn (Request $request) => Limit::perHour(60)->by('missed-recording:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
         RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));

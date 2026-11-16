@@ -12,8 +12,9 @@ use Livewire\Livewire;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
-| v1.6 P6: the app's bell counts only what needs the person: unread problems, answers to an upgrade request and calls
-| waiting for Keep or Discard; never finished transcripts, new devices or shares; "9+" above nine.
+| v1.6 P6: the app's bell counts only what needs the person: unread problems (since v1.8 a missed recording too), answers
+| to an upgrade request and calls waiting for Keep or Discard; never finished transcripts, new devices or shares; "9+"
+| above nine.
 */
 
 beforeEach(function () {
@@ -51,9 +52,10 @@ it('counts unread problems, upgrade answers and calls waiting for Keep or Discar
     bellPost('upload_failed');
     bellPost('budget_reached');
     bellPost('upgrade_declined');
+    bellPost('missed_recording');
     Fx::session($this->person, null, ['status' => SessionStatus::Recording]);
 
-    expect(bellBadge())->toBe('6')->and(Activity::getNavigationBadge())->toBe('6');
+    expect(bellBadge())->toBe('7')->and(Activity::getNavigationBadge())->toBe('7');
 
     $this->person->unreadNotifications()->get()->each->markAsRead();
     expect(bellBadge())->toBe('1');
