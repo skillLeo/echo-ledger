@@ -22,7 +22,6 @@ and its text show · **—** = not tested yet.
 | 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit `SCScreenshotManager`, display filter, nothing excluded | **Pass** | Magenta 0 px; green 153,600 px |
 | 2026-11-16 | macOS 27.3 (26C5035r) | test harness | ScreenCaptureKit `SCStream` (5 fps), display filter, nothing excluded | **Pass** | Magenta 0 px; green 152,004 px |
 | 2026-11-16 | macOS 27.3 (26C5035r) | test harness | The same stream after `updateContentFilter` (excluding no applications), then changed back | **Pass** | Magenta 0 px in both frames (the FB21115847 case did not show the window here); green 152,004 and 15,908 px (the second looks like a frame caught mid-change) |
-
 | 2026-11-16 | macOS 27.3 (26C5035r) | v1.8.1 desktop (debug build, `--smoke-test --share-check`, the privacy service's own Share Check) | ScreenCaptureKit `SCScreenshotManager`, display filter, nothing excluded, sRGB | **Pass** (twice) | Protected magenta test window 0 px; green control 64,480 of 64,480 px (its whole area at the 1920 px capture size) |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build with the test window built unprotected (a check that the check can fail) | the same | **Fail**, as it should | Magenta 28,620 px (the check pattern's magenta half); green 64,480 px |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build before the capture asked for sRGB | the same, in the display's colour space | Error (control missing) | The green control (sRGB 0, 200, 0) came back as about (90, 197, 58) in Display P3, outside the tolerance of 25: the check now captures in sRGB |
@@ -33,6 +32,24 @@ and its text show · **—** = not tested yet.
 So on this Mac the window flag holds for ScreenCaptureKit display captures, streams and a mid-capture filter change.
 Meeting apps can still capture differently (another filter, another API, their own modes such as Zoom's "without window
 filtering"), so the meeting-app rows below still need the guided test with a second device.
+
+## Phone (S25, SM-S938B, Android 17, build CP2A.260605.016.S938BXXSDDZJ1)
+
+Measured 2026-11-16 with the v1.8.1 build (commit 79dd2992) and Samsung's screen recorder (full screen, a
+MediaProjection display capture), checked on the recorded video.
+
+| Check | Result | Notes |
+|---|---|---|
+| `addScreenRecordingCallback` registered (DETECT_SCREEN_RECORDING granted) | Yes | `dumpsys window` lists the app's callback |
+| The callback for a floating card (the recording pill, TYPE_APPLICATION_OVERLAY) | **Never fires** | `isVisibleInScreenRecording=false` all through the recording; it turns true only while the app's own screen (an activity) is in front. Android counts activities, not overlay windows |
+| Another public signal | None found | The recorder's virtual display is FLAG_PRIVATE, so other apps don't see it in DisplayManager |
+| "Hide cards" while recording | **Visible** | The video shows the pill with its clock |
+| "Black box" (FLAG_SECURE on the card) | **Black** | The video shows a black rectangle where the pill is; on the phone the pill shows normally |
+| Hide button on the pill | Works | The pill becomes a grey dot without text; a tap brings it back |
+| Quick Settings tile | First tap works | It hides the cards; a second tap sent by `adb cmd statusbar click-tile` did not show them again (to recheck by hand) |
+
+So on the phone, protection while sharing has to come from FLAG_SECURE (the black box), not from detection.
+Meet, Zoom and WhatsApp shares are tested after that change.
 
 ## Meeting apps (whole screen / one window / tab)
 
