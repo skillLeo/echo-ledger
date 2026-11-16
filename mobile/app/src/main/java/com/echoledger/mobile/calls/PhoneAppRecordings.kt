@@ -196,6 +196,17 @@ object PhoneAppRecordings {
     /** From just before [call] rang to 3 minutes after it can have ended: when its recording's file is written. */
     fun windowOf(call: LogCall): LongRange = (call.dateMs - 5_000)..(call.dateMs + RING_MAX_MS + call.talkS * 1000 + AFTER_END_MS)
 
+    /**
+     * [call]'s own times, as its recording [file] shows them (pure): from when it rang or was dialled to the end of the
+     * recording (or of the talk time, when later), never past the talk time after the longest ringing, and a few seconds
+     * for the clocks. Settling one call, or making it wait, never reaches the call before or after it.
+     */
+    fun callSpan(call: LogCall, file: MediaFile, zone: ZoneId = ZoneId.systemDefault()): LongRange {
+        val talkEnd = call.dateMs + call.talkS * 1000
+        val recordingEnd = spanOf(file, zone).first + file.durationMs
+        return call.dateMs..(maxOf(talkEnd, minOf(recordingEnd, talkEnd + RING_MAX_MS)) + 5_000)
+    }
+
     /** A recording of a call with [talkS] of talk lasts about as long (the Phone app may start it as the call is dialled). */
     fun lengthFits(durationMs: Long, talkS: Long): Boolean {
         val talkMs = talkS * 1000
@@ -324,7 +335,7 @@ object PhoneAppRecordings {
         /** EchoLedger is still recording or saving the call: decided on a later look. */
         WAIT,
 
-        /** EchoLedger recorded the call itself: its own recording is the one kept. */
+        /** EchoLedger recorded both sides of the call itself: its own recording is the one kept. */
         OWN,
 
         /** Shorter than 3 s, or than "Skip calls shorter than". */
@@ -342,9 +353,10 @@ object PhoneAppRecordings {
 
     /**
      * What to do with the Phone app's recording of [call] (pure, unit-tested): [entry] is EchoLedger's journal entry for
-     * the call (null when it never saw it), [own] its own recording with sound, [choices] the person's choices when the
-     * call rang, [shortestS] "Skip calls shorter than", [busy] EchoLedger is recording or saving now. A call EchoLedger
-     * did not see is wanted when phone calls were set to Always with auto-record on; one it saw follows what became of it.
+     * the call (null when it never saw it), [own] its own recording with both sides heard, [choices] the person's choices
+     * when the call rang, [shortestS] "Skip calls shorter than", [busy] EchoLedger is recording or saving now. A call
+     * EchoLedger did not see is wanted when phone calls were set to Always with auto-record on; one it saw follows what
+     * became of it, and one it kept with one side only is brought in as well.
      */
     fun verdict(
         call: LogCall,
@@ -362,7 +374,8 @@ object PhoneAppRecordings {
         call.talkS * 1000 < CallStateMachine.MIN_DURATION_MS || (shortestS > 0 && call.talkS < shortestS) -> Verdict.SHORT
 
         entry != null -> when (CallJournal.Result.of(entry.result)) {
-            CallJournal.Result.KEPT -> Verdict.OWN
+            // Kept, but with one side only ("Only your voice was recorded"): the Phone app's copy has both.
+            CallJournal.Result.KEPT -> if (entry.reached(CallJournal.Stage.BOTH_AUDIO)) Verdict.OWN else Verdict.IMPORT
 
             CallJournal.Result.DISCARDED -> Verdict.DISCARDED
 
@@ -391,7 +404,9 @@ object PhoneAppRecordings {
         choices: CallJournal.Choices?,
         shortestS: Int
     ): String = when (verdict) {
-        Verdict.IMPORT -> "imported the Phone app's recording (${file.durationMs / 1000} s)."
+        Verdict.IMPORT ->
+            "imported the Phone app's recording (${file.durationMs / 1000} s)" +
+                (if (CallJournal.Result.of(entry?.result) == CallJournal.Result.KEPT) "; EchoLedger's own has one side only." else ".")
 
         Verdict.WAIT -> "waiting: EchoLedger is still saving its own recording of this call."
 
@@ -654,8 +669,18 @@ object PhoneAppRecordings {
         if (n.size == 2) Candidate(n[0], n[1]) else null
     }
 
-    private fun saveCandidates(context: Context, list: List<Candidate>) =
-        prefs(context).edit().putString(ASK, list.takeLast(5).joinToString(",") { "${it.fileId}:${it.callAtMs}" }).apply()
+    /**
+     * Keeps [list] (the newest 5). A recording no longer offered (imported, "Not this call", or pushed out by newer ones)
+     * no longer holds its call back: the detector judges it a little later.
+     */
+    private fun saveCandidates(context: Context, list: List<Candidate>) {
+        val before = candidates(context)
+        val kept = list.takeLast(5)
+        prefs(context).edit().putString(ASK, kept.joinToString(",") { "${it.fileId}:${it.callAtMs}" }).apply()
+        val gone = before.filter { old -> kept.none { it.callAtMs == old.callAtMs } }
+        gone.forEach { PendingImports.done(context, it.callAtMs) }
+        if (gone.isNotEmpty()) runCatching { MissedRecordingWorker.soon(context, ANSWERED_DELAY_MS) }
+    }
 
     /** "Not this call": the recording is no longer offered. */
     fun dropCandidate(context: Context, fileId: Long) = saveCandidates(context, candidates(context).filter { it.fileId != fileId })
@@ -733,8 +758,14 @@ object PhoneAppRecordings {
             }
             done += file.id
             settled++
-            // The detector may judge the call now; one waiting for the person still waits (at most its time limit).
-            if (!waitsForPerson) PendingImports.doneOverlapping(context, call.dateMs, call.dateMs + RING_MAX_MS + call.talkS * 1000)
+            // The detector may judge the call now, by its own times; one whose recording waits for the person waits too,
+            // until they import it or say it is not this call's.
+            val times = callSpan(call, file)
+            if (waitsForPerson) {
+                PendingImports.waitForPerson(context, times.first, times.last)
+            } else {
+                PendingImports.doneOverlapping(context, times.first, times.last)
+            }
             log(context, note)
             if (call.dateMs >= p.getLong(NOTE_AT, 0)) {
                 p.edit().putString(NOTE, note.replaceFirstChar { it.uppercase() }).putLong(NOTE_AT, call.dateMs).apply()
@@ -798,14 +829,16 @@ object PhoneAppRecordings {
     }
 
     /**
-     * EchoLedger's own SIM-call recordings with sound on the phone. One skipped (unanswered, short), one that failed for
-     * silence on its way out, or one imported from the Phone app does not count.
+     * EchoLedger's own SIM-call recordings on the phone that heard both sides (its journal says so). One skipped
+     * (unanswered, short), one that failed for silence on its way out, one with your voice only, or one imported from the
+     * Phone app does not count: the Phone app's copy of that call is brought in.
      */
     private fun ownRecordings(book: CallJournal.Book, recordings: List<LocalRecording>): List<Own> = recordings
         .filter { rec ->
+            val entry = book.call(rec.id)
             rec.sourceApp == SourceApp.PHONE_CALL.wire && rec.durationMs > 0 && rec.state != SkippedCalls.STATE &&
-                rec.captureWarning?.startsWith(IMPORTED) != true &&
-                CallJournal.Result.of(book.call(rec.id)?.result) != CallJournal.Result.FAILED
+                rec.captureWarning?.startsWith(IMPORTED) != true && entry != null &&
+                CallJournal.Result.of(entry.result) != CallJournal.Result.FAILED && entry.reached(CallJournal.Stage.BOTH_AUDIO)
         }
         .mapNotNull { rec ->
             val start = runCatching { Instant.parse(rec.startedAt).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
@@ -923,10 +956,13 @@ object PhoneAppRecordings {
                 file.durationMs
             )
         }
-        // A missed recording found for this call before the import (the Phone app was slow) is withdrawn.
-        MissedRecordingStore.all(context)
-            .filter { it.app == SourceApp.PHONE_CALL.wire && !it.sent && abs(it.startedAtMs - call.dateMs) <= MissedRecordings.MATCH_MS }
-            .forEach { MissedRecordingStore.withdraw(context, it.ref) }
+        // A missed recording found for this call before the import (the Phone app was slow, or the person imported it
+        // later) is withdrawn, also one sent already: its server copy is marked read. Only this call's, by its own times.
+        val recorded = listOf(MissedRecordings.Span(span.first, span.first + file.durationMs, SourceApp.PHONE_CALL.wire))
+        val covered = MissedRecordingStore.all(context)
+            .filter { it.app == SourceApp.PHONE_CALL.wire && !it.withdrawn && MissedRecordings.coveredNow(it, recorded) }
+        covered.forEach { MissedRecordingStore.withdraw(context, it.ref) }
+        if (covered.any { it.sent }) runCatching { MissedUploadWorker.enqueue(context) }
         if (settings.deletePhoneAppCopy && Build.VERSION.SDK_INT >= 30) {
             prefs(context).edit().putString(DELETE, (pendingDeletes(context) + file.id).distinct().joinToString(",")).apply()
         }
@@ -985,6 +1021,8 @@ object PhoneAppRecordings {
         }
     }
 
+    /** After the person answered for a recording, the detector looks again this soon. */
+    private const val ANSWERED_DELAY_MS = 30_000L
     private const val KEY_WATCH = "watch"
     const val WATCH = "phone-app-recordings-watch"
     const val SOON = "phone-app-recordings-soon"
@@ -1010,11 +1048,14 @@ object PhoneAppRecordings {
             Result.success()
         }
 
-        /** The looks after a call are over: the detector may judge what is left, a little later. */
+        /**
+         * The looks after a call are over: the detector may judge what is left, a little later. A call whose recording
+         * waits for the person still waits.
+         */
         private fun gaveUp(context: Context) {
-            if (PendingImports.waiting(context).isEmpty()) return
-            PendingImports.clear(context)
-            MissedRecordingWorker.soon(context)
+            val before = PendingImports.waiting(context).size
+            PendingImports.endLooks(context)
+            if (PendingImports.waiting(context).size < before) MissedRecordingWorker.soon(context)
         }
     }
 }

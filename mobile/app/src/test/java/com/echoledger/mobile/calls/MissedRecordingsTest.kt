@@ -296,6 +296,41 @@ class MissedRecordingsTest {
     }
 
     @Test
+    fun `an answered call's row never answers the redial a minute later, whether the call was kept or imported`() {
+        // A: answered, 25 s of talk, and recorded: by EchoLedger, or (the phone line would not open) by the Phone app.
+        fun book(imported: Boolean): Book {
+            var b = CallJournal.seen(ready(), "a", "phone_call", Seen.HELPER, t0)
+            b = CallJournal.stage(b, "a", Stage.ARMED, t0 + 100, "helper ready")
+            if (imported) {
+                b = CallJournal.fail(b, "a", "unknown", MissedReason.PHONE_LINE, t0 + 200)
+                b = CallJournal.ended(b, "a", t0 + 30_000)
+                b = CallJournal.seen(b, "p", "phone_call", Seen.PHONE_APP, t0 + 4_000)
+                b = CallJournal.finish(b, "p", Result.KEPT, t0 + 29_000, "imported from the Phone app", 25_000)
+            } else {
+                b = CallJournal.stage(b, "a", Stage.STARTED, t0 + 300)
+                b = CallJournal.stage(b, "a", Stage.BOTH_AUDIO, t0 + 4_000)
+                b = CallJournal.ended(b, "a", t0 + 30_000)
+                b = CallJournal.finish(b, "a", Result.KEPT, t0 + 31_000, keptMs = 25_000)
+            }
+            // B: the redial 40 s after A ended; it rang 30 s and nobody answered. Its phone line would not open either.
+            b = CallJournal.seen(b, "b", "phone_call", Seen.HELPER, t0 + 70_000)
+            b = CallJournal.stage(b, "b", Stage.ARMED, t0 + 70_100, "helper ready")
+            b = CallJournal.fail(b, "b", "unknown", MissedReason.PHONE_LINE, t0 + 70_200)
+            return CallJournal.ended(b, "b", t0 + 100_000)
+        }
+        val rowA = log(t0 - 3_000, 25)
+        val rowB = log(t0 + 69_000, 0, answered = false)
+        listOf(false, true).forEach { imported ->
+            assertTrue("imported: $imported", find(book(imported), listOf(rowA, rowB)).isEmpty())
+            assertTrue("imported: $imported, before the redial's own row is written", find(book(imported), listOf(rowA)).isEmpty())
+        }
+        // A redial that was answered and not recorded is missed, with its own length.
+        val answeredRedial = find(book(imported = false), listOf(rowA, log(t0 + 69_000, 20))).single()
+        assertEquals(t0 + 70_000, answeredRedial.startedAtMs)
+        assertEquals(20L, answeredRedial.durationS)
+    }
+
+    @Test
     fun `the ringing does not count toward Skip calls shorter than`() {
         fun call(talkS: Long): Book {
             var b = CallJournal.seen(ready(), "a1", "whatsapp", Seen.AUDIO, t0)
@@ -388,12 +423,30 @@ class MissedRecordingsTest {
         val item = MissedItem("r1", "phone_call", t0, 120, "unknown", "", t0)
         assertTrue(MissedRecordings.coveredNow(item, listOf(Span(t0 + 20_000, t0 + 140_000))))
         assertTrue(
-            "the ringing before the call-log row's talk",
-            MissedRecordings.coveredNow(item, listOf(Span(t0 + 150_000, t0 + 200_000)))
+            "the ringing before the call-log row's talk: a recording that starts in it as long as the talk",
+            MissedRecordings.coveredNow(item.copy(durationS = 30), listOf(Span(t0 + 50_000, t0 + 80_000)))
         )
         assertFalse(MissedRecordings.coveredNow(item, listOf(Span(t0 + 10 * min, t0 + 12 * min))))
         val app = item.copy(app = "whatsapp")
         assertFalse(MissedRecordings.coveredNow(app, listOf(Span(t0 + 150_000, t0 + 200_000))))
+    }
+
+    @Test
+    fun `a voice note 20 s after a missed SIM call neither hides it nor withdraws it`() {
+        val book = CallJournal.mark(ready(), State.HELPER_LOST, t0 - min)
+        // Only the call log saw the call: 2 minutes of talk. The voice note starts 20 s after the talk ended.
+        val voiceNote = Span(t0 + 140_000, t0 + 170_000)
+        assertEquals(listOf(t0), find(book, listOf(log(t0, 120)), recordings = listOf(voiceNote)).map { it.startedAtMs })
+        val item = MissedItem("r1", "phone_call", t0, 120, "helper_not_armed", "", t0)
+        assertFalse(MissedRecordings.coveredNow(item, listOf(voiceNote)))
+
+        // A short call that rang a minute first: its Phone app recording starts after the talk time, as long as the talk.
+        val short = item.copy(durationS = 20)
+        assertTrue(MissedRecordings.coveredNow(short, listOf(Span(t0 + 60_000, t0 + 81_000))))
+        assertFalse(
+            "a recording of another length there is another one",
+            MissedRecordings.coveredNow(short, listOf(Span(t0 + 60_000, t0 + 140_000)))
+        )
     }
 
     @Test

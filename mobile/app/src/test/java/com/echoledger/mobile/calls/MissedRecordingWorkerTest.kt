@@ -170,6 +170,28 @@ class MissedRecordingWorkerTest : AppTest() {
     }
 
     @Test
+    fun `a call whose recording waits for the person outlasts the time limit and the end of the looks`() {
+        PhoneAppRecordings.schedule(app, t, t + 60_000)
+        PendingImports.waitForPerson(app, t - 5_000, t + 65_000)
+        PhoneAppRecordings.schedule(app, t + 10 * min, t + 12 * min)
+        PendingImports.endLooks(app)
+        val farLater = System.currentTimeMillis() + 6 * day
+        assertEquals(
+            "only the person's wait, in place of the look's",
+            listOf((t - 5_000)..(t + 65_000)),
+            PendingImports.waiting(app, farLater)
+        )
+        // Waits written before there were waits for the person still read.
+        assertEquals(listOf(PendingImports.Wait(1, 2, 3)), PendingImports.parse("1:2:3"))
+        assertEquals(
+            PendingImports.parse("1:2:3;4:5:6:1").toSet(),
+            PendingImports.parse(PendingImports.format(PendingImports.parse("1:2:3;4:5:6:1"))).toSet()
+        )
+        PendingImports.done(app, t - 5_000)
+        assertTrue(PendingImports.waiting(app, farLater).isEmpty())
+    }
+
+    @Test
     fun `scheduling the Phone app's import makes the call wait, and a wait ends by itself`() {
         PhoneAppRecordings.schedule(app, t, t + 60_000)
         assertEquals(listOf(t..t + 60_000), PendingImports.waiting(app, t + 70_000))

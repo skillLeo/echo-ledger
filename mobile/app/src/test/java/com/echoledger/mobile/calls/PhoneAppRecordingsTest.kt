@@ -255,8 +255,9 @@ class PhoneAppRecordingsTest {
     private fun always(autoRecord: Boolean = true, viewer: Boolean = false) =
         CallJournal.Choices(autoRecord = autoRecord, phoneCalls = "always", viewer = viewer)
 
-    private fun entry(result: Result?, note: String? = null): CallJournal.Call {
+    private fun entry(result: Result?, note: String? = null, bothSides: Boolean = false): CallJournal.Call {
         var b = CallJournal.seen(CallJournal.Book(), "e1", "phone_call", Seen.HELPER, t0 + 8_000)
+        if (bothSides) b = CallJournal.stage(b, "e1", CallJournal.Stage.BOTH_AUDIO, t0 + 9_000)
         if (result == Result.FAILED) b = CallJournal.fail(b, "e1", "unknown", "x", t0 + 9_000)
         if (result != null && result != Result.FAILED) b = CallJournal.finish(b, "e1", result, t0 + 140_000, note)
         return b.call("e1")!!
@@ -276,7 +277,16 @@ class PhoneAppRecordingsTest {
             Verdict.OWN,
             PhoneAppRecordings.verdict(c, entry(Result.FAILED), Own(t0, t0 + 130_000, 2), always(), 10, t0)
         )
-        assertEquals(Verdict.OWN, PhoneAppRecordings.verdict(c, entry(Result.KEPT), null, always(), 10, t0))
+        assertEquals(
+            "kept, both sides heard",
+            Verdict.OWN,
+            PhoneAppRecordings.verdict(c, entry(Result.KEPT, bothSides = true), null, always(), 10, t0)
+        )
+        assertEquals(
+            "kept with one side only: the Phone app's copy has both",
+            Verdict.IMPORT,
+            PhoneAppRecordings.verdict(c, entry(Result.KEPT), null, always(), 10, t0)
+        )
         assertEquals(Verdict.DISCARDED, PhoneAppRecordings.verdict(c, entry(Result.DISCARDED), null, always(), 10, t0))
         assertEquals(
             "Record not chosen",

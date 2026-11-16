@@ -6,6 +6,7 @@ import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.recording.CallJournal
 import java.time.Instant
 import java.time.temporal.ChronoUnit
+import kotlin.math.abs
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
@@ -28,17 +29,23 @@ object MissedRecordings {
     /** A call seen outside the journal: [by] is [CALL_LOG] or [NOTIFICATION]; [endMs] null while its length is unknown. */
     data class Sighting(val app: String, val startMs: Long, val endMs: Long?, val answered: Boolean, val by: String)
 
-    /** A recording that exists or existed around a call (a manual one counts too). */
-    data class Span(val startMs: Long, val endMs: Long)
+    /** A recording that exists or existed around a call (a manual one counts too, a voice note never); [app] when known. */
+    data class Span(val startMs: Long, val endMs: Long, val app: String? = null)
 
-    /** A missed call: [fix] is its button (the reason's own, or Turn on when auto-record was not running). */
+    /**
+     * A missed call: [fix] is its button (the reason's own, or Turn on when auto-record was not running). [endedAtMs] is
+     * when it ended as far as is known; [logOnly] when only the call log knew its end, which is then its start plus the
+     * talk time ([durationS]): the ringing before the answer is not known.
+     */
     data class Found(
         val app: String,
         val startedAtMs: Long,
         val durationS: Long?,
         val reason: MissedReason,
         val detail: String,
-        val fix: MissedFix = reason.fix
+        val fix: MissedFix = reason.fix,
+        val endedAtMs: Long? = null,
+        val logOnly: Boolean = false
     )
 
     const val CALL_LOG = "call_log"
@@ -60,8 +67,9 @@ object MissedRecordings {
     /**
      * Each call the phone saw that should have been recorded but was not, oldest first, and not already in [known] (the
      * items found before, by their app and start time). [ongoing]: a recording is live or still saving, or a call is
-     * going on; [importing]: SIM calls whose recording the Phone app's import may still bring in; [notifications]:
-     * EchoLedger may read call notifications (without it an app call is never reported).
+     * going on; [importing]: SIM calls whose recording the Phone app's import may still bring in, or that waits for the
+     * person to import it; [notifications]: EchoLedger may read call notifications (without it an app call is never
+     * reported).
      */
     fun find(
         book: CallJournal.Book,
@@ -77,23 +85,33 @@ object MissedRecordings {
         val calls = book.calls.filter { (it.seenBy == CallJournal.Seen.HELPER || it.seenBy == CallJournal.Seen.AUDIO) && it.atMs >= from }
         val recent = sightings.filter { it.startMs >= from }
         val spans = recordings + recordedSpans(book)
+        // Each call-log row is one call: it goes with the one journal entry of its call, never also with the next call's.
+        val rows = recent.filter { it.by == CALL_LOG }
+        val rowOf = pairRows(book, rows, nowMs)
+        val notices = recent.filter { it.by != CALL_LOG }
         val fromJournal = calls.mapNotNull { call ->
             val end = windowEnd(book, call, nowMs)
-            val match = recent.filter { same(it.app, call.app) && belongs(it, call.atMs, end) }
+            val match = listOfNotNull(rowOf[call.id]) + notices.filter { same(it.app, call.app) && overlapsCall(it, call.atMs, end) }
             judgeJournal(book, call, match, spans, nowMs, ongoing)
         }
-        val fromSightings = merge(recent)
-            .filter { s -> calls.none { same(s.app, it.app) && belongs(s, it.atMs, windowEnd(book, it, nowMs)) } }
-            .mapNotNull { judgeSighting(book, it, spans, nowMs) }
-        val seen = mutableListOf<Found>()
-        return (fromJournal + fromSightings)
+        val paired = rowOf.values.toSet()
+        val unseen = rows.filter { it !in paired } +
+            notices.filter { s -> calls.none { same(s.app, it.app) && overlapsCall(s, it.atMs, windowEnd(book, it, nowMs)) } }
+        val fromSightings = merge(unseen).mapNotNull { judgeSighting(book, it, spans, nowMs) }
+        val all = (fromJournal + fromSightings)
             .filter { it.startedAtMs >= from }
             .filter { notifications || it.app == SourceApp.PHONE_CALL.wire }
-            .filter { f -> f.app != SourceApp.PHONE_CALL.wire || importing.none { overlaps(it, f) } }
+        // A SIM call whose Phone app recording is still being looked for, or waits for the person, waits too: each wait
+        // holds the one call it is about (the closest start among those its times overlap), never the call after it.
+        val held = importing.mapNotNull { range ->
+            all.filter { it.app == SourceApp.PHONE_CALL.wire && overlaps(range, it) }.minByOrNull { abs(it.startedAtMs - range.first) }
+        }
+        val seen = mutableListOf<Found>()
+        return all.filter { f -> held.none { it === f } }
             .sortedBy { it.startedAtMs }
             .filter { f ->
-                val again = known.any { sameApp(it.app, f.app) && kotlin.math.abs(it.startedAtMs - f.startedAtMs) <= MATCH_MS } ||
-                    seen.any { same(it.app, f.app) && kotlin.math.abs(it.startedAtMs - f.startedAtMs) <= MATCH_MS }
+                val again = known.any { sameApp(it.app, f.app) && abs(it.startedAtMs - f.startedAtMs) <= MATCH_MS } ||
+                    seen.any { same(it.app, f.app) && abs(it.startedAtMs - f.startedAtMs) <= MATCH_MS }
                 if (!again) seen += f
                 !again
             }
@@ -101,18 +119,23 @@ object MissedRecordings {
 
     private val RECORDED = setOf(CallJournal.Result.KEPT, CallJournal.Result.SKIPPED, CallJournal.Result.DISCARDED)
 
-    /** What the journal says was recorded (kept, skipped or thrown away on purpose): the evidence once the file is gone. */
-    fun recordedSpans(book: CallJournal.Book): List<Span> = book.calls.filter { CallJournal.Result.of(it.result) in RECORDED }.map {
-        Span(it.atMs, it.endedAtMs ?: (it.atMs + (it.keptMs ?: 0)))
-    }
+    /**
+     * What the journal says was recorded (kept, skipped or thrown away on purpose): the evidence once the file is gone. A
+     * voice note is never a call's recording.
+     */
+    fun recordedSpans(book: CallJournal.Book): List<Span> = book.calls
+        .filter { CallJournal.Result.of(it.result) in RECORDED && it.app != SourceApp.VOICE_NOTE.wire }
+        .map { Span(it.atMs, it.endedAtMs ?: (it.atMs + (it.keptMs ?: 0)), it.app) }
 
     /**
-     * A recording of [item]'s call turned up after it was found (the Phone app's, imported late): it is withdrawn instead
-     * of being sent. A call-log row's end leaves out the ringing, so a SIM call's window is a little longer.
+     * A recording of [item]'s call turned up after it was found (the Phone app's, imported late): it is withdrawn, also
+     * when it was sent already. Only a recording of the call's own times counts (see [covered]); an item kept before its
+     * end was known is taken as the call log's: its start plus its length.
      */
     fun coveredNow(item: MissedItem, spans: List<Span>): Boolean {
-        val ring = if (item.app == SourceApp.PHONE_CALL.wire) PhoneCalls.BEFORE_MS else 0L
-        return recorded(spans, item.startedAtMs, item.startedAtMs + (item.durationS ?: 0) * 1000 + ring)
+        val talkMs = item.durationS?.let { it * 1000 }
+        val end = item.endedAtMs ?: (item.startedAtMs + (talkMs ?: 0))
+        return covered(spans, item.app, item.startedAtMs, end, talkMs.takeIf { item.logOnly || item.endedAtMs == null })
     }
 
     /** A call the app itself saw: what the journal says, unless it was recorded after all (the Phone app's recording). */
@@ -147,8 +170,12 @@ object MissedRecordings {
         // Its length counts from the answer: the ringing is not the call.
         val lengthMs = answered.mapNotNull { answeredLength(it, knownEnd) }.maxOrNull() ?: knownEnd?.let { it - call.atMs }
         if (!wanted(book, call.app, call.atMs, lengthMs)) return null
-        if (recorded(spans, call.atMs, knownEnd ?: call.lastActivityMs())) return null
-        return Found(call.app, call.atMs, lengthMs?.let { it / 1000 }, reason, detail)
+        // Its own end: the journal's, else a notice's; a call-log row's alone leaves out the ringing before the answer.
+        val exactEnd = call.endedAtMs ?: sightings.filter { it.by != CALL_LOG }.mapNotNull { it.endMs }.maxOrNull()
+        val logOnly = exactEnd == null && knownEnd != null
+        val end = maxOf(exactEnd ?: knownEnd ?: call.lastActivityMs(), call.atMs)
+        if (covered(spans, call.app, call.atMs, end, lengthMs.takeIf { logOnly })) return null
+        return Found(call.app, call.atMs, lengthMs?.let { it / 1000 }, reason, detail, endedAtMs = end, logOnly = logOnly)
     }
 
     /** EchoLedger itself heard the call answered: both sides (or the one track) had sound; never in the audio mode alone. */
@@ -171,14 +198,27 @@ object MissedRecordings {
         call.endedAtMs ?: endProof(book, call) ?: nowMs
 
     /**
-     * Whether [s] reports the call EchoLedger saw from [atMs] to [endMs]: a call-log row of a call that rang at most 2
-     * minutes before it was seen and not after it ended; a call notice whose answer-to-end overlaps it. A redial a minute
-     * after an unanswered call is a call of its own.
+     * Each call-log row with the one journal entry of its call: of the phone-call entries (the helper's, the audio
+     * mode's, an import's, one by hand) whose call it can be, rung at most 2 minutes before the entry began and not after
+     * it ended, the one that began closest to it; each entry has one row at most. So an answered call's row never also
+     * answers the redial a minute later, nor gives it its length.
      */
-    private fun belongs(s: Sighting, atMs: Long, endMs: Long): Boolean = when (s.by) {
-        CALL_LOG -> s.startMs in (atMs - PhoneCalls.BEFORE_MS)..(endMs + SLACK_MS)
-        else -> s.startMs <= endMs + SLACK_MS && (s.endMs ?: Long.MAX_VALUE) >= atMs - SLACK_MS
+    private fun pairRows(book: CallJournal.Book, rows: List<Sighting>, nowMs: Long): Map<String, Sighting> {
+        val entries = book.calls.filter { it.app == SourceApp.PHONE_CALL.wire }
+        val pairs = rows.flatMap { row ->
+            entries.filter { row.startMs in (it.atMs - PhoneCalls.BEFORE_MS)..(windowEnd(book, it, nowMs) + SLACK_MS) }
+                .map { Triple(row, it, abs(row.startMs - it.atMs)) }
+        }
+        val out = LinkedHashMap<String, Sighting>()
+        pairs.sortedBy { it.third }.forEach { (row, entry, _) ->
+            if (entry.id !in out && out.values.none { it === row }) out[entry.id] = row
+        }
+        return out
     }
+
+    /** Whether the call notice [s] reports the call EchoLedger saw from [atMs] to [endMs]: its answer-to-end overlaps it. */
+    private fun overlapsCall(s: Sighting, atMs: Long, endMs: Long): Boolean =
+        s.startMs <= endMs + SLACK_MS && (s.endMs ?: Long.MAX_VALUE) >= atMs - SLACK_MS
 
     /** From the answer: a call-log row's talk time, a notice's time from the answer to its end (or the call's). */
     private fun answeredLength(s: Sighting, callEndMs: Long?): Long? = when (s.by) {
@@ -186,13 +226,17 @@ object MissedRecordings {
         else -> (s.endMs ?: callEndMs)?.let { it - s.startMs }
     }?.coerceAtLeast(0)
 
-    /** A call only the call log or a notification saw: why the app missed it, from auto-record's timeline of then. */
-    private fun judgeSighting(book: CallJournal.Book, s: Sighting, spans: List<Span>, nowMs: Long): Found? {
+    /**
+     * A call only the call log or a notification saw: why the app missed it, from auto-record's timeline of then. Its
+     * length is the call log's talk time when it has a row (the ringing is not the call), else its notice's.
+     */
+    private fun judgeSighting(book: CallJournal.Book, s: Unseen, spans: List<Span>, nowMs: Long): Found? {
         val endMs = s.endMs ?: return null
         if (!s.answered || nowMs - endMs < SETTLE_MS) return null
         val choices = book.choicesAt(s.startMs) ?: return null
+        val lengthMs = s.talkMs ?: (endMs - s.startMs)
         // A call the person did not want recorded is never missed, whatever the plan or the role said then.
-        if (!wanted(book, s.app, s.startMs, endMs - s.startMs)) return null
+        if (!wanted(book, s.app, s.startMs, lengthMs)) return null
         val service = book.serviceAt(s.startMs)
         val reason = when {
             choices.viewer || service.refused == "plan" -> MissedReason.PLAN
@@ -200,8 +244,17 @@ object MissedRecordings {
             service.armed && service.helperReady -> MissedReason.DETECTION
             else -> MissedReason.HELPER_NOT_ARMED
         }
-        if (recorded(spans, s.startMs, coverEnd(s))) return null
-        return Found(s.app, s.startMs, (endMs - s.startMs) / 1000, reason, detailOf(reason, service), fixOf(reason, service))
+        if (covered(spans, s.app, s.startMs, endMs, s.talkMs.takeIf { s.logOnly })) return null
+        return Found(
+            s.app,
+            s.startMs,
+            lengthMs / 1000,
+            reason,
+            detailOf(reason, service),
+            fixOf(reason, service),
+            endedAtMs = endMs,
+            logOnly = s.logOnly
+        )
     }
 
     /** The sentence for [reason]: auto-record that was not running, or that Android kept from starting, says so. */
@@ -234,33 +287,73 @@ object MissedRecordings {
         return lengthMs == null || lengthMs >= shortest
     }
 
-    /** A recording that really overlaps the call (a little slack for the answer and the clocks); a neighbour does not count. */
-    private fun recorded(spans: List<Span>, startMs: Long, endMs: Long): Boolean =
-        spans.any { it.startMs <= endMs + SLACK_MS && it.endMs >= startMs - SLACK_MS }
+    /**
+     * Whether a recording covers the call of [app] from [startMs] to [endMs]: one that really overlaps it (a little slack
+     * for the answer and the clocks). When only the call log knows the call ([talkMs] given), its end is its start plus
+     * the talk time and the ringing before the answer is not known: a recording of the same app that starts in that
+     * ringing counts too, but only when it is as long as the talk. A neighbour (the next call, a voice note) never does.
+     */
+    private fun covered(spans: List<Span>, app: String, startMs: Long, endMs: Long, talkMs: Long?): Boolean = spans.any { s ->
+        val overlaps = s.startMs <= endMs + SLACK_MS && s.endMs >= startMs - SLACK_MS
+        val afterRinging = talkMs != null &&
+            s.startMs in startMs..(startMs + PhoneCalls.BEFORE_MS + SLACK_MS) &&
+            (s.app == null || same(s.app, app)) &&
+            abs(s.endMs - s.startMs - talkMs) <= maxOf(LENGTH_SLACK_MS, talkMs * 15 / 100)
+        overlaps || afterRinging
+    }
 
-    /** A call-log row ends at its start plus the talk time, which leaves out the ringing: its call may end later. */
-    private fun coverEnd(s: Sighting): Long = (s.endMs ?: s.startMs) + if (s.by == CALL_LOG) PhoneCalls.BEFORE_MS else 0L
-
-    /** A SIM call whose Phone app recording is still being looked for waits. */
+    /** Whether the wait over [range] is about [f]'s call: their own times overlap. */
     private fun overlaps(range: LongRange, f: Found): Boolean {
-        val end = f.startedAtMs + (f.durationS ?: 0) * 1000 + PhoneCalls.BEFORE_MS
-        return range.first <= end && range.last >= f.startedAtMs - PhoneCalls.BEFORE_MS
+        val end = f.endedAtMs ?: (f.startedAtMs + (f.durationS ?: 0) * 1000)
+        return range.first <= end + SLACK_MS && range.last >= f.startedAtMs - SLACK_MS
     }
 
     private const val SLACK_MS = 10_000L
 
-    /** The call-log row and the dialer's notification of one SIM call (or two notices of one app call) are one call. */
-    private fun merge(sightings: List<Sighting>): List<Sighting> {
-        val out = mutableListOf<Sighting>()
+    /** A recording as long as a call's talk: within 10 s, or 15 % of a long call. */
+    private const val LENGTH_SLACK_MS = 10_000L
+
+    /**
+     * One call only the call log or notifications saw: [talkMs] the call log's talk time when it has a row, [logOnly]
+     * when only the call log saw it (its end is then its start plus the talk time, without the ringing).
+     */
+    private data class Unseen(
+        val app: String,
+        val startMs: Long,
+        val endMs: Long?,
+        val answered: Boolean,
+        val talkMs: Long?,
+        val logOnly: Boolean
+    )
+
+    /**
+     * The call-log row and the dialer's notification of one SIM call (or two notices of one app call) are one call: each
+     * report joins the call that started closest to it. Two call-log rows are always two calls.
+     */
+    private fun merge(sightings: List<Sighting>): List<Unseen> {
+        val out = mutableListOf<Unseen>()
         sightings.sortedBy { it.startMs }.forEach { s ->
-            val i = out.indexOfFirst { same(it.app, s.app) && near(it.startMs, it.endMs, s.startMs, s.endMs) }
-            if (i < 0) {
-                out += s
+            val row = s.by == CALL_LOG
+            val talk = if (row) s.endMs?.let { it - s.startMs } else null
+            val i = out.indices
+                .filter { j ->
+                    out[j].let {
+                        same(it.app, s.app) && !(row && it.talkMs != null) &&
+                            near(it.startMs, it.endMs, s.startMs, s.endMs)
+                    }
+                }
+                .minByOrNull { j -> abs(out[j].startMs - s.startMs) }
+            if (i == null) {
+                out += Unseen(s.app, s.startMs, s.endMs, s.answered, talk, logOnly = row)
             } else {
                 val a = out[i]
-                // The call log knows the talk time; a notification without an end learns it from the other.
-                val end = listOfNotNull(a.endMs, s.endMs).maxOrNull()
-                out[i] = a.copy(endMs = end, answered = a.answered || s.answered)
+                // The call log knows the talk time; a notification knows the end (and one without an end learns it).
+                out[i] = a.copy(
+                    endMs = listOfNotNull(a.endMs, s.endMs).maxOrNull(),
+                    answered = a.answered || s.answered,
+                    talkMs = a.talkMs ?: talk,
+                    logOnly = a.logOnly && row
+                )
             }
         }
         return out
@@ -276,7 +369,7 @@ object MissedRecordings {
 
     /** Two reports of one call: they start close together, or their times really overlap. */
     private fun near(aStart: Long, aEnd: Long?, bStart: Long, bEnd: Long?): Boolean {
-        if (kotlin.math.abs(aStart - bStart) <= MATCH_MS) return true
+        if (abs(aStart - bStart) <= MATCH_MS) return true
         val aTo = aEnd ?: aStart
         val bTo = bEnd ?: bStart
         return aStart < bTo && bStart < aTo
@@ -348,9 +441,18 @@ data class MissedItem(
     /** Its button, when not the reason's own ([MissedFix] name; Turn on when auto-record was not running). */
     val fix: String? = null,
     /** A recording of the call turned up after all (the Phone app's, imported late): it left Activity and is never sent. */
-    val withdrawn: Boolean = false
+    val withdrawn: Boolean = false,
+    /** When the call ended as far as is known (null on items found before it was kept: their start plus their length). */
+    val endedAtMs: Long? = null,
+    /** Only the call log knew the call: its end is its start plus the talk time, without the ringing before the answer. */
+    val logOnly: Boolean = false,
+    /** Its server copy was marked read, after it was read, dismissed or withdrawn here. */
+    val serverRead: Boolean = false
 ) {
     val waiting: Boolean get() = !sent && !refused && !withdrawn
+
+    /** The server has it, and it was read, dismissed or withdrawn here: its server copy is to be marked read too. */
+    val serverCopyToRead: Boolean get() = serverId != null && !serverRead && (read || dismissed || withdrawn)
 
     /** The button: Turn on, or the reason's own. */
     val button: MissedFix get() = MissedFix.of(fix) ?: MissedReason.of(reason).fix

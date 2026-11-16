@@ -1,18 +1,24 @@
 package com.echoledger.mobile.calls
 
 import android.app.NotificationManager
+import androidx.work.testing.TestListenableWorkerBuilder
 import com.echoledger.mobile.calls.PhoneAppRecordings.LogCall
 import com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile
+import com.echoledger.mobile.data.ApiJson
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.recording.CallJournal
 import com.echoledger.mobile.recording.CaptureLog
 import com.echoledger.mobile.testsupport.AppTest
+import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.bodyText
+import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.storeRecording
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.jsonObject
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -110,9 +116,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals("Call with +923001234567", DecisionPopup.title(rec))
     }
 
-    @Test
-    fun `EchoLedger's own two-sided recording is kept and the Phone app's copy is never even read`() {
-        val c = call()
+    /** EchoLedger's own two-track recording of [c], kept; its journal says whether it heard [bothSides]. */
+    private fun ownRecording(c: LogCall, bothSides: Boolean) {
         app.storeRecording(
             id = "mine",
             sourceApp = "phone_call",
@@ -121,11 +126,36 @@ class PhoneAppRecordingsRunTest : AppTest() {
             durationMs = 128_000,
             channels = 2
         )
+        CallJournal.update(app) { b ->
+            var j = CallJournal.seen(b, "mine", "phone_call", CallJournal.Seen.HELPER, c.dateMs + 3 * sec)
+            j = CallJournal.stage(j, "mine", CallJournal.Stage.ARMED, c.dateMs + 3 * sec, "helper ready")
+            j = CallJournal.stage(j, "mine", CallJournal.Stage.STARTED, c.dateMs + 6 * sec)
+            if (bothSides) j = CallJournal.stage(j, "mine", CallJournal.Stage.BOTH_AUDIO, c.dateMs + 9 * sec)
+            j = CallJournal.ended(j, "mine", c.dateMs + 134 * sec)
+            CallJournal.finish(j, "mine", CallJournal.Result.KEPT, c.dateMs + 135 * sec, keptMs = 128_000)
+        }
+    }
+
+    @Test
+    fun `EchoLedger's own two-sided recording is kept and the Phone app's copy is never even read`() {
+        val c = call()
+        ownRecording(c, bothSides = true)
         val store = Store(mutableListOf(recording(1, c)), listOf(c))
         assertEquals(emptyList<String>(), run(store).imported)
         assertEquals(emptyList<Long>(), store.opened)
         assertEquals("EchoLedger's own recording kept (both sides apart); the Phone app's copy stays in its folder.", note())
         assertEquals(listOf("mine"), app.graph.recordings.all().map { it.id })
+    }
+
+    @Test
+    fun `EchoLedger's own recording with your voice only does not keep the Phone app's two-sided copy out`() {
+        val c = call()
+        ownRecording(c, bothSides = false)
+        val store = Store(mutableListOf(recording(1, c)), listOf(c))
+        val imported = run(store).imported.single()
+        assertEquals(listOf(1L), store.opened)
+        assertEquals("Imported the Phone app's recording (125 s); EchoLedger's own has one side only.", note())
+        assertEquals(setOf("mine", imported), app.graph.recordings.all().map { it.id }.toSet())
     }
 
     @Test
@@ -304,6 +334,88 @@ class PhoneAppRecordingsRunTest : AppTest() {
         run(Store(mutableListOf(recording(1, c)), listOf(c)))
         val item = MissedRecordingStore.all(app).single()
         assertTrue(item.withdrawn && !item.waiting)
+    }
+
+    @Test
+    fun `a call whose recording waits for the person is never reported missed while it waits, however long`() {
+        val c = call()
+        // EchoLedger could not open the phone line; the dialer's notice says the call was answered.
+        CallJournal.update(app) { b ->
+            val seen = CallJournal.seen(b, "e1", "phone_call", CallJournal.Seen.HELPER, c.dateMs + 8 * sec)
+            CallJournal.fail(
+                CallJournal.ended(seen, "e1", c.dateMs + 135 * sec),
+                "e1",
+                "unknown",
+                MissedReason.PHONE_LINE,
+                c.dateMs + 9 * sec
+            )
+        }
+        CallSightings.update(app) {
+            listOf(CallSightings.Seen("phone_call", c.dateMs + 8 * sec, c.dateMs + 134 * sec, "com.samsung.android.incallui"))
+        }
+        PhoneAppRecordings.schedule(app, c.dateMs + 8 * sec, c.dateMs + 135 * sec)
+        val store = Store(mutableListOf(recording(1, c, owner = null)), listOf(c))
+        run(store)
+        assertEquals(listOf(1L), PhoneAppRecordings.candidates(app).map { it.fileId })
+
+        // The looks after the call are over, and an hour passes: the call still waits for the person's answer.
+        runBlocking { TestListenableWorkerBuilder<PhoneAppRecordings.Worker>(app).build().doWork() }
+        val hourLater = t + 60 * 60 * sec
+        assertTrue(runBlocking { MissedRecordingWorker.detect(app, hourLater) }.isEmpty())
+
+        // "Not this call": now it is a missed recording.
+        PhoneAppRecordings.dropCandidate(app, 1)
+        assertEquals(
+            listOf(c.dateMs + 8 * sec),
+            runBlocking {
+                MissedRecordingWorker.detect(app, hourLater + 60 * sec)
+            }.map { it.startedAtMs }
+        )
+    }
+
+    @Test
+    fun `a report sent before the person imported the call's recording is withdrawn, and read on the server too`() {
+        runBlocking { app.pairLocally(server) }
+        server.on(
+            "GET",
+            "/api/activity",
+            FakeServer.json(
+                200,
+                """{"data":[{"id":"act-1","kind":"missed_recording","title":"Missed recording","body":"Phone call",""" +
+                    """"read":false,"missed_recording_id":"01JMISSED0000000000000000F"}],"unread_count":1}"""
+            )
+        )
+        server.on("POST", "/api/activity/read", FakeServer.json(200, """{"unread_count":0}"""))
+        val c = call()
+        val store = Store(mutableListOf(recording(1, c, owner = null)), listOf(c))
+        run(store)
+        // It was found and sent before (an import that looked late), and the person imports the recording now.
+        val item = MissedRecordingStore.add(
+            app,
+            listOf(MissedRecordings.Found("phone_call", c.dateMs, 125, MissedReason.UNKNOWN, ""))
+        ).single()
+        MissedRecordingStore.sent(app, item.ref, "01JMISSED0000000000000000F")
+        runBlocking { PhoneAppRecordings.importCandidate(app, 1, store) }
+
+        assertTrue(MissedRecordingStore.all(app).single().withdrawn)
+        runBlocking { TestListenableWorkerBuilder<MissedUploadWorker>(app).build().doWork() }
+        val read = server.requestsTo("POST", "/api/activity/read").map { ApiJson.parseToJsonElement(it.bodyText()).jsonObject.toString() }
+        assertEquals(listOf("""{"ids":["act-1"]}"""), read)
+    }
+
+    @Test
+    fun `settling or importing one call never touches the next call's wait or report`() {
+        val a = call(talkS = 30)
+        // B rang 90 s after A: its report and its wait are its own.
+        val next = MissedRecordingStore.add(
+            app,
+            listOf(MissedRecordings.Found("phone_call", a.dateMs + 90 * sec, 60, MissedReason.HELPER_NOT_ARMED, ""))
+        ).single()
+        PhoneAppRecordings.schedule(app, a.dateMs + 8 * sec, a.dateMs + 40 * sec)
+        PhoneAppRecordings.schedule(app, a.dateMs + 90 * sec, a.dateMs + 150 * sec)
+        assertEquals(1, run(Store(mutableListOf(recording(1, a)), listOf(a))).imported.size)
+        assertEquals(listOf((a.dateMs + 90 * sec)..(a.dateMs + 150 * sec)), PendingImports.waiting(app))
+        assertFalse(MissedRecordingStore.all(app).single { it.ref == next.ref }.withdrawn)
     }
 
     @Test

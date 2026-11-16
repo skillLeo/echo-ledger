@@ -60,7 +60,9 @@ object MissedRecordingStore {
                 detail = f.detail,
                 foundAtMs = nowMs,
                 owner = owner,
-                fix = fix
+                fix = fix,
+                endedAtMs = f.endedAtMs,
+                logOnly = f.logOnly
             )
         }
         if (fresh.isEmpty()) return emptyList()
@@ -81,8 +83,18 @@ object MissedRecordingStore {
 
     fun refused(context: Context, ref: String) = change(context, ref) { it.copy(refused = true) }
 
-    /** A recording of the call turned up after all: the item leaves Activity and is never sent. */
+    /**
+     * A recording of the call turned up after all: the item leaves Activity and is never sent; one sent already has its
+     * server copy marked read by the uploader ([MissedItem.serverCopyToRead]).
+     */
     fun withdraw(context: Context, ref: String) = change(context, ref) { it.copy(read = true, dismissed = true, withdrawn = true) }
+
+    /** Their server copies were marked read (or looked for and not there any more). */
+    @Synchronized
+    fun serverRead(context: Context, refs: Collection<String>) {
+        if (refs.isEmpty()) return
+        save(context, all(context).map { if (it.ref in refs) it.copy(serverRead = true) else it })
+    }
 
     /**
      * A sign-in as [next] after [previous]: when it is someone else, the items found without an account are stamped with
@@ -99,6 +111,10 @@ object MissedRecordingStore {
     /** What [current] sees and sends: its own items (and those found before any account was known). */
     fun forAccount(items: List<MissedItem>, current: Owner?): List<MissedItem> =
         items.filter { !it.withdrawn && Owner.mayUpload(it.owner, current) }
+
+    /** The server copies [current] marks read: its items read, dismissed or withdrawn here after they were sent. */
+    fun serverCopiesToRead(items: List<MissedItem>, current: Owner?): List<MissedItem> =
+        items.filter { it.serverCopyToRead && Owner.mayUpload(it.owner, current) }
 
     @Synchronized
     fun clear(context: Context) {

@@ -25,8 +25,11 @@ import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.NotifyCategory
+import com.echoledger.mobile.core.Owner
 import com.echoledger.mobile.core.PhoneCalls
+import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.AppSettings
+import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.NotPairedException
 import com.echoledger.mobile.notify.CallerNameListener
@@ -47,7 +50,10 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
     override suspend fun doWork(): Result {
         val fresh = detect(applicationContext)
         if (fresh.isNotEmpty()) notify(applicationContext, fresh)
-        if (MissedRecordingStore.all(applicationContext).any { it.waiting }) MissedUploadWorker.enqueue(applicationContext)
+        withdrawCovered(applicationContext)
+        if (MissedRecordingStore.all(applicationContext).any { it.waiting || it.serverCopyToRead }) {
+            MissedUploadWorker.enqueue(applicationContext)
+        }
         return Result.success()
     }
 
@@ -91,13 +97,28 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
             MissedRecordingStore.add(context, found, nowMs, settings.account)
         }
 
-        /** The recordings on the phone, as times (what the journal says was recorded is added by the detector). */
+        /**
+         * The recordings on the phone, as times and apps (what the journal says was recorded is added by the detector). A
+         * voice note is never a call's recording.
+         */
         fun spans(context: Context): List<MissedRecordings.Span> =
             (context.applicationContext as EchoLedgerApp).graph.recordings.all().mapNotNull { rec ->
+                if (rec.sourceApp == SourceApp.VOICE_NOTE.wire) return@mapNotNull null
                 val start = runCatching { Instant.parse(rec.startedAt).toEpochMilli() }.getOrNull() ?: return@mapNotNull null
                 val end = runCatching { Instant.parse(rec.endedAt).toEpochMilli() }.getOrNull() ?: (start + rec.durationMs)
-                MissedRecordings.Span(start, maxOf(end, start + rec.durationMs))
+                MissedRecordings.Span(start, maxOf(end, start + rec.durationMs), rec.sourceApp)
             }
+
+        /**
+         * Every item whose call turned out recorded after all (the Phone app's recording, imported late) is withdrawn,
+         * sent or not: one the server has then has its server copy marked read by the uploader.
+         */
+        fun withdrawCovered(context: Context) {
+            val spans = spans(context) + MissedRecordings.recordedSpans(CallJournal.book(context))
+            MissedRecordingStore.all(context)
+                .filter { !it.withdrawn && MissedRecordings.coveredNow(it, spans) }
+                .forEach { MissedRecordingStore.withdraw(context, it.ref) }
+        }
 
         /** Something may still be going on: a recording live or still saving, or a call (the phone's audio mode). */
         fun ongoing(context: Context): Boolean {
@@ -179,8 +200,9 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
  * Sends the missed recordings the server does not have yet (`POST /api/devices/missed-recordings`): accepted (201, or
  * 200 for one it had) → sent; refused for good (422, 404 on a server without it, 403) → never again; anything else
  * waits for the next try, offline included. Each keeps its `client_ref`, so a retry never makes a second item. Only the
- * signed-in account's items go; one whose call turned out recorded after all is withdrawn instead; one already read or
- * dismissed on the phone has its server copy marked read too. Items found while it runs go in the same run.
+ * signed-in account's items go; one whose call turned out recorded after all is withdrawn instead, also after it was
+ * sent; one read, dismissed or withdrawn on the phone after the server had it has its server copy marked read too.
+ * Items found while it runs go in the same run.
  */
 class MissedUploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result {
@@ -189,7 +211,7 @@ class MissedUploadWorker(context: Context, params: WorkerParameters) : Coroutine
         val api = graph.api() ?: return Result.success() // not signed in: they wait on the phone
         val current = graph.settings.current().account
         val tried = mutableSetOf<String>()
-        val seenHere = mutableListOf<String>()
+        MissedRecordingWorker.withdrawCovered(context)
         try {
             while (true) {
                 val batch = MissedRecordingStore.forAccount(MissedRecordingStore.all(context), current)
@@ -211,8 +233,6 @@ class MissedUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                     try {
                         val id = api.reportMissedRecording(MissedRecordings.payload(item, BuildConfig.VERSION_NAME))
                         MissedRecordingStore.sent(context, item.ref, id)
-                        val now2 = MissedRecordingStore.all(context).firstOrNull { it.ref == item.ref }
-                        if (id != null && now2 != null && (now2.read || now2.dismissed)) seenHere += id
                     } catch (e: NotPairedException) {
                         return Result.success()
                     } catch (e: ApiException) {
@@ -227,17 +247,23 @@ class MissedUploadWorker(context: Context, params: WorkerParameters) : Coroutine
                 }
             }
         } finally {
-            if (seenHere.isNotEmpty()) markRead(api, seenHere)
+            markServerCopiesRead(context, api, current)
         }
         return Result.success()
     }
 
-    /** The server's Activity items of reports already read or dismissed on the phone are read there too. */
-    private suspend fun markRead(api: com.echoledger.mobile.net.ApiClient, reportIds: List<String>) {
+    /**
+     * The server's Activity items of reports read, dismissed or withdrawn on the phone are read there too (among its 100
+     * newest, as far as `GET /api/activity` reaches); each report is looked for once, and again only after a failed try.
+     */
+    private suspend fun markServerCopiesRead(context: Context, api: ApiClient, current: Owner?) {
+        val due = MissedRecordingStore.serverCopiesToRead(MissedRecordingStore.all(context), current)
+        if (due.isEmpty()) return
         runCatching {
-            val ids = api.activity(100).data.filter { !it.read && it.missedRecordingId in reportIds }.map { it.id }
+            val reports = due.mapNotNull { it.serverId }.toSet()
+            val ids = api.activity(100).data.filter { !it.read && it.missedRecordingId in reports }.map { it.id }
             if (ids.isNotEmpty()) api.markActivityRead(ids)
-        }
+        }.onSuccess { MissedRecordingStore.serverRead(context, due.map { it.ref }) }
     }
 
     companion object {
