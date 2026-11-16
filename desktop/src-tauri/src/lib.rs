@@ -678,6 +678,12 @@ pub fn run() {
             let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
             actions::handle_links(handle, &urls);
         }
+        // Opening the app again from Finder, Launchpad, Spotlight or the Dock starts no second copy on a Mac (the
+        // single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the main window.
+        #[cfg(target_os = "macos")]
+        if let RunEvent::Reopen { has_visible_windows, .. } = &event {
+            actions::reopen(handle, *has_visible_windows);
+        }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.
             if code.is_none() {
