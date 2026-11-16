@@ -24,6 +24,8 @@
 .el-root :where(h1, h2, h3, h4, p, ul, ol, figure) { margin: 0; padding: 0; }
 .el-root :where(ul, ol) { list-style: none; }
 .el-root :where(button, input, select, textarea) { font: inherit; color: inherit; }
+/* A v2 page inside today's frame takes the frame's background and scrolling. */
+.el-root.el-embedded { background: transparent; }
 
 /* Urdu: Nastaliq at the urdu.body size, with room above and below; titles keep their size and gain line height.
    Latin words and digits inside Urdu use the sans face the token family ends in. */
@@ -503,6 +505,45 @@
 .el-segment--active { background: var(--el-role-accent-soft); margin-inline: calc(var(--el-space-12) * -1); padding-inline: var(--el-space-12); border-radius: var(--el-radius-sm); border-block-end-color: transparent; }
 .el-segment__text { min-inline-size: 0; overflow-wrap: anywhere; }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
+
+/* ---- The app shell (ui_v2.shell) -------------------------------------------------------------------------- */
+.el-shell { display: grid; grid-template-columns: auto minmax(0, 1fr); block-size: 100%; }
+.el-shell > .el-sidebar { overflow-y: auto; }
+[data-platform="macos"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-40); }
+.el-shell__status { margin-block-start: auto; padding: var(--el-space-8); }
+.el-shell__main { position: relative; display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; overflow: hidden; }
+.el-shell__main > .el-empty { margin-block: auto; }
+.el-shell__main > .content { flex: 1 1 auto; min-block-size: 0; }
+
+/* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
+.el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
+.el-page--wide { max-inline-size: calc(var(--el-space-64) * 15); }
+.el-page--narrow { max-inline-size: calc(var(--el-space-64) * 11); }
+.el-page__head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-12) var(--el-space-16); }
+.el-page__head--top { align-items: flex-start; }
+.el-page__titles { display: flex; flex-direction: column; gap: var(--el-space-4); min-inline-size: 0; flex: 1 1 calc(var(--el-space-64) * 6); }
+.el-page__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-page__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-page__back { align-self: flex-start; margin-inline-start: calc(var(--el-space-8) * -1); margin-block-end: calc(var(--el-space-8) * -1); }
+.el-page__tools { display: flex; flex-direction: column; gap: var(--el-space-12); }
+.el-page__tools > .el-search { max-inline-size: calc(var(--el-space-64) * 8); }
+.el-page__player > .el-player { flex-wrap: wrap; }
+.el-page__player > .el-loading { padding: var(--el-space-12); }
+.el-page__speed { inline-size: calc(var(--el-space-64) + var(--el-space-24)); }
+.el-row__buttons { display: flex; align-items: center; gap: var(--el-space-4); }
+.el-details { display: grid; grid-template-columns: max-content 1fr; gap: var(--el-space-8) var(--el-space-24); margin: 0; }
+.el-details > dt { color: var(--el-role-text-secondary); }
+.el-details > dd { margin: 0; }
+.el-profile { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-16); padding: var(--el-space-16); }
+.el-profile__who { flex: 1 1 calc(var(--el-space-64) * 4); display: flex; flex-direction: column; gap: var(--el-space-2); min-inline-size: 0; }
+.el-profile__email { direction: ltr; unicode-bidi: isolate; align-self: flex-start; }
+.el-profile__plan { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); margin-block-start: var(--el-space-4); }
+.el-profile-error > .el-empty { padding: var(--el-space-24); }
+.el-group { display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-group__title { padding-inline: var(--el-space-4); }
+.el-group__rows { padding: var(--el-space-4); }
+.el-group__progress { padding: 0 var(--el-space-12) var(--el-space-8); }
+.el-settings-top { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 11); margin-block-end: var(--el-space-24); }
 
 /* Below the compact breakpoint the sidebar keeps its icons only; the names stay for assistive tools and as tooltips.
    Media queries cannot read variables: the width mirrors --el-breakpoint-compact (tokensOnly.test.ts checks it). */
