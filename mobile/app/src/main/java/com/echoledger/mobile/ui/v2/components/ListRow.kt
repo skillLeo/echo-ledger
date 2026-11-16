@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -25,14 +27,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /**
  * A list row, 64 dp (one line of meta) or 72 dp ([tall], with an avatar), in the WhatsApp manner: the title and
- * [titleEnd] (a time) on the first line, [meta] and [metaEnd] (a duration or one status) on the second, [trailing]
- * for a switch or a value. The whole row is one tap target and is read as one item.
+ * [titleEnd] (a time) on the first line; at most one [status], then [meta] and [metaEnd] (a duration) on the second;
+ * [trailing] for a switch or a value. The whole row is one tap target and is read as one item.
  */
 @Composable
 fun EchoListRow(
@@ -41,6 +44,7 @@ fun EchoListRow(
     meta: String? = null,
     titleEnd: String? = null,
     metaEnd: (@Composable () -> Unit)? = null,
+    status: (@Composable () -> Unit)? = null,
     leading: (@Composable () -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     tall: Boolean = false,
@@ -72,8 +76,9 @@ fun EchoListRow(
                 )
                 titleEnd?.let { Text(it, style = type.caption, color = c.textSecondary, maxLines = 1) }
             }
-            if (meta != null || metaEnd != null) {
+            if (meta != null || metaEnd != null || status != null) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                    status?.invoke()
                     Text(
                         meta.orEmpty(),
                         style = type.meta,
@@ -106,32 +111,37 @@ fun EchoSettingRow(
 ) {
     val c = EchoV2.colors
     val type = EchoV2.type
-    Row(
-        modifier
-            .fillMaxWidth()
-            .defaultMinSize(minHeight = EchoTokens.Layout.rowMobile)
-            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
-            .semantics(mergeDescendants = true) {}
-            .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
-    ) {
-        icon?.let { Icon(it, null, Modifier.size(V2Size.icon), tint = c.textSecondary) }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
-            Text(title, style = type.body, color = c.textPrimary)
-            subtitle?.let { Text(it, style = type.meta, color = c.textSecondary) }
+    BoxWithConstraints(modifier.fillMaxWidth()) {
+        // A value takes at most this share of the row, so long titles keep their room and short values hug the end.
+        val valueMax = maxWidth * 0.45f
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = EchoTokens.Layout.rowMobile)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
+                .semantics(mergeDescendants = true) {}
+                .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s16)
+        ) {
+            icon?.let { Icon(it, null, Modifier.size(V2Size.icon), tint = c.textSecondary) }
+            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
+                Text(title, style = type.body, color = c.textPrimary)
+                subtitle?.let { Text(it, style = type.meta, color = c.textSecondary) }
+            }
+            value?.let {
+                Text(
+                    it,
+                    style = type.meta,
+                    color = c.textSecondary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.End,
+                    modifier = Modifier.widthIn(max = valueMax)
+                )
+            }
+            trailing?.invoke()
         }
-        value?.let {
-            Text(
-                it,
-                style = type.meta,
-                color = c.textSecondary,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(0.6f, fill = false)
-            )
-        }
-        trailing?.invoke()
     }
 }
 

@@ -1,23 +1,28 @@
 package com.echoledger.mobile.ui.v2.components
 
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -49,6 +54,7 @@ fun formatClock(ms: Long): String {
  * The recording player: the seek bar with the position and the length, then back 10 s, play or pause, forward 10 s and
  * the speed. Media controls never mirror: the timeline runs left to right in every language.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EchoPlayer(
     positionMs: Long,
@@ -68,11 +74,14 @@ fun EchoPlayer(
             Slider(
                 value = if (durationMs > 0) positionMs.toFloat() / durationMs else 0f,
                 onValueChange = { onSeek((it * durationMs).toLong()) },
-                colors = SliderDefaults.colors(
-                    thumbColor = c.accent,
-                    activeTrackColor = c.accent,
-                    inactiveTrackColor = c.borderDefault
-                ),
+                thumb = { Box(Modifier.size(EchoTokens.Space.s16).background(c.accent, CircleShape)) },
+                track = { state ->
+                    Canvas(Modifier.fillMaxWidth().height(V2Size.handleHeight)) {
+                        val y = size.height / 2
+                        drawLine(c.borderDefault, Offset(0f, y), Offset(size.width, y), size.height, StrokeCap.Round)
+                        drawLine(c.accent, Offset(0f, y), Offset(size.width * state.value, y), size.height, StrokeCap.Round)
+                    }
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .semantics {
@@ -119,7 +128,7 @@ fun EchoPlayer(
                             .size(EchoTokens.Layout.controlTouchMin + EchoTokens.Space.s8, EchoTokens.Layout.controlTouchMin)
                             .semantics { contentDescription = "${labels.speed} $speed" }
                     ) {
-                        Box(contentAlignment = Alignment.Center) { Text(speed, style = EchoV2.type.label) }
+                        Box(contentAlignment = Alignment.Center) { Text(speed, style = EchoV2.type.mono, color = c.textPrimary) }
                     }
                 }
             }

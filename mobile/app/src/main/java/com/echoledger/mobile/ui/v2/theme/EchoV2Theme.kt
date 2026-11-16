@@ -215,6 +215,9 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     /** Durations and clocks; always the system face with tabular digits. */
     val mono = EchoTokens.Type.mono.copy(fontFamily = FontFamily.Default, fontFeatureSettings = "tnum")
 
+    /** Email addresses, links and codes inside any language: the system face, 14 sp. */
+    val metaLatin = EchoTokens.Type.body.copy(fontFamily = FontFamily.Default)
+
     /** Transcript text in Urdu (urdu.body). */
     val urduBody = EchoTokens.Type.urduBody.copy(fontFamily = UrduNastaliq)
 
