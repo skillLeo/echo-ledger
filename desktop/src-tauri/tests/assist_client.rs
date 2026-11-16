@@ -1,6 +1,7 @@
-//! The Live Assist relay client (docs/API_ASSIST.md 1.9.0-c) against a local mock relay: the Bearer token and
-//! TCP_NODELAY, the first `ready`, messages with their `seq`, the token refresh before expiry, the close codes,
-//! reconnecting with pauses and giving up, and the `live_assist` gate.
+//! The Live Assist relay client (docs/API_ASSIST.md 1.9.0-e) against a local mock relay: the Bearer token and
+//! TCP_NODELAY, the relay's pinned key, the first `ready`, messages with their `seq` per connection and paced to the
+//! relay's rate, the token refresh before expiry, the close codes, reconnecting with pauses and giving up, a refused
+//! token, what waits while the socket is down, and the `live_assist` gate.
 
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -105,7 +106,8 @@ async fn next_json(ws: &mut Ws) -> Value {
 }
 
 fn grant(url: &str, token: &str, expires_in: chrono::Duration) -> RelayGrant {
-    RelayGrant { url: url.to_string(), token: token.to_string(), expires_at: Utc::now() + expires_in }
+    // Plain ws:// to this computer needs no pins (debug builds and tests only).
+    RelayGrant { url: url.to_string(), token: token.to_string(), expires_at: Utc::now() + expires_in, pins: vec![] }
 }
 
 /// A refresh that hands out `t2`, `t3`… for the same relay and counts its calls.
@@ -342,6 +344,8 @@ async fn what_the_app_sends_while_the_socket_is_down_goes_out_once_it_is_back() 
         async move {
             let _ = ws.send(ready(index > 0)).await;
             if index == 0 {
+                // Something sent on the first connection, so a seq carried over would not start at 1.
+                let _ = next_json(&mut ws).await;
                 close_with(&mut ws, 4408).await;
                 return;
             }
@@ -355,6 +359,8 @@ async fn what_the_app_sends_while_the_socket_is_down_goes_out_once_it_is_back() 
     let events = Events::default();
     let policy = Policy { backoff: vec![Duration::from_millis(300)], ..quick() };
     let session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, policy, events.sink());
+    events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { resumed: false, .. })).await;
+    session.send(ClientMessage::HelpNow { turn_id: None });
     events.wait_for("the pause", |e| matches!(e, AssistEvent::Reconnecting { .. })).await;
     session.send(turn("Said while the socket was down"));
     events.wait_for("the resumed session", |e| matches!(e, AssistEvent::Connected { resumed: true, .. })).await;
@@ -365,6 +371,7 @@ async fn what_the_app_sends_while_the_socket_is_down_goes_out_once_it_is_back() 
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     assert_eq!(got.lock().unwrap()[0]["text"], "Said while the socket was down");
+    assert_eq!(got.lock().unwrap()[0]["seq"], 1, "seq counts per connection, from 1 (1.9.0-d)");
     session.stop();
 }
 
@@ -377,4 +384,173 @@ async fn nothing_starts_while_the_live_assist_flag_is_off() {
     let (refresh, _) = refresher("ws://127.0.0.1:9/v1/assist");
     let started = desktop_lib::assist::start(&off, grant("ws://127.0.0.1:9/v1/assist", "t1", chrono::Duration::minutes(15)), refresh, |_| {});
     assert!(started.is_none());
+}
+
+fn ready_at(rate: u32, resumed: bool) -> Message {
+    Message::Text(json!({"type": "ready", "seq": 1, "protocol": 1, "session_id": "01JS", "mode": "balanced", "allowed_modes": ["balanced"], "resumed": resumed, "practice": false, "limits": {"max_message_bytes": 2097152, "max_turn_chars": 4000, "messages_per_second": rate}}).to_string().into())
+}
+
+#[tokio::test]
+async fn messages_wait_for_ready_and_go_out_at_the_relay_s_rate() {
+    let got: Arc<Mutex<Vec<(Value, std::time::Instant)>>> = Arc::default();
+    let log = got.clone();
+    let relay = Relay::start(never, move |_, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            // Ready only after a moment: nothing may arrive before it.
+            tokio::time::sleep(Duration::from_millis(150)).await;
+            log.lock().unwrap().push((json!({"ready_sent": true}), std::time::Instant::now()));
+            let _ = ws.send(ready_at(10, false)).await;
+            for _ in 0..4 {
+                let frame = next_json(&mut ws).await;
+                log.lock().unwrap().push((frame, std::time::Instant::now()));
+            }
+            while let Some(Ok(_)) = ws.next().await {}
+        }
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink());
+    for i in 0..4 {
+        session.send(turn(&format!("turn {i}")));
+    }
+    for _ in 0..200 {
+        if got.lock().unwrap().len() == 5 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let got = got.lock().unwrap().clone();
+    assert_eq!(got[0].0, json!({"ready_sent": true}), "nothing before ready");
+    assert_eq!(got.iter().skip(1).map(|(v, _)| v["seq"].as_u64().unwrap()).collect::<Vec<_>>(), [1, 2, 3, 4]);
+    // 10 a second: 100 ms apart (a little slack below for timer rounding).
+    for pair in got[1..].windows(2) {
+        assert!(pair[1].1.duration_since(pair[0].1) >= Duration::from_millis(90), "{:?}", pair[1].1.duration_since(pair[0].1));
+    }
+    session.stop();
+}
+
+#[tokio::test]
+async fn a_token_refused_again_and_again_waits_like_any_reconnect() {
+    // Every connection is refused with 401, whatever the token.
+    let relay = Relay::start(|_| Some(401), |_, _ws: Ws| async move {}).await;
+    let (refresh, calls) = refresher(&relay.url);
+    let events = Events::default();
+    let policy = Policy { backoff: vec![Duration::from_millis(60)], give_up_after: Duration::from_millis(500), ..quick() };
+    let _session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, policy, events.sink());
+    events.wait_for("giving up", |e| matches!(e, AssistEvent::Ended(EndReason::GaveUp(_)))).await;
+    let reconnects: Vec<AssistEvent> = events.all().into_iter().filter(|e| matches!(e, AssistEvent::Reconnecting { .. })).collect();
+    // The first refusal: a new token and at once; the next ones: a new token and the usual pause.
+    assert_eq!(reconnects[0], AssistEvent::Reconnecting { attempt: 0, after: Duration::ZERO, why: "token".into() });
+    assert!(reconnects[1..].iter().all(|e| matches!(e, AssistEvent::Reconnecting { attempt, after, .. } if *attempt >= 1 && *after == Duration::from_millis(60))), "{reconnects:?}");
+    // About 500 ms at 60 ms a try: a handful of connections, not a tight loop.
+    let tries = relay.connections().len();
+    assert!((3..=12).contains(&tries), "{tries} connections");
+    assert!(*calls.lock().unwrap() as usize <= tries);
+}
+
+#[tokio::test]
+async fn while_down_only_the_latest_partial_waits_with_every_final() {
+    let got: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let log = got.clone();
+    let relay = Relay::start(never, move |index, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            let _ = ws.send(ready_at(1000, index > 0)).await;
+            if index == 0 {
+                close_with(&mut ws, 1012).await;
+                return;
+            }
+            loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(text))) => log.lock().unwrap().push(serde_json::from_str(text.as_str()).unwrap()),
+                    Some(Ok(_)) => {}
+                    _ => break,
+                }
+            }
+        }
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let policy = Policy { backoff: vec![Duration::from_millis(400)], ..quick() };
+    let session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, policy, events.sink());
+    events.wait_for("the pause", |e| matches!(e, AssistEvent::Reconnecting { .. })).await;
+    let partial = |text: &str| ClientMessage::TurnPartial(Turn { turn_id: "o-2".into(), channel: Channel::Other, text: text.into(), language: None, start_ms: None, end_ms: None, silence_ms: Some(90) });
+    session.send(partial("so what"));
+    session.send(turn("Final one"));
+    session.send(partial("so what is"));
+    session.send(ClientMessage::HelpNow { turn_id: None });
+    session.send(partial("so what is your"));
+    events.wait_for("the resumed session", |e| matches!(e, AssistEvent::Connected { resumed: true, .. })).await;
+    for _ in 0..100 {
+        if got.lock().unwrap().len() >= 3 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let got: Vec<String> = got.lock().unwrap().iter().map(|v| format!("{} {}", v["type"].as_str().unwrap(), v["text"].as_str().unwrap_or(""))).collect();
+    assert_eq!(got, ["turn_final Final one", "help_now ", "turn_partial so what is your"]);
+    session.stop();
+}
+
+#[tokio::test]
+async fn a_relay_without_the_pinned_key_is_refused_in_plain_words() {
+    // A TLS relay on this computer whose key is not the pinned one.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let key = rcgen::KeyPair::generate().unwrap();
+    let cert = rcgen::CertificateParams::new(vec!["localhost".to_string()]).unwrap().self_signed(&key).unwrap();
+    let config = Arc::new(
+        rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(vec![cert.der().clone()], rustls::pki_types::PrivateKeyDer::Pkcs8(rustls::pki_types::PrivatePkcs8KeyDer::from(key.serialize_der())))
+            .unwrap(),
+    );
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut tcp) = stream else { break };
+            let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
+            let Ok(mut conn) = rustls::ServerConnection::new(config.clone()) else { continue };
+            let _ = conn.complete_io(&mut tcp);
+        }
+    });
+    let other = base64::Engine::encode(&base64::engine::general_purpose::STANDARD, [7u8; 32]);
+    let mut wrong = grant(&format!("wss://localhost:{port}/v1/assist"), "t1", chrono::Duration::minutes(15));
+    wrong.pins = vec![format!("sha256/{other}")];
+    assert_eq!(client::connect(&wrong).await.err(), Some(client::ConnectError::Insecure));
+    // No pins at all: refused before any connection.
+    let none = RelayGrant { pins: vec![], ..wrong.clone() };
+    assert_eq!(client::connect(&none).await.err(), Some(client::ConnectError::Insecure));
+    // As a session: it ends in plain words and never retries.
+    let (refresh, calls) = refresher(&wrong.url);
+    let events = Events::default();
+    let _session = client::spawn(wrong, refresh, quick(), events.sink());
+    events.wait_for("the refusal", |e| *e == AssistEvent::Ended(EndReason::Insecure)).await;
+    assert_eq!(*calls.lock().unwrap(), 0);
+    assert_eq!(desktop_lib::net::pinning::RELAY_INSECURE, "Live Assist could not make a secure connection.");
+}
+
+#[tokio::test]
+async fn a_running_session_stops_when_live_assist_turns_off() {
+    let relay = Relay::start(never, |_, mut ws: Ws| async move {
+        let _ = ws.send(ready(false)).await;
+        while let Some(Ok(_)) = ws.next().await {}
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let on = desktop_lib::ui_flags::UiFlags::read(Some(&json!({"live_assist": true})), false);
+    let registry = desktop_lib::assist::Registry::default();
+    registry.set(desktop_lib::assist::start(&on, grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, events.sink()).unwrap());
+    events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { .. })).await;
+    assert!(!registry.stop_unless_enabled(&on), "still on: it runs");
+    assert!(registry.current().is_some());
+    let off = desktop_lib::ui_flags::UiFlags::read(Some(&json!({"live_assist": false})), false);
+    assert!(registry.stop_unless_enabled(&off));
+    events.wait_for("the end", |e| *e == AssistEvent::Ended(EndReason::Closed)).await;
+    assert!(registry.current().is_none());
 }

@@ -73,6 +73,8 @@ pub struct AppState {
     pub server_config: Mutex<Option<ServerConfig>>,
     /// The interface flags last announced as `ui:flags` (contract 2.0.0-a).
     pub ui_announced: ui_flags::Announced,
+    /// The Live Assist session that runs, if any.
+    pub assist: assist::Registry,
     pub capture: audio::CaptureController,
     pub live: stt::LiveCaptions,
     pub dictation_live: stt::LiveCaptions,
@@ -167,6 +169,7 @@ impl AppState {
             token_store,
             server_config: Mutex::new(None),
             ui_announced: ui_flags::Announced::default(),
+            assist: assist::Registry::default(),
             capture: audio::CaptureController::default(),
             live: stt::LiveCaptions::default(),
             dictation_live: stt::LiveCaptions::default(),

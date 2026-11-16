@@ -8,6 +8,49 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
+/// What a suggestion is (1.9.0-e): an answer to the other person's turn, a Balanced upgrade of a draft, a rewrite
+/// (shorter, formal, translate, regenerate) or a fallback after a provider failed mid-answer. A kind this app does not
+/// know yet is `Other`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SuggestionKind {
+    #[default]
+    Answer,
+    Upgrade,
+    Rewrite,
+    Fallback,
+    #[serde(other)]
+    Other,
+}
+
+/// How a suggestion ended (1.9.0-e): `complete`; `cancelled` (the person kept talking, or `cancel`); `superseded`
+/// (replaced by the suggestion whose `replaces` names it); `failed` (an `error` follows). Unknown is `Other`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EndStatus {
+    #[default]
+    Complete,
+    Cancelled,
+    Superseded,
+    Failed,
+    #[serde(other)]
+    Other,
+}
+
+/// Why the mode changed (1.9.0-e): spend reached the next step down, a refreshed token raised the budget, the plan
+/// allows fewer modes, or the session's assist seconds ran out. Unknown is `Other`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModeReason {
+    Budget,
+    BudgetRestored,
+    Plan,
+    AssistTime,
+    #[default]
+    #[serde(other)]
+    Other,
+}
+
 /// Which side said it: `me` (the person using EchoLedger) never starts a suggestion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -187,15 +230,30 @@ pub struct Ready {
     pub resumed: bool,
     #[serde(default)]
     pub practice: bool,
+    #[serde(default)]
+    pub limits: Option<Limits>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+/// `ready.limits`: the most the relay takes; the app paces its messages to `messages_per_second`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize)]
+pub struct Limits {
+    #[serde(default)]
+    pub max_message_bytes: Option<usize>,
+    #[serde(default)]
+    pub max_turn_chars: Option<usize>,
+    #[serde(default)]
+    pub messages_per_second: Option<u32>,
+}
+
+/// A suggestion begins (1.9.0-e): `turn_id` is the `other` turn it answers, `speculative` that it started on a partial
+/// and may be cancelled, `replaces` the suggestion it takes the place of on the card.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuggestionStart {
     pub suggestion_id: String,
     #[serde(default)]
     pub turn_id: Option<String>,
     #[serde(default)]
-    pub kind: String,
+    pub kind: SuggestionKind,
     #[serde(default)]
     pub mode: String,
     #[serde(default)]
@@ -208,7 +266,7 @@ pub struct SuggestionStart {
     pub replaces: Option<String>,
 }
 
-#[derive(Clone, PartialEq, Eq, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Token {
     pub suggestion_id: String,
     pub text: String,
@@ -220,12 +278,11 @@ impl fmt::Debug for Token {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SuggestionEnd {
     pub suggestion_id: String,
-    /// `done` | `cancelled` | `superseded`.
     #[serde(default)]
-    pub status: String,
+    pub status: EndStatus,
     #[serde(default)]
     pub model: String,
     #[serde(default)]
@@ -234,7 +291,7 @@ pub struct SuggestionEnd {
     pub usage: serde_json::Value,
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Skip {
     pub suggestion_id: String,
     #[serde(default)]
@@ -257,13 +314,13 @@ pub struct RelayError {
     pub fatal: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+/// `fast` | `balanced` | `deep` | `max` | `captions_only`, the steps `max → deep → balanced → fast → captions_only`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ModeChanged {
     pub from: String,
     pub to: String,
-    /// `requested` | `plan` | `budget` | `budget_restored` | `assist_time`.
     #[serde(default)]
-    pub reason: String,
+    pub reason: ModeReason,
 }
 
 /// Relay → app. A type this app does not know yet is `Unknown` and is ignored.
@@ -332,11 +389,13 @@ mod tests {
         let (seq, ready) = parse(r#"{"type":"ready","seq":1,"protocol":1,"session_id":"01JS","mode":"balanced","requested_mode":"balanced","allowed_modes":["balanced","fast"],"expires_at":"2026-11-16T09:15:00+00:00","resumed":false,"practice":false,"limits":{"max_message_bytes":2097152}}"#).unwrap();
         assert_eq!(seq, Some(1));
         assert!(matches!(ready, ServerMessage::Ready(ref r) if r.mode == "balanced" && r.allowed_modes.len() == 2 && !r.resumed));
+        let ServerMessage::Ready(ready) = ready else { unreachable!() };
+        assert_eq!(ready.limits.and_then(|l| l.max_message_bytes), Some(2_097_152));
         let (_, start) = parse(r#"{"type":"suggestion_start","seq":2,"suggestion_id":"1f3a-7","turn_id":"o-12","kind":"answer","mode":"balanced","model":"m","speculative":true,"draft":true,"replaces":null}"#).unwrap();
-        assert!(matches!(start, ServerMessage::SuggestionStart(ref s) if s.speculative && s.draft && s.kind == "answer"));
+        assert!(matches!(start, ServerMessage::SuggestionStart(ref s) if s.speculative && s.draft && s.kind == SuggestionKind::Answer));
         assert!(matches!(parse(r#"{"type":"token","seq":3,"suggestion_id":"1f3a-7","text":"Yes, I "}"#).unwrap().1, ServerMessage::Token(ref t) if t.text == "Yes, I "));
         let (_, end) = parse(r#"{"type":"suggestion_end","seq":4,"suggestion_id":"1f3a-7","status":"done","model":"m","latency":{"total_ms":702.5},"usage":{"output_tokens":31}}"#).unwrap();
-        assert!(matches!(end, ServerMessage::SuggestionEnd(ref e) if e.status == "done" && e.latency["total_ms"] == 702.5));
+        assert!(matches!(end, ServerMessage::SuggestionEnd(ref e) if e.status == EndStatus::Other && e.latency["total_ms"] == 702.5), "the relay's old done");
         assert!(matches!(parse(r#"{"type":"skip","seq":5,"suggestion_id":"x","turn_id":"o-1","latency":{},"usage":{}}"#).unwrap().1, ServerMessage::Skip(_)));
         let (_, error) = parse(r#"{"type":"error","seq":6,"code":"token_expired","message":"…","retry":false,"suggestion_id":null,"in_reply_to":null,"fatal":true}"#).unwrap();
         assert!(matches!(error, ServerMessage::Error(ref e) if e.code == "token_expired" && e.fatal));
@@ -345,6 +404,29 @@ mod tests {
         assert_eq!(parse(r#"{"type":"something_new","seq":9,"x":1}"#).unwrap().1, ServerMessage::Unknown);
         assert!(parse("not json").is_none());
         assert!(parse(r#"{"no":"type"}"#).is_none());
+    }
+
+    #[test]
+    fn the_1_9_0_e_fields_are_read() {
+        let (_, start) = parse(r#"{"type":"suggestion_start","seq":2,"suggestion_id":"s2","turn_id":"o-12","kind":"fallback","mode":"balanced","model":"m2","speculative":false,"draft":false,"replaces":"s1"}"#).unwrap();
+        let ServerMessage::SuggestionStart(start) = start else { panic!("{start:?}") };
+        assert_eq!((start.turn_id.as_deref(), start.kind, start.speculative, start.replaces.as_deref()), (Some("o-12"), SuggestionKind::Fallback, false, Some("s1")));
+        for (kind, read) in [("answer", SuggestionKind::Answer), ("upgrade", SuggestionKind::Upgrade), ("rewrite", SuggestionKind::Rewrite), ("fallback", SuggestionKind::Fallback), ("help_now", SuggestionKind::Other)] {
+            let (_, m) = parse(&format!(r#"{{"type":"suggestion_start","suggestion_id":"s","kind":"{kind}"}}"#)).unwrap();
+            assert!(matches!(m, ServerMessage::SuggestionStart(ref s) if s.kind == read), "{kind}");
+        }
+        for (status, read) in [("complete", EndStatus::Complete), ("cancelled", EndStatus::Cancelled), ("superseded", EndStatus::Superseded), ("failed", EndStatus::Failed), ("later", EndStatus::Other)] {
+            let (_, m) = parse(&format!(r#"{{"type":"suggestion_end","suggestion_id":"s","status":"{status}"}}"#)).unwrap();
+            assert!(matches!(m, ServerMessage::SuggestionEnd(ref e) if e.status == read), "{status}");
+        }
+        for (reason, read) in [("budget", ModeReason::Budget), ("budget_restored", ModeReason::BudgetRestored), ("plan", ModeReason::Plan), ("assist_time", ModeReason::AssistTime), ("requested", ModeReason::Other)] {
+            let (_, m) = parse(&format!(r#"{{"type":"mode_changed","from":"deep","to":"balanced","reason":"{reason}"}}"#)).unwrap();
+            assert!(matches!(m, ServerMessage::ModeChanged(ref c) if c.reason == read), "{reason}");
+        }
+        // Written back in the contract's words for the window.
+        assert_eq!(serde_json::to_value(&start).unwrap()["kind"], "fallback");
+        assert_eq!(serde_json::to_value(EndStatus::Superseded).unwrap(), "superseded");
+        assert_eq!(serde_json::to_value(ModeReason::AssistTime).unwrap(), "assist_time");
     }
 
     #[test]

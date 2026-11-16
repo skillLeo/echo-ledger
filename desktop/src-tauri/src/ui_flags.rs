@@ -96,7 +96,10 @@ impl Announced {
 /// config read.
 pub fn announce(app: &AppHandle) {
     let state = app.state::<crate::AppState>();
-    if let Some(flags) = state.ui_announced.changed(cached(&state)) {
+    let flags = cached(&state);
+    // `live_assist` turned off for this person: a session that runs stops.
+    state.assist.stop_unless_enabled(&flags);
+    if let Some(flags) = state.ui_announced.changed(flags) {
         let _ = app.emit(EVENT, flags);
     }
 }
