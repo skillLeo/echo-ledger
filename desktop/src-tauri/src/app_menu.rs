@@ -1,8 +1,8 @@
-//! The Mac's app menu (Phase 1B). The app has no Dock icon and shows no menu bar, but macOS still looks here for key
-//! equivalents while its window is in front: ⌘, opens Settings, ⌘W closes the window to the menu bar as Windows closes
-//! to the tray, ⌘Q quits the way the menu-bar icon's Quit does (a running recording is saved first), and the Edit keys
-//! work in every text field. The two items of our own are answered by the tray's menu handler (Tauri hands it every
-//! menu's events).
+//! The Mac's app menu (Phase 1B), in the menu bar while EchoLedger is in front (a normal app since v1.8.1, `app_life`):
+//! ⌘, opens Settings, ⌘W closes the window while EchoLedger keeps running in the Dock and the menu bar (as Windows
+//! closes to the notification area), ⌘Q quits the way the menu bar icon's Quit does (a running recording is kept first),
+//! and the Edit keys work in every text field. The two items of our own are answered by the tray's menu handler (Tauri
+//! hands it every menu's events).
 
 /// What the keys do; the ids the handler in tray.rs knows.
 pub const SETTINGS: &str = "settings";
@@ -37,7 +37,10 @@ mod tests {
     #[test]
     fn quit_is_the_id_the_tray_s_quit_answers() {
         let tray = include_str!("tray.rs");
-        assert!(tray.contains("\"quit\" => {") && tray.contains("stop_recording_for_quit"), "⌘Q saves a running recording like the menu-bar Quit");
+        let quit = &tray[tray.find("\"quit\" => {").expect("the tray answers quit")..];
+        let quit = &quit[..quit.find("app.exit(0);").unwrap()];
+        assert!(quit.contains("crate::actions::save_before_quit(&app).await;"), "⌘Q saves a running recording like the menu-bar Quit");
+        assert!(include_str!("actions.rs").contains("pub async fn save_before_quit(app: &AppHandle) {\n    if app.state::<crate::AppState>().capture.is_recording() {\n        let _ = stop_recording_for_quit(app).await;"));
         assert_eq!(QUIT, "quit");
         assert!(tray.contains("crate::app_menu::SETTINGS => {"));
     }

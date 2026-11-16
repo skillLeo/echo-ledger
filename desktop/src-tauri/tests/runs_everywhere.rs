@@ -12,8 +12,8 @@ use desktop_lib::audio::writer::read_mono_i16;
 use desktop_lib::mac_check::{CheckItem, CheckReport, CheckState};
 use desktop_lib::net::models::DeviceReport;
 use desktop_lib::overlay::geometry::{
-    Corner, MAC_FLOATING_LEVEL, MAC_OVERLAY_BEHAVIOUR, MAC_OVERLAY_LEVEL, MacRect, MacScreen, PillPosition, RectPx, WorkArea, area_for, cursor_in_regions, cursor_in_regions_scaled, dock,
-    mac_area, mac_follows_spaces, mac_on_screen, nearest_corner, pill_origin, rescue, top_center,
+    Corner, MAC_FLOATING_LEVEL, MAC_NONACTIVATING, MAC_OVERLAY_BEHAVIOUR, MAC_OVERLAY_LEVEL, MacRect, MacScreen, PillPosition, RectPx, WorkArea, area_for, cursor_in_regions, cursor_in_regions_scaled, dock,
+    mac_area, mac_follows_spaces, mac_on_screen, mac_overlay_style, nearest_corner, pill_origin, rescue, top_center,
 };
 use desktop_lib::settings::Settings;
 use desktop_lib::shortcuts::{self, Action};
@@ -171,6 +171,26 @@ fn overlays_join_every_space_and_show_over_full_screen_windows() {
     // What `visible_on_all_workspaces` gives alone is not enough: a full-screen Zoom window covers it.
     assert!(!mac_follows_spaces(1), "canJoinAllSpaces without fullScreenAuxiliary");
     assert!(!mac_follows_spaces(1 << 8), "fullScreenAuxiliary without canJoinAllSpaces");
+}
+
+#[test]
+fn overlays_never_activate_echoledger_and_stay_out_of_its_window_lists() {
+    // EchoLedger is a normal app with a Dock icon (app_life): its overlays are non-activating, so a click on them never
+    // brings EchoLedger in front of a full-screen meeting, and they may still float over it.
+    assert_eq!(MAC_NONACTIVATING, 1 << 7, "NSWindowStyleMaskNonactivatingPanel");
+    assert_eq!(mac_overlay_style(0), MAC_NONACTIVATING, "a borderless overlay");
+    assert_eq!(mac_overlay_style(1 << 3), (1 << 3) | MAC_NONACTIVATING, "its own style bits stay (resizable)");
+    let mac = include_str!("../src/overlay/macos.rs");
+    let keep = &mac[mac.find("pub fn keep_above_everything").unwrap()..];
+    let keep = &keep[..keep.find("\n}\n").unwrap()];
+    for applied in ["setStyleMask(NSWindowStyleMask(mac_overlay_style(ns_window.styleMask().0)))", "setExcludedFromWindowsMenu(true)", "setCollectionBehavior(NSWindowCollectionBehavior(MAC_OVERLAY_BEHAVIOUR))", "setLevel(MAC_OVERLAY_LEVEL)", "setCanHide(false)"] {
+        assert!(keep.contains(applied), "{applied}");
+    }
+    // Every overlay gets it: the recording controls, captions, dictation, the after-call card, the meeting prompt and
+    // Live Translate are all built by `create_overlay` or `create_translate_window`, never focusable.
+    let overlay = include_str!("../src/overlay/mod.rs");
+    assert_eq!(overlay.matches("macos::keep_above_everything(&window);").count(), 2);
+    assert!(overlay.contains(".focused(false)\n        .focusable(false)"));
 }
 
 #[test]

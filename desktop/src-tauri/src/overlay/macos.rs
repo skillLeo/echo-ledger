@@ -6,10 +6,10 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use objc2::MainThreadMarker;
-use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{NSScreen, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 use tauri::{AppHandle, Runtime, WebviewWindow};
 
-use super::geometry::{MAC_FLOATING_LEVEL, MAC_OVERLAY_BEHAVIOUR, MAC_OVERLAY_LEVEL, MacRect, MacScreen, mac_follows_spaces, mac_on_screen};
+use super::geometry::{MAC_FLOATING_LEVEL, MAC_OVERLAY_BEHAVIOUR, MAC_OVERLAY_LEVEL, MacRect, MacScreen, mac_follows_spaces, mac_on_screen, mac_overlay_style};
 use crate::mac_check::WindowFacts;
 
 fn mac_rect(r: objc2_core_foundation::CGRect) -> MacRect {
@@ -33,6 +33,9 @@ pub fn screens<R: Runtime>(app: &AppHandle<R>) -> Vec<MacScreen> {
 
 /// Above full-screen windows and in every Space. `always_on_top` and `visible_on_all_workspaces` alone give the floating
 /// level and no full-screen behaviour, which a full-screen Zoom window covers. Hide Others leaves overlays alone too.
+/// Non-activating (`mac_overlay_style`): a click never brings EchoLedger in front of the meeting, and a normal app's
+/// window may float over another app's full-screen window. Out of the Window menu and the Dock icon's list of windows:
+/// the main window is the one window people pick there (⌘Tab lists apps, and EchoLedger once).
 pub fn keep_above_everything<R: Runtime>(window: &WebviewWindow<R>) {
     let target = window.clone();
     let _ = window.run_on_main_thread(move || {
@@ -41,7 +44,9 @@ pub fn keep_above_everything<R: Runtime>(window: &WebviewWindow<R>) {
         let ns_window: &NSWindow = unsafe { &*(pointer as *const NSWindow) };
         ns_window.setLevel(MAC_OVERLAY_LEVEL);
         ns_window.setCollectionBehavior(NSWindowCollectionBehavior(MAC_OVERLAY_BEHAVIOUR));
+        ns_window.setStyleMask(NSWindowStyleMask(mac_overlay_style(ns_window.styleMask().0)));
         ns_window.setCanHide(false);
+        ns_window.setExcludedFromWindowsMenu(true);
     });
 }
 

@@ -1,4 +1,5 @@
-//! Tray / menu-bar icon: the app keeps running here when the main window is closed. The icon shows the app's state
+//! Tray / menu-bar icon: the app keeps running here when the main window is closed (on a Mac in the Dock as well,
+//! `app_life`). The icon shows the app's state
 //! (A3.4): on Windows a coloured dot on the app icon while recording, paused, uploading or when something needs
 //! attention. On a Mac the icon is a template image, so it follows light and dark menu bars; while recording it is a
 //! coloured badge of its own with a clear margin, and a dot in the template's ink means uploading or attention (`look`).
@@ -484,11 +485,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         Ok(())
                     }
                     "quit" => {
-                        let state = app.state::<crate::AppState>();
-                        if state.capture.is_recording() {
-                            // Never lose audio on quit: the recording stays as a decision for the next start.
-                            let _ = crate::actions::stop_recording_for_quit(&app).await;
-                        }
+                        // Never lose audio on quit: a running recording is kept first (the Dock's Quit does the same).
+                        crate::actions::save_before_quit(&app).await;
                         app.exit(0);
                         Ok(())
                     }
