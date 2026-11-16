@@ -528,6 +528,42 @@ class RecordingServiceTest : AppTest() {
         )
     }
 
+    /**
+     * v1.8 0.3 re-review: a one-sided recording is held only once its call waits for the Phone app's copy, so a release
+     * that runs in between (another call's check ending, the app opening) never lets it go before the copy can come.
+     */
+    @Test
+    fun `a one-sided phone call's recording is held only after its wait for the Phone app's copy is there`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(
+            app
+        ).grantPermissions(android.Manifest.permission.READ_CALL_LOG, com.echoledger.mobile.calls.PhoneAppRecordings.permission())
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = ScriptedHelper(stereo(speech(18_000), quiet(18_000)))
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200)
+        helper.listener!!.onCallEnded()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        // Held on the saving thread; the main thread has not run since.
+        val prefs = app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE)
+        val until = System.currentTimeMillis() + 20_000
+        while (prefs.getString("held", null).isNullOrEmpty() && System.currentTimeMillis() < until) Thread.sleep(20)
+        val id = prefs.getString("held", null)!!.substringBefore(':')
+        // A release now (another call's check ending) must leave it held: its call already waits for the copy.
+        runBlocking { com.echoledger.mobile.calls.PhoneAppRecordings.releaseHeld(app) }
+        assertEquals("pending_decision", app.graph.recordings.get(id)?.state)
+        assertEquals(1, com.echoledger.mobile.calls.PendingImports.waiting(app).size)
+    }
+
     /** v1.8 0.3 review: a SIM call EchoLedger recorded itself is not left waiting for the Phone app's copy. */
     @Test
     fun `a phone call EchoLedger recorded on both sides is not left waiting for the Phone app's copy`() {

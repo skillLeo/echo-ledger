@@ -1386,6 +1386,11 @@ class RecordingService : LifecycleService() {
             // Your voice only, with the Phone app's two-sided copy on its way: this one waits for it, undecided and with no
             // card, and the copy takes its place, so one call is one card and is transcribed once (since v1.8 0.3).
             val held = stored != null && skip == null && !silent && oneSided != null && phoneAppCovers
+            // A SIM call whose own recording was lost, silent or one-sided: the Phone app's copy is looked for. Its wait is
+            // added here, before the recording is held, so no release in between can let a held recording go too early.
+            if (session.sourceApp == SourceApp.PHONE_CALL.wire && (stored == null || silent || oneSided != null)) {
+                com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, session.startedAt.toEpochMilli(), endedMs)
+            }
             if (held && stored != null) {
                 graph.recordings.update(stored.id) { it.copy(state = "pending_decision") }
                 // Released with its card (or "After a call") if the copy does not come after all.
@@ -1448,10 +1453,6 @@ class RecordingService : LifecycleService() {
             val themeMode = settings.themeMode
             main.post {
                 val sim = session.sourceApp == SourceApp.PHONE_CALL.wire
-                // A SIM call whose own recording was lost, silent or one-sided: the Phone app's copy is looked for.
-                if (sim && (stored == null || silent || oneSided != null)) {
-                    com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, session.startedAt.toEpochMilli(), endedMs)
-                }
                 if (silent && sim) {
                     // The phone line gave nothing: said quietly, or not at all when the Phone app's recording is coming.
                     com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(this, settings)?.let {
