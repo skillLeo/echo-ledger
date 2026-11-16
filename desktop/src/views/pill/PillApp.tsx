@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, errorMessage, listenTo, type FarSidePayload, type MarkPayload, type RecordingState, type ScreenHoldReason, type ScreensPill } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
@@ -11,6 +11,11 @@ import { BLUETOOTH_NOTE } from "../../lib/microphone";
 import { CaptionsIcon, MicIcon, MonitorIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { BookmarkIcon, MinimizeIcon, PauseIcon, PlayIcon, StopIcon, WarningIcon } from "../../components/ControlIcons";
 import "../controls.css";
+import { useUiFlags } from "../../v2/flags";
+
+// The pill in the new look (ui_v2.recording_controls), loaded only when its flag is on.
+const RecordingPillV2 = lazy(() => import("../../v2/controls/RecordingPill").then((m) => ({ default: m.RecordingPill })));
+const captureNowV2 = () => import("../../v2/controls/commands").then((m) => m.captureNow());
 
 /** How long a failed action's message replaces the source label. */
 const ERROR_MS = 4000;
@@ -56,6 +61,8 @@ type Action = "pause" | "stop" | "cancel" | "captions" | "hide" | "mark" | "lang
  */
 export default function PillApp() {
   const [rec, setRec] = useState<RecordingState | null>(null);
+  // Read when the pill opens, never switched in the middle of a recording (v2/flags.ts).
+  const [ui] = useUiFlags(true, "pill", !!rec?.active);
   const [visible, setVisible] = useState(false);
   const [anchor, setAnchor] = useState<TimerAnchor | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -306,6 +313,25 @@ export default function PillApp() {
   const label = sourceLabel(live.sourceApp);
   const elapsed = formatTimer(elapsedAt(anchor, now));
   const [me, client] = live.levels;
+
+  if (ui.flags["ui_v2.recording_controls"]) {
+    const caller = (live as RecordingState & { callerName?: string | null }).callerName?.trim();
+    return (
+      <div className="pill-root el-root el-embedded" onMouseDown={startDrag} onMouseMove={afterDrag}>
+        <Suspense fallback={null}>
+          <RecordingPillV2
+            model={{
+              elapsed, name: caller || label, paused, captions: live.captions, language: languageChip(live.language), error,
+              screens: live.screens ? { on: live.screens.on, count: live.screens.count } : null,
+            }}
+            actions={{
+              onCaptions: toggleCaptions, onPause: togglePause, onStop: stop, onScreens: toggleScreens,
+              onCapture: () => void run("screens", captureNowV2), onLanguage: cycleLanguage, onDiscard: confirmCancel,
+            }} />
+        </Suspense>
+      </div>
+    );
+  }
 
   return (
     <div className="pill-root">

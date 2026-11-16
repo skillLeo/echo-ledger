@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { announceReady, api, errorMessage, listenTo, type AfterCallState, type AskAnswer, type AskPayload, type PendingItem, type SavedToast } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
@@ -9,6 +9,10 @@ import { CheckIcon } from "../../components/ControlIcons";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { usePresence } from "../../lib/motion";
 import "../controls.css";
+import { useUiFlags } from "../../v2/flags";
+
+// The after-call card in the new look (ui_v2.after_call), loaded only when its flag is on.
+const AfterCallStackV2 = lazy(() => import("../../v2/controls/AfterCallStack").then((m) => ({ default: m.AfterCallStack })));
 
 /** How long a failed action's message replaces the title. */
 const ERROR_MS = 4000;
@@ -34,6 +38,7 @@ const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 export default function ReviewApp() {
   const [state, setState] = useState<AfterCallState>(EMPTY);
   const [ask, setAsk] = useState<AskPayload | null>(null);
+  const [ui] = useUiFlags(true, "review", false);
 
   useEffect(() => {
     let alive = true;
@@ -106,6 +111,10 @@ export default function ReviewApp() {
     <div className="review-root">
       {ask ? (
         <AskChip key={ask.id} ask={ask} onClose={closeAsk} />
+      ) : ui.flags["ui_v2.after_call"] ? (
+        <Suspense fallback={null}>
+          <AfterCallStackV2 state={state} onGone={(part) => setState((s) => ({ ...s, [part]: null }))} />
+        </Suspense>
       ) : (
         <div className="after-stack">
           {(saved.item || discarded.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}

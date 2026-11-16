@@ -558,6 +558,51 @@ button.el-step__head { cursor: pointer; }
 .el-step__body { display: flex; flex-direction: column; gap: var(--el-space-8); }
 .el-step__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
 
+/* ---- Recording pill and after-call card (floating layers: the only places with a shadow) -------------------- */
+.el-pill {
+  display: inline-flex; align-items: center; gap: var(--el-space-4);
+  min-block-size: var(--el-component-button-height);
+  padding: var(--el-space-2) var(--el-space-4);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-radius-full);
+  box-shadow: var(--el-shadow-1);
+  white-space: nowrap;
+}
+.el-pill__summary {
+  display: inline-flex; align-items: center; gap: var(--el-space-8);
+  min-block-size: calc(var(--el-space-24) + var(--el-space-4));
+  padding-inline: var(--el-space-8);
+  border: 0; border-radius: var(--el-radius-full);
+  background: transparent; cursor: pointer;
+}
+.el-pill__summary:hover { background: var(--el-role-bg-subtle); }
+.el-pill__sep { color: var(--el-role-text-secondary); }
+.el-pill__name { max-inline-size: calc(var(--el-space-64) * 2); overflow: hidden; text-overflow: ellipsis; }
+.el-pill__name--error { color: var(--el-role-danger-default); }
+.el-pill__controls { display: inline-flex; align-items: center; gap: var(--el-space-2); padding-inline-start: var(--el-space-4); border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-pill__controls .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
+.el-pill__ask { padding-inline: var(--el-space-8); }
+.el-aftercall-stack { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-8); }
+.el-aftercall-stack .el-toast-region { position: static; translate: none; }
+.el-aftercall {
+  display: flex; flex-direction: column; gap: var(--el-space-12);
+  padding: var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-card-radius);
+  box-shadow: var(--el-shadow-2);
+}
+.el-aftercall__head { display: flex; align-items: center; gap: var(--el-space-12); min-inline-size: 0; }
+.el-aftercall__name {
+  display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0;
+  padding: 0; border: 0; background: transparent; text-align: start; cursor: pointer;
+}
+.el-aftercall__name:hover .el-aftercall__title { text-decoration: underline; }
+.el-aftercall__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-aftercall__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-aftercall .el-progress { block-size: var(--el-space-2); }
+
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
 .el-page--wide { max-inline-size: calc(var(--el-space-64) * 15); }
