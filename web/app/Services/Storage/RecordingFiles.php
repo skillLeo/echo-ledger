@@ -87,6 +87,15 @@ final class RecordingFiles
         }
     }
 
+    /**
+     * Whether the file is stored. A bucket that does not answer throws (League's UnableToCheckExistence) instead of
+     * saying no, so only a file that really is not there reads as gone.
+     */
+    public function exists(string $relative): bool
+    {
+        return $this->disk()->getDriver()->fileExists($relative);
+    }
+
     /** @return int plaintext bytes written */
     public function decryptToFile(string $relative, string $dstPath, string $aad): int
     {

@@ -135,11 +135,21 @@ final class ActivityFeed
         return TranscriptErrorCode::tryFrom((string) $transcript->error_code)?->retryable() === true && ! (bool) (($transcript->meta ?? [])['own_key'] ?? false);
     }
 
+    /** The body of "Transcription failed": the recording's name, then why in plain words for [$errorCode]. */
+    public static function failedBody(string $title, ?string $errorCode): string
+    {
+        return $title.': '.TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $errorCode));
+    }
+
+    /**
+     * "Transcription failed" with the reason in plain words per error code (since v1.8.1, D-131): never the engine's own
+     * error text, which can name the provider. The apps show this text and build their OS notification from it.
+     */
     public function transcriptFailed(Transcript $transcript, ?CaptureSession $session = null): void
     {
         $session ??= $transcript->captureSession()->first();
         if ($session instanceof CaptureSession && ! $session->trashed()) {
-            $this->post($session->user, 'transcript_failed', 'Transcription failed', $session->displayTitle().': '.($transcript->error ?? 'try again from the recording.'), $session, 'heroicon-o-exclamation-triangle');
+            $this->post($session->user, 'transcript_failed', 'Transcription failed', self::failedBody($session->displayTitle(), $transcript->error_code), $session, 'heroicon-o-exclamation-triangle');
             app(ReadyNotices::class)->deliver($session, ready: false);
         }
     }

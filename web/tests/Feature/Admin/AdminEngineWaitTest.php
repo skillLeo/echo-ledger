@@ -20,8 +20,9 @@ use Tests\Feature\Admin\Support\AdminTestHelpers;
 uses(AdminTestHelpers::class);
 
 /*
- * The recording page since v1.5: "Waiting for <engine> — retrying at 2:05 PM" while an Urdu or Auto transcript waits
- * for its engine, and "Backup engine — Re-transcribe?" when a lower engine wrote it.
+ * The recording page since v1.5: "Waiting to transcribe — retrying at 2:05 PM" while an Urdu or Auto transcript waits
+ * for its engine, and "Backup engine — Re-transcribe?" when a lower engine wrote it. Since v1.8.1 (D-129) neither says
+ * which engine (people who are not the server's operator see no engine name at all: PlainWordsTest).
  */
 
 beforeEach(function () {
@@ -45,19 +46,19 @@ function consoleWaitSession(object $test, string $sessionStatus, array $transcri
     return $session->fresh();
 }
 
-it('says which engine a waiting transcript waits for and when it is tried again, in the console\'s time zone', function () {
+it('says a waiting transcript waits and when it is tried again, in the console\'s time zone, never which engine', function () {
     Carbon::setTestNow('2026-11-04 08:00:00');
     $session = consoleWaitSession($this, SessionStatus::Processing->value, ['provider' => 'groq', 'status' => TranscriptStatus::Pending, 'text' => null, 'segments' => [],
         'meta' => ['route' => ['used' => 'groq', 'retry_at' => '2026-11-04T09:05:00+00:00', 'retry_reason' => 'rate_limited', 'wait_started_at' => '2026-11-04T07:55:00+00:00']]]);
 
     $this->get(CaptureSessionResource::getUrl('view', ['record' => $session]))->assertOk()
-        ->assertSee('Waiting for Groq Whisper large-v3 — retrying at 2:05 PM. This page updates by itself.')
+        ->assertSee('Waiting to transcribe — retrying at 2:05 PM. This page updates by itself.')
         ->assertDontSee('Backup engine');
 
     // A retry on another day says the day too.
     Transcript::query()->where('capture_session_id', $session->id)->sole()->update(['meta' => ['route' => ['retry_at' => '2026-11-05T09:05:00+00:00', 'retry_reason' => 'unavailable']]]);
     $this->get(CaptureSessionResource::getUrl('view', ['record' => $session]))->assertOk()
-        ->assertSee('Waiting for Groq Whisper large-v3 — retrying at Nov 5, 2:05 PM.');
+        ->assertSee('Waiting to transcribe — retrying at Nov 5, 2:05 PM.');
 });
 
 it('says "Backup engine — Re-transcribe?" when a lower engine wrote the transcript, and Re-transcribe asks the first engine again', function () {
@@ -69,12 +70,12 @@ it('says "Backup engine — Re-transcribe?" when a lower engine wrote the transc
 
     $this->get(CaptureSessionResource::getUrl('view', ['record' => $session]))->assertOk()
         ->assertSee('Backup engine — Re-transcribe?')
-        ->assertSee('Groq Whisper large-v3 stayed busy, so AssemblyAI wrote this transcript.')
+        ->assertSee('The first engine for this language stayed busy, so a backup engine wrote this transcript.')
         ->assertSee("mountAction('retranscribeBackup')", escape: false);
 
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
         ->callAction('retranscribeBackup')
-        ->assertNotified('Re-transcribing with Groq Whisper large-v3');
+        ->assertNotified('Re-transcribing with the first engine');
 
     $run = Transcript::query()->where('capture_session_id', $session->id)->where('kind', TranscriptKind::Alternate->value)->sole();
     expect($run->provider)->toBe('groq')
@@ -91,7 +92,7 @@ it('says why for a recording the first engine refused, and nothing for one it wr
         'meta' => ['route' => ['used' => 'groq', 'wanted' => 'groq', 'fallback' => false]]]);
 
     $this->get(CaptureSessionResource::getUrl('view', ['record' => $refused]))->assertOk()
-        ->assertSee('Groq Whisper large-v3 could not take this recording, so Soniox wrote this transcript.');
+        ->assertSee('The first engine for this language could not take this recording, so a backup engine wrote this transcript.');
     $this->get(CaptureSessionResource::getUrl('view', ['record' => $own]))->assertOk()
         ->assertDontSee('Backup engine');
 });

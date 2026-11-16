@@ -100,12 +100,12 @@ it('offers Roman Urdu, اردو and English for Urdu, Urdu for English, English 
         ->and(TranscriptViews::available(urduTranscript($this, '')))->toBe(['roman', 'urdu', 'english']);
 });
 
-it('needs the Anthropic key (saying where to add it), then makes the views on the queue once, opening Urdu in Roman Urdu', function () {
+it('needs the AI key (saying where to add it, in plain words), then makes the views on the queue once, opening Urdu in Roman Urdu', function () {
     Queue::fake();
     $transcript = urduTranscript($this);
 
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(409)->assertJsonPath('code', 'views_unavailable')
-        ->assertJsonPath('message', 'Roman Urdu and English need the server\'s Anthropic key. Whoever runs this server adds it under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials');
+        ->assertJsonPath('message', 'Roman Urdu and English views are not set up on this server yet. Whoever runs it adds the AI key under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials');
     app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-test-1234567890');
 
     $this->postJson("/api/transcripts/{$transcript->id}/views")->assertStatus(202)->assertJsonPath('status', 'making');
@@ -299,7 +299,7 @@ it('keeps the reason when the views could not be made', function () {
     {
         public function convert(array $lines, string $language, array $views): array
         {
-            throw new RuntimeException('Claude declined to convert this transcript.');
+            throw new RuntimeException('The AI declined to write the views of this transcript.');
         }
     });
     $transcript = urduTranscript($this);
@@ -307,7 +307,7 @@ it('keeps the reason when the views could not be made', function () {
     app(TranscriptViews::class)->make($transcript);
 
     $this->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()
-        ->assertJsonPath('status', 'failed')->assertJsonPath('error', 'Claude declined to convert this transcript.');
+        ->assertJsonPath('status', 'failed')->assertJsonPath('error', 'The AI declined to write the views of this transcript.');
 });
 
 it('exports a view instead of the original words and shows the views in the console player', function () {
@@ -393,13 +393,15 @@ it('opens a share link in the chosen view once it is made, and in the original w
 
     $created = $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600, 'view' => 'english'])->assertCreated();
     expect($created->json('view'))->toBe('english');
-    $this->get($created->json('url'))->assertOk()->assertSee('میں ٹھیک ہوں')->assertDontSee('English view, written by Claude');
+    $this->get($created->json('url'))->assertOk()->assertSee('میں ٹھیک ہوں')->assertDontSee('English view, written by AI');
     // The page loads the Nastaliq font from this server for the Urdu lines.
     $plain = $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600])->assertCreated();
     $this->get($plain->json('url'))->assertOk()->assertSee('lang="ur"', false)->assertSee('fonts/noto-nastaliq-urdu-arabic.woff2', false);
 
     app(TranscriptViews::class)->make($transcript);
-    $this->get($created->json('url'))->assertOk()->assertSee('E: میں ٹھیک ہوں')->assertSee('English view, written by Claude from the transcript.');
+    // Who wrote the view is said in plain words: never the model or its maker (D-129).
+    $this->get($created->json('url'))->assertOk()->assertSee('E: میں ٹھیک ہوں')->assertSee('English view, written by AI from the transcript.')
+        ->assertDontSee('Claude')->assertDontSee('claude-');
     $this->postJson("/api/sessions/{$session->id}/shares", ['expires_in' => 3600, 'view' => 'french'])->assertStatus(422);
 });
 

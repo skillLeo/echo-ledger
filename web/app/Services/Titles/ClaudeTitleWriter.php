@@ -56,7 +56,7 @@ class ClaudeTitleWriter implements TitleWriter
             requestOptions: ['timeout' => 60.0, 'maxRetries' => 2],
         );
         if ($message->stopReason === 'refusal') {
-            throw new RuntimeException('Claude declined to name this recording.');
+            throw new RuntimeException('The AI declined to name this recording.');
         }
         $json = '';
         foreach ($message->content as $block) {
@@ -66,7 +66,7 @@ class ClaudeTitleWriter implements TitleWriter
         }
         $data = json_decode($json, true);
         if (! is_array($data) || ! is_string($data['title'] ?? null)) {
-            throw new RuntimeException('Claude did not return a title in the expected form.');
+            throw new RuntimeException('The AI did not return a title in the expected form.');
         }
 
         return [

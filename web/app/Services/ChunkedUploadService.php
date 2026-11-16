@@ -365,6 +365,12 @@ final class ChunkedUploadService
     }
 
     /** Decrypts a ready recording to a private temp file. The caller MUST unlink it in `finally`. */
+    /** Whether a ready recording's file is stored (since v1.8.1); a storage fault throws instead of answering no. */
+    public function storedFileExists(Recording $recording): bool
+    {
+        return $recording->stored_path !== null && $recording->stored_path !== '' && $this->files()->exists((string) $recording->stored_path);
+    }
+
     public function decryptToTemp(Recording $recording): string
     {
         if (! $recording->isReady()) {

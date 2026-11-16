@@ -124,7 +124,7 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
         $message = $this->client($key)->beta->messages->create(...$arguments);
 
         if ($message->stopReason === 'refusal') {
-            throw new RuntimeException('Claude declined to convert this transcript.');
+            throw new RuntimeException('The AI declined to write the views of this transcript.');
         }
         if ($message->stopReason === 'max_tokens') {
             throw new TooLongForOneRequest('The views of these lines did not fit in one answer.');
@@ -137,7 +137,7 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
         }
         $data = json_decode($json, true);
         if (! is_array($data) || ! is_array($data['lines'] ?? null)) {
-            throw new RuntimeException('Claude did not return the views in the expected form.');
+            throw new RuntimeException('The AI did not return the views in the expected form.');
         }
         $out = [];
         $misheard = [];
@@ -192,7 +192,7 @@ class ClaudeTranscriptConverter implements TranscriptConverter, WordByWordConver
         }
         $message = $this->client($key)->beta->messages->create(...$arguments);
         if ($message->stopReason === 'refusal') {
-            throw new RuntimeException('Claude declined to convert this transcript.');
+            throw new RuntimeException('The AI declined to write the views of this transcript.');
         }
         if ($message->stopReason === 'max_tokens') {
             throw new TooLongForOneRequest('The words of these lines did not fit in one answer.');

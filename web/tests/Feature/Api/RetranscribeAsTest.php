@@ -118,6 +118,6 @@ it('offers Re-transcribe as on the recording page', function () {
 
     $this->panelComponent(ViewCaptureSession::class, ['record' => $session->id])
         ->callAction('retranscribe_as', data: ['language' => 'ur'])
-        ->assertNotified('Re-transcribing in Urdu with ElevenLabs Scribe');
+        ->assertNotified('Re-transcribing in Urdu');
     expect($session->transcripts()->where('kind', 'alternate')->sole()->meta['promote_when_done'])->toBeTrue();
 });

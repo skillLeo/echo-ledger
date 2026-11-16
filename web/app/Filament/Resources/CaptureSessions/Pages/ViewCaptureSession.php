@@ -230,14 +230,15 @@ class ViewCaptureSession extends ViewRecord
         if ($session->status === SessionStatus::Uploading) {
             return 'Uploading. This page updates by itself.';
         }
-        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait).
+        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait). Since
+        // v1.8.1 (D-129) the line never says which engine, as on the desktop.
         $final = $session->finalTranscript()->first();
         $retryAt = $final !== null ? EngineWait::fields($final)['retry_at'] : null;
         if ($final !== null && $retryAt !== null) {
             $zone = app(SettingsRepository::class)->displayTimezone();
             $at = Carbon::parse($retryAt)->setTimezone($zone);
 
-            return 'Waiting for '.($final->providerKey()?->getLabel() ?? $final->provider).' — retrying at '
+            return 'Waiting to transcribe — retrying at '
                 .$at->format($at->isSameDay(now()->setTimezone($zone)) ? 'g:i A' : 'M j, g:i A').'. This page updates by itself.';
         }
 
@@ -335,7 +336,7 @@ class ViewCaptureSession extends ViewRecord
         if (! TranscriptViews::entitled($transcript) && app(TranscriptViews::class)->state($transcript)['status'] !== 'ready') {
             $this->mountAction('upgradeViews');
 
-            return app(TranscriptViews::class)->state($transcript);
+            return TranscriptPlayerEntry::views(app(TranscriptViews::class)->state($transcript));
         }
         try {
             $state = app(TranscriptViews::class)->request($transcript);
@@ -345,7 +346,7 @@ class ViewCaptureSession extends ViewRecord
         }
         $this->viewsMaking = $state['status'] === 'making';
 
-        return $state;
+        return TranscriptPlayerEntry::views($state);
     }
 
     /** The poll while views are being made or call notes written: hands the player the views once they are ready. */
@@ -411,7 +412,7 @@ class ViewCaptureSession extends ViewRecord
         MakeCallNotesJob::dispatch($session->id);
     }
 
-    public function callNote(): ?CallNote
+    protected function callNote(): ?CallNote
     {
         $note = CallNote::query()->where('capture_session_id', $this->session()->id)->first();
 
@@ -623,8 +624,10 @@ class ViewCaptureSession extends ViewRecord
                 && ! in_array(app(TranscriptViews::class)->state($transcript)['status'], ['ready'], true);
         };
         // Since v1.6 the views are a paid feature: without it the button carries the plan's badge and opens the sheet.
+        // Always with its words: the badge makes the label HTML, which Filament would write into the narrow icon
+        // button's title attribute, breaking the tag (and this button has no icon to show there anyway).
         if (! PlanLock::allows('views')) {
-            return PlanLock::sheet('show_as', 'views', 'Show as…')->labeledFrom('sm')->visible($visible);
+            return PlanLock::sheet('show_as', 'views', 'Show as…')->visible($visible);
         }
 
         return Action::make('show_as')->label('Show as…')->labeledFrom('sm')->icon(Heroicon::OutlinedLanguage)->color('gray')
@@ -731,24 +734,20 @@ class ViewCaptureSession extends ViewRecord
 
     /**
      * Shown when the final transcript came back in the wrong script for its language (Urdu as Devanagari, for
-     * example): one click sends it to the next engine for that language as a second version to compare.
+     * example): one click sends it to the next engine for that language as a second version to compare. The server
+     * picks that engine, so its name is not said (since v1.8.1, D-129).
      */
     private function wrongScriptAction(): Action
     {
         return Action::make('wrong_script')
-            ->label(function (CaptureSession $record): string {
-                $next = $this->nextEngine($record);
-
-                return 'Wrong script detected'.($next !== null ? ' · Transcribe with '.$next->getLabel() : '');
-            })
+            ->label(fn (CaptureSession $record): string => 'Wrong script detected'.($this->nextEngine($record) !== null ? ' · Transcribe with the next engine' : ''))
             ->icon(Heroicon::OutlinedExclamationTriangle)
             ->color('warning')
             ->visible(fn (CaptureSession $record): bool => is_string($record->finalTranscript?->meta['script_warning'] ?? null))
             ->requiresConfirmation()
             ->modalHeading('Wrong script detected')
             ->modalDescription(fn (CaptureSession $record): string => 'The transcript is mostly in '.ScriptCheck::label((string) ($record->finalTranscript?->meta['script_warning'] ?? ''))
-                .', not in the script of '.LanguageChoice::label($record->finalTranscript?->language).'. Send the recording to '
-                .($this->nextEngine($record)?->getLabel() ?? 'another engine').' and compare the two versions.')
+                .', not in the script of '.LanguageChoice::label($record->finalTranscript?->language).'. Send the recording to the next engine for this language and compare the two versions.')
             ->modalSubmitActionLabel('Transcribe again')
             ->action(function (CaptureSession $record): void {
                 $next = $this->nextEngine($record);
@@ -765,7 +764,7 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Second version queued with '.$next->getLabel())->body('Open “Compare versions” when it is done.')->success()->send();
+                Notification::make()->title('Second version queued')->body('Open “Compare versions” when it is done.')->success()->send();
             });
     }
 
@@ -782,13 +781,16 @@ class ViewCaptureSession extends ViewRecord
         return null;
     }
 
-    /** Compare engines: the same audio through up to three engines for one language (the bake-off). */
+    /**
+     * Compare engines: the same audio through up to three engines for one language (the bake-off). It picks engines by
+     * name, so it is the server's operator's alone (since v1.8.1, W-002).
+     */
     private function compareEnginesAction(): Action
     {
         return Action::make('compare_engines')
             ->label('Compare engines')
             ->icon(Heroicon::OutlinedScale)
-            ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true)
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->primaryRecording?->isReady() === true)
             ->modalHeading('Compare engines')
             ->modalDescription('The recording is transcribed again by each engine you pick, in the language you choose. Each run is billed by its engine. Nothing replaces the transcript until you choose.')
             ->fillForm(fn (CaptureSession $record): array => [
@@ -885,11 +887,13 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /**
+     * The server's operator (the super admin): the Accuracy Lab and the engine tools that pick an engine by name are
+     * theirs alone (since v1.8.1, W-002); everyone else re-transcribes by language and the server picks the engine.
+     */
     private static function isOwner(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return ConsoleAccess::operator();
     }
 
     private function engineResultsAction(): Action
@@ -897,7 +901,7 @@ class ViewCaptureSession extends ViewRecord
         return Action::make('engine_results')
             ->label('Engine results')
             ->icon(Heroicon::OutlinedTableCells)
-            ->visible(fn (CaptureSession $record): bool => $record->trials()->exists())
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->trials()->exists())
             ->slideOver()
             ->modalWidth('7xl')
             ->modalHeading('Engine results')
@@ -927,9 +931,10 @@ class ViewCaptureSession extends ViewRecord
             ->url(Settings::canAccess() ? Settings::getUrl(panel: 'admin') : null)->success()->send();
     }
 
-    /** "Use this version" on a run in Engine results. */
+    /** "Use this version" on a run in Engine results (the operator's, as the runs are). */
     public function useEngineRun(string $runId): void
     {
+        abort_unless(self::isOwner(), 403);
         $this->assertCanChange();
         $run = $this->session()->trials()->find($runId);
         if (! $run instanceof Transcript) {
@@ -991,7 +996,8 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language).' with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+                // The server picks the engine for the language, so it is not named (since v1.8.1, D-129).
+                Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language))->success()->send();
             });
     }
 
@@ -1017,16 +1023,17 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Re-transcribing with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+                Notification::make()->title('Re-transcribing with the first engine')->success()->send();
             });
     }
 
+    /** A second version by an engine chosen by name: the operator's alone (since v1.8.1, W-002). */
     private function secondEngineAction(): Action
     {
         return Action::make('second_engine')
             ->label('Transcribe with another engine')
             ->icon(Heroicon::OutlinedBeaker)
-            ->visible(fn (CaptureSession $record): bool => $record->finalTranscript?->status === TranscriptStatus::Completed
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->finalTranscript?->status === TranscriptStatus::Completed
                 && $record->primaryRecording?->isReady() === true)
             ->modalDescription('Both versions are kept so you can compare them and choose the one to use. The engine bills its usual price.')
             ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])
