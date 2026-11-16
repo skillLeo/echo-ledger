@@ -48,6 +48,8 @@ pub enum MockBehavior {
     Reply(String),
     /// The usual answer, starting this much later than the model's latency.
     Late(Duration),
+    /// The usual answer's first this-many words, then a dropped connection.
+    Break(usize),
 }
 
 #[derive(Debug)]
@@ -194,6 +196,21 @@ impl Provider for MockProvider {
             Some(MockBehavior::Late(extra)) => {
                 first += extra;
                 mock_reply(request.purpose, &request.question)
+            }
+            Some(MockBehavior::Break(words)) => {
+                let next = Duration::from_millis(latency.token_ms);
+                let chunks: Vec<String> =
+                    mock_reply(request.purpose, &request.question).split_inclusive(char::is_whitespace).take(words).map(str::to_owned).collect();
+                let guard = CancelGuard { stats: self.stats.clone(), finished: false };
+                let texts = stream::iter(chunks.into_iter().enumerate()).then(move |(i, chunk)| async move {
+                    tokio::time::sleep(if i == 0 { first } else { next }).await;
+                    Ok(StreamEvent::Text(chunk))
+                });
+                let broken = stream::once(async move {
+                    let _guard = guard;
+                    Err(ProviderError::Unavailable)
+                });
+                return texts.chain(broken).boxed();
             }
             None => mock_reply(request.purpose, &request.question),
         };

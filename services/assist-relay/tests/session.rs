@@ -221,6 +221,40 @@ async fn a_failing_model_falls_back_before_the_first_token() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_model_that_breaks_mid_answer_is_replaced_by_the_fallback_model() {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims("s-break");
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Break(3));
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("suggestion_end").await;
+    let first = &of_type(&seen, "suggestion_start")[0];
+    let broken = first["suggestion_id"].as_str().unwrap();
+    assert_eq!(first["model"], "claude-haiku-5-5");
+    assert_eq!(text_of(&seen, broken), "Yes, I can ", "three words reached the card");
+    let end = seen.last().unwrap();
+    assert_eq!((end["suggestion_id"].as_str(), end["status"].as_str()), (Some(broken), Some("superseded")));
+
+    let replacement = s.next().await;
+    assert_eq!(replacement["type"], "suggestion_start");
+    assert_eq!(replacement["replaces"], broken);
+    assert_eq!(replacement["model"], "openai/gpt-oss-120b");
+    assert_eq!(replacement["turn_id"], "o-1");
+    let id = replacement["suggestion_id"].as_str().unwrap().to_owned();
+    let rest = s.until("suggestion_end").await;
+    let done = rest.last().unwrap();
+    assert_eq!((done["suggestion_id"].as_str(), done["status"].as_str()), (Some(id.as_str()), Some("done")));
+    assert!(text_of(&rest, &id).starts_with("Yes, I can answer that"));
+    // Timed from the same end of turn: the broken attempt's time counts.
+    assert!(done["latency"]["end_of_turn_to_first_token_ms"].as_f64().unwrap() > 350.0, "{done}");
+    let records = h.telemetry.suggestions();
+    assert!(records.iter().any(|r| r.suggestion == id && r.fallback_used));
+}
+
+#[tokio::test(start_paused = true)]
 async fn a_model_that_never_answers_ends_in_a_retryable_error_after_the_fallback() {
     let h = harness(RelayConfig::built_in());
     h.mock(ProviderKind::Anthropic).push(MockBehavior::Stall);

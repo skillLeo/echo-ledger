@@ -1062,7 +1062,46 @@ impl Engine {
             }
             return;
         }
+        if active.visibility == Visibility::Shown
+            && let Some(fallback) = active.fallback.clone()
+        {
+            // Words already reached the card: the fallback model answers again as a new suggestion in its place.
+            self.replace_on_fallback(id, fallback);
+            return;
+        }
         self.finish_shown(id, Finish::Error(error));
+    }
+
+    /// A shown suggestion broke after its first words (the connection dropped, or the model declined mid-answer). It
+    /// ends `superseded`, and the fallback model answers the same request as a new suggestion that `replaces` it, timed
+    /// from the same end of turn. The fallback gets no fallback of its own.
+    fn replace_on_fallback(&mut self, id: &str, fallback: String) {
+        let Some(active) = self.active.get(id) else {
+            return;
+        };
+        let (origin, mode, context, t0) = (active.origin.clone(), active.mode, active.context.clone(), active.t0);
+        self.finish_shown(id, Finish::Superseded);
+        let new_id = self.next_id();
+        self.suggestions += 1;
+        self.emit(ServerMessage::SuggestionStart(SuggestionStart {
+            suggestion_id: new_id.clone(),
+            turn_id: origin.turn_id().map(str::to_owned),
+            kind: origin.kind(),
+            mode,
+            model: fallback.clone(),
+            speculative: false,
+            draft: false,
+            replaces: Some(id.to_owned()),
+        }));
+        if let Some(spec) = self.spec.as_mut()
+            && spec.suggestion_id == id
+        {
+            spec.suggestion_id = new_id.clone();
+        }
+        self.launch(new_id.clone(), Visibility::Shown, origin, mode, fallback, None, context, t0, None);
+        if let Some(active) = self.active.get_mut(&new_id) {
+            active.fallback_used = true;
+        }
     }
 
     fn on_attempt_end(&mut self, id: &str) {
