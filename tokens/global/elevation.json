@@ -1,0 +1,37 @@
+{
+  "shadow": {
+    "1": {
+      "$type": "shadow",
+      "$value": {
+        "color": "#0000001F",
+        "offsetX": "0px",
+        "offsetY": "2px",
+        "blur": "8px",
+        "spread": "0px"
+      },
+      "$description": "Menus"
+    },
+    "2": {
+      "$type": "shadow",
+      "$value": {
+        "color": "#00000029",
+        "offsetX": "0px",
+        "offsetY": "8px",
+        "blur": "24px",
+        "spread": "0px"
+      },
+      "$description": "Dialogs"
+    },
+    "3": {
+      "$type": "shadow",
+      "$value": {
+        "color": "#00000033",
+        "offsetX": "0px",
+        "offsetY": "12px",
+        "blur": "32px",
+        "spread": "0px"
+      },
+      "$description": "Floating overlays"
+    }
+  }
+}

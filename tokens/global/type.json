@@ -1,0 +1,135 @@
+{
+  "font": {
+    "family": {
+      "sans": {
+        "$type": "fontFamily",
+        "$value": [
+          "system-ui",
+          "-apple-system",
+          "Segoe UI Variable",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif"
+        ],
+        "$description": "Native apps use the system face; the web face is chosen at Gate 3."
+      },
+      "mono": {
+        "$type": "fontFamily",
+        "$value": [
+          "ui-monospace",
+          "SF Mono",
+          "Cascadia Mono",
+          "Roboto Mono",
+          "monospace"
+        ]
+      },
+      "urdu": {
+        "$type": "fontFamily",
+        "$value": [
+          "Noto Nastaliq Urdu",
+          "serif"
+        ]
+      },
+      "arabic": {
+        "$type": "fontFamily",
+        "$value": [
+          "Noto Naskh Arabic",
+          "IBM Plex Sans Arabic",
+          "serif"
+        ]
+      }
+    }
+  },
+  "text": {
+    "display": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "32px",
+        "lineHeight": "40px",
+        "fontWeight": 600
+      }
+    },
+    "title-l": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "24px",
+        "lineHeight": "32px",
+        "fontWeight": 600
+      }
+    },
+    "title-m": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "20px",
+        "lineHeight": "28px",
+        "fontWeight": 600
+      }
+    },
+    "title-s": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "16px",
+        "lineHeight": "24px",
+        "fontWeight": 600
+      }
+    },
+    "body": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "14px",
+        "lineHeight": "20px",
+        "fontWeight": 400
+      }
+    },
+    "body-strong": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "14px",
+        "lineHeight": "20px",
+        "fontWeight": 600
+      }
+    },
+    "caption": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "12px",
+        "lineHeight": "16px",
+        "fontWeight": 400
+      }
+    },
+    "mono": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.mono}",
+        "fontSize": "13px",
+        "lineHeight": "20px",
+        "fontWeight": 400
+      }
+    },
+    "urdu-body": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.urdu}",
+        "fontSize": "16px",
+        "lineHeight": "30px",
+        "fontWeight": 400
+      }
+    },
+    "arabic-body": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.arabic}",
+        "fontSize": "15px",
+        "lineHeight": "26px",
+        "fontWeight": 400
+      }
+    }
+  }
+}

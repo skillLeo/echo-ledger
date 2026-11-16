@@ -3,7 +3,11 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.1-a (2026-11-17)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 2.0.0-a (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-a: `GET /api/config` gains `ui_flags` and the new `PUT /api/account/ui`; see "Interface flags (since 2.0.0-a)". The
+Live Assist contract is [API_ASSIST.md](API_ASSIST.md), frozen at the same date.
+1.8.1-b: the new `error_code` `own_key_rejected` (the person's own Groq key was refused), and `recording_missing` also
+covers audio that is no longer stored.
 1.8.1-a: a failed transcript's `error` is the plain sentence of its `error_code` only — never the provider's own text
 (bugs D-129/D-131); the same sentences in Activity; see "Transcript `error_code` messages".
 
@@ -116,7 +120,7 @@ Every addition below is marked **(since v1.1)**.
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
 | provider | `assemblyai`, `elevenlabs`, `azure_mai`, `whispercpp_local`, `parakeet_local`, `soniox` (since v1.1.2, final transcripts only), `groq` (since v1.2: Whisper large-v3, final transcripts only), `gemini` (since v1.5: Google Gemini, final transcripts only) |
 | use case | `live_captions`, `dictation`, `final_transcript`, `voice_note`, `game_translate`, `watch_translate` |
-| transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing`, `needs_transcription_key` (since v1.6: the Free plan without the person's own key) |
+| transcript `error_code` (since v1.1, set when `status` is `failed`) | `no_audio`, `budget_exceeded`, `provider_unreachable`, `provider_rejected`, `provider_not_configured`, `provider_timeout`, `interrupted`, `recording_missing`, `needs_transcription_key` (since v1.6: the Free plan without the person's own key), `own_key_rejected` (since 1.8.1-b: the provider refused the person's own key) |
 | transcript `backup_reason` / `retry_reason` (since v1.5) | `waited`, `rejected` / `rate_limited`, `unavailable` |
 
 **Segment** (shared transcript shape; channel 1 = "Me" mic/left, channel 2 = "Client" system/right; mono = channel 1 "Speaker"):
@@ -140,8 +144,9 @@ microphone and the audio device for `no_audio`; Android: check Setup → Call ca
 | `provider_timeout` | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
 | `provider_not_configured` | `No speech engine is set up for this language yet.` |
 | `interrupted` | `Transcription was interrupted. Your audio is safe: try again.` |
-| `recording_missing` | `The audio did not fully reach the server.` |
+| `recording_missing` | `The audio did not fully reach the server, or it is no longer stored.` |
 | `needs_transcription_key` | `Add your free Groq key in Account → Transcription key.` (the one vendor name people must act on) |
+| `own_key_rejected` | `Groq did not accept your key. Check it in Account → Transcription key, then try again.` |
 | missing or unknown code | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
 
 The Activity item for a failed transcript (`transcript_failed`) reads `<recording title>: <the sentence above>`.
@@ -660,6 +665,24 @@ No sign-in, throttled (60/min/IP). The apps open these pages in the browser.
     reaches 100 % of any set limit: the server limits on the whole server's usage, or the workspace plan's monthly
     minutes on the workspace's usage. While `limit_reached` is true, `stt/token` answers `403 budget_exceeded` and
     new final transcripts fail with `error_code` `budget_exceeded`. Both are `false` when no limit is set.
+
+### Interface flags (since 2.0.0-a)
+
+The redesigned screens ship behind server-controlled flags, off by default. The apps read them from `GET /api/config`
+and never decide them on the device.
+
+- `GET /api/config` gains `"ui_flags": {"ui_v2.shell": false, "ui_v2.home": false, "ui_v2.library": false,
+  "ui_v2.recording_controls": false, "ui_v2.after_call": false, "ui_v2.live": false, "ui_v2.ask": false,
+  "ui_v2.settings": false, "ui_v2.setup_health": false, "ui_v2.admin": false, "ui_v2.website": false,
+  "live_assist": false}, "ui_classic": false`. Each value is the result for this person: the super admin switches a
+  flag for everyone, for a percentage of accounts (stable per account), for one workspace or for one person. A flag
+  the app doesn't know is ignored; a flag missing from the answer (an older server) is `false`.
+- `ui_classic: true` means the person chose "Switch back to classic". Every `ui_v2.*` flag then answers `false` for
+  them (`live_assist` is unaffected). The apps show the switch in Settings while any `ui_v2.*` flag is on for them.
+- `PUT /api/account/ui` — `config:read`. Body `{"classic": true|false}`. `200` with the new `ui_flags` and
+  `ui_classic`. The web console uses the same setting for the signed-in person.
+- The apps re-read `GET /api/config` at start, on resume after 15 minutes, and right after `PUT /api/account/ui`;
+  a change applies on the next screen the person opens, never in the middle of a recording.
 
 ### `GET /api/clients` — `library:read`
 `200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "retention_days": null, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`

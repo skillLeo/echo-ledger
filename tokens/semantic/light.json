@@ -1,0 +1,112 @@
+{
+  "role": {
+    "bg": {
+      "canvas": {
+        "$type": "color",
+        "$value": "{color.stone.25}"
+      },
+      "surface": {
+        "$type": "color",
+        "$value": "{color.stone.0}"
+      },
+      "subtle": {
+        "$type": "color",
+        "$value": "{color.stone.50}"
+      },
+      "overlay": {
+        "$type": "color",
+        "$value": "{color.stone.0}"
+      }
+    },
+    "border": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.stone.100}"
+      },
+      "strong": {
+        "$type": "color",
+        "$value": "{color.stone.300}"
+      }
+    },
+    "text": {
+      "primary": {
+        "$type": "color",
+        "$value": "{color.stone.900}"
+      },
+      "secondary": {
+        "$type": "color",
+        "$value": "{color.stone.500}"
+      },
+      "on-accent": {
+        "$type": "color",
+        "$value": "{color.stone.0}"
+      },
+      "disabled": {
+        "$type": "color",
+        "$value": "{color.stone.300}"
+      }
+    },
+    "accent": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.teal.700}"
+      },
+      "hover": {
+        "$type": "color",
+        "$value": "{color.teal.800}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.teal.50}"
+      },
+      "text": {
+        "$type": "color",
+        "$value": "{color.teal.700}"
+      },
+      "focus": {
+        "$type": "color",
+        "$value": "{color.teal.600}"
+      }
+    },
+    "record": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.red.600}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.red.50}"
+      }
+    },
+    "success": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.green.700}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.green.50}"
+      }
+    },
+    "warning": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.amber.700}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.amber.50}"
+      }
+    },
+    "danger": {
+      "default": {
+        "$type": "color",
+        "$value": "{color.red.700}"
+      },
+      "soft": {
+        "$type": "color",
+        "$value": "{color.red.50}"
+      }
+    }
+  }
+}

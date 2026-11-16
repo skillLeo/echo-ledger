@@ -1,8 +1,8 @@
-# Live Assist contract — revision 1.9.0-b (draft)
+# Live Assist contract — revision 1.9.0-c (frozen 2026-11-17 for the sprint)
 
-The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is a draft
-until the L1 server work starts (after v1.8.0); then its HTTP part moves into [API.md](API.md) and the API
-documentation test covers it. Everything here is invisible to users until v1.9 ships, and nothing of it ships before
+The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is frozen for
+the sprint: only the lead changes it, always with a bump. Its HTTP part moves into [API.md](API.md) when the L1 server
+work merges, and the API documentation test covers it from then on. Everything here is invisible to users until v1.9 ships, and nothing of it ships before
 Phase S is verified on real devices.
 
 Conventions are those of [API.md](API.md): JSON, a device token with abilities, ids from the token and never from the

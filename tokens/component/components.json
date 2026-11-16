@@ -1,0 +1,85 @@
+{
+  "component": {
+    "button": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.sm}"
+      },
+      "height": {
+        "$type": "dimension",
+        "$value": "{layout.control.height}"
+      },
+      "padding-x": {
+        "$type": "dimension",
+        "$value": "{space.12}"
+      }
+    },
+    "field": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.sm}"
+      },
+      "height": {
+        "$type": "dimension",
+        "$value": "{layout.control.height}"
+      }
+    },
+    "card": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.md}"
+      }
+    },
+    "menu": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.md}"
+      }
+    },
+    "dialog": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.lg}"
+      }
+    },
+    "sheet": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.sheet}"
+      }
+    },
+    "chip": {
+      "radius": {
+        "$type": "dimension",
+        "$value": "{radius.full}"
+      }
+    },
+    "list-row": {
+      "height": {
+        "$type": "dimension",
+        "$value": "{layout.row.comfortable}"
+      },
+      "height-compact": {
+        "$type": "dimension",
+        "$value": "{layout.row.compact}"
+      },
+      "height-mobile": {
+        "$type": "dimension",
+        "$value": "{layout.row.mobile}"
+      }
+    },
+    "toast": {
+      "duration": {
+        "$type": "duration",
+        "$value": "6000ms",
+        "$description": "Long enough to reach Undo"
+      }
+    },
+    "recording-dot": {
+      "pulse": {
+        "$type": "duration",
+        "$value": "{motion.pulse}"
+      }
+    }
+  }
+}
