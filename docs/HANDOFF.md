@@ -8,6 +8,13 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   docs/research/screen-share-privacy.md (committed, with the source links).
 - **Checklists (committed, single source of truth):** docs/FINISH_CHECKLIST_V1_8.md and docs/FINISH_CHECKLIST_V1_9.md,
   each with its "Needs Hassam" list at the top.
+- **v1.8.1 web deployed 2026-11-16** (commit bb2509da, files 10, migration 1 → batch 17): Share Check results
+  (`POST /api/diagnostics/share-checks`), sharing-bar patterns (`GET /api/config/share-bars`), Admin → Diagnostics →
+  Screen-share checks. Rehearsed up/down/up on a copy of production first. Backup
+  `~/echoledger-backups/pre-v1.8.1-20261116-002238`; scripts `~/v181-backup.sh`, `~/v181-deploy.sh` (no public/build
+  change). Phone S5 code is in (99e7baf2), not yet on the S25. The old local MariaDB on 3307 lost its InnoDB system
+  files; rehearsals now use a fresh datadir `~/echoledger-mariadb/rehearsal-v181` on port 3317 (3308 is another
+  project's).
 - **Order of work, as the v1.9 plan says:** v1.8 Step 0 → v1.9 Step 0 → **Phase S (private screen share) → shipped as
   a v1.8.x release** → v1.8 P0 … P9 → tag v1.8.0 → v1.9 Phase L (Live Assist). The Live Assist answer card never ships
   without Phase S.
