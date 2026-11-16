@@ -58,6 +58,10 @@ export function applyFilters(items: LibraryItem[], f: FilterState): LibraryItem[
 /** Status only when it needs the person (DESIGN_SYSTEM.md): a ready recording shows its second line instead. */
 const STATE_LABEL = { ready: "Ready", processing: "Transcribing", failed: "Transcription failed", no_audio: "No audio" } as const;
 
+/** Double-check: what a second transcription heard on a line it disagreed on, in the app's own words. The server's
+ * label names the engine ("Groq Whisper large-v3"), so it is never shown (D-132). */
+const SECOND_HEARD = "A second transcription heard:";
+
 /** Transcript states in which the provider is still working: never shown as an empty transcript (A6.DU3). */
 const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
 const isTranscribing = (status?: string | null): boolean => !!status && IN_FLIGHT.has(status);
@@ -1533,7 +1537,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                               <span className={s.uncertain && inView === null ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain && inView === null ? UNSURE_LINE : undefined}>
                                 {lineContent(i)}
                                 {inView !== null && showAs !== "original" && views?.kept?.[showAs]?.includes(i) && <span className="seg-kept muted" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span>}
-                                {s.check && inView === null && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
+                                {s.check && inView === null && <span className="seg-check" dir="auto"><b>{SECOND_HEARD}</b> {s.check.text}</span>}
                               </span>
                             </>
                           );

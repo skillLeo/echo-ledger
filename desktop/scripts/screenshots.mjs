@@ -197,6 +197,11 @@ const SCREENS = [
     await page.waitForSelector(".segments .segment");
     await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
   }, viewport]),
+  // D-132: what a second transcription heard under a line, in the app's own words, never the engine's name.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`library-second-check${size}`, "library&check=1", async (page) => {
+    await page.waitForSelector(".segments .seg-check");
+    await page.locator(".segments .seg-check").scrollIntoViewIfNeeded();
+  }, viewport]),
   // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`library-untitled${size}`, "library&untitled=1", async (page) => {
     await page.waitForSelector(".segments .segment");

@@ -287,7 +287,10 @@ const commands: Record<string, (args: Args) => unknown> = {
   request_links: () => ({ data: REQUESTS }),
   session_detail: ({ id }) => ({ id, playback_url: audioUrl, markers: id === "r5" ? [{ id: "mk1", at_ms: 95_000, tag: "Budget", note: "Phase one estimate" }] : [], speaker_names: { Me: "You", Client: "Sara (Acme)" } }),
   // `&failure=<error_code>`: the failed call fails for that reason instead (D-130: Try again only where it can help).
+  // `&check=1`: a second transcription disagreed on the "la ravel" line (D-132: said without the engine's name).
   transcript_detail: ({ id }) => (id === "t-r4" && params.get("failure") ? { ...TRANSCRIPTS["t-r4"], error_code: params.get("failure") }
+    : id === "t-r5" && params.get("check") === "1" ? { ...TRANSCRIPTS["t-r5"], segments: TRANSCRIPTS["t-r5"].segments.map((s, i) => (i === 3
+      ? { ...s, check: { provider: "groq", label: "Groq Whisper large-v3", text: "We will build it on Laravel with a Vue front end." } } : s)) }
     : TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null }),
   transcript_views: () => VIEWS,
   unsure_markers: () => null,

@@ -1475,7 +1475,7 @@ describe("LibraryView uncertain words", () => {
     expect(audio().currentTime).toBe(2);
   });
 
-  it("shows what a second engine heard under a line it disagreed on (Double-check)", async () => {
+  it("shows what a second transcription heard under a line it disagreed on, never the engine's name (Double-check, D-132)", async () => {
     const lines = unsure();
     lines[1] = { ...lines[1], check: { provider: "groq", label: "Groq Whisper large-v3", text: "I will come on Monday" } };
     TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: lines });
@@ -1483,7 +1483,8 @@ describe("LibraryView uncertain words", () => {
     await selectItem("Zoom with Acme", "Farah");
 
     const note = detail().querySelector(".seg-check") as HTMLElement;
-    expect(note).toHaveTextContent("Groq Whisper large-v3 heard: I will come on Monday");
+    expect(note).toHaveTextContent("A second transcription heard: I will come on Monday");
+    expect(detail()).not.toHaveTextContent(/Groq|Whisper/);
     expect(within(detail()).getByText("میں کل آؤں گا", { exact: false })).toBeInTheDocument();
   });
 
