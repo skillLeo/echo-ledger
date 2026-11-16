@@ -48,6 +48,11 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     in b-web) · contract 1.8.0-c · not deployed yet (next web deploy batches it with the audit fixes).
   - 2026-11-16 · v1.9 S5 phone (always secure, names, Hide for the session, audit U7/u23/R6/R28) · `406db0de` · changes
     needed → fixed → approve (7 minor follow in b-phone) · waiting: the S25 retest.
+  - 2026-11-16 · v1.8.1 audit, desktop half (S1, S4, S5, U1–U26, R1–R28) · `5d9f9779` · changes needed → fixed →
+    approve (2 minor follow in b-desktop-reopen) · CI building Windows + Mac.
+  - 2026-11-16 · the session moved to another account after the first one's weekly limit; the role agent types
+    (web-builder, desktop-builder, phone-builder, relay-builder, reviewer) load since then; every interrupted worker was
+    resumed where it stopped; the shared cargo target was cleared while nothing was building (13 GB).
 - **Phone, 2026-11-16 (S25, Android 17):** the screen-recording callback never fires for floating windows (only while
   an EchoLedger screen is in front); FLAG_SECURE gives a black box → the phone moves to "always secure" (b-phone). Mac:
   opening the running app from Finder/Dock shows nothing (no `RunEvent::Reopen` handler) → v1.8 0.4. The installed
