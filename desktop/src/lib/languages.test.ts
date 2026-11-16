@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -130,5 +130,18 @@ describe("the recording page's words for a transcript's state (D-052)", () => {
       expect(transcriptStatusLine(odd)).toBe("The transcript isn't ready yet.");
       expect(transcriptStatusLine(odd)).not.toMatch(/_/);
     }
+  });
+});
+
+describe("why a transcription failed, in the app's own words (D-130)", () => {
+  it("has a plain sentence for every documented error_code and one for anything else, never a vendor", () => {
+    const codes = ["no_audio", "budget_exceeded", "provider_unreachable", "provider_rejected", "provider_not_configured", "provider_timeout", "interrupted", "recording_missing", "needs_transcription_key"];
+    const lines = codes.map(failureLine);
+    expect(new Set(lines).size).toBe(codes.length);
+    for (const line of [...lines, failureLine(null), failureLine("something_new")]) {
+      expect(line).toMatch(/\.$/);
+      expect(line).not.toMatch(/AssemblyAI|Gemini|ElevenLabs|Groq|Soniox|provider/i);
+    }
+    expect(failureLine("something_new")).toBe("Something went wrong while transcribing this recording.");
   });
 });

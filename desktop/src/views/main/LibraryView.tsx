@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -1430,8 +1430,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 {transcript ? (
                   transcript.status === "failed" ? (
                     <div className="notice error" style={{ marginTop: 12 }}>
-                      <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
-                      {/* The server says what happened; the desktop knows what to check (docs/API.md `error_code`). */}
+                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code)}
+                      {/* What happened in the app's own words per `error_code` (D-130; the server's message can name a provider);
+                          the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
                       {/* One click to try again (v1.6, P6), in the same language; not when the key is missing or nothing was heard. */}
                       {!readOnly && transcript.error_code !== "no_audio" && transcript.error_code !== "needs_transcription_key" && (

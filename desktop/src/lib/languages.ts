@@ -172,3 +172,30 @@ export function learnPrompt(clientName: string | null, clientLanguage: string | 
   if (!clientName || chosen === null || normalizeLanguage(clientLanguage) === chosen) return null;
   return `Use ${languageLabel(chosen)} for ${clientName} from now on?`;
 }
+
+/** Why a transcription failed, in the app's own plain words per `error_code` (pure, D-130): never the server's message,
+ * which can name a provider ("Gemini could not read the audio."); an unknown code gets one generic sentence. */
+export function failureLine(code: string | null | undefined): string {
+  switch (code) {
+    case "no_audio":
+      return "No audio was captured in this recording.";
+    case "budget_exceeded":
+      return "This month's transcription limit was reached.";
+    case "provider_unreachable":
+      return "The transcription service couldn't be reached. Try again later.";
+    case "provider_rejected":
+      return "The transcription service couldn't transcribe this recording.";
+    case "provider_not_configured":
+      return "Transcription isn't set up on the server yet. Ask the person who runs the console.";
+    case "provider_timeout":
+      return "The transcription service didn't finish in time.";
+    case "interrupted":
+      return "Transcription was interrupted.";
+    case "recording_missing":
+      return "The recording is missing or isn't ready yet.";
+    case "needs_transcription_key":
+      return "No transcription key is added yet.";
+    default:
+      return "Something went wrong while transcribing this recording.";
+  }
+}
