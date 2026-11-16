@@ -309,7 +309,9 @@ export function MicrophonePage({ settings, patch, disabled, systemAudioNote }: {
           )}
         </InfoRow>
         {permissions?.platform === "macos" && (
-          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed" : "Asked on first use"}>
+          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed"
+            // macOS does not say without the privacy call (D-136): Fix opens System Settings, where it shows.
+            : permissions.canTellNotAsked === false ? "Check in System Settings" : "Asked on first use"}>
             {permissions.systemAudio !== "allowed" && (
               <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Fix</button>
             )}

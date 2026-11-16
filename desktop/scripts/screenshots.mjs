@@ -216,6 +216,13 @@ const SCREENS = [
       await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
       if (state.startsWith("reopen")) await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
     }, viewport]),
+    // D-136: no privacy call on this macOS: nothing said that cannot be read, System Settings first.
+    [`permissions-untold-mac${size}`, "library-lost-mac&untold=1", async (page) => {
+      await page.waitForSelector("[data-testid=permission-loss]");
+      await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
+      await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
+      await page.getByTestId("permission-system_audio").scrollIntoViewIfNeeded();
+    }, viewport],
     // The Mac check's Screen Recording step has the same Quit & reopen.
     [`settings-mac-check-reopen${size}`, "settings-mac-check&reopen=1", async (page) => {
       await settingsReady(page);

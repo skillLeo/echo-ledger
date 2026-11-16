@@ -2451,6 +2451,9 @@ pub struct PermissionsStatus {
     /// macOS: Screen Recording still reads `reopen` although EchoLedger was quit and reopened since it was allowed:
     /// reopening again would not help, switching EchoLedger off and on in System Settings may.
     pub reopen_did_not_apply: bool,
+    /// macOS: system audio and Screen Recording are read through the privacy call that tells "not asked" apart; without
+    /// it their `unknown` says nothing (D-136).
+    pub can_tell_not_asked: bool,
 }
 
 fn access_word(access: crate::permissions::Access) -> &'static str {
@@ -2478,6 +2481,7 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(crate::permissions::can_tell_not_asked()),
         allowed_before: state.permissions_allowed_before(&now),
         reopen_did_not_apply: state.screen_reopen_did_not_apply(&now),
+        can_tell_not_asked: crate::permissions::can_tell_not_asked(),
     })
 }
 

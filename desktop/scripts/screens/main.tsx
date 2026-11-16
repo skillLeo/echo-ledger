@@ -334,8 +334,10 @@ const commands: Record<string, (args: Args) => unknown> = {
         // "&older=1": the microphone was allowed before on this Mac and reads "not asked" now (D-120); "&reopen=1": Screen
         // Recording was switched on in System Settings while EchoLedger ran; "&reopen=2": and a reopen did not apply it.
         microphone: onboarding || older ? "unknown" : "allowed",
-        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
-        screen: onboarding ? "denied" : params.get("reopen") ? "reopen" : "allowed",
+        // "&untold=1": this macOS lacks the privacy call, so system audio and Screen Recording read unknown (D-136).
+        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : params.get("untold") === "1" ? "unknown" : "allowed",
+        screen: onboarding ? "denied" : params.get("reopen") ? "reopen" : params.get("untold") === "1" ? "unknown" : "allowed",
+        canTellNotAsked: params.get("untold") !== "1",
         reopenDidNotApply: params.get("reopen") === "2",
         browserAutomation: false,
         platform: "macos",

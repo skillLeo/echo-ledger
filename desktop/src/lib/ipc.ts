@@ -587,6 +587,9 @@ export interface PermissionsStatus {
   /** macOS: Screen Recording still reads `reopen` although EchoLedger was reopened since it was allowed: not Quit &
    * reopen again, but switch EchoLedger off and on in System Settings. */
   reopenDidNotApply?: boolean;
+  /** macOS: system audio and Screen Recording are read through the privacy call that tells "not asked" apart; `false`:
+   * their `unknown` says nothing (D-136). Missing (an older core): as if it could. */
+  canTellNotAsked?: boolean;
 }
 
 /** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */

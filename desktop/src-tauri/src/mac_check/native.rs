@@ -89,6 +89,10 @@ impl MacProbe for NativeProbe {
         crate::permissions::read()
     }
 
+    fn can_tell_not_asked(&self) -> bool {
+        crate::permissions::can_tell_not_asked()
+    }
+
     fn reopen_did_not_apply(&self) -> bool {
         let state = self.app.state::<crate::AppState>();
         // Read through the app's memory, which notes the run in which Screen Recording first waited.

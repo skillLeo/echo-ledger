@@ -53,6 +53,15 @@ export const ALLOWED_BEFORE = "Allowed before on this Mac. If System Settings al
 /** Screen Recording switched on in System Settings while EchoLedger ran: macOS applies it when the app opens again. */
 export const REOPEN = "Allowed in System Settings. Quit and reopen EchoLedger to finish.";
 
+/** System audio or Screen Recording when macOS does not say how it stands (D-136): only where to look. */
+export const CANNOT_TELL = "macOS does not say whether EchoLedger may use this. Check it in System Settings.";
+
+/** Whether macOS can say "not asked yet" for this permission (pure): the microphone always; system audio and Screen
+ * Recording only through the privacy call (D-136). */
+export function canTellNotAsked(permissions: PermissionsStatus | null, kind: PermissionKind): boolean {
+  return kind === "microphone" || permissions?.platform !== "macos" || permissions.canTellNotAsked !== false;
+}
+
 /** The same after EchoLedger was reopened: reopening did not apply it, so it is not offered again (no endless loop). */
 export const SWITCH_OFF_ON = "Allowed in System Settings, but macOS has not applied it, even after EchoLedger reopened. Switch EchoLedger off and on again there.";
 
@@ -98,6 +107,8 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
   const before = access === "unknown" && !!permissions?.allowedBefore?.includes(kind);
   // Reopened, and macOS still has not applied Screen Recording: switch it off and on there instead.
   const stuck = access === "reopen" && !!permissions?.reopenDidNotApply;
+  // macOS does not say (no privacy call): no "Not asked yet", System Settings first (D-136).
+  const untold = access === "unknown" && !canTellNotAsked(permissions, kind);
   const reopen = async () => {
     setReopenRefused(null);
     try {
@@ -126,13 +137,13 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       {text.note && <p className="small muted" data-testid="permission-note">{text.note}</p>}
       <div className="permission-state small" data-testid={`permission-state-${kind}`}>
         <span className={`status-dot ${access === "allowed" ? "ok" : access === "denied" ? "failed" : access === "reopen" ? "ask" : ""}`} aria-hidden="true" />
-        {before ? ALLOWED_BEFORE : stuck ? SWITCH_OFF_ON : STATE_TEXT[access]}
+        {before ? ALLOWED_BEFORE : stuck ? SWITCH_OFF_ON : untold ? CANNOT_TELL : STATE_TEXT[access]}
       </div>
       <div className="row permission-actions">
         {access === "reopen" && !stuck && <button type="button" className="btn primary" onClick={() => void reopen()}>Quit &amp; reopen</button>}
-        {(before || stuck) && settingsButton(true)}
+        {(before || stuck || untold) && settingsButton(true)}
         {access === "unknown" && <button type="button" className="btn" disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>}
-        {(access === "denied" || (access === "unknown" && !before)) && settingsButton(false)}
+        {(access === "denied" || (access === "unknown" && !before && !untold)) && settingsButton(false)}
       </div>
       {reopenRefused && <p className="small error-text" role="alert">{reopenRefused}</p>}
       {access !== "allowed" && (access !== "reopen" || stuck) && <p className="small muted">{text.where}</p>}

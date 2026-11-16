@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ALLOWED_BEFORE, PERMISSION_KINDS, REOPEN, SWITCH_OFF_ON, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
+import { ALLOWED_BEFORE, CANNOT_TELL, PERMISSION_KINDS, REOPEN, SWITCH_OFF_ON, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
@@ -210,6 +210,27 @@ describe("a permission allowed before on this Mac, \"not asked\" now (D-120)", (
     expect(buttons("system_audio").map((b) => b.textContent)).toEqual(["Allow", "Open System Settings"]);
     render(<PermissionStep kind="screen" permissions={mac({ screen: "denied", allowedBefore: ["screen"] })} onChange={vi.fn()} />);
     expect(screen.getByTestId("permission-state-screen")).toHaveTextContent(/^Off: turn on EchoLedger in System Settings$/);
+  });
+});
+
+describe("system audio and Screen Recording when macOS does not say (D-136)", () => {
+  it("says nothing it cannot read, with System Settings first, then Allow", () => {
+    for (const kind of ["system_audio", "screen"] as const) {
+      render(<PermissionStep kind={kind} permissions={mac({ systemAudio: "unknown", screen: "unknown", canTellNotAsked: false })} onChange={vi.fn()} />);
+      const state = screen.getByTestId(`permission-state-${kind}`);
+      expect(state).toHaveTextContent(CANNOT_TELL);
+      expect(state).not.toHaveTextContent(/Not asked/);
+      const buttons = within(screen.getByTestId(`permission-${kind}`)).getAllByRole("button");
+      expect(buttons.map((b) => b.textContent)).toEqual(["Open System Settings", "Allow"]);
+      expect(buttons[0]).toHaveClass("primary");
+    }
+  });
+
+  it("keeps Not asked yet for the microphone, which macOS always says, and where the call is there", () => {
+    render(<PermissionStep kind="microphone" permissions={mac({ microphone: "unknown", canTellNotAsked: false })} onChange={vi.fn()} />);
+    expect(screen.getByTestId("permission-state-microphone")).toHaveTextContent("Not asked yet");
+    render(<PermissionStep kind="system_audio" permissions={mac({ systemAudio: "unknown", canTellNotAsked: true })} onChange={vi.fn()} />);
+    expect(screen.getByTestId("permission-state-system_audio")).toHaveTextContent("Not asked yet");
   });
 });
 
