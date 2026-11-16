@@ -880,7 +880,8 @@ object PhoneAppRecordings {
             if (verdict == Verdict.IMPORT) {
                 val trust = trust(file, call, phone)
                 if (trust == Trust.OK) {
-                    when (val copy = importFile(context, sources, file, call, settings, nowMs, prompt = true)) {
+                    val (replaces, second) = ownCopy(context, entry)
+                    when (val copy = importFile(context, sources, file, call, settings, nowMs, prompt = true, replaces, second)) {
                         // A file that cannot be read now, or that the Phone app is still saving, is looked at again later.
                         Copy.Later -> continue
 
@@ -917,7 +918,7 @@ object PhoneAppRecordings {
         }
         markHandled(context, done)
         // Brought in without the card: one quiet notification for all of them.
-        if (quiet.isNotEmpty()) Notifications.phoneAppImported(context, quiet.size, quiet.any { it.state == "pending_decision" })
+        if (quiet.isNotEmpty()) Notifications.phoneAppImported(context, quiet.size)
         Outcome(imported, settled, waiting)
     }
 
@@ -957,7 +958,8 @@ object PhoneAppRecordings {
                 ?: return@withLock answered("not imported: the file no longer fits the call.")
         val trust = trust(file, call, sources.thisPhone())
         if (trust == Trust.TOO_LARGE || trust == Trust.NOT_THE_PHONE_APP) return@withLock answered(note(trust, file.owner))
-        when (val copy = importFile(context, sources, file, call, settings, System.currentTimeMillis(), prompt = false)) {
+        val (replaces, second) = ownCopy(context, entriesFor(listOf(call), CallJournal.book(context).calls)[call])
+        when (val copy = importFile(context, sources, file, call, settings, System.currentTimeMillis(), prompt = false, replaces, second)) {
             Copy.Later -> "not imported yet: the file could not be read.".also { log(context, it) }
 
             is Copy.Refused -> answered(copy.note)
@@ -1051,7 +1053,9 @@ object PhoneAppRecordings {
         call: LogCall,
         settings: AppSettings,
         nowMs: Long,
-        prompt: Boolean
+        prompt: Boolean,
+        replaces: LocalRecording? = null,
+        second: Boolean = false
     ): Copy {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         val (mime, codec) = typeOf(file) ?: return Copy.Refused(UNSUPPORTED)
@@ -1123,7 +1127,8 @@ object PhoneAppRecordings {
             sampleRate = 48_000,
             plainSize = 0,
             sha256 = "",
-            state = PostCallPrompt.stateFor(settings.afterCall),
+            // A second copy of a call already kept waits for the person: nothing is transcribed twice by itself.
+            state = if (second) "pending_decision" else PostCallPrompt.stateFor(settings.afterCall),
             language = settings.transcriptionLanguage,
             callerName = name,
             callerSource = if (name != null) "contacts" else "phone",
@@ -1139,7 +1144,7 @@ object PhoneAppRecordings {
         markHandled(context, listOf(file.id))
         afterStoreForTest?.invoke()
         // The rest happens even when the run is being cancelled now.
-        val quiet = withContext(NonCancellable) { afterStore(context, stored, file, call, span, settings, nowMs, prompt) }
+        val quiet = withContext(NonCancellable) { afterStore(context, stored, file, call, span, settings, nowMs, prompt, replaces, second) }
         return Copy.Done(stored, quiet)
     }
 
@@ -1156,7 +1161,9 @@ object PhoneAppRecordings {
         span: LongRange,
         settings: AppSettings,
         nowMs: Long,
-        prompt: Boolean
+        prompt: Boolean,
+        replaces: LocalRecording? = null,
+        second: Boolean = false
     ): Boolean {
         // The capture journal: this phone call is recorded, by the Phone app.
         CallJournal.update(context) { book ->
@@ -1180,6 +1187,16 @@ object PhoneAppRecordings {
         if (settings.deletePhoneAppCopy && Build.VERSION.SDK_INT >= 30) {
             saveDeletes(context, deletes(context).filter { it.fileId != file.id } + PendingDelete(file.id, stored.id))
         }
+        // EchoLedger's own recording of the call with your voice only, still undecided: the two-sided copy takes its place.
+        replaces?.let {
+            Decisions.apply(context, it.id, keep = false)
+            log(context, "the Phone app's copy took the place of EchoLedger's own (your voice only).")
+        }
+        // Kept already (or sent): the copy waits in Record for the person, with no second card and no time limit.
+        if (second) {
+            Notifications.phoneAppCopyWaiting(context, call.dateMs)
+            return false
+        }
         val callEnd = maxOf(call.dateMs + call.talkS * 1000, span.first + file.durationMs)
         if (prompt && cardNow(callEnd, nowMs, MissedRecordingWorker.ongoing(context))) {
             withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, stored, settings.afterCall, settings.themeMode) }
@@ -1187,6 +1204,18 @@ object PhoneAppRecordings {
         }
         PostCallPrompt.quietly(context, stored)
         return prompt
+    }
+
+    /**
+     * EchoLedger's own recording of the call whose Phone app copy is being brought in (its journal [entry] kept it with
+     * your voice only): the one the copy replaces (still undecided, so never sent), and whether the copy is a second
+     * recording of a call already kept or sent (then it waits for the person).
+     */
+    private fun ownCopy(context: Context, entry: CallJournal.Call?): Pair<LocalRecording?, Boolean> {
+        if (entry == null || CallJournal.Result.of(entry.result) != CallJournal.Result.KEPT) return null to false
+        val own = (context.applicationContext as EchoLedgerApp).graph.recordings.get(entry.id)
+        val replaces = own?.takeIf { it.state == "pending_decision" }
+        return replaces to (replaces == null)
     }
 
     /** The start of the line every imported recording says (also how the import knows its own). */

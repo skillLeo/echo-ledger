@@ -133,10 +133,14 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals("Call with +923001234567", DecisionPopup.title(rec))
     }
 
-    /** EchoLedger's own two-track recording of [c], kept; its journal says whether it heard [bothSides]. */
-    private fun ownRecording(c: LogCall, bothSides: Boolean) {
+    /**
+     * EchoLedger's own two-track recording of [c], kept; its journal says whether it heard [bothSides]. [state]: where
+     * it stands (queued: kept and on its way to the server; pending_decision: nobody decided yet).
+     */
+    private fun ownRecording(c: LogCall, bothSides: Boolean, state: String = "queued") {
         app.storeRecording(
             id = "mine",
+            state = state,
             sourceApp = "phone_call",
             startedAt = Instant.ofEpochMilli(c.dateMs + 6 * sec).toString(),
             endedAt = Instant.ofEpochMilli(c.dateMs + 134 * sec).toString(),
@@ -173,6 +177,32 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals(listOf(1L), store.opened)
         assertEquals("Imported the Phone app's recording (125 s); EchoLedger's own has one side only.", note())
         assertEquals(setOf("mine", imported), app.graph.recordings.all().map { it.id }.toSet())
+    }
+
+    @Test
+    fun `a one-sided own recording nobody decided on yet is replaced by the Phone app's two-sided copy, with one card`() {
+        val c = call()
+        ownRecording(c, bothSides = false, state = "pending_decision")
+        val imported = run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single()
+        assertEquals("one recording of the call", listOf(imported), app.graph.recordings.all().map { it.id })
+        assertEquals("one card, the two-sided copy's", imported, DecisionPopup.showingFor)
+    }
+
+    @Test
+    fun `a one-sided own recording already kept leaves the two-sided copy waiting for the person, with no second card`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val c = call()
+        ownRecording(c, bothSides = false, state = "queued")
+        val imported = run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single()
+        assertEquals(setOf("mine", imported), app.graph.recordings.all().map { it.id }.toSet())
+        assertNull("no second card", DecisionPopup.showingFor)
+        val copy = app.graph.recordings.get(imported)!!
+        assertEquals("it waits for the person: nothing is transcribed twice by itself", "pending_decision", copy.state)
+        val keptLater = androidx.work.WorkManager.getInstance(app)
+            .getWorkInfosForUniqueWork(DecisionTimeoutWorker.workName(imported)).get(10, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue("never kept by itself", keptLater.isEmpty())
+        val notices = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+        assertTrue(notices.any { it.extras.getString("android.title") == "The Phone app's copy has both sides" })
     }
 
     @Test
@@ -583,6 +613,19 @@ class PhoneAppRecordingsRunTest : AppTest() {
                 it.extras.getString("android.title")
             }.filter { it!!.contains("brought in") }
         )
+    }
+
+    @Test
+    fun `quiet imports on Ask me are kept like any unanswered question, and the notice says they are in the Library`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        runBlocking { app.graph.settings.update { it.copy(afterCall = "ask") } }
+        val c = call()
+        assertEquals(1, run(Store(mutableListOf(recording(1, c)), listOf(c)), atMs = t + 50 * 60 * sec).imported.size)
+        val notice = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+            .single { it.extras.getString("android.title") == "Call recording brought in" }
+        val text = notice.extras.getCharSequence("android.text").toString()
+        assertFalse(text, text.contains("Keep or discard"))
+        assertTrue(text, text.contains("Library"))
     }
 
     @Test

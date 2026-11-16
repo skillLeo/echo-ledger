@@ -465,10 +465,11 @@ object Notifications {
 
     /**
      * Call recordings brought in from the Phone app without the after-call card (since v1.8 0.3: a call or recording was
-     * live, or the calls ended a while ago): one quiet notification, adding up while it is still showing.
+     * live, or the calls ended a while ago): one quiet notification, adding up while it is still showing. They are kept:
+     * on "Ask me" one nobody answers is kept 10 s later (the rule for an unanswered question), and none is asked here.
      */
     @SuppressLint("MissingPermission") // checked by canPost() first
-    fun phoneAppImported(context: Context, count: Int, waiting: Boolean) {
+    fun phoneAppImported(context: Context, count: Int) {
         if (!canPost(context) || count <= 0) return
         val prefs = context.getSharedPreferences("phone_app_recordings", Context.MODE_PRIVATE)
         val showing = runCatching {
@@ -477,7 +478,7 @@ object Notifications {
         val total = count + if (showing) prefs.getInt(IMPORTED_COUNT, 0) else 0
         prefs.edit().putInt(IMPORTED_COUNT, total).apply()
         val title = if (total == 1) "Call recording brought in" else "$total call recordings brought in"
-        val text = if (waiting) "From the Phone app. Keep or discard them in Record." else "From the Phone app. They're in your Library."
+        val text = "From the Phone app. They're in your Library."
         val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(title)
@@ -492,6 +493,31 @@ object Notifications {
     }
 
     private const val IMPORTED_ID = 7_438
+
+    /**
+     * The Phone app's two-sided copy of a call EchoLedger already kept with your voice only (since v1.8 0.3): it waits in
+     * Record for the person, quietly, so the call is never transcribed twice by itself.
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun phoneAppCopyWaiting(context: Context, callAtMs: Long) {
+        if (!canPost(context)) return
+        val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault())
+            .format(java.time.Instant.ofEpochMilli(callAtMs))
+        val text = "Your call at $time was kept with your voice only. Keep or discard the Phone app's copy in Record."
+        val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("The Phone app's copy has both sides")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+        runCatching { NotificationManagerCompat.from(context).notify(COPY_WAITING_ID, builder.build()) }
+    }
+
+    private const val COPY_WAITING_ID = 7_439
     private const val IMPORTED_COUNT = "quiet_imports"
 
     /**
