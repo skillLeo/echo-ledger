@@ -20,8 +20,7 @@ export function RecordingScreen({ lang }: { lang: Lang }) {
         <div className="g-header__titles">
           <h1 className="el-title-l" dir="auto">{t.title}</h1>
           <p className="g-meta el-secondary">
-            <span className="g-meta__source"><Icons.SourceAppIcon app="whatsapp" /></span>
-            <span dir="auto">{t.meta}</span>
+            <span dir="auto"><span className="g-meta__source"><Icons.SourceAppIcon app="whatsapp" /></span>{t.meta}</span>
             <Badge tone="success">{t.status}</Badge>
           </p>
         </div>

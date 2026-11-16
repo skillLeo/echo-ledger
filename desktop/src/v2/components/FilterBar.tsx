@@ -28,7 +28,7 @@ export function Chip({ label, selected = false, onToggle, onRemove, removeLabel,
   return (
     <button type="button" className="el-chip" aria-pressed={selected} onClick={onToggle} dir="auto">
       {label}
-      {count !== undefined && <span className="el-chip__count el-num">{count}</span>}
+      {count !== undefined && <>{" "}<span className="el-chip__count el-num">{count}</span></>}
     </button>
   );
 }
