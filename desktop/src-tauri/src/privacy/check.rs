@@ -294,6 +294,8 @@ pub async fn run(app: &AppHandle, why: Why) -> AppResult<View> {
         if let Some(w) = app.get_webview_window(label) {
             let _ = w.destroy();
         }
+        // The check's windows are gone: their read-back no longer speaks for EchoLedger's own windows.
+        app.state::<Privacy>().watch.lock().unwrap_or_else(|p| p.into_inner()).forget(label);
     }
     RUNNING.store(false, Ordering::SeqCst);
     let view = result?;
@@ -510,6 +512,7 @@ pub fn guided_close(app: &AppHandle) {
     if let Some(w) = app.get_webview_window(GUIDED_CARD) {
         let _ = w.destroy();
     }
+    app.state::<Privacy>().watch.lock().unwrap_or_else(|p| p.into_inner()).forget(GUIDED_CARD);
 }
 
 /// Keeps the answer of a guided test for this app version on this macOS version.

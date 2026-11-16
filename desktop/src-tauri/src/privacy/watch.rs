@@ -99,7 +99,9 @@ pub fn spawn(app: tauri::AppHandle) {
                 let settings = state.settings();
                 let concealed = privacy.hidden_for(super::HideReason::Share);
                 let any_shown = super::KNOWN.iter().any(|(label, kind)| matches!(kind, super::Kind::Main | super::Kind::Floating) && app.get_webview_window(label).is_some_and(|w| w.is_visible().unwrap_or(false)));
-                let watching = (any_shown || concealed) && !settings.share_one_window && settings.hide_from_sharing != crate::settings::ShareHiding::Off;
+                // The guided test shares the whole screen on purpose, and its answer is given in the main window.
+                let guided = app.get_webview_window(super::GUIDED_CARD).is_some();
+                let watching = (any_shown || concealed) && !guided && !settings.share_one_window && settings.hide_from_sharing != crate::settings::ShareHiding::Off;
                 if !watching {
                     if concealed {
                         super::set_hidden(&app, super::HideReason::Share, false);
