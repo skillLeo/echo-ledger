@@ -197,6 +197,17 @@ const SCREENS = [
     await page.waitForSelector(".segments .segment");
     await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
   }, viewport]),
+  // D-121: the Library's row opened its folders in a narrow window; widened until the page's own column shows, the
+  // sidebar's copy has closed (the full-size window, the column on the page).
+  ["sidebar-library-widened", "library", async (page) => {
+    await page.setViewportSize({ width: 960, height: 700 });
+    await page.waitForSelector(".app");
+    await page.locator(".sidebar").getByRole("button", { name: "Library", exact: true }).click();
+    await page.getByRole("list", { name: "Smart folders in the sidebar" }).waitFor();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(300);
+    if (await page.getByRole("list", { name: "Smart folders in the sidebar" }).count()) throw new Error("the sidebar's copy is still open");
+  }],
   // D-121, D-007, D-090: whole controls, the workspace switcher, Settings' action rows.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`workspace-menu${size}`, "library&plan=free", async (page) => {

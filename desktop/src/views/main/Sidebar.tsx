@@ -2,7 +2,7 @@
 // commands), then Home · Library (its smart folders) · Projects (the pinned
 // ones) · Activity · Shared (with me, my links, request links) · Upload, and at the bottom Help & shortcuts, Settings and
 // Collapse sidebar. 240 px by default, 200–320 by dragging its edge (kept on this computer), or a 64 px icon rail ("[").
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ClientFolder, SmartFolder } from "../../lib/ipc";
 import type { LibraryPlace, LibraryView } from "../../lib/folders";
 import type { MainTab } from "../../lib/mainView";
@@ -90,6 +90,16 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
     if (group === "library" && libraryColumn) return;
     setRowOpened((current) => (current.has(group) ? current : new Set([...current, group])));
   };
+  // Widened until the Library's column shows: the group its row opened for now closes (the arrow's choice stays).
+  useEffect(() => {
+    if (!libraryColumn) return;
+    setRowOpened((current) => {
+      if (!current.has("library")) return current;
+      const next = new Set(current);
+      next.delete("library");
+      return next;
+    });
+  }, [libraryColumn]);
   const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id, group?: SidebarGroup) => (
     <button type="button" className={`nav-btn ${current ? "active" : ""}`} aria-current={current ? "page" : undefined}
       title={collapsed ? label : undefined} onClick={() => { onGo(id); if (group && !collapsed) openGroup(group); }}>

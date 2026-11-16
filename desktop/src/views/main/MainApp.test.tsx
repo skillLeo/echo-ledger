@@ -783,6 +783,14 @@ describe("MainApp action runner", () => {
       fireEvent.click(nav("Library"));
       expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
       expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      // Widened until the column shows: the sidebar's copy closes, and stays closed when the window narrows again.
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+      act(() => void window.dispatchEvent(new Event("resize")));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+      act(() => void window.dispatchEvent(new Event("resize")));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
       first.unmount();
       // Wide enough for the column: the Library's row leaves the sidebar's copy closed; the arrow opens and keeps it.
       Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
