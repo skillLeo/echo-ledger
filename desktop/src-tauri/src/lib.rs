@@ -577,6 +577,7 @@ pub fn run() {
             commands::mic_last_not_recorded,
             commands::quit_and_reopen,
             commands::ui_flags,
+            commands::trash_keep_hours,
             commands::ui_classic_set,
             commands::assist_start,
             commands::assist_stop,

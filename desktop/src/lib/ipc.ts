@@ -1765,6 +1765,8 @@ export const api = {
   quitAndReopen: () => invoke<void>("quit_and_reopen"),
   /** The interface flags from the last config read, no request (contract 2.0.0-a); desktop/src/v2/flags.ts reads them. */
   uiFlags: () => invoke<UiFlagsAnswer>("ui_flags"),
+  /** How many hours a deleted recording can be restored (contract 2.0.0-b; 48 from an older server). */
+  trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
   /** Live Assist (API_ASSIST.md 1.9.0-e): starts a session while `live_assist` is on; suggestions come as `assist:*`. */

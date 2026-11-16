@@ -2523,6 +2523,13 @@ pub fn ui_flags(state: State<'_, AppState>) -> crate::ui_flags::UiFlags {
     crate::ui_flags::cached(&state)
 }
 
+/// How many hours a deleted recording can be restored (contract 2.0.0-b), from the last config read, with no request:
+/// 48 before the first one or from an older server. "Recently deleted" says this number, never a fixed one.
+#[tauri::command]
+pub fn trash_keep_hours(state: State<'_, AppState>) -> u64 {
+    state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map_or(crate::net::models::TRASH_KEEP_HOURS, crate::net::models::ServerConfig::trash_keep_hours)
+}
+
 /// "Switch back to classic" on or off: `PUT /api/account/ui`, its answer kept in the cached config and returned in the
 /// same shape; the config is then read again in the background, as the contract asks.
 #[tauri::command]

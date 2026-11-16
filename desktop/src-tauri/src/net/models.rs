@@ -80,12 +80,25 @@ pub struct ServerConfig {
     /// The person chose "Switch back to classic" (contract 2.0.0-a); anything but `true` is off.
     #[serde(default, deserialize_with = "lenient_bool")]
     pub ui_classic: bool,
+    /// `{"keep_hours": 48}` (contract 2.0.0-b): how long a deleted recording can be restored; read with
+    /// [`ServerConfig::trash_keep_hours`].
+    #[serde(default)]
+    pub trash: Option<serde_json::Value>,
 }
+
+/// How long a deleted recording can be restored when the server does not say (contract 2.0.0-b).
+pub const TRASH_KEEP_HOURS: u64 = 48;
 
 impl ServerConfig {
     /// The interface flags of this config (contract 2.0.0-a).
     pub fn ui(&self) -> crate::ui_flags::UiFlags {
         crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic)
+    }
+
+    /// How many hours a deleted recording can be restored (contract 2.0.0-b): 48 when the server is older or sends no
+    /// usable whole number.
+    pub fn trash_keep_hours(&self) -> u64 {
+        self.trash.as_ref().and_then(|t| t.get("keep_hours")).and_then(serde_json::Value::as_u64).filter(|h| *h > 0).unwrap_or(TRASH_KEEP_HOURS)
     }
 }
 

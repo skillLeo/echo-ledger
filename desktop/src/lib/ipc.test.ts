@@ -32,6 +32,7 @@ describe("api wrappers", () => {
     ["micLastNotRecorded", () => api.micLastNotRecorded(), "mic_last_not_recorded", undefined],
     ["quitAndReopen", () => api.quitAndReopen(), "quit_and_reopen", undefined],
     ["uiFlags", () => api.uiFlags(), "ui_flags", undefined],
+    ["trashKeepHours", () => api.trashKeepHours(), "trash_keep_hours", undefined],
     ["uiClassicSet", () => api.uiClassicSet(true), "ui_classic_set", { classic: true }],
     ["assistStart", () => api.assistStart({ prepId: "p1", mode: "balanced" }), "assist_start", { prepId: "p1", mode: "balanced", practice: false, recordingSessionId: null }],
     ["assistStart (practice)", () => api.assistStart({ practice: true }), "assist_start", { prepId: null, mode: null, practice: true, recordingSessionId: null }],

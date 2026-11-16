@@ -665,6 +665,21 @@ fn a_v1_1_config_names_its_version_and_this_months_usage() {
 }
 
 #[test]
+fn the_trash_keeps_what_the_server_says_and_48_hours_otherwise() {
+    let with = |trash: Value| -> ServerConfig {
+        let mut v = fixture("config.json");
+        v["trash"] = trash;
+        serde_json::from_value(v).unwrap()
+    };
+    assert_eq!(with(json!({"keep_hours": 72})).trash_keep_hours(), 72, "contract 2.0.0-b");
+    let older: ServerConfig = parse("config.json");
+    assert_eq!(older.trash_keep_hours(), 48, "missing on an older server: 48");
+    for odd in [json!(null), json!({}), json!({"keep_hours": 0}), json!({"keep_hours": -5}), json!({"keep_hours": "72"}), json!(true)] {
+        assert_eq!(with(odd.clone()).trash_keep_hours(), 48, "{odd}");
+    }
+}
+
+#[test]
 fn a_config_without_a_version_is_a_v1_server() {
     let config: ServerConfig = parse("config.json");
     assert_eq!(config.api_version, None);
