@@ -1,4 +1,6 @@
-# Live Assist contract — revision 1.9.0-f (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-g (frozen 2026-11-17 for the sprint)
+
+1.9.0-g: the relay host's pins are `relay_pins` in `GET /api/config`.
 
 1.9.0-f: the suggestion fields follow the relay as built: `kind` names the request, a fallback is recognised by
 `replaces`, `status` is `done` / `cancelled` / `superseded`, a failure ends with an `error` carrying the
@@ -160,8 +162,9 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   live sessions; the client then sends its `context_update` again.
 - `relay.url` (in the session start answer) is exactly `wss://<relay host>/v1/assist`: from one server setting, never
   from the request's host; no port, query or trailing slash; the same for the whole session.
-- The apps pin the relay host's public key (plus a backup key) like the server's, delivered in the device security
-  list before the first connection. A pin mismatch refuses the connection with a clear message; recording is
+- The apps pin the relay host's public key (plus a backup key) like the server's. Since 1.9.0-g `GET /api/config`
+  carries them as `"relay_pins": ["sha256/…", "sha256/…"]` (present while `live_assist` is on for the person; an empty
+  or missing list means Live Assist can't connect yet), read before the first connection. A pin mismatch refuses the connection with a clear message; recording is
   unaffected.
 - Clients set `TCP_NODELAY` on the socket.
 
