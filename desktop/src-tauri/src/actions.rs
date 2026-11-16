@@ -103,6 +103,8 @@ pub fn mark_moment(app: &AppHandle, tag: Option<&str>, note: Option<&str>) -> Ap
 
 pub fn emit_status(app: &AppHandle) {
     let _ = app.emit("app:status", crate::commands::status(app));
+    // New interface flags apply with a status update, never in the middle of a recording (contract 2.0.0-a).
+    crate::ui_flags::settle(app);
 }
 
 /// Live captions on/off. Captions need audio, so turning them on while idle starts a recording (captions on);

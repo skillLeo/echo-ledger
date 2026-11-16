@@ -645,6 +645,15 @@ export interface MicUser {
   reason: IgnoreReason | null;
 }
 
+/** The interface flags (contract 2.0.0-a): every flag the app knows, on or off, for this person. They change only
+ * between recordings; `waiting` says newer ones wait for the end of one. */
+export interface UiFlagsView {
+  flags: Record<string, boolean>;
+  classic: boolean;
+  offersClassicSwitch: boolean;
+  waiting: boolean;
+}
+
 /** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
 export interface NotRecordedMic {
   user: MicUser;
@@ -1421,6 +1430,7 @@ export interface PrivacyStatus {
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
 export interface EventPayloads {
   "app:status": AppStatus;
+  "ui:flags": UiFlagsView;
   /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
   "app:error": string | { text: string; target?: unknown };
   "app:toast": string | { text: string; target?: unknown };
@@ -1697,6 +1707,10 @@ export const api = {
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
   /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
   quitAndReopen: () => invoke<void>("quit_and_reopen"),
+  /** The interface flags the window shows (contract 2.0.0-a); newer ones come as `ui:flags`. */
+  getUiFlags: () => invoke<UiFlagsView>("get_ui_flags"),
+  /** "Switch back to classic" (`PUT /api/account/ui`); the config is read again right after. */
+  setClassic: (classic: boolean) => invoke<UiFlagsView>("set_classic", { classic }),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

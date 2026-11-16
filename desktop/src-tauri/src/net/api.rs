@@ -548,6 +548,12 @@ impl ApiClient {
         Self::ok_empty(resp).await
     }
 
+    /// `PUT /api/account/ui` (contract 2.0.0-a): "Switch back to classic" on or off for this person.
+    pub async fn set_ui_classic(&self, classic: bool) -> AppResult<crate::net::models::UiAnswer> {
+        let resp = self.authed(self.http.put(self.url("account/ui")))?.json(&json!({ "classic": classic })).send().await?;
+        Self::parse(resp).await
+    }
+
     pub async fn config(&self) -> AppResult<ServerConfig> {
         let resp = self.authed(self.http.get(self.url("config")))?.send().await?;
         Self::parse(resp).await

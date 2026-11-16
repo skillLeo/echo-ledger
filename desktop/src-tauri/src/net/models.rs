@@ -74,6 +74,28 @@ pub struct ServerConfig {
     /// The server is in maintenance (since v1.6, P2.7): uploads wait.
     #[serde(default, deserialize_with = "lenient")]
     pub maintenance: Option<MaintenanceDto>,
+    /// The interface flags for this person (contract 2.0.0-a), as sent: `ui_flags::UiFlags::read` makes them safe.
+    #[serde(default)]
+    pub ui_flags: Option<serde_json::Value>,
+    /// The person chose "Switch back to classic" (contract 2.0.0-a); anything but `true` is off.
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub ui_classic: bool,
+}
+
+impl ServerConfig {
+    /// The interface flags of this config (contract 2.0.0-a).
+    pub fn ui(&self) -> crate::ui_flags::UiFlags {
+        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic)
+    }
+}
+
+/// `PUT /api/account/ui`'s answer (contract 2.0.0-a): the new flags and choice.
+#[derive(Clone, Debug, Default, Deserialize)]
+pub struct UiAnswer {
+    #[serde(default)]
+    pub ui_flags: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient_bool")]
+    pub ui_classic: bool,
 }
 
 /// `config.app_update` (docs/API.md "Updates, announcements and maintenance"). `refused`: the server answers this
