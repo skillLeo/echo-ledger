@@ -167,6 +167,7 @@ class Settings extends Page
             'mail_encryption' => isset(MailSettings::ENCRYPTIONS[$all['mail.encryption'] ?? '']) ? $all['mail.encryption'] : 'tls',
             'mail_username' => $all['mail.username'] ?? null,
             'mail_from_address' => $all['mail.from_address'] ?? null,
+            // Only a name saved here (the product's name is the placeholder), so saving the form never stores it.
             'mail_from_name' => $all['mail.from_name'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],

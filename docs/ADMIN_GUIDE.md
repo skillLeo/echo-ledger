@@ -32,8 +32,9 @@ never their recordings. A workspace always has one owner, so an owner who wants 
   Settings (email, sign-up, engines and the rest of the server), Device reports, the Accuracy Lab and Diagnostics
   (screen-share checks and missed recordings).
 - **The product's name** lives in one place, `brand.name` in `web/config/echoledger.php`: the website, the console, the
-  admin panel, emails and the messages the apps show read it there (the email sender's name follows it until one is saved
-  under Settings → Email).
+  admin panel, emails and the messages the apps show read it there. The email sender's name follows it while **From
+  name** under Settings → Email is empty; a From name saved before (also one that says the old name) stays as it is, so
+  change it there by hand, or clear it to follow the product's name.
 - Someone who is not staff gets "Forbidden" on every admin page; the bare `/admin` (the console's home before v1.6)
   takes them to `/app`. The app's old addresses under `/admin` (bookmarks, links in emails sent before the update)
   go to the same page under `/app`.

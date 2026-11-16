@@ -2,8 +2,13 @@
 
 declare(strict_types=1);
 
+use App\Filament\Support\PlanLock;
 use App\Mail\EmailCodeMail;
 use App\Mcp\Servers\EchoLedgerServer;
+use App\Models\Plan;
+use App\Models\Workspace;
+use App\Providers\AppServiceProvider;
+use App\Services\Entitlements\Features;
 use App\Services\ShareLinks;
 use App\Services\System\PlatformNotices;
 use App\Support\Brand;
@@ -86,6 +91,11 @@ it('keeps the name in config/echoledger.php, and what reads app.name reads it to
         ->and(Brand::name())->toBe('EchoLedger')->and(Brand::adminName())->toBe('EchoLedger admin')
         ->and(config('app.name'))->toBe('EchoLedger')
         ->and(Brand::fill('Transcription on '.Brand::TOKEN))->toBe('Transcription on EchoLedger');
+
+    // app.name is set from the brand when the application boots, whatever the .env file's APP_NAME says.
+    config(['echoledger.brand.name' => BRAND_OTHER, 'app.name' => 'Name from the env file']);
+    (new AppServiceProvider($this->app))->register();
+    expect(config('app.name'))->toBe(BRAND_OTHER);
 });
 
 it('writes the name nowhere else in what the code or the views show', function () {
@@ -119,6 +129,22 @@ it('shows the console and the admin panel under another name', function () {
         expectRenamed((string) $this->get($url)->assertOk()->getContent(), $where);
     }
     expect((string) $this->get('/admin')->getContent())->toContain(BRAND_OTHER.' admin');
+});
+
+it('names a feature under another name where the upgrade flow and a locked button say it', function () {
+    renameBrand();
+    Filament::setCurrentPanel(Filament::getPanel('app'));
+    $person = Fx::user();
+    Workspace::query()->whereKey($person->current_workspace_id)->update(['plan_id' => Plan::free()->id]);
+    $this->actingAs($person, 'web');
+
+    $html = (string) $this->get('/app/settings/plan/upgrade?feature=platform_transcription')->assertOk()->getContent();
+    expectRenamed($html, 'the upgrade page of a feature');
+    expect($html)->toContain('Transcription on '.BRAND_OTHER.' is in ')
+        ->and(Features::name('platform_transcription'))->toBe('Transcription on '.BRAND_OTHER)
+        ->and(Features::name('no_such_feature'))->toBe('no_such_feature');
+    // A locked feature's button without a label of its own is named after the feature.
+    expectRenamed((string) e(PlanLock::sheet('unlock', 'platform_transcription')->getLabel()), 'a locked feature\'s button');
 });
 
 it('shows a shared recording under another name', function () {

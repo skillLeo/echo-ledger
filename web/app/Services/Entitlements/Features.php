@@ -98,8 +98,9 @@ final class Features
         return (self::ALL[$feature]['cost'] ?? self::PAID) === self::FREE;
     }
 
+    /** The feature's name as people read it (the product's name in it, as all() has it), or its key for an unknown one. */
     public static function name(string $feature): string
     {
-        return self::ALL[$feature]['name'] ?? $feature;
+        return isset(self::ALL[$feature]) ? Brand::fill(self::ALL[$feature]['name']) : $feature;
     }
 }
