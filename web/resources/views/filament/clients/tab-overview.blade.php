@@ -12,7 +12,7 @@
             <div class="el-setting-row">
                 <div>
                     <h3 id="ai-heading" class="el-setting-title">AI notes @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</h3>
-                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: no Claude request for this project.</p>
+                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: nothing from this project is sent to the AI.</p>
                 </div>
                 <button type="button" class="el-switch" role="switch" aria-checked="{{ $client->ai_notes && ! $aiLocked ? 'true' : 'false' }}" aria-labelledby="ai-heading" wire:click="toggleAiNotes" @if ($aiLocked) data-locked @endif></button>
             </div>
@@ -57,7 +57,7 @@
                 <p class="el-caption" role="status" style="margin-top: var(--space-2)">Making the brief. This updates by itself.</p>
             @else
                 @if ($brief->status === 'failed')
-                    <div class="el-banner el-banner-danger" style="margin-bottom: var(--space-3)">@svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true'])<span class="el-banner-body">{{ $brief->error ?? 'The brief could not be made.' }}</span></div>
+                    <div class="el-banner el-banner-danger" style="margin-bottom: var(--space-3)">@svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true'])<span class="el-banner-body">{{ $brief->errorForPeople() ?? 'The brief could not be made.' }}</span></div>
                 @endif
                 @if ($briefEmpty)
                     <p class="el-muted" style="font-size: 15px">No brief yet. Add documents or instructions on Files, or it is written from the call notes.</p>
@@ -142,7 +142,7 @@
                     @if ($note->status === 'pending')
                         <span class="el-status el-status-brand el-status-spin">@svg('heroicon-o-arrow-path', ['aria-hidden' => 'true']) Writing the notes</span>
                     @elseif ($note->status !== 'ready')
-                        <p class="el-caption">{{ $note->error ?? 'No notes for this call.' }}</p>
+                        <p class="el-caption">{{ $note->errorForPeople() ?? 'No notes for this call.' }}</p>
                     @else
                         <div class="el-notes">
                             @foreach ($note->toApi()['sections'] as $section)

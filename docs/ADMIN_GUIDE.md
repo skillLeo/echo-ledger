@@ -190,8 +190,9 @@ reports.
   a month), longest recording (minutes), recordings a day. An empty number means no limit. **Engines** says which
   speech engines the plan may use (the person's own Groq key and the computer's own transcription cost you nothing).
 - **Features** (since v1.6): every paid feature is a switch: transcription on EchoLedger, Roman Urdu/English/Urdu
-  views, double-check, screen moments, the Claude and ChatGPT connector, team workspace, premium engines (ElevenLabs,
-  Gemini), Live Translate, AI notes. Recording, organising, search, share links, export and the Ready check are free
+  views, double-check, screen moments, Ask an AI assistant (the Claude and ChatGPT connector), team workspace, premium
+  engines (ElevenLabs and Gemini), Live Translate, AI notes. People see each feature under the same plain name, never
+  the providers' (since v1.8.1). Recording, organising, search, share links, export and the Ready check are free
   and in every plan. A new plan starts with every paid feature off.
 - **Assign** puts a workspace on a plan, **until** a date if you like (then it goes back to the default plan; checked
   every hour). **Delete** works only for a plan no workspace uses, and not for the default one.
@@ -272,7 +273,9 @@ instructions** text is shown instead, as before.
 - **Budget alert** (since v1.6): a monthly budget in US$. Staff who see usage get a notice in the bell and an email when
   this month's estimated cost passes 80% of it, and again at 100%, once each a month. It only warns; the monthly limit
   in Settings is what stops transcription.
-- **Usage** (owners and admins): their workspace per person. A member sees only their own.
+- **Usage** (owners and admins): their workspace per person. A member sees only their own. Since v1.8.1 it shows the
+  totals of every engine together and its CSV one line per use: which provider did what is only here, in **Server
+  usage** (choose the workspace).
 - Activity shows "at 80 %" and "reached" once a month for minutes, storage and AI credits.
 
 **Limits on a server with customers.** Use each plan's minutes, not only the server-wide monthly budget in Settings. The
@@ -318,7 +321,7 @@ Next to the ones in [web/DEPLOY.md](../web/DEPLOY.md):
 People can connect Claude or ChatGPT to their own recordings; the steps are in [CONNECTOR.md](CONNECTOR.md). It only
 reads, and sees only what that person can open in the apps.
 
-- **Turn it on or off** per plan: Admin panel → Plans → the Connector feature.
+- **Turn it on or off** per plan: Admin panel → Plans → the **Ask an AI assistant** feature.
 - **Once on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key storage/oauth-public.key`,
   run as the user PHP runs as. Until then `/mcp` and its sign-in page answer with a server error. [DEPLOY.md](../web/DEPLOY.md)
   has checks you can run with curl.
@@ -398,6 +401,19 @@ and the app shows them the fix.
   permission back on, start the capture helper again). One reason growing on many devices after an app update usually
   means a fault in that version: give the developers the system and the app version.
 
+## 9d. Why a transcript failed (since v1.8.1)
+
+People read why a transcript failed in plain words chosen by its error code: on the recording page, in Activity and
+the bell, in the apps (and the system notifications they show) and in the API's `error`. The engine's own words, which
+can name the provider ("Gemini could not read the audio."), stay with the transcript for you: as the super admin you
+see them on the recording page under **Details** (**Error**, next to **Transcribed by**), and under the plain words in
+**Engine results** and **Compare versions**.
+
+When you update to v1.8.1, the update rewrites the "Transcription failed" notifications already sent in plain words.
+After `php artisan queue:restart`, run `php artisan echoledger:plain-failure-notifications` once more: it also
+rewrites any notification a worker still running the old code sent in between. It leaves alone the ones already in
+plain words, so running it again is safe (`--dry-run` only counts them).
+
 ## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in
@@ -408,7 +424,10 @@ and the app shows them the fix.
   on the profile ends other browsers and leaves devices signed in. A new email address counts once the link sent to it is
   opened; a Google account links only to a confirmed address.
 - An account in its 7-day deletion grace serves no share or request link until it cancels.
-- Only the super admin changes the server's engine order (**Make default** in Engine results, Settings).
+- Only the super admin changes the server's engine order (**Make default** in Engine results, Settings). Since v1.8.1
+  the recording page's engine tools that pick an engine by name (**Compare engines**, **Engine results**, **Transcribe
+  with another engine**, the Accuracy Lab reference) and which engine wrote a version are the super admin's alone;
+  everyone else re-transcribes by language and the server picks the engine.
 - Usage reports count only for streaming the server granted that device, so nobody can use up the monthly limit by
   reporting made-up minutes. Only an owner or admin can continue over Live Translate's budget, up to twice the budget.
 - **Security** in the console lists sign-ins, failed bursts, shares, deletions and admin actions (the audit log).

@@ -52,13 +52,17 @@ describe('what makes a notification', function () {
         $final->update(['status' => TranscriptStatus::Completed, 'text' => 'done']);
         $final->update(['text' => 'edited']);
         $other = CaptureSession::factory()->create(['user_id' => $this->owner->id]);
-        $other->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'The provider rejected the audio.']);
+        // Made with the person's own key, so no other engine takes it over: they hear of it at once.
+        $other->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'groq', 'status' => TranscriptStatus::Failed, 'error_code' => 'provider_rejected',
+            'error' => 'The speech provider could not transcribe this recording: Groq Whisper refused the audio.', 'meta' => ['own_key' => true]]);
 
         expect(kinds($this->owner))->toEqualCanonicalizing(['transcript_ready', 'transcript_failed']);
         $ready = ActivityFeed::payload($this->owner->notifications()->get()->first(fn (DatabaseNotification $n): bool => ActivityFeed::kindOf($n) === 'transcript_ready'));
         expect($ready)->toMatchArray(['title' => 'Transcript ready', 'body' => 'Acme kickoff', 'session_id' => $session->id, 'read' => false]);
         $failed = $this->owner->notifications()->get()->first(fn (DatabaseNotification $n): bool => ActivityFeed::kindOf($n) === 'transcript_failed');
-        expect($failed->data['body'])->toContain('The provider rejected the audio.');
+        // The reason in plain words, never the engine's own text, which names it (D-131).
+        expect(ActivityFeed::payload($failed)['body'])->toBe($other->displayTitle().': The speech engines could not transcribe it this time. Your audio is safe: try again.')
+            ->not->toContain('Groq')->not->toContain('Whisper');
     });
 
     it('tells when an upload failed and when a device was paired', function () {

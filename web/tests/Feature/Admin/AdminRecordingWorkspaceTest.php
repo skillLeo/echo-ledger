@@ -8,10 +8,12 @@ use App\Jobs\MakeCallNotesJob;
 use App\Models\CallNote;
 use App\Models\CaptureSession;
 use App\Models\Client;
+use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\TextReplacements;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Queue;
+use Livewire\Exceptions\MethodNotFoundException;
 use Livewire\Features\SupportTesting\Testable;
 use Tests\Feature\Admin\Support\AdminTestHelpers;
 
@@ -67,6 +69,17 @@ describe('call notes', function () {
             ->toContain('href="?t=1500"')->toContain('el-seek');
     });
 
+    it('never hands the browser the stored note itself, with its model and the AI\'s own error', function () {
+        $session = recordingCall($this, $this->client);
+        CallNote::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $this->client->id, 'capture_session_id' => $session->id,
+            'status' => 'failed', 'language' => 'en', 'model' => 'claude-sonnet-5-5', 'error' => 'Missing credential anthropic.api_key']);
+        $page = recordingPage($this, $session);
+
+        // The page still shows the plain reason; a call from the browser cannot reach the note.
+        expect($page->html())->toContain(e(ClientWorkspace::NOT_SET_UP))->not->toContain('anthropic.api_key')->not->toContain('claude-sonnet');
+        expect(fn () => $page->call('callNote'))->toThrow(MethodNotFoundException::class);
+    });
+
     it('has no call notes for a recording without a client, and refuses to write them', function () {
         Queue::fake();
         $session = recordingCall($this, null);
@@ -80,7 +93,7 @@ describe('call notes', function () {
         Queue::fake();
         app(CredentialVault::class)->forget('anthropic', 'api_key');
 
-        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('AI is not set up on this server yet. Whoever runs it adds the Anthropic key under API Credentials.');
+        recordingPage($this, recordingCall($this, $this->client))->call('writeNotes', 'en')->assertNotified('AI is not set up on this server yet. Whoever runs it adds the AI key under API Credentials.');
         Queue::assertNothingPushed();
     });
 });

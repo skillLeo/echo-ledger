@@ -27,7 +27,7 @@
         </div>
         <p class="el-sr" role="status">Writing the notes. This updates by itself.</p>
     @elseif (in_array($note->status, ['failed', 'skipped'], true))
-        <p class="el-muted" style="font-size: 14px">{{ $note->error ?? 'The notes could not be written.' }}</p>
+        <p class="el-muted" style="font-size: 14px">{{ $note->errorForPeople() ?? 'The notes could not be written.' }}</p>
     @elseif ($sections === [])
         <p class="el-muted" style="font-size: 14px">Nothing to note in this call.</p>
     @else

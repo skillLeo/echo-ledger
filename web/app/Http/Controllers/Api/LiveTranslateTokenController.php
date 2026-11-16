@@ -37,6 +37,9 @@ final class LiveTranslateTokenController extends Controller
     /** "Continue this month anyway" goes up to this many times the budget. */
     public const OVER_BUDGET_CAP = 2;
 
+    /** `503 provider_not_configured`: the one answer that names the provider, as the phone reads it. */
+    public const NEEDS_KEY = 'Live Translate needs a Soniox key. Add it in API Credentials, then try again.';
+
     public const WEBSOCKET_URL = 'wss://stt-rt.soniox.com/transcribe-websocket';
 
     private const TEMPORARY_KEY_URL = 'https://api.soniox.com/v1/auth/temporary-api-key';
@@ -59,7 +62,11 @@ final class LiveTranslateTokenController extends Controller
         }
         $key = $vault->get('soniox', 'api_key');
         if ($key === null || $key === '') {
-            throw new ApiError(503, 'provider_not_configured', 'Live Translate needs a Soniox key. Add it in API Credentials, then try again.');
+            // Kept as it is: the phone tells this case apart by "Soniox key" (TranslateBudget.kt), and only the person who
+            // runs the server can add it. The other answers below say the service in plain words (since v1.8.1, W-003);
+            // the phone reads "did not accept the key" and "credit" in them (v1.8.0), or the code with "credit" and "key"
+            // (v1.8.1, TranslateBudget.tokenProblem).
+            throw new ApiError(503, 'provider_not_configured', self::NEEDS_KEY);
         }
         try {
             $answer = Http::withToken($key)->acceptJson()->connectTimeout(10)->timeout(15)
@@ -68,16 +75,17 @@ final class LiveTranslateTokenController extends Controller
                 ->json();
         } catch (RequestException $e) {
             throw new ApiError(502, 'provider_error', match ($e->response->status()) {
-                401, 403 => 'Soniox did not accept the key in API Credentials. Check it there, then try again.',
-                402 => 'Soniox has no credit left. Add credit to the Soniox account, then try again.',
-                default => 'Soniox could not start Live Translate right now. Try again in a minute.',
+                401, 403 => 'The Live Translate service did not accept the key in API Credentials. Check it there, then try again.',
+                402 => 'The Live Translate service has no credit left. Add credit to its account, then try again.',
+                default => 'Live Translate could not start right now. Try again in a minute.',
             });
         } catch (ConnectionException) {
-            throw new ApiError(502, 'provider_error', "Soniox could not be reached. Check the server's internet connection, then try again.");
+            throw new ApiError(502, 'provider_error', "The Live Translate service could not be reached. Check the server's internet connection, then try again.");
         }
         $temporary = is_array($answer) ? ($answer['api_key'] ?? null) : null;
         if (! is_string($temporary) || $temporary === '') {
-            throw new ApiError(502, 'provider_error', 'Soniox answered without a key. Try again in a minute.');
+            // A passing fault: no "key" in these words, which the phone (v1.8.1) reads as "not set up on the server".
+            throw new ApiError(502, 'provider_error', 'The Live Translate service did not answer as expected. Try again in a minute.');
         }
 
         // What this device reports with POST /api/usage counts from here on.

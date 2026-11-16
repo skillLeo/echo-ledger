@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Exceptions\RecordingUndecryptable;
 use RuntimeException;
 use SplTempFileObject;
 
@@ -120,12 +121,12 @@ final class RecordingCipher
         $final = false;
         try {
             if (fread($in, 4) !== self::MAGIC) {
-                throw new RuntimeException('Not an EchoLedger encrypted recording.');
+                throw new RecordingUndecryptable('Not an EchoLedger encrypted recording.');
             }
             $header = (string) fread($in, SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES);
             // init_pull throws SodiumException (not a RuntimeException) for a short header.
             if (strlen($header) !== SODIUM_CRYPTO_SECRETSTREAM_XCHACHA20POLY1305_HEADERBYTES) {
-                throw new RuntimeException('Recording is truncated or has trailing data.');
+                throw new RecordingUndecryptable('Recording is truncated or has trailing data.');
             }
             $state = sodium_crypto_secretstream_xchacha20poly1305_init_pull($header, $this->key);
             while (! feof($in)) {
@@ -135,7 +136,7 @@ final class RecordingCipher
                 }
                 $result = sodium_crypto_secretstream_xchacha20poly1305_pull($state, $cipher, $aad);
                 if ($result === false) {
-                    throw new RuntimeException('Recording is corrupt or was tampered with.');
+                    throw new RecordingUndecryptable('Recording is corrupt or was tampered with.');
                 }
                 [$plain, $tag] = $result;
                 $sink($plain);
@@ -147,7 +148,7 @@ final class RecordingCipher
             }
             $trailing = ! feof($in) && fread($in, 1) !== '';
             if (! $final || $trailing) {
-                throw new RuntimeException('Recording is truncated or has trailing data.');
+                throw new RecordingUndecryptable('Recording is truncated or has trailing data.');
             }
         } finally {
             fclose($in);

@@ -10,6 +10,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Exceptions\RecordingUndecryptable;
 use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
@@ -35,6 +36,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 use League\Flysystem\FilesystemException;
 use Throwable;
 
@@ -127,13 +129,29 @@ final class TranscribeFinalJob implements ShouldQueue
         }
         $temps = [];
         try {
-            $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
             $channel1 = $recordings->get(RecordingRole::Channel1->value);
             $channel2 = $recordings->get(RecordingRole::Channel2->value);
             $caps = $driver->capabilities();
             $useChannels = $channel1?->isReady() && $channel2?->isReady() && ($caps->needsChannelArtifacts || $caps->usesChannelArtifacts);
-            $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
-            $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
+            // Since v1.8.1: a stored file that is not there, or that was read in full and does not decrypt, is missing
+            // audio, not an interrupted run, so "Transcribe again" does not loop on it. Anything passing (a dropped
+            // request, a bucket's 503, a download cut short, a full temp disk) throws: the queue tries again, and the
+            // last failure is an interrupted run (failed()). Which file and why go to the log only.
+            try {
+                foreach (array_filter([$primary, $useChannels ? $channel1 : null, $useChannels ? $channel2 : null]) as $stored) {
+                    if (! $uploads->storedFileExists($stored)) {
+                        throw new RecordingUndecryptable("Recording {$stored->id} is not stored.");
+                    }
+                }
+                $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
+                $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
+                $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
+            } catch (RecordingUndecryptable $e) {
+                Log::warning('Final transcript: the stored audio is missing or damaged', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+                $store->failWith($transcript, TranscriptErrorCode::RecordingMissing);
+
+                return;
+            }
 
             $request = new FinalJobRequest(
                 transcript: $transcript,
@@ -232,6 +250,13 @@ final class TranscribeFinalJob implements ShouldQueue
         } catch (ProviderJobFailed $e) {
             $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
         } catch (RequestException $e) {
+            // Since v1.8.1: Groq refusing the person's own key is theirs to fix in Account → Transcription key; another
+            // try with the same key, or another engine, cannot help.
+            if ((bool) (($transcript->meta ?? [])['own_key'] ?? false) && in_array($e->response->status(), [401, 403], true)) {
+                $store->fail($transcript, TranscriptErrorCode::OwnKeyRejected->message().' '.TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::OwnKeyRejected);
+
+                return null;
+            }
             $store->fail($transcript, TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::ProviderRejected, $e->response);
         } catch (ConnectionException) {
             $store->failWith($transcript, TranscriptErrorCode::ProviderUnreachable);
@@ -281,7 +306,8 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            // A storage error names the file: the device gets the documented text, the log the rest.
+            // A storage error names the file: the device gets the documented text, the log the rest. It is a passing
+            // fault after every try (missing or damaged audio fails in handle(), as recording_missing).
             $error = $exception instanceof FilesystemException
                 ? TranscriptErrorCode::Interrupted->message()
                 : mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);

@@ -59,7 +59,7 @@ class ClaudeScreenDescriber implements ScreenDescriber
             requestOptions: ['timeout' => 120.0, 'maxRetries' => 2],
         );
         if ($message->stopReason === 'refusal') {
-            throw new RuntimeException('Claude declined to read this screen.');
+            throw new RuntimeException('The AI declined to read this screen.');
         }
         if ($message->stopReason === 'max_tokens') {
             throw new RuntimeException('The text of this screen did not fit in one answer.');
@@ -72,7 +72,7 @@ class ClaudeScreenDescriber implements ScreenDescriber
         }
         $data = json_decode($json, true);
         if (! is_array($data) || ! is_string($data['ocr_text'] ?? null) || ! is_string($data['description'] ?? null)) {
-            throw new RuntimeException('Claude did not return the screen in the expected form.');
+            throw new RuntimeException('The AI did not return the screen in the expected form.');
         }
 
         return [

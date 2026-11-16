@@ -19,9 +19,9 @@
 
 <x-el.section title="Connected apps">
     @if ($connectorLocked)
-        <x-el.row setting="devices.connected" title="Claude and ChatGPT" :href="$connectorUrl" :tag="$connectorTag" />
+        <x-el.row setting="devices.connected" title="Ask an AI assistant" :href="$connectorUrl" :tag="$connectorTag" />
     @elseif ($apps === [])
-        <x-el.row setting="devices.connected" title="Claude and ChatGPT" value="Not connected" />
+        <x-el.row setting="devices.connected" title="Ask an AI assistant" value="Not connected" />
     @else
         @foreach ($apps as $app)
             <div class="el-set-row" @if ($loop->first) id="setting-devices.connected" tabindex="-1" data-setting="devices.connected" @endif>
@@ -31,4 +31,4 @@
         @endforeach
     @endif
 </x-el.section>
-<p class="el-set-foot">Apps you allowed to read your recordings, such as Claude or ChatGPT. They can only read.</p>
+<p class="el-set-foot">AI assistants you allowed to read your recordings. They can only read.</p>

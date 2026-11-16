@@ -111,7 +111,12 @@ it('never lets another person ask about someone\'s recording', function () {
 
     // The recording page is not theirs to open: 404 before any action can run.
     $this->get(ViewCaptureSession::getUrl(['record' => $theirs->id]))->assertNotFound();
-    expect(fn () => $this->panelComponent(ViewCaptureSession::class, ['record' => $theirs->id])->call('notifyWhenReady'))->toThrow(Exception::class);
+    // Livewire's test client answers a page whose record is not found with a 404, as the browser gets it, instead of
+    // throwing; an action sent to it then has no page to run on.
+    $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $theirs->id])->assertNotFound();
+    expect($page->html())->not->toContain('Laptop call')->not->toContain('Notify me when ready');
+    $page->call('notifyWhenReady');
+    expect(app(ReadyNotices::class)->asked($theirs->user, $theirs))->toBeFalse();
     expect(Cache::has('ready-notice:'.$theirs->id))->toBeFalse();
     // Nor through the service: only the owner can ask.
     expect(app(ReadyNotices::class)->ask($this->admin, $theirs))->toBeFalse();
