@@ -12,6 +12,7 @@
         "laravel/framework": "^13.0",
         "laravel/mcp": "^1.1",
         "laravel/passport": "^13.10",
+        "laravel/pennant": "^1.27",
         "laravel/sanctum": "^4.0",
         "laravel/socialite": "^5.31",
         "laravel/tinker": "^3.0",
