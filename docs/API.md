@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.0-c (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 1.8.0-d (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -503,7 +503,9 @@ computer (docs/research/screen-share-privacy.md, docs/SCREEN_SHARE_MATRIX.md). T
   window titles or window contents are ever sent. The server keeps the result with the device and its person; staff
   with the device-reports permission see them only as a matrix in Admin → Diagnostics → Screen-share checks (platform ×
   OS build × app version × method or meeting app → pass / fail / error counts and the last date). Nobody else can read
-  them, and a person's own results are not listed back to any app.
+  them, and a person's own results are not listed back to any app. Since contract 1.8.0-d: `platform` must be the
+  sending device's own platform (`422` otherwise); `os_build`, `app_version` and `meeting_app_version` hold only
+  letters, digits, spaces and `. ( ) _ + -`; results are deleted 180 days after they arrive, and with their person.
 - `GET /api/config/share-bars` — `config:read`: the window patterns that mean "a screen share is running" (Zoom's
   share toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bars, Slack and WhatsApp), so they can
   change without an app release → `200 {"version": 1, "updated_at": "…", "patterns": [{"id":
