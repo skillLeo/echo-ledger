@@ -164,8 +164,9 @@ sudo systemd-analyze security assist-relay        # should rate it "OK" or bette
 journalctl -u assist-relay -n 20 -o cat           # "listening", then "providers_fetched"
 ```
 
-Memory: the load test measured about 200 KiB per session and about 1 MiB in the worst case (an hour-long call with
-the most documents). `MemoryMax=2G` leaves the rest of a 4 GB VPS to nginx and the system. See LOADTEST.md.
+Memory: the load test measured about 200 KiB per session. The worst case is **estimated**, not measured, at about
+1 MiB per session (the longest turns, the transcript at its cap and the most documents). `MemoryMax=2G` leaves the
+rest of a 4 GB VPS to nginx and the system. See LOADTEST.md.
 
 ## 6. nginx and TLS
 
