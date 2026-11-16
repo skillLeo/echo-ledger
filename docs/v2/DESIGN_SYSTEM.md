@@ -18,7 +18,8 @@ today's screens.
 2. No purple, indigo or violet as the brand or accent colour.
 3. No emoji in labels, buttons, headings or badges.
 4. No cards with a coloured left border.
-5. At most 3 corner radii in use.
+5. At most 3 corner radii in use (4, 8 and 12; "full" is the pill shape of chips, avatars and the recording pill and
+   does not count).
 6. Shadows only on floating layers (menus, dialogs, overlays).
 7. At most one badge per row; no "New" badges older than 30 days.
 8. No looping animation except the recording dot.

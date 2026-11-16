@@ -26,6 +26,12 @@
   --el-breakpoint-compact: 720px;
   --el-breakpoint-medium: 1024px;
   --el-breakpoint-wide: 1440px;
+  --el-layer-base: 0;
+  --el-layer-sticky: 10;
+  --el-layer-menu: 20;
+  --el-layer-toast: 30;
+  --el-layer-dialog: 40;
+  --el-layer-overlay: 50;
   --el-space-0: 0px;
   --el-space-2: 2px;
   --el-space-4: 4px;

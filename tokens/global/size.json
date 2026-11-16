@@ -47,5 +47,31 @@
       "$value": "1440px"
     },
     "$description": "Window widths: below compact the sidebar collapses to icons; below medium two-pane views stack."
+  },
+  "layer": {
+    "base": {
+      "$type": "number",
+      "$value": 0
+    },
+    "sticky": {
+      "$type": "number",
+      "$value": 10
+    },
+    "menu": {
+      "$type": "number",
+      "$value": 20
+    },
+    "toast": {
+      "$type": "number",
+      "$value": 30
+    },
+    "dialog": {
+      "$type": "number",
+      "$value": 40
+    },
+    "overlay": {
+      "$type": "number",
+      "$value": 50
+    }
   }
 }
