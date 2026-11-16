@@ -8,6 +8,15 @@ export const SIDEBAR_MAX = 320;
 export const SIDEBAR_DEFAULT = 240;
 /** The icon rail's width when the sidebar is collapsed. */
 export const SIDEBAR_RAIL = 64;
+/** Under this window width (CSS pixels: the smallest window at 200 % text is 430) the sidebar shows as its rail, whatever
+ * was chosen; the person can still open it there for the moment. */
+export const AUTO_RAIL_BELOW = 640;
+
+/** Whether the sidebar shows as its rail (pure): the person's choice, or the rail in a window too narrow for it unless
+ * the person opened it there. */
+export function sidebarFolded(chosen: boolean, windowWidth: number, openedAnyway: boolean): boolean {
+  return windowWidth < AUTO_RAIL_BELOW ? !openedAnyway : chosen;
+}
 
 /** Under this page width (window minus sidebar) the Library's list and recording stack and the page scrolls. */
 export const NARROW_CONTENT = 798;

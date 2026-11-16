@@ -5,7 +5,7 @@ import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTa
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
 import { actionCount } from "../../lib/badge";
-import { COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL } from "../../lib/shell";
+import { AUTO_RAIL_BELOW, COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL, sidebarFolded } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { HelpDialog } from "./HelpDialog";
@@ -77,20 +77,34 @@ export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
-  const [collapsed, setCollapsed] = useState(loadCollapsed);
+  const [chosenCollapsed, setCollapsed] = useState(loadCollapsed);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
-  const toggleSidebar = useCallback(() => {
-    setCollapsed((c) => {
-      saveCollapsed(!c);
-      return !c;
-    });
-  }, []);
   // The page's width (the window's less the sidebar's) decides whether the Library's columns fit (styles.css).
   const [windowWidth, setWindowWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     const resized = () => setWindowWidth(window.innerWidth);
     window.addEventListener("resize", resized);
     return () => window.removeEventListener("resize", resized);
+  }, []);
+  // A window too narrow for the sidebar (200 % text in the smallest window) shows its rail; opening it there lasts
+  // until the window is wide again and never changes what was chosen.
+  const autoRail = windowWidth < AUTO_RAIL_BELOW;
+  const [openedAnyway, setOpenedAnyway] = useState(false);
+  useEffect(() => {
+    if (!autoRail) setOpenedAnyway(false);
+  }, [autoRail]);
+  const collapsed = sidebarFolded(chosenCollapsed, windowWidth, openedAnyway);
+  const autoRailRef = useRef(autoRail);
+  autoRailRef.current = autoRail;
+  const toggleSidebar = useCallback(() => {
+    if (autoRailRef.current) {
+      setOpenedAnyway((o) => !o);
+      return;
+    }
+    setCollapsed((c) => {
+      saveCollapsed(!c);
+      return !c;
+    });
   }, []);
   const resizeSidebar = useCallback((width: number, done: boolean) => {
     setSidebarWidth(width);

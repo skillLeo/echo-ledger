@@ -190,7 +190,15 @@ fn main() {
     let reply: usize = unsafe { msg_send![delegate, applicationShouldTerminate: &*app] };
     assert_eq!(reply, 1);
 
-    println!("mac_appkit: ok (tao builds a floating window as a panel, an observed window is left alone, tao's delegate answers quits; the activation setter is {})", if setter { "there" } else { "not there" });
+    // spaces.rs watches which display the pointer is on with mouse-moved monitors: AppKit installs them without any
+    // permission (only key events need Accessibility), so the watch never prompts.
+    let watch = block2::RcBlock::new(|_: std::ptr::NonNull<objc2_app_kit::NSEvent>| {});
+    let monitor = objc2_app_kit::NSEvent::addGlobalMonitorForEventsMatchingMask_handler(objc2_app_kit::NSEventMask::MouseMoved, &watch);
+    let monitor = monitor.expect("a mouse-moved monitor without any permission");
+    // SAFETY: the monitor NSEvent returned just above.
+    unsafe { objc2_app_kit::NSEvent::removeMonitor(&monitor) };
+
+    println!("mac_appkit: ok (tao builds a floating window as a panel, an observed window is left alone, tao's delegate answers quits, the pointer is watched without a permission; the activation setter is {})", if setter { "there" } else { "not there" });
 }
 
 #[cfg(not(target_os = "macos"))]

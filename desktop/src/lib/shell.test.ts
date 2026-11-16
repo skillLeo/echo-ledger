@@ -153,3 +153,14 @@ describe("the workspace switcher (v1.6, P4.3)", () => {
     expect(workspacesOf(null, makeStatus({ plan: { ...status.plan, workspace: null } }))[0].name).toBe("Personal");
   });
 });
+
+describe("the sidebar in a window too narrow for it", () => {
+  it("shows the rail under 640 px unless opened there, and the choice otherwise", async () => {
+    const { AUTO_RAIL_BELOW, sidebarFolded } = await import("./shell");
+    expect(AUTO_RAIL_BELOW).toBe(640);
+    expect(sidebarFolded(false, 430, false)).toBe(true);
+    expect(sidebarFolded(false, 430, true)).toBe(false);
+    expect(sidebarFolded(true, 860, false)).toBe(true);
+    expect(sidebarFolded(false, 860, true)).toBe(false);
+  });
+});

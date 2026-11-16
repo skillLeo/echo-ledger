@@ -13,8 +13,9 @@
 //! never count. Whether a Space is full screen is read from the system's list of Spaces (each display's current Space and
 //! its type, as the window server keeps it); macOS has no public call for it, so the two functions are looked up when
 //! the app runs and, without them, EchoLedger simply keeps its Dock icon. It is read when the Space in use or the
-//! displays change, and switched only when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test
-//! allows no other activation policy change anywhere.
+//! displays change, and, while there are several displays, when the pointer moves to another one; it is switched only
+//! when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test allows no other activation policy
+//! change anywhere.
 //!
 //! "Open EchoLedger" from the menu brings an open main window to the Space in use (`MoveToActiveSpace` while it opens,
 //! then the window's own behaviour again), so a Dock click or ⌘Tab later still goes to the window where it is.
@@ -60,6 +61,16 @@ pub fn space_type_of(uuid: &str, displays: &[(String, i64)]) -> Option<i64> {
     displays.iter().find(|(id, _)| id.eq_ignore_ascii_case(uuid)).map(|(_, t)| *t).or(one)
 }
 
+/// Whether the pointer's display is watched (pure): only while there are several displays to move between.
+pub fn watch_pointer_with(displays: usize) -> bool {
+    displays > 1
+}
+
+/// Whether the pointer moved to another display (pure): a new read is due then (the first known display counts).
+pub fn moved_to_another_display(before: Option<(i64, i64)>, now: Option<(i64, i64)>) -> bool {
+    now.is_some() && before != now
+}
+
 /// One read against the read before it (pure): the Dock to apply now (only when both agree), and whether to read again.
 pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
     if before == Some(now) { (Some(now), false) } else { (None, true) }
@@ -67,19 +78,19 @@ pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
 
 #[cfg(target_os = "macos")]
 pub mod mac {
-    use super::{Dock, InUse, SETTLED, dock_for, settle, space_type_of};
+    use super::{Dock, InUse, SETTLED, dock_for, moved_to_another_display, settle, space_type_of, watch_pointer_with};
     use objc2::{MainThreadMarker, Message};
     use objc2::rc::Retained;
     use objc2::runtime::AnyObject;
     use objc2_app_kit::{
-        NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSScreen, NSWindow,
+        NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSEventMask, NSScreen, NSWindow,
         NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification,
     };
-    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType};
+    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType, CFUUID};
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSNumber, NSOperationQueue, NSString};
     use std::ffi::{c_char, c_void};
     use std::ptr::NonNull;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     /// The first check after launch, once the launch's own activation policy is applied.
     const AFTER_LAUNCH: std::time::Duration = std::time::Duration::from_secs(1);
@@ -96,12 +107,71 @@ pub mod mac {
         observe(&NSWorkspace::sharedWorkspace().notificationCenter(), space);
         observe(&NSNotificationCenter::defaultCenter(), screens);
         later(AFTER_LAUNCH);
+        if let Some(mtm) = MainThreadMarker::new() {
+            watch_pointer(mtm);
+        }
+    }
+
+    thread_local! {
+        /// The mouse-moved monitors (another app's events, then EchoLedger's own), while there are several displays.
+        static POINTER_MONITORS: std::cell::RefCell<Option<[Retained<AnyObject>; 2]>> = const { std::cell::RefCell::new(None) };
+        /// The display the pointer was last on (its frame's corner).
+        static POINTER_DISPLAY: std::cell::Cell<Option<(i64, i64)>> = const { std::cell::Cell::new(None) };
+    }
+
+    /// Watches which display the pointer is on while there are several (main thread): moving to another one reads
+    /// again, as a Space change does. A mouse-moved monitor needs no permission (only key events would); the handler
+    /// only compares the display, and reads only when it changed.
+    fn watch_pointer(mtm: MainThreadMarker) {
+        let several = watch_pointer_with(NSScreen::screens(mtm).count());
+        POINTER_MONITORS.with(|monitors| {
+            let mut monitors = monitors.borrow_mut();
+            match (several, monitors.is_some()) {
+                (true, false) => {
+                    let global = block2::RcBlock::new(|_: NonNull<NSEvent>| pointer_moved());
+                    let local = block2::RcBlock::new(|event: NonNull<NSEvent>| {
+                        pointer_moved();
+                        event.as_ptr()
+                    });
+                    let global = NSEvent::addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved, &global);
+                    // SAFETY: the block hands every event back unchanged.
+                    let local = unsafe { NSEvent::addLocalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved, &local) };
+                    if let (Some(global), Some(local)) = (global, local) {
+                        *monitors = Some([global, local]);
+                    }
+                }
+                (false, true) => {
+                    for monitor in monitors.take().into_iter().flatten() {
+                        // SAFETY: a monitor NSEvent returned above.
+                        unsafe { NSEvent::removeMonitor(&monitor) };
+                    }
+                    POINTER_DISPLAY.set(None);
+                }
+                _ => {}
+            }
+        });
+    }
+
+    fn pointer_moved() {
+        let Some(mtm) = MainThreadMarker::new() else { return };
+        let pointer = NSEvent::mouseLocation();
+        let now = NSScreen::screens(mtm).iter().map(|s| s.frame()).find(|f| {
+            pointer.x >= f.origin.x && pointer.x < f.origin.x + f.size.width && pointer.y >= f.origin.y && pointer.y < f.origin.y + f.size.height
+        }).map(|f| (f.origin.x as i64, f.origin.y as i64));
+        if moved_to_another_display(POINTER_DISPLAY.replace(now), now) {
+            *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            check();
+        }
     }
 
     fn observe(centre: &NSNotificationCenter, name: &NSNotificationName) {
         let block = block2::RcBlock::new(|_: NonNull<NSNotification>| {
             *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
             check();
+            // A display came or went: the pointer is watched only while there are several.
+            if let Some(mtm) = MainThreadMarker::new() {
+                watch_pointer(mtm);
+            }
         });
         // SAFETY: no object filter; the main queue (the check needs it); the block lives as long as the observation, which
         // is the app's run.
@@ -161,7 +231,7 @@ pub mod mac {
         InUse { space_type, ours_full_screen }
     }
 
-    // ---- The window server's list of Spaces (no public call; looked up at run time) ------------------------------------
+    // ---- The window server's list of Spaces (no public call; looked up once, at run time) -------------------------------
 
     unsafe extern "C" {
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
@@ -170,13 +240,43 @@ pub mod mac {
     const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
 
     type MainConnection = unsafe extern "C" fn() -> i32;
-    type CopySpaces = unsafe extern "C" fn(i32) -> *const CFArray;
+    type CopySpaces = unsafe extern "C" fn(i32) -> *const CFType;
     type DisplayUuid = unsafe extern "C" fn(u32) -> *const CFType;
-    type UuidString = unsafe extern "C" fn(*const c_void, *const CFType) -> *const CFString;
 
-    fn symbol(name: &std::ffi::CStr) -> Option<NonNull<c_void>> {
-        // SAFETY: a plain lookup by name.
-        NonNull::new(unsafe { dlsym(RTLD_DEFAULT, name.as_ptr()) })
+    /// The three functions this needs, found once; none when one is missing (EchoLedger then keeps its Dock icon).
+    struct WindowServer {
+        main_connection: MainConnection,
+        copy_spaces: CopySpaces,
+        display_uuid: DisplayUuid,
+    }
+
+    static WINDOW_SERVER: OnceLock<Option<WindowServer>> = OnceLock::new();
+
+    fn window_server() -> Option<&'static WindowServer> {
+        WINDOW_SERVER
+            .get_or_init(|| {
+                let find = |name: &std::ffi::CStr| {
+                    // SAFETY: a plain lookup by name.
+                    NonNull::new(unsafe { dlsym(RTLD_DEFAULT, name.as_ptr()) })
+                };
+                let (main, copy, uuid) = (find(c"CGSMainConnectionID")?, find(c"CGSCopyManagedDisplaySpaces")?, find(c"CGDisplayCreateUUIDFromDisplayID")?);
+                // SAFETY: the functions by the signatures every user of them relies on; what they return is only read
+                // after a type check (`current_spaces`, `display_uuid`).
+                Some(unsafe {
+                    WindowServer {
+                        main_connection: std::mem::transmute::<*mut c_void, MainConnection>(main.as_ptr()),
+                        copy_spaces: std::mem::transmute::<*mut c_void, CopySpaces>(copy.as_ptr()),
+                        display_uuid: std::mem::transmute::<*mut c_void, DisplayUuid>(uuid.as_ptr()),
+                    }
+                })
+            })
+            .as_ref()
+    }
+
+    /// An owned (+1) CF object a function returned, or none for a null one.
+    fn owned(object: *const CFType) -> Option<CFRetained<CFType>> {
+        // SAFETY: the functions above return a new (+1) object or null; CFRetained releases it.
+        NonNull::new(object.cast_mut()).map(|o| unsafe { CFRetained::from_raw(o) })
     }
 
     /// The display's UUID (as the list of Spaces names it).
@@ -184,30 +284,18 @@ pub mod mac {
         let key = NSString::from_str("NSScreenNumber");
         let number: Option<Retained<AnyObject>> = screen.deviceDescription().objectForKey(&key);
         let id = number?.downcast::<NSNumber>().ok()?.unsignedIntValue();
-        let create = symbol(c"CGDisplayCreateUUIDFromDisplayID")?;
-        let string = symbol(c"CFUUIDCreateString")?;
-        // SAFETY: the two CoreGraphics / CoreFoundation functions by their documented signatures; both results are
-        // owned (+1) and released by CFRetained.
-        unsafe {
-            let create: DisplayUuid = std::mem::transmute(create.as_ptr());
-            let string: UuidString = std::mem::transmute(string.as_ptr());
-            let uuid = CFRetained::from_raw(NonNull::new(create(id).cast_mut())?);
-            let text = CFRetained::from_raw(NonNull::new(string(std::ptr::null(), &*uuid).cast_mut())?);
-            Some(text.to_string())
-        }
+        // SAFETY: CoreGraphics' function by its documented signature.
+        let uuid = owned(unsafe { (window_server()?.display_uuid)(id) })?;
+        let uuid = uuid.downcast_ref::<CFUUID>()?;
+        CFUUID::new_string(None, Some(uuid)).map(|s| s.to_string())
     }
 
     /// Each display's UUID and its current Space's type; none when the system does not have the list.
     fn current_spaces() -> Option<Vec<(String, i64)>> {
-        let main = symbol(c"CGSMainConnectionID")?;
-        let copy = symbol(c"CGSCopyManagedDisplaySpaces")?;
-        // SAFETY: the window server's own functions by the signatures every user of them relies on; the array is owned
-        // (+1) and released by CFRetained; its values are read with type checks only.
-        let list = unsafe {
-            let main: MainConnection = std::mem::transmute(main.as_ptr());
-            let copy: CopySpaces = std::mem::transmute(copy.as_ptr());
-            CFRetained::from_raw(NonNull::new(copy(main()).cast_mut())?)
-        };
+        let functions = window_server()?;
+        // SAFETY: the window server's functions by their signatures; the answer is type-checked before it is read.
+        let answer = owned(unsafe { (functions.copy_spaces)((functions.main_connection)()) })?;
+        let list = answer.downcast_ref::<CFArray>()?;
         let get = |dict: &CFDictionary, key: &str| -> Option<CFRetained<CFType>> {
             let key = CFString::from_str(key);
             // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
@@ -260,6 +348,24 @@ pub mod mac {
     }
     // SAFETY: built on the main thread and run by the main dispatch queue, which is the main thread.
     unsafe impl<F> Send for SendOnMain<F> {}
+
+    #[cfg(test)]
+    mod live {
+        use super::*;
+
+        #[test]
+        fn the_window_server_lists_each_display_s_current_space_and_is_looked_up_once() {
+            let first = window_server().map(|w| w as *const WindowServer as usize);
+            assert!(first.is_some(), "the three functions are there on this macOS");
+            assert_eq!(first, window_server().map(|w| w as *const WindowServer as usize), "found once, kept");
+            let list = current_spaces().expect("the list of Spaces");
+            assert!(!list.is_empty(), "one entry per display (or one for all)");
+            for (id, kind) in &list {
+                assert!(!id.is_empty() && *kind >= 0, "{id}: {kind}");
+            }
+            println!("spaces: {list:?}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -292,6 +398,22 @@ mod tests {
     }
 
     #[test]
+    fn the_pointer_moving_to_another_display_reads_again_only_while_there_are_several() {
+        assert!(!watch_pointer_with(1), "one display: nothing is watched");
+        assert!(watch_pointer_with(2));
+        assert!(moved_to_another_display(None, Some((0, 0))), "the first known display");
+        assert!(moved_to_another_display(Some((0, 0)), Some((1512, 0))), "to the second display");
+        assert!(!moved_to_another_display(Some((1512, 0)), Some((1512, 0))), "moving on the same display reads nothing");
+        assert!(!moved_to_another_display(Some((0, 0)), None), "between displays (no display under it)");
+        let spaces = code("spaces.rs");
+        let watch = body(&spaces, "    fn watch_pointer(");
+        assert!(watch.contains("addGlobalMonitorForEventsMatchingMask_handler(NSEventMask::MouseMoved") && watch.contains("NSEvent::removeMonitor(&monitor)"), "on with several displays, off with one");
+        assert!(body(&spaces, "    pub fn install() {").contains("watch_pointer(mtm)"));
+        assert!(body(&spaces, "    fn observe(").contains("watch_pointer(mtm)"), "a display came or went");
+        assert!(body(&spaces, "    fn pointer_moved() {").contains("if moved_to_another_display("), "reads only when the display changed");
+    }
+
+    #[test]
     fn the_dock_icon_changes_only_when_two_reads_agree() {
         assert_eq!(settle(None, Dock::Away), (None, true), "the first read only asks for another");
         assert_eq!(settle(Some(Dock::Shown), Dock::Away), (None, true), "mid-slide: read again");
@@ -306,6 +428,16 @@ mod tests {
     fn body(code: &str, start: &str) -> String {
         let from = &code[code.find(start).unwrap_or_else(|| panic!("{start}"))..];
         from[..from.find("\n    }\n").map(|i| i + 6).or_else(|| from.find("\n}\n")).unwrap()].to_string()
+    }
+
+    #[test]
+    fn the_private_answer_is_type_checked_and_the_functions_are_found_once() {
+        let spaces = code("spaces.rs");
+        assert_eq!(spaces.matches("dlsym(RTLD_DEFAULT").count(), 1, "one lookup place");
+        assert!(spaces.contains("static WINDOW_SERVER: OnceLock<Option<WindowServer>>"));
+        let read = body(&spaces, "    fn current_spaces() -> Option<Vec<(String, i64)>> {");
+        assert!(read.find("answer.downcast_ref::<CFArray>()?").unwrap() < read.find("list.count()").unwrap(), "a CFArray before it is read");
+        assert!(body(&spaces, "    fn display_uuid(").contains("uuid.downcast_ref::<CFUUID>()?"));
     }
 
     #[test]
