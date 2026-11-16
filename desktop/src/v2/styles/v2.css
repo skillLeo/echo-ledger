@@ -604,6 +604,35 @@ button.el-step__head { cursor: pointer; }
 .el-aftercall__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
 .el-aftercall .el-progress { block-size: var(--el-space-2); }
 
+/* ---- Live Assist card (a floating layer) ------------------------------------------------------------------- */
+.el-assist-root { display: flex; justify-content: center; padding: var(--el-space-8); }
+.el-assist {
+  display: flex; flex-direction: column; gap: var(--el-space-8);
+  inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 8);
+  padding: var(--el-space-8) var(--el-space-12) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-card-radius);
+  box-shadow: var(--el-shadow-2);
+}
+.el-assist__bar { display: flex; align-items: center; gap: var(--el-space-4); cursor: grab; }
+.el-assist__budget { flex: 1; min-inline-size: var(--el-space-48); padding-inline: var(--el-space-8); }
+.el-assist__note { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-assist__note > span { flex: 1; }
+.el-assist__body { display: flex; flex-direction: column; gap: var(--el-space-8); min-block-size: var(--el-space-48); }
+.el-assist__question { margin: 0; }
+.el-assist__first {
+  margin: 0;
+  font-size: var(--el-text-title-s-size); line-height: var(--el-text-title-s-line); font-weight: var(--el-text-title-s-weight);
+}
+.el-assist__bullets { margin: 0; padding-inline-start: var(--el-space-20); list-style: disc; display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-assist__next, .el-assist__language { margin: 0; }
+.el-assist__language:lang(ur), .el-assist__language:lang(ar) { font-family: var(--el-text-urdu-body-font); line-height: var(--el-text-urdu-body-line); }
+.el-assist__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-4); }
+.el-assist__captions { margin: 0; padding: var(--el-space-8) 0 0; list-style: none; border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-assist__who { font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-secondary); }
+.el-assist__partial { color: var(--el-role-text-secondary); }
+
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
 .el-page--wide { max-inline-size: calc(var(--el-space-64) * 15); }
