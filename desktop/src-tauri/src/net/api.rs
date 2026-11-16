@@ -554,6 +554,24 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/assist/sessions` (Live Assist 1.9.0-e): starts a session; the relay and speech tokens come back.
+    pub async fn assist_start(&self, request: &AssistStartRequest) -> AppResult<AssistStartAnswer> {
+        let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/assist/sessions/{id}/token`: new tokens before the old ones expire.
+    pub async fn assist_token(&self, session_id: &str) -> AppResult<AssistTokenAnswer> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/token"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/assist/sessions/{id}/end`: the session ends and its report is made.
+    pub async fn assist_end(&self, session_id: &str) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/end"))))?.send().await?;
+        Self::parse::<serde_json::Value>(resp).await.map(|_| ())
+    }
+
     pub async fn config(&self) -> AppResult<ServerConfig> {
         let resp = self.authed(self.http.get(self.url("config")))?.send().await?;
         Self::parse(resp).await

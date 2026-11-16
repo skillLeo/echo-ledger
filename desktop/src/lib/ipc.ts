@@ -645,6 +645,56 @@ export interface MicUser {
   reason: IgnoreReason | null;
 }
 
+/** Live Assist (docs/API_ASSIST.md 1.9.0-e). */
+export interface AssistStartOptions {
+  prepId?: string | null;
+  mode?: "fast" | "balanced" | "deep" | "max" | null;
+  practice?: boolean;
+  recordingSessionId?: string | null;
+}
+export interface AssistStarted {
+  sessionId: string;
+  mode: string;
+  practice: boolean;
+  /** Started from a prep: no after-call card. */
+  autoSaved: boolean;
+  modes: string[];
+  secondsLeft: number | null;
+}
+/** `assist:suggestion_start`: `turn_id` is the other person's turn it answers; `replaces` the suggestion it takes the
+ * place of on the card (drop that one when this one's first token arrives). */
+export interface AssistSuggestionStart {
+  suggestion_id: string;
+  turn_id: string | null;
+  kind: "answer" | "upgrade" | "rewrite" | "fallback" | "other";
+  mode: string;
+  model: string;
+  speculative: boolean;
+  draft: boolean;
+  replaces: string | null;
+}
+export interface AssistToken {
+  suggestion_id: string;
+  text: string;
+}
+export interface AssistSuggestionEnd {
+  suggestion_id: string;
+  status: "complete" | "cancelled" | "superseded" | "failed" | "other";
+  model: string;
+  latency: Record<string, number | null>;
+  usage: Record<string, number | boolean>;
+}
+export interface AssistModeChanged {
+  from: string;
+  to: string;
+  reason: "budget" | "budget_restored" | "plan" | "assist_time" | "other";
+}
+/** `assist:state`: the relay connection; `message` is a plain sentence when it ended by itself. */
+export type AssistState =
+  | { state: "connected"; resumed: boolean; mode: string }
+  | { state: "reconnecting"; attempt: number; afterMs: number }
+  | { state: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up"; message: string | null };
+
 /** The interface flags (contract 2.0.0-a): every flag the app knows, on or off, for this person, and the "classic"
  * choice; `ui:flags` carries the same when the cached flags change. */
 export interface UiFlagsAnswer {
@@ -1429,6 +1479,12 @@ export interface PrivacyStatus {
 export interface EventPayloads {
   "app:status": AppStatus;
   "ui:flags": UiFlagsAnswer;
+  "assist:suggestion_start": AssistSuggestionStart;
+  "assist:token": AssistToken;
+  "assist:suggestion_end": AssistSuggestionEnd;
+  "assist:skip": { suggestion_id: string; turn_id: string | null };
+  "assist:mode_changed": AssistModeChanged;
+  "assist:state": AssistState;
   /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
   "app:error": string | { text: string; target?: unknown };
   "app:toast": string | { text: string; target?: unknown };
@@ -1709,6 +1765,11 @@ export const api = {
   uiFlags: () => invoke<UiFlagsAnswer>("ui_flags"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** Live Assist (API_ASSIST.md 1.9.0-e): starts a session while `live_assist` is on; suggestions come as `assist:*`. */
+  assistStart: (options: AssistStartOptions = {}) =>
+    invoke<AssistStarted>("assist_start", { prepId: options.prepId ?? null, mode: options.mode ?? null, practice: options.practice ?? false, recordingSessionId: options.recordingSessionId ?? null }),
+  /** Ends the running Live Assist session (nothing runs: nothing happens). */
+  assistStop: () => invoke<void>("assist_stop"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

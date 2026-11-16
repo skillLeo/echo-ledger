@@ -230,6 +230,12 @@ pub struct AssistHandle {
     stop: Arc<watch::Sender<bool>>,
 }
 
+impl std::fmt::Debug for AssistHandle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssistHandle").field("running", &self.is_running()).finish()
+    }
+}
+
 impl AssistHandle {
     /// Queues a message; it goes out in order, once the socket is up and the relay is ready.
     pub fn send(&self, message: ClientMessage) -> bool {

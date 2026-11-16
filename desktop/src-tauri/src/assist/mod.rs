@@ -8,6 +8,7 @@ use std::sync::Mutex;
 pub mod client;
 pub mod outbox;
 pub mod protocol;
+pub mod session;
 
 /// Whether Live Assist may run for this person: the server's `live_assist` flag (contract 2.0.0-a), never decided here.
 pub fn enabled(flags: &crate::ui_flags::UiFlags) -> bool {
@@ -24,25 +25,35 @@ pub fn start(
     enabled(flags).then(|| client::spawn(grant, refresh, client::Policy::default(), on_event))
 }
 
-/// The session that runs on this computer, if any (one at a time, as the server allows).
+/// The session that runs on this computer, if any (one at a time, as the server allows): its server id and its relay
+/// connection.
 #[derive(Default)]
-pub struct Registry(Mutex<Option<client::AssistHandle>>);
+pub struct Registry(Mutex<Option<(String, client::AssistHandle)>>);
 
 impl Registry {
-    pub fn set(&self, handle: client::AssistHandle) {
-        if let Some(old) = self.0.lock().unwrap_or_else(|p| p.into_inner()).replace(handle) {
+    pub fn set(&self, session_id: String, handle: client::AssistHandle) {
+        if let Some((_, old)) = self.0.lock().unwrap_or_else(|p| p.into_inner()).replace((session_id, handle)) {
             old.stop();
         }
     }
 
-    pub fn current(&self) -> Option<client::AssistHandle> {
-        self.0.lock().unwrap_or_else(|p| p.into_inner()).clone().filter(client::AssistHandle::is_running)
+    /// The running session's id and connection.
+    pub fn current(&self) -> Option<(String, client::AssistHandle)> {
+        self.0.lock().unwrap_or_else(|p| p.into_inner()).clone().filter(|(_, h)| h.is_running())
+    }
+
+    /// Stops the session's connection and forgets it; its id when one ran (the server is told by the caller).
+    pub fn take(&self) -> Option<String> {
+        let running = self.0.lock().unwrap_or_else(|p| p.into_inner()).take();
+        running.map(|(id, handle)| {
+            handle.stop();
+            id
+        })
     }
 
     /// Stops the session and forgets it; true when one ran.
     pub fn stop(&self) -> bool {
-        let handle = self.0.lock().unwrap_or_else(|p| p.into_inner()).take();
-        handle.map(|h| h.stop()).is_some()
+        self.take().is_some()
     }
 
     /// Stops a running session when the `live_assist` flag is off (the server turned it off for this person); true

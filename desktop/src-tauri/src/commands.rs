@@ -2538,6 +2538,52 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
 }
 
+/// Starts a Live Assist session (docs/API_ASSIST.md 1.9.0-e), only while the server's `live_assist` flag is on: the
+/// server first (`POST /api/assist/sessions`), then the relay. Suggestions reach the window as `assist:suggestion_start`,
+/// `assist:token`, `assist:suggestion_end`, `assist:skip` and `assist:mode_changed`, the connection as `assist:state`.
+#[tauri::command]
+pub async fn assist_start(
+    app: AppHandle,
+    prep_id: Option<String>,
+    mode: Option<String>,
+    practice: Option<bool>,
+    recording_session_id: Option<String>,
+) -> AppResult<crate::assist::session::AssistStarted> {
+    let state = app.state::<AppState>();
+    let api = std::sync::Arc::new(state.api()?);
+    let flags = crate::ui_flags::cached(&state);
+    let pins = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map(|c| c.pins.clone()).unwrap_or_default();
+    let practice = practice.unwrap_or(false);
+    let request = crate::net::models::AssistStartRequest {
+        prep_id,
+        mode,
+        platform: "desktop".into(),
+        // Practice has no recording; a live session names the recording of this device, when one runs.
+        recording_session_id: if practice { None } else { recording_session_id },
+        practice,
+    };
+    let emitter = app.clone();
+    let (started, handle) = crate::assist::session::start(api, &flags, pins, request, move |name, body| {
+        let _ = emitter.emit(name, body);
+    })
+    .await?;
+    state.assist.set(started.session_id.clone(), handle);
+    Ok(started)
+}
+
+/// Ends the Live Assist session that runs: the relay connection closes and the server is told
+/// (`POST /api/assist/sessions/{id}/end`). Nothing runs: nothing to do.
+#[tauri::command]
+pub async fn assist_stop(app: AppHandle) -> AppResult<()> {
+    let state = app.state::<AppState>();
+    let Some(session_id) = state.assist.take() else { return Ok(()) };
+    match state.api()?.assist_end(&session_id).await {
+        // Already ended on the server (from another device, or by its time): what was wanted.
+        Err(e) if e.code() == Some("session_ended") => Ok(()),
+        other => other,
+    }
+}
+
 /// "Once per loss": the person has read the sentence.
 #[tauri::command]
 pub fn permission_notice_dismiss(app: AppHandle) {

@@ -578,6 +578,8 @@ pub fn run() {
             commands::quit_and_reopen,
             commands::ui_flags,
             commands::ui_classic_set,
+            commands::assist_start,
+            commands::assist_stop,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,

@@ -545,7 +545,7 @@ async fn a_running_session_stops_when_live_assist_turns_off() {
     let events = Events::default();
     let on = desktop_lib::ui_flags::UiFlags::read(Some(&json!({"live_assist": true})), false);
     let registry = desktop_lib::assist::Registry::default();
-    registry.set(desktop_lib::assist::start(&on, grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, events.sink()).unwrap());
+    registry.set("01JS".into(), desktop_lib::assist::start(&on, grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, events.sink()).unwrap());
     events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { .. })).await;
     assert!(!registry.stop_unless_enabled(&on), "still on: it runs");
     assert!(registry.current().is_some());

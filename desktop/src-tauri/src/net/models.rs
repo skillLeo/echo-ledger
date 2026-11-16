@@ -1288,3 +1288,68 @@ pub struct ShareCheckReport {
     /// `screen` | `window` | `tab`.
     pub share_mode: Option<String>,
 }
+
+/// `POST /api/assist/sessions`'s body (docs/API_ASSIST.md "Sessions").
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize)]
+pub struct AssistStartRequest {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub prep_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mode: Option<String>,
+    pub platform: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub recording_session_id: Option<String>,
+    pub practice: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct AssistSessionDto {
+    pub id: String,
+    #[serde(default)]
+    pub auto_saved: bool,
+    #[serde(default)]
+    pub mode: String,
+    #[serde(default)]
+    pub practice: bool,
+}
+
+/// The relay block: where to connect, with which token, until when.
+#[derive(Clone, PartialEq, Eq, Deserialize)]
+pub struct AssistRelayDto {
+    pub url: String,
+    pub token: String,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+}
+
+impl std::fmt::Debug for AssistRelayDto {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AssistRelayDto").field("url", &self.url).field("expires_at", &self.expires_at).finish_non_exhaustive()
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
+pub struct AssistPlanDto {
+    #[serde(default)]
+    pub modes: Vec<String>,
+    #[serde(default)]
+    pub seconds_left: Option<u64>,
+}
+
+/// `201` of `POST /api/assist/sessions`. The `stt` block is kept as sent: the live captions read it.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AssistStartAnswer {
+    pub session: AssistSessionDto,
+    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub stt: Option<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<AssistPlanDto>,
+}
+
+/// `200` of `POST /api/assist/sessions/{id}/token`: new relay and speech tokens.
+#[derive(Clone, Debug, Deserialize)]
+pub struct AssistTokenAnswer {
+    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub stt: Option<serde_json::Value>,
+}
