@@ -19,7 +19,7 @@ describe("a release build", () => {
       configFile: join(desktop, "vite.config.ts"),
       mode: "production",
       logLevel: "silent",
-      build: { write: false, minify: false, reportCompressedSize: false },
+      build: { write: false, reportCompressedSize: false },
     }).finally(() => { process.env.NODE_ENV = before; });
     const outputs = (Array.isArray(result) ? result : [result]) as RollupOutput[];
     const files: (OutputChunk | OutputAsset)[] = outputs.flatMap((o) => o.output);
