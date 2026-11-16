@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
-import { HELD_ELSEWHERE, PERMISSION_KINDS, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { ALLOWED_BEFORE, PERMISSION_KINDS, REOPEN, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
-import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll } from "../../test/tauri";
 import { makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import type { PermissionsStatus } from "../../lib/ipc";
 
@@ -191,20 +191,47 @@ describe("the banner on the Record page", () => {
   });
 });
 
-describe("a permission an older copy of EchoLedger holds (D-120)", () => {
-  it("says so instead of Not asked yet, with System Settings as the main button", () => {
-    render(<PermissionStep kind="microphone" permissions={mac({ microphone: "unknown", heldElsewhere: ["microphone"] })} onChange={vi.fn()} />);
-    expect(screen.getByTestId("permission-state-microphone")).toHaveTextContent(HELD_ELSEWHERE);
-    expect(screen.getByTestId("permission-state-microphone")).not.toHaveTextContent("Not asked yet");
-    expect(screen.getByRole("button", { name: "Open System Settings" })).not.toHaveClass("ghost");
-    expect(screen.getByRole("button", { name: "Allow" })).toBeInTheDocument();
+describe("a permission allowed before on this Mac, \"not asked\" now (D-120)", () => {
+  const buttons = (kind: string) => within(screen.getByTestId(`permission-${kind}`)).getAllByRole("button");
+
+  it("says it as a possibility, with Open System Settings as the first, filled button, then Allow", () => {
+    render(<PermissionStep kind="microphone" permissions={mac({ microphone: "unknown", allowedBefore: ["microphone"] })} onChange={vi.fn()} />);
+    const state = screen.getByTestId("permission-state-microphone");
+    expect(state).toHaveTextContent(/^Allowed before on this Mac\. If System Settings already lists EchoLedger, remove it there, then click Allow\.$/);
+    expect(ALLOWED_BEFORE).not.toMatch(/older copy|has this permission/);
+    expect(buttons("microphone").map((b) => b.textContent)).toEqual(["Open System Settings", "Allow"]);
+    expect(buttons("microphone")[0]).toHaveClass("primary");
+    expect(buttons("microphone")[1]).not.toHaveClass("primary");
   });
 
   it("keeps Not asked yet for what this computer never granted, and Off for what is turned off", () => {
-    render(<PermissionStep kind="system_audio" permissions={mac({ systemAudio: "unknown", heldElsewhere: ["microphone"] })} onChange={vi.fn()} />);
+    render(<PermissionStep kind="system_audio" permissions={mac({ systemAudio: "unknown", allowedBefore: ["microphone"] })} onChange={vi.fn()} />);
     expect(screen.getByTestId("permission-state-system_audio")).toHaveTextContent("Not asked yet");
-    render(<PermissionStep kind="screen" permissions={mac({ screen: "denied", heldElsewhere: ["screen"] })} onChange={vi.fn()} />);
+    expect(buttons("system_audio").map((b) => b.textContent)).toEqual(["Allow", "Open System Settings"]);
+    render(<PermissionStep kind="screen" permissions={mac({ screen: "denied", allowedBefore: ["screen"] })} onChange={vi.fn()} />);
     expect(screen.getByTestId("permission-state-screen")).toHaveTextContent(/^Off: turn on EchoLedger in System Settings$/);
+  });
+});
+
+describe("Screen Recording switched on while EchoLedger ran (D-120)", () => {
+  it("asks to quit and reopen to finish, never to remove it or to Allow, with Quit & reopen", async () => {
+    respond("quit_and_reopen", null);
+    render(<PermissionStep kind="screen" permissions={mac({ screen: "reopen", allowedBefore: [] })} onChange={vi.fn()} />);
+    const state = screen.getByTestId("permission-state-screen");
+    expect(state).toHaveTextContent(REOPEN);
+    expect(state).toHaveTextContent("Quit and reopen EchoLedger to finish");
+    expect(state).not.toHaveTextContent(/remove it|Not asked/);
+    const step = screen.getByTestId("permission-screen");
+    expect(within(step).getAllByRole("button").map((b) => b.textContent)).toEqual(["Quit & reopen"]);
+    fireEvent.click(within(step).getByRole("button", { name: "Quit & reopen" }));
+    await waitFor(() => expect(callsOf("quit_and_reopen")).toHaveLength(1));
+  });
+
+  it("says why it does not quit in the middle of a recording", async () => {
+    fail("quit_and_reopen", "Stop the recording first: EchoLedger quits and reopens to finish.");
+    render(<PermissionStep kind="screen" permissions={mac({ screen: "reopen" })} onChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Quit & reopen" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Stop the recording first: EchoLedger quits and reopens to finish.");
   });
 });
 

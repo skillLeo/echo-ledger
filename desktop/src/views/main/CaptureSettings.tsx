@@ -221,6 +221,8 @@ const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
   allowed: "Allowed",
   denied: "Not allowed",
   unknown: "Asked on first use",
+  // Screen Recording only; never the microphone, kept for completeness.
+  reopen: "Allowed: quit and reopen EchoLedger to finish",
 };
 
 /** Recording › Microphone & audio. */

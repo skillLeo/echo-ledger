@@ -182,14 +182,18 @@ const SCREENS = [
       await page.getByTestId("library-list").getByText(/Call with \+92/).click();
       await page.waitForSelector(".detail .notice.error");
     }, viewport])),
-  // D-001, D-120: the Calls page's app icons beside their names; a permission an older copy holds.
+  // D-001, D-120: the Calls page's app icons beside their names; a permission allowed before on this Mac, said as a
+  // possibility with System Settings first, and Screen Recording switched on while EchoLedger ran (Quit & reopen).
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
-    [`permissions-older-copy-mac${size}`, "library-lost-mac&older=1", async (page) => {
+    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
       await page.waitForSelector("[data-testid=permission-loss]");
       await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
       await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
-    }, viewport],
+      if (state === "reopen") await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
+    }, viewport]),
+    // The Ready check and the top bar never say "Microphone allowed" or "Calls: Ready" in that state.
+    [`record-allowed-before-mac${size}`, "record&older=1", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row"), viewport],
   ]),
   // D-023, D-024, D-029, D-031, D-046, D-003: nothing clipped or pushed sideways in the Library.
   ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],

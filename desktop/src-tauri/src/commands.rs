@@ -2432,7 +2432,8 @@ pub async fn test_capture(app: AppHandle, seconds: Option<u32>) -> AppResult<cra
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionsStatus {
-    /// `allowed` | `denied` | `unknown`.
+    /// `allowed` | `denied` | `unknown` | `reopen` (Screen Recording only: allowed in System Settings, used once EchoLedger
+    /// is quit and reopened).
     pub microphone: &'static str,
     /// The same for this Mac's sound (Phase 1B); always `allowed` on Windows.
     pub system_audio: &'static str,
@@ -2445,8 +2446,8 @@ pub struct PermissionsStatus {
     pub missing: Vec<crate::permissions::Missing>,
     /// A permission that was granted and has gone: the one calm sentence, until the person dismisses it or it returns.
     pub lost: Option<String>,
-    /// macOS: what this computer granted before but macOS now calls "not asked" (another copy of EchoLedger holds it).
-    pub held_elsewhere: Vec<crate::permissions::Kind>,
+    /// macOS: what this computer allowed before but macOS now calls "not asked" (D-120): said as a possibility.
+    pub allowed_before: Vec<crate::permissions::Kind>,
 }
 
 fn access_word(access: crate::permissions::Access) -> &'static str {
@@ -2454,6 +2455,7 @@ fn access_word(access: crate::permissions::Access) -> &'static str {
         crate::permissions::Access::Allowed => "allowed",
         crate::permissions::Access::Denied => "denied",
         crate::permissions::Access::Unknown => "unknown",
+        crate::permissions::Access::Reopen => "reopen",
     }
 }
 
@@ -2471,7 +2473,7 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
         lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(),
-        held_elsewhere: if cfg!(target_os = "macos") { state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).held_by_another_copy(&now) } else { Vec::new() },
+        allowed_before: state.permissions_allowed_before(&now),
     })
 }
 
@@ -2483,6 +2485,17 @@ pub async fn permission_request(app: AppHandle, kind: crate::permissions::Kind) 
         tauri::async_runtime::spawn_blocking(move || crate::permissions::request(kind)).await.map_err(|e| AppError::msg(e.to_string()))?;
     }
     permissions_status(app).await
+}
+
+/// "Quit & reopen": Screen Recording allowed in System Settings while EchoLedger ran takes effect when it opens again.
+/// Never in the middle of a recording or of dictation.
+#[tauri::command]
+pub async fn quit_and_reopen(app: AppHandle) -> AppResult<()> {
+    let recording = app.state::<AppState>().capture.is_recording();
+    if let Some(sentence) = crate::permissions::reopen_refusal(recording, crate::dictation::is_active(&app)) {
+        return Err(AppError::msg(sentence));
+    }
+    app.restart()
 }
 
 /// "Once per loss": the person has read the sentence.

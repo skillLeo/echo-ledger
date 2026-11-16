@@ -20,7 +20,8 @@ export type MicDecision = "auto_record" | "recording" | "ignored" | "ask" | "off
 export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionWidth = "narrow" | "normal" | "wide";
-export type PermissionState = "allowed" | "denied" | "unknown";
+/** `reopen`: Screen Recording allowed in System Settings while EchoLedger ran, used once it is quit and reopened. */
+export type PermissionState = "allowed" | "denied" | "unknown" | "reopen";
 export type UploadState = "queued" | "uploading" | "verifying" | "failed";
 
 export interface RecordingInfo {
@@ -580,8 +581,9 @@ export interface PermissionsStatus {
   missing?: MissingPermission[];
   /** A permission that was granted has gone: one calm sentence, until dismissed or granted again. */
   lost?: string | null;
-  /** macOS: granted before on this computer, "not asked" now: another copy of EchoLedger holds it (D-120). */
-  heldElsewhere?: PermissionKind[];
+  /** macOS: allowed before on this computer, "not asked" now (D-120): another copy of EchoLedger may hold it, or the
+   * privacy settings were reset, so it is said as a possibility. */
+  allowedBefore?: PermissionKind[];
 }
 
 /** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */
@@ -1686,6 +1688,8 @@ export const api = {
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
+  /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
+  quitAndReopen: () => invoke<void>("quit_and_reopen"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

@@ -82,15 +82,20 @@ fn tcc(service: &str) -> Access {
     access_of_tcc_answer(unsafe { call(service, std::ptr::null()) })
 }
 
-/// Screen Recording: CoreGraphics' yes is final; its no is told apart by TCC.
+/// Screen Recording: CoreGraphics' yes is final; its no is told apart by TCC: told no, not asked yet, or allowed in
+/// System Settings while EchoLedger ran (CoreGraphics keeps its first answer until the app opens again).
 pub fn access_of_screen(preflight: bool, tcc: Access) -> Access {
-    if preflight {
-        Access::Allowed
-    } else if tcc == Access::Denied {
-        Access::Denied
-    } else {
-        Access::Unknown
+    match (preflight, tcc) {
+        (true, _) => Access::Allowed,
+        (false, Access::Denied) => Access::Denied,
+        (false, Access::Allowed) => Access::Reopen,
+        (false, _) => Access::Unknown,
     }
+}
+
+/// Whether this macOS answers the private TCC call that tells "not asked" apart (system audio, Screen Recording).
+pub fn reads_privacy_answers() -> bool {
+    preflight().is_some()
 }
 
 /// Read every few seconds during a recording too, so what the system autoreleases does not build up on a worker thread.
@@ -147,6 +152,6 @@ mod tests {
         assert_eq!(access_of_screen(true, Access::Denied), Access::Allowed, "CoreGraphics' yes is what the capture uses");
         assert_eq!(access_of_screen(false, Access::Denied), Access::Denied);
         assert_eq!(access_of_screen(false, Access::Unknown), Access::Unknown, "so Allow can put EchoLedger on System Settings' list");
-        assert_eq!(access_of_screen(false, Access::Allowed), Access::Unknown, "TCC says yes, the capture says no: ask again");
+        assert_eq!(access_of_screen(false, Access::Allowed), Access::Reopen, "TCC says yes, the capture says no: allowed while EchoLedger ran, used once it reopens");
     }
 }

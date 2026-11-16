@@ -30,6 +30,7 @@ describe("api wrappers", () => {
     ["hideCaptions", () => api.hideCaptions(), "hide_captions", undefined],
     ["micUsers", () => api.micUsers(), "mic_users", undefined],
     ["micLastNotRecorded", () => api.micLastNotRecorded(), "mic_last_not_recorded", undefined],
+    ["quitAndReopen", () => api.quitAndReopen(), "quit_and_reopen", undefined],
     ["importVoiceNotes", () => api.importVoiceNotes(["notes/a.opus", "notes/b.mp3"]), "import_voice_notes", { pathsList: ["notes/a.opus", "notes/b.mp3"], clientId: null, language: null }],
     ["importVoiceNotes (client, language)", () => api.importVoiceNotes(["clip.mp4"], "c1", "ur"), "import_voice_notes", { pathsList: ["clip.mp4"], clientId: "c1", language: "ur" }],
     ["pickImportFiles", () => api.pickImportFiles(), "import_pick", undefined],
