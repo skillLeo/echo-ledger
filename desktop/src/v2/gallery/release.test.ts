@@ -1,6 +1,6 @@
 // @vitest-environment node
 // The gallery must never ship: a real release build (vite build, in memory) has no gallery chunk, no gallery module and
-// no "v2gallery" anywhere in its output.
+// no "v2gallery" anywhere in its output; nor the development-only interface flag override.
 import { describe, expect, it } from "vitest";
 import { build } from "vite";
 import { dirname, join } from "node:path";
@@ -32,6 +32,8 @@ describe("a release build", () => {
       expect(Object.keys(chunk.modules).filter((m) => /[/\\]v2[/\\]gallery[/\\]/.test(m))).toEqual([]);
       expect(chunk.code).not.toContain("v2gallery");
       expect(chunk.code).not.toContain("mountGallery");
+      // The development-only flag override (v2/flags.ts) does not ship either.
+      expect(chunk.code).not.toContain("uiflags");
     }
     for (const asset of files.filter((f): f is OutputAsset => f.type === "asset")) {
       expect(asset.fileName).not.toMatch(/gallery/i);
