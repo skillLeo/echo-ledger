@@ -82,8 +82,11 @@ class TranslateUsage(context: Context, private val zone: ZoneId = ZoneId.systemD
 object TranslateStatus {
     private const val KEY = "blocked"
 
-    fun blocked(context: Context): String? =
-        context.applicationContext.getSharedPreferences("live_translate_usage", Context.MODE_PRIVATE).getString(KEY, null)
+    fun blocked(context: Context): String? = // Read through [shortReason] again: one saved by an older version named the engine.
+        context.applicationContext.getSharedPreferences(
+            "live_translate_usage",
+            Context.MODE_PRIVATE
+        ).getString(KEY, null)?.let(::shortReason)
 
     /** Remembers the short reason for [notice] (null clears it). */
     fun remember(context: Context, notice: String?) {
@@ -93,14 +96,38 @@ object TranslateStatus {
         }.apply()
     }
 
-    /** "Needs Soniox credit", "Needs a Soniox key", "Budget used up", or null for anything passing. */
+    /** "Needs credit", "Not set up on the server", "Budget used up", or null for anything passing. */
     fun shortReason(notice: String?): String? {
         val text = notice?.lowercase() ?: return null
         return when {
-            "credit" in text -> "Needs Soniox credit"
-            "soniox key" in text || "did not accept the key" in text -> "Needs a Soniox key"
+            "credit" in text -> "Needs credit"
+            "not set up" in text || " key" in text -> "Not set up on the server"
             "budget" in text -> "Budget used up"
             else -> null
         }
     }
+
+    /**
+     * What a refused Live Translate key request says (contract `POST /api/live-translate/token`), in plain words: the
+     * server's own message names the engine and its account, which people never see (since v1.8.1, P-001).
+     */
+    fun tokenProblem(e: com.echoledger.mobile.net.ApiException): String {
+        val said = e.message.orEmpty().lowercase()
+        return when {
+            e.code == "budget_exceeded" ->
+                com.echoledger.mobile.core.VendorNames.plain(e.message, "Live Translate's budget for this month is used up.")
+
+            e.code == "provider_not_configured" -> NOT_SET_UP
+
+            e.code == "provider_error" && "credit" in said -> LiveTranslateSession.NO_CREDIT
+
+            e.code == "provider_error" && "key" in said -> NOT_SET_UP
+
+            e.code == "provider_error" -> "Live Translate's translation service is not answering. Try again later."
+
+            else -> com.echoledger.mobile.core.VendorNames.plain(e.message, "Live Translate could not start. Try again later.")
+        }
+    }
+
+    const val NOT_SET_UP = "Live Translate is not set up on the server yet. Ask your admin."
 }

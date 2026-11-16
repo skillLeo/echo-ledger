@@ -200,6 +200,71 @@ class ScreenshotsTest : ScreenTest() {
         capture("session")
     }
 
+    /** A recording's page with [transcript] (the server's answer), for the transcript's states (P-001: plain words). */
+    private fun sessionState(name: String, transcript: String, wait: String) {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/transcripts/.+", FakeServer.json(200, transcript))
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null))
+        )
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        val item = LibraryItem(
+            id = ServerFixtures.SESSION_ID,
+            sourceDevice = "phone",
+            sourceApp = "whatsapp",
+            title = "Invoice questions",
+            client = NamedRef("01JCLIENT0000000000000000A", "Aria Studio"),
+            startedAt = "2026-10-24T07:10:00+00:00",
+            durationMs = 742_000,
+            status = "completed",
+            transcript = TranscriptSummary(finalTranscriptId = ServerFixtures.TRANSCRIPT_ID, liveAvailable = false, preview = "preview"),
+            updatedAt = "2026-10-24T07:30:00+00:00"
+        )
+        shoot { SessionScreen(vm, item, onBack = {}) }
+        compose.waitUntil(10_000) { runCatching { compose.onNodeWithText(wait, substring = true).fetchSemanticsNode() }.isSuccess }
+        capture(name)
+    }
+
+    /** A failed transcript: why, in the phone's own words for its error (never the engine's). */
+    @Test
+    fun sessionFailed() = sessionState(
+        "session-failed",
+        ServerFixtures.transcript(status = "failed", errorCode = "provider_rejected", error = "rejected", segments = "[]", text = null),
+        "The transcription service could not transcribe this recording."
+    )
+
+    /** Made by the backup engine: the offer of the best one, naming neither engine. */
+    @Test
+    fun sessionBackup() = sessionState(
+        "session-backup",
+        ServerFixtures.transcript(backupEngine = true, providerLabel = "a backup engine"),
+        "Backup transcription — Re-transcribe?"
+    )
+
+    /** A line a second engine heard differently: "A second transcription heard: …" (never that engine's name). */
+    @Test
+    fun sessionSecondHearing() = sessionState(
+        "session-second-hearing",
+        ServerFixtures.transcript(
+            segments = """[{"channel":1,"speaker":"Me","start_ms":250,"end_ms":2600,"text":"I will come on Sunday.","uncertain":true,
+                "check":{"provider":"other","label":"Another engine","text":"I will come on Monday"},"words":[]}]"""
+        ),
+        "A second transcription heard: I will come on Monday"
+    )
+
+    /** Waiting for the preferred engine: "Waiting to transcribe — retrying at …". */
+    @Test
+    fun sessionWaiting() = sessionState(
+        "session-waiting",
+        ServerFixtures.transcript(status = "pending", segments = "[]", text = null).replace(
+            "\"error_code\":null",
+            "\"error_code\":null,\"retry_at\":\"2026-10-24T09:15:00+00:00\",\"retry_reason\":\"rate_limited\""
+        ),
+        "Waiting to transcribe"
+    )
+
     /** A recording's page with its transcript, as [session] shows it, scrolled to the action row. */
     private fun sessionActions(name: String, fontScale: Float) {
         runBlocking { app.pairLocally(server) }

@@ -402,7 +402,7 @@ private fun OverviewTab(
             InlineBanner(PlanState.NO_AI_NOTES, kind = BannerKind.Info)
         } else if (!w.ai.configured) {
             InlineBanner(
-                "AI is not set up on the server yet: call notes, the brief and Ask need its Anthropic key.",
+                "The AI assistant is not set up on the server yet: call notes, the brief and Ask need it.",
                 kind = BannerKind.Warning
             )
         }
@@ -443,7 +443,13 @@ private fun OverviewTab(
                     }, kind = ButtonKind.Text)
                 }
             }
-            w.brief.error?.let { Text(it, style = type.labelM, color = c.danger) }
+            w.brief.error?.let {
+                Text(
+                    com.echoledger.mobile.core.VendorNames.plain(it, "The brief could not be made."),
+                    style = type.labelM,
+                    color = c.danger
+                )
+            }
             if (w.brief.sections.isEmpty) {
                 Text(
                     "Add files or keep a call with ${client.name}: the brief writes itself from them.",
@@ -582,7 +588,11 @@ fun NotesCard(note: CallNotesDto, onOpenAt: (String, Long) -> Unit, showTitle: B
                 Text("  Writing the notes…", style = type.labelM, color = c.textMuted)
             }
 
-            "failed", "skipped" -> Text(note.error ?: "No notes for this one.", style = type.labelM, color = c.textMuted)
+            "failed", "skipped" -> Text(
+                com.echoledger.mobile.core.VendorNames.plain(note.error, "No notes for this one."),
+                style = type.labelM,
+                color = c.textMuted
+            )
 
             else -> if (note.sections.isEmpty()) {
                 Text("Nothing to note in this one.", style = type.labelM, color = c.textMuted)
@@ -666,7 +676,7 @@ private fun FilesTab(vm: MainViewModel, client: ClientDto, w: WorkspaceDto, onCh
                         when (file.status) {
                             "extracting" -> "Reading…"
 
-                            "failed" -> file.error ?: "Could not be read"
+                            "failed" -> com.echoledger.mobile.core.VendorNames.plain(file.error, "Could not be read")
 
                             else -> listOfNotNull(
                                 if (file.instructions) "Instructions" else ImportCopy.size(file.sizeBytes),

@@ -66,7 +66,7 @@ class ServerContractScreenTest : ScreenTest() {
         open(libraryItem("Quarterly review"))
 
         compose.onNodeWithText("Quarterly review").assertIsDisplayed()
-        compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
+        compose.onNodeWithText("Final transcript").assertIsDisplayed()
         compose.onNodeWithText("This is a test of the EchoLedger transcription system.").assertIsDisplayed()
         compose.onNodeWithText("Loud and clear. Go ahead.").assertIsDisplayed()
         assertEquals(2, count("You", substring = false)) // "Me" reads as "You" on the page
@@ -83,16 +83,15 @@ class ServerContractScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a failed recording shows the provider's reason`() {
+    fun `a failed recording says so in the phone's own words, never the provider's text`() {
+        // Contract 1.8.1-a: the app shows its own words per error_code; this older sample has no code, only the
+        // provider's words, which people never see.
         serve("transcripts_show_200_final_failed", "sessions_show_200_failed")
         open(libraryItem("WhatsApp call"))
 
         compose.onNodeWithText("Transcription failed", substring = true).assertIsDisplayed()
-        compose.onNodeWithText(
-            "Transcoding failed. File does not appear to contain audio. File type is application/octet-stream (data).",
-            substring = true
-        )
-            .assertIsDisplayed()
+        compose.onNodeWithText("The transcript could not be made. Tap Retry.", substring = true).assertIsDisplayed()
+        assertEquals(0, count("Transcoding failed", substring = true))
     }
 
     @Test

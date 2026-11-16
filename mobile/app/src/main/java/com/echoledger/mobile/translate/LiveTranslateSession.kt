@@ -404,7 +404,7 @@ class LiveTranslateSession(
 
     companion object {
         const val NO_CONNECTION = "No connection — retrying"
-        const val NO_CREDIT = "Soniox has no credit left. Add credit to the Soniox account to use Live Translate."
+        const val NO_CREDIT = "Live Translate has no credit left on the server. Ask your admin to add credit."
         const val MAX_PENDING_FRAMES = 50 // 5 s of speech waits for the stream to open
         const val KEEPALIVE_EVERY_MS = 10_000L // Soniox ends a stream after 20 s without audio or keepalive
         const val ROTATE_AFTER_MS = 290L * 60_000L // Soniox's limit is 300 minutes per stream

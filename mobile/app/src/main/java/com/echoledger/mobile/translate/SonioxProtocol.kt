@@ -79,7 +79,7 @@ object SonioxProtocol {
     /** One reply frame; unknown fields are ignored, a broken frame is an error reply (never a crash). */
     fun parse(frame: String): SonioxReply {
         val json = runCatching { kotlinx.serialization.json.Json.parseToJsonElement(frame).jsonObject }.getOrNull()
-            ?: return SonioxReply(errorCode = -1, errorMessage = "Soniox sent something that is not JSON.")
+            ?: return SonioxReply(errorCode = -1, errorMessage = "The translation service sent something that is not JSON.")
         val errorCode = (json["error_code"] as? JsonPrimitive)?.intOrNull
         if (errorCode != null) {
             return SonioxReply(errorCode = errorCode, errorMessage = (json["error_message"] as? JsonPrimitive)?.contentOrNull)

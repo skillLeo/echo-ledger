@@ -75,7 +75,13 @@ internal fun TranscriptLine(
     Column {
         LineText(text, ranges, spoken, marked, described, enabled && unsure.isNotEmpty(), segment, language, onPlay)
         segment.check?.let { check ->
-            Text("${check.label} heard: ${check.text}", color = Brand.Muted, fontSize = 12.sp, modifier = Modifier.padding(top = 2.dp))
+            // The second engine's words, never its name (since v1.8.1, P-001).
+            Text(
+                "A second transcription heard: ${check.text}",
+                color = Brand.Muted,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
     }
 }
