@@ -65,9 +65,11 @@ recording that would hold nothing does not start and says why, even with the win
 **Record now** in the menu bar icon's menu opens the window with the reason, and a meeting that cannot be recorded
 gets a notification.
 
-**Updates and permissions.** Because the app is not signed with an Apple Developer ID yet, macOS may forget its
-permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so
-once, in one sentence, with the same steps to set it up again.
+**Updates and permissions (since v1.8.1).** The Mac app is now always signed with the same certificate. The update to
+1.8.1 asks once more for the **Microphone**, **System audio** and **Screen recording**, and your saved sign-in may ask
+once to use the keychain (choose **Always Allow**). After that they stay allowed through later updates. EchoLedger still
+looks at them every time it starts; if one that was allowed has gone, it says so once, in one sentence, with the same
+steps to set it up again.
 
 **Starting at login** is off until you turn it on in **Account → This computer**.
 
@@ -77,8 +79,9 @@ and screen moments, one at a time, and says how to fix what it finds. It does no
 report** gives you plain text with no names, and **Send to my admin** sends it to your workspace's admins, only when you
 press it.
 
-A $99 a year Apple Developer ID fixes both of the above (the Open Anyway step and the forgotten permissions). The
-workflow that signs and notarizes the app already exists and starts working as soon as the certificate is in place.
+Later, an Apple Developer ID ($99 a year) removes the **Open Anyway** step when EchoLedger is first installed; the
+permissions already stay allowed across updates without it. The workflow that signs and notarizes the app with it
+already exists and starts working as soon as the certificate is in place.
 
 ## 2. Install the phone app
 
