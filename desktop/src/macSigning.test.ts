@@ -213,6 +213,30 @@ describe.runIf(process.platform !== "win32")("check-mac-archive.sh", () => {
     expect(hard.result.status).toBe(1);
     expect(hard.result.stderr).toContain("a hard link");
   });
+
+  it("follows links on disk, so a link through another link cannot get out, and refuses a link to nothing", () => {
+    // Contents/d is Contents itself, so d/../.. reads as EchoLedger.app but is the folder around it.
+    const chain = archive((root) => {
+      symlinkSync(".", join(root, "EchoLedger.app/Contents/d"));
+      symlinkSync("d/../..", join(root, "EchoLedger.app/Contents/a"));
+      return ["EchoLedger.app"];
+    });
+    expect(chain.result.status).toBe(1);
+    expect(chain.result.stderr).toContain("leads outside EchoLedger.app on disk: d/../..");
+    const nowhere = archive((root) => {
+      symlinkSync("MacOS/gone", join(root, "EchoLedger.app/Contents/l"));
+      return ["EchoLedger.app"];
+    });
+    expect(nowhere.result.stderr).toContain("leads nowhere: MacOS/gone");
+    // A link to a link inside the app is fine.
+    const inside = archive((root) => {
+      symlinkSync("MacOS", join(root, "EchoLedger.app/Contents/m"));
+      symlinkSync("m/echoledger-desktop", join(root, "EchoLedger.app/Contents/run"));
+      return ["EchoLedger.app"];
+    });
+    expect(inside.result.status, inside.result.stderr).toBe(0);
+  });
+
 });
 
 describe("the Mac workflow signs only what can be released, and proves the signature", () => {

@@ -4,7 +4,8 @@
 # the updater:
 #   - every entry is EchoLedger.app or under EchoLedger.app/: no other top-level entry, no absolute path;
 #   - no `..` or `.` path component, no empty one, and no path twice (a second copy would replace the first);
-#   - no hard link (the bundler never writes one), and every symbolic link points inside EchoLedger.app;
+#   - no hard link (the bundler never writes one), and every symbolic link points inside EchoLedger.app: by its text,
+#     and followed on disk to the end of any chain of links (cd -P), so a link to a link cannot get out;
 #   - no name with a line break (it would read as two entries here).
 #
 # Usage: sh check-mac-archive.sh <EchoLedger.app.tar.gz> <empty folder to unpack into>
@@ -41,6 +42,28 @@ tar -xzf "$archive" -C "$dest"
 [ -z "$(find "$dest" -name '*
 *')" ] || fail "a name with a line break in $archive"
 
+# Followed on disk to its end (links to links included), each link stays inside the unpacked app.
+root=$(cd -P "$dest/EchoLedger.app" && pwd -P)
+physical() {
+  path=$1
+  hops=0
+  while [ -L "$path" ]; do
+    hops=$((hops + 1))
+    [ "$hops" -le 40 ] || return 1
+    next=$(readlink "$path")
+    case "$next" in
+      /*) path=$next ;;
+      *) path=$(dirname "$path")/$next ;;
+    esac
+  done
+  [ -e "$path" ] || return 1
+  if [ -d "$path" ]; then
+    (cd -P "$path" && pwd -P)
+  else
+    printf '%s/%s\n' "$(cd -P "$(dirname "$path")" && pwd -P)" "$(basename "$path")"
+  fi
+}
+
 # Every symbolic link, resolved from its own folder, stays inside EchoLedger.app.
 links="$dest/.links"
 (cd "$dest" && find EchoLedger.app -type l) > "$links"
@@ -63,6 +86,11 @@ while IFS= read -r link; do
   case "$resolved" in
     EchoLedger.app | EchoLedger.app/*) ;;
     *) fail "$link points outside EchoLedger.app: $target" ;;
+  esac
+  on_disk=$(physical "$dest/$link") || fail "$link leads nowhere: $target"
+  case "$on_disk" in
+    "$root" | "$root"/*) ;;
+    *) fail "$link leads outside EchoLedger.app on disk: $target" ;;
   esac
 done < "$links"
 rm -f "$links"
