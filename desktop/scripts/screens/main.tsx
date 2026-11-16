@@ -62,6 +62,68 @@ const opened = screen === "library-backup" ? "r2" : "r5";
 // v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
 // minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).
 const planParam = params.get("plan");
+
+// v1.8.1 Screen-share privacy: "settings-share" (Windows 11), "settings-share-mac" (Zoom installed, the per-app lines),
+// "settings-share-old" (Windows 10 1909: the black box line), "settings-share-pass-mac" / "-fail-mac" / "-error-mac"
+// (Share Check's three results), "controls-share-visible" (the floating windows' badge in amber).
+const share = screen.includes("share");
+const shareResult = screen.includes("-fail") ? "fail" : screen.includes("-error") ? "error" : "pass";
+/** A desktop as a capture would show it: a page, its text, the green control, and the test window where it leaked. */
+function capturedScreen(leaked: boolean): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 960;
+  canvas.height = 600;
+  const g = canvas.getContext("2d")!;
+  g.fillStyle = "#2b3a55";
+  g.fillRect(0, 0, 960, 600);
+  g.fillStyle = "#f9f9fb";
+  g.fillRect(90, 60, 780, 470);
+  g.fillStyle = "#3e63dd";
+  g.fillRect(90, 60, 780, 36);
+  g.fillStyle = "#c9ccd3";
+  for (let y = 130; y < 500; y += 26) g.fillRect(130, y, 560 - ((y * 7) % 180), 10);
+  g.fillStyle = "rgb(0, 200, 0)";
+  g.fillRect(492, 230, 165, 112);
+  if (leaked) {
+    for (let x = 0; x < 165; x += 12) for (let y = 0; y < 112; y += 12) {
+      g.fillStyle = ((x + y) / 12) % 2 === 0 ? "#ff00ff" : "#000000";
+      g.fillRect(303 + x, 230 + y, 12, 12);
+    }
+  }
+  return canvas.toDataURL("image/png");
+}
+const MAC_APPS = [
+  { app: "zoom", name: "Zoom", version: "7.1.9", state: "hidden", line: "Zoom: hidden", needsTest: false },
+  { app: "teams", name: "Teams", version: "25.290.1", state: "not_checked", line: "Teams: not checked", needsTest: true },
+  { app: "meet", name: "Meet", version: "142.0.7444.60", state: "share_tab", line: "Meet: share a tab", needsTest: true },
+  { app: "slack", name: "Slack", version: null, state: "not_checked", line: "Slack: not checked", needsTest: false },
+  { app: "whatsapp", name: "WhatsApp", version: "26.1.0", state: "not_checked", line: "WhatsApp: not checked", needsTest: true },
+];
+function privacyStatus() {
+  const old = screen.includes("share-old");
+  const visible = old || screen.includes("share-visible") || shareResult === "fail" && screen.includes("-fail");
+  const badge = visible ? "visible" : screen.includes("share-error") ? "not_checked" : "private";
+  return {
+    platform: mac ? "macos" : "windows",
+    badge,
+    badgeLabel: badge === "visible" ? "Visible in shares" : badge === "not_checked" ? "Not checked" : "Private",
+    system: mac ? "macOS 27.3" : old ? "Windows 10 (build 18363)" : "Windows 11 24H2",
+    hiding: "all",
+    oldWindows: old,
+    lines: old ? [{ warning: true, text: "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result." }] : [],
+    demoSecondsLeft: null,
+    hiddenByShortcut: false,
+    hiddenForShare: false,
+    share: null,
+    lastCheck: old ? null : { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: mac ? "sck" : "wgc", result: "pass", reason: null }] },
+    checkRunning: false,
+    checkDue: null,
+    apps: mac ? MAC_APPS : [],
+    zoomInstalled: mac,
+    permission: !screen.includes("-error"),
+    displays: mac ? 2 : 1,
+  };
+}
 const free = planParam === "free" || screen.endsWith("-free");
 const ultra = planParam === "ultra" || screen.endsWith("-ultra");
 const pro = planParam === "pro";
@@ -267,6 +329,22 @@ const commands: Record<string, (args: Args) => unknown> = {
       saved: makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
       ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
     }),
+  privacy_status: () => privacyStatus(),
+  privacy_concealed: () => false,
+  privacy_diagnostics: () => "",
+  share_check_card: () => null,
+  share_check_run: () => ({
+    result: shareResult,
+    reason: shareResult === "error" ? "permission_missing" : null,
+    methods: [{ method: "sck", result: shareResult, reason: shareResult === "error" ? "permission_missing" : null }],
+    system: "macOS 27.3",
+    at: new Date().toISOString(),
+    picture: shareResult === "error" ? null : capturedScreen(shareResult === "fail"),
+    width: 960,
+    height: 600,
+    testArea: shareResult === "error" ? null : [303 / 960, 230 / 600, 165 / 960, 112 / 600],
+    controlArea: shareResult === "error" ? null : [492 / 960, 230 / 600, 165 / 960, 112 / 600],
+  }),
   subscribe_captions: ({ onEvent }) => {
     captions = onEvent as typeof captions;
   },

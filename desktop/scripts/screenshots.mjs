@@ -342,7 +342,24 @@ const SCREENS = [
   ["settings-security", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Sign-in & security"); }],
   ["settings-privacy", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Privacy & data"); }],
   ["settings-about", "settings", async (page) => { await settingsReady(page); await nav(page, "About"); }],
+  // v1.8.1: Screen-share privacy and its Share Check, and the badge on the floating windows.
+  ["settings-share-privacy", "settings-share", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector("[data-testid=privacy-badge]"); }],
+  ["settings-share-privacy-mac", "settings-share-mac", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector("[data-testid=zoom-steps]"); }],
+  ["settings-share-privacy-old-windows", "settings-share-old", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector(".privacy-line.warning"); }],
+  ...["pass", "fail", "error"].map((result) => [`share-check-${result}`, `settings-share-${result}-mac`, async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.locator("#setting-share_privacy\\.check").click();
+    await page.getByRole("heading", { level: 1, name: "Check screen-share privacy" }).waitFor();
+    await page.getByRole("button", { name: "Check now" }).click();
+    await page.waitForSelector("[data-testid=check-result]");
+    await page.waitForTimeout(200);
+  }]),
   ["settings-shortcuts-mac", "settings-keys-mac", async (page) => { await settingsReady(page); await nav(page, "Keyboard shortcuts"); }],
+  ["controls-badge-visible", "controls-share-visible", async (page) => {
+    await page.waitForSelector("[data-testid=recording-pill]");
+    await page.waitForSelector("[data-testid=privacy-badge].visible");
+  }],
   ["settings-mac-check", "settings-mac-check", async (page) => {
     await settingsReady(page);
     await nav(page, "Help");
