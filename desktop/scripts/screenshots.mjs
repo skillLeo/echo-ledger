@@ -147,6 +147,15 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
+  // D-105: the chip's Discard is a labelled trash, and Discard says Discarded with Undo for 6 s.
+  ["controls-discarded", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }],
+  ["controls-discarded-narrow", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }, { width: 860, height: 560 }],
   ["controls-bluetooth", "controls-bluetooth", async (page) => {
     await page.waitForSelector("[data-testid=bluetooth-notice]");
     await page.waitForSelector(".after-pill.chip");

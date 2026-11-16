@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import ReviewApp from "./ReviewApp";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondAll, respondWith, setWindowLabel } from "../../test/tauri";
 import { makeAfterCallState, makeAskPayload, makeChipItem, makeSavedToast } from "../../test/fixtures";
@@ -53,7 +53,7 @@ function setup() {
   resetTauriMock();
   setWindowLabel("review");
   vi.stubGlobal("ResizeObserver", NoopResizeObserver);
-  respondAll({ overlay_set_hit_regions: undefined, saved_undo: undefined, pending_keep: undefined, pending_discard: undefined, pending_open: undefined, ask_answer: undefined });
+  respondAll({ overlay_set_hit_regions: undefined, saved_undo: undefined, pending_keep: undefined, pending_discard: undefined, after_call_discard: undefined, after_call_discard_undo: undefined, pending_open: undefined, ask_answer: undefined });
 }
 
 describe("Saved toast (Keep automatically)", () => {
@@ -172,7 +172,16 @@ describe("Ask-me chip", () => {
     expect(toast()).not.toBeInTheDocument();
   });
 
-  it("✓ keeps and ✕ discards the recording, and the chip goes", async () => {
+  it("names Discard in words beside a trash, never a ×, and says Undo is there", async () => {
+    await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
+    const discard = button("Discard");
+    expect(discard).toHaveTextContent(/^Discard$/);
+    expect(discard.querySelector("svg")).not.toBeNull();
+    expect(discard).toHaveAttribute("title", "Discard (Undo for 6 s)");
+    expect(chip()!.textContent).not.toMatch(/[×✕]/);
+  });
+
+  it("✓ keeps and Discard discards the recording, and the chip goes", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1") }));
     fireEvent.click(button("Keep"));
     await waitFor(() => expect(callsOf("pending_keep")).toEqual([{ id: "p1" }]));
@@ -186,7 +195,9 @@ describe("Ask-me chip", () => {
 
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
     fireEvent.click(button("Discard"));
-    await waitFor(() => expect(callsOf("pending_discard")).toEqual([{ id: "p2" }]));
+    // The chip's own discard: the core keeps the files for Undo (never the immediate pending_discard).
+    await waitFor(() => expect(callsOf("after_call_discard")).toEqual([{ id: "p2" }]));
+    expect(callsOf("pending_discard")).toEqual([]);
     await flushAsync();
     expect(chip()).not.toBeInTheDocument();
   });
@@ -239,7 +250,7 @@ describe("Ask-me chip", () => {
   });
 
   it.each([
-    ["Discard", "Discard", "pending_discard"],
+    ["Discard", "Discard", "after_call_discard"],
     ["its title", /rename or choose a project/, "pending_open"],
   ] as const)("leaves without saying Kept when the person answered with %s, also when its time ran out meanwhile", async (_how, name, command) => {
     const answer = waitingCommand(command);
@@ -255,7 +266,7 @@ describe("Ask-me chip", () => {
   });
 
   it("still shows the core's keep after an answer that failed", async () => {
-    fail("pending_discard", "Could not discard.");
+    fail("after_call_discard", "Could not discard.");
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
     fireEvent.click(button("Discard"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not discard.");
@@ -437,5 +448,34 @@ describe("after-call hit regions", () => {
     await waitFor(() => expect(lastRegions()).toEqual(pillRegion));
     await emitEvent("aftercall:state", makeAfterCallState());
     await waitFor(() => expect(lastRegions()).toEqual([]));
+  });
+});
+
+describe("Discarded toast (after the chip's Discard)", () => {
+  beforeEach(setup);
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const discarded = () => document.querySelector<HTMLElement>("[data-testid=discarded-toast]:not(.leaving)");
+
+  it("says Discarded with the title and Undo, and Undo puts the chip back", async () => {
+    await renderWindow(makeAfterCallState({ discarded: makeSavedToast({ id: "p1", callerName: "Omar", durationMs: 252_000 }) }));
+    expect(discarded()).toHaveTextContent("Discarded·Call with Omar·4:12Undo");
+    expect(discarded()).toHaveAccessibleName("Discarded: Call with Omar");
+    fireEvent.click(within(discarded()!).getByRole("button", { name: "Undo" }));
+    await waitFor(() => expect(callsOf("after_call_discard_undo")).toEqual([{ id: "p1" }]));
+    // The core sends the chip back, counting again.
+    await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p1", { callerName: "Omar" }) }));
+    await waitFor(() => expect(discarded()).not.toBeInTheDocument());
+    expect(chip()).toHaveAccessibleName("Keep Call with Omar?");
+  });
+
+  it("says so when Undo comes too late", async () => {
+    fail("after_call_discard_undo", "Too late to undo: this recording was already discarded.");
+    await renderWindow(makeAfterCallState({ discarded: makeSavedToast({ id: "p1" }) }));
+    fireEvent.click(within(discarded()!).getByRole("button", { name: "Undo" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Too late to undo");
   });
 });

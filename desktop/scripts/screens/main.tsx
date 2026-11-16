@@ -352,7 +352,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
   after_call_state: () =>
     makeAfterCallState({
-      saved: makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+      saved: screen === "controls-discarded" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+      // "controls-discarded": the chip's Discard pressed a moment ago, with its Undo.
+      discarded: screen === "controls-discarded" ? makeSavedToast({ id: PENDING[0].id, callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }) : null,
       ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
     }),
   privacy_status: () => privacyStatus(),

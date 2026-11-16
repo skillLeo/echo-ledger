@@ -650,6 +650,103 @@ pub fn keep_decision(app: &AppHandle, id: &str) -> AppResult<()> {
 }
 
 /// Discard: files deleted, nothing uploaded, no transcript requested; an open server session is deleted.
+/// Discard on the after-call chip: one click, so nothing is deleted yet. The recording leaves the chip, the lists and
+/// the counts, "Discarded · … · Undo" shows for 6 s, and its files go only once that time (and a little more) is over
+/// (`discard_due`), also when the app restarts meanwhile.
+pub fn discard_from_chip(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let window = Duration::from_secs(crate::after_call::DISCARDED_SECONDS) + crate::after_call::DISCARD_SLACK;
+    let at = now + chrono::Duration::from_std(window).unwrap_or_else(|_| chrono::Duration::seconds(8));
+    let decision = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).discard_later(id, at)?
+    };
+    {
+        let mut surfaces = surfaces(&state);
+        surfaces.clear_chip(id);
+        surfaces.show_discarded(SavedToast::of(&decision, now), Instant::now());
+    }
+    schedule_discard(app, at);
+    emit_pending(app);
+    refresh_after_call(app);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_secs(crate::after_call::DISCARDED_SECONDS) + Duration::from_millis(100)).await;
+        refresh_after_call(&app);
+    });
+    Ok(())
+}
+
+/// Undo on "Discarded": the recording is back on its chip, counting again from the start (kept by itself when nobody
+/// answers, as before). An error when its time was already over.
+pub fn undo_chip_discard(app: &AppHandle, id: &str) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let at = Utc::now() + chrono::Duration::seconds(pending::CHIP_SECONDS);
+    {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        DecisionFiles::in_dir(&state.data_dir).undo_discard(id, at).map_err(|_| AppError::msg(DISCARD_TOO_LATE))?;
+    }
+    {
+        let mut surfaces = surfaces(&state);
+        surfaces.clear_discarded(id);
+        surfaces.show_chip(id.to_string());
+    }
+    schedule_keep(app, at);
+    emit_pending(app);
+    refresh_after_call(app);
+    Ok(())
+}
+
+/// Undo pressed after the recording was already deleted.
+pub const DISCARD_TOO_LATE: &str = "Too late to undo: this recording was already discarded.";
+
+/// Deletes every recording discarded from the chip whose Undo time is over, and sets the timer for the next one.
+pub fn discard_due(app: &AppHandle) {
+    let state = app.state::<crate::AppState>();
+    let now = Utc::now();
+    let (done, next) = {
+        let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        let done = files.discard_due(now);
+        if let Ok(done) = &done {
+            for decision in done {
+                if let (Some(owner), Some(session)) = (held_owner(&state, decision.owner.as_ref()), decision.server_session_id())
+                    && let Err(e) = crate::owner::hold_discard(&state.data_dir, owner, session)
+                {
+                    eprintln!("[echoledger] holding a discarded recording's server session: {e}");
+                }
+            }
+        }
+        (done, files.load().next_discard(now))
+    };
+    if let Some(at) = next {
+        schedule_discard(app, at);
+    }
+    match done {
+        Ok(done) if !done.is_empty() => {
+            for decision in &done {
+                crate::screens::forget(app, &decision.id);
+            }
+            state.upload_notify.notify_one(); // the worker deletes a queued server session
+            emit_pending(app);
+            refresh_after_call(app);
+        }
+        Ok(_) => {}
+        Err(e) => eprintln!("[echoledger] discarding after the Undo time: {e}"),
+    }
+}
+
+/// Wakes up when a discarded recording's Undo time is over and deletes what is due then.
+fn schedule_discard(app: &AppHandle, at: chrono::DateTime<Utc>) {
+    let wait = (at - Utc::now()).to_std().unwrap_or_default() + Duration::from_millis(200);
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(wait).await;
+        discard_due(&app);
+    });
+}
+
 pub fn discard_decision(app: &AppHandle, id: &str) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     {
@@ -693,12 +790,13 @@ pub fn emit_pending(app: &AppHandle) {
 /// What the after-call window shows now: the Saved toast while it lasts, and the chip while its recording counts down.
 pub fn after_call_state(app: &AppHandle) -> AfterCallState {
     let state = app.state::<crate::AppState>();
-    let (saved, chip) = {
+    let (saved, discarded, chip) = {
         let surfaces = surfaces(&state);
-        (surfaces.saved(Instant::now()).cloned(), surfaces.chip().map(str::to_string))
+        let now = Instant::now();
+        (surfaces.saved(now).cloned(), surfaces.discarded(now).cloned(), surfaces.chip().map(str::to_string))
     };
-    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| !d.waits()).map(PendingDecision::item));
-    AfterCallState { saved, ask }
+    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(PendingDecision::item));
+    AfterCallState { saved, discarded, ask }
 }
 
 /// Puts the after-call window in line with `after_call_state` (built when something is to be shown, let go when not).
@@ -794,10 +892,14 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
 }
 
 /// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
-/// restart within 10 s) gets its timer (`keep_due`). Recordings that wait for the person stay as they are, whatever
+/// restart within 10 s) gets its timer (`keep_due`); a chip's Discard is finished once its Undo time is over
+/// (`discard_due`). Recordings that wait for the person stay as they are, whatever
 /// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
     keep_due(app);
+    // A chip's Discard whose Undo time ran out while the app was closed is finished now; one still within it (a
+    // restart within seconds) waits for the rest of its time.
+    discard_due(app);
     let state = app.state::<crate::AppState>();
     purge_skipped(app);
     for call in SkippedFiles::in_dir(&state.data_dir).load().items {

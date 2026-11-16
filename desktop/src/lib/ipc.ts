@@ -1270,6 +1270,8 @@ export interface SavedToast {
 /** What the after-call window shows: the Saved toast and the Ask-me chip (its item's `deadlineAt` is when it keeps). */
 export interface AfterCallState {
   saved: SavedToast | null;
+  /** "Discarded · <title> · Undo" after the chip's Discard, while its files can still come back. */
+  discarded: SavedToast | null;
   ask: PendingItem | null;
 }
 
@@ -1648,6 +1650,10 @@ export const api = {
   afterCallState: () => invoke<AfterCallState>("after_call_state"),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
+  /** Discard on the after-call chip: the files stay until its Undo time is over. */
+  afterCallDiscard: (id: string) => invoke<void>("after_call_discard", { id }),
+  /** Undo on "Discarded": the recording is back on its chip. */
+  afterCallDiscardUndo: (id: string) => invoke<void>("after_call_discard_undo", { id }),
   /** Short or silent automatic calls skipped in the last 24 h, newest first. */
   skippedList: () => invoke<SkippedItem[]>("skipped_list"),
   /** The server sessions of recordings recovered after a restart (their "Recovered" chip). */

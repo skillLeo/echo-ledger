@@ -350,6 +350,63 @@ fn discard_deletes_the_files_uploads_nothing_and_deletes_the_server_session() {
 }
 
 #[test]
+fn the_chips_discard_deletes_nothing_until_its_undo_time_is_over() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).keeping_at(now + chrono::Duration::seconds(8))).unwrap();
+    let folder = root.path().join("recordings/a");
+    let at = now + chrono::Duration::seconds(8);
+
+    files.discard_later("a", at).unwrap();
+
+    // Gone from every list and count, its chip no longer counting, but every file and the server session still there.
+    let store = files.load();
+    assert!(store.ui_items().is_empty() && store.waiting() == 0, "no list or count shows it");
+    assert!(!store.find("a").unwrap().counting(), "the chip no longer keeps it");
+    assert!(folder.join("recording.flac").exists() && folder.join("mic.wav").exists() && folder.join("system.wav").exists());
+    assert!(DiscardQueue::load(&files.discards).items.is_empty(), "the server session is not deleted yet");
+    assert_eq!(store.next_discard(now), Some(at));
+    // Before its time: nothing happens, also when the app starts again meanwhile.
+    assert!(files.discard_due(now + chrono::Duration::seconds(7)).unwrap().is_empty());
+    assert!(DecisionFiles::in_dir(root.path()).discard_due(now).unwrap().is_empty(), "a restart within the time");
+    assert!(folder.exists());
+    // Once over: the files and the server session go, as with any discard.
+    let done = files.discard_due(at).unwrap();
+    assert_eq!(done.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["a"]);
+    assert!(!folder.exists());
+    assert!(DiscardQueue::load(&files.discards).items.contains(&"01SESSIONAAAAAAAAAAAAAAAAA".to_string()));
+    assert!(files.load().items.is_empty());
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is uploaded");
+}
+
+#[test]
+fn undo_after_the_chips_discard_brings_the_recording_back_whole() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).keeping_at(now + chrono::Duration::seconds(4))).unwrap();
+    files.discard_later("a", now + chrono::Duration::seconds(8)).unwrap();
+
+    let again = now + chrono::Duration::seconds(10);
+    let back = files.undo_discard("a", again).unwrap();
+
+    assert!(!back.discarding() && back.counting(), "on its chip again, counting");
+    assert_eq!(back.keep_at(), Some(again));
+    let store = files.load();
+    assert_eq!(store.ui_items().len(), 1, "in the lists again");
+    assert!(store.next_discard(now).is_none(), "nothing left to delete");
+    // Its time passing deletes nothing now; every file and the live transcript are there for Keep.
+    assert!(files.discard_due(now + chrono::Duration::hours(1)).unwrap().is_empty());
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+    let upload = files.keep("a").unwrap();
+    assert_eq!(upload.server_session_id.as_deref(), Some("01SESSIONAAAAAAAAAAAAAAAAA"));
+    assert!(DiscardQueue::load(&files.discards).items.is_empty());
+    // Undo again, or after the time: too late, said as an error.
+    assert_eq!(files.undo_discard("a", again).unwrap_err().to_string(), pending::NOT_WAITING);
+}
+
+#[test]
 fn discarding_a_recording_without_a_server_session_queues_no_server_delete() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());
