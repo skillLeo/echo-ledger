@@ -1,0 +1,53 @@
+[package]
+name = "assist-relay"
+version = "0.1.0"
+description = "EchoLedger Live Assist relay: short suggested answers streamed to the apps during a call"
+authors = ["EchoLedger"]
+edition = "2024"
+rust-version = "1.90"
+publish = false
+default-run = "assist-relay"
+
+[[bin]]
+name = "assist-relay"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
+base64 = "0.22.1"
+futures-util = { version = "0.3.34", default-features = false, features = ["sink", "std"] }
+hmac = "0.13.0"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+# The load test's WebSocket client: the same version axum serves WebSockets with, so it is built once.
+tokio-tungstenite = "0.29.0"
+toml = "1.1.8"
+tracing = "0.1.44"
+# No `tracing-log`: records from the `log` facade (tungstenite's frame traces) are never collected.
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["env-filter", "fmt", "json", "std"] }
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["test-util"] }
+
+[lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false
+
+[profile.release]
+codegen-units = 4
+lto = "thin"
+strip = "symbols"
