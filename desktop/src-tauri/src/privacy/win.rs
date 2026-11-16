@@ -114,7 +114,9 @@ pub struct Watch {
 
 impl Watch {
     /// The 5 s check (pure apart from the calls on `system`): reads each visible window back against what EchoLedger
-    /// set; a flag that changed is reported and left as it is. A window that is gone is forgotten, never read.
+    /// set. A flag that held and now reads otherwise was changed by something else: reported once, at that change, and
+    /// left as it is. A flag that never held (Windows did not keep it when EchoLedger set it) stays a mismatch, said as
+    /// such, never blamed on something else. A window that is gone is forgotten, never read.
     pub fn tick(&mut self, system: &dyn Affinity, windows: &[Watched]) -> Vec<Changed> {
         let mut changed = Vec::new();
         for w in windows {
@@ -131,9 +133,12 @@ impl Watch {
                 self.last.insert(w.label.clone(), Readback::Held);
                 continue;
             }
-            self.changed_outside = true;
+            let held = self.last.get(&w.label) == Some(&Readback::Held);
             self.last.insert(w.label.clone(), Readback::Mismatch { wanted: set, read });
-            changed.push(Changed { label: w.label.clone(), set, read });
+            if held {
+                self.changed_outside = true;
+                changed.push(Changed { label: w.label.clone(), set, read });
+            }
         }
         changed
     }
@@ -199,7 +204,7 @@ impl Line {
 }
 
 pub const OLD_WINDOWS_LINE: &str = "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.";
-pub const OLD_WINDOWS_SHOWN_LINE: &str = "On this Windows version, EchoLedger can't be left out of a share, so it shows as it is. Choose Black box to keep its text private, or update Windows.";
+pub const OLD_WINDOWS_SHOWN_LINE: &str = "On this Windows version, EchoLedger can't be left out of a screen share, so it shows as it is. Choose Black box to keep its text private, or update Windows.";
 pub const REMOTE_LINE: &str = "In Remote Desktop, EchoLedger windows are visible to the remote side.";
 pub const MISMATCH_LINE: &str = "Windows didn't keep an EchoLedger window hidden from screen share. Run the check to be sure.";
 pub const CHANGED_OUTSIDE_LINE: &str = "Something on this computer turned off screen-share privacy for an EchoLedger window, so it is visible in screen share. EchoLedger left it as it is.";
@@ -368,6 +373,43 @@ mod tests {
         watch.hide_again();
         assert!(!watch.any_mismatch());
         assert_eq!(RECHECK_EVERY, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_flag_still_changed_at_the_next_tick_is_not_reported_again() {
+        let windows = FakeWindows { build: Some(26_100), ..Default::default() };
+        let mut watch = Watch::default();
+        watch.applied("pill", WDA_EXCLUDEFROMCAPTURE, apply(&windows, 1, WDA_EXCLUDEFROMCAPTURE));
+        let pill = watched(&[("pill", 1)]);
+        assert!(watch.tick(&windows, &pill).is_empty());
+        windows.affinity.borrow_mut().insert(1, WDA_NONE);
+        assert_eq!(watch.tick(&windows, &pill).len(), 1, "reported at the change");
+        // Two more ticks with the flag still off: nothing new to log, and it is still visible in screen share.
+        assert!(watch.tick(&windows, &pill).is_empty());
+        assert!(watch.tick(&windows, &pill).is_empty());
+        assert!(watch.changed_outside() && watch.any_mismatch());
+        assert_eq!(windows.sets.borrow().len(), 1, "never set again by itself");
+    }
+
+    #[test]
+    fn a_flag_that_never_held_is_a_mismatch_not_a_change_by_something_else() {
+        // Windows did not keep the flag when EchoLedger set it (a window that keeps its old value).
+        let stuck = FakeWindows { build: Some(26_100), stuck: vec![7], ..Default::default() };
+        let mut watch = Watch::default();
+        watch.applied("overlay", WDA_EXCLUDEFROMCAPTURE, apply(&stuck, 7, WDA_EXCLUDEFROMCAPTURE));
+        let overlay = watched(&[("overlay", 7)]);
+        for _ in 0..3 {
+            assert!(watch.tick(&stuck, &overlay).is_empty(), "nothing to blame on something else, tick after tick");
+        }
+        assert!(watch.any_mismatch() && !watch.changed_outside());
+        let said = lines(Some(26_100), false, OldWindowsSharing::BlackBox, watch.any_mismatch(), watch.changed_outside());
+        assert_eq!(said, vec![Line::warning(MISMATCH_LINE)], "\"Windows didn't keep it\", with no Hide again");
+        // Once it holds (set again at a lifecycle point), a later change is one from outside.
+        stuck.affinity.borrow_mut().insert(7, WDA_EXCLUDEFROMCAPTURE);
+        assert!(watch.tick(&stuck, &overlay).is_empty());
+        stuck.affinity.borrow_mut().insert(7, WDA_NONE);
+        assert_eq!(watch.tick(&stuck, &overlay).len(), 1);
+        assert!(watch.changed_outside());
     }
 
     #[test]
