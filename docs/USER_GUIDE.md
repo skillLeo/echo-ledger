@@ -46,10 +46,12 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
    **System Settings → Privacy & Security**, scroll down to Security and click **Open Anyway** next to EchoLedger, and
    confirm with your password or Touch ID. After that it opens normally. (On macOS 15 and later, right-click → Open no
    longer gets past this message.)
-3. EchoLedger lives in the menu bar (top right). Click its icon to open it, or right-click it for the menu. ⌘W closes the
-   window and leaves EchoLedger in the menu bar, ⌘, opens Settings, and ⌘Q quits. The icon follows light and dark menu
-   bars and turns red while recording. Opening EchoLedger again from Applications, Launchpad, Spotlight or the Dock while
-   it runs opens its window.
+3. EchoLedger is in the Dock and in the menu bar (top right). Click its Dock icon to open its window; click the menu
+   bar icon for its menu (**Open EchoLedger** opens the window). ⌘W closes the window and EchoLedger keeps running in
+   the Dock and the menu bar; ⌘, opens Settings. To quit, press ⌘Q, choose **Quit EchoLedger** from the menu bar icon,
+   or right-click the Dock icon and choose **Quit**; a recording that is running is stopped and kept first. The menu bar
+   icon follows light and dark menu bars and shows a red badge while recording (amber while paused). Opening EchoLedger
+   again from Applications, Launchpad, Spotlight or the Dock while it runs opens its window.
 4. A short setup goes through what macOS must allow, one step each, with a button to the right page of System Settings:
    - **Microphone:** your side of a call, voice notes and dictation.
    - **System audio:** the other side of a call (the sound this Mac plays).
@@ -59,8 +61,9 @@ records both sides of a call (Apple menu → **About This Mac** shows your versi
 
 **If a permission is off,** nothing crashes and nothing records silently: the Record page, the recording controls and
 the captions say what is missing and what the recording holds without it (only your voice, or only the other side). A
-recording that would hold nothing does not start and says why, even with the window closed: a shortcut or the menu-bar
-icon opens the window with the reason, and a meeting that cannot be recorded gets a notification.
+recording that would hold nothing does not start and says why, even with the window closed: a shortcut or
+**Record now** in the menu bar icon's menu opens the window with the reason, and a meeting that cannot be recorded
+gets a notification.
 
 **Updates and permissions.** Because the app is not signed with an Apple Developer ID yet, macOS may forget its
 permissions after an update. EchoLedger looks at them every time it starts; if one that was allowed has gone, it says so
@@ -349,9 +352,33 @@ EchoLedger can start recording when a call starts.
   It works while auto-record is on and the call capture helper is running. Allow **Call log** and **Contacts** so each
   recording gets the number and the contact's name ("Call with Omar Khan"), and is filed under that client.
   **Tell the other person before you record a phone call. In many places the law needs their consent.** Some phones
-  give both voices on one track; the transcript then cannot tell who spoke. Some phone makers (Samsung among them)
-  keep the phone line for their own Phone app. EchoLedger then says "The phone line gave no sound" and the SIM call
-  cannot be recorded on that phone.
+  give both voices on one track; the transcript then cannot tell who spoke.
+
+  **SIM calls through the Phone app's own recordings.** Some phone makers (Samsung among them) keep the phone line for
+  their own Phone app, so EchoLedger can't hear it. Let the Phone app record every call, and EchoLedger brings each
+  recording in right after the call:
+  - On a Galaxy: **Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls**. On Xiaomi, Redmi and
+    POCO: **Phone app → Settings → Call recording → Record calls automatically → All numbers**.
+    **Settings → Auto-record apps** has **Open the Phone app's settings**, and on a Galaxy says whether Auto record
+    calls is on.
+  - Allow **Music and audio** and **Call log** when asked, and leave **Import the Phone app's recordings** on.
+  - The recording comes in as the call's, named after the contact or the number ("Call with Omar Khan"), with the
+    after-call card, and is kept and transcribed like any other recording. A call that ended a while ago, or one that
+    comes in while you are on another call, comes in without the card: one notification says how many came in.
+  - Only calls you asked EchoLedger to record come in (**Record phone calls** on **Always**, or **Record** chosen when
+    asked), and only files the phone's own Phone app made during the call. When EchoLedger heard both sides itself,
+    its own recording is kept and the Phone app's copy stays where it is.
+  - When the phone doesn't say which app made a file, the call waits for you in **Settings → Auto-record apps**:
+    **Import this recording** shows the file's name and length, with **Play**, before anything is brought in;
+    **Not this call** leaves it.
+  - Nothing in the Phone app's folder is deleted or moved unless you turn on
+    **Delete the Phone app's copy after import** (Android 11 and later). Then, once the recording is safely in
+    EchoLedger, Android asks you before each delete. If you delete the recording before it reached EchoLedger, the
+    Phone app's copy is kept.
+  - After a call EchoLedger couldn't hear, it says so once, quietly, with what to do. While the Phone app's recording
+    is on its way, it says nothing.
+  - On phones whose Phone app keeps its recordings to itself (a Pixel with Google's Phone app), SIM calls cannot be
+    recorded; Settings says so in one line.
 
 The **Record** screen always explains the last decision, for example "Ignored: dictation".
 
@@ -452,8 +479,10 @@ you afterwards. Choose how in **Settings → Calls & meetings → After a call**
 
 - **Keep automatically** (the default): the call is kept and a small **"Saved · Call with Omar · 4:12 · Undo"**
   shows for 6 seconds. **Undo** deletes it; nothing has been uploaded yet.
-- **Ask me**: a small after-call card with the title, **✓** (keep) and **✕** (discard). Tap the title to rename it or
-  pick a client. If you do nothing, the call is kept after 10 seconds.
+- **Ask me**: a small after-call card with the title, **✓** (keep) and **Discard** (a bin on the computer, **✕** on
+  the phone). Tap the title to rename it or pick a client. On the computer, **Discard** can be undone for a few
+  seconds: **"Discarded · Call with Omar · 4:12 · Undo"** shows, and nothing is deleted until it goes. If you do
+  nothing, the call is kept after 10 seconds.
 
 Calls are **skipped** quietly, with no question: a call that was never answered (on the phone), a call shorter than
 **Skip calls shorter than** (10 seconds by default), and a call where nobody spoke. Activity shows one line,
@@ -598,8 +627,8 @@ VTT subtitles, or JSON. Urdu and Hindi text keep the right shape and direction.
 4. Copy the link. It is shown only once.
 
 A project's link shows its recordings, newest first; each opens like a recording's link. You can revoke a link at
-any time and it stops working at once. **Shares** (in the console) and the share sheet in the apps list every link
-with its views and when it was last opened.
+any time: **Revoke** asks first, then the link stops working at once for everyone who has it. **Shares** (in the
+console) and the share sheet in the apps list every link with its views and when it was last opened.
 
 **Send to WhatsApp (computer, since v1.6).** On a recording, the WhatsApp button next to **Share**, or **⋯ → Send to
 WhatsApp…** on its row, offers three ways, as on the phone:
@@ -913,7 +942,9 @@ nothing is recorded or kept unless you switch saving on.
   never takes a touch: every tap goes to the game. Tap the small dot beside it to move or resize it (it locks again
   after 5 seconds); hold the dot for Pause, Hide, text size, opacity, the original line, the language and Stop.
 - **Watch translate** (phone): films and videos get subtitles in Urdu (or English, Arabic…). Apps that protect their
-  videos, such as Netflix, do not allow it and say so.
+  videos, such as Netflix, do not allow it and say so. If the capture helper can't tell which app is playing, Watch
+  translate asks Android to share the sound instead (the same question as without the helper): tap **Start now**.
+  **You → General → Help & diagnostics → Audio probe** shows what the helper sees.
 - **Test translate** on each page plays a short sentence with the phone's own voice and shows the result, so you can
   set the box up without opening a game.
 - **On the computer** (Windows): the **Record** page → **Live Translate**: choose an app that is playing sound, Game or
