@@ -3,7 +3,9 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.0-e (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 1.8.1-a (2026-11-17)** — bumped whenever a section below changes; briefs name the revision they build on.
+1.8.1-a: a failed transcript's `error` is the documented plain message of its `error_code` only — never the provider's
+own text (bugs D-129/D-131); see "Transcript `error_code` messages".
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -131,11 +133,16 @@ hint for `no_audio` (desktop: check the microphone and the audio device; Android
 | `no_audio` | `No audio was captured in this recording.` |
 | `budget_exceeded` | `Monthly transcription limit reached` |
 | `provider_unreachable` | `The speech provider could not be reached. Try again later.` |
-| `provider_rejected` | `The speech provider could not transcribe this recording: <provider reason, at most 200 characters>` |
-| `provider_not_configured` | `<what to configure>` (for example `AssemblyAI is not configured. Add its API key on API Credentials.`) |
+| `provider_rejected` | `The speech provider could not transcribe this recording.` (since 1.8.1-a: no provider reason; the engine's own words stay in server logs and the operator view) |
+| `provider_not_configured` | `The speech provider is not configured.` (since 1.8.1-a: no engine or key name) |
 | `provider_timeout` | `The speech provider did not finish within 6 hours.` |
 | `interrupted` | `Transcription was interrupted. Retry it from the console.` |
 | `recording_missing` | `The recording is missing or not ready.` |
+| `needs_transcription_key` | `Add your free Groq key in Account → Transcription key` (the one vendor name people must act on) |
+| missing or unknown code | `The transcript could not be made.` |
+
+Since 1.8.1-a the `error` field (transcripts, session detail, library items) and the Activity item for a failed
+transcript carry only these messages. Apps show their own words per `error_code` and may ignore `error`.
 
 ---
 
