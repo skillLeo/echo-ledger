@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
-import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { LIMITS, ONE_WINDOW_TIP, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
-import { PrivacyBadge } from "../../components/PrivacyBadge";
+import { GUIDED_ALONE, LIMITS, ONE_WINDOW_TIP, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
+import ShareCheckWindow, { CONTROL_TEXT } from "../sharecheck/ShareCheckWindow";
+import { PrivacyBadge, PrivacyBadgeView } from "../../components/PrivacyBadge";
 
 const PICTURE = "data:image/webp;base64,UklGRg==";
 
@@ -27,7 +28,7 @@ describe("Share Check", () => {
     respond("share_check_card", null);
     render(<ShareCheckPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Check now" }));
-    expect(await screen.findByText("Hidden. People who see your whole screen won't see EchoLedger. Checked on macOS 27.3, today.")).toBeInTheDocument();
+    expect(await screen.findByText("Hidden in this check. Each meeting app captures differently on a Mac: test yours below. Checked on macOS 27.3, today.")).toBeInTheDocument();
     expect(screen.getByText("What you see")).toBeInTheDocument();
     expect(screen.getByText("What others see")).toBeInTheDocument();
     expect(screen.getByAltText("Your screen as a screen share captured it")).toHaveAttribute("src", PICTURE);
@@ -35,23 +36,47 @@ describe("Share Check", () => {
     expect(screen.getAllByRole("button").filter((b) => b.classList.contains("primary"))).toHaveLength(1);
   });
 
-  it("says plainly when EchoLedger is visible", async () => {
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", badge: "visible" }));
+  it("says plainly when EchoLedger is visible, naming only the apps not confirmed hidden", async () => {
+    respond("privacy_status", makePrivacyStatus({
+      platform: "macos", badge: "visible",
+      apps: [
+        { app: "zoom", name: "Zoom", version: "7.1.9", state: "hidden", line: "Zoom: hidden", needsTest: false },
+        { app: "teams", name: "Teams", version: "25.1", state: "not_checked", line: "Teams: not checked", needsTest: true },
+        { app: "meet", name: "Meet", version: "142.0", state: "share_tab", line: "Meet: share a tab", needsTest: true },
+      ],
+    }));
     respond("share_check_run", view({ result: "fail", methods: [{ method: "sck", result: "fail", reason: null }] }));
     respond("share_check_card", null);
     render(<ShareCheckPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Check now" }));
-    expect(await screen.findByText("Visible on this Mac in apps like Zoom and Teams. Use one-window sharing or your phone.")).toBeInTheDocument();
+    expect(await screen.findByText("Visible on this Mac in Teams and Meet. Share one window or a tab instead.")).toBeInTheDocument();
+  });
+
+  it("says before the first run that the Screen Recording permission is missing, with its fix", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false }));
+    respond("open_privacy_settings", null);
+    render(<ShareCheckPage />);
+    const line = await screen.findByTestId("permission-first");
+    expect(line).toHaveTextContent("Screen Recording");
+    fireEvent.click(within(line).getByRole("button", { name: "Open Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
+  });
+
+  it("keeps Check now off while an automatic run is on", async () => {
+    respond("privacy_status", makePrivacyStatus({ checkRunning: true }));
+    render(<ShareCheckPage />);
+    expect(await screen.findByRole("button", { name: "Checking…" })).toBeDisabled();
   });
 
   it("names a missing permission with Open Settings, and a failed capture with Try again", async () => {
-    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false }));
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: true }));
     respond("share_check_run", view({ result: "error", reason: "permission_missing", picture: null, testArea: null, controlArea: null }));
     respond("share_check_card", null);
     respond("open_privacy_settings", null);
     render(<ShareCheckPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Check now" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Open Settings" }));
+    const result = await screen.findByTestId("check-result");
+    fireEvent.click(within(result).getByRole("button", { name: "Open Settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
     expect(screen.queryByText("What others see")).toBeNull();
 
@@ -71,11 +96,25 @@ describe("Share Check", () => {
     respond("share_check_card", null);
     respond("share_check_answer", makePrivacyStatus({ platform: "macos" }));
     render(<ShareCheckPage />);
+    expect(await screen.findByText("Chrome 142.0")).toBeInTheDocument();
     fireEvent.click((await screen.findAllByRole("button", { name: "Test" }))[0]);
-    expect(await screen.findByText(/A test card is on your screen now/)).toBeInTheDocument();
+    const question = await screen.findByText(/A test card is on your screen now/);
     expect(callsOf("share_check_card")).toEqual([{ open: true }]);
+    await waitFor(() => expect(question).toHaveFocus());
+    expect(screen.getByText(GUIDED_ALONE)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "I can't see it" }));
     await waitFor(() => expect(callsOf("share_check_answer")).toEqual([{ meetingApp: "zoom", visible: false }]));
+  });
+
+  it("lets the test with the phone be cancelled without an answer", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", apps: [{ app: "zoom", name: "Zoom", version: "7.1.9", state: "not_checked", line: "Zoom: not checked", needsTest: true }] }));
+    respond("share_check_card", null);
+    render(<ShareCheckPage />);
+    fireEvent.click(await screen.findByRole("button", { name: "Test" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    expect(callsOf("share_check_card")).toEqual([{ open: true }, { open: false }]);
+    expect(callsOf("share_check_answer")).toEqual([]);
+    expect(await screen.findByRole("button", { name: "Test" })).toBeInTheDocument();
   });
 });
 
@@ -83,7 +122,7 @@ describe("Settings › Screen-share privacy", () => {
   beforeEach(() => resetTauriMock());
 
   it("shows the status, the last check, the tip and the limits; Windows' amber lines", async () => {
-    respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in shares", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
+    respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in screen share", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
     const patch = vi.fn(async () => true);
     render(<SharePrivacyPage settings={makeSettings()} patch={patch} onCheck={() => undefined} />);
     expect(await screen.findByText("In Remote Desktop, EchoLedger windows are visible to the remote side.")).toBeInTheDocument();
@@ -109,8 +148,52 @@ describe("Settings › Screen-share privacy", () => {
     expect(await screen.findByText("Zoom: hidden")).toBeInTheDocument();
     expect(screen.getByText("Meet: share a tab")).toBeInTheDocument();
     expect(screen.queryByText("Teams: not checked"), "not installed").toBeNull();
+    expect(screen.getByText("Chrome 142.0"), "Meet's result is kept for Chrome's version").toBeInTheDocument();
+    expect(screen.getByText("Hidden"), "the tags are a pair: Hidden / Visible").toBeInTheDocument();
+    expect(screen.queryByTestId("zoom-steps"), "a step, not a value read from Zoom").toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: /Set up Zoom/ }));
     expect(screen.getByTestId("zoom-steps")).toHaveTextContent("Settings › Share Screen › Advanced and set Screen capture mode to Advanced capture with window filtering");
     expect(screen.getByRole("switch", { name: "I share one window or a tab" })).toBeInTheDocument();
+  });
+
+  it("shows and changes Hide EchoLedger windows, and counts the demo down", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      respond("privacy_status", makePrivacyStatus({ demoSecondsLeft: 120 }));
+      respond("privacy_set_hidden", null);
+      render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+      expect(await screen.findByText("2 min left")).toBeInTheDocument();
+      await act(async () => { vi.advanceTimersByTime(61_000); });
+      expect(screen.getByText("1 min left"), "counted down here").toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "Hide now" }));
+      expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: true }]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says why the windows are hidden and brings them back", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true }));
+    respond("privacy_set_hidden", null);
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    expect(await screen.findByText("Hidden while you share your screen")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show EchoLedger windows" }));
+    expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: false }]);
+  });
+
+  it("moves the floating windows only when one is open, and says what happened", async () => {
+    respond("privacy_status", makePrivacyStatus({ displays: 2, floatingOpen: false }));
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    expect(await screen.findByRole("button", { name: /Move to the other display/ })).toBeDisabled();
+    expect(screen.getByText("Nothing open to move")).toBeInTheDocument();
+  });
+
+  it("shows why a move did not happen", async () => {
+    respond("privacy_status", makePrivacyStatus({ displays: 2, floatingOpen: true }));
+    fail("privacy_move_to_other_display", "Only one display is connected now.");
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    fireEvent.click(await screen.findByRole("button", { name: /Move to the other display/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Only one display is connected now.");
   });
 });
 
@@ -118,10 +201,11 @@ describe("the privacy badge", () => {
   beforeEach(() => resetTauriMock());
 
   it.each([
-    ["private", "Hidden from screen share. Open Share Check"],
-    ["not_checked", "Not checked on this system yet. Open Share Check"],
-    ["visible", "EchoLedger can show in screen shares. Open Share Check"],
-  ] as const)("%s opens Share Check when clicked", async (badge, name) => {
+    ["private", "Private: hidden from screen share. Check screen-share privacy"],
+    ["black_box", "Black box: people see a black box instead of EchoLedger. Check screen-share privacy"],
+    ["not_checked", "Not checked on this system yet. Check screen-share privacy"],
+    ["visible", "Visible in screen share. Check screen-share privacy"],
+  ] as const)("%s opens Check screen-share privacy when clicked", async (badge, name) => {
     respond("privacy_status", makePrivacyStatus({ badge }));
     respond("privacy_open_check", null);
     render(<PrivacyBadge />);
@@ -138,7 +222,12 @@ describe("the privacy badge", () => {
     await screen.findByRole("button", { name: /Not checked/ });
     respond("privacy_status", makePrivacyStatus({ badge: "private" }));
     await act(async () => emitEvent("privacy:changed", null));
-    expect(await screen.findByRole("button", { name: /Hidden from screen share/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /hidden from screen share/i })).toBeInTheDocument();
+  });
+
+  it("names itself to a screen reader where it is not a button", async () => {
+    render(<PrivacyBadgeView badge="not_checked" compact />);
+    expect(screen.getByRole("img", { name: "Not checked" })).toBeInTheDocument();
   });
 });
 
@@ -188,5 +277,38 @@ describe("the last check's row", () => {
     expect(lastCheckValue("pass", today, now, "old_windows")).toBe("Black box, today");
     expect(lastCheckValue("pass", today, now)).toBe("Hidden, today");
     expect(lastCheckValue(null, null, now)).toBe("Not checked yet");
+  });
+});
+
+describe("the check's own windows and onboarding", () => {
+  beforeEach(() => resetTauriMock());
+
+  it("says on the green control what the flash is", () => {
+    respond("share_check_drawn", null);
+    render(<ShareCheckWindow kind="control" />);
+    expect(screen.getByTestId("check-control")).toHaveTextContent(CONTROL_TEXT);
+  });
+
+  it("tells about the flash in onboarding and offers the fix the result names", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos" }));
+    respond("share_check_run", view({ result: "error", reason: "capture_failed", picture: null, testArea: null, controlArea: null }));
+    render(<OnboardingShareCheck platform="macos" />);
+    expect(screen.getByText(PATTERN_FLASH)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check screen-share privacy" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+    await waitFor(() => expect(callsOf("share_check_run")).toHaveLength(2));
+  });
+
+  it("has one row for the check, with the last result, and the amber lines in the first section's footer", async () => {
+    respond("privacy_status", makePrivacyStatus({ lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
+    const onCheck = vi.fn();
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={onCheck} />);
+    const line = await screen.findByText("In Remote Desktop, EchoLedger windows are visible to the remote side.");
+    expect(line.closest(".set-foot"), "under the first section, aligned with the footers").not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Check now" }), "no second Check now on this page").toBeNull();
+    const row = screen.getByRole("button", { name: /Check screen-share privacy/ });
+    expect(row).toHaveTextContent(/Hidden, today/);
+    fireEvent.click(row);
+    expect(onCheck).toHaveBeenCalled();
   });
 });

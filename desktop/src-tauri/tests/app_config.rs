@@ -392,7 +392,7 @@ fn opening_the_app_again_goes_where_a_second_launch_goes() {
 fn privacy_commands_that_change_or_reveal_answer_the_main_window_only() {
     // A floating window's page has no business with a picture of the screen, the log, or what is hidden.
     let commands = std::fs::read_to_string(manifest_dir().join("src/commands.rs")).unwrap();
-    for name in ["share_check_run", "share_check_card", "share_check_answer", "privacy_show_in_shares", "privacy_hide_all", "privacy_hide_again", "privacy_diagnostics", "privacy_move_to_display"] {
+    for name in ["share_check_run", "share_check_card", "share_check_answer", "privacy_show_in_shares", "privacy_hide_all", "privacy_hide_again", "privacy_set_hidden", "privacy_diagnostics", "privacy_move_to_other_display"] {
         let start = commands.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("{name} is gone"));
         let body = &commands[start..];
         let body = &body[..body.find("\n}\n").unwrap()];

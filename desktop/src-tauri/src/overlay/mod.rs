@@ -262,13 +262,32 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
     Ok(())
 }
 
-/// Moves every floating window to display `index` (Screen-share privacy: keep EchoLedger on the display that isn't
-/// shared): the captions to their corner, the pill to the top centre, the others to the bottom right.
-pub fn move_to_display<R: Runtime>(app: &AppHandle<R>, index: usize) -> Result<(), String> {
+/// The floating windows "Move to the other display" moves (the dictation box, kept built while idle, goes along when the
+/// others do, but alone it is nothing to move).
+const MOVABLE: [&str; 4] = [OVERLAY, PILL, REVIEW, crate::translate::WINDOW];
+
+/// Whether one of the floating windows is open (Settings offers the move only then).
+pub fn floating_open<R: Runtime>(app: &AppHandle<R>) -> bool {
+    MOVABLE.iter().any(|l| app.get_webview_window(l).is_some())
+}
+
+/// The display to move to (pure): the first that is not the main one, whatever order the system lists them in.
+pub fn other_display(displays: usize, primary: usize) -> Option<usize> {
+    (0..displays).find(|i| *i != primary)
+}
+
+/// Moves every floating window to the first display that is not the main one (Screen-share privacy: share the main
+/// display, keep EchoLedger on the other): the captions to their corner, the recording controls to the top centre, the
+/// others to the bottom right. The error says why nothing moved.
+pub fn move_to_other_display<R: Runtime>(app: &AppHandle<R>) -> Result<(), String> {
     let labels = [OVERLAY, DICTATION, PILL, REVIEW, crate::translate::WINDOW];
-    let Some(first) = labels.iter().find_map(|l| app.get_webview_window(l)) else { return Ok(()) };
+    if !floating_open(app) {
+        return Err("Nothing to move yet: the recording controls, captions and Live Translate move once they are open.".into());
+    }
+    let Some(first) = labels.iter().find_map(|l| app.get_webview_window(l)) else { return Err("Nothing to move yet.".into()) };
     let desk = Desk::read(&first).ok_or("The displays could not be read.")?;
-    let (area, scale) = *desk.areas.get(index).ok_or("That display is not connected.")?;
+    let index = other_display(desk.areas.len(), desk.primary).ok_or("Only one display is connected now.")?;
+    let (area, scale) = desk.areas[index];
     let corner = app.try_state::<crate::AppState>().map_or(Corner::BottomRight, |s| s.settings().overlay_corner);
     for label in labels {
         let Some(window) = app.get_webview_window(label) else { continue };
@@ -464,6 +483,14 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_other_display_is_the_first_that_is_not_the_main_one() {
+        assert_eq!(other_display(2, 0), Some(1));
+        assert_eq!(other_display(2, 1), Some(0), "Windows may list the main display second: never move onto it");
+        assert_eq!(other_display(3, 1), Some(0));
+        assert_eq!(other_display(1, 0), None, "one display: nowhere to move");
+    }
 
     #[test]
     fn only_the_last_empty_after_call_state_hides_the_window() {

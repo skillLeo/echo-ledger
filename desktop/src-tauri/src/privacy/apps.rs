@@ -104,7 +104,7 @@ pub fn state_of(app: MeetingApp, app_version: Option<&str>, os_version: &str, re
 pub fn line(app: MeetingApp, state: AppState) -> String {
     let what = match state {
         AppState::Hidden => "hidden",
-        AppState::Visible => "visible in shares",
+        AppState::Visible => "visible in screen share",
         AppState::NotChecked => "not checked",
         AppState::ShareTab => "share a tab",
     };
@@ -219,7 +219,7 @@ mod tests {
         assert_eq!(line(MeetingApp::Zoom, state_of(MeetingApp::Zoom, Some("7.1.9"), "27.3", &results)), "Zoom: hidden");
         assert_eq!(line(MeetingApp::Teams, state_of(MeetingApp::Teams, Some("25.1"), "27.3", &results)), "Teams: not checked");
         assert_eq!(line(MeetingApp::Meet, state_of(MeetingApp::Meet, Some("142.0"), "27.3", &results)), "Meet: share a tab");
-        assert_eq!(line(MeetingApp::Slack, state_of(MeetingApp::Slack, Some("4.47"), "27.3", &results)), "Slack: visible in shares");
+        assert_eq!(line(MeetingApp::Slack, state_of(MeetingApp::Slack, Some("4.47"), "27.3", &results)), "Slack: visible in screen share");
     }
 
     #[test]

@@ -1,7 +1,7 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 
@@ -9,6 +9,13 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const switchFor = (name: string) => screen.getByRole("switch", { name });
+
+describe("Captions and screen share", () => {
+  it("says what Settings › Screen-share privacy decides for the captions", () => {
+    expect(captionsShareLine("off")).toBe("Captions are visible in screen share. Change it in Settings › Screen-share privacy.");
+    for (const hiding of ["all", "floating"] as const) expect(captionsShareLine(hiding)).toMatch(/^Captions are hidden from screen share/);
+  });
+});
 
 describe("Calls & meetings", () => {
   it("treats apps without a stored switch as on, and says which record by themselves", () => {

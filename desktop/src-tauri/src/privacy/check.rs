@@ -246,7 +246,7 @@ const PREVIEW_LONG: u32 = 960;
 
 fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-        .title(if kind == Kind::Test { "EchoLedger Share Check test" } else { "EchoLedger Share Check control" })
+        .title(if kind == Kind::Test { "EchoLedger screen-share privacy test" } else { "EchoLedger screen-share privacy control" })
         .inner_size(PATCH.0, PATCH.1)
         .position(at.0, at.1)
         .decorations(false)
@@ -441,10 +441,10 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         let drawn = both_drawn();
         let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
         if !drawn {
-            diag::log(&state.data_dir, "Share Check: the check's windows did not draw.");
+            diag::log(&state.data_dir, "Privacy check: the check's windows did not draw.");
             methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()), blank: false });
         } else if is_covered {
-            diag::log(&state.data_dir, "Share Check: another window covered the test window.");
+            diag::log(&state.data_dir, "Privacy check: another window covered the test window.");
             methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()), blank: false });
         }
         let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
@@ -457,7 +457,7 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                     let counts = pixels::measure(&picture, test_rect, control_rect);
                     let result = pixels::verdict(counts);
                     let reason = (result == Outcome::Error).then(|| "control_missing".to_string());
-                    diag::log(&state.data_dir, &format!("Share Check {method}: {result:?} (test {} px, control {} of {} px).", counts.test, counts.control, counts.control_area));
+                    diag::log(&state.data_dir, &format!("Privacy check {method}: {result:?} (test {} of {} px, control {} of {} px).", counts.test, counts.test_area, counts.control, counts.control_area));
                     let detail = (result != Outcome::Pass).then(|| {
                         let rgb = |r: Option<[u8; 3]>| r.map_or_else(|| "nothing".to_string(), |c| format!("rgb({}, {}, {})", c[0], c[1], c[2]));
                         format!("the control area averages {}, the test area {}, picture {}x{}", rgb(pixels::average(&picture, control_rect)), rgb(pixels::average(&picture, test_rect)), shot.frame.width, shot.frame.height)
@@ -477,7 +477,7 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                 Err(failure) => {
                     let detail = match &failure {
                         Failure::Capture(message) => {
-                            diag::log(&state.data_dir, &format!("Share Check {method}: the capture failed ({message})."));
+                            diag::log(&state.data_dir, &format!("Privacy check {method}: the capture failed ({message})."));
                             Some(message.clone())
                         }
                         Failure::Permission => None,
@@ -497,7 +497,14 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
     let reason = if result == Outcome::Error { methods.iter().find_map(|m| m.reason.clone()) } else if black_box { Some("old_windows".into()) } else { None };
     let at = Utc::now();
     let record = Record { at, os_build: os_build(), app_version: app_version().into(), result, reason: reason.clone(), methods: methods.clone(), why };
-    Store::update(&state.data_dir, |store| store.add(record));
+    let before = Store::update(&state.data_dir, |store| store.add(record)).checks.iter().rev().skip(1).find(|r| r.os_build == os_build() && r.app_version == app_version() && r.result != Outcome::Error).map(|r| r.result);
+    if let Some((title, body)) = change_notice(before, result, why) {
+        use crate::notifications::{Category, allowed, local_minutes, show};
+        let settings = state.settings();
+        if allowed(&settings, Category::Account, local_minutes()) {
+            show(app, &settings, Category::Account, title, body);
+        }
+    }
     for m in methods.iter().filter(|m| m.method != "none") {
         report(app, ShareCheckReport {
             platform: platform_wire().into(),
@@ -516,6 +523,22 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         None => (None, 0, 0, None, None),
     };
     Ok(View { result, reason, methods, system, at, picture, width, height, test_area, control_area })
+}
+
+/// What to tell the person when a run they did not start changed the result on this system and app version (pure),
+/// above all that EchoLedger became visible in screen share. A run that measured nothing says nothing.
+pub fn change_notice(before: Option<Outcome>, after: Outcome, why: Why) -> Option<(&'static str, &'static str)> {
+    if matches!(why, Why::Asked | Why::Onboarding) || after == Outcome::Error || before == Some(after) {
+        return None;
+    }
+    match after {
+        Outcome::Fail => Some((
+            "EchoLedger may be visible in screen share",
+            "The automatic check found EchoLedger in a screen capture on this computer. Open Check screen-share privacy to see what others see.",
+        )),
+        Outcome::Pass if before == Some(Outcome::Fail) => Some(("EchoLedger is hidden from screen share again", "The automatic check no longer finds it in a screen capture.")),
+        _ => None,
+    }
 }
 
 /// Windows before build 19041 gives a black box instead of leaving the window out (with the setting "Black box").
@@ -713,6 +736,8 @@ pub struct PrivacyStatus {
     pub zoom_installed: bool,
     /// macOS Screen Recording is allowed (always true elsewhere).
     pub permission: bool,
+    /// One of the floating windows is open: "Move to the other display" has something to move.
+    pub floating_open: bool,
     pub displays: usize,
 }
 
@@ -774,6 +799,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         zoom_installed: apps.iter().any(|a| a.app == MeetingApp::Zoom && a.version.is_some()),
         apps,
         permission,
+        floating_open: crate::overlay::floating_open(app),
         displays: app.available_monitors().map(|m| m.len()).unwrap_or(1),
     }
 }
@@ -799,7 +825,7 @@ pub fn diagnostics_text(app: &AppHandle) -> String {
     ];
     if let Some(last) = &s.last_check {
         let methods: Vec<String> = last.methods.iter().map(|m| format!("{} {}", m.method, wire(m.result))).collect();
-        header.push(format!("Last Share Check: {} on {} ({})", wire(last.result), last.at.format("%Y-%m-%d %H:%M"), methods.join(", ")));
+        header.push(format!("Last privacy check: {} on {} ({})", wire(last.result), last.at.format("%Y-%m-%d %H:%M"), methods.join(", ")));
     }
     for row in &s.apps {
         header.push(format!("{} ({})", row.line, row.version.as_deref().unwrap_or("not installed")));
@@ -865,6 +891,18 @@ mod tests {
             .collect();
         threads.into_iter().for_each(|t| t.join().unwrap());
         assert_eq!(Store::load(dir.path()).guided.len(), 80, "no change was lost and no torn read emptied the file");
+    }
+
+    #[test]
+    fn an_automatic_run_says_when_the_result_changed_above_all_to_visible() {
+        let visible = change_notice(Some(Outcome::Pass), Outcome::Fail, Why::Weekly).unwrap();
+        assert_eq!(visible.0, "EchoLedger may be visible in screen share");
+        assert!(change_notice(None, Outcome::Fail, Why::AppUpdate).is_some(), "the first measure after an update");
+        assert_eq!(change_notice(Some(Outcome::Fail), Outcome::Pass, Why::SystemUpdate).map(|n| n.0), Some("EchoLedger is hidden from screen share again"));
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Pass, Why::Weekly), None, "nothing changed");
+        assert_eq!(change_notice(None, Outcome::Pass, Why::First), None, "hidden from the start needs no news");
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Error, Why::Retry), None, "nothing was measured");
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Fail, Why::Asked), None, "the person sees the result on the page");
     }
 
     #[test]

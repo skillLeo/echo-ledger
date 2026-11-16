@@ -499,6 +499,18 @@ pub fn end_demo(app: &AppHandle) {
     crate::actions::emit_status(app);
 }
 
+/// "Show EchoLedger windows" (the tray, Settings): "Hide EchoLedger windows" ends; during a whole-screen share the
+/// safety net lets go at its next look (a sharing bar still on screen takes the windows off again).
+pub fn show_windows<R: Runtime>(app: &AppHandle<R>) {
+    let Some(privacy) = app.try_state::<Privacy>() else { return };
+    if privacy.hidden_for(HideReason::Person) {
+        set_hidden(app, HideReason::Person, false);
+    }
+    if privacy.hidden_for(HideReason::Share) {
+        privacy.release_share();
+    }
+}
+
 /// "Hide EchoLedger windows" (the shortcut): off the screen, and back on the next press.
 pub fn toggle_hide_all(app: &AppHandle) {
     let on = !app.state::<Privacy>().hidden_for(HideReason::Person);

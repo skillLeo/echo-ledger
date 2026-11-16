@@ -1724,7 +1724,9 @@ span.privacy-badge { cursor: default; }
 .guided { display: grid; gap: var(--space-3); }
 .guided p { margin: 0; }
 .guided-answers { display: flex; gap: var(--space-2); }
-.check-patch-window { position: fixed; inset: 0; }
+.check-patch-window { position: fixed; inset: 0; display: grid; place-items: center; }
+/* The control's one line: white on its green (counted as green only where no letter is), never magenta. */
+.check-control-text { max-width: 180px; color: #fff; font: 600 12px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif; text-align: center; }
 html[data-window="share-check-test"], html[data-window="share-check-test"] body,
 html[data-window="share-check-control"], html[data-window="share-check-control"] body { background: transparent; margin: 0; overflow: hidden; }
 .check-card { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; padding: 40px; background: #ff00ff; color: #fff; text-align: center; }

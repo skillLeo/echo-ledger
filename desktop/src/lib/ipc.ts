@@ -1389,6 +1389,8 @@ export interface PrivacyStatus {
   apps: MeetingAppRow[];
   zoomInstalled: boolean;
   permission: boolean;
+  /** One of the floating windows is open: "Move to the other display" has something to move. */
+  floatingOpen: boolean;
   displays: number;
 }
 
@@ -1453,9 +1455,12 @@ export const api = {
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
   /** Windows: sets every capture flag again after something else on the computer changed one. */
   privacyHideAgain: () => invoke<void>("privacy_hide_again"),
+  /** "Hide EchoLedger windows" (`hidden`) or "Show EchoLedger windows". */
+  privacySetHidden: (hidden: boolean) => invoke<void>("privacy_set_hidden", { hidden }),
   privacyOpenCheck: () => invoke<void>("privacy_open_check"),
   privacyDiagnostics: () => invoke<string>("privacy_diagnostics"),
-  privacyMoveToDisplay: (index: number) => invoke<void>("privacy_move_to_display", { index }),
+  /** The floating windows to the display that isn't the main one (so the main one can be shared). */
+  privacyMoveToOtherDisplay: () => invoke<void>("privacy_move_to_other_display"),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),

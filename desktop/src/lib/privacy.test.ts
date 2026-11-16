@@ -6,10 +6,21 @@ const NOW = new Date(2026, 10, 16, 15, 0);
 
 describe("Share Check words", () => {
   it("says the result in one plain line, with the system and the day", () => {
+    // A Mac's pass says only what this check saw: each meeting app captures its own way.
     expect(resultLine("pass", null, "macOS 27.3", new Date(2026, 10, 16, 9, 0).toISOString(), "macos", NOW).text)
-      .toBe("Hidden. People who see your whole screen won't see EchoLedger. Checked on macOS 27.3, today.");
-    expect(resultLine("pass", null, "Windows 11 24H2", new Date(2026, 10, 15, 9, 0).toISOString(), "windows", NOW).text).toContain("Checked on Windows 11 24H2, yesterday.");
-    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW).text).toBe("Visible on this Mac in apps like Zoom and Teams. Use one-window sharing or your phone.");
+      .toBe("Hidden in this check. Each meeting app captures differently on a Mac: test yours below. Checked on macOS 27.3, today.");
+    expect(resultLine("pass", null, "macOS 27.3", NOW.toISOString(), "macos", NOW, [], "onboarding").text).toContain("test yours in Settings › Screen-share privacy");
+    expect(resultLine("pass", null, "Windows 11 24H2", new Date(2026, 10, 15, 9, 0).toISOString(), "windows", NOW).text)
+      .toBe("Hidden. People who see your whole screen won't see EchoLedger. Checked on Windows 11 24H2, yesterday.");
+    // A fail names only the apps here not confirmed hidden, and never promises the phone yet.
+    const apps = [
+      { app: "zoom", name: "Zoom", version: "7.1.9", state: "hidden", line: "Zoom: hidden", needsTest: false },
+      { app: "teams", name: "Teams", version: "25.1", state: "not_checked", line: "Teams: not checked", needsTest: true },
+      { app: "slack", name: "Slack", version: null, state: "not_checked", line: "Slack: not checked", needsTest: false },
+    ] as const;
+    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW, [...apps]).text).toBe("Visible on this Mac in Teams. Share one window or a tab instead.");
+    expect(resultLine("fail", null, "macOS 27.3", NOW.toISOString(), "macos", NOW).text).toBe("Visible on this Mac in screen share. Share one window or a tab instead.");
+    expect(resultLine("fail", null, "Windows 11 24H2", NOW.toISOString(), "windows", NOW).text).toBe("Visible in screen share on this computer. Share one window or a tab instead.");
   });
 
   it("names the error and offers its fix", () => {

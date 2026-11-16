@@ -79,7 +79,14 @@ pub fn status(app: &AppHandle) -> AppStatus {
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
     let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo };
+    let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| {
+        if p.hidden_for(crate::privacy::HideReason::Person) {
+            Some(crate::tray::Hidden::Person)
+        } else {
+            p.hidden_for(crate::privacy::HideReason::Share).then_some(crate::tray::Hidden::Share)
+        }
+    });
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
@@ -2853,6 +2860,18 @@ pub fn privacy_hide_all(app: AppHandle, window: WebviewWindow) -> AppResult<()> 
     Ok(())
 }
 
+/// Settings › Screen-share privacy: "Hide EchoLedger windows" (`hidden`) or "Show EchoLedger windows".
+#[tauri::command]
+pub fn privacy_set_hidden(app: AppHandle, window: WebviewWindow, hidden: bool) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
+    if hidden {
+        crate::privacy::set_hidden(&app, crate::privacy::HideReason::Person, true);
+    } else {
+        crate::privacy::show_windows(&app);
+    }
+    Ok(())
+}
+
 /// "Hide again" (Windows): after something else on the computer changed an EchoLedger window's capture flag, the person
 /// sets every flag again. Only the main window's privacy page asks.
 #[tauri::command]
@@ -2875,9 +2894,9 @@ pub async fn privacy_diagnostics(app: AppHandle, window: WebviewWindow) -> AppRe
     Ok(crate::privacy::check::diagnostics_text(&app))
 }
 
-/// Moves the floating windows to another display (the one that isn't shared).
+/// Moves the floating windows to the display that isn't the main one (so the main one can be shared).
 #[tauri::command]
-pub fn privacy_move_to_display(app: AppHandle, window: WebviewWindow, index: usize) -> AppResult<()> {
+pub fn privacy_move_to_other_display(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
     crate::privacy::from_main_window(window.label())?;
-    crate::overlay::move_to_display(&app, index).map_err(AppError::msg)
+    crate::overlay::move_to_other_display(&app).map_err(AppError::msg)
 }

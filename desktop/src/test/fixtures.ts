@@ -455,6 +455,7 @@ export function makePrivacyStatus(overrides: Partial<PrivacyStatus> = {}): Priva
     apps: [],
     zoomInstalled: false,
     permission: true,
+    floatingOpen: false,
     displays: 1,
     ...overrides,
   };
