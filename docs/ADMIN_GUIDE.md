@@ -369,7 +369,8 @@ toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bar, Slack, 
 
 **Admin panel → Diagnostics → Missed recordings** (staff with the device-reports permission) counts the calls that
 people's phones and computers saw but did not record. An app counts one when its check finds a call with no recording;
-the person also gets **Missed recording** in Activity, with the reason, and the app shows them the fix.
+the person also gets **Missed recording** in Activity, under **Needs action** and counted on the bell, with the reason,
+and the app shows them the fix.
 
 - **One row per device and reason**, over the last 30 days: the device (its name, system and app version), its person,
   the reason, how many in the **last 7 days** and in the **last 30 days**, and when the last one was. The rows with the
@@ -381,6 +382,8 @@ the person also gets **Missed recording** in Activity, with the reason, and the 
 - **Filters:** the reason and the system.
 - **What it never shows:** names, phone numbers or recordings, nor which app the call was in, how long it lasted or what
   the app said about it. The page only counts.
+- **How long it is kept:** each missed call is deleted 90 days after the call (the daily `model:prune`), and at once
+  with its person or workspace.
 - **What to do with it:** many of one reason on one device: help that person with the fix their app shows (turn the
   permission back on, start the capture helper again). One reason growing on many devices after an app update usually
   means a fault in that version: give the developers the system and the app version.

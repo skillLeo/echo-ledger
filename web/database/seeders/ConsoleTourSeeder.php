@@ -155,9 +155,11 @@ class ConsoleTourSeeder extends Seeder
             $missed = MissedRecording::query()->create(['user_id' => $user->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id,
                 'client_ref' => (string) Str::uuid(), 'platform' => $device->platform->value, 'app_version' => '1.8.0', 'source_app' => $app,
                 'call_started_at' => now()->subMinutes($minutesAgo), 'call_duration_s' => $seconds, 'reason' => $reason]);
-            // Its Activity item says when the call ended, as an app that reported it at once would have it.
+            // Its Activity item says when the call ended, as an app that reported it at once would have it; the person has
+            // read the ones older than a day, so Needs action holds the two new ones.
+            $ended = $missed->call_started_at->copy()->addSeconds($seconds);
             $user->notifications()->get()->filter(fn (DatabaseNotification $n): bool => ($n->data['viewData']['missed_recording_id'] ?? null) === $missed->id)
-                ->each(fn (DatabaseNotification $n) => $n->forceFill(['created_at' => $missed->call_started_at->copy()->addSeconds($seconds)])->save());
+                ->each(fn (DatabaseNotification $n) => $n->forceFill(['created_at' => $ended, 'read_at' => $minutesAgo > 2 * 24 * 60 - 1 ? $ended->copy()->addHour() : null])->save());
         }
     }
 }

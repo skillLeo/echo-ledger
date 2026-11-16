@@ -10,6 +10,7 @@ use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -180,6 +181,10 @@ describe('POST /api/devices/missed-recordings', function () {
         'too long an app version' => [['app_version' => str_repeat('1', 33)]],
         'no source app' => [['source_app' => null]],
         'an unknown source app' => [['source_app' => 'myspace']],
+        // Contract 1.8.0-b: the sessions' own values only (plus browser), never the short names 1.8.0-a listed.
+        'phone for phone_call' => [['source_app' => 'phone']],
+        'meet for google_meet' => [['source_app' => 'meet']],
+        'teams for microsoft_teams' => [['source_app' => 'teams']],
         'no start' => [['call_started_at' => null]],
         'a start that is no date' => [['call_started_at' => 'yesterday-ish']],
         'a start in the future' => [['call_started_at' => '2026-11-16T12:06:00Z']],
@@ -218,17 +223,15 @@ describe('POST /api/devices/missed-recordings', function () {
         expect(missedRows())->toHaveCount(count(MissedRecording::REASONS) + count(DevicePlatform::cases()));
     });
 
-    it('takes the sessions\' source apps and a browser, and keeps phone, meet and teams as the sessions name them', function () {
+    it('takes every source app of the sessions and a browser, kept as sent', function () {
         $device = Fx::device();
-        $sent = [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), 'browser', 'phone', 'meet', 'teams'];
+        $sent = [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), 'browser'];
         foreach ($sent as $app) {
             $this->api(Fx::token($device))->postJson('/api/devices/missed-recordings', missedBody(['source_app' => $app, 'client_ref' => 'ref-'.$app]))->assertCreated();
         }
 
-        $stored = collect(missedRows())->mapWithKeys(fn (MissedRecording $m): array => [substr($m->client_ref, 4) => $m->source_app]);
-        expect($stored->only(['phone', 'meet', 'teams', 'browser', 'zoom'])->all())
-            ->toEqual(['phone' => 'phone_call', 'meet' => 'google_meet', 'teams' => 'microsoft_teams', 'browser' => 'browser', 'zoom' => 'zoom'])
-            ->and($stored)->toHaveCount(count($sent));
+        $stored = collect(missedRows())->mapWithKeys(fn (MissedRecording $m): array => [substr($m->client_ref, 4) => $m->source_app])->all();
+        expect($stored)->toEqualCanonicalizing(array_combine($sent, $sent))->and(MissedRecording::sourceApps())->toEqualCanonicalizing($sent);
     });
 
     it('needs a device with config:read', function () {
@@ -297,10 +300,10 @@ describe('the Activity item', function () {
         'detection' => [['reason' => 'detection', 'source_app' => 'whatsapp_business'], 'WhatsApp Business call · 5:12 · The call was not detected'],
         'the microphone' => [['reason' => 'mic_busy', 'source_app' => 'zoom', 'call_duration_s' => 3725], 'Zoom call · 1:02:05 · Another app was using the microphone'],
         'a crash' => [['reason' => 'crash', 'source_app' => 'phone_call'], 'Phone call · 5:12 · The app stopped during the call'],
-        'the plan' => [['reason' => 'plan', 'source_app' => 'meet'], 'Google Meet call · 5:12 · Your plan did not allow the recording'],
+        'the plan' => [['reason' => 'plan', 'source_app' => 'google_meet'], 'Google Meet call · 5:12 · Your plan did not allow the recording'],
         'not known' => [['reason' => 'unknown', 'source_app' => 'other'], 'Call · 5:12 · The reason is not known'],
         'a browser' => [['source_app' => 'browser', 'call_duration_s' => 600], 'Call in a browser · 10:00 · The helper was not connected'],
-        'Teams by its short name' => [['source_app' => 'teams'], 'Microsoft Teams call · 5:12 · The helper was not connected'],
+        'Teams' => [['source_app' => 'microsoft_teams'], 'Microsoft Teams call · 5:12 · The helper was not connected'],
         'no length' => [['call_duration_s' => null], 'WhatsApp call · The helper was not connected'],
     ]);
 
@@ -322,15 +325,42 @@ describe('the Activity item', function () {
         expect(collect($aliceItems)->where('kind', 'missed_recording')->all())->toBe([])->and(missedItems($bob))->toHaveCount(1);
     });
 
-    it('shows on the app\'s Activity page, and leaves the bell\'s number to the problems the apps count', function () {
+    it('needs action: the bell counts it and Activity shows it under Needs action until it is read', function () {
         $user = Fx::user();
         $this->api(Fx::token(Fx::device($user)))->postJson('/api/devices/missed-recordings', missedBody(['source_app' => 'zoom']))->assertCreated();
+        $user->notifications()->where('data', 'not like', '%missed_recording%')->update(['read_at' => now()]);
         app('auth')->forgetGuards();
+        $badge = fn (): int => app(ActionBadge::class)->count($user, (int) $user->current_workspace_id);
+        // What the page lists between "Needs action" and the next heading.
+        $needs = fn (): string => (string) preg_replace('/^.*?>Needs action<\/h2>|<h2 class="el-section-header".*$/s', '', (string) $this->get('/app/activity')->assertOk()->getContent());
 
-        $this->actingAs($user, 'web')->get('/app/activity')->assertOk()
-            ->assertSee('Missed recording')->assertSee('Zoom call · 5:12 · The helper was not connected')
-            ->assertDontSee('The helper was not connected when the call started.');
-        // The phone and the desktop count fail, error and problem kinds (ActionBadge): a missed call is listed, not counted.
-        expect(app(ActionBadge::class)->count($user, (int) $user->current_workspace_id))->toBe(0);
+        $this->actingAs($user, 'web');
+        expect($badge())->toBe(1)->and(ActionBadge::needsAction('missed_recording'))->toBeTrue()
+            ->and($needs())->toContain('Missed recording')->toContain('Zoom call · 5:12 · The helper was not connected')
+            ->not->toContain('The helper was not connected when the call started.');
+
+        $user->unreadNotifications()->update(['read_at' => now()]);
+        $page = (string) $this->get('/app/activity')->assertOk()->getContent();
+        expect($badge())->toBe(0)->and($page)->not->toContain('>Needs action</h2>')->toContain('Zoom call · 5:12 · The helper was not connected');
+    });
+});
+
+describe('retention', function () {
+    it('deletes a missed call 90 days after it happened, with the daily model:prune, and keeps newer ones', function () {
+        $this->travelTo(Carbon::parse('2026-11-16 12:00:00'));
+        $device = Fx::device();
+        $row = fn (string $ref, string $at): MissedRecording => unscoped(fn (): MissedRecording => MissedRecording::query()->create([
+            'user_id' => $device->user_id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => $ref, 'platform' => 'android',
+            'source_app' => 'whatsapp', 'call_started_at' => Carbon::parse($at), 'reason' => 'crash']));
+        $row('old', '2026-08-18 11:59:59');
+        $row('day-ninety', '2026-08-18 12:00:01');
+        $row('recent', '2026-11-15 09:00:00');
+
+        // The scheduled command names no model: it finds this one by itself.
+        Artisan::call('model:prune', ['--pretend' => true]);
+        expect(Artisan::output())->toContain(MissedRecording::class)->and(missedRows())->toHaveCount(3);
+
+        Artisan::call('model:prune');
+        expect(collect(missedRows())->pluck('client_ref')->all())->toEqualCanonicalizing(['day-ninety', 'recent']);
     });
 });

@@ -1535,10 +1535,11 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 
 The console bell and the device apps share one list of notifications: `transcript_ready`, `transcript_failed`,
 `upload_failed` (a recording did not finish uploading; its device can send it again), `device_paired`, `budget_warn`
-(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, and since v1.5
-`shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"). Recordings in the
-undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show new ones as OS
-notifications that open `session_id`, outside the quiet hours the person chose on that device.
+(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, since v1.5
+`shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"), and since v1.8
+`missed_recording` (a call an app saw but did not record; it needs action, see `POST /api/devices/missed-recordings`).
+Recordings in the undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show
+new ones as OS notifications that open `session_id`, outside the quiet hours the person chose on that device.
 
 ### `GET /api/activity?limit=` — `library:read` (since v1.1)
 `limit` 1-100 (default 30), newest first:

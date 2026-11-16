@@ -24,7 +24,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * Activity (plan B18), as the phone shows it: what needs the person first (calls waiting for Keep or Discard, failed
- * transcripts and uploads), then today and earlier. The same notifications as the bell and GET /api/activity.
+ * transcripts and uploads, since v1.8 missed recordings), then today and earlier. The same notifications as the bell
+ * and GET /api/activity.
  */
 class Activity extends Page
 {
@@ -33,8 +34,8 @@ class Activity extends Page
     /** How many notifications the page lists; older ones stay in the bell until they are pruned. */
     public const LIMIT = 60;
 
-    /** Kinds that need the person while they are unread. */
-    public const NEEDS_ACTION = ['transcript_failed', 'upload_failed', 'budget_reached'];
+    /** Kinds that need the person while they are unread (since v1.8 a missed recording too). */
+    public const NEEDS_ACTION = ['transcript_failed', 'upload_failed', 'budget_reached', 'missed_recording'];
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBell;
 

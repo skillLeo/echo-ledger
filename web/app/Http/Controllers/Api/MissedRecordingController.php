@@ -51,7 +51,7 @@ final class MissedRecordingController extends Controller
                 'client_ref' => $data['client_ref'],
                 'platform' => $data['platform'],
                 'app_version' => $data['app_version'] ?? null,
-                'source_app' => MissedRecording::storedSourceApp($data['source_app']),
+                'source_app' => $data['source_app'],
                 // A clock a little ahead of the server's is let through, and kept as now.
                 'call_started_at' => Carbon::parse($data['call_started_at'])->utc()->min(now()),
                 'call_duration_s' => isset($data['call_duration_s']) ? (int) $data['call_duration_s'] : null,

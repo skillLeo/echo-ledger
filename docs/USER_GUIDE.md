@@ -458,10 +458,11 @@ Review"**, in the Library, in **Calls & meetings** and in Activity. **Review** o
 **Discard**, a name (the pencil), a client and a language, and **Keep all** / **Discard all** act on every call at once.
 **Undecided calls** are kept automatically after **24 hours** (the default), after **3 days**, or **never**.
 
-**Missed recording** (since v1.8): when your phone or computer saw a call but did not record it, Activity says so, with
-the call's app, its length and why, for example **"WhatsApp call · 5:12 · The helper was not connected"**. Open
-EchoLedger on that phone or computer: it shows how to fix it. Only the app, the time, the length and the reason are
-sent, never names, numbers or audio.
+**Missed recording** (since v1.8): when your phone or computer saw a call but did not record it, Activity lists it
+under **Needs action** and the bell counts it until you open it, with the call's app, its length and why, for example
+**"WhatsApp call · 5:12 · The helper was not connected"**. Open EchoLedger on that phone or computer: it shows how to
+fix it. Only the app, the time, the length and the reason are sent, never names, numbers or audio, and the server
+deletes them 90 days after the call.
 
 The pill (the small bar at the top of the screen) and the notification on the phone have **Pause** and
 **Stop** buttons. Paused time is not recorded. While an outgoing call rings, the pill says **Waiting for an answer**.

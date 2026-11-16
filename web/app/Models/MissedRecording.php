@@ -7,7 +7,9 @@ namespace App\Models;
 use App\Enums\SourceApp;
 use App\Models\Concerns\BelongsToWorkspace;
 use App\Services\TranscriptExporter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -15,7 +17,8 @@ use Illuminate\Support\Carbon;
 /**
  * A call an app saw but did not record (since v1.8, docs/API.md `POST /api/devices/missed-recordings`): its app, when
  * it started, how long it lasted and why nothing was recorded. Never names, phone numbers or audio. Its person reads it
- * in Activity ("Missed recording"); staff read it only as the counts of Admin → Diagnostics → Missed recordings.
+ * in Activity ("Missed recording"); staff read it only as the counts of Admin → Diagnostics → Missed recordings. Kept 90
+ * days from the call (call data), then pruned by `model:prune`; it goes earlier with its person or workspace.
  *
  * @property string $id
  * @property int $user_id
@@ -34,7 +37,7 @@ use Illuminate\Support\Carbon;
  */
 class MissedRecording extends Model
 {
-    use BelongsToWorkspace, HasUlids;
+    use BelongsToWorkspace, HasUlids, MassPrunable;
 
     /** Why nothing was recorded, and how Activity says it to the person. */
     public const REASONS = [
@@ -50,34 +53,27 @@ class MissedRecording extends Model
     /** A meeting in a browser that no known meeting app was recognised in. */
     public const BROWSER = 'browser';
 
-    /** Short names an app may send for a call app, kept as the sessions' own `source_app` values. */
-    public const SOURCE_APP_ALIASES = ['phone' => 'phone_call', 'meet' => 'google_meet', 'teams' => 'microsoft_teams'];
-
     /** The oldest call an app may report. */
     public const MAX_AGE_DAYS = 30;
 
     /** How far ahead of the server's clock a device's clock may run: a call that started "now" is not in the future. */
     public const CLOCK_DRIFT_MINUTES = 5;
 
+    /** Days a row is kept after its call (docs/API.md: call data). */
+    public const KEEP_DAYS = 90;
+
     public const UPDATED_AT = null;
 
     protected $fillable = ['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason', 'detail'];
 
     /**
-     * Every `source_app` an app may send: the sessions' wire values (App\Enums\SourceApp), `browser`, and the short
-     * names of SOURCE_APP_ALIASES.
+     * Every `source_app` an app may send: the sessions' wire values (App\Enums\SourceApp), or `browser`.
      *
      * @return list<string>
      */
     public static function sourceApps(): array
     {
-        return [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), self::BROWSER, ...array_keys(self::SOURCE_APP_ALIASES)];
-    }
-
-    /** The value kept for what an app sent: a short name becomes the sessions' wire value. */
-    public static function storedSourceApp(string $sent): string
-    {
-        return self::SOURCE_APP_ALIASES[$sent] ?? $sent;
+        return [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), self::BROWSER];
     }
 
     /** "WhatsApp call", "Phone call", "Call in a browser", or "Call" for an app EchoLedger does not name. */
@@ -86,7 +82,7 @@ class MissedRecording extends Model
         if ($sourceApp === self::BROWSER) {
             return 'Call in a browser';
         }
-        $app = SourceApp::tryFrom(self::storedSourceApp($sourceApp));
+        $app = SourceApp::tryFrom($sourceApp);
 
         return match ($app) {
             null, SourceApp::Other => 'Call',
@@ -105,6 +101,16 @@ class MissedRecording extends Model
         $parts[] = self::REASONS[$this->reason] ?? self::REASONS['unknown'];
 
         return implode(' · ', $parts);
+    }
+
+    /**
+     * Rows whose call is older than KEEP_DAYS, in every workspace (the daily `model:prune`).
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        return static::query()->withoutGlobalScopes()->where('call_started_at', '<', now()->subDays(self::KEEP_DAYS));
     }
 
     /** @return BelongsTo<Device, $this> */

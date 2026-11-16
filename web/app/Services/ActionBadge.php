@@ -9,9 +9,9 @@ use Illuminate\Notifications\DatabaseNotification;
 
 /**
  * The bell's number in the app (since v1.6, P6): only what needs the person, as the phone's Activity tab and the
- * desktop count it: unread problems (a failed transcript or upload, the monthly limit reached), unread answers to an
- * upgrade request, and calls waiting for Keep or Discard. Never finished transcripts, new devices or shares. Above nine
- * it says "9+".
+ * desktop count it: unread problems (a failed transcript or upload, the monthly limit reached, since v1.8 a missed
+ * recording), unread answers to an upgrade request, and calls waiting for Keep or Discard. Never finished transcripts,
+ * new devices or shares. Above nine it says "9+".
  */
 final class ActionBadge
 {
@@ -20,12 +20,15 @@ final class ActionBadge
     /** How many unread notifications are read for the number (newest first): more than "9+" ever needs. */
     private const LOOK_AT = 50;
 
-    /** A problem the person has to look at: the phone's rule (fail, error, problem) and the monthly limit reached. */
+    /**
+     * A problem the person has to look at: the phone's rule (fail, error, problem), the monthly limit reached and, since
+     * v1.8, a call an app saw but did not record (docs/API.md: it needs action in every app).
+     */
     public static function isProblem(?string $kind): bool
     {
         $kind = strtolower((string) $kind);
 
-        return str_contains($kind, 'fail') || str_contains($kind, 'error') || str_contains($kind, 'problem') || $kind === 'budget_reached';
+        return str_contains($kind, 'fail') || str_contains($kind, 'error') || str_contains($kind, 'problem') || in_array($kind, ['budget_reached', 'missed_recording'], true);
     }
 
     public static function needsAction(?string $kind): bool
