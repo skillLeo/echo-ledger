@@ -140,16 +140,24 @@ jobs:
     name: Smoke test, ${{ matrix.label }}
     needs: build
     runs-on: ${{ matrix.runner }}
+    # The Windows 11 Arm runner may fail without failing the run: on that image another process's window
+    # (Windows.UI.Core.CoreWindow, the runner image's own; see the Share Check's diagnostic output) covers the
+    # test window, so the Share Check there measures that window, not EchoLedger's. Server 2022 and 2025 run the
+    # same smoke test and Share Check and must pass.
+    continue-on-error: ${{ matrix.allow_failure }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - runner: windows-2022
             label: Server 2022 (build 20348)
+            allow_failure: false
           - runner: windows-2025
             label: Server 2025
+            allow_failure: false
           - runner: windows-11-arm
             label: Windows 11 Arm (x64 app under emulation)
+            allow_failure: true
     steps:
       - uses: actions/checkout@v4
         with:
