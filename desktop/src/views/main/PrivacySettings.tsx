@@ -194,7 +194,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
         <p>{ONE_WINDOW_TIP}</p><p>{LIMITS}</p>
         {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
       </>}>
-        <ActionRow id="share_privacy.demo" value={demoSeconds ? demoLeft(demoSeconds) : undefined}
+        <ActionRow id="share_privacy.demo" status={demoSeconds ? demoLeft(demoSeconds) : undefined}
           title={demoSeconds ? "Hide from screen share again" : undefined}
           disabled={settings.hideFromSharing === "off"}
           onClick={() => act(api.privacyShowInShares(demoSeconds ? 0 : 10))} />
@@ -206,13 +206,13 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
           )}
         </InfoRow>
         {status && status.displays > 1 && (
-          <ActionRow id="share_privacy.displays" value={displaysValue(status.floatingOpen, moved)} disabled={!status.floatingOpen}
+          <ActionRow id="share_privacy.displays" status={displaysValue(status.floatingOpen, moved)} disabled={!status.floatingOpen}
             onClick={() => act(api.privacyMoveToOtherDisplay(), () => setMoved(true))} />
         )}
       </Section>
       <Section title="Diagnostics" footer={<p>{setting("share_privacy.diagnostics").description}</p>}>
         <SwitchRow id="share_privacy.diagnostics" on={settings.sendDiagnostics} onChange={(v) => void patch({ sendDiagnostics: v })} />
-        <ActionRow id="share_privacy.copy" value={copied === "diag" ? "Copied" : undefined}
+        <ActionRow id="share_privacy.copy" status={copied === "diag" ? "Copied" : undefined}
           onClick={() => act(api.privacyDiagnostics().then((text) => copy("diag", text)))} />
       </Section>
     </div>

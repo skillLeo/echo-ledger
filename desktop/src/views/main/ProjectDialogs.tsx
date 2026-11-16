@@ -4,7 +4,7 @@ import { useEffect, useId, useMemo, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api, errorMessage, type ClientFolder } from "../../lib/ipc";
 import { canMoveTo, projectLabel, projectTree, subtreeIds, visibleRows } from "../../lib/projects";
-import { FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
+import { CloseIcon, FolderIcon, InboxIcon, PlusIcon, SearchIcon } from "../../components/Icons";
 import type { Notify } from "../../lib/notice";
 
 /** Moves recordings into a project (null: the Inbox): one through its own change, several in one bulk action. */
@@ -20,11 +20,13 @@ export function movedText(count: number, title: string | null | undefined, proje
 }
 
 /** A dialog sheet: Escape or a click beside it closes it, except while it is busy. */
-export function Sheet({ title, onClose, busy = false, className = "", children }: {
+export function Sheet({ title, onClose, busy = false, className = "", closeButton = false, children }: {
   title: string;
   onClose: () => void;
   busy?: boolean;
   className?: string;
+  /** A × beside the title (a long sheet whose own buttons can be below the fold). */
+  closeButton?: boolean;
   children: ReactNode;
 }) {
   const titleId = useId();
@@ -39,7 +41,14 @@ export function Sheet({ title, onClose, busy = false, className = "", children }
   return createPortal(
     <div className="sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
       <div className={`sheet card ${className}`.trim()} role="dialog" aria-modal="true" aria-labelledby={titleId}>
-        <h2 id={titleId} className="sheet-title">{title}</h2>
+        {closeButton ? (
+          <div className="sheet-head">
+            <h2 id={titleId} className="sheet-title">{title}</h2>
+            <button type="button" className="btn ghost icon-only" aria-label="Close" title="Close (Esc)" disabled={busy} onClick={onClose}><CloseIcon size={18} /></button>
+          </div>
+        ) : (
+          <h2 id={titleId} className="sheet-title">{title}</h2>
+        )}
         {children}
       </div>
     </div>,

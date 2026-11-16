@@ -708,14 +708,16 @@ pub fn discard_due(app: &AppHandle) {
     let (done, next) = {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
         let files = DecisionFiles::in_dir(&state.data_dir);
-        let done = files.discard_due(now);
-        if let Ok(done) = &done {
-            for decision in done {
-                if let (Some(owner), Some(session)) = (held_owner(&state, decision.owner.as_ref()), decision.server_session_id())
-                    && let Err(e) = crate::owner::hold_discard(&state.data_dir, owner, session)
-                {
-                    eprintln!("[echoledger] holding a discarded recording's server session: {e}");
-                }
+        // One by one: a recording that could not go stays for the next try, and never stops the others.
+        let (done, failed) = files.discard_due(now);
+        for (id, e) in &failed {
+            eprintln!("[echoledger] discarding {id} after the Undo time: {e} (tried again later)");
+        }
+        for decision in &done {
+            if let (Some(owner), Some(session)) = (held_owner(&state, decision.owner.as_ref()), decision.server_session_id())
+                && let Err(e) = crate::owner::hold_discard(&state.data_dir, owner, session)
+            {
+                eprintln!("[echoledger] holding a discarded recording's server session: {e}");
             }
         }
         (done, files.load().next_discard(now))
@@ -723,17 +725,13 @@ pub fn discard_due(app: &AppHandle) {
     if let Some(at) = next {
         schedule_discard(app, at);
     }
-    match done {
-        Ok(done) if !done.is_empty() => {
-            for decision in &done {
-                crate::screens::forget(app, &decision.id);
-            }
-            state.upload_notify.notify_one(); // the worker deletes a queued server session
-            emit_pending(app);
-            refresh_after_call(app);
+    if !done.is_empty() {
+        for decision in &done {
+            crate::screens::forget(app, &decision.id);
         }
-        Ok(_) => {}
-        Err(e) => eprintln!("[echoledger] discarding after the Undo time: {e}"),
+        state.upload_notify.notify_one(); // the worker deletes a queued server session
+        emit_pending(app);
+        refresh_after_call(app);
     }
 }
 

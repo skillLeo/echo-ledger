@@ -1,9 +1,11 @@
 // Help & shortcuts (v1.6, P4.1): every key of the window in one place ("?" opens it), the global shortcuts as set in
-// Account → Preferences, and where to read more.
+// Settings › Keyboard shortcuts, and where to read more (answers to common questions in Settings › Help); how to get a
+// screenshot of EchoLedger and what to send for support. It fits the window: the lists scroll, the title and buttons stay.
 import { useEffect, useState } from "react";
 import { api, type Settings, type ShortcutAction } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
 import { paletteKeys } from "../../lib/shell";
+import { PLAYER_KEYS } from "../../lib/player";
 import { Sheet } from "./ProjectDialogs";
 
 /** The keys of the main window (they work while EchoLedger is in front, never while typing in a field). */
@@ -17,9 +19,9 @@ export function windowKeys(platform: string): readonly (readonly [string, string
     ["X", "Select the recording (then Move, Label, Export or Delete)"],
     ["Esc", "Close the recording, a menu or a dialog"],
     ["N", "Start or stop a voice note"],
-    ["Space", "Play or pause the open recording"],
-    ["← / →", "Back or forward 5 seconds"],
-    ["Shift+← / Shift+→", "Back or forward 10 seconds"],
+    [PLAYER_KEYS.toggle, "Play or pause the open recording"],
+    [`${PLAYER_KEYS.back5} / ${PLAYER_KEYS.forward5}`, "Back or forward 5 seconds"],
+    [`${PLAYER_KEYS.back10} / ${PLAYER_KEYS.forward10}`, "Back or forward 10 seconds"],
     [`${mod}F`, "Find in the open transcript"],
     ["[", "Collapse or expand the sidebar"],
     ["?", "This list"],
@@ -34,26 +36,38 @@ const GLOBAL: readonly (readonly [ShortcutAction, string])[] = [
   ["mark", "Bookmark this moment"],
 ];
 
-export function HelpDialog({ platform, onClose, onShortcuts }: { platform: string; onClose: () => void; onShortcuts: () => void }) {
+/** How to get a screenshot of EchoLedger and what to send for support (D-125). */
+export const CAPTURE_HELP = "While EchoLedger hides from screen shares it is hidden from screenshots too: turn on Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support (both in Settings › Screen-share privacy).";
+
+export function HelpDialog({ platform, onClose, onSettings }: { platform: string; onClose: () => void; onSettings: (page: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   useEffect(() => {
     api.settings().then(setSettings).catch(() => undefined);
   }, []);
+  const go = (page: string) => {
+    onClose();
+    onSettings(page);
+  };
   return (
-    <Sheet title="Help & shortcuts" onClose={onClose} className="help-sheet">
-      <h3 className="help-head">In this window</h3>
-      <dl className="key-list">
-        {windowKeys(platform).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
-      </dl>
-      <h3 className="help-head">Anywhere on this computer</h3>
-      <dl className="key-list">
-        {GLOBAL.map(([action, what]) => (
-          <div key={action}><dt><span className="kbd">{settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set"}</span></dt><dd>{what}</dd></div>
-        ))}
-      </dl>
-      <p className="small muted">Change the global shortcuts in Account → Preferences. The user guide is in the console under Help.</p>
-      <div className="row sheet-actions">
-        <button type="button" className="btn ghost" onClick={() => { onClose(); onShortcuts(); }}>Change shortcuts</button>
+    <Sheet title="Help & shortcuts" onClose={onClose} className="help-sheet" closeButton>
+      <div className="help-body">
+        <h3 className="help-head">In this window</h3>
+        <dl className="key-list">
+          {windowKeys(platform).map(([keys, what]) => <div key={keys}><dt><span className="kbd">{keys}</span></dt><dd>{what}</dd></div>)}
+        </dl>
+        <h3 className="help-head">Anywhere on this computer</h3>
+        <dl className="key-list">
+          {GLOBAL.map(([action, what]) => (
+            <div key={action}><dt><span className="kbd">{settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set"}</span></dt><dd>{what}</dd></div>
+          ))}
+        </dl>
+        <p className="small muted">Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.</p>
+        <p className="small muted" data-testid="capture-help">{CAPTURE_HELP}</p>
+      </div>
+      <div className="row sheet-actions help-actions">
+        <button type="button" className="btn ghost" onClick={() => go("shortcuts")}>Keyboard shortcuts</button>
+        <button type="button" className="btn ghost" onClick={() => go("help")}>Help articles</button>
+        <button type="button" className="btn ghost" onClick={() => go("share_privacy")}>Screen-share privacy</button>
         <span className="spacer" />
         <button type="button" className="btn primary" onClick={onClose}>Close</button>
       </div>

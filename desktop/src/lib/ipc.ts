@@ -20,7 +20,8 @@ export type MicDecision = "auto_record" | "recording" | "ignored" | "ask" | "off
 export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionWidth = "narrow" | "normal" | "wide";
-export type PermissionState = "allowed" | "denied" | "unknown";
+/** `reopen`: Screen Recording allowed in System Settings while EchoLedger ran, used once it is quit and reopened. */
+export type PermissionState = "allowed" | "denied" | "unknown" | "reopen";
 export type UploadState = "queued" | "uploading" | "verifying" | "failed";
 
 export interface RecordingInfo {
@@ -580,6 +581,9 @@ export interface PermissionsStatus {
   missing?: MissingPermission[];
   /** A permission that was granted has gone: one calm sentence, until dismissed or granted again. */
   lost?: string | null;
+  /** macOS: allowed before on this computer, "not asked" now (D-120): another copy of EchoLedger may hold it, or the
+   * privacy settings were reset, so it is said as a possibility. */
+  allowedBefore?: PermissionKind[];
 }
 
 /** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */
@@ -621,7 +625,7 @@ export interface FarSidePayload {
 }
 
 /**
- * A process holding the microphone and why EchoLedger does or does not record it (Record view explainer).
+ * A process holding the microphone and why EchoLedger does or does not record it (Settings › Calls & meetings).
  * `app` is the call app it is identified as, `site` the matched browser host or rule id.
  */
 export interface MicUser {
@@ -632,6 +636,13 @@ export interface MicUser {
   site: string | null;
   decision: MicDecision;
   reason: IgnoreReason | null;
+}
+
+/** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
+export interface NotRecordedMic {
+  user: MicUser;
+  /** RFC 3339. */
+  at: string;
 }
 
 export interface LibraryItem {
@@ -1553,6 +1564,8 @@ export const api = {
   notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
+  /** The last app not recorded since EchoLedger started, and when; null when there was none. */
+  micLastNotRecorded: () => invoke<NotRecordedMic | null>("mic_last_not_recorded"),
   /** One recording per file, with one client and language for the batch (null: no client / automatic). */
   importVoiceNotes: (pathsList: string[], clientId: string | null = null, language: TranscriptionLanguage | null = null) =>
     invoke<ImportSummary>("import_voice_notes", { pathsList, clientId, language }),
@@ -1675,6 +1688,8 @@ export const api = {
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
+  /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
+  quitAndReopen: () => invoke<void>("quit_and_reopen"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

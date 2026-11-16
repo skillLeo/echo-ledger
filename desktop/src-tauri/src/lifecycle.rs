@@ -3,6 +3,11 @@
 //! hidden for `HIDE_GRACE`, except the dictation box, which stays built while its shortcut is bound (`WARM`).
 //! Recording, detection, shortcuts and uploads live in the core and need no window.
 //!
+//! Idle budget (what still runs with no window): on a Mac with several displays, spaces.rs watches which display the
+//! pointer is on (the Dock icon steps aside only for another app's full-screen Space on the display in use). That is a
+//! mouse-moved monitor whose handler compares cached display frames at most once per 200 ms and reads the window
+//! server's Space list only when the display changed; with one display nothing is watched.
+//!
 //! Events for a window that is still being built are kept (the latest of each kind, in order) and sent when its page
 //! says it listens (`window_ready`). Events for a window that does not exist are dropped: every page reads the
 //! current state when it starts. Captions are replayed by `CaptionHub` instead.

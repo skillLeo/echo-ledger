@@ -136,16 +136,6 @@ export interface PageEntry {
   keywords?: string;
 }
 
-/** The pages whose name, group or keywords hold every word typed (capitals ignored), in the order given. */
-export function findPages<T extends PageEntry>(pages: readonly T[], query: string): T[] {
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
-  if (words.length === 0) return [];
-  return pages.filter((p) => {
-    const text = `${p.label} ${p.group ?? ""} ${p.keywords ?? ""}`.toLowerCase();
-    return words.every((w) => text.includes(w));
-  });
-}
-
 /** What a key does in a list (J/K move, Enter opens, X selects, Esc closes), or null when it is not one of them. */
 export type ListKey = "next" | "previous" | "open" | "pick" | "close";
 export function listKey(e: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey" | "shiftKey">): ListKey | null {

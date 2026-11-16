@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import type { LibraryItem } from "../../lib/ipc";
 import type { ItemGroup } from "../../lib/libraryGroups";
 import { formatDuration, formatWhen, sourceAppLabel } from "../../lib/format";
-import { itemState } from "../../lib/library";
+import { itemState, recordingName } from "../../lib/library";
 import { stepOf } from "../../lib/progress";
 import { AppTileIcon, appKind, PinIcon } from "../../components/Icons";
 import { GroupHeader } from "./LibraryGrouping";
@@ -106,9 +106,9 @@ export function LibraryTable({ groups, columns, collapsed, onToggleGroup, picked
               }}>
               <td className="col-title">
                 <span className="lib-title-cell">
-                  {selecting && <input type="checkbox" className="row-box" checked={picked.has(item.id)} readOnly tabIndex={-1} aria-label={`Select ${item.title ?? "recording"}`} />}
+                  {selecting && <input type="checkbox" className="row-box" checked={picked.has(item.id)} readOnly tabIndex={-1} aria-label={`Select ${recordingName(item.title)}`} />}
                   <span className={`avatar small app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
-                  <button type="button" className="lib-title" dir="auto" onClick={(e) => { e.stopPropagation(); if (selecting) onPick(item.id); else onOpen(item); }}>{item.title ?? "Recording"}</button>
+                  <button type="button" className="lib-title" dir="auto" onClick={(e) => { e.stopPropagation(); if (selecting) onPick(item.id); else onOpen(item); }}>{recordingName(item.title)}</button>
                   {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                 </span>
               </td>

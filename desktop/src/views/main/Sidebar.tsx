@@ -2,7 +2,7 @@
 // commands), then Home · Library (its smart folders) · Projects (the pinned
 // ones) · Activity · Shared (with me, my links, request links) · Upload, and at the bottom Help & shortcuts, Settings and
 // Collapse sidebar. 240 px by default, 200–320 by dragging its edge (kept on this computer), or a 64 px icon rail ("[").
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { ClientFolder, SmartFolder } from "../../lib/ipc";
 import type { LibraryPlace, LibraryView } from "../../lib/folders";
 import type { MainTab } from "../../lib/mainView";
@@ -28,7 +28,7 @@ export function sidebarSearchLabel(keys: string): string {
 }
 
 export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, recording, places, folder, view, onPlace, projects, projectId, onProject,
-  sharedTab, onShared, onGo, onUpload, onHelp, onSearch, searchKeys, uploading, uploadsWait = false, canUpload }: {
+  sharedTab, onShared, onGo, onUpload, onHelp, onSearch, searchKeys, uploading, uploadsWait = false, canUpload, libraryColumn = false }: {
   tab: MainTab;
   collapsed: boolean;
   onCollapse: () => void;
@@ -58,25 +58,57 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
   /** The server holds the uploads (v1.6, P2.7): the line says why, without the spinner. */
   uploadsWait?: boolean;
   canUpload: boolean;
+  /** The Library page shows its folders in a column of its own (wide enough): the sidebar's group would repeat them. */
+  libraryColumn?: boolean;
 }) {
-  const [open, setOpen] = useState<Set<SidebarGroup>>(loadOpenGroups);
-  const toggleGroup = (group: SidebarGroup) => setOpen((current) => {
-    const next = new Set(current);
-    if (next.has(group)) next.delete(group);
-    else next.add(group);
-    saveOpenGroups(next);
-    return next;
-  });
+  // The groups the person opened or closed with their arrow (kept on this computer), and the ones a click on a group's
+  // row opened for now (never kept: the arrow is the person's choice).
+  const [saved, setSaved] = useState<Set<SidebarGroup>>(loadOpenGroups);
+  const [rowOpened, setRowOpened] = useState<ReadonlySet<SidebarGroup>>(() => new Set());
+  const isOpen = (group: SidebarGroup) => saved.has(group) || rowOpened.has(group);
+  const toggleGroup = (group: SidebarGroup) => {
+    const closing = isOpen(group);
+    setRowOpened((current) => {
+      if (!current.has(group)) return current;
+      const next = new Set(current);
+      next.delete(group);
+      return next;
+    });
+    setSaved((current) => {
+      const next = new Set(current);
+      if (closing) next.delete(group);
+      else next.add(group);
+      saveOpenGroups(next);
+      return next;
+    });
+  };
   const pinned = (projects ?? []).filter((p) => p.pinned);
-  const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id) => (
+  // A group's whole row opens it (D-121): its label goes to the page and shows what is under it, for now; the arrow
+  // beside it shows or hides that and is remembered. The Library's row leaves its group alone while the Library page
+  // shows the same folders in its own column.
+  const openGroup = (group: SidebarGroup) => {
+    if (group === "library" && libraryColumn) return;
+    setRowOpened((current) => (current.has(group) ? current : new Set([...current, group])));
+  };
+  // Widened until the Library's column shows: the group its row opened for now closes (the arrow's choice stays).
+  useEffect(() => {
+    if (!libraryColumn) return;
+    setRowOpened((current) => {
+      if (!current.has("library")) return current;
+      const next = new Set(current);
+      next.delete("library");
+      return next;
+    });
+  }, [libraryColumn]);
+  const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id, group?: SidebarGroup) => (
     <button type="button" className={`nav-btn ${current ? "active" : ""}`} aria-current={current ? "page" : undefined}
-      title={collapsed ? label : undefined} onClick={() => onGo(id)}>
+      title={collapsed ? label : undefined} onClick={() => { onGo(id); if (group && !collapsed) openGroup(group); }}>
       {icon}<span className="nav-label">{label}</span>{extra}
     </button>
   );
   const expander = (group: SidebarGroup, label: string) => (collapsed ? null : (
-    <button type="button" className={`nav-expand ${open.has(group) ? "open" : ""}`} aria-expanded={open.has(group)}
-      aria-label={`${open.has(group) ? "Hide" : "Show"} ${label}`} title={`${open.has(group) ? "Hide" : "Show"} ${label}`} onClick={() => toggleGroup(group)}>
+    <button type="button" className={`nav-expand ${isOpen(group) ? "open" : ""}`} aria-expanded={isOpen(group)}
+      aria-label={`${isOpen(group) ? "Hide" : "Show"} ${label}`} title={`${isOpen(group) ? "Hide" : "Show"} ${label}`} onClick={() => toggleGroup(group)}>
       <ChevronRightIcon size={14} />
     </button>
   ));
@@ -136,17 +168,17 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("library", "Library", <LibraryIcon size={20} filled={tab === "library"} />)}
+              {navButton("library", "Library", <LibraryIcon size={20} filled={tab === "library"} />, undefined, tab === "library", "library")}
               {expander("library", "Library's smart folders")}
             </div>
-            {!collapsed && open.has("library") && <PlaceList places={places} folder={tab === "library" ? folder : null} view={tab === "library" ? view : null} onOpen={onPlace} label="Smart folders in the sidebar" compact />}
+            {!collapsed && isOpen("library") && <PlaceList places={places} folder={tab === "library" ? folder : null} view={tab === "library" ? view : null} onOpen={onPlace} label="Smart folders in the sidebar" compact />}
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("projects", "Projects", <FolderIcon size={20} filled={tab === "projects"} />)}
+              {navButton("projects", "Projects", <FolderIcon size={20} filled={tab === "projects"} />, undefined, tab === "projects", pinned.length > 0 ? "projects" : undefined)}
               {pinned.length > 0 && expander("projects", "pinned projects")}
             </div>
-            {!collapsed && open.has("projects") && pinned.length > 0 && (
+            {!collapsed && isOpen("projects") && pinned.length > 0 && (
               <ul className="place-list in-sidebar" aria-label="Pinned projects">
                 {pinned.map((p) => (
                   <li key={p.id} className={`place-row ${tab === "projects" && projectId === p.id ? "selected" : ""}`} {...{ [DROP_ATTRIBUTE]: p.id }}>
@@ -164,10 +196,10 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("shared", "Shared", <ShareIcon size={20} filled={tab === "shared"} />)}
+              {navButton("shared", "Shared", <ShareIcon size={20} filled={tab === "shared"} />, undefined, tab === "shared", "shared")}
               {expander("shared", "what is shared")}
             </div>
-            {!collapsed && open.has("shared") && (
+            {!collapsed && isOpen("shared") && (
               <ul className="place-list in-sidebar" aria-label="Shared">
                 {SHARED_TABS.map(([id, label]) => {
                   const here = tab === "shared" && sharedTab === id;

@@ -269,7 +269,8 @@ describe("Library screen fed with server data", () => {
     expect(await screen.findByText("Loud and clear. Go ahead.")).toBeInTheDocument();
     expect(screen.getAllByText("Me").length).toBeGreaterThanOrEqual(2);
     expect(screen.getAllByText("Client").length).toBeGreaterThanOrEqual(2);
-    expect(screen.getByText(/Final transcript · AssemblyAI/)).toBeInTheDocument();
+    expect(screen.getByText("Final transcript")).toBeInTheDocument();
+    expect(screen.queryByText(/AssemblyAI|universal/)).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("player")).toHaveAttribute("src", expect.stringContaining("/audio?expires=")));
   });
 
@@ -280,10 +281,11 @@ describe("Library screen fed with server data", () => {
     expect(within(segments).getAllByText(/Please call me back tomorrow at three thirty\./)).toHaveLength(1);
   });
 
-  it("shows the provider's reason when the transcript failed", async () => {
+  it("says why the transcript failed in the app's own words, never the provider's message (D-130)", async () => {
     await open("WhatsApp call");
-    expect(await screen.findByText(/Transcription failed\./)).toBeInTheDocument();
-    expect(screen.getByText(/Transcoding failed\. File does not appear to contain audio/)).toBeInTheDocument();
+    const failed = await screen.findByText(/Transcription failed\./);
+    expect(failed.closest(".notice")).not.toHaveTextContent(/Transcoding failed\. File does not appear to contain audio/);
+    expect(failed.closest(".notice")).toHaveTextContent(/Transcription failed\. (The transcription service|Something went wrong|No audio)/);
     expect(screen.queryByText(/Check your microphone/)).not.toBeInTheDocument();
   });
 

@@ -255,6 +255,14 @@ impl AppState {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }
 
+    /// What this computer allowed before that macOS now calls "not asked" (D-120); nothing off a Mac.
+    pub fn permissions_allowed_before(&self, now: &permissions::Permissions) -> Vec<permissions::Kind> {
+        if !cfg!(target_os = "macos") {
+            return Vec::new();
+        }
+        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).allowed_before(now, permissions::can_tell_not_asked())
+    }
+
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
     pub fn permissions_now(&self) -> permissions::Permissions {
         let now = permissions::read();
@@ -553,6 +561,8 @@ pub fn run() {
             commands::notify_when_ready,
             commands::hide_captions,
             commands::mic_users,
+            commands::mic_last_not_recorded,
+            commands::quit_and_reopen,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,

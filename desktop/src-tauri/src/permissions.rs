@@ -22,6 +22,9 @@ pub enum Access {
     Denied,
     /// The system has not asked yet, or does not say (macOS asks the first time).
     Unknown,
+    /// Allowed in System Settings while EchoLedger was running: macOS applies Screen Recording when an app opens, so this
+    /// copy can use it once it is quit and reopened. Only Screen Recording reads this way.
+    Reopen,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -150,6 +153,10 @@ pub struct Memory {
     pub granted: Vec<Kind>,
     #[serde(default)]
     pub notice: Vec<Kind>,
+    /// Every permission ever granted on this computer, kept whatever happens later (D-120): one that macOS now calls
+    /// "not asked" was allowed before ([`Memory::allowed_before`]).
+    #[serde(default)]
+    pub ever: Vec<Kind>,
 }
 
 const KINDS: [Kind; 3] = [Kind::Microphone, Kind::SystemAudio, Kind::Screen];
@@ -176,7 +183,12 @@ impl Memory {
         let mut next = self.clone();
         for kind in KINDS {
             let had = next.granted.contains(&kind);
-            if now.of(kind) == Access::Allowed {
+            // Allowed in System Settings and waiting for a reopen is granted: nothing went.
+            let allowed = matches!(now.of(kind), Access::Allowed | Access::Reopen);
+            if (had || next.notice.contains(&kind) || allowed) && !next.ever.contains(&kind) {
+                next.ever.push(kind);
+            }
+            if allowed {
                 if !had {
                     next.granted.push(kind);
                 }
@@ -189,6 +201,19 @@ impl Memory {
             }
         }
         next
+    }
+
+    /// The permissions this computer allowed before that macOS now calls "not asked" (D-120). Another copy of EchoLedger
+    /// (an older build) that System Settings still lists can be why, and so can a reset of the privacy settings or a Mac
+    /// set up from another one: it is said as a possibility, never as what happened. System audio and Screen Recording
+    /// count only when `can_tell_not_asked` (macOS answered the privacy call that tells "not asked" apart for them; without
+    /// it they are merely unknown). Screen Recording allowed while EchoLedger ran is [`Access::Reopen`], never this.
+    pub fn allowed_before(&self, now: &Permissions, can_tell_not_asked: bool) -> Vec<Kind> {
+        KINDS
+            .into_iter()
+            .filter(|k| can_tell_not_asked || *k == Kind::Microphone)
+            .filter(|k| self.ever.contains(k) && now.of(*k) == Access::Unknown)
+            .collect()
     }
 
     /// The one calm sentence about what went; none when nothing did.
@@ -209,6 +234,30 @@ impl Memory {
             [first, second, third, ..] => format!("{first}, {second} and {third}"),
         };
         Some(format!("macOS no longer lets EchoLedger use {list}."))
+    }
+}
+
+/// Whether this computer tells "not asked yet" apart from "told no" for system audio and Screen Recording: on a Mac, the
+/// privacy call that reads it is there. Windows has no such permissions.
+pub fn can_tell_not_asked() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        macos::reads_privacy_answers()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+/// Why EchoLedger does not quit and reopen now (pure): never in the middle of a recording or of dictation.
+pub fn reopen_refusal(recording: bool, dictating: bool) -> Option<&'static str> {
+    if recording {
+        Some("Stop the recording first: EchoLedger quits and reopens to finish.")
+    } else if dictating {
+        Some("Finish dictating first: EchoLedger quits and reopens to finish.")
+    } else {
+        None
     }
 }
 
@@ -348,8 +397,49 @@ mod tests {
     }
 
     #[test]
+    fn a_permission_allowed_before_but_not_asked_now_is_said_as_allowed_before() {
+        let start = Memory::default().observe(&ON, true);
+        assert_eq!(start.ever, vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
+        // macOS calls the microphone "not asked" now (another build, a reset, a migrated Mac): allowed before.
+        let fresh = Permissions { microphone: Access::Unknown, ..ON };
+        let after = start.observe(&fresh, true);
+        assert_eq!(after.allowed_before(&fresh, true), vec![Kind::Microphone]);
+        // Dismissing the banner forgets the notice, never what was granted.
+        let dismissed = Memory { notice: Vec::new(), ..after.clone() };
+        assert_eq!(dismissed.allowed_before(&fresh, true), vec![Kind::Microphone]);
+        // Turned off on purpose (denied) is said as off; never granted is just "not asked".
+        assert!(after.allowed_before(&Permissions { microphone: Access::Denied, ..ON }, true).is_empty());
+        assert!(Memory::default().allowed_before(&fresh, true).is_empty());
+        // A memory saved before this field existed learns it from what it knew.
+        let old: Memory = serde_json::from_str(r#"{"granted":[],"notice":["microphone"]}"#).unwrap();
+        assert_eq!(old.observe(&fresh, true).allowed_before(&fresh, true), vec![Kind::Microphone]);
+    }
+
+    #[test]
+    fn what_macos_cannot_say_or_a_permission_waiting_for_a_reopen_is_never_allowed_before() {
+        let start = Memory::default().observe(&ON, true);
+        let unknown = Permissions { microphone: Access::Unknown, system_audio: Access::Unknown, screen: Access::Unknown };
+        // Without the privacy call, system audio and Screen Recording are only unknown: nothing is said about them.
+        assert_eq!(start.observe(&unknown, true).allowed_before(&unknown, false), vec![Kind::Microphone]);
+        assert_eq!(start.observe(&unknown, true).allowed_before(&unknown, true), vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
+        // Screen Recording switched on in System Settings while EchoLedger ran: waiting for a reopen, never "remove it".
+        let reopen = Permissions { screen: Access::Reopen, ..ON };
+        let waiting = start.observe(&Permissions { screen: Access::Denied, ..ON }, true).observe(&reopen, true);
+        assert!(waiting.allowed_before(&reopen, true).is_empty());
+        assert!(waiting.notice.is_empty(), "allowed again: the loss is not said");
+        assert!(waiting.granted.contains(&Kind::Screen));
+    }
+
+    #[test]
+    fn it_quits_and_reopens_only_between_recordings_and_dictation() {
+        assert_eq!(reopen_refusal(false, false), None);
+        assert!(reopen_refusal(true, false).unwrap().starts_with("Stop the recording first"));
+        assert!(reopen_refusal(false, true).unwrap().starts_with("Finish dictating first"));
+    }
+
+    #[test]
     fn the_sentence_is_one_calm_line() {
-        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone] };
+        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone], ever: Vec::new() };
         let line = two.sentence().unwrap();
         assert!(line.contains("the microphone and system audio"), "{line}");
         // One short sentence on the banner (its Set up button opens the steps).
@@ -362,7 +452,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = Memory::path(dir.path());
         assert_eq!(Memory::load(&path), Memory::default());
-        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen] };
+        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen], ever: Vec::new() };
         memory.save(&path);
         assert_eq!(Memory::load(&path), memory);
         std::fs::write(&path, "not json").unwrap();

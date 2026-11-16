@@ -347,5 +347,11 @@ describe("In progress (Phase 1C)", () => {
       { id: "upload-u1", title: "Imported memo", line: "Uploading… 42%", recordingId: null },
       { id: "s1", title: "Acme call", line: "Transcribing… about 20 s left", recordingId: "s1" },
     ]);
+    // Untitled (D-031): an upload is named as the Library's upload list names it, a recording as the Library does.
+    const untitled = inProgressRows(
+      [{ id: "u3", sourceApp: "zoom", title: null, startedAt: "", durationMs: 0, state: "uploading", lastError: null, attempts: 0, imported: false, progress: 10 }],
+      [makeItem("s3", { title: null, status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } })],
+    );
+    expect(untitled.map((r) => r.title)).toEqual(["Zoom call", "Recording"]);
   });
 });

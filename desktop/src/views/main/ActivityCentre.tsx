@@ -7,8 +7,8 @@ import { LIVE_STATUS_MS, needsLiveStatus } from "../../lib/library";
 import { stepOf, uploadLine } from "../../lib/progress";
 import { useWindowShown } from "../../lib/visibility";
 import { formatWhen } from "../../lib/format";
-import { dayGroup } from "../../lib/library";
-import { skippedLine, skippedMeta, waitingItems, waitingSummary } from "../../lib/pending";
+import { dayGroup, recordingName } from "../../lib/library";
+import { skippedLine, skippedMeta, uploadTitle, waitingItems, waitingSummary } from "../../lib/pending";
 import { AlertIcon, BellIcon, DesktopIcon, HourglassIcon } from "../../components/Icons";
 import { actionCount, BADGE_READ_LIMIT, isProblem, needsAction as asksForAction } from "../../lib/badge";
 import { PageHeader } from "../../components/Page";
@@ -27,12 +27,12 @@ export interface InProgressRow {
 
 /** The rows of In progress (pure): this computer's uploads first, then the Library's recordings still moving. */
 export function inProgressRows(uploads: UploadItem[], items: LibraryItem[]): InProgressRow[] {
-  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: u.title ?? "Recording", line: uploadLine(u), recordingId: null }));
+  const sending = uploads.filter((u) => u.state !== "failed" && !u.heldFor).map((u) => ({ id: `upload-${u.id}`, title: uploadTitle(u), line: uploadLine(u), recordingId: null }));
   const moving = items
     .filter((i) => !i.deleted)
     .map((i) => ({ item: i, step: stepOf(i) }))
     .filter(({ step }) => step.step !== null)
-    .map(({ item, step }) => ({ id: item.id, title: item.title ?? "Recording", line: step.line ?? "", recordingId: item.id }));
+    .map(({ item, step }) => ({ id: item.id, title: recordingName(item.title), line: step.line ?? "", recordingId: item.id }));
   return [...sending, ...moving];
 }
 

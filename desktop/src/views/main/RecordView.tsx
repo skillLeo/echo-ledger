@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { api, listenTo, type AppStatus, type InputDevice, type MicUser } from "../../lib/ipc";
-import { processName, sourceAppLabel } from "../../lib/format";
-import { explainMicUser, micTone } from "../../lib/explainer";
+import { api, listenTo, type AppStatus, type InputDevice } from "../../lib/ipc";
+import { sourceAppLabel } from "../../lib/format";
 import { DISCARD_QUESTION } from "../../lib/pending";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { useWindowShown } from "../../lib/visibility";
@@ -14,56 +13,6 @@ import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { ReadyCheckCard } from "./ReadyCheck";
 import { confirmAction } from "../../lib/confirm";
-
-/**
- * Live view of which apps hold the microphone and what the core decided for each (A1.8), so a call that was not
- * recorded can be explained instead of silently lost.
- */
-function CallDetection({ status, run }: { status: AppStatus; run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
-  const [users, setUsers] = useState<MicUser[]>([]);
-  const shown = useWindowShown();
-  useEffect(() => {
-    if (!shown) return; // C9: no microphone scans behind a hidden window
-    let alive = true;
-    const tick = () => api.micUsers().then((u) => alive && setUsers(u)).catch(() => undefined);
-    tick();
-    const timer = window.setInterval(tick, 2000);
-    return () => {
-      alive = false;
-      window.clearInterval(timer);
-    };
-  }, [shown]);
-  return (
-    <div className="card" style={{ marginTop: 14 }}>
-      <div className="row">
-        <b>Automatic call recording</b>
-        <span className="spacer" />
-        <button type="button" className={`switch ${status.autoMode ? "on" : ""}`} role="switch" aria-checked={status.autoMode} aria-label="Toggle automatic call recording"
-          onClick={() => run(() => api.updateSettings({ autoMode: !status.autoMode }).then(() => undefined))} />
-      </div>
-      <p className="small muted">
-        {status.autoMode
-          ? "On: EchoLedger records a call when an app both uses your microphone and plays audio, for example WhatsApp, Zoom, Teams, or Google Meet in a browser. Dictation and voice typing are never recorded."
-          : "Off: calls are only recorded when you press REC. Turn this on to record WhatsApp, Zoom, Teams and Meet calls automatically."}
-      </p>
-      <div className="mic-users" data-testid="mic-users">
-        {users.length === 0 && <span className="small muted">No app is using the microphone right now.</span>}
-        {users.map((u, i) => (
-          <div key={`${u.name}-${i}`} className="mic-user">
-            <span className={`status-dot ${micTone(u)}`} aria-hidden="true" />
-            <div className="mic-user-main">
-              <div className="mic-user-name">
-                <span title={u.name}>{processName(u.name)}</span>
-                {u.site && <span className="muted">{u.site}</span>}
-              </div>
-              <div className={`small mic-user-why ${u.decision === "ignored" || u.decision === "off" ? "muted" : ""}`}>{explainMicUser(u)}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /**
  * The Bluetooth microphone a recording would use (v1.5), or null. Read when the page shows and again when a recording
@@ -90,13 +39,6 @@ function useBluetoothMic(recordingRef: string | null): InputDevice | null {
   }, []);
   return bluetoothMic(devices, chosen);
 }
-
-const BACKEND_LABEL: Record<string, string> = {
-  process_loopback: "Windows process loopback (EchoLedger excluded)",
-  endpoint_loopback: "Windows endpoint loopback (all system audio)",
-  core_audio_tap: "macOS Core Audio tap",
-  mock: "Simulated source",
-};
 
 export function RecordView({ status, run, onImport }: {
   status: AppStatus;
@@ -155,7 +97,6 @@ export function RecordView({ status, run, onImport }: {
               {recording ? `${paused ? "Paused" : "Recording"} · ${what}` : "Not recording"}
             </div>
             {!recording && <div className="small muted" data-testid="record-now-hint">Record now: a meeting or call on screen is recorded with both sides, anything else as a voice note. Your microphone is "Me", the other side of the call is "Client".</div>}
-            {recording && <div className="small muted">{BACKEND_LABEL[recording.backend] ?? recording.backend}</div>}
             {recording && (
               <div className="record-controls">
                 {paused ? (
@@ -177,7 +118,6 @@ export function RecordView({ status, run, onImport }: {
           </div>
         </div>
       </div>
-      <CallDetection status={status} run={run} />
       <div className="grid-2" style={{ marginTop: 14 }}>
         <div className="card">
           <div className="row"><CaptionsIcon /><b>Live captions</b><span className="spacer" />

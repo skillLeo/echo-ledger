@@ -1,41 +1,64 @@
-// The Record view's call-detection explainer (A1.8): one line per app holding the microphone, saying what the core
-// saw and what it decided, so a call that was not recorded can be understood instead of silently missed.
-import { sourceAppLabel } from "./format";
-import type { IgnoreReason, MicUser } from "./ipc";
+// Why a call was or wasn't recorded (A1.8; since D-014 in Settings › Calls & meetings, no longer on Home): one plain
+// line per app using the microphone, saying what EchoLedger will do and why, so a call that was not recorded can be
+// understood instead of silently missed. Plain words only: never how sound is captured.
+import { formatTime, processName, rowDate, sourceAppLabel } from "./format";
+import type { IgnoreReason, MicUser, NotRecordedMic } from "./ipc";
 
-const IGNORED: Record<IgnoreReason, string> = {
-  dictation: "Ignored: dictation (no audio playing)",
-  unknown_site: "Ignored: unknown site",
-  unknown_app: "Ignored: not a call app",
-  never_record: "Ignored: on your never-record list",
-  auto_off: "Auto-record is off",
-  app_off: "Ignored: auto-record is off for this app",
+/** Why an app is not recorded, in plain words. */
+const NOT_RECORDED: Record<IgnoreReason, string> = {
+  dictation: "no sound is playing, so it looks like dictation",
+  unknown_site: "this website isn't one of your call sites",
+  unknown_app: "it isn't a call app EchoLedger knows",
+  never_record: "it's on your never-record list",
+  auto_off: "auto-record is off",
+  app_off: "auto-record is off for this app",
 };
 
-/** The decision part of the line: `Decision: auto-record`, `Recording now`, `Ignored: …`, `Will ask you`, … */
+/** What EchoLedger does with it (pure): "Recorded now", "Will be recorded", "Will ask you", "Not recorded: …". */
 export function decisionText(user: Pick<MicUser, "decision" | "reason">): string {
   switch (user.decision) {
     case "auto_record":
-      return "Decision: auto-record";
+      return "Will be recorded";
     case "recording":
-      return "Recording now";
+      return "Recorded now";
     case "ask":
       return "Will ask you";
     case "off":
-      return "Auto-record is off";
-    case "ignored":
-      return (user.reason && IGNORED[user.reason]) || "Ignored";
+      return `Not recorded: ${NOT_RECORDED.auto_off}`;
     default:
-      return "Ignored";
+      return `Not recorded${user.reason && NOT_RECORDED[user.reason] ? `: ${NOT_RECORDED[user.reason]}` : ""}`;
   }
 }
 
-/** `Holds mic ✓ · Playing audio ✓ · Identified as Google Meet · Decision: auto-record` */
-export function explainMicUser(user: MicUser): string {
-  const parts = [`Holds mic ${user.holdsMic ? "✓" : "✗"}`, `Playing audio ${user.playsAudio ? "✓" : "✗"}`];
-  if (user.app) parts.push(`Identified as ${sourceAppLabel(user.app)}`);
-  parts.push(decisionText(user));
-  return parts.join(" · ");
+/** The app as people know it: the call app's name, the website, or the program's name. */
+export function micUserName(user: Pick<MicUser, "app" | "site" | "name">): string {
+  return user.app ? sourceAppLabel(user.app) : user.site?.trim() || processName(user.name);
+}
+
+/** Whether an app using the microphone is left unrecorded (pure): what the "last one not recorded" line is about. */
+export function notRecorded(user: Pick<MicUser, "decision">): boolean {
+  return user.decision === "ignored" || user.decision === "off";
+}
+
+/** When it was last seen (pure): "at 3:42 pm", "yesterday at 3:42 pm" or "on 9 Dec at 3:42 pm" (Settings' clock). */
+export function seenWhen(iso: string, now: Date = new Date()): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  const time = formatTime(at);
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (at.toDateString() === now.toDateString()) return `at ${time}`;
+  if (at.toDateString() === yesterday.toDateString()) return `yesterday at ${time}`;
+  return `on ${rowDate(iso, now)} at ${time}`;
+}
+
+/** The line about the last app not recorded (pure), kept by the core since EchoLedger started, so a call from before
+ * the page was opened is explained too: "Last not recorded: Slack at 3:42 pm, because it isn't a call app EchoLedger
+ * knows." */
+export function lastNotRecordedLine(last: NotRecordedMic, now: Date = new Date()): string {
+  const why = decisionText(last.user).replace(/^Not recorded(: )?/, "");
+  const when = seenWhen(last.at, now);
+  return `Last not recorded: ${micUserName(last.user)}${when ? ` ${when}` : ""}${why ? `, because ${why}` : ""}.`;
 }
 
 export type MicTone = "live" | "ok" | "ask" | "idle";

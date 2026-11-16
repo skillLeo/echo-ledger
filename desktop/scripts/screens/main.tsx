@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -58,6 +58,8 @@ const plan = makePlan({
   monthlyMinutes: 3000, usedMinutes: 812.5, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.4 * 1024 ** 3, retentionDays: 90, seats: 5,
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
+// `&untitled=1`: the opened recording has no title (D-031: it is called Recording everywhere).
+const LISTED = params.get("untitled") === "1" ? ITEMS.map((i) => (i.id === opened ? { ...i, title: null, title_auto: false } : i)) : ITEMS;
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
 // v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
 // minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).
@@ -196,8 +198,11 @@ const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
-// Phase 1C: the Ready check, ready or with two things to fix ("record-not-ready").
-const notReady = screen === "record-not-ready";
+// Phase 1C: the Ready check, ready or with two things to fix ("record-not-ready"); "&older=1": the microphone was
+// allowed before on this Mac and macOS calls it "not asked" now (D-120), so calls are not ready.
+const older = params.get("older") === "1";
+const twoToFix = screen === "record-not-ready";
+const notReady = twoToFix || older;
 const check = (id: string, label: string, ok: boolean, detail: string | null = null, fix: { label: string; action: string } | null = null) => ({ id, label, ok, detail, fix });
 const READY_REPORT = {
   ready: !notReady,
@@ -205,11 +210,13 @@ const READY_REPORT = {
   checks: [
     check("account", "Signed in", true),
     check("microphone", "Microphone", true),
-    check("microphone_permission", "Microphone allowed", true),
-    notReady
+    older
+      ? check("microphone_permission", "Microphone allowed", false, "Allowed before on this Mac. If System Settings already lists EchoLedger, remove it there; macOS asks again when a recording starts.", { label: "Open System Settings", action: "allow_microphone" })
+      : check("microphone_permission", "Microphone allowed", true),
+    twoToFix
       ? check("other_side", "The other side of calls", false, "EchoLedger may not record this computer's sound: only your voice would be recorded.", { label: "Open System Settings", action: "allow_system_audio" })
       : check("other_side", "The other side of calls", true),
-    notReady
+    twoToFix
       ? check("detection", "Meetings recorded by themselves", false, "Record calls automatically is off: calls are recorded only when you start them.", { label: "Turn on", action: "turn_on_auto_mode" })
       : check("detection", "Meetings recorded by themselves", true),
   ],
@@ -244,6 +251,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   // v1.6.2: a promo code for Pro, at half price.
   promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
+    // "record-recording": Home while a Zoom call records (no capture method, no list of apps; D-013, D-014).
+    recording: screen === "record-recording" ? makeRecording({ sourceApp: "zoom", backend: "core_audio_tap" }) : null,
+    levels: screen === "record-recording" ? [0.42, 0.31] : [0, 0],
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,
     deviceName: "Work laptop",
@@ -271,8 +281,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
-  library_list: () => (empty ? [] : ITEMS),
-  library_refresh: () => (empty ? [] : ITEMS),
+  library_list: () => (empty ? [] : LISTED),
+  library_refresh: () => (empty ? [] : LISTED),
   list_clients: () => ({ data: CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
@@ -281,7 +291,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   shared_with_me: () => ({ data: SHARED }),
   request_links: () => ({ data: REQUESTS }),
   session_detail: ({ id }) => ({ id, playback_url: audioUrl, markers: id === "r5" ? [{ id: "mk1", at_ms: 95_000, tag: "Budget", note: "Phase one estimate" }] : [], speaker_names: { Me: "You", Client: "Sara (Acme)" } }),
-  transcript_detail: ({ id }) => TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null },
+  // `&failure=<error_code>`: the failed call fails for that reason instead (D-130: Try again only where it can help).
+  // `&check=1`: a second transcription disagreed on the "la ravel" line (D-132: said without the engine's name).
+  transcript_detail: ({ id }) => (id === "t-r4" && params.get("failure") ? { ...TRANSCRIPTS["t-r4"], error_code: params.get("failure") }
+    : id === "t-r5" && params.get("check") === "1" ? { ...TRANSCRIPTS["t-r5"], segments: TRANSCRIPTS["t-r5"].segments.map((s, i) => (i === 3
+      ? { ...s, check: { provider: "groq", label: "Groq Whisper large-v3", text: "We will build it on Laravel with a Vue front end." } } : s)) }
+    : TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null }),
   transcript_views: () => VIEWS,
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
@@ -290,11 +305,18 @@ const commands: Record<string, (args: Args) => unknown> = {
   recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   upload_list: () => [],
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
-  search_library: () => ({ data: [], next_page: null }),
+  // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
+  search_library: ({ query }) => {
+    const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();
+    const data = params.get("found") === "1" && q ? ITEMS.filter((i) => i.title?.toLowerCase().includes(q)).map((session) => ({ session, hit_count: 1, hits: [] })) : [];
+    return { data, next_page: null };
+  },
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),
   mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
+  // What the core kept: a Zoom call earlier today, not recorded because its switch is off (D-014).
+  mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
   translate_apps: () => [],
   translate_status: () => screen.startsWith("controls-translate") ? {
     mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
@@ -307,13 +329,16 @@ const commands: Record<string, (args: Args) => unknown> = {
   ],
   permissions_status: () => (mac
     ? {
-        microphone: onboarding ? "unknown" : "allowed",
+        // "&older=1": the microphone was allowed before on this Mac and reads "not asked" now (D-120); "&reopen=1": Screen
+        // Recording was switched on in System Settings while EchoLedger ran.
+        microphone: onboarding || older ? "unknown" : "allowed",
         systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
-        screen: onboarding ? "denied" : "allowed",
+        screen: onboarding ? "denied" : params.get("reopen") === "1" ? "reopen" : "allowed",
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
         lost: screen === "library-lost-mac" || screen === "library-banners-mac" ? "macOS no longer lets EchoLedger use the microphone." : null,
+        allowedBefore: older ? ["microphone"] : [],
       }
     : { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] }),
   mac_check_last: () => screen === "settings-mac-check"

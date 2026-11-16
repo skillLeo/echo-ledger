@@ -80,6 +80,8 @@ const SEGMENTS: Segment[] = [
 ];
 
 export const TRANSCRIPTS: Record<string, TranscriptDetail> = {
+  // The failed call: the server's message names its provider; the page says why in its own words (D-130).
+  "t-r4": makeTranscript({ id: "t-r4", kind: "final", provider: "gemini", status: "failed", segments: [], error: "Gemini could not read the audio.", error_code: "provider_rejected" }),
   "t-r2": makeTranscript({
     id: "t-r2", kind: "final", provider: "assemblyai", model: "universal-2", status: "completed", language: "ur", backup_engine: true, backup_reason: "waited",
     segments: [

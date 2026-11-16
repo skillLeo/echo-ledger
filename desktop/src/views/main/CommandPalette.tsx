@@ -5,9 +5,10 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { snippetParts } from "../../lib/player";
 import type { MainTab } from "../../lib/mainView";
-import { findPages, type PageEntry } from "../../lib/shell";
+import type { PageEntry } from "../../lib/shell";
 import type { NoticeTarget } from "../../lib/notice";
 import { featureWords, isLocked, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { BadgeMark } from "./Upgrade";
@@ -23,10 +24,49 @@ export interface PaletteCommand {
   run: () => void;
 }
 
-/** Every word of the query appears in the label or the keywords (case-insensitive). */
+/** A text's words for matching (pure): lower case, split at whatever is not a letter, a combining mark or a digit. What
+ * is typed is split the same way as the names, so "d'souza" finds "D'Souza Traders" and "ali & sons" finds "Ali & Sons";
+ * a mark (Urdu's zer or pesh, an accent typed apart) stays inside its word. */
+export const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
+
+/** The commands and pages that open a place: "Go to Library", "Go to Devices · Account". */
+const GO_TO = /^go to /i;
+
+/**
+ * How well a row matches what was typed (pure, D-087): 3 its name starts with it, 2 every typed word starts a word of
+ * its name, 1 some word only starts a word of its keywords, 0 none (also a word found only inside another one: "ew" is
+ * not "new"). Names come first, so "new" and Enter make a new project, never a voice note found by its keyword. Nothing
+ * typed matches everything; only punctuation typed matches nothing.
+ */
+export function paletteScore(query: string, command: Pick<PaletteCommand, "label" | "keywords">): number {
+  const typed = wordsOf(query);
+  if (typed.length === 0) return query.trim() ? 0 : 1;
+  const name = wordsOf(command.label);
+  const keys = wordsOf(command.keywords ?? "");
+  let byKeyword = false;
+  for (const word of typed) {
+    if (name.some((n) => n.startsWith(word))) continue;
+    if (!keys.some((k) => k.startsWith(word))) return 0;
+    byKeyword = true;
+  }
+  if (byKeyword) return 1;
+  // The name starts with what was typed, word by word: the last word typed may be the start of one. "Go to X" is named
+  // by X too, so "library" is Go to Library's own name and comes before "Sync the library".
+  const last = typed.length - 1;
+  const startsWithTyped = (words: string[]) => typed.every((word, i) => (i < last ? words[i] === word : words[i]?.startsWith(word)));
+  const place = GO_TO.test(command.label) ? wordsOf(command.label.replace(GO_TO, "")) : null;
+  return startsWithTyped(name) || (place !== null && startsWithTyped(place)) ? 3 : 2;
+}
+
+/** Whether a row matches what was typed at all ([`paletteScore`] above 0). */
 export function paletteMatches(query: string, command: Pick<PaletteCommand, "label" | "keywords">): boolean {
-  const haystack = `${command.label} ${command.keywords ?? ""}`.toLowerCase();
-  return query.toLowerCase().split(/\s+/).filter(Boolean).every((w) => haystack.includes(w));
+  return paletteScore(query, command) > 0;
+}
+
+/** The rows that match, best first, keeping their own order between equals (pure). */
+function ranked<T>(rows: readonly T[], score: (row: T) => number): { row: T; score: number }[] {
+  return rows.map((row, at) => ({ row, score: score(row), at })).filter((r) => r.score > 0).sort((a, b) => b.score - a.score || a.at - b.at)
+    .map(({ row, score: s }) => ({ row, score: s }));
 }
 
 /** A smart folder of the Library the palette can open (the ones the sidebar lists). */
@@ -129,12 +169,15 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
 }) {
   const [query, setQuery] = useState("");
   const entitlements = useEntitlements();
-  const [index, setIndex] = useState(0);
+  // The row the arrows moved to; none: the best match (Enter runs it).
+  const [index, setIndex] = useState<number | null>(null);
   const [found, setFound] = useState<SearchResult["data"]>([]);
   // The recordings' search is still out: "Nothing matches" waits for it.
   const [lookingUp, setLookingUp] = useState(false);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Where the pointer last was over the list: only its own movement chooses a row (see `pointed`).
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra }), [status, onGo, run, folders, onFolder, extra]);
 
   useEffect(() => {
@@ -158,21 +201,46 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     };
   }, [query]);
 
-  const matching = commands.filter((c) => paletteMatches(query, c));
+  // Every group ranked by name first; a word only inside another word never matches (D-087).
+  const actions = ranked(commands, (c) => paletteScore(query, c));
+  const matching = actions.map((a) => a.row);
   // Pages by name (a project, a folder, Devices…) that no command above already opens.
-  const pageHits = findPages(pages, query).filter((p) => !matching.some((c) => c.label === `Go to ${p.label}`)).slice(0, 6)
-    .map((p) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
+  const pageRows = ranked(pages.filter((p) => !matching.some((c) => c.label === `Go to ${p.label}`)),
+    (p) => (query.trim() ? paletteScore(query, { label: p.label, keywords: `${p.group ?? ""} ${p.keywords ?? ""}` }) : 0)).slice(0, 6);
+  const pageHits = pageRows.map(({ row: p }) => ({ id: `page-${p.id}`, label: `Go to ${p.label}${p.group ? ` · ${p.group}` : ""}`, run: p.open }));
   const settingHits: (PaletteCommand & { crumb: string })[] = query.trim().length >= 2 && settings
     ? settings(query).map((x) => ({ id: `setting-${x.id}`, label: x.title, crumb: x.breadcrumb, run: x.open })) : [];
   const recordings: PaletteCommand[] = found.map((r) => {
     const hit = r.hits[0];
     const ms = hit?.start_ms ?? 0;
-    return { id: `rec-${r.session.id}`, label: r.session.title ?? "Recording", keywords: hit ? `${timestamp(ms)} ${hit.snippet}` : "", run: () => onOpenRecording(r.session.id, ms) };
+    return { id: `rec-${r.session.id}`, label: recordingName(r.session.title), keywords: hit ? `${timestamp(ms)} ${hit.snippet}` : "", run: () => onOpenRecording(r.session.id, ms) };
   });
-  const groups: [string, PaletteCommand[]][] = ([["Actions", matching], ["Settings", settingHits], ["Pages", pageHits], ["Recordings", recordings]] as [string, PaletteCommand[]][])
-    .filter(([, list]) => list.length > 0);
+  // How well each shown row matches: a setting or recording found by what it says, not its name, counts as a keyword.
+  const nameScore = (label: string) => Math.max(1, paletteScore(query, { label }));
+  const scored: [string, PaletteCommand[], number[]][] = [
+    ["Actions", matching, actions.map((a) => a.score)],
+    ["Settings", settingHits, settingHits.map((s) => nameScore(s.label))],
+    ["Pages", pageHits, pageRows.map((p) => p.score)],
+    ["Recordings", recordings, recordings.map((r) => nameScore(r.label))],
+  ];
+  const shownGroups = scored.filter(([, list]) => list.length > 0);
+  const groups: [string, PaletteCommand[]][] = shownGroups.map(([name, list]) => [name, list]);
   const options: PaletteCommand[] = groups.flatMap(([, list]) => list);
-  const selected = Math.min(index, Math.max(0, options.length - 1));
+  const scores: number[] = shownGroups.flatMap(([, , s]) => s);
+  // Enter runs the best match (the first of the best, in the order shown) until the arrows move. Recordings come in later
+  // (from 250 ms, the last group): they never take the highlight from a row already shown for what was typed, so Enter
+  // runs what was on screen; they are the best match only when nothing else is listed.
+  const early = scores.length - recordings.length;
+  const best = scores.slice(0, early > 0 ? early : scores.length).reduce((at, s, i) => (s > scores[at] ? i : at), 0);
+  const selected = Math.min(index ?? best, Math.max(0, options.length - 1));
+
+  // The pointer chooses a row only by moving: rows re-ranked or arriving under a still pointer (recordings coming in, a
+  // group appearing) leave what Enter runs alone, so a mouse entering a row or a move event in place chooses nothing.
+  const pointed = (e: React.MouseEvent, i: number) => {
+    const last = pointer.current;
+    pointer.current = { x: e.clientX, y: e.clientY };
+    if (last && (last.x !== e.clientX || last.y !== e.clientY) && i !== selected) setIndex(i);
+  };
 
   const choose = (option: PaletteCommand | undefined) => {
     if (!option) return;
@@ -205,8 +273,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
           <LucideSearchIcon size={16} />
           <input ref={inputRef} className="input palette-input" autoFocus value={query} placeholder="Search recordings, settings, pages… or type a command"
             role="combobox" aria-expanded="true" aria-controls={listId} aria-activedescendant={options[selected] ? `${listId}-${options[selected].id}` : undefined}
-            onChange={(e) => { setQuery(e.target.value); setIndex(0); }} />
-          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setIndex(0); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
+            onChange={(e) => { setQuery(e.target.value); setIndex(null); }} />
+          {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setIndex(null); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
         <div id={listId} className="palette-list" role="listbox" aria-label="Results">
           {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
@@ -220,7 +288,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
                 const crumb = (o as { crumb?: string }).crumb;
                 return (
                   <div key={o.id} id={`${listId}-${o.id}`} role="option" aria-selected={i === selected} className={`palette-item ${i === selected ? "active" : ""}`}
-                    onMouseEnter={() => setIndex(i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
+                    onMouseMove={(e) => pointed(e, i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
                     <span className="palette-label">{o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
                     {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in {lowestPlan(entitlements, o.feature)?.name ?? "a paid plan"}</span>}
                     {crumb && <span className="palette-detail small muted">{crumb}</span>}

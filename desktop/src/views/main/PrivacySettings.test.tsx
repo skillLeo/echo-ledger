@@ -123,6 +123,20 @@ describe("Share Check", () => {
 describe("Settings › Screen-share privacy", () => {
   beforeEach(() => resetTauriMock());
 
+  it("shows Show in screen share and Copy diagnostics as actions, not plain text (D-090)", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", zoomInstalled: true }));
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    for (const name of ["Show in screen share for 10 min", "Copy diagnostics"]) {
+      const row = await screen.findByRole("button", { name: new RegExp(`^${name}`) });
+      expect(row).toHaveClass("set-action");
+    }
+    // A row that opens in place keeps its chevron instead: on a Mac with Zoom, the Zoom row is there to check.
+    const zoom = screen.getByRole("button", { name: /^Set up Zoom/ });
+    expect(zoom).toHaveAttribute("aria-expanded", "false");
+    expect(zoom).not.toHaveClass("set-action");
+    expect(zoom.querySelector(".set-trail.disclosure")).not.toBeNull();
+  });
+
   it("shows the status, the last check, the tip and the limits; Windows' amber lines", async () => {
     respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in screen share", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
     const patch = vi.fn(async () => true);

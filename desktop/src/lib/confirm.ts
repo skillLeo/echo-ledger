@@ -1,4 +1,4 @@
-// "Are you sure?" in the app's own dialog (UI sweep rule 2): never the browser's window.confirm, whose look and title
+// "Are you sure?" in the app's own dialog, never the browser's window.confirm, whose look and title
 // are the webview's. `confirmAction` asks; the one <ConfirmHost /> of the window (views/main/ConfirmHost.tsx) shows
 // the question and answers it.
 import type { ReactNode } from "react";

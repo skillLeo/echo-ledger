@@ -55,6 +55,26 @@ pub fn delete_recording_folder(dir: &Path) {
     }
 }
 
+/// Marks a recording folder as on its way out before anything else forgets it (`pending::DecisionFiles::discard`): a
+/// crash after its entry left pending.json but before the folder went then deletes it at the next start instead of
+/// offering it back as "Recovered recording".
+pub fn mark_leaving(dir: &Path) -> std::io::Result<()> {
+    if dir.as_os_str().is_empty() || !dir.exists() {
+        return Ok(());
+    }
+    match leaving_marker(dir) {
+        Some(marker) => std::fs::write(marker, b""),
+        None => Ok(()),
+    }
+}
+
+/// Takes a mark back when the folder stays after all (its entry could not be saved).
+pub fn unmark_leaving(dir: &Path) {
+    if let Some(marker) = leaving_marker(dir) {
+        let _ = std::fs::remove_file(marker);
+    }
+}
+
 fn leaving_marker(dir: &Path) -> Option<PathBuf> {
     let mut name = dir.file_name()?.to_os_string();
     name.push(LEAVING);

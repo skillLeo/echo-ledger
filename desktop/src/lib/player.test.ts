@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, timelinePercent, UNCERTAIN_BELOW, uncertainWord, waveformBars } from "./player";
+import { PLAYER_HINT, PLAYER_KEYS, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, timelinePercent, UNCERTAIN_BELOW, uncertainWord, waveformBars } from "./player";
 
 const segments = [
   { speaker: "Me", start_ms: 0, end_ms: 4_000 },
@@ -136,5 +136,18 @@ describe("playerLength (E1)", () => {
     expect(playerLength(null, [], 42.4)).toBe(42_400);
     expect(playerLength(undefined, undefined, Number.NaN)).toBe(0);
     expect(playerLength(null, null, Infinity)).toBe(0);
+  });
+});
+
+describe("the player's keys as people read them (D-047)", () => {
+  it("names exactly the keys playerKey answers, so tooltips, the hint and Help tell the truth", () => {
+    const pressed: Record<string, [string, boolean]> = { Space: [" ", false], "←": ["ArrowLeft", false], "→": ["ArrowRight", false], "Shift+←": ["ArrowLeft", true], "Shift+→": ["ArrowRight", true] };
+    for (const [action, label] of Object.entries(PLAYER_KEYS)) {
+      const [key, shift] = pressed[label];
+      expect(playerKey(key, "DIV", false, shift), label).toBe(action);
+    }
+    expect(PLAYER_HINT).toBe("Space plays · ← / → 5 s · Shift+← / Shift+→ 10 s");
+    // J, K and L belong to the list (or nothing), never the player.
+    for (const key of ["j", "k", "l", "J", "K", "L"]) expect(playerKey(key, "DIV")).toBeNull();
   });
 });

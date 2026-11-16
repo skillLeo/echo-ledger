@@ -162,11 +162,17 @@ export function LinkRow({ id, title = titleOf(id), value, onOpen, external = fal
   );
 }
 
-/** A row that does something at once ("Lock now", "Export my data"): the title in the text colour, never a link colour. */
-export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = false, label, expanded }: {
+/** A row that does something ("Lock now", "Copy diagnostics"): its title in the link colour, so it reads as an action
+ * (D-090), with what it is doing now beside it (`status`: "Copied", the time left). A row with a value ("PIN · Not
+ * set", "Promo code · Add") opens something: the text colour and a chevron. A row that opens in place has a chevron
+ * that turns (`expanded`). */
+export function ActionRow({ id, title = titleOf(id), value, status, onClick, disabled = false, label, expanded }: {
   id: string;
   title?: string;
+  /** What it opens or sets: the row gets a chevron. */
   value?: ReactNode;
+  /** Feedback while it stays an action ("Copied", "9:58 left"). */
+  status?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   label?: string;
@@ -174,14 +180,17 @@ export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = 
   expanded?: boolean;
 }) {
   const disclosure = expanded !== undefined;
-  const shown = value !== undefined && value !== null && value !== "";
+  const has = (node: ReactNode) => node !== undefined && node !== null && node !== "";
+  const opens = has(value);
+  const end = opens ? value : status;
   return (
-    <button type="button" className="set-row set-link" {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
+    <button type="button" className={`set-row set-link ${disclosure || opens ? "" : "set-action"}`.trim()} {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
       <span className="set-title">{title}</span>
-      {(shown || disclosure) && (
+      {(has(end) || disclosure || opens) && (
         <span className="set-end">
-          {shown && <span className="set-value">{value}</span>}
+          {has(end) && <span className="set-value">{end}</span>}
           {disclosure && <LucideChevronRightIcon size={16} className={`set-trail disclosure ${expanded ? "open" : ""}`.trim()} />}
+          {opens && !disclosure && <LucideChevronRightIcon size={16} className="set-trail" />}
         </span>
       )}
     </button>

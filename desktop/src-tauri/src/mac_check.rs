@@ -174,6 +174,8 @@ pub trait MacProbe {
 }
 
 const OPEN_SETTINGS: &str = "Open System Settings";
+/// Screen Recording allowed in System Settings while EchoLedger ran: macOS applies it when the app opens again.
+const REOPEN: &str = "Allowed in System Settings. Quit and reopen EchoLedger to finish.";
 const SCREEN_NOT_ASKED: &str = "macOS has not asked yet: turn on screen moments in Settings → Screen moments and press Allow Screen Recording.";
 
 fn fix(settings: &'static str) -> Option<CheckFix> {
@@ -239,6 +241,7 @@ fn check_permission(kind: Kind, access: Access, version: Option<(u32, u32, u32)>
         // Recording never asks for this one, and System Settings does not list EchoLedger until it has asked.
         Access::Unknown if kind == Kind::Screen => item(key, title, CheckState::Limited, SCREEN_NOT_ASKED, None),
         Access::Unknown => item(key, title, CheckState::Limited, "macOS has not asked yet. It asks the first time you record.", fix(settings)),
+        Access::Reopen => item(key, title, CheckState::Limited, REOPEN, None),
     }
 }
 
@@ -357,6 +360,7 @@ pub fn check_screen_capture(access: Access, frame: impl FnOnce() -> Result<(), F
     match frame() {
         Ok(()) => item(KEY, TITLE, CheckState::Ok, "One frame captured and thrown away. Nothing was stored.", None),
         Err(FrameProblem::Permission) if access == Access::Unknown => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {SCREEN_NOT_ASKED}"), None),
+        Err(FrameProblem::Permission) if access == Access::Reopen => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {REOPEN}"), None),
         Err(FrameProblem::Permission) => item(KEY, TITLE, CheckState::Off, "Screen Recording is off for EchoLedger. Recordings keep their sound without screen moments.", fix("screen")),
         Err(FrameProblem::Other(e)) => item(KEY, TITLE, CheckState::Failed, format!("No frame came back: {e}"), fix("screen")),
     }
@@ -763,6 +767,20 @@ mod tests {
         assert!(test.detail.contains("Not tested") && test.detail.contains("Allow Screen Recording"), "{}", test.detail);
         assert!(!test.detail.contains("is off"), "{}", test.detail);
         assert_eq!(test.fix, None);
+    }
+
+    #[test]
+    fn screen_recording_allowed_while_echoledger_ran_asks_for_a_reopen_and_does_not_say_off() {
+        let reopen = Permissions { screen: Access::Reopen, ..ON };
+        let mac = FakeMac { permissions: reopen, frame: Err(FrameProblem::Permission), ..FakeMac::default() };
+        let items = run(&mac);
+        for key in ["screen_permission", "screen_capture_test"] {
+            let item = find(&items, key);
+            assert_eq!(item.state, CheckState::Limited, "{key}");
+            assert!(item.detail.contains("Quit and reopen EchoLedger to finish"), "{}", item.detail);
+            assert!(!item.detail.contains("is off") && !item.detail.contains("not asked"), "{}", item.detail);
+            assert_eq!(item.fix, None, "System Settings has nothing left to change");
+        }
     }
 
     #[test]

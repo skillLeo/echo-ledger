@@ -4,6 +4,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, type SharedItem } from "../../lib/ipc";
 import { formatDuration, formatWhen } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { AppTileIcon, appKind, FolderIcon, UsersIcon } from "../../components/Icons";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { NO_TARGET, type Notify } from "../../lib/notice";
@@ -101,7 +102,7 @@ export function SharedWithMe({ notify, openId, onOpen, onSaved, focusId = null }
     <div className="group shared-list" role="list" aria-label="Shared with me">
       {items.map((item) => {
         const session = item.kind === "session" ? item.session : null;
-        const title = item.title ?? session?.title ?? item.client?.name ?? "Untitled";
+        const title = session ? recordingName(item.title?.trim() || session.title) : item.title ?? item.client?.name ?? "Untitled";
         return (
           <div key={item.id} role="listitem" data-shared={item.id} className={`shared-card ${openId === item.id ? "selected" : ""}`}>
             <div className="row">

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { CommandPalette, paletteCommands, paletteMatches, emptyLine } from "./CommandPalette";
+import { CommandPalette, paletteCommands, paletteMatches, paletteScore, emptyLine } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makeRecording, makeStatus, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
@@ -16,6 +16,52 @@ describe("command palette (B9)", () => {
     expect(paletteMatches("language", { label: "Go to Settings", keywords: "captions language" })).toBe(true);
     expect(paletteMatches("record zoom", { label: "Start recording" })).toBe(false);
     expect(paletteMatches("", { label: "Anything" })).toBe(true);
+  });
+
+  it("ranks a name before a keyword and never matches a word inside another (D-087)", () => {
+    expect(paletteScore("new", { label: "New project", keywords: "create client folder add" })).toBe(3);
+    expect(paletteScore("new", { label: "Record a voice note", keywords: "microphone new dictate n" })).toBe(1);
+    expect(paletteScore("proj new", { label: "New project" })).toBe(2);
+    expect(paletteScore("ew", { label: "New project" })).toBe(0);
+    expect(paletteScore("ording", { label: "Stop recording" })).toBe(0);
+    expect(paletteMatches("record", { label: "Stop recording" })).toBe(true);
+  });
+
+  it("names a Go to command by its place: \"library\" is Go to Library first, then Sync the library (D-087)", () => {
+    expect(paletteScore("library", { label: "Go to Library", keywords: "recordings transcripts" })).toBe(3);
+    expect(paletteScore("libr", { label: "Go to Library" })).toBe(3);
+    expect(paletteScore("go to lib", { label: "Go to Library" })).toBe(3);
+    expect(paletteScore("library", { label: "Sync the library", keywords: "refresh download" })).toBe(2);
+    expect(paletteScore("to", { label: "Go to Library" })).toBe(2);
+    const onGo = vi.fn();
+    const run = vi.fn();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={onGo} run={run} onOpenRecording={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "library" } });
+    const actions = within(screen.getByRole("group", { name: "Actions" })).getAllByRole("option").map((o) => o.textContent);
+    expect(actions.indexOf("Go to Library")).toBeLessThan(actions.indexOf("Sync the library"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onGo).toHaveBeenCalledWith("library");
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("splits what is typed as it splits names, keeps marks inside a word, and ignores case (D-087)", () => {
+    expect(paletteScore("d'souza", { label: "D'Souza Traders" })).toBe(3);
+    expect(paletteScore("D'Souza tra", { label: "D'Souza Traders" })).toBe(3);
+    expect(paletteScore("ali & sons", { label: "Ali & Sons" })).toBe(3);
+    expect(paletteScore("ali sons", { label: "Ali & Sons" })).toBe(3);
+    expect(paletteScore("r&d", { label: "R&D budget" })).toBe(3);
+    expect(paletteScore("a-team", { label: "The A-Team" })).toBe(2);
+    expect(paletteScore("ACME", { label: "Acme Holdings" })).toBe(3);
+    // Urdu with a pesh, and an accent typed as its own mark: one word each, never cut at the mark.
+    expect(paletteScore("مُلا", { label: "مُلاقات نوٹس" })).toBe(3);
+    expect(paletteScore("لا", { label: "مُلاقات نوٹس" })).toBe(0);
+    expect(paletteScore("cafe\u0301", { label: "Cafe\u0301 Noir" })).toBe(3);
+    expect(paletteScore("sume", { label: "Re\u0301sume\u0301 review" })).toBe(0);
+    // Nothing typed lists everything; punctuation alone finds nothing.
+    expect(paletteScore("", { label: "Ali & Sons" })).toBe(1);
+    expect(paletteScore("   ", { label: "Ali & Sons" })).toBe(1);
+    expect(paletteScore("&", { label: "Ali & Sons" })).toBe(0);
   });
 
   it("offers what makes sense right now", () => {
@@ -145,6 +191,48 @@ describe("command palette (B9)", () => {
     expect(props.run).toHaveBeenCalledTimes(1);
   });
 
+  it("makes a new project from \"new\" and Enter, never a voice note (D-087)", () => {
+    const extra = { newProject: vi.fn() };
+    const run = vi.fn();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={run} onOpenRecording={vi.fn()} extra={extra} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "new" } });
+    const actions = within(screen.getByRole("group", { name: "Actions" })).getAllByRole("option").map((o) => o.textContent);
+    expect(actions[0]).toBe("New project");
+    expect(actions.indexOf("Record a voice note")).toBeGreaterThan(0);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(extra.newProject).toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("finds pages by their name, group or words, every word typed, and opens the best one with Enter", () => {
+    const open = { devices: vi.fn(), acme: vi.fn() };
+    const pages = [
+      { id: "devices", label: "Devices", group: "Account", keywords: "phones computers", open: open.devices },
+      { id: "p1", label: "Acme Holdings", group: "Projects", open: open.acme },
+      { id: "p2", label: "D'Souza Traders", group: "Projects", open: vi.fn() },
+      { id: "p3", label: "Ali & Sons", group: "Projects", open: vi.fn() },
+    ];
+    const show = (query: string) => {
+      cleanup();
+      render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} pages={pages} />);
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: query } });
+      return screen.queryByRole("group", { name: "Pages" });
+    };
+    expect(within(show("dev")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
+    expect(within(show("account phones")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
+    expect(show("vices")).toBeNull();
+    // Names with punctuation, typed with it (D-087); capitals ignored; nothing typed lists no pages.
+    expect(within(show("d'souza")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to D'Souza Traders · Projects"]);
+    expect(within(show("ali & sons")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Ali & Sons · Projects"]);
+    expect(within(show("ACME")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Acme Holdings · Projects"]);
+    expect(show("  ")).toBeNull();
+    expect(show("zzz")).toBeNull();
+    show("acme");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(open.acme).toHaveBeenCalled();
+  });
+
   it("finds recordings by their transcript and opens one at the moment", async () => {
     respond("search_library", { data: [{ session: makeItem("s1", { title: "Acme kickoff" }), hit_count: 1,
       hits: [{ transcript_id: "t", kind: "final", segment_index: 1, start_ms: 65_000, end_ms: 66_000, speaker: "Client", snippet: "the invoice is due", highlights: [[4, 7]] }] }], next_page: null });
@@ -154,6 +242,56 @@ describe("command palette (B9)", () => {
     expect(option.querySelector("mark")).toHaveTextContent("invoice");
     fireEvent.mouseDown(option);
     expect(props.onOpenRecording).toHaveBeenCalledWith("s1", 65_000);
+  });
+
+  it("keeps the highlight on a row already shown when recordings come in later, so Enter runs it (D-087)", async () => {
+    respond("search_library", { data: [{ session: makeItem("s1", { title: "Budget review" }), hit_count: 1, hits: [] }], next_page: null });
+    const open = vi.fn();
+    const onOpenRecording = vi.fn();
+    const settings = () => [{ id: "limit", title: "Monthly limit", breadcrumb: "Account › Plan & usage", open }];
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={onOpenRecording} settings={settings} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "budget" } });
+    // Found by what it is about, not its name: still the one row on screen, highlighted at once.
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Monthly limit");
+    // "Budget review" (its name starts with what was typed) arrives after 250 ms: the highlight stays.
+    await screen.findByRole("option", { name: /Budget review/ });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Monthly limit");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(open).toHaveBeenCalled();
+    expect(onOpenRecording).not.toHaveBeenCalled();
+  });
+
+  it("highlights the best recording when only recordings match", async () => {
+    respond("search_library", { data: [
+      { session: makeItem("s1", { title: "Weekly sync" }), hit_count: 1, hits: [] },
+      { session: makeItem("s2", { title: "Budget review" }), hit_count: 1, hits: [] },
+    ], next_page: null });
+    const props = renderPalette();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "budget" } });
+    await screen.findByRole("option", { name: /Budget review/ });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Budget review");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(props.onOpenRecording).toHaveBeenCalledWith("s2", 0);
+  });
+
+  it("chooses a row only when the pointer moves, never when rows slide under a still pointer (D-087)", () => {
+    const props = renderPalette();
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "go to" } });
+    const rows = screen.getAllByRole("option");
+    expect(rows[2]).toHaveTextContent("Go to Home");
+    // A row arriving under the pointer: the mouse entering it, or a move event where the pointer has not moved.
+    fireEvent.mouseEnter(rows[2]);
+    fireEvent.mouseMove(rows[2], { clientX: 40, clientY: 90 });
+    fireEvent.mouseMove(rows[2], { clientX: 40, clientY: 90 });
+    expect(rows[0]).toHaveAttribute("aria-selected", "true");
+    expect(rows[2]).toHaveAttribute("aria-selected", "false");
+    // The pointer moves over it: chosen, and Enter runs it.
+    fireEvent.mouseMove(rows[2], { clientX: 42, clientY: 91 });
+    expect(rows[2]).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onGo).toHaveBeenCalledWith("record");
   });
 
   it("asks for one more letter rather than saying nothing matches a single letter", () => {

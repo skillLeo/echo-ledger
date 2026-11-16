@@ -271,7 +271,7 @@ fn this_release_is_version_1_5_0_beta_1() {
 
 #[test]
 fn the_updater_carries_the_release_key_and_refuses_unsigned_releases() {
-    // v1.5: the lead's minisign key (its private half stays outside the repo); the endpoint is the signed-in server's
+    // v1.5: the release signing key (minisign; its private half stays outside the repo); the endpoint is the signed-in server's
     // /downloads/desktop.json, set at run time, so none is configured.
     let conf = tauri_conf();
     let updater = &conf["plugins"]["updater"];

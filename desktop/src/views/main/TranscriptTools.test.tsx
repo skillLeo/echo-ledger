@@ -55,6 +55,9 @@ describe("player controls and timeline (B6)", () => {
     const { rerender } = render(<PlayerDock playing={false} nowMs={12_000} durationMs={125_000} onToggle={onToggle} onSkip={onSkip}><span /></PlayerDock>);
     expect(screen.getByText("0:12 / 2:05")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    // D-047: the tooltips name the keys that do it.
+    expect(screen.getByRole("button", { name: "Back 10 seconds" })).toHaveAttribute("title", "Back 10 s (Shift+←)");
+    expect(screen.getByRole("button", { name: "Forward 10 seconds" })).toHaveAttribute("title", "Forward 10 s (Shift+→)");
     fireEvent.click(screen.getByRole("button", { name: "Back 10 seconds" }));
     fireEvent.click(screen.getByRole("button", { name: "Forward 10 seconds" }));
     expect(onToggle).toHaveBeenCalledTimes(1);

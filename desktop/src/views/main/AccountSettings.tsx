@@ -164,7 +164,7 @@ export function PrivacyPage({ account, settings, onAccount, onConsent }: {
             ? <p>Your account will be deleted on {longDate(account.deletes_at)}. To keep it, sign in on the website and choose Keep my account.</p>
             : <p>Your account and everything only you own are deleted after 7 days. Signing in again before then and choosing Keep my account cancels it.</p>}
         </>}>
-          <ActionRow id="privacy.export" value={exportValue} disabled={exporting?.status === "making"}
+          <ActionRow id="privacy.export" status={exportValue} disabled={exporting?.status === "making"}
             onClick={() => (exporting?.status === "ready" && exporting.url ? void api.openExport(exporting.url).catch((e) => setExportError(errorMessage(e))) : void startExport())} />
           {account.deletes_at
             ? <LinkRow id="privacy.cancel_deletion" value={`Deletes on ${rowDateWithYear(account.deletes_at)}`} external onOpen={() => void api.openServerPage("app/profile").catch(() => undefined)} />

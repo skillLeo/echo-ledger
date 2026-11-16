@@ -437,3 +437,25 @@ describe("Sign out", () => {
     await waitFor(() => expect(onUnpaired).toHaveBeenCalled());
   });
 });
+
+describe("an action row reads as an action, a row that opens something has a chevron (D-090)", () => {
+  it("draws the link colour only without a value, keeps it while it says what it is doing, and chevrons a value", async () => {
+    const { ActionRow } = await import("./SettingsControls");
+    const { render: draw, screen: page } = await import("@testing-library/react");
+    draw(<>
+      <ActionRow id="lock.now" onClick={() => undefined} />
+      <ActionRow id="share_privacy.copy" status="Copied" onClick={() => undefined} />
+      <ActionRow id="lock.pin" value="Not set" onClick={() => undefined} />
+      <ActionRow id="plan.promo" value="Add" onClick={() => undefined} />
+    </>);
+    const row = (name: RegExp) => page.getByRole("button", { name });
+    expect(row(/^Lock now/)).toHaveClass("set-action");
+    expect(row(/^Copy diagnostics/)).toHaveClass("set-action");
+    expect(row(/^Copy diagnostics/)).toHaveTextContent("Copied");
+    for (const name of [/^PIN|^Change PIN|^Set a PIN/, /^Promo code/]) {
+      const opens = page.getAllByRole("button").find((b) => name.test(b.textContent ?? ""))!;
+      expect(opens).not.toHaveClass("set-action");
+      expect(opens.querySelector(".set-trail")).not.toBeNull();
+    }
+  });
+});

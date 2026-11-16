@@ -323,8 +323,8 @@ mod tests {
 
     #[test]
     fn echoledger_is_a_normal_mac_app() {
-        // Never the Dock-less modes, in any run: not in the code, not in Info.plist. The one exception is spaces.rs (the
-        // lead's decision): while the display in use shows another app in a real full-screen Space, EchoLedger's menu
+        // Never the Dock-less modes, in any run: not in the code, not in Info.plist. The one exception is spaces.rs (a
+        // product decision): while the display in use shows another app in a real full-screen Space, EchoLedger's menu
         // bar menu opens over it only without the Dock icon, which comes back as soon as it does not. No other code
         // changes the activation policy at all: lib.rs sets Regular for the run and the smoke test, spaces.rs's check
         // switches between Regular and Accessory, and nothing else calls either setter.

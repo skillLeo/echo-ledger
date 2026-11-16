@@ -45,7 +45,7 @@ import { StateBanner } from "../../components/StateBanner";
 import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
-import { confirmAction } from "../../lib/confirm";
+import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -215,6 +215,9 @@ export default function MainApp() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
+        // A question on screen is answered first: search never opens (or closes) behind it, whether it was asked through
+        // confirmAction or is a page's own confirm dialog (Sign out, Cancel this request).
+        if (isConfirmOpen() || document.querySelector('[role="alertdialog"]')) return;
         setPalette((open) => !open);
         return;
       }
@@ -689,7 +692,8 @@ export default function MainApp() {
       <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
         recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
         projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
-        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord}
+        libraryColumn={pageWidth >= COLUMN_CONTENT} />
       <div className="main-col">
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
           onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
@@ -757,7 +761,7 @@ export default function MainApp() {
         <div className="drop-hint" aria-hidden="true"><div className="drop-hint-card">Drop voice notes, audio or video files to import them</div></div>
       )}
       {importPaths && <ImportSheet paths={importPaths} notify={notify} onClose={closeImport} />}
-      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onShortcuts={() => openAccount("shortcuts")} />}
+      {help && <HelpDialog platform={status.platform} onClose={() => setHelp(false)} onSettings={openAccount} />}
       {requestSheet && <RequestLinksSheet projects={projects ?? []} notify={notify} onClose={() => setRequestSheet(false)} />}
       <UpgradeSheet />
       <ConfirmHost />
