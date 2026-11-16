@@ -343,6 +343,7 @@ fn the_smoke_test_returns_before_anything_that_records_uploads_or_polls_starts()
         "commands::spawn_idle_lock",
         "actions::spawn_activity_poll",
         "updates::spawn_quiet_checks",
+        "privacy::bars::spawn_refresh",
         "state.api()",
         "actions::handle_links",
     ] {
@@ -401,4 +402,14 @@ fn privacy_commands_that_change_or_reveal_answer_the_main_window_only() {
     let drawn = &commands[commands.find("fn share_check_drawn(").unwrap()..];
     assert!(drawn[..drawn.find("\n}\n").unwrap()].contains("[crate::privacy::CHECK_TEST, crate::privacy::CHECK_CONTROL].contains(&window.label())"), "only the check's own windows count as drawn");
     assert!(commands.contains("pub async fn privacy_status(app: AppHandle)"), "the status every badge reads stays off the main thread");
+}
+
+#[test]
+fn the_sharing_bar_patterns_never_wait_ahead_of_the_config_and_the_uploads() {
+    // R21: the ask for newer patterns was awaited before the config, the library and the queue (up to 120 s offline).
+    let setup = setup_source();
+    let startup = &setup[setup.find("let startup = handle.clone();").expect("the startup task")..];
+    let startup = &startup[..startup.find("});").unwrap()];
+    assert!(!startup.contains("bars::refresh"), "not in the startup task");
+    assert!(setup.contains("privacy::bars::spawn_refresh(handle.clone());"), "a task of its own, once a day");
 }

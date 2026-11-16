@@ -424,14 +424,14 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             privacy::watch::spawn(handle.clone());
             privacy::check::spawn_auto(handle.clone());
+            // Newer sharing-bar patterns, when the server has them: in a task of their own, once a day.
+            privacy::bars::spawn_refresh(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = startup.state::<AppState>();
                 if let Ok(api) = state.api() {
-                    // Newer sharing-bar patterns, when the server has them (the built-in ones otherwise).
-                    let _ = privacy::bars::refresh(&api, &state.data_dir).await;
                     if let Ok(config) = api.config().await {
                         state.apply_config(config);
                         // The tray follows the role too: a viewer's menu has no recording lines.
