@@ -127,6 +127,15 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     the action row Export · Share link · Send squeezes "Send to WhatsApp" into a one-letter-wide column, its text
     running down the screen letter by letter. The row must wrap or scroll (FlowRow or a horizontal scroll with full
     labels), with a screenshot test at 360 dp width and at font scale 200 %.
+  - UI BUG LIST from Hassam's Mac screenshots (2026-11-16 late), for the desktop builder after the full-screen menu fix:
+    (1) the sidebar's "Find a page" finds only pages: it should also list matching recordings and transcripts (and a
+    "Search recordings for …" row), never just "No page matches"; (2) the sidebar search field is too narrow, typed
+    text clips at the start ("ecovered recording"); (3) Settings search "Closest matches" offers unrelated rows when
+    nothing matches (show none, or only real near-spellings); (4) a recovered recording is renamed by its AI title after
+    upload, so "Recovered recording" can't be found again: keep a "Recovered" marker or show it in Activity; (5) the
+    menu bar menu doesn't open over a full-screen app (builder on it now); (6) people can't screenshot EchoLedger on a
+    Mac (hidden from capture by design): Help should say "Show EchoLedger in screen share for 10 minutes" before
+    screenshots, and Copy diagnostics is the support path. Also run the planned UI sweep of all screens.
   - GUIDE TEXT QUEUE for the web builder (docs/USER_GUIDE.md), from the builders' reports:
     (1) Phone calls (SIM) bullet, B18: keep "Some phones give both voices on one track…", replace the two sentences
     after it with the "SIM calls through the Phone app's own recordings" block (Galaxy: Phone app → ⋮ → Settings →
