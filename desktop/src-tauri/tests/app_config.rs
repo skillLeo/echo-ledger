@@ -360,3 +360,24 @@ fn the_smoke_test_does_not_hand_itself_over_to_a_running_app_or_touch_the_keycha
     assert!(source.contains("if smoke { Box::new(MemoryStore::default()) } else { Box::new(KeyringStore) }"));
     assert!(source.contains("if smoke { Box::new(smoke::NoKeys) } else { Box::new(screens::store::KeychainKeys) }"));
 }
+
+// ---- Opening the app again (v1.8, 0.4) -------------------------------------------------------------------------
+
+#[test]
+fn opening_the_app_again_goes_where_a_second_launch_goes() {
+    // A Mac starts no second copy when EchoLedger is opened from Finder, Launchpad, Spotlight or the Dock: the running
+    // copy gets a reopen, which the installed v1.6.0 did not answer. Windows starts a second copy, which the
+    // single-instance plugin hands to the running one. Both open the main window through `show_main_from_outside`.
+    let lib = std::fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
+    assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"), "a second launch opens the main window");
+    let run = &lib[lib.find("app.run(|handle, event|").expect("the run loop")..];
+    let reopen = run.find("if let RunEvent::Reopen { has_visible_windows, .. } = &event {").expect("the run loop answers a reopen");
+    assert!(run[..reopen].trim_end().ends_with("#[cfg(target_os = \"macos\")]"), "the reopen arm is the Mac's");
+    assert!(run[reopen..].contains("actions::reopen(handle, *has_visible_windows);"), "a reopen goes to actions::reopen");
+    let actions = std::fs::read_to_string(manifest_dir().join("src/actions.rs")).unwrap();
+    let body = &actions[actions.find("pub fn reopen(app: &AppHandle, has_visible_windows: bool) {").expect("actions::reopen")..];
+    let body = &body[..body.find("\n}\n").expect("the end of actions::reopen")];
+    assert!(body.contains("reopen_action(has_visible_windows, main_on_screen(app))"), "the main window decides, not AppKit's count alone");
+    assert!(body.contains("Reopen::OpenMain => show_main_from_outside(app, &[])"), "opened as at a second launch");
+    assert!(body.contains("Reopen::BringForward => crate::tray::show_main(app)"), "brought forward as the menu bar's Open does");
+}
