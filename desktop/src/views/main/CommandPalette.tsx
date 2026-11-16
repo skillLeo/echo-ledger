@@ -29,6 +29,9 @@ export interface PaletteCommand {
  * a mark (Urdu's zer or pesh, an accent typed apart) stays inside its word. */
 export const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
 
+/** The commands and pages that open a place: "Go to Library", "Go to Devices · Account". */
+const GO_TO = /^go to /i;
+
 /**
  * How well a row matches what was typed (pure, D-087): 3 its name starts with it, 2 every typed word starts a word of
  * its name, 1 some word only starts a word of its keywords, 0 none (also a word found only inside another one: "ew" is
@@ -47,9 +50,12 @@ export function paletteScore(query: string, command: Pick<PaletteCommand, "label
     byKeyword = true;
   }
   if (byKeyword) return 1;
-  // The name starts with what was typed, word by word: the last word typed may be the start of one.
+  // The name starts with what was typed, word by word: the last word typed may be the start of one. "Go to X" is named
+  // by X too, so "library" is Go to Library's own name and comes before "Sync the library".
   const last = typed.length - 1;
-  return typed.every((word, i) => (i < last ? name[i] === word : name[i]?.startsWith(word))) ? 3 : 2;
+  const startsWithTyped = (words: string[]) => typed.every((word, i) => (i < last ? words[i] === word : words[i]?.startsWith(word)));
+  const place = GO_TO.test(command.label) ? wordsOf(command.label.replace(GO_TO, "")) : null;
+  return startsWithTyped(name) || (place !== null && startsWithTyped(place)) ? 3 : 2;
 }
 
 /** Whether a row matches what was typed at all ([`paletteScore`] above 0). */

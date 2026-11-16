@@ -27,6 +27,24 @@ describe("command palette (B9)", () => {
     expect(paletteMatches("record", { label: "Stop recording" })).toBe(true);
   });
 
+  it("names a Go to command by its place: \"library\" is Go to Library first, then Sync the library (D-087)", () => {
+    expect(paletteScore("library", { label: "Go to Library", keywords: "recordings transcripts" })).toBe(3);
+    expect(paletteScore("libr", { label: "Go to Library" })).toBe(3);
+    expect(paletteScore("go to lib", { label: "Go to Library" })).toBe(3);
+    expect(paletteScore("library", { label: "Sync the library", keywords: "refresh download" })).toBe(2);
+    expect(paletteScore("to", { label: "Go to Library" })).toBe(2);
+    const onGo = vi.fn();
+    const run = vi.fn();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={onGo} run={run} onOpenRecording={vi.fn()} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "library" } });
+    const actions = within(screen.getByRole("group", { name: "Actions" })).getAllByRole("option").map((o) => o.textContent);
+    expect(actions.indexOf("Go to Library")).toBeLessThan(actions.indexOf("Sync the library"));
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onGo).toHaveBeenCalledWith("library");
+    expect(run).not.toHaveBeenCalled();
+  });
+
   it("splits what is typed as it splits names, keeps marks inside a word, and ignores case (D-087)", () => {
     expect(paletteScore("d'souza", { label: "D'Souza Traders" })).toBe(3);
     expect(paletteScore("D'Souza tra", { label: "D'Souza Traders" })).toBe(3);

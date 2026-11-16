@@ -169,6 +169,13 @@ const SCREENS = [
     await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("calls & meetings");
     await page.waitForTimeout(600);
   }, viewport]),
+  // D-087: "Go to X" is named by X, so "library" offers Go to Library first (Enter opens it, never Sync).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`palette-library${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("library");
+    await page.waitForTimeout(600);
+  }, viewport]),
   // A Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],
