@@ -16,6 +16,16 @@
   --el-radius-lg: 12px;
   --el-radius-sheet: 16px;
   --el-radius-full: 999px;
+  --el-border-hairline: 1px;
+  --el-border-strong: 2px;
+  --el-focus-width: 2px;
+  --el-focus-offset: 2px;
+  --el-icon-sm: 16px;
+  --el-icon-md: 20px;
+  --el-icon-lg: 24px;
+  --el-breakpoint-compact: 720px;
+  --el-breakpoint-medium: 1024px;
+  --el-breakpoint-wide: 1440px;
   --el-space-0: 0px;
   --el-space-2: 2px;
   --el-space-4: 4px;
@@ -30,8 +40,8 @@
   --el-space-64: 64px;
   --el-font-family-sans: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-font-family-mono: ui-monospace, "SF Mono", "Cascadia Mono", "Roboto Mono", monospace;
-  --el-font-family-urdu: "Noto Nastaliq Urdu", serif;
-  --el-font-family-arabic: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+  --el-font-family-urdu: "Noto Nastaliq Urdu", system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-font-family-arabic: "Noto Naskh Arabic", "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-text-display-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-text-display-size: 32px;
   --el-text-display-line: 40px;
@@ -64,11 +74,11 @@
   --el-text-mono-size: 13px;
   --el-text-mono-line: 20px;
   --el-text-mono-weight: 400;
-  --el-text-urdu-body-font: "Noto Nastaliq Urdu", serif;
+  --el-text-urdu-body-font: "Noto Nastaliq Urdu", system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-text-urdu-body-size: 16px;
   --el-text-urdu-body-line: 30px;
   --el-text-urdu-body-weight: 400;
-  --el-text-arabic-body-font: "Noto Naskh Arabic", "IBM Plex Sans Arabic", serif;
+  --el-text-arabic-body-font: "Noto Naskh Arabic", "IBM Plex Sans Arabic", system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
   --el-text-arabic-body-size: 15px;
   --el-text-arabic-body-line: 26px;
   --el-text-arabic-body-weight: 400;
@@ -118,6 +128,7 @@
   --el-role-warning-soft: #FFFAEB;
   --el-role-danger-default: #B42318;
   --el-role-danger-soft: #FEF3F2;
+  --el-role-scrim-default: #1A1A1A66;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -145,6 +156,7 @@
     --el-role-warning-soft: #2B1A05;
     --el-role-danger-default: #F97066;
     --el-role-danger-soft: #2A0E0B;
+    --el-role-scrim-default: #00000099;
   }
 }
 
@@ -172,4 +184,5 @@
   --el-role-warning-soft: #2B1A05;
   --el-role-danger-default: #F97066;
   --el-role-danger-soft: #2A0E0B;
+  --el-role-scrim-default: #00000099;
 }

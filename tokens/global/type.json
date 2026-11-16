@@ -27,7 +27,12 @@
         "$type": "fontFamily",
         "$value": [
           "Noto Nastaliq Urdu",
-          "serif"
+          "system-ui",
+          "-apple-system",
+          "Segoe UI Variable",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif"
         ]
       },
       "arabic": {
@@ -35,7 +40,12 @@
         "$value": [
           "Noto Naskh Arabic",
           "IBM Plex Sans Arabic",
-          "serif"
+          "system-ui",
+          "-apple-system",
+          "Segoe UI Variable",
+          "Segoe UI",
+          "Roboto",
+          "sans-serif"
         ]
       }
     }
