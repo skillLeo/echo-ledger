@@ -7,7 +7,8 @@ If implementation and this file disagree, fix one of them in the same change —
 2.0.0-a: `GET /api/config` gains `ui_flags` and the new `PUT /api/account/ui`; see "Interface flags (since 2.0.0-a)". The
 Live Assist contract is [API_ASSIST.md](API_ASSIST.md), frozen at the same date.
 1.8.1-b: the new `error_code` `own_key_rejected` (the person's own Groq key was refused), and `recording_missing` also
-covers audio that is no longer stored.
+covers audio that is no longer stored; `stt/token`'s 503 names no engine; transcript exports carry `provider` only
+for the super admin.
 1.8.1-a: a failed transcript's `error` is the plain sentence of its `error_code` only — never the provider's own text
 (bugs D-129/D-131); the same sentences in Activity; see "Transcript `error_code` messages".
 
@@ -106,7 +107,7 @@ Every addition below is marked **(since v1.1)**.
 | 422 | `too_many_labels` | More than 20 labels on one recording | Permanent: remove some labels first |
 | 429 | `rate_limited` | Throttled; `Retry-After` is always set | Wait `Retry-After` seconds |
 | 502 | `provider_error` | `stt/token`: the provider refused or could not be reached | Retry later |
-| 503 | `provider_not_configured` | `stt/token`: provider key or region missing | Show the message; retry later |
+| 503 | `provider_not_configured` | `stt/token`: provider key or region missing. Since 1.8.1-b the `message` is "Live captions are not set up on the server yet. Ask your admin." (or "Dictation …" for dictation); it never names an engine | Show the message; retry later |
 
 ## Enumerations
 | Field | Values |
