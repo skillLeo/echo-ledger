@@ -100,7 +100,7 @@ objc2 = "0.6.5"
 objc2-core-audio = "0.3.2"
 objc2-core-audio-types = "0.3.2"
 objc2-foundation = { version = "0.3.2", features = ["NSArray", "NSValue", "NSUUID", "NSString", "NSError", "NSProcessInfo", "NSGeometry", "NSURL", "NSNotification", "NSOperation", "NSDictionary", "block2"] }
-objc2-core-foundation = { version = "0.3.2", features = ["CFString", "CFDictionary", "CFArray", "CFNumber", "CFData", "CFCGTypes"] }
+objc2-core-foundation = { version = "0.3.2", features = ["CFString", "CFDictionary", "CFArray", "CFNumber", "CFData", "CFCGTypes", "CFUUID"] }
 block2 = "0.6.2"
 dispatch2 = "0.3.1"
 objc2-local-authentication = { version = "0.3.2", features = ["LAContext", "LAError", "block2"] }

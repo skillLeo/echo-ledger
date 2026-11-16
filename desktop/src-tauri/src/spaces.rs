@@ -75,11 +75,11 @@ pub mod mac {
         NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSScreen, NSWindow,
         NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification,
     };
-    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType};
+    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType, CFUUID};
     use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSNumber, NSOperationQueue, NSString};
     use std::ffi::{c_char, c_void};
     use std::ptr::NonNull;
-    use std::sync::Mutex;
+    use std::sync::{Mutex, OnceLock};
 
     /// The first check after launch, once the launch's own activation policy is applied.
     const AFTER_LAUNCH: std::time::Duration = std::time::Duration::from_secs(1);
@@ -161,7 +161,7 @@ pub mod mac {
         InUse { space_type, ours_full_screen }
     }
 
-    // ---- The window server's list of Spaces (no public call; looked up at run time) ------------------------------------
+    // ---- The window server's list of Spaces (no public call; looked up once, at run time) -------------------------------
 
     unsafe extern "C" {
         fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
@@ -170,13 +170,43 @@ pub mod mac {
     const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
 
     type MainConnection = unsafe extern "C" fn() -> i32;
-    type CopySpaces = unsafe extern "C" fn(i32) -> *const CFArray;
+    type CopySpaces = unsafe extern "C" fn(i32) -> *const CFType;
     type DisplayUuid = unsafe extern "C" fn(u32) -> *const CFType;
-    type UuidString = unsafe extern "C" fn(*const c_void, *const CFType) -> *const CFString;
 
-    fn symbol(name: &std::ffi::CStr) -> Option<NonNull<c_void>> {
-        // SAFETY: a plain lookup by name.
-        NonNull::new(unsafe { dlsym(RTLD_DEFAULT, name.as_ptr()) })
+    /// The three functions this needs, found once; none when one is missing (EchoLedger then keeps its Dock icon).
+    struct WindowServer {
+        main_connection: MainConnection,
+        copy_spaces: CopySpaces,
+        display_uuid: DisplayUuid,
+    }
+
+    static WINDOW_SERVER: OnceLock<Option<WindowServer>> = OnceLock::new();
+
+    fn window_server() -> Option<&'static WindowServer> {
+        WINDOW_SERVER
+            .get_or_init(|| {
+                let find = |name: &std::ffi::CStr| {
+                    // SAFETY: a plain lookup by name.
+                    NonNull::new(unsafe { dlsym(RTLD_DEFAULT, name.as_ptr()) })
+                };
+                let (main, copy, uuid) = (find(c"CGSMainConnectionID")?, find(c"CGSCopyManagedDisplaySpaces")?, find(c"CGDisplayCreateUUIDFromDisplayID")?);
+                // SAFETY: the functions by the signatures every user of them relies on; what they return is only read
+                // after a type check (`current_spaces`, `display_uuid`).
+                Some(unsafe {
+                    WindowServer {
+                        main_connection: std::mem::transmute::<*mut c_void, MainConnection>(main.as_ptr()),
+                        copy_spaces: std::mem::transmute::<*mut c_void, CopySpaces>(copy.as_ptr()),
+                        display_uuid: std::mem::transmute::<*mut c_void, DisplayUuid>(uuid.as_ptr()),
+                    }
+                })
+            })
+            .as_ref()
+    }
+
+    /// An owned (+1) CF object a function returned, or none for a null one.
+    fn owned(object: *const CFType) -> Option<CFRetained<CFType>> {
+        // SAFETY: the functions above return a new (+1) object or null; CFRetained releases it.
+        NonNull::new(object.cast_mut()).map(|o| unsafe { CFRetained::from_raw(o) })
     }
 
     /// The display's UUID (as the list of Spaces names it).
@@ -184,30 +214,18 @@ pub mod mac {
         let key = NSString::from_str("NSScreenNumber");
         let number: Option<Retained<AnyObject>> = screen.deviceDescription().objectForKey(&key);
         let id = number?.downcast::<NSNumber>().ok()?.unsignedIntValue();
-        let create = symbol(c"CGDisplayCreateUUIDFromDisplayID")?;
-        let string = symbol(c"CFUUIDCreateString")?;
-        // SAFETY: the two CoreGraphics / CoreFoundation functions by their documented signatures; both results are
-        // owned (+1) and released by CFRetained.
-        unsafe {
-            let create: DisplayUuid = std::mem::transmute(create.as_ptr());
-            let string: UuidString = std::mem::transmute(string.as_ptr());
-            let uuid = CFRetained::from_raw(NonNull::new(create(id).cast_mut())?);
-            let text = CFRetained::from_raw(NonNull::new(string(std::ptr::null(), &*uuid).cast_mut())?);
-            Some(text.to_string())
-        }
+        // SAFETY: CoreGraphics' function by its documented signature.
+        let uuid = owned(unsafe { (window_server()?.display_uuid)(id) })?;
+        let uuid = uuid.downcast_ref::<CFUUID>()?;
+        CFUUID::new_string(None, Some(uuid)).map(|s| s.to_string())
     }
 
     /// Each display's UUID and its current Space's type; none when the system does not have the list.
     fn current_spaces() -> Option<Vec<(String, i64)>> {
-        let main = symbol(c"CGSMainConnectionID")?;
-        let copy = symbol(c"CGSCopyManagedDisplaySpaces")?;
-        // SAFETY: the window server's own functions by the signatures every user of them relies on; the array is owned
-        // (+1) and released by CFRetained; its values are read with type checks only.
-        let list = unsafe {
-            let main: MainConnection = std::mem::transmute(main.as_ptr());
-            let copy: CopySpaces = std::mem::transmute(copy.as_ptr());
-            CFRetained::from_raw(NonNull::new(copy(main()).cast_mut())?)
-        };
+        let functions = window_server()?;
+        // SAFETY: the window server's functions by their signatures; the answer is type-checked before it is read.
+        let answer = owned(unsafe { (functions.copy_spaces)((functions.main_connection)()) })?;
+        let list = answer.downcast_ref::<CFArray>()?;
         let get = |dict: &CFDictionary, key: &str| -> Option<CFRetained<CFType>> {
             let key = CFString::from_str(key);
             // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
@@ -260,6 +278,24 @@ pub mod mac {
     }
     // SAFETY: built on the main thread and run by the main dispatch queue, which is the main thread.
     unsafe impl<F> Send for SendOnMain<F> {}
+
+    #[cfg(test)]
+    mod live {
+        use super::*;
+
+        #[test]
+        fn the_window_server_lists_each_display_s_current_space_and_is_looked_up_once() {
+            let first = window_server().map(|w| w as *const WindowServer as usize);
+            assert!(first.is_some(), "the three functions are there on this macOS");
+            assert_eq!(first, window_server().map(|w| w as *const WindowServer as usize), "found once, kept");
+            let list = current_spaces().expect("the list of Spaces");
+            assert!(!list.is_empty(), "one entry per display (or one for all)");
+            for (id, kind) in &list {
+                assert!(!id.is_empty() && *kind >= 0, "{id}: {kind}");
+            }
+            println!("spaces: {list:?}");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -306,6 +342,16 @@ mod tests {
     fn body(code: &str, start: &str) -> String {
         let from = &code[code.find(start).unwrap_or_else(|| panic!("{start}"))..];
         from[..from.find("\n    }\n").map(|i| i + 6).or_else(|| from.find("\n}\n")).unwrap()].to_string()
+    }
+
+    #[test]
+    fn the_private_answer_is_type_checked_and_the_functions_are_found_once() {
+        let spaces = code("spaces.rs");
+        assert_eq!(spaces.matches("dlsym(RTLD_DEFAULT").count(), 1, "one lookup place");
+        assert!(spaces.contains("static WINDOW_SERVER: OnceLock<Option<WindowServer>>"));
+        let read = body(&spaces, "    fn current_spaces() -> Option<Vec<(String, i64)>> {");
+        assert!(read.find("answer.downcast_ref::<CFArray>()?").unwrap() < read.find("list.count()").unwrap(), "a CFArray before it is read");
+        assert!(body(&spaces, "    fn display_uuid(").contains("uuid.downcast_ref::<CFUUID>()?"));
     }
 
     #[test]
