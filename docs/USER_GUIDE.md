@@ -627,8 +627,9 @@ VTT subtitles, or JSON. Urdu and Hindi text keep the right shape and direction.
 4. Copy the link. It is shown only once.
 
 A project's link shows its recordings, newest first; each opens like a recording's link. You can revoke a link at
-any time: **Revoke** asks first, then the link stops working at once for everyone who has it. **Shares** (in the
-console) and the share sheet in the apps list every link with its views and when it was last opened.
+any time; it stops working at once for everyone who has it. On the computer and in the console, **Revoke** asks first.
+**Shares** (in the console) and the share sheet in the apps list every link with its views and when it was last
+opened.
 
 **Send to WhatsApp (computer, since v1.6).** On a recording, the WhatsApp button next to **Share**, or **⋯ → Send to
 WhatsApp…** on its row, offers three ways, as on the phone:

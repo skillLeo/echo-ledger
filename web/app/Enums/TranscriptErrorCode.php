@@ -24,7 +24,10 @@ enum TranscriptErrorCode: string
     /** Longest provider reason quoted in a `provider_rejected` message. */
     public const MAX_REASON_CHARS = 200;
 
-    /** The documented message; `provider_rejected` and `provider_not_configured` add their own detail. */
+    /**
+     * The message kept with a failed transcript, for the operator and the logs; `provider_rejected` and
+     * `provider_not_configured` add their own detail. People read plainWords() instead.
+     */
     public function message(): string
     {
         return match ($this) {
@@ -41,20 +44,11 @@ enum TranscriptErrorCode: string
     }
 
     /**
-     * The `error` the API sends for a failed transcript (since v1.8.1, D-131): the documented message of its code alone.
-     * The detail `provider_rejected` and `provider_not_configured` store with it (the engine's own words, which can name
-     * it) stays in the transcript's `error` column, for the operator and the logs. A missing or unknown code reads as a
-     * plain failure.
-     */
-    public static function publicMessage(?self $code): string
-    {
-        return $code?->message() ?? 'The transcript could not be made.';
-    }
-
-    /**
-     * Why a transcript failed, in plain words for the console and the bell (since v1.8.1, D-129 and D-131): never the
-     * stored `error`, which may quote the engine or its provider. The apps say the same from `error_code`; a missing or
-     * unknown code reads as an engine problem. The Free plan's own Groq key is the one name people must act on.
+     * Why a transcript failed, in plain words: the one set of sentences people read everywhere (since v1.8.1, D-129 and
+     * D-131), on the console's recording page and Library, in Activity and the bell, and as the API's `error` (so an app
+     * that shows `error` says the same). Never the stored `error`, which may quote the engine or its provider: that stays
+     * in the transcript's `error` column, for the operator and the logs. A missing or unknown code reads as an engine
+     * problem. The Free plan's own Groq key is the one name people must act on.
      */
     public static function plainWords(?self $code): string
     {

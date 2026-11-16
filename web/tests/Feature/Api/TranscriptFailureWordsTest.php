@@ -82,9 +82,9 @@ it('turns a job that failed on a provider-named error into an Activity item and 
 
     // The API's error: on the transcript and in the recording's detail.
     $one = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
-        ->assertJsonPath('error', TranscriptErrorCode::Interrupted->message())->assertJsonPath('error_code', 'interrupted');
+        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::Interrupted))->assertJsonPath('error_code', 'interrupted');
     $detail = $this->getJson("/api/sessions/{$session->id}")->assertOk()->json('transcripts.0');
-    expect($detail['error'])->toBe(TranscriptErrorCode::Interrupted->message())->and($detail['error_code'])->toBe('interrupted')
+    expect($detail['error'])->toBe(TranscriptErrorCode::plainWords(TranscriptErrorCode::Interrupted))->and($detail['error_code'])->toBe('interrupted')
         ->and(failureVendorsIn((string) $one->json('error').' '.$detail['error']))->toBe([]);
 
     // The email for "Notify me when ready" names the recording, never the engine.
@@ -103,7 +103,9 @@ it('never names an engine or a vendor in the Activity item or the API error, wha
 
     expect($item)->not->toBeNull()
         ->and($item['body'])->toBe('Call with Omar: '.TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $code)))
-        ->and($api)->toBe(TranscriptErrorCode::publicMessage(TranscriptErrorCode::tryFrom((string) $code)))
+        // One set of plain words: the API's error is what Activity and the console say.
+        ->and($api)->toBe(TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $code)))
+        ->and($api)->not->toContain('console')
         ->and(failureVendorsIn($item['body'], $freeKey))->toBe([])
         ->and(failureVendorsIn($api, $freeKey))->toBe([])
         ->and(str_contains($item['body'], 'could not read the audio'))->toBeFalse();

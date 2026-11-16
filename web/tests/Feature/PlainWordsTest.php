@@ -7,8 +7,12 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Support\UpgradeFlow;
+use App\Models\CallNote;
 use App\Models\CaptureSession;
+use App\Models\ClientBrief;
+use App\Models\ClientFile;
 use App\Models\Plan;
 use App\Models\Transcript;
 use App\Models\User;
@@ -25,6 +29,7 @@ use Filament\Facades\Filament;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
+use Livewire\Livewire;
 use Psr\Http\Message\RequestInterface;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -76,6 +81,8 @@ const VENDOR_NAMES_ALLOWED = [
     // The phone tells the key, the credit and the service apart by these words (TranslateBudget.kt); they lose the name
     // once the phone reads the error code instead.
     'app/Http/Controllers/Api/LiveTranslateTokenController.php' => 'Live Translate\'s key and credit',
+    // The pattern that keeps them from people, never shown itself.
+    'app/Support/ProviderText.php' => 'the names it hides',
     // The Usage pages' cost per provider.
     'app/Services/Usage/UsageBreakdown.php' => 'the cost per provider',
     'app/Services/Usage/UsageReport.php' => 'the cost per provider',
@@ -222,6 +229,44 @@ it('says in plain words that the AI could not write a project\'s notes, keeping 
         && str_contains((string) $context['error'], 'authentication_error'));
 });
 
+it('never sends or shows a reason the AI\'s work failed for that names a provider, even one kept from before', function () {
+    $device = Fx::device();
+    $owner = $device->user;
+    $project = Fx::client($owner);
+    $session = Fx::session($owner, $device, ['client_id' => $project->id]);
+    $transcript = Fx::transcript($session, 'Send the invoice.');
+    // What v1.8.0 and older kept: the AI's maker, its model, a credential's name.
+    CallNote::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'capture_session_id' => $session->id,
+        'status' => 'failed', 'error' => 'Claude did not return the notes in the expected form.']);
+    ClientBrief::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'sections' => ClientBrief::emptySections(),
+        'status' => 'failed', 'error' => '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} claude-sonnet-5-5']);
+    ClientFile::query()->create(['workspace_id' => $session->workspace_id, 'user_id' => $owner->id, 'client_id' => $project->id, 'name' => 'Scope.pdf',
+        'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => 'Missing credential anthropic.api_key. Add it on Admin → API Credentials.']);
+    $transcript->update(['meta' => ['views' => ['status' => 'failed', 'fingerprint' => TranscriptViews::fingerprint($transcript), 'error' => 'Claude declined to convert this transcript.']]]);
+    $api = $this->api(Fx::token($device));
+    $unavailable = ClaudeClientAi::UNAVAILABLE;
+
+    $workspace = $api->getJson("/api/clients/{$project->id}/workspace")->assertOk();
+    expect($workspace->json('data.brief.error'))->toBe($unavailable)
+        ->and($workspace->json('data.files.0.error'))->toBe($unavailable)
+        ->and($workspace->json('data.notes.0.error'))->toBe($unavailable)
+        ->and(vendorNamesIn((string) $workspace->getContent()))->toBe([]);
+    expect($api->getJson("/api/sessions/{$session->id}/notes")->assertOk()->json('data.error'))->toBe($unavailable)
+        ->and($api->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->json('error'))->toBe($unavailable);
+
+    // A plain reason stays as it is.
+    CallNote::query()->where('capture_session_id', $session->id)->update(['error' => 'The transcript is not ready yet.']);
+    expect($api->getJson("/api/sessions/{$session->id}/notes")->assertOk()->json('data.error'))->toBe('The transcript is not ready yet.');
+
+    // The console's project page says the same.
+    Filament::setCurrentPanel('app');
+    $this->actingAs($owner, 'web');
+    $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent()
+        .(string) $this->get('/app/clients/'.$project->id.'?tab=files')->assertOk()->getContent();
+    expect($html)->toContain(e($unavailable))->not->toContain('overloaded_error')->not->toContain('Missing credential')
+        ->and(vendorNamesIn($html))->toBe([]);
+});
+
 /** A recording of [$owner] with a ready recording and a final transcript holding [$transcript]. */
 function plainWordsRecording(User $owner, array $transcript): CaptureSession
 {
@@ -299,6 +344,48 @@ describe('the console\'s recording page', function () {
             ->assertSee('Transcribed by')->assertSee('Google Gemini')
             ->assertSee('Gemini could not read the audio.')
             ->assertSee(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected));
+    });
+});
+
+describe('the console\'s Library side panel', function () {
+    beforeEach(function () {
+        Fx::fakeRecordingsDisk();
+        Filament::setCurrentPanel('app');
+    });
+
+    afterEach(fn () => Fx::cleanupDisks());
+
+    /** A failed recording of [$owner] whose engines' own words name them, as EngineFallbackJob writes them. */
+    function plainWordsFailedRecording(User $owner): CaptureSession
+    {
+        $session = plainWordsRecording($owner, ['provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error_code' => 'provider_rejected',
+            'error' => 'The speech provider could not transcribe this recording: Gemini could not read the audio. (Tried: AssemblyAI, Google Gemini. No other engine with a key can do this language: add one on API Credentials.)']);
+        $session->update(['status' => 'failed']);
+
+        return $session->fresh();
+    }
+
+    it('says why a recording failed in plain words to someone who is not the server\'s operator', function () {
+        $owner = Fx::user();
+        $session = plainWordsFailedRecording($owner);
+        $this->actingAs($owner, 'web');
+
+        $html = Livewire::test(ListCaptureSessions::class)->set('selected', $session->id)->html();
+
+        // Without Livewire's block markers, as people read it.
+        expect((string) preg_replace('/<!--.*?-->/s', '', $html))->toContain('Failed: '.e(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected)))
+            ->and(vendorNamesIn($html))->toBe([])
+            ->and($html)->not->toContain('data-engine-error');
+    });
+
+    it('also shows the engine\'s own words to the server\'s operator', function () {
+        $operator = Fx::superAdmin();
+        $session = plainWordsFailedRecording($operator);
+        $this->actingAs($operator, 'web');
+
+        expect(Livewire::test(ListCaptureSessions::class)->set('selected', $session->id)->html())
+            ->toContain(e(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected)))
+            ->toContain('data-engine-error')->toContain('Gemini could not read the audio.');
     });
 });
 

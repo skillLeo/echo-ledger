@@ -357,13 +357,14 @@ describe('sessions and uploads', function () {
         $session = CaptureSession::factory()->create(['user_id' => $this->owner->id]);
         $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'No audio was captured in this recording.', 'error_code' => 'no_audio']);
         $session->transcripts()->create(['kind' => TranscriptKind::Live, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'ok', 'error' => 'stale']);
-        // Since v1.8.1 (D-131) the reason is the documented message of the code, never the stored words: without a code too.
+        // Since v1.8.1 (D-131) the reason is the plain words of the code, never the stored words: without a code too.
         $session->transcripts()->create(['kind' => TranscriptKind::Alternate, 'provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error' => 'Gemini could not read the audio.']);
 
         $transcripts = collect($this->getJson("/api/sessions/{$session->id}")->assertOk()->json('transcripts'))->keyBy('kind');
 
-        expect($transcripts['final']['error'])->toBe('No audio was captured in this recording.')->and($transcripts['final']['error_code'])->toBe('no_audio')
-            ->and($transcripts['alternate']['error'])->toBe('The transcript could not be made.')->and($transcripts['alternate']['error_code'])->toBeNull()
+        expect($transcripts['final']['error'])->toBe('Nothing could be heard in this recording.')->and($transcripts['final']['error_code'])->toBe('no_audio')
+            ->and($transcripts['alternate']['error'])->toBe('The speech engines could not transcribe it this time. Your audio is safe: try again.')
+            ->and($transcripts['alternate']['error_code'])->toBeNull()
             ->and($transcripts['live']['error'])->toBeNull()->and($transcripts['live']['error_code'])->toBeNull();
         expectKeys($transcripts['final'], ['error', 'error_code']);
     });
@@ -521,14 +522,14 @@ describe('library and transcripts', function () {
         $b = $this->getJson("/api/transcripts/{$ok->id}")->assertOk();
 
         expect(Shape::violations($a->json(), transcriptShape()))->toBe([])
-            ->and($a->json('error'))->toBe('No audio was captured in this recording.')
+            ->and($a->json('error'))->toBe('Nothing could be heard in this recording.')
             ->and($a->json('error_code'))->toBe('no_audio')
             ->and($b->json('error'))->toBeNull()
             ->and($b->json('error_code'))->toBeNull();
         // Since v1.8.1 (D-131) never the stored words: a failure from before error codes reads as a plain failure.
         $legacy = CaptureSession::factory()->create(['user_id' => $this->owner->id])->transcripts()->create(['kind' => TranscriptKind::Final,
             'provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error' => 'Gemini could not read the audio.']);
-        $this->getJson("/api/transcripts/{$legacy->id}")->assertOk()->assertJsonPath('error', 'The transcript could not be made.')->assertJsonPath('error_code', null);
+        $this->getJson("/api/transcripts/{$legacy->id}")->assertOk()->assertJsonPath('error', 'The speech engines could not transcribe it this time. Your audio is safe: try again.')->assertJsonPath('error_code', null);
         expectKeys($a->json(), ['error', 'error_code']);
         expectKeys($b->json(), ['error', 'error_code']);
     });

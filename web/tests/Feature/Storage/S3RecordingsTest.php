@@ -1244,7 +1244,7 @@ it('gives the device the documented text when a final transcript fails on the bu
 
     $answer = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
         ->assertJsonPath('status', 'failed')
-        ->assertJsonPath('error', TranscriptErrorCode::Interrupted->message())
+        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::Interrupted))
         ->assertJsonPath('error_code', 'interrupted');
     expect($answer->getContent())->not->toContain(FakeS3Server::HOST)->not->toContain(FakeS3Server::BUCKET)->not->toContain((string) $recording->stored_path);
 

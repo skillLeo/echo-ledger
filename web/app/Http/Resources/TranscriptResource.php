@@ -101,8 +101,8 @@ final class TranscriptResource extends JsonResource
 
     /**
      * `error` and `error_code` (docs/API.md): set only while the transcript is failed, so a stale reason of an earlier
-     * attempt never reaches a device. Since v1.8.1 (D-131) `error` is the documented message of the code alone, never
-     * the engine's own words kept with it, which can name the provider (TranscriptErrorCode::publicMessage).
+     * attempt never reaches a device. Since v1.8.1 (D-131) `error` is the plain words of the code, as the console and
+     * Activity say them (TranscriptErrorCode::plainWords), never the engine's own words kept with it.
      *
      * @return array{error: string|null, error_code: string|null}
      */
@@ -114,6 +114,6 @@ final class TranscriptResource extends JsonResource
         $code = $transcript->getAttribute('error_code');
         $code = is_string($code) && $code !== '' ? $code : null;
 
-        return ['error' => TranscriptErrorCode::publicMessage(TranscriptErrorCode::tryFrom((string) $code)), 'error_code' => $code];
+        return ['error' => TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $code)), 'error_code' => $code];
     }
 }
