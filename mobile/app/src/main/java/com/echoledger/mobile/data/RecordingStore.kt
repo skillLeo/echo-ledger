@@ -27,7 +27,8 @@ data class LocalRecording(
     val sha256: String,
     /**
      * "pending_decision" (call, awaiting Keep/Discard) | "queued" | "uploading" | "uploaded" | "failed" | "skipped"
-     * (since v1.5: an unanswered, short or silent call, kept on the phone for a day so it can be restored).
+     * (since v1.5: an unanswered, short or silent call, kept on the phone for a day so it can be restored) |
+     * "discarding" (since v1.8.1: discarded from the after-call chip, its file kept until [discardAt] for Undo).
      */
     val state: String,
     val lastError: String? = null,
@@ -57,7 +58,9 @@ data class LocalRecording(
     val skippedReason: String? = null,
     val skippedAt: String? = null,
     /** Since v1.5: the account it was made under, once someone else signed in here ([com.echoledger.mobile.core.Owner]); null = this phone's account. */
-    val owner: com.echoledger.mobile.core.Owner? = null
+    val owner: com.echoledger.mobile.core.Owner? = null,
+    /** Since v1.8.1, for state "discarding": when the after-call chip's Undo time is over and the file goes (an instant). */
+    val discardAt: String? = null
 )
 
 /**
