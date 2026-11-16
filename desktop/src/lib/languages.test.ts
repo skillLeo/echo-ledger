@@ -85,19 +85,19 @@ describe("backup engine and waiting for the engine (v1.5)", () => {
   it("says which engine it waits for and when it tries again", () => {
     const now = new Date(2026, 10, 4, 13, 0);
     const at = (day: number, hour: number, minute: number) => new Date(2026, 10, day, hour, minute).toISOString();
-    expect(retryLine({ provider: "groq", retry_at: at(4, 14, 5) }, now)).toBe("Waiting for Groq — retrying at 2:05 pm");
-    expect(retryLine({ provider: "groq", retry_at: at(4, 9, 30) }, new Date(2026, 10, 4, 8, 0))).toBe("Waiting for Groq — retrying at 9:30 am");
-    expect(retryLine({ provider: "groq", retry_at: at(5, 1, 10) }, now)).toBe("Waiting for Groq — retrying tomorrow at 1:10 am");
-    expect(retryLine({ provider: "gemini", retry_at: at(7, 18, 0) }, now)).toBe("Waiting for Gemini — retrying Nov 7 at 6:00 pm");
-    expect(retryLine({ provider: "groq", retry_at: at(4, 12, 59) }, now)).toBe("Waiting for Groq — retrying now");
-    expect(retryLine({ provider: null, retry_at: at(4, 14, 5) }, now)).toBe("Waiting for the engine — retrying at 2:05 pm");
+    expect(retryLine({ provider: "groq", retry_at: at(4, 14, 5) }, now)).toBe("Waiting to transcribe — retrying at 2:05 pm");
+    expect(retryLine({ provider: "groq", retry_at: at(4, 9, 30) }, new Date(2026, 10, 4, 8, 0))).toBe("Waiting to transcribe — retrying at 9:30 am");
+    expect(retryLine({ provider: "groq", retry_at: at(5, 1, 10) }, now)).toBe("Waiting to transcribe — retrying tomorrow at 1:10 am");
+    expect(retryLine({ provider: "gemini", retry_at: at(7, 18, 0) }, now)).toBe("Waiting to transcribe — retrying Nov 7 at 6:00 pm");
+    expect(retryLine({ provider: "groq", retry_at: at(4, 12, 59) }, now)).toBe("Waiting to transcribe — retrying now");
+    expect(retryLine({ provider: null, retry_at: at(4, 14, 5) }, now)).toBe("Waiting to transcribe — retrying at 2:05 pm");
   });
 
   it("writes a plain space before am / pm, also where the runtime puts a narrow no-break space", () => {
     const time = vi.spyOn(Date.prototype, "toLocaleTimeString").mockReturnValue("2:05\u202FPM");
     try {
       const line = retryLine({ provider: "groq", retry_at: new Date(2026, 10, 4, 14, 5).toISOString() }, new Date(2026, 10, 4, 13, 0));
-      expect(line).toBe("Waiting for Groq — retrying at 2:05 pm");
+      expect(line).toBe("Waiting to transcribe — retrying at 2:05 pm");
     } finally {
       time.mockRestore();
     }
@@ -111,8 +111,9 @@ describe("backup engine and waiting for the engine (v1.5)", () => {
   });
 
   it("explains why it waits", () => {
-    expect(retryReason("rate_limited", "Groq")).toBe("Groq has reached its limit for now. The transcript waits for it instead of using a less accurate engine.");
-    expect(retryReason("unavailable", "Groq")).toBe("Groq is not answering. The transcript waits for it instead of using a less accurate engine.");
+    // D-126: plain words, never which provider.
+    expect(retryReason("rate_limited")).toBe("The transcription service has reached its limit for now. The transcript waits for it instead of using a less accurate one.");
+    expect(retryReason("unavailable")).toBe("The transcription service isn't answering. The transcript waits for it instead of using a less accurate one.");
     expect(retryReason(null, "Groq")).toBeNull();
   });
 });

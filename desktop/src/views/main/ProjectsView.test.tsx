@@ -384,6 +384,14 @@ describe("Notes", () => {
     expect(screen.queryByRole("tab", { name: "AI notes" })).not.toBeInTheDocument();
   });
 
+  it("says AI isn't set up on the server in plain words, never which provider's key (D-127)", async () => {
+    await renderProjects({ ws: workspace({ ai: { configured: false, spent_usd: 0, budget_usd: 0, client_spent_usd: 0 } }) });
+    tab("Notes");
+    expect(await screen.findByText(/AI isn't set up on the server yet: notes, the brief and Ask wait for it\./)).toBeInTheDocument();
+    expect(screen.getByText("Ask needs AI set up on the server. Ask the person who runs the console to set it up.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Anthropic/);
+  });
+
   it("says EchoLedger writes the notes and reads the files, never the vendor (D-062)", async () => {
     await renderProjects();
     tab("Notes");

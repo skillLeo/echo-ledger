@@ -14,7 +14,7 @@ import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialog
 import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, type UnsureMarkers } from "../../lib/format";
 import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
@@ -1365,7 +1365,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
                   {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
                   {retrying && (
-                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, providerName(waitingFinal?.provider) || "The engine") ?? undefined}>{retrying}</div>
+                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason) ?? undefined}>{retrying}</div>
                   )}
                   {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && !readOnly && (
                     <div className="backup-line" role="status" data-testid="backup-engine">

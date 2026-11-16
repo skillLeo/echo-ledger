@@ -370,8 +370,27 @@ describe("MainApp sidebar and keys", () => {
     fireEvent.keyDown(document.body, { key: "?" });
     const help = await screen.findByRole("dialog", { name: "Help & shortcuts" });
     expect(within(help).getByText("Next / previous recording in the list")).toBeInTheDocument();
-    fireEvent.click(within(help).getByRole("button", { name: "Close" }));
+    // D-079: a x at the top beside the title, and Close at the bottom.
+    const closes = within(help).getAllByRole("button", { name: "Close" });
+    expect(closes).toHaveLength(2);
+    expect(closes[0].closest(".sheet-head")).not.toBeNull();
+    fireEvent.click(closes[0]);
     expect(screen.queryByRole("dialog", { name: "Help & shortcuts" })).not.toBeInTheDocument();
+  });
+
+  it("points Help at places that exist, says how to get a screenshot, and opens them (D-078, D-125)", async () => {
+    await renderPaired();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
+    const help = await screen.findByRole("dialog", { name: "Help & shortcuts" });
+    expect(help).not.toHaveTextContent(/Account → Preferences|console under Help/);
+    expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. The user guide is in Settings › Help.");
+    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support/);
+    expect(within(help).getByText(/Shift\+← \/ Shift\+→/)).toBeInTheDocument();
+    fireEvent.click(within(help).getByRole("button", { name: "User guide" }));
+    expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Help & shortcuts" })).getByRole("button", { name: "Screen-share privacy" }));
+    expect(await screen.findByRole("heading", { name: "Screen-share privacy", level: 1 })).toBeInTheDocument();
   });
 
   it("opens Projects and Activity from the sidebar", async () => {

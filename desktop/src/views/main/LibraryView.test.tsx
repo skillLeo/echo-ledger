@@ -742,7 +742,7 @@ describe("LibraryView transcript", () => {
     const both = makeItem("b2", { title: "Both", status: "processing", transcript: { final_status: "submitted", final_transcript_id: "tr-wip", live_available: true, live_transcript_id: "tr-live", preview: null } });
     await renderLibrary([both]);
     await selectItem("Both", "Live words.");
-    // The live captions are shown; the final one is read too, for "Waiting for Groq — retrying at …" (v1.5).
+    // The live captions are shown; the final one is read too, for "Waiting to transcribe — retrying at …" (v1.5).
     expect(callsOf("transcript_detail")).toEqual([{ id: "tr-live" }, { id: "tr-wip" }]);
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
     expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
@@ -1664,8 +1664,9 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true }), ...ITEMS]);
     await selectItem("Urdu call", "Assalam o alaikum");
     const line = await within(detail()).findByTestId("retry-line");
-    expect(line).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
-    expect(line).toHaveAttribute("title", "Groq has reached its limit for now. The transcript waits for it instead of using a less accurate engine.");
+    expect(line).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
+    expect(line).toHaveAttribute("title", "The transcription service has reached its limit for now. The transcript waits for it instead of using a less accurate one.");
+    expect(line.textContent + (line.getAttribute("title") ?? "")).not.toMatch(/Groq|Gemini|AssemblyAI|ElevenLabs/);
     expect(within(detail()).queryByTestId("backup-engine")).not.toBeInTheDocument();
   });
 
@@ -1675,7 +1676,7 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true });
     await renderLibrary([call, ...ITEMS]);
     await selectItem("Urdu call", "Assalam o alaikum");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
 
     // The try runs: no retry time while it does.
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "processing", retry_at: null, retry_reason: null };
@@ -1687,7 +1688,7 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "pending", retry_at: new Date(2026, 9, 24, 14, 13).toISOString(), retry_reason: "unavailable" };
     respond("library_list", [{ ...call, updated_at: "2026-10-24T13:07:00Z" }, ...ITEMS]);
     await emitEvent("library:updated", 1);
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:13 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:13 pm");
     expect(within(detail()).getByText("Assalam o alaikum")).toBeInTheDocument();
   });
 
@@ -1696,13 +1697,13 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w" });
     await renderLibrary([call, ...ITEMS]);
     await selectItem("Urdu call");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(1);
 
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 14, 13).toISOString() };
     respond("library_list", [{ ...call, updated_at: "2026-10-24T11:07:00Z" }, ...ITEMS]);
     await emitEvent("library:updated", 1);
-    expect(await within(detail()).findByText("Waiting for Groq — retrying at 2:13 pm")).toBeInTheDocument();
+    expect(await within(detail()).findByText("Waiting to transcribe — retrying at 2:13 pm")).toBeInTheDocument();
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
   });
 
@@ -1711,14 +1712,14 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 11, 58).toISOString(), retry_reason: "rate_limited" });
     await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w" }), ...ITEMS]);
     await selectItem("Urdu call");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying now");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying now");
     const minute = timeouts.mock.calls.filter(([, ms]) => ms === 60_000).at(-1)?.[0];
     expect(minute).toBeTypeOf("function");
 
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 12, 4).toISOString() };
     await act(async () => (minute as () => void)());
     await flushAsync();
-    expect(within(detail()).getByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 12:04 pm");
+    expect(within(detail()).getByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 12:04 pm");
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
   });
 

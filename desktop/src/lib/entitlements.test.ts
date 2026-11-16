@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, renderHook } from "@testing-library/react";
-import { allFeatures, badgeText, featureWords, featuresSummary, forgetEntitlements, isLocked, lowestPlan, needsOwnKey, pendingRequest, refreshEntitlements, resetEntitlementsForTests, useEntitlements } from "./entitlements";
+import { PAID_FEATURES, allFeatures, badgeText, featureWords, featuresSummary, forgetEntitlements, isLocked, lowestPlan, needsOwnKey, pendingRequest, refreshEntitlements, resetEntitlementsForTests, useEntitlements } from "./entitlements";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -97,5 +97,19 @@ describe("All features (v1.6.2)", () => {
     expect(featuresSummary(sampleEntitlements("ultra"))).toBe("Your plan has 15 of 15 features");
     expect(featuresSummary(makeEntitlements({ features: { record: { enabled: true, name: null, description: null, cost: "free", lowest_plan: null } } })))
       .toBe("Your plan has 1 of 1 feature");
+  });
+});
+
+describe("the app's own feature words name no vendor (D-128)", () => {
+  const VENDORS = /Claude|ChatGPT|OpenAI|Anthropic|ElevenLabs|Gemini|AssemblyAI|Soniox|Deepgram/;
+
+  it("when the server sends no names, a feature is named by what it does", async () => {
+    for (const [key, name, description] of PAID_FEATURES) {
+      expect(`${name} ${description}`, key).not.toMatch(VENDORS);
+    }
+    const { planFeatures } = await import("./plan");
+    const names = planFeatures({ liveTranslate: true, screenMoments: true, aiNotes: true, connector: true } as Parameters<typeof planFeatures>[0]).map(([name]) => name);
+    expect(names.join(" ")).not.toMatch(VENDORS);
+    expect(names).toContain("Ask an AI assistant");
   });
 });

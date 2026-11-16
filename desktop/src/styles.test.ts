@@ -423,3 +423,12 @@ describe("a chip's word and its select are one control (D-121)", () => {
     expect(prop(".chip-select", "cursor")).toBe("pointer");
   });
 });
+
+describe("Help fits the window (D-079)", () => {
+  it("is never taller than the room under the backdrop's top gap, and only its lists scroll", () => {
+    expect(prop(".help-sheet", "max-height")).toBe("calc(90vh - var(--space-4))");
+    expect(prop(".sheet-backdrop", "padding")).toMatch(/^10vh /);
+    expect(prop(".help-sheet .help-body", "overflow-y")).toBe("auto");
+    expect(prop(".help-sheet", "overflow")).toBe("hidden");
+  });
+});

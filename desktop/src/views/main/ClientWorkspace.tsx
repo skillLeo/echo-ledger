@@ -329,7 +329,7 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
               className={`switch ${ws.client.ai_notes ? "on" : ""}`} disabled={busy} onClick={() => void toggleNotes()} />
           </div>
           <div className="budget-line" data-testid="ai-budget" style={{ paddingTop: 10 }}>
-            {ws.ai.configured ? budgetLine(ws.ai) : "AI is not set up on the server yet: notes, the brief and Ask need its Anthropic key."}
+            {ws.ai.configured ? budgetLine(ws.ai) : "AI isn't set up on the server yet: notes, the brief and Ask wait for it. Ask the person who runs the console."}
           </div>
         </div>
       </section>
@@ -813,7 +813,7 @@ function Ask({ ws, clientId, onOpenRecording }: { ws: Workspace; clientId: strin
   };
   return (
     <>
-      {!ws.ai.configured && <div className="notice" role="status" style={{ marginBottom: 12 }}>Ask needs the server's Anthropic key. Ask the person who runs the console to add it.</div>}
+      {!ws.ai.configured && <div className="notice" role="status" style={{ marginBottom: 12 }}>Ask needs AI set up on the server. Ask the person who runs the console to set it up.</div>}
       <form className="ask-box" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
         <textarea className="input" aria-label="Question" dir="auto" placeholder={`Ask about ${ws.client.name}: “When do we launch?”`} maxLength={500} value={question}
           onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void ask(); } }} />

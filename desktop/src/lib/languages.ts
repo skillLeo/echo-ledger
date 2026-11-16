@@ -1,4 +1,3 @@
-import { providerName } from "./format";
 import type { TranscriptionLanguage } from "./ipc";
 
 /** A language choice: a code, or null for Auto (the client's or the console default). */
@@ -134,29 +133,29 @@ export function transcriptStatusLine(status: string | null | undefined): string 
  */
 export const usedBackupEngine = (transcript: { backup_engine?: boolean | null } | null | undefined): boolean => transcript?.backup_engine === true;
 
-/** Why a transcript waits for its engine, for the line's tooltip. */
-export function retryReason(reason: string | null | undefined, engine: string): string | null {
-  if (reason === "rate_limited") return `${engine} has reached its limit for now. The transcript waits for it instead of using a less accurate engine.`;
-  if (reason === "unavailable") return `${engine} is not answering. The transcript waits for it instead of using a less accurate engine.`;
+/** Why a transcript waits, for the line's tooltip: in plain words, never which provider (D-126). */
+export function retryReason(reason: string | null | undefined): string | null {
+  if (reason === "rate_limited") return "The transcription service has reached its limit for now. The transcript waits for it instead of using a less accurate one.";
+  if (reason === "unavailable") return "The transcription service isn't answering. The transcript waits for it instead of using a less accurate one.";
   return null;
 }
 
 /**
- * "Waiting for Groq — retrying at 2:05 pm" while an Urdu or Auto transcript waits for its preferred engine (v1.5
- * `retry_at`); another day says which. Null when it does not wait, also on an older server (no `retry_at`).
+ * "Waiting to transcribe — retrying at 2:05 pm" while an Urdu or Auto transcript waits for its preferred engine (v1.5
+ * `retry_at`); another day says which; never which provider (D-126). Null when it does not wait, also on an older
+ * server (no `retry_at`).
  */
 export function retryLine(transcript: { provider?: string | null; retry_at?: string | null } | null | undefined, now: Date = new Date()): string | null {
   if (!transcript?.retry_at) return null;
   const at = new Date(transcript.retry_at);
   if (Number.isNaN(at.getTime())) return null;
-  const engine = providerName(transcript.provider) || "the engine";
-  if (at.getTime() <= now.getTime()) return `Waiting for ${engine} — retrying now`;
+  if (at.getTime() <= now.getTime()) return "Waiting to transcribe — retrying now";
   // "2:05 pm"; newer ICU puts a narrow no-break space before the day period.
   const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, " ").toLowerCase();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   const day = at.toDateString() === now.toDateString() ? "" : at.toDateString() === tomorrow.toDateString() ? "tomorrow " : `${at.toLocaleDateString("en-US", { month: "short", day: "numeric" })} `;
-  return `Waiting for ${engine} — retrying ${day}at ${time}`;
+  return `Waiting to transcribe — retrying ${day}at ${time}`;
 }
 
 /** The wrong-script warning: "devanagari" means Hindi letters came back (lines are flagged, never shown as Hindi). */

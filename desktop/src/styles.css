@@ -676,7 +676,7 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .detail-actions .btn.ghost { height: 34px; padding: 0 var(--space-3); font-size: var(--text-sm); }
 .detail-sources { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; margin-left: calc(-1 * var(--space-2)); }
 .detail-meta { font-size: var(--text-sm); color: var(--text-muted); }
-/* v1.5: "Backup engine — Re-transcribe?" and "Waiting for Groq — retrying at 2:05 pm" under the engine line. */
+/* v1.5: "Backup engine — Re-transcribe?" and "Waiting to transcribe — retrying at 2:05 pm" under the engine line. */
 .backup-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); min-width: 0; margin-top: 2px; color: var(--text); }
 .backup-line > .btn { flex: none; }
 .retry-line { margin-top: 2px; }
@@ -1327,7 +1327,19 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .badge.state-active { color: var(--success); }
 .badge.state-revoked, .badge.state-expired { color: var(--text-faint); }
 /* Help & shortcuts. */
-.help-sheet { width: min(620px, calc(100vw - 48px)); max-height: calc(100vh - 64px); overflow: auto; }
+/* Help fits the window (D-079): no taller than the room under the backdrop's top gap; the lists scroll, the title with
+   its x and the buttons stay. */
+.help-sheet { width: min(620px, calc(100vw - 48px)); max-height: calc(90vh - var(--space-4)); display: flex; flex-direction: column; overflow: hidden; }
+.help-sheet .help-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: grid; gap: var(--space-3); align-content: start; }
+.help-sheet .help-actions { flex: none; flex-wrap: wrap; }
+.sheet-head { display: flex; align-items: center; gap: var(--space-2); }
+.sheet-head .sheet-title { flex: 1; min-width: 0; }
+/* A short window (200 % text in the smallest one): the whole sheet scrolls, its title and x stay at the top. */
+@media (max-height: 480px) {
+  .help-sheet { overflow-y: auto; }
+  .help-sheet .help-body { flex: none; overflow: visible; }
+  .help-sheet .sheet-head { position: sticky; top: calc(-1 * var(--space-5)); z-index: 1; margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-5)) 0; padding: var(--space-5) var(--space-5) var(--space-2); background: inherit; }
+}
 .help-head { margin: var(--space-3) 0 var(--space-2); font-size: var(--text-sm); color: var(--text-muted); }
 .key-list { margin: 0; display: grid; gap: 0; }
 .key-list > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: var(--space-3); align-items: center; padding: 6px 0; border-bottom: 1px solid var(--border); }

@@ -268,6 +268,17 @@ const SCREENS = [
     await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
     await page.waitForSelector(".help-sheet");
   }],
+  // D-079: Help fits the smallest window, at 200 % text too; the lists scroll, the x and buttons stay.
+  ["help-narrow", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
+    await page.waitForSelector(".help-sheet");
+  }, { width: 860, height: 560 }],
+  ["help-narrow-text200", "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
+    await page.waitForSelector(".help-sheet");
+  }, { width: 860, height: 560, scale: 2 }],
   ["sidebar-rail", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.getByRole("button", { name: "Collapse the sidebar" }).click();
