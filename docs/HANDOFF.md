@@ -162,6 +162,18 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
     and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-16 · v1.8 phone 0.2b capture journal + 0.2 missed recordings + 0.3 Phone app recordings (SIM calls) + the
+    Watch translate fix (phone batch A6) · `9fa6be6a` (b-phone) · changes needed → majors fixed → minors fixed →
+    re-review approve (13 minor follow for the next phone round: package names of other apps in the capture log and
+    the 300-char cut, missed notice per account, dialer notices vs a quick redial, endLooks on chained checks, two
+    cards for one SIM call after B5, SIM failure wording per reason, the quiet import text vs auto-keep, the share
+    notice left after a start, unlinkToDeath in HelperConnection.lost, isSystemApp cache + failure = unknown,
+    MediaPlayer.prepare and takeDeletes off the main thread, mark-read beyond the newest 100 (needs contract 1.8.0-f:
+    mark read by missed_recording_id), unknown audio types fall back to the extension; plus the squeezed Send to
+    WhatsApp button). Device: phone batch A6 retest, Part C (SIM calls) and Part D (missed recordings; D5 needs the
+    0.2 server deployed). DECIDED: the helper may read a player's uid/state from AudioPlaybackConfiguration's public
+    toString() when the hidden getters give nothing (no reflection, no new hidden API); "can't read" falls back to
+    Android's own share-the-sound question, so a misread never picks the wrong app silently.
   - 2026-11-16 · v1.8.1 desktop follow-up (the Mac freeze: no lock held across a main-thread wait + a whole-crate
     source rule; tray generation; the menu on a click and the 14 pt badge with a rim on a Mac; EchoLedger a normal
     Mac app: Dock, ⌘Tab, Force Quit, floating windows as non-activating panels, every quit keeps a recording, the
