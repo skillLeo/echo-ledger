@@ -87,11 +87,28 @@ pub enum InternalError {
 /// The answer of `GET /api/internal/assist/providers`.
 #[derive(Clone, Deserialize)]
 pub struct ProvidersResponse {
-    /// Provider -> API key.
+    /// Provider name -> API key. Names this relay has no client for (a provider added to Admin -> API Credentials
+    /// before the relay supports it) are skipped by `known_keys`, never a reason to refuse the answer.
     #[serde(default)]
-    pub keys: BTreeMap<ProviderKind, String>,
+    pub keys: BTreeMap<String, String>,
     #[serde(flatten)]
     pub catalog: Catalog,
+}
+
+impl ProvidersResponse {
+    /// The keys of the providers this relay knows. Each unknown provider is logged by its name only.
+    pub fn known_keys(&self) -> BTreeMap<ProviderKind, String> {
+        let mut known = BTreeMap::new();
+        for (name, key) in &self.keys {
+            match serde_json::from_value::<ProviderKind>(serde_json::Value::String(name.clone())) {
+                Ok(kind) => {
+                    known.insert(kind, key.clone());
+                }
+                Err(_) => tracing::warn!(event = "provider_unknown", provider = %crate::config::safe_name(name)),
+            }
+        }
+        known
+    }
 }
 
 impl fmt::Debug for ProvidersResponse {
@@ -221,7 +238,7 @@ pub fn spawn_provider_refresh(
         loop {
             let wait = match api.providers().await {
                 Ok(answer) => {
-                    keys.replace(answer.keys);
+                    keys.replace(answer.known_keys());
                     match base.with_catalog(answer.catalog) {
                         Ok(next) => {
                             let models = next.models.len();
@@ -475,11 +492,64 @@ mod tests {
         assert!(matches!(api.providers().await, Err(InternalError::Status(401))));
     }
 
+    /// Log lines written while `f` runs, through the relay's own subscriber.
+    fn logged(f: impl FnOnce()) -> String {
+        #[derive(Clone, Default)]
+        struct Buffer(Arc<Mutex<Vec<u8>>>);
+        impl std::io::Write for Buffer {
+            fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(bytes);
+                Ok(bytes.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let buffer = Buffer::default();
+        let writer = buffer.clone();
+        tracing::subscriber::with_default(crate::logging::subscriber("info", move || writer.clone()), f);
+        String::from_utf8(buffer.0.lock().unwrap().clone()).unwrap()
+    }
+
+    #[test]
+    fn an_unknown_provider_is_skipped_and_logged_by_name_never_failing_the_answer() {
+        let body = r#"{"keys": {"anthropic": "KEY-A", "moonshot": "KEY-MOONSHOT-SECRET", "groq": "KEY-G"},
+            "models": {
+              "claude-haiku-5-5": {"provider": "anthropic", "first_token_timeout_ms": 2500,
+                                   "price": {"input": 0.1, "cache_write": 0.125, "cache_read": 0.01, "output": 0.5}},
+              "openai/gpt-oss-120b": {"provider": "groq", "first_token_timeout_ms": 2000,
+                                      "price": {"input": 0.15, "cache_write": 0.15, "cache_read": 0.15, "output": 0.6}},
+              "kimi-k3": {"provider": "moonshot", "first_token_timeout_ms": 2500,
+                          "price": {"input": 0.6, "cache_write": 0.6, "cache_read": 0.15, "output": 2.5}}
+            }}"#;
+        let mut known = BTreeMap::new();
+        let log = logged(|| {
+            let answer: ProvidersResponse = serde_json::from_str(body).expect("the answer still loads");
+            known = answer.known_keys();
+            let models = answer.catalog.models.clone().unwrap();
+            assert!(models.contains_key("claude-haiku-5-5") && models.contains_key("openai/gpt-oss-120b"));
+            assert!(!models.contains_key("kimi-k3"), "a model of an unknown provider is left out");
+        });
+        assert_eq!(known.keys().copied().collect::<Vec<_>>(), vec![ProviderKind::Anthropic, ProviderKind::Groq]);
+        assert!(log.contains("provider_unknown") && log.contains("moonshot"), "{log}");
+        assert!(log.contains("catalog_model_skipped") && log.contains("kimi-k3"), "{log}");
+        assert!(!log.contains("KEY-"), "no key in the log: {log}");
+        // A catalog that is still invalid after that does not take the keys with it.
+        let broken: ProvidersResponse =
+            serde_json::from_str(r#"{"keys": {"anthropic": "KEY-A", "moonshot": "KEY-M"}, "modes": {"fast": {"primary": "kimi-k3", "transcript": "recent", "max_output_tokens": 300},
+              "balanced": {"primary": "kimi-k3", "transcript": "full", "max_output_tokens": 300},
+              "deep": {"primary": "kimi-k3", "transcript": "full", "max_output_tokens": 300},
+              "max": {"primary": "kimi-k3", "transcript": "full", "max_output_tokens": 300}}}"#)
+                .expect("loads");
+        assert_eq!(broken.known_keys().len(), 1);
+        assert!(RelayConfig::built_in().with_catalog(broken.catalog).is_err(), "refused: the last good catalog stays");
+    }
+
     #[test]
     fn provider_keys_never_show_in_debug() {
         let answer: ProvidersResponse = serde_json::from_str(r#"{"keys":{"anthropic":"KEY-VALUE-1","groq":"KEY-VALUE-2"}}"#).unwrap();
         let keys = ProviderKeys::default();
-        keys.replace(answer.keys.clone());
+        keys.replace(answer.known_keys());
         let shown = format!("{answer:?} {keys:?}");
         assert!(!shown.contains("KEY-VALUE"), "{shown}");
         assert_eq!(keys.count(), 2);
