@@ -67,6 +67,7 @@ describe("api wrappers", () => {
     ["afterCallState", () => api.afterCallState(), "after_call_state", undefined],
     ["savedUndo", () => api.savedUndo("rec-1"), "saved_undo", { id: "rec-1" }],
     ["skippedList", () => api.skippedList(), "skipped_list", undefined],
+    ["recoveredSessions", () => api.recoveredSessions(), "recovered_sessions", undefined],
     ["skippedRestore", () => api.skippedRestore("skip-1"), "skipped_restore", { id: "skip-1" }],
     ["uploadList", () => api.uploadList(), "upload_list", undefined],
     ["uploadRetry", () => api.uploadRetry("u1"), "upload_retry", { id: "u1" }],

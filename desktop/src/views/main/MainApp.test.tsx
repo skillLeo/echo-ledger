@@ -268,7 +268,7 @@ describe("MainApp sidebar and keys", () => {
     expect(document.querySelector(".app")).toHaveClass("collapsed");
     for (const name of ["Home", "Library", "Projects", "Shared", "Upload", "Settings"]) expect(nav(name)).toHaveAttribute("title", expect.stringContaining(name));
     expect(within(nav("Activity, 2 need you")).getByText("2")).toHaveClass("nav-count");
-    expect(screen.getByRole("button", { name: "Find a page" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Search recordings, settings and pages/ })).toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize the sidebar" })).not.toBeInTheDocument();
   });
 
@@ -315,14 +315,26 @@ describe("MainApp sidebar and keys", () => {
     expect(document.querySelector("header.topbar")).toHaveAttribute("data-tauri-drag-region");
   });
 
-  it("finds a page by name from the top of the sidebar", async () => {
+  it("has one search: the sidebar's opens the window's search, which finds pages, settings and recordings", async () => {
     await renderPaired();
-    fireEvent.change(screen.getByRole("combobox", { name: "Find a page" }), { target: { value: "devices" } });
-    const pages = screen.getByRole("listbox", { name: "Pages" });
-    expect(within(pages).getByRole("option", { name: /Devices/ })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Find a page" }), { key: "Enter" });
+    expect(screen.queryByRole("combobox", { name: "Find a page" })).not.toBeInTheDocument();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Search recordings, settings and pages/ }));
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    const field = within(palette).getByRole("combobox");
+    fireEvent.change(field, { target: { value: "devices" } });
+    expect(within(palette).getAllByRole("option", { name: /Devices/ })[0]).toBeInTheDocument();
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Go to Devices/ }));
     expect(await screen.findByRole("heading", { name: "Devices", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Find a page" })).toHaveValue("");
+  });
+
+  it("never answers a search with a dead end: recordings are still looked up, then it says where it looked", async () => {
+    await renderPaired();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Search recordings, settings and pages/ }));
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "qqzzxx" } });
+    expect(within(palette).getByRole("status")).toHaveTextContent("Searching recordings and transcripts…");
+    await waitFor(() => expect(within(palette).getByRole("status")).toHaveTextContent("Nothing matches “qqzzxx” in recordings, transcripts, settings or pages."), { timeout: 2000 });
+    expect(within(palette).queryByText("No page matches.")).not.toBeInTheDocument();
   });
 
   it("opens Help & shortcuts with ? and from the sidebar", async () => {
@@ -1068,4 +1080,13 @@ describe("MainApp and what the plan allows (v1.6)", () => {
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
   })
+});
+
+describe("the budget banner's state", () => {
+  it("names the month it is about, so closing it lasts that month (a new month asks again)", async () => {
+    const { budgetState } = await import("./MainApp");
+    expect(budgetState("warn", "2026-12-01")).toBe("warn|2026-12-01");
+    expect(budgetState("warn", "2027-01-01")).not.toBe(budgetState("warn", "2026-12-01"));
+    expect(budgetState("reached", null)).toBe("reached");
+  });
 });

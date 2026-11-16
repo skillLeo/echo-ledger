@@ -19,7 +19,8 @@ export interface SettingResult {
 export interface SearchAnswer {
   settings: SettingResult[];
   help: SettingResult[];
-  /** When nothing matched: up to three real entries close to the first word ("Closest matches"). */
+  /** When nothing matched: up to three real entries whose words are a genuine misspelling of the first word
+   * ("Closest matches"); none rather than unrelated ones. */
   closest: SettingEntry[];
 }
 
@@ -214,8 +215,14 @@ export function searchSettings(rawQuery: string, available: Availability = () =>
   return { settings, help, closest };
 }
 
-/** Up to three entries whose title or English keyword words are within 3 edits of `word`, and that a search for that
- * word itself would find (never a suggestion that returns nothing). Never Roman Urdu or Urdu words. */
+/** How many edits still make a word a genuine misspelling of another (pure): at most two, and at most half of it
+ * ("kaal" → "call" is two of four; "recovered" → "record" is three, so nothing is suggested). */
+export function closeEnough(word: string, edits: number): boolean {
+  return edits <= Math.min(2, Math.floor(word.length / 2));
+}
+
+/** Up to three entries whose title or English keyword words are a genuine misspelling of `word` ([`closeEnough`]).
+ * Never Roman Urdu or Urdu words; none rather than unrelated ones. */
 function closestTo(word: string, items: Indexed[]): SettingEntry[] {
   if (word.length < 3) return [];
   const scored: { entry: SettingEntry; d: number }[] = [];
@@ -223,7 +230,7 @@ function closestTo(word: string, items: Indexed[]): SettingEntry[] {
     if (item.entry.kind === "help") continue;
     const words = [...item.fields.title, ...(item.entry.keywords ?? []).flatMap(tokens)];
     const d = Math.min(...words.map((t) => distance(word, t)));
-    if (d <= 3) scored.push({ entry: item.entry, d });
+    if (closeEnough(word, d)) scored.push({ entry: item.entry, d });
   }
   const page = (e: SettingEntry) => (e.kind === "page" ? 0 : 1);
   return scored.sort((a, b) => a.d - b.d || page(a.entry) - page(b.entry) || a.entry.title.length - b.entry.title.length).slice(0, 3).map((s) => s.entry);

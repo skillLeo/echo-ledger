@@ -43,7 +43,7 @@ export function ShareNotice() {
   const status = usePrivacyStatus();
   if (!status?.mainInShare) return null;
   return (
-    <StateBanner id="main-in-share" state={`share-${status.shareNumber}`} tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
+    <StateBanner id="main-in-share" slot="main-in-share" state={`share-${status.shareNumber}`} tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
       <span>{SHARE_NOTICE}</span>
     </StateBanner>
   );

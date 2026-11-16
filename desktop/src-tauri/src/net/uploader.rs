@@ -122,6 +122,10 @@ pub struct PendingUpload {
     /// this computer signs in as.
     #[serde(default)]
     pub owner: Option<crate::owner::Owner>,
+    /// Recovered after a restart (since v1.3): its session is remembered as recovered once the server has it
+    /// (`crate::recovered`), so the mark outlives "Recovered recording" as its title.
+    #[serde(default)]
+    pub recovered: bool,
 }
 
 impl Default for PendingUpload {
@@ -157,6 +161,7 @@ impl Default for PendingUpload {
             sha256: None,
             progress: None,
             owner: None,
+            recovered: false,
         }
     }
 }

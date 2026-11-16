@@ -5,7 +5,7 @@ import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTa
 import { activityReporter, LockScreen } from "./LockScreen";
 import { ActivityView, useActivityItems } from "./ActivityCentre";
 import { actionCount } from "../../lib/badge";
-import { COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL } from "../../lib/shell";
+import { COLUMN_CONTENT, loadCollapsed, loadSidebarWidth, NARROW_CONTENT, paletteKeys, saveCollapsed, saveSidebarWidth, SIDEBAR_RAIL } from "../../lib/shell";
 import { Sidebar, SHARED_TABS, type SharedTab, type ShellPage } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { HelpDialog } from "./HelpDialog";
@@ -41,6 +41,8 @@ import { isHoldMessage, ServerBanners } from "./ServerBanners";
 import { ShareNotice } from "./PrivacySettings";
 import { Notice } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
+import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
+import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 
 type Tab = MainTab;
@@ -637,12 +639,12 @@ export default function MainApp() {
     failed: status.failedUploads,
     pinned: 0,
   }, tab === "library" ? libraryFolder : null);
-  // What Settings offers here (v1.7): the same availability for the palette, Find a page and Settings' own search.
+  // What Settings offers here (v1.7): the same availability for the window's search (the palette) and Settings' own.
   const settingsAvailable = settingsAvailability({ platform: status.platform, account, entitlements, role: roleOf(account, status) });
   const findSettings = (query: string) => searchSettings(query, settingsAvailable).settings.slice(0, 6)
     .map((r) => ({ id: r.entry.id, title: r.entry.title, breadcrumb: r.breadcrumb, open: () => openAccount(r.entry.kind === "page" ? r.entry.id : `${r.entry.page ?? r.entry.id}#${r.entry.id}`) }));
   const upgradeOpen = !!openUpgradeRequest(entitlements);
-  // "Find a page" (v1.6): every page, place, project and Settings page by name.
+  // Every page, place, project and Settings page by name, for the window's search (the palette).
   const pages: ShellPage[] = [
     { id: "home", label: "Home", keywords: "record start ready check calls voice note captions", open: () => goTo("record") },
     { id: "library", label: "Library", keywords: "recordings transcripts all", open: () => openFolder(null) },
@@ -671,7 +673,7 @@ export default function MainApp() {
       <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
         recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
         projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
-        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} pages={pages} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
       <div className="main-col">
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
           onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
@@ -680,25 +682,22 @@ export default function MainApp() {
           onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
           onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
         <main ref={contentRef} className={`content page-${tab}`}>
+          {/* One banner at a time, the most important first (BannerSlot); the next one shows once it goes. */}
+          <BannerSlot>
           <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
           <ServerBanners server={status.server} notify={notify} />
           <ShareNotice />
           {status.platform === "macos" && <PermissionLossNotice />}
           {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
-          {oneSided && (
-            <Notice kind="banner" tone="warn" className="banner warn one-sided-banner" role="alert" testId="one-sided" icon={<AlertIcon size={16} />} timeoutMs={null}
-              onOpen={() => goTo("record")} onDismiss={() => setOneSided(null)}
-              actions={<button type="button" className="btn compact" onClick={() => { setOneSided(null); goTo("record"); }}>Ready check</button>}>
-              <span className="one-sided-text"><b>{oneSided.title}</b><span className="small">{oneSided.reason} {oneSided.fix}</span></span>
-            </Notice>
-          )}
+          <OneSidedBanner said={oneSided} onDismiss={() => setOneSided(null)} onReady={() => { setOneSided(null); goTo("record"); }} onOpen={() => goTo("record")} />
           {/* The month's limit (a state): goes to Plan & usage; closed until it changes (warning, then reached). */}
           {status.budget !== "ok" && (status.budget === "reached" || status.budget === "warn") && (
-            <StateBanner id="budget" state={status.budget} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
+            <StateBanner id="budget" slot="budget" state={budgetState(status.budget, entitlements?.limits.monthly_minutes?.resets_at)} remember={!!entitlements?.limits.monthly_minutes?.resets_at} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
               onOpen={() => openAccount("plan")} openLabel={`${status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN} Open Plan & usage`}>
               <span>{status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN}</span>
             </StateBanner>
           )}
+          </BannerSlot>
           {tab === "library" && (
             <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
               initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={canRecord ? () => void pickImport() : undefined} onOpenClient={(id) => openProject(id)}
@@ -748,4 +747,24 @@ export default function MainApp() {
       {toastView}
     </div>
   );
+}
+
+/** The last call's side that was never heard (Phase 1C): one sentence and the Ready check that fixes it; why and how
+ * in full behind "Learn more". */
+function OneSidedBanner({ said, onDismiss, onReady, onOpen }: { said: OneSided | null; onDismiss: () => void; onReady: () => void; onOpen: () => void }) {
+  const shown = useBannerTurn("one-sided", !!said);
+  if (!shown || !said) return null;
+  return (
+    <Notice kind="banner" tone="warn" className="banner warn one-sided-banner" role="alert" testId="one-sided" icon={<AlertIcon size={16} />} timeoutMs={null}
+      onOpen={onOpen} onDismiss={onDismiss} details={<LearnMore>{said.reason} {said.fix}</LearnMore>}
+      actions={<button type="button" className="btn compact" onClick={onReady}>Ready check</button>}>
+      <span className="one-sided-text"><b>{said.title}.</b></span>
+    </Notice>
+  );
+}
+
+/** The budget banner's state: the level and the month it is about (its reset date), so closing it lasts that month
+ * only; without the date it is closed for this run only. */
+export function budgetState(level: string, resetsAt: string | null | undefined): string {
+  return resetsAt ? `${level}|${resetsAt}` : level;
 }

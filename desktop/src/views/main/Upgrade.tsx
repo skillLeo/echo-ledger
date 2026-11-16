@@ -135,7 +135,9 @@ const METERS: readonly (readonly [string, string, string])[] = [
   ["seats", "Team members", "plan.usage.members"],
 ];
 
-/** One meter of "This month": title, "230 of 600 min", the bar (neutral, then amber from 80 %, red when full) and its line. */
+/** One meter of "This month": title, "230 of 600 min", the bar (neutral, then amber from 80 %, red when full) and its line.
+ * Without a limit (a plan with no monthly cap) there is no share to draw: the minutes used and "No monthly limit", never
+ * an empty bar. */
 export function Meter({ id, label, limitKey, limit, quiet, onUpgrade }: {
   id: string;
   label: string;
@@ -145,14 +147,15 @@ export function Meter({ id, label, limitKey, limit, quiet, onUpgrade }: {
   quiet: boolean;
   onUpgrade?: () => void;
 }) {
-  const percent = percentOf(limit) ?? 0;
+  const share = percentOf(limit);
+  const percent = share ?? 0;
   // A team of one member out of one is never red (it blocks nothing here).
   const blocks = limitKey !== "seats";
   const tone = percent >= 100 && blocks ? "full" : percent >= 80 ? "warn" : "";
   const text = usageText(limitKey, limit);
   const resets = limitKey === "monthly_minutes" && limit.resets_at ? limit.resets_at : null;
   const words = limitKey === "monthly_minutes" ? "minutes" : limitKey === "storage_bytes" ? "storage" : limitKey === "devices" ? "devices" : "team members";
-  let line: ReactNode = resets ? `Resets ${rowDate(resets)}` : null;
+  let line: ReactNode = share === null ? (limitKey === "monthly_minutes" ? "No monthly limit" : null) : resets ? `Resets ${rowDate(resets)}` : null;
   if (percent >= 100 && blocks) {
     line = limitKey === "monthly_minutes" ? `Transcription is paused${resets ? ` until ${rowDate(resets)}` : ""}.`
       : limitKey === "storage_bytes" ? (quiet ? "New recordings can't upload until you free up space." : <>New recordings can't upload until you free up space or <button type="button" className="btn inline-link" onClick={onUpgrade}>upgrade</button>.</>)
@@ -162,11 +165,13 @@ export function Meter({ id, label, limitKey, limit, quiet, onUpgrade }: {
       ? `You've used ${percent}% of your ${words}.${resets ? ` They reset on ${rowDate(resets)}.` : ""}`
       : <>You've used {percent}% of your {words}. <button type="button" className="btn inline-link" onClick={onUpgrade}>Upgrade</button>{resets ? ` or wait until ${rowDate(resets)}.` : "."}</>;
   }
-  const spoken = `${label}, ${text.replace(" min", " minutes")} used${resets ? `, resets ${sentenceDate(resets).replace(/ \d{4}$/, "")}` : ""}.`;
+  const spoken = `${label}, ${text.replace(" min", " minutes")} used${resets && share !== null ? `, resets ${sentenceDate(resets).replace(/ \d{4}$/, "")}` : ""}.`;
   return (
     <div className="set-row set-meter-row" {...rowAttrs(id)} data-testid={`meter-${limitKey}`}>
       <span className="set-line"><span className="set-title">{label}</span><span className={`set-value ${tone}`}>{text}</span></span>
-      <span className={`set-meter ${tone}`} role="meter" aria-label={spoken} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={fillWidth(percent / 100)} /></span>
+      {share !== null
+        ? <span className={`set-meter ${tone}`} role="meter" aria-label={spoken} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}><span style={fillWidth(percent / 100)} /></span>
+        : <span className="sr-only">{spoken}</span>}
       {line && <span className={`set-sub ${tone}`}>{line}</span>}
     </div>
   );

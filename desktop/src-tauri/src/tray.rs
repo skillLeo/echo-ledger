@@ -455,7 +455,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             tauri::async_runtime::spawn(async move {
                 let result = match id.as_str() {
                     "open" => {
-                        show_main(&app);
+                        open_here(&app);
                         Ok(())
                     }
                     crate::app_menu::SETTINGS => {
@@ -540,6 +540,21 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 /// only the window, the menu could not be found); the window on Windows, where a right click opens the menu.
 pub fn left_click_opens_menu(macos: bool) -> bool {
     macos
+}
+
+/// "Open EchoLedger" from the menu: on a Mac an open main window comes to the Space in use while it opens (another
+/// app full screen, another desktop) instead of taking the person to the Space it is on; a new one opens there anyway.
+fn open_here(app: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    if let Some(window) = app.get_webview_window(crate::lifecycle::MAIN) {
+        let _ = app.run_on_main_thread(move || {
+            if let Ok(pointer) = window.ns_window() {
+                // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is, on the main thread here.
+                crate::spaces::mac::bring_here_while_opening(unsafe { &*(pointer as *const objc2_app_kit::NSWindow) });
+            }
+        });
+    }
+    show_main(app);
 }
 
 /// Opens the main window (built on demand, C9: closing it destroys it).

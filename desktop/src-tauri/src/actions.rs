@@ -1547,6 +1547,13 @@ async fn run_upload_cycle(app: &AppHandle) {
             Ok(UploadOutcome::Deleted { .. } | UploadOutcome::Duplicate) => crate::screens::forget(app, &id),
             _ => {}
         }
+        // A recovered recording keeps its mark in the Library and Activity after its transcript renames it.
+        if item.recovered
+            && let Ok(UploadOutcome::Ready { session_id } | UploadOutcome::Verifying { session_id }) = &result
+            && crate::recovered::remember(&state.data_dir, session_id)
+        {
+            let _ = app.emit("recovered:changed", ());
+        }
         emit_uploads(app);
         // Undo on the Saved toast while this attempt ran: what reached the server is deleted again (v1.5). Checked
         // under the same lock Undo takes, so a recording is either found uploaded by Undo or deleted here.

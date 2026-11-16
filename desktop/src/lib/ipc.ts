@@ -1411,6 +1411,8 @@ export interface EventPayloads {
   "pill:visibility": boolean;
   "pending:changed": PendingItem[];
   "skipped:changed": SkippedItem[];
+  /** Another recovered recording reached the server (`recovered_sessions` has it). */
+  "recovered:changed": null;
   "aftercall:state": AfterCallState;
   "ask:show": AskPayload;
   "ask:hide": null;
@@ -1648,6 +1650,8 @@ export const api = {
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
   /** Short or silent automatic calls skipped in the last 24 h, newest first. */
   skippedList: () => invoke<SkippedItem[]>("skipped_list"),
+  /** The server sessions of recordings recovered after a restart (their "Recovered" chip). */
+  recoveredSessions: () => invoke<string[]>("recovered_sessions"),
   /** Keeps a skipped call like any other (it uploads and is transcribed). */
   skippedRestore: (id: string) => invoke<void>("skipped_restore", { id }),
   uploadList: () => invoke<UploadItem[]>("upload_list"),

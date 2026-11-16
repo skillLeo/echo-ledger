@@ -166,6 +166,8 @@ function entitlementsHere() {
   if (!free && !ultra && !pro) return null;
   const e = sampleEntitlements(free ? "free" : pro ? "pro" : "ultra");
   if (near && e.limits.monthly_minutes) e.limits.monthly_minutes = { ...e.limits.monthly_minutes, used: 552 };
+  // `&unlimited=1`: minutes without a monthly limit (the Ultra account in Hassam's screenshots).
+  if (params.get("unlimited") === "1") e.limits.monthly_minutes = { limit: null, used: 651, resets_at: "2026-12-01" };
   if (requestStage) {
     const r = makeUpgradeRequest(requestStage, { plan: pro ? "ultra" : "pro", amount_due: pro ? "Rs 12,499" : "Rs 2,999", amount_due_pkr: pro ? 12499 : 2999 });
     if (params.get("round") === "1" && r.payment) {
@@ -255,6 +257,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     // v1.6 (P2.7): what the server says to every app.
     pendingUploads: screen === "library-maintenance" ? 2 : screen === "library-refused" ? 1 : 0,
     server: SERVER_NOTICES[screen] ?? { appUpdate: null, announcement: null, maintenance: null, waiting: null },
+    // "library-banners-mac": a forgotten permission and 80 % of the minutes at once; one banner shows.
+    budget: screen === "library-banners-mac" ? "warn" : "ok",
   }),
   account_get: () => (params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
@@ -282,6 +286,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
   skipped_list: () => (empty ? [] : SKIPPED),
+  // "library-recovered": the first recording was recovered after a restart, and its transcript renamed it.
+  recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   upload_list: () => [],
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
   search_library: () => ({ data: [], next_page: null }),
@@ -307,7 +313,7 @@ const commands: Record<string, (args: Args) => unknown> = {
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
-        lost: screen === "library-lost-mac" ? "macOS no longer lets EchoLedger use the microphone, which can happen after an update. Setting it up again takes a moment." : null,
+        lost: screen === "library-lost-mac" || screen === "library-banners-mac" ? "macOS no longer lets EchoLedger use the microphone." : null,
       }
     : { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] }),
   mac_check_last: () => screen === "settings-mac-check"

@@ -139,6 +139,20 @@ describe("LibraryView list", () => {
     expect(screen.getByText("5 recordings from your phone, this computer and the web.")).toBeInTheDocument();
   });
 
+  it("keeps a Recovered chip on a recovered recording after its transcript renamed it", async () => {
+    respond("recovered_sessions", [ITEMS[0].id]);
+    await renderLibrary(ITEMS);
+    const list = screen.getByTestId("library-list");
+    const row = within(list).getByText("Zoom with Acme").closest(".item-line") as HTMLElement;
+    expect(within(row).getByText("Recovered")).toHaveClass("recovered-chip");
+    expect(within(list).getAllByText("Recovered")).toHaveLength(1);
+    // Another one reaches the server: the list reads the marks again.
+    respond("recovered_sessions", [ITEMS[0].id, ITEMS[1].id]);
+    await emitEvent("recovered:changed", null);
+    await flushAsync();
+    expect(within(list).getAllByText("Recovered")).toHaveLength(2);
+  });
+
   it("says 'recording' for exactly one", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();

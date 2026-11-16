@@ -30,6 +30,7 @@ pub mod plan;
 pub mod privacy;
 pub mod projects;
 pub mod readiness;
+pub mod recovered;
 pub mod receipts;
 pub mod recovery;
 pub mod refusal;
@@ -39,6 +40,7 @@ pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
 pub mod smoke;
+pub mod spaces;
 pub mod stt;
 pub mod translate;
 pub mod tray;
@@ -682,6 +684,7 @@ pub fn run() {
             commands::after_call_state,
             commands::saved_undo,
             commands::skipped_list,
+            commands::recovered_sessions,
             commands::skipped_restore,
             commands::window_ready,
             commands::main_view_get,
@@ -695,6 +698,9 @@ pub fn run() {
     if !app_life::mac::answer_quits_from_outside(app.handle()) {
         eprintln!("[echoledger] a quit from the Dock would not keep a running recording first");
     }
+    // Its menu bar menu opens over another app's full-screen window (`spaces`).
+    #[cfg(target_os = "macos")]
+    spaces::mac::install();
 
     app.run(|handle, event| {
         // macOS hands an echoledger://open or echoledger://signed-in link to the running app as an opened URL (Info.plist

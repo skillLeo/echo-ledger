@@ -118,7 +118,7 @@ export function applyPreferences(prefs: Preferences): void {
 /** Event the shell sends when Preferences change, so every part follows at once. */
 export const PREFERENCES_EVENT = "echoledger:preferences";
 
-/** A page "Find a page" can open: its name, where it sits ("Library", "Account") and the words it answers to. */
+/** A page the window's search (the palette) can open: its name, where it sits ("Library", "Account") and the words it answers to. */
 export interface PageEntry {
   id: string;
   label: string;

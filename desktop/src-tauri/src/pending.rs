@@ -149,6 +149,9 @@ pub struct PendingDecision {
     /// computer signs in as. Keep passes it on to the upload.
     #[serde(default)]
     pub owner: Option<crate::owner::Owner>,
+    /// Recovered after a restart (since v1.3): it keeps a "Recovered" mark once its transcript renames it (`recovered`).
+    #[serde(default)]
+    recovered: bool,
 }
 
 impl PendingDecision {
@@ -187,6 +190,7 @@ impl PendingDecision {
             caller: input.caller,
             keep_at: None,
             owner: None,
+            recovered: false,
         }
     }
 
@@ -261,7 +265,13 @@ impl PendingDecision {
             caller: None,
             keep_at: None,
             owner: None,
+            recovered: true,
         }
+    }
+
+    /// Recovered after a restart; an entry saved before the mark existed is known by its title.
+    pub fn is_recovered(&self) -> bool {
+        self.recovered || self.title.as_deref() == Some(RECOVERED_TITLE)
     }
 
     pub fn item(&self) -> PendingItem {
@@ -318,6 +328,7 @@ impl PendingDecision {
             language_marks: self.language_marks.clone(),
             caller: self.caller.clone(),
             owner: self.owner.clone(),
+            recovered: self.is_recovered(),
             ..PendingUpload::default()
         }
     }

@@ -192,7 +192,7 @@ describe("the banner on the Record page", () => {
 });
 
 describe("a permission macOS forgot", () => {
-  const lost = "macOS no longer lets EchoLedger use the microphone, which can happen after an update. Setting it up again takes a moment.";
+  const lost = "macOS no longer lets EchoLedger use the microphone.";
 
   it("says so in one calm sentence and goes when dismissed", async () => {
     respond("permissions_status", mac({ microphone: "unknown", lost }));

@@ -1,7 +1,7 @@
 // Ctrl / Cmd + K (plan B9): run an action, go to a page, or jump into a recording found in any transcript. Since v1.6
-// (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page "Find a page" knows
-// (a project, a smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups:
-// Actions, Settings, Pages, Recordings.
+// (P4.3) it also makes things (Upload, New project, Request link, Invite) and opens every page by name (a project, a
+// smart folder, a Settings page such as Devices); since v1.7 it finds every single setting too, in groups: Actions,
+// Settings, Pages, Recordings. It is the window's one search: the top bar's field and the sidebar's Search open it.
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
@@ -121,7 +121,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   /** The Library's smart folders the sidebar lists, and what opens one. */
   folders?: readonly PaletteFolder[];
   onFolder?: (folder: SmartFolder) => void;
-  /** Every page "Find a page" knows (projects, places, Account tabs), found by name once something is typed. */
+  /** Every page by name (projects, places, Settings pages), found once something is typed. */
   pages?: readonly (PageEntry & { open: () => void })[];
   extra?: PaletteExtra;
   /** Every single setting by name (v1.7), from the settings registry. */
@@ -131,6 +131,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const entitlements = useEntitlements();
   const [index, setIndex] = useState(0);
   const [found, setFound] = useState<SearchResult["data"]>([]);
+  // The recordings' search is still out: "Nothing matches" waits for it.
+  const [lookingUp, setLookingUp] = useState(false);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
   const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra }), [status, onGo, run, folders, onFolder, extra]);
@@ -139,11 +141,16 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
     const q = query.trim();
     if (q.length < 2) {
       setFound([]);
+      setLookingUp(false);
       return;
     }
     let alive = true;
+    setLookingUp(true);
     const timer = window.setTimeout(() => {
-      api.searchLibrary({ q }).then((r) => alive && setFound(r.data.slice(0, 6))).catch(() => alive && setFound([]));
+      api.searchLibrary({ q })
+        .then((r) => alive && setFound(r.data.slice(0, 6)))
+        .catch(() => alive && setFound([]))
+        .finally(() => alive && setLookingUp(false));
     }, 250);
     return () => {
       alive = false;
@@ -202,7 +209,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
           {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setIndex(0); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
         <div id={listId} className="palette-list" role="listbox" aria-label="Results">
-          {options.length === 0 && <div className="palette-empty small muted" role="presentation">Nothing matches.</div>}
+          {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
           {groups.map(([name, list]) => (
             <div key={name} role="group" aria-labelledby={`${listId}-g-${name}`} className="palette-group">
               <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{name}</div>
@@ -230,4 +237,13 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       </div>
     </div>
   );
+}
+
+/** What the palette says when nothing is listed (pure): recordings are searched from two letters, so one letter asks
+ * for another rather than saying nothing matches. */
+export function emptyLine(query: string, lookingUp: boolean): string {
+  const q = query.trim();
+  if (q.length === 1) return "Type one more letter to search recordings.";
+  if (lookingUp) return "Searching recordings and transcripts…";
+  return `Nothing matches “${q}” in recordings, transcripts, settings or pages.`;
 }

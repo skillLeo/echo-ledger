@@ -177,6 +177,18 @@ describe("Plan & usage", () => {
     expect(storage).toHaveTextContent("New recordings can't upload until you free up space or upgrade.");
   });
 
+  it("draws no empty bar for minutes without a monthly limit: what was used and that there is no limit", () => {
+    const e = sampleEntitlements("ultra");
+    e.limits.monthly_minutes = { limit: null, used: 651, resets_at: "2026-12-01" };
+    page(e);
+    const minutes = screen.getByTestId("meter-monthly_minutes");
+    expect(minutes).toHaveTextContent("651 min");
+    expect(minutes).toHaveTextContent("No monthly limit");
+    expect(minutes.querySelector(".set-meter")).toBeNull();
+    expect(within(minutes).queryByRole("meter")).toBeNull();
+    expect(minutes).toHaveTextContent("Transcription, 651 minutes used.");
+  });
+
   it("Ultra: no Plans and no button, the top plan's line, and a team's members meter", () => {
     page(sampleEntitlements("ultra"));
     expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
