@@ -73,7 +73,7 @@ final class EngineComparison
     /**
      * The runs of a recording, side by side.
      *
-     * @return list<array{id: string, provider: string, label: string, model: string|null, status: string, error: string|null, language: string, cost_usd: float|null, minutes: float|null, script_warning: string|null, text: string}>
+     * @return list<array{id: string, provider: string, label: string, model: string|null, status: string, error: string|null, detail: string|null, language: string, cost_usd: float|null, minutes: float|null, script_warning: string|null, text: string}>
      */
     public function results(CaptureSession $session): array
     {
@@ -91,7 +91,9 @@ final class EngineComparison
                 'label' => $run->providerKey()?->getLabel() ?? $run->provider,
                 'model' => TranscriptResource::model($run),
                 'status' => $run->status->value,
-                'error' => $run->status === TranscriptStatus::Failed ? $run->error : null,
+                // Why it failed in plain words; the engine's own words only as `detail`, for the operator (D-131).
+                'error' => $run->failureText(),
+                'detail' => $run->status === TranscriptStatus::Failed ? $run->error : null,
                 'language' => LanguageChoice::label($run->language),
                 'cost_usd' => $row !== null ? round((float) $row->getAttribute('cost'), 4) : null,
                 'minutes' => $row !== null ? round(((int) $row->getAttribute('billed')) / 60000, 1) : null,

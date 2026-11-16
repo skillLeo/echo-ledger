@@ -399,6 +399,14 @@ and the app shows them the fix.
   permission back on, start the capture helper again). One reason growing on many devices after an app update usually
   means a fault in that version: give the developers the system and the app version.
 
+## 9d. Why a transcript failed (since v1.8.1)
+
+People read why a transcript failed in plain words chosen by its error code: on the recording page, in Activity and
+the bell, in the apps (and the system notifications they show) and in the API's `error`. The engine's own words, which
+can name the provider ("Gemini could not read the audio."), stay with the transcript for you: as the super admin you
+see them on the recording page under **Details** (**Error**, next to **Transcribed by**), and under the plain words in
+**Engine results** and **Compare versions**.
+
 ## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in

@@ -21,8 +21,12 @@
     @elseif ($alternate->status !== \App\Enums\TranscriptStatus::Completed)
         <p>
             The second version ({{ $label($alternate) }}) is {{ str_replace('_', ' ', $alternate->status->value) }}.
-            @if ($alternate->status === \App\Enums\TranscriptStatus::Failed && $alternate->error)
-                <span class="el-err">{{ $alternate->error }}</span>
+            @if ($alternate->status === \App\Enums\TranscriptStatus::Failed)
+                {{-- Plain words for everyone; the engine's own words for the operator only (D-131). --}}
+                <span class="el-err">{{ $alternate->failureText() }}</span>
+                @if (\App\Services\Workspaces\ConsoleAccess::operator() && filled($alternate->error))
+                    <span class="el-muted">{{ $alternate->error }}</span>
+                @endif
             @else
                 Open this again when it is done.
             @endif

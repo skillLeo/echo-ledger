@@ -41,9 +41,20 @@ enum TranscriptErrorCode: string
     }
 
     /**
-     * Why a transcript failed, in plain words for the console and the bell (since v1.8.1, D-129): never the stored
-     * `error`, which may quote the engine or its provider. The apps say the same from `error_code`; a missing or unknown
-     * code reads as an engine problem. The Free plan's own Groq key is the one name people must act on.
+     * The `error` the API sends for a failed transcript (since v1.8.1, D-131): the documented message of its code alone.
+     * The detail `provider_rejected` and `provider_not_configured` store with it (the engine's own words, which can name
+     * it) stays in the transcript's `error` column, for the operator and the logs. A missing or unknown code reads as a
+     * plain failure.
+     */
+    public static function publicMessage(?self $code): string
+    {
+        return $code?->message() ?? 'The transcript could not be made.';
+    }
+
+    /**
+     * Why a transcript failed, in plain words for the console and the bell (since v1.8.1, D-129 and D-131): never the
+     * stored `error`, which may quote the engine or its provider. The apps say the same from `error_code`; a missing or
+     * unknown code reads as an engine problem. The Free plan's own Groq key is the one name people must act on.
      */
     public static function plainWords(?self $code): string
     {

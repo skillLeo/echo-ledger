@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Enums\TranscriptErrorCode;
 use Illuminate\Database\Connection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -127,7 +128,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 49;
+const LATER_MIGRATIONS = 50;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -203,7 +204,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 34;
+const AFTER_PHASE2 = 35;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -301,7 +302,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 32;
+const AFTER_PHASE3 = 33;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -348,7 +349,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 30;
+const AFTER_ACCOUNTS = 31;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -404,12 +405,12 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 29;
+const AFTER_PLANS = 30;
 
 /** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
 const CONNECTOR_STEPS = 5;
 
-const AFTER_CONNECTOR = 22;
+const AFTER_CONNECTOR = 23;
 
 const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
 
@@ -603,7 +604,7 @@ it('gives each person a project of their own for what they filed or nested in so
 });
 
 /** Migrations after the sent items' one (rolled back first): the title and preferences ones and the cheapest-first engine routes; add later ones here. */
-const AFTER_SENT_ITEMS = 20;
+const AFTER_SENT_ITEMS = 21;
 
 it('fills what a project sent before this release holds, keeps every row and can go back', function () {
     $db = cycleConnection();
@@ -669,7 +670,7 @@ it('fills what a project sent before this release holds, keeps every row and can
 });
 
 /** Migrations after the automatic titles' one (rolled back first); add later ones here. */
-const AFTER_TITLE_AUTO = 19;
+const AFTER_TITLE_AUTO = 20;
 
 it('marks automatic titles with a flag that starts false for every recording and can go back', function () {
     $db = cycleConnection();
@@ -698,7 +699,7 @@ it('marks automatic titles with a flag that starts false for every recording and
 });
 
 /** Migrations after the preferences one (the cheapest-first engine routes); add later ones here. */
-const AFTER_PREFERENCES = 18;
+const AFTER_PREFERENCES = 19;
 
 it('adds the email and Library choices empty for everyone and can go back', function () {
     $db = cycleConnection();
@@ -718,7 +719,7 @@ it('adds the email and Library choices empty for everyone and can go back', func
 });
 
 /** Migrations after v1.6's email codes (P1.1); add later ones here. */
-const AFTER_EMAIL_CODES = 16;
+const AFTER_EMAIL_CODES = 17;
 
 it('adds the email codes and keeps every older account\'s password, and can go back', function () {
     $db = cycleConnection();
@@ -741,7 +742,7 @@ it('adds the email codes and keeps every older account\'s password, and can go b
 });
 
 /** Migrations after v1.6's entitlements (P1.2); add later ones here. */
-const AFTER_ENTITLEMENTS = 15;
+const AFTER_ENTITLEMENTS = 16;
 
 it('adds what plans show and limit, plan end dates and a person\'s overrides, changing no workspace, and can go back', function () {
     $db = cycleConnection();
@@ -774,7 +775,7 @@ it('adds what plans show and limit, plan end dates and a person\'s overrides, ch
 });
 
 /** Migrations after v1.6's own transcription keys (P1.3); add later ones here. */
-const AFTER_TRANSCRIPTION_KEYS = 14;
+const AFTER_TRANSCRIPTION_KEYS = 15;
 
 it('adds a person\'s own transcription key, empty for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -794,7 +795,7 @@ it('adds a person\'s own transcription key, empty for everyone, and can go back'
 });
 
 /** Migrations after v1.6's default plans (P1.3); add later ones here. */
-const AFTER_DEFAULT_PLANS = 13;
+const AFTER_DEFAULT_PLANS = 14;
 
 it('makes Free, Pro and Business, moves Personal and v1.5 Free workspaces to Business, frees the super admins, and puts it all back', function () {
     $db = cycleConnection();
@@ -854,7 +855,7 @@ it('makes Free, Pro and Business, moves Personal and v1.5 Free workspaces to Bus
 });
 
 /** Migrations after v1.6's upgrade requests (P1.4); add later ones here. */
-const AFTER_UPGRADE_REQUESTS = 12;
+const AFTER_UPGRADE_REQUESTS = 13;
 
 it('adds the upgrade requests, and can go back', function () {
     $db = cycleConnection();
@@ -875,7 +876,7 @@ it('adds the upgrade requests, and can go back', function () {
 });
 
 /** Migrations after v1.6's suspend switch (P1.5); add later ones here. */
-const AFTER_SUSPENSION = 11;
+const AFTER_SUSPENSION = 12;
 
 it('adds the suspend switch, off for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -892,7 +893,7 @@ it('adds the suspend switch, off for everyone, and can go back', function () {
 });
 
 /** Migrations after v1.6's device identity (P3); add later ones here. */
-const AFTER_DEVICE_IDENTITY = 10;
+const AFTER_DEVICE_IDENTITY = 11;
 
 it('merges one person\'s duplicate devices into the newest, moving what they hold, and puts them back', function () {
     $db = cycleConnection();
@@ -936,7 +937,7 @@ it('merges one person\'s duplicate devices into the newest, moving what they hol
 });
 
 /** Migrations after v1.6's staff notes and Support access (P2.2); add later ones here. */
-const AFTER_ADMIN_NOTES = 9;
+const AFTER_ADMIN_NOTES = 10;
 
 it('adds staff notes and the Support access switch, off for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -961,7 +962,7 @@ it('adds staff notes and the Support access switch, off for everyone, and can go
 });
 
 /** Migrations after v1.6's plan archive and currency (P2.3); add later ones here. */
-const AFTER_PLAN_ARCHIVE = 8;
+const AFTER_PLAN_ARCHIVE = 9;
 
 it('adds the plan archive and the display price in a currency, empty for every plan, and can go back', function () {
     $db = cycleConnection();
@@ -976,7 +977,7 @@ it('adds the plan archive and the display price in a currency, empty for every p
 });
 
 /** Migrations after v1.6's staff roles (P2.5); add later ones here. */
-const AFTER_STAFF_ROLES = 7;
+const AFTER_STAFF_ROLES = 8;
 
 it('adds the four staff roles, gives nobody one, and can go back', function () {
     $db = cycleConnection();
@@ -1005,7 +1006,7 @@ it('adds the four staff roles, gives nobody one, and can go back', function () {
 });
 
 /** Migrations after v1.6's bound pairing codes (P3 Sign in again); add later ones here. */
-const AFTER_BOUND_CODES = 6;
+const AFTER_BOUND_CODES = 7;
 
 it('adds the device a pairing code signs in again, empty for every code, and can go back', function () {
     $db = cycleConnection();
@@ -1031,7 +1032,7 @@ it('adds the device a pairing code signs in again, empty for every code, and can
 });
 
 /** Migrations after v1.8.1's Share Check results; add later ones here. */
-const AFTER_SHARE_CHECKS = 3;
+const AFTER_SHARE_CHECKS = 4;
 
 it('adds the Share Check results, keeps them when their device goes and drops them with their person, and can go back', function () {
     $db = cycleConnection();
@@ -1063,7 +1064,7 @@ it('adds the Share Check results, keeps them when their device goes and drops th
 });
 
 /** Migrations after v1.8's missed recordings (P0 0.2); add later ones here. */
-const AFTER_MISSED_RECORDINGS = 2;
+const AFTER_MISSED_RECORDINGS = 3;
 
 it('adds the missed recordings, one row per event of a device, kept when the device goes and dropped with the person or workspace, and can go back', function () {
     $db = cycleConnection();
@@ -1110,7 +1111,7 @@ it('adds the missed recordings, one row per event of a device, kept when the dev
 });
 
 /** Migrations after the v1.8.1 audit's index on the Share Check results (R26); add later ones here. */
-const AFTER_SHARE_CHECK_INDEX = 1;
+const AFTER_SHARE_CHECK_INDEX = 2;
 
 it('adds one index on what the screen-share matrix groups by, keeps every result, and can go back', function () {
     $db = cycleConnection();
@@ -1158,7 +1159,7 @@ it('adds one index on what the screen-share matrix groups by, keeps every result
 });
 
 /** Migrations after v1.8.1's plain words in the Pro plan's description (D-129); add later ones here. */
-const AFTER_PRO_PLAIN_WORDS = 0;
+const AFTER_PRO_PLAIN_WORDS = 1;
 
 it('says the Pro plan in plain words where its description is still v1.6\'s, leaves one the operator edited, and can go back', function () {
     $db = cycleConnection();
@@ -1186,5 +1187,31 @@ it('says the Pro plan in plain words where its description is still v1.6\'s, lea
     expect($description('pro'))->toBe($edited);
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_PRO_PLAIN_WORDS]);
     expect($description('pro'))->toBe($edited);
+    cycleArtisan('migrate', ['--step' => 1]);
+});
+
+/** Migrations after v1.8.1's plain words in the "Transcription failed" notifications already sent (D-131); add later ones here. */
+const AFTER_FAILED_WORDS = 0;
+
+it('rewrites the "Transcription failed" notifications already sent in plain words, leaves the others, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_FAILED_WORDS]);
+    $now = now();
+    $user = $db->table('users')->insertGetId(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $notification = fn (string $id, string $kind, string $body) => $db->table('notifications')->insert(['id' => $id, 'type' => 'Filament\\Notifications\\DatabaseNotification',
+        'notifiable_type' => 'App\\Models\\User', 'notifiable_id' => $user, 'created_at' => $now, 'updated_at' => $now,
+        'data' => json_encode(['title' => 'x', 'body' => $body, 'viewData' => ['kind' => $kind, 'session_id' => '01JZZZZZZZZZZZZZZZZZZZZZZZ', 'escaped' => true]])]);
+    $notification('00000000-0000-4000-8000-000000000001', 'transcript_failed', 'Call: Gemini could not read the audio.');
+    $notification('00000000-0000-4000-8000-000000000002', 'transcript_ready', 'Call');
+    $body = fn (string $id): string => (string) json_decode((string) $db->table('notifications')->where('id', $id)->value('data'), true)['body'];
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    // Its recording is gone: the plain reason alone.
+    expect($body('00000000-0000-4000-8000-000000000001'))->toBe(e(TranscriptErrorCode::plainWords(null)))
+        ->and($body('00000000-0000-4000-8000-000000000002'))->toBe('Call');
+
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_FAILED_WORDS]);
+    expect($body('00000000-0000-4000-8000-000000000001'))->not->toContain('Gemini')->and($db->table('notifications')->count())->toBe(2);
     cycleArtisan('migrate', ['--step' => 1]);
 });

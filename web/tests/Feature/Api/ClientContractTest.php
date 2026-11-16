@@ -355,12 +355,15 @@ describe('sessions and uploads', function () {
 
     it('names the reason of a failed transcript in the session detail, and only for a failure', function () {
         $session = CaptureSession::factory()->create(['user_id' => $this->owner->id]);
-        $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'No audio was captured in this recording.']);
+        $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'No audio was captured in this recording.', 'error_code' => 'no_audio']);
         $session->transcripts()->create(['kind' => TranscriptKind::Live, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'ok', 'error' => 'stale']);
+        // Since v1.8.1 (D-131) the reason is the documented message of the code, never the stored words: without a code too.
+        $session->transcripts()->create(['kind' => TranscriptKind::Alternate, 'provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error' => 'Gemini could not read the audio.']);
 
         $transcripts = collect($this->getJson("/api/sessions/{$session->id}")->assertOk()->json('transcripts'))->keyBy('kind');
 
-        expect($transcripts['final']['error'])->toBe('No audio was captured in this recording.')
+        expect($transcripts['final']['error'])->toBe('No audio was captured in this recording.')->and($transcripts['final']['error_code'])->toBe('no_audio')
+            ->and($transcripts['alternate']['error'])->toBe('The transcript could not be made.')->and($transcripts['alternate']['error_code'])->toBeNull()
             ->and($transcripts['live']['error'])->toBeNull()->and($transcripts['live']['error_code'])->toBeNull();
         expectKeys($transcripts['final'], ['error', 'error_code']);
     });
@@ -510,7 +513,7 @@ describe('library and transcripts', function () {
 
     it('carries the reason for a failure and only for a failure', function () {
         $session = CaptureSession::factory()->create(['user_id' => $this->owner->id]);
-        $failed = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'No audio was captured in this recording.']);
+        $failed = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Failed, 'error' => 'No audio was captured in this recording.', 'error_code' => 'no_audio']);
         $session2 = CaptureSession::factory()->create(['user_id' => $this->owner->id]);
         $ok = $session2->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'fine', 'error' => 'stale error text']);
 
@@ -519,8 +522,13 @@ describe('library and transcripts', function () {
 
         expect(Shape::violations($a->json(), transcriptShape()))->toBe([])
             ->and($a->json('error'))->toBe('No audio was captured in this recording.')
+            ->and($a->json('error_code'))->toBe('no_audio')
             ->and($b->json('error'))->toBeNull()
             ->and($b->json('error_code'))->toBeNull();
+        // Since v1.8.1 (D-131) never the stored words: a failure from before error codes reads as a plain failure.
+        $legacy = CaptureSession::factory()->create(['user_id' => $this->owner->id])->transcripts()->create(['kind' => TranscriptKind::Final,
+            'provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error' => 'Gemini could not read the audio.']);
+        $this->getJson("/api/transcripts/{$legacy->id}")->assertOk()->assertJsonPath('error', 'The transcript could not be made.')->assertJsonPath('error_code', null);
         expectKeys($a->json(), ['error', 'error_code']);
         expectKeys($b->json(), ['error', 'error_code']);
     });
