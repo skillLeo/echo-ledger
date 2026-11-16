@@ -2,8 +2,10 @@
 # Intel, on every v* tag, on demand, and whenever the desktop app changes. Each chip runs on its own real runner
 # (macos-15 is Apple Silicon, macos-15-intel is Intel): all Rust and front-end tests, the build, then the built app's
 # smoke test (--smoke-test, src-tauri/src/smoke.rs), which also runs from the .dmg on macOS 26. It is signed with the
-# Developer ID certificate and notarized when the Apple secrets exist, and unsigned otherwise (the first open then goes
-# through System Settings → Privacy & Security → Open Anyway, docs/USER_GUIDE.md); the updater's .app.tar.gz and .sig
+# Developer ID certificate and notarized when the Apple secrets exist; until then with the self-signed "EchoLedger
+# Development Signing" identity when its secret exists, so macOS keeps Screen Recording and the keychain items across
+# updates; and ad hoc otherwise. Without the Developer ID the first open goes through System Settings → Privacy &
+# Security → Open Anyway (docs/USER_GUIDE.md). The updater's .app.tar.gz and .sig
 # are made when the updater key's secret exists (docs/SIGNING.md). The .dmg files are the run's artifacts, and on a v*
 # tag they are attached to that tag's GitHub Release.
 name: Desktop (macOS)
@@ -35,6 +37,8 @@ jobs:
     env:
       # Secrets cannot be read in a step's `if`: only whether they are set is passed on. Notarizing needs all of them.
       HAS_APPLE_SIGNING: ${{ secrets.APPLE_CERTIFICATE != '' && secrets.APPLE_CERTIFICATE_PASSWORD != '' && secrets.APPLE_ID != '' && secrets.APPLE_PASSWORD != '' && secrets.APPLE_TEAM_ID != '' }}
+      # The self-signed identity (a base64 PKCS#12 and its password, docs/SIGNING.md), used only without the Apple ones.
+      HAS_SELF_SIGNING: ${{ secrets.MACOS_SELF_SIGNED_P12 != '' && secrets.MACOS_SELF_SIGNED_P12_PASSWORD != '' }}
       HAS_UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     strategy:
       fail-fast: false
@@ -106,7 +110,49 @@ jobs:
             echo "APPLE_SIGNING_IDENTITY=$APPLE_SIGNING_IDENTITY" >> "$GITHUB_ENV"
           fi
 
-      - name: Build (unsigned)
+      # Until the Apple Developer ID exists (H9), one self-signed identity signs every build. macOS ties Screen Recording
+      # and the keychain items to a signature's designated requirement: an ad hoc build's names its own hash, so each
+      # update is a new app to macOS; this one's names the certificate, so they stay. The identity lives in a temporary
+      # keychain on the search list for this build only (the last step removes both); the bundler then signs with it,
+      # the hardened runtime and Entitlements.plist, as on the Developer ID path. Nothing is notarized: there is no
+      # Apple account behind it.
+      - name: Import the self-signed identity
+        if: env.HAS_APPLE_SIGNING != 'true' && env.HAS_SELF_SIGNING == 'true'
+        env:
+          P12: ${{ secrets.MACOS_SELF_SIGNED_P12 }}
+          P12_PASSWORD: ${{ secrets.MACOS_SELF_SIGNED_P12_PASSWORD }}
+        run: |
+          set -eu
+          kc="$RUNNER_TEMP/echoledger-signing.keychain-db"
+          kc_password="$(openssl rand -hex 24)"
+          security list-keychains -d user | tr -d '"' | awk '{ print $1 }' > "$RUNNER_TEMP/keychains-before"
+          security create-keychain -p "$kc_password" "$kc"
+          echo "SELF_SIGNED_KEYCHAIN=$kc" >> "$GITHUB_ENV"
+          security set-keychain-settings -lut 7200 "$kc"
+          security unlock-keychain -p "$kc_password" "$kc"
+          printf '%s' "$P12" | base64 --decode > "$RUNNER_TEMP/self-signed.p12"
+          security import "$RUNNER_TEMP/self-signed.p12" -k "$kc" -P "$P12_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          rm -f "$RUNNER_TEMP/self-signed.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$kc_password" "$kc" > /dev/null
+          identity=$(security find-identity -p codesigning "$kc" | awk '/"EchoLedger Development Signing"/ { print $2; exit }')
+          if [ -z "$identity" ]; then
+            echo "::error::MACOS_SELF_SIGNED_P12 holds no code-signing identity named EchoLedger Development Signing (docs/SIGNING.md)."
+            exit 1
+          fi
+          # On the search list for this build only, before the runner's own keychains.
+          security list-keychains -d user -s "$kc" $(cat "$RUNNER_TEMP/keychains-before")
+          # Trusted for code signing where the runner allows it without a password (GitHub's do); codesign signs with an
+          # untrusted self-signed identity as well, so a runner that refuses only skips this.
+          security find-certificate -c "EchoLedger Development Signing" -p "$kc" > "$RUNNER_TEMP/self-signed.pem"
+          sudo -n security add-trusted-cert -d -r trustRoot -p codeSign -k "$kc" "$RUNNER_TEMP/self-signed.pem" || echo "Not trusted on this runner; signing does not need it."
+          # The identity signs from the search list before the long build starts.
+          printf 'int main(void) { return 0; }\n' > "$RUNNER_TEMP/probe.c"
+          cc -o "$RUNNER_TEMP/probe" "$RUNNER_TEMP/probe.c"
+          codesign --force --sign "$identity" --options runtime "$RUNNER_TEMP/probe"
+          echo "APPLE_SIGNING_IDENTITY=$identity" >> "$GITHUB_ENV"
+          echo "SELF_SIGNED_LEAF=$(echo "$identity" | tr 'A-F' 'a-f')" >> "$GITHUB_ENV"
+
+      - name: Build (self-signed, or ad hoc without that secret)
         if: env.HAS_APPLE_SIGNING != 'true'
         uses: tauri-apps/tauri-action@v0
         env:
@@ -147,9 +193,28 @@ jobs:
             spctl --assess --type execute --verbose=4 macos/EchoLedger.app
             xcrun stapler validate macos/EchoLedger.app
             echo "Signed with the Developer ID certificate and notarized." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "${SELF_SIGNED_LEAF:-}" ]; then
+            codesign --verify --deep --strict --verbose=2 macos/EchoLedger.app
+            requirement=$(codesign -d -r- macos/EchoLedger.app 2>&1 | grep 'designated =>')
+            echo "$requirement"
+            # What Screen Recording is kept for: this app from this certificate, whichever build.
+            case "$requirement" in
+              *"identifier \"com.echoledger.desktop\" and certificate leaf = H\"$SELF_SIGNED_LEAF\""*) ;;
+              *) echo "::error::The designated requirement does not pin the self-signed certificate: $requirement"; exit 1 ;;
+            esac
+            echo "Signed with the self-signed identity; its designated requirement pins the certificate, so Screen Recording stays across updates. Not notarized." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Unsigned build: no Apple signing secrets in this repository (docs/SIGNING.md)." >> "$GITHUB_STEP_SUMMARY"
+            echo "Ad hoc build: no Apple signing secrets and no self-signed identity in this repository (docs/SIGNING.md)." >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # Even after a failed build: the search list as it was, no trust left behind, the temporary keychain deleted.
+      - name: Remove the self-signed identity
+        if: always() && env.SELF_SIGNED_KEYCHAIN != ''
+        run: |
+          if [ -s "$RUNNER_TEMP/keychains-before" ]; then security list-keychains -d user -s $(cat "$RUNNER_TEMP/keychains-before"); fi
+          if [ -f "$RUNNER_TEMP/self-signed.pem" ]; then sudo -n security remove-trusted-cert -d "$RUNNER_TEMP/self-signed.pem" || true; fi
+          security delete-keychain "$SELF_SIGNED_KEYCHAIN" || true
+          rm -f "$RUNNER_TEMP/self-signed.p12" "$RUNNER_TEMP/self-signed.pem" "$RUNNER_TEMP/keychains-before" "$RUNNER_TEMP/probe" "$RUNNER_TEMP/probe.c"
 
       - name: Smoke test of the built app
         run: sh scripts/smoke-mac.sh src-tauri/target/${{ matrix.target }}/release/bundle/macos/EchoLedger.app
