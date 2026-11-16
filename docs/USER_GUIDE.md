@@ -774,7 +774,9 @@ The library, the player and exports show the language of the transcript. If an U
 transcript comes back in Hindi letters (or the other way round), the recording page says **Wrong script detected**:
 one tap transcribes it again with the next engine. Search finds Urdu words however the engine spelled them, and
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
-console and choose **Re-transcribe** or **Compare engines**, then keep the better one.
+console and choose **Re-transcribe as…** with its language: the server picks the engine. **Compare versions** shows
+the current and the second version side by side, and you keep the better one. (Your server's administrator can also
+compare engines by name.)
 
 ### Show as: Roman Urdu, English and Urdu
 

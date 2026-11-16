@@ -781,13 +781,16 @@ class ViewCaptureSession extends ViewRecord
         return null;
     }
 
-    /** Compare engines: the same audio through up to three engines for one language (the bake-off). */
+    /**
+     * Compare engines: the same audio through up to three engines for one language (the bake-off). It picks engines by
+     * name, so it is the server's operator's alone (since v1.8.1, W-002).
+     */
     private function compareEnginesAction(): Action
     {
         return Action::make('compare_engines')
             ->label('Compare engines')
             ->icon(Heroicon::OutlinedScale)
-            ->visible(fn (CaptureSession $record): bool => $record->primaryRecording?->isReady() === true)
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->primaryRecording?->isReady() === true)
             ->modalHeading('Compare engines')
             ->modalDescription('The recording is transcribed again by each engine you pick, in the language you choose. Each run is billed by its engine. Nothing replaces the transcript until you choose.')
             ->fillForm(fn (CaptureSession $record): array => [
@@ -884,11 +887,13 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /**
+     * The server's operator (the super admin): the Accuracy Lab and the engine tools that pick an engine by name are
+     * theirs alone (since v1.8.1, W-002); everyone else re-transcribes by language and the server picks the engine.
+     */
     private static function isOwner(): bool
     {
-        $user = auth()->user();
-
-        return $user instanceof User && $user->is_super_admin;
+        return ConsoleAccess::operator();
     }
 
     private function engineResultsAction(): Action
@@ -896,7 +901,7 @@ class ViewCaptureSession extends ViewRecord
         return Action::make('engine_results')
             ->label('Engine results')
             ->icon(Heroicon::OutlinedTableCells)
-            ->visible(fn (CaptureSession $record): bool => $record->trials()->exists())
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->trials()->exists())
             ->slideOver()
             ->modalWidth('7xl')
             ->modalHeading('Engine results')
@@ -926,9 +931,10 @@ class ViewCaptureSession extends ViewRecord
             ->url(Settings::canAccess() ? Settings::getUrl(panel: 'admin') : null)->success()->send();
     }
 
-    /** "Use this version" on a run in Engine results. */
+    /** "Use this version" on a run in Engine results (the operator's, as the runs are). */
     public function useEngineRun(string $runId): void
     {
+        abort_unless(self::isOwner(), 403);
         $this->assertCanChange();
         $run = $this->session()->trials()->find($runId);
         if (! $run instanceof Transcript) {
@@ -1021,12 +1027,13 @@ class ViewCaptureSession extends ViewRecord
             });
     }
 
+    /** A second version by an engine chosen by name: the operator's alone (since v1.8.1, W-002). */
     private function secondEngineAction(): Action
     {
         return Action::make('second_engine')
             ->label('Transcribe with another engine')
             ->icon(Heroicon::OutlinedBeaker)
-            ->visible(fn (CaptureSession $record): bool => $record->finalTranscript?->status === TranscriptStatus::Completed
+            ->visible(fn (CaptureSession $record): bool => self::isOwner() && $record->finalTranscript?->status === TranscriptStatus::Completed
                 && $record->primaryRecording?->isReady() === true)
             ->modalDescription('Both versions are kept so you can compare them and choose the one to use. The engine bills its usual price.')
             ->fillForm(fn (CaptureSession $record): array => ['language' => LanguageChoice::normalize($record->language) ?? ''])

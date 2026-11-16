@@ -419,7 +419,10 @@ see them on the recording page under **Details** (**Error**, next to **Transcrib
   on the profile ends other browsers and leaves devices signed in. A new email address counts once the link sent to it is
   opened; a Google account links only to a confirmed address.
 - An account in its 7-day deletion grace serves no share or request link until it cancels.
-- Only the super admin changes the server's engine order (**Make default** in Engine results, Settings).
+- Only the super admin changes the server's engine order (**Make default** in Engine results, Settings). Since v1.8.1
+  the recording page's engine tools that pick an engine by name (**Compare engines**, **Engine results**, **Transcribe
+  with another engine**, the Accuracy Lab reference) and which engine wrote a version are the super admin's alone;
+  everyone else re-transcribes by language and the server picks the engine.
 - Usage reports count only for streaming the server granted that device, so nobody can use up the monthly limit by
   reporting made-up minutes. Only an owner or admin can continue over Live Translate's budget, up to twice the budget.
 - **Security** in the console lists sign-ins, failed bursts, shares, deletions and admin actions (the audit log).
