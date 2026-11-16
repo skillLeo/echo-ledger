@@ -134,9 +134,13 @@ export function lockedBadge(e: Entitlements | null | undefined, feature: string)
 }
 
 /** A feature's name and what it does: the server's words, else the app's. */
+/** Features whose server names still name vendors (D-129, server side): the app says its own words for them on every
+ * chip, badge (tooltip and label) and upgrade sheet until the server's names are plain (D-044). */
+export const OWN_WORDS_ONLY: ReadonlySet<string> = new Set(["connector", "premium_engines"]);
+
 export function featureWords(e: Entitlements | null | undefined, feature: string): { name: string; description: string } {
   const known = PAID_FEATURES.find(([key]) => key === feature);
-  const fromServer = e?.features[feature];
+  const fromServer = OWN_WORDS_ONLY.has(feature) ? undefined : e?.features[feature];
   return {
     name: fromServer?.name?.trim() || known?.[1] || titleCase(feature.replace(/_/g, " ")),
     description: fromServer?.description?.trim() || known?.[2] || "",

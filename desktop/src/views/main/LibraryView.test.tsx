@@ -689,6 +689,11 @@ describe("LibraryView transcript", () => {
       for (const [feature, label, badge] of chips) {
         const chip = within(detail()).getByTestId(`locked-${feature}`);
         expect(chip).toHaveTextContent(`${label}${badge}`);
+        // The badge's tooltip and name too, although the server still sends vendor names for two of them (D-129).
+        const button = within(chip).getByRole("button");
+        expect(`${button.getAttribute("title")} ${button.getAttribute("aria-label")}`).not.toMatch(/Claude|ChatGPT|ElevenLabs|Gemini/);
+        if (feature === "connector") expect(button).toHaveAttribute("title", "Ask an AI assistant is in Pro");
+        if (feature === "premium_engines") expect(button).toHaveAccessibleName("Premium engines, in Ultra");
         fireEvent.click(within(chip).getByRole("button"));
         expect(sheet.result.current?.feature).toBe(feature);
       }

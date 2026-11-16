@@ -96,6 +96,14 @@ describe("step 1: Upgrade", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 
+  it("names a vendor-named feature in the app's own words in the sheet (D-044; the server's names are D-129)", () => {
+    const sheet = open(sampleEntitlements("free"), {}, "connector");
+    const said = within(sheet()).getByText(/is in Pro\. You're on Free\.$/);
+    expect(said).toHaveTextContent("Ask an AI assistant is in Pro. You're on Free.");
+    expect(said).not.toHaveTextContent(/Claude|ChatGPT|ElevenLabs|Gemini/);
+    // The plans' highlight lines are the server's own text (D-129 on the server), not a feature's name.
+  });
+
   it("shows why a request didn't go, inline, and keeps the choices", async () => {
     fail("upgrade_request_create", "This plan isn't available right now. Please choose another.");
     const sheet = open(sampleEntitlements("free"));
