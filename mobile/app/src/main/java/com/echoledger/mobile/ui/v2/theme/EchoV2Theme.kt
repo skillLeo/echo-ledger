@@ -1,5 +1,8 @@
 package com.echoledger.mobile.ui.v2.theme
 
+import android.content.ContextWrapper
+import android.content.res.Configuration
+import android.content.res.Resources
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ColorScheme
@@ -12,16 +15,21 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import com.echoledger.mobile.R
 import com.echoledger.mobile.ui.design.UrduNastaliq
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
+import java.util.Locale
 
 /**
  * The colour roles of the v2 design system (docs/v2/DESIGN_SYSTEM.md) for one theme. Components read these, never the
@@ -55,6 +63,9 @@ data class EchoV2Colors(
     /** The accent as it reads on the inverse surface (toasts): the other theme's accent text. */
     val inverseAccent: Color
 ) {
+    /** No colour at all (a quiet button's fill, an unselected tab's line). */
+    val clear: Color get() = Color.Transparent
+
     companion object {
         val Light = EchoTokens.Light.run {
             EchoV2Colors(
@@ -238,36 +249,25 @@ data class EchoV2Strings(
     val more: String
 ) {
     companion object {
-        val English = EchoV2Strings(
-            clearSearch = "Clear search",
-            close = "Close",
-            loading = "Loading",
-            undo = "Undo",
-            selected = "Selected",
-            notSelected = "Not selected",
-            openMenu = "Show choices",
-            dragHandle = "Drag to resize or close",
-            back = "Back",
-            more = "More options"
-        )
-        val Urdu = EchoV2Strings(
-            clearSearch = "تلاش صاف کریں",
-            close = "بند کریں",
-            loading = "لوڈ ہو رہا ہے",
-            undo = "واپس لیں",
-            selected = "منتخب",
-            notSelected = "منتخب نہیں",
-            openMenu = "انتخاب دکھائیں",
-            dragHandle = "سائز بدلنے یا بند کرنے کے لیے کھینچیں",
-            back = "واپس",
-            more = "مزید"
+        /** The words in the language of [res] (strings_v2_core.xml, values and values-ur). */
+        fun from(res: Resources) = EchoV2Strings(
+            clearSearch = res.getString(R.string.v2_clear_search),
+            close = res.getString(R.string.v2_close),
+            loading = res.getString(R.string.v2_loading),
+            undo = res.getString(R.string.v2_undo),
+            selected = res.getString(R.string.v2_selected),
+            notSelected = res.getString(R.string.v2_not_selected),
+            openMenu = res.getString(R.string.v2_open_menu),
+            dragHandle = res.getString(R.string.v2_drag_handle),
+            back = res.getString(R.string.v2_back),
+            more = res.getString(R.string.v2_more)
         )
     }
 }
 
 val LocalEchoV2Colors = staticCompositionLocalOf { EchoV2Colors.Light }
 val LocalEchoV2Type = staticCompositionLocalOf { EchoV2Type.System }
-val LocalEchoV2Strings = staticCompositionLocalOf { EchoV2Strings.English }
+val LocalEchoV2Strings = staticCompositionLocalOf<EchoV2Strings?> { null }
 
 /** Shortcuts to the current v2 theme values. */
 object EchoV2 {
@@ -278,8 +278,8 @@ object EchoV2 {
         @Composable @ReadOnlyComposable
         get() = LocalEchoV2Type.current
     val strings: EchoV2Strings
-        @Composable @ReadOnlyComposable
-        get() = LocalEchoV2Strings.current
+        @Composable
+        get() = LocalEchoV2Strings.current ?: LocalContext.current.resources.let { res -> remember(res) { EchoV2Strings.from(res) } }
 }
 
 /** Language of the phone: Urdu when the locale is Urdu, otherwise English. */
@@ -301,16 +301,51 @@ fun EchoV2Theme(
 ) {
     val colors = if (darkTheme) EchoV2Colors.Dark else EchoV2Colors.Light
     val type = if (language == EchoLanguage.Urdu) EchoV2Type.Urdu else EchoV2Type.System
-    val strings = if (language == EchoLanguage.Urdu) EchoV2Strings.Urdu else EchoV2Strings.English
     val direction = if (language.rtl) LayoutDirection.Rtl else LayoutDirection.Ltr
-    CompositionLocalProvider(
-        LocalEchoV2Colors provides colors,
-        LocalEchoV2Type provides type,
-        LocalEchoV2Strings provides strings,
-        LocalLayoutDirection provides direction
-    ) {
-        MaterialTheme(colorScheme = colors.toMaterial(), typography = type.material(), shapes = EchoV2Shapes, content = content)
+    ProvideLanguage(language) {
+        val res = LocalContext.current.resources
+        val strings = remember(res, LocalConfiguration.current) { EchoV2Strings.from(res) }
+        CompositionLocalProvider(
+            LocalEchoV2Colors provides colors,
+            LocalEchoV2Type provides type,
+            LocalEchoV2Strings provides strings,
+            LocalLayoutDirection provides direction
+        ) {
+            MaterialTheme(colorScheme = colors.toMaterial(), typography = type.material(), shapes = EchoV2Shapes, content = content)
+        }
     }
+}
+
+/** The locale whose values-* folder holds [this] language's words. */
+val EchoLanguage.locale: Locale get() = if (this == EchoLanguage.Urdu) Locale.forLanguageTag("ur-PK") else Locale.UK
+
+/**
+ * Draws [content] with the resources of [language] when the phone's own language is another one (a preview, a test,
+ * or an app language chosen in Settings). The activity stays the context's base, so starting activities still works.
+ */
+@Composable
+fun ProvideLanguage(language: EchoLanguage, content: @Composable () -> Unit) {
+    val config = LocalConfiguration.current
+    val current = config.locales[0]?.language
+    val matches = if (language == EchoLanguage.Urdu) current == "ur" else current != "ur"
+    if (matches) {
+        content()
+        return
+    }
+    val context = LocalContext.current
+    val localized = remember(context, config, language) {
+        val wanted = Configuration(config).apply { setLocale(language.locale) }
+        val res = context.createConfigurationContext(wanted).resources
+        object : ContextWrapper(context) {
+            override fun getResources(): Resources = res
+        }
+    }
+    CompositionLocalProvider(
+        LocalContext provides localized,
+        LocalConfiguration provides localized.resources.configuration,
+        LocalResources provides localized.resources,
+        content = content
+    )
 }
 
 /** Dialogs on the phone share the sheet radius (16), so the phone uses three radii. */

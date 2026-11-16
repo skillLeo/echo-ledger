@@ -78,7 +78,7 @@ fun uploadRows(pending: List<LocalRecording>, text: V2Text): List<UploadRow> = p
             it.id,
             it.title?.takeIf { t ->
                 t.isNotBlank()
-            } ?: it.callerName ?: app.label,
+            } ?: it.callerName ?: text.sourceName(it.sourceApp),
             formatClock(it.durationMs + 500),
             LibraryModel.icon(app),
             it.state == "failed"
@@ -126,6 +126,8 @@ fun V2LibraryScreen(
         initials = initials,
         onOpen = { onOpen(it.item) },
         onDelete = { row ->
+            // TODO(phone core): MainViewModel.delete is fire-and-forget, so this toast can show before the server has moved
+            // the recording to Trash. Show it only after success once the view model has a suspending delete.
             vm.delete(row.item)
             scope.launch { toasts.showUndo(text.deleted, undo) { scope.launch { vm.restore(row.id) } } }
         },

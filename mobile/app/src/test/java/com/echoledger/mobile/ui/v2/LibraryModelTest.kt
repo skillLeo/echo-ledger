@@ -1,21 +1,31 @@
 package com.echoledger.mobile.ui.v2
 
+import android.app.Application
 import com.echoledger.mobile.ui.v2.library.LibraryModel
 import com.echoledger.mobile.ui.v2.library.RowStatus
 import com.echoledger.mobile.ui.v2.library.SavedView
 import com.echoledger.mobile.ui.v2.shell.V2Text
+import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import java.time.ZonedDateTime
 import java.util.Locale
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
 /** Library rows from the server's items: the time, the status, the saved views and the search. */
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [34], application = Application::class)
 class LibraryModelTest {
+    private val english = V2Testing.text(EchoLanguage.English)
+    private val urdu = V2Testing.text(EchoLanguage.Urdu)
+
     private val now = ZonedDateTime.parse("2026-11-17T12:00:00+05:00[Asia/Karachi]")
     private val items = V2Fixtures.library()
 
-    private fun rows(views: Set<SavedView> = emptySet(), query: String = "", locale: Locale = Locale.UK, text: V2Text = V2Text.English) =
+    private fun rows(views: Set<SavedView> = emptySet(), query: String = "", locale: Locale = Locale.UK, text: V2Text = english) =
         LibraryModel.rows(items, views, query, now, text, locale)
 
     @Test
@@ -30,7 +40,7 @@ class LibraryModelTest {
     @Test
     fun urduTimesKeepLatinDigits() {
         val ur = Locale.forLanguageTag("ur-PK")
-        val byId = rows(locale = ur, text = V2Text.Urdu).associateBy { it.id }
+        val byId = rows(locale = ur, text = urdu).associateBy { it.id }
         assertEquals("10:42", byId.getValue("01JA").time)
         assertEquals("کل", byId.getValue("01JD").time)
         assertTrue(byId.values.all { r -> (r.time + r.duration).none { it in '٠'..'٩' || it in '۰'..'۹' } })
@@ -69,7 +79,14 @@ class LibraryModelTest {
     @Test
     fun deletedItemsNeverShow() {
         val withDeleted = items + items.first().copy(id = "01JZ", deleted = true)
-        assertEquals(items.size, LibraryModel.rows(withDeleted, emptySet(), "", now, V2Text.English, Locale.UK).size)
+        assertEquals(items.size, LibraryModel.rows(withDeleted, emptySet(), "", now, english, Locale.UK).size)
+    }
+
+    @Test
+    fun sourcesAreNamedFromTheirKeyNotTheServersEnglish() {
+        val item = items.first().copy(sourceAppLabel = "WhatsApp")
+        assertEquals("واٹس ایپ", LibraryModel.row(item, now, urdu, Locale.forLanguageTag("ur-PK")).source)
+        assertEquals("WhatsApp", LibraryModel.row(item, now, english, Locale.UK).source)
     }
 
     @Test

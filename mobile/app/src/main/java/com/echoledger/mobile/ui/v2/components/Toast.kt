@@ -122,7 +122,7 @@ fun EchoToast(message: String, actionLabel: String?, onAction: () -> Unit, modif
                 Surface(
                     onClick = onAction,
                     modifier = Modifier.defaultMinSize(minHeight = EchoTokens.Layout.controlTouchMin),
-                    color = Color.Transparent,
+                    color = EchoV2.colors.clear,
                     contentColor = c.inverseAccent,
                     shape = RoundedCornerShape(EchoTokens.Component.buttonRadius)
                 ) {

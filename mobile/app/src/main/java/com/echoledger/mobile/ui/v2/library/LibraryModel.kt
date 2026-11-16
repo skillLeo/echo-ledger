@@ -87,7 +87,7 @@ object LibraryModel {
 
     fun row(item: LibraryItem, now: ZonedDateTime, text: V2Text, locale: Locale): V2Row {
         val app = SourceApp.from(item.sourceApp)
-        val source = item.sourceAppLabel ?: app.label
+        val source = text.sourceName(item.sourceApp)
         return V2Row(
             id = item.id,
             title = item.title?.takeIf { it.isNotBlank() } ?: source,

@@ -122,6 +122,8 @@ fun V2RecordingScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, 
             context.startActivity(Intent.createChooser(share, text.share))
         },
         onDelete = {
+            // TODO(phone core): MainViewModel.delete is fire-and-forget, so this toast can show before the server has moved
+            // the recording to Trash. Show it only after success once the view model has a suspending delete.
             vm.delete(item)
             scope.launch { toasts.showUndo(text.deleted, undo) { scope.launch { vm.restore(item.id) } } }
             onBack()

@@ -17,7 +17,7 @@ data class UiFlags(val flags: Map<String, Boolean> = emptyMap(), val classic: Bo
     val settings: Boolean get() = isOn(SETTINGS)
 
     /** Settings shows "Switch back to classic" while any `ui_v2.*` flag is on for this person, or after they chose it. */
-    val offersClassicSwitch: Boolean get() = classic || flags.any { (k, v) -> k.startsWith(V2_PREFIX) && v }
+    val offersClassicSwitch: Boolean get() = classic || KNOWN_V2.any { flags[it] == true }
 
     companion object {
         const val V2_PREFIX = "ui_v2."
@@ -31,6 +31,12 @@ data class UiFlags(val flags: Map<String, Boolean> = emptyMap(), val classic: Bo
         const val SETTINGS = "ui_v2.settings"
         const val SETUP_HEALTH = "ui_v2.setup_health"
         const val LIVE_ASSIST = "live_assist"
+
+        const val ADMIN = "ui_v2.admin"
+        const val WEBSITE = "ui_v2.website"
+
+        /** The `ui_v2.*` names of contract 2.0.0-a; an unknown name never counts. */
+        val KNOWN_V2 = setOf(SHELL, HOME, LIBRARY, RECORDING_CONTROLS, AFTER_CALL, LIVE, ASK, SETTINGS, SETUP_HEALTH, ADMIN, WEBSITE)
 
         val Off = UiFlags()
     }

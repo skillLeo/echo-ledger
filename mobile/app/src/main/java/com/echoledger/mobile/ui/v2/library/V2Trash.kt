@@ -37,21 +37,42 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-/** "21 Dec" (Latin digits), the day a binned recording is erased. */
+/** "19 Nov, 14:05" (Latin digits), when a binned recording is erased. */
 fun eraseDay(iso: String?, locale: Locale, zone: ZoneId = ZoneId.systemDefault()): String? = runCatching {
-    LibraryModel.latinDigits(OffsetDateTime.parse(iso).atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern("d MMM", locale)))
+    LibraryModel.latinDigits(OffsetDateTime.parse(iso).atZoneSameInstant(zone).format(DateTimeFormatter.ofPattern("d MMM, HH:mm", locale)))
 }.getOrNull()
 
-/** Library › Trash: deleted recordings for 30 days, each restorable or erasable now (with a confirmation). */
+/** The server's Trash length when nothing says otherwise (docs/API.md 2.0.0-b, the privacy policy). */
+const val DEFAULT_TRASH_HOURS = 48
+
+/**
+ * How many hours Trash keeps a recording: the config's `trash.keep_hours` when the app has it, else what the server's
+ * own dates say (erase_at minus deleted_at of a binned recording), else 48.
+ */
+fun trashKeepHours(configHours: Int?, items: List<BinItemDto>?): Int {
+    configHours?.takeIf { it > 0 }?.let { return it }
+    items.orEmpty().firstNotNullOfOrNull { bin ->
+        runCatching {
+            val minutes = java.time.Duration.between(OffsetDateTime.parse(bin.deletedAt), OffsetDateTime.parse(bin.eraseAt)).toMinutes()
+            ((minutes + 30) / 60).toInt().takeIf { it > 0 }
+        }.getOrNull()
+    }?.let { return it }
+    return DEFAULT_TRASH_HOURS
+}
+
+/**
+ * Library › Trash: recordings the server keeps for [configKeepHours] (`trash.keep_hours`; null until the app reads it),
+ * each restorable or erasable now (with a confirmation).
+ */
 @Composable
-fun V2TrashScreen(vm: MainViewModel, retentionDays: Int, onBack: () -> Unit, modifier: Modifier = Modifier) {
+fun V2TrashScreen(vm: MainViewModel, configKeepHours: Int?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var items by remember { mutableStateOf<List<BinItemDto>?>(null) }
     var reload by remember { mutableIntStateOf(0) }
     LaunchedEffect(reload) { items = vm.bin() }
     val scope = rememberCoroutineScope()
     V2TrashContent(
         items = items,
-        retentionDays = retentionDays,
+        keepHours = trashKeepHours(configKeepHours, items),
         onBack = onBack,
         onRestore = { id -> scope.launch { if (vm.restore(id)) reload++ } },
         onErase = { id -> scope.launch { if (vm.eraseNow(id)) reload++ } },
@@ -63,7 +84,7 @@ fun V2TrashScreen(vm: MainViewModel, retentionDays: Int, onBack: () -> Unit, mod
 @Composable
 fun V2TrashContent(
     items: List<BinItemDto>?,
-    retentionDays: Int,
+    keepHours: Int,
     onBack: () -> Unit,
     onRestore: (String) -> Unit,
     onErase: (String) -> Unit,
@@ -79,12 +100,12 @@ fun V2TrashContent(
         when {
             items == null -> EchoSkeletonList(4, Modifier.weight(1f))
 
-            items.isEmpty() -> EchoEmptyState(text.trashEmptyTitle, text.trashEmptyBody, icon = EchoIcons.Delete)
+            items.isEmpty() -> EchoEmptyState(text.trashEmptyTitle, text.trashKeeps(keepHours), icon = EchoIcons.Delete)
 
             else -> LazyColumn(Modifier.weight(1f)) {
                 item {
                     Text(
-                        text.trashKeeps(retentionDays),
+                        text.trashKeeps(keepHours),
                         style = EchoV2.type.meta,
                         color = c.textSecondary,
                         modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8)

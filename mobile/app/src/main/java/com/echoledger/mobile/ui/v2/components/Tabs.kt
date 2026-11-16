@@ -72,7 +72,7 @@ fun EchoTabs(tabs: List<String>, selectedIndex: Int, onSelect: (Int) -> Unit, mo
                             .fillMaxWidth()
                             .padding(horizontal = EchoTokens.Space.s8)
                             .height(EchoTokens.Component.tabsIndicator)
-                            .background(if (selected) c.accent else Color.Transparent)
+                            .background(if (selected) c.accent else EchoV2.colors.clear)
                     )
                 }
             }

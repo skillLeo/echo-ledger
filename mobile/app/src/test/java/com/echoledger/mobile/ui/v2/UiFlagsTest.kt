@@ -32,6 +32,8 @@ class UiFlagsTest {
     fun theClassicSwitchShowsWhileAnyV2FlagIsOn() {
         assertTrue(UiFlags(mapOf("ui_v2.settings" to true)).offersClassicSwitch)
         assertFalse(UiFlags(mapOf("live_assist" to true, "ui_v2.shell" to false)).offersClassicSwitch)
+        // Only the contract's names count: an unknown ui_v2 name never shows the switch.
+        assertFalse(UiFlags(mapOf("ui_v2.something_new" to true)).offersClassicSwitch)
     }
 
     @Test

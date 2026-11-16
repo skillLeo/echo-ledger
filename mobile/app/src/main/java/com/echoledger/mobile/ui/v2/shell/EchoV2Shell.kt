@@ -21,6 +21,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoDestination
@@ -82,7 +83,7 @@ fun EchoV2Shell(
 ) {
     EchoV2Theme(darkTheme = darkTheme, language = language) {
         val toasts = rememberEchoToastState()
-        CompositionLocalProvider(LocalV2Text provides V2Text.of(language), LocalEchoToasts provides toasts) {
+        CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)
             Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
                 ShellBody(vm, flags, classic, onSwitchToClassic)
@@ -98,10 +99,11 @@ private fun MessagesToToasts(vm: MainViewModel, toasts: EchoToastState) {
     val message by vm.message.collectAsState()
     // Shown from a scope that outlives the effect: consuming the message restarts the effect.
     val scope = rememberCoroutineScope()
+    val res = LocalContext.current.resources
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
         vm.consumeMessage()
-        scope.launch { toasts.show(text) }
+        scope.launch { toasts.show(VmMessages.localize(res, text)) }
     }
 }
 
@@ -134,7 +136,8 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
 
                 V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
 
-                V2Route.Trash -> V2TrashScreen(vm, retentionDays = 30, onBack = { route = V2Route.Tabs })
+                // TODO(phone core): pass the config's trash.keep_hours (contract 2.0.0-b) once the data layer parses it.
+                V2Route.Trash -> V2TrashScreen(vm, configKeepHours = null, onBack = { route = V2Route.Tabs })
 
                 is V2Route.Recording -> {
                     val item = library.firstOrNull { it.id == r.id }

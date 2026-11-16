@@ -39,14 +39,14 @@ private fun buttonColors(kind: EchoButtonKind, enabled: Boolean): ButtonColors {
     val c = EchoV2.colors
     if (!enabled) {
         return when (kind) {
-            EchoButtonKind.Quiet -> ButtonColors(Color.Transparent, c.textDisabled, null)
+            EchoButtonKind.Quiet -> ButtonColors(c.clear, c.textDisabled, null)
             else -> ButtonColors(c.bgSubtle, c.textDisabled, null)
         }
     }
     return when (kind) {
         EchoButtonKind.Primary -> ButtonColors(c.accent, c.textOnAccent, null)
         EchoButtonKind.Secondary -> ButtonColors(c.bgSurface, c.textPrimary, c.borderStrong)
-        EchoButtonKind.Quiet -> ButtonColors(Color.Transparent, c.accentText, null)
+        EchoButtonKind.Quiet -> ButtonColors(c.clear, c.accentText, null)
         EchoButtonKind.Danger -> ButtonColors(c.danger, c.textOnAccent, null)
     }
 }
@@ -118,7 +118,7 @@ fun EchoIconButton(
             .sizeIn(minWidth = EchoTokens.Layout.controlTouchMin, minHeight = EchoTokens.Layout.controlTouchMin)
             .semantics { this.contentDescription = contentDescription },
         shape = CircleShape,
-        color = Color.Transparent,
+        color = EchoV2.colors.clear,
         contentColor = if (enabled) tint else EchoV2.colors.textDisabled
     ) {
         Column(
@@ -139,7 +139,7 @@ fun EchoActionItem(icon: ImageVector, label: String, onClick: () -> Unit, modifi
         onClick = onClick,
         modifier = modifier.defaultMinSize(minWidth = EchoTokens.Space.s64, minHeight = EchoTokens.Space.s64),
         shape = RoundedCornerShape(EchoTokens.Component.buttonRadius),
-        color = Color.Transparent,
+        color = EchoV2.colors.clear,
         contentColor = color
     ) {
         Column(

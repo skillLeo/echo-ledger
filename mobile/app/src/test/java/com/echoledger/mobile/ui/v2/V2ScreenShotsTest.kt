@@ -18,12 +18,12 @@ import com.echoledger.mobile.ui.v2.library.V2LibraryContent
 import com.echoledger.mobile.ui.v2.library.V2RecordingContent
 import com.echoledger.mobile.ui.v2.library.V2TrashContent
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
-import com.echoledger.mobile.ui.v2.shell.LocalV2Text
 import com.echoledger.mobile.ui.v2.shell.Profile
 import com.echoledger.mobile.ui.v2.shell.ProfileState
 import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.shell.V2SettingsHomeContent
 import com.echoledger.mobile.ui.v2.shell.V2Text
+import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -59,9 +59,8 @@ class V2ScreenShotsTest {
     private fun shootAll(name: String, screen: @Composable (urdu: Boolean, text: V2Text) -> Unit) {
         compose.setContent {
             EchoV2Theme(darkTheme = dark, language = language) {
-                val text = V2Text.of(language)
-                CompositionLocalProvider(LocalV2Text provides text, LocalEchoToasts provides rememberEchoToastState()) {
-                    screen(language == EchoLanguage.Urdu, text)
+                CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
+                    screen(language == EchoLanguage.Urdu, v2Text)
                 }
             }
         }
@@ -139,10 +138,20 @@ class V2ScreenShotsTest {
     fun trash() = shootAll("trash") { urdu, _ ->
         V2TrashContent(
             items = listOf(
-                BinItemDto("01JX", if (urdu) "کراچی کارگو سروسز" else "Karachi Cargo Services", eraseAt = "2026-12-09T10:00:00Z"),
-                BinItemDto("01JY", if (urdu) "وائس نوٹ" else "Voice note", eraseAt = "2026-12-14T08:30:00Z")
+                BinItemDto(
+                    "01JX",
+                    if (urdu) "کراچی کارگو سروسز" else "Karachi Cargo Services",
+                    deletedAt = "2026-11-17T05:00:00Z",
+                    eraseAt = "2026-11-19T05:00:00Z"
+                ),
+                BinItemDto(
+                    "01JY",
+                    if (urdu) "وائس نوٹ" else "Voice note",
+                    deletedAt = "2026-11-16T08:30:00Z",
+                    eraseAt = "2026-11-18T08:30:00Z"
+                )
             ),
-            retentionDays = 30,
+            keepHours = 48,
             onBack = {},
             onRestore = {},
             onErase = {}
