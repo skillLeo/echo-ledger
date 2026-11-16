@@ -826,7 +826,11 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
                     notifLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                 }
             }
-            StepRow("Caption bubble (optional)", capabilities.overlayPermission) {
+            StepRow(
+                "Display over other apps (optional)",
+                capabilities.overlayPermission,
+                detail = "For EchoLedger's floating windows: the recording controls, captions, the after-call card and Live Translate."
+            ) {
                 context.startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}")))
             }
         }
@@ -918,7 +922,7 @@ fun SetupScreen(vm: MainViewModel, capabilities: Capabilities, onBack: () -> Uni
 }
 
 @Composable
-private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
+private fun StepRow(title: String, done: Boolean, detail: String? = null, onFix: () -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             if (done) Icons.Rounded.CheckCircle else Icons.Rounded.RadioButtonUnchecked,
@@ -927,12 +931,10 @@ private fun StepRow(title: String, done: Boolean, onFix: () -> Unit) {
             modifier = Modifier.size(18.dp)
         )
         Spacer(Modifier.width(8.dp))
-        Text(
-            title,
-            color = if (done) Brand.Success else Brand.Text,
-            modifier = Modifier.weight(1f).semantics { stateDescription = if (done) "Done" else "Needed" },
-            fontSize = 14.sp
-        )
+        Column(Modifier.weight(1f).semantics(mergeDescendants = true) { stateDescription = if (done) "Done" else "Needed" }) {
+            Text(title, color = if (done) Brand.Success else Brand.Text, fontSize = 14.sp)
+            detail?.let { Text(it, color = Brand.Muted, fontSize = 12.sp) }
+        }
         if (!done) TextButton(onClick = onFix) { Text("Allow") }
     }
 }
@@ -958,7 +960,7 @@ internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
         Text("After a call", fontWeight = FontWeight.SemiBold)
         listOf(
             PostCallPrompt.KEEP to "Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s",
-            PostCallPrompt.ASK to "Ask me — a small chip to keep or discard it; kept after 10 s"
+            PostCallPrompt.ASK to "Ask me — a small after-call card to keep or discard it; kept after 10 s"
         ).forEach { (value, label) ->
             Row(
                 Modifier.fillMaxWidth()
@@ -1082,7 +1084,12 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("Hide content in Recents and screenshots")
-                    Text("Off by default: screenshots are always allowed unless you turn this on.", color = Brand.Muted, fontSize = 12.sp)
+                    Text(
+                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always left out of " +
+                            "screenshots unless you choose Show in During screen sharing.",
+                        color = Brand.Muted,
+                        fontSize = 12.sp
+                    )
                 }
                 Switch(
                     checked = settings.secureScreen,

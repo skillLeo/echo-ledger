@@ -37,6 +37,10 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
   in the shell-uid helper stay: the plan's "no hidden or private Android APIs, even through the helper" is an S5 rule
   (screen-share privacy; L5 follows it), and v1.8 0.3 itself plans VOICE_CALL / uplink / downlink through the helper.
   No hidden API is used for screen-share privacy or Live Assist.
+- **Decided, changed from the plan's wording:** R1 — the Mac safety net keeps the floating windows off until the meeting
+  seen with the whole-screen share has ended (3 s without it and no sharing bar over 3 successful reads), not "when the
+  share ends": Chrome's Hide button and Zoom's hidden controls remove the bar while the share goes on, so a missing bar
+  proves nothing. "Show EchoLedger windows" brings them back sooner; failed or empty window reads change nothing.
 - **Decided, superseded:** R7 asked for "Hide EchoLedger windows" to survive process death because Hide was then the
   only protection on Android. With every floating window always secure (black box unless Show), keeping Hide across
   restarts only created a dead end (the S5 review: Live Translate had no way back), so Hide now lasts until shown again
@@ -130,10 +134,10 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
   the card and a Quick Settings tile "Hide EchoLedger cards"; setting "During screen sharing": Hide cards (default) /
   Black box (FLAG_SECURE) / Show; no hidden or private APIs. **Acceptance:** unit tests for the states; the S25 results
   in SCREEN_SHARE_MATRIX.md.
-  - Code done 2026-11-16: `core/ShareGuard.kt` (state), `overlay/ShareWatch.kt` (callback while any card is
-    attached), pill / captions / after-call chip / Live Translate collapse or vanish, toolbar button "Hide EchoLedger
-    cards", tile `tile/HideCardsTileService.kt`, Settings → Privacy & data → During screen sharing (exported, reset
-    with General). `ShareGuardTest` passes. **Left:** the S25 run (N6) and its matrix rows.
+  - 2026-11-16: measured on the S25 (Android 17): the callback never fires for floating windows (docs/SCREEN_SHARE_MATRIX.md).
+    Merged `406db0de` (reviewed twice): every floating window is a black box (FLAG_SECURE) in screen shares, recordings and
+    screenshots unless Settings → During screen sharing is Show; Hide EchoLedger windows (button + tile) for the session;
+    one set of names (docs/DESIGN_SYSTEM.md). Waiting: the S25 retest with Meet, Zoom, WhatsApp (phone batch A–B).
 - [ ] S6 Trust UX: a privacy badge on every floating window and the Assist card (Private / Not checked / Visible in
   shares) from the last real check, a tap opens Share Check; on a Mac the per-app list; a "Hide all EchoLedger windows"
   global shortcut (conflict-checked, not ⌘⌥H); Settings → Privacy page (switch and status, last check + Check now, the

@@ -41,6 +41,11 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
 - [ ] 0.1 Screen moments: the exact cause found on Windows and the Mac (plan gating, the switch and project default, the
   Mac permission after updates, meeting detection, thresholds and cap, upload, server). **Acceptance:** a cause report
   in HANDOFF with evidence for each of a–f; a regression test per cause.
+  - 2026-11-16 production evidence (read-only, counts only): Hassam's workspace is on the business (Ultra) plan with
+    screen moments allowed (a: not the cause); 14 desktop recordings in 30 days and **0 screens ever** on the server;
+    the server's PHP has GD with WebP (f: not the cause). So no screen ever left the computers: the Mac's Screen
+    Recording permission lost with each unsigned update (c), silent capture failures and the end-of-call race (d, e) —
+    fixed on b-desktop (`31eb96ed`), in review fixes; Mac signing in CI follows.
 - [ ] 0.1b The pill shows a live "Screens N"; at 0 after 60 s of sharing it says why with a fix button; the after-call
   card and the Library row show the count. **Acceptance:** component tests for the count, the 60 s reason (each reason
   string) and the row icon.

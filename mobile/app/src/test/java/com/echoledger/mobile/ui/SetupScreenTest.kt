@@ -94,7 +94,11 @@ class SetupScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Microphone").assertIsDisplayed()
         compose.onNodeWithText("Notifications (Stop / Keep / Discard actions)").assertIsDisplayed()
-        compose.onNodeWithText("Caption bubble (optional)").assertIsDisplayed()
+        compose.onNodeWithText("Display over other apps (optional)").assertIsDisplayed()
+        compose.onNodeWithText(
+            "For EchoLedger's floating windows: the recording controls, captions, the after-call card and Live Translate.",
+            useUnmergedTree = true
+        ).assertExists()
         compose.onAllNodesWithText("Allow").assertCountEquals(2)
     }
 
@@ -130,7 +134,7 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `Allow for the caption bubble opens the overlay settings page`() {
+    fun `Allow for display over other apps opens the overlay settings page`() {
         showSetup(caps(mic = true, notif = true, overlay = false))
 
         compose.onNodeWithText("Allow").performClick()

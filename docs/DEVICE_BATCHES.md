@@ -38,6 +38,20 @@ call, an unsaved number, a 5-second call and two calls back to back. EchoLedger 
 each: which audio source (VOICE_CALL, uplink, downlink) opened and whether both sides had sound. If One UI blocks them,
 the next build imports Samsung's own call recordings instead (Phone app → Settings → Record calls → Auto record).
 
+**Part D — v1.8 0.2 missed recordings (after the build with the detector is installed):**
+
+| # | Step | Pass when |
+|---|---|---|
+| D1 | A WhatsApp call with the helper stopped | About 2.5 minutes later: Activity → Needs action "Missed recording" with **Start the helper**, and one notification |
+| D2 | A SIM call (phone calls set to Always) with the helper stopped | An item, found through the call log |
+| D3 | A call in an app switched off for auto-record; a call shorter than *Skip calls shorter than* | No item |
+| D4 | A normally recorded call | No item; Copy diagnostics shows all five stages for it |
+| D5 | The console | The server copy appears; no second phone notification |
+| D6 | Live Translate (Game and Watch) while hidden; its notification's **Show** | The grey dot where the grip was; Show brings everything back |
+| D7 | Hide, then restart the app | Shown again |
+| D8 | TalkBack double-tap on the minimised red dot | The recording controls open |
+| D9 | 0.2c, after a few days of use: Copy diagnostics → "Calls, last 7 days" and "Auto-record" | The real causes of any missed calls, each then fixed with a test |
+
 ## Windows laptop — v1.8.1 S0/S6/S7, about 45 minutes
 
 The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share privacy".

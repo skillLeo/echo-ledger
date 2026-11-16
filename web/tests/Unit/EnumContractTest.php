@@ -45,6 +45,12 @@ function docTokens(string $rowStartsWith): array
     return [];
 }
 
+/**
+ * Values the contract already names but the server doesn't have yet (like ApiDocumentationTest's NOT_SERVED_YET).
+ * Remove a value here in the change that adds it to the enum; the guard below fails while both hold it.
+ */
+const NOT_BUILT_YET = ['session `status`' => ['audio_only']];
+
 function caseValues(string $enum): array
 {
     return array_map(fn ($case) => $case->value, $enum::cases());
@@ -56,7 +62,9 @@ describe('docs/API.md enumerations match the code', function () {
     });
 
     it('lists the session statuses', function () {
-        expect(docTokens('session `status`'))->toEqualCanonicalizing(caseValues(SessionStatus::class));
+        $planned = NOT_BUILT_YET['session `status`'];
+        expect(array_values(array_diff(docTokens('session `status`'), $planned)))->toEqualCanonicalizing(caseValues(SessionStatus::class));
+        expect(array_values(array_intersect($planned, caseValues(SessionStatus::class))))->toBe([], 'built now: remove it from NOT_BUILT_YET');
     });
 
     it('lists the upload statuses', function () {

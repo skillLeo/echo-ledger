@@ -67,8 +67,12 @@ data class CaptionFeed(val lines: List<CaptionLine> = emptyList(), val partial: 
 
 private val GLASS = Color(0xFF1E1F23)
 
-/** A touchable overlay window that never takes the keyboard: the base of the pill and the caption panel. */
-private abstract class OverlayWindow(protected val context: Context) {
+/**
+ * A touchable overlay window that never takes the keyboard: the base of the recording controls and the captions. It
+ * opens, moves and closes through [PrivateWindows], which keeps it a black box in a screen share unless During screen
+ * sharing is Show.
+ */
+private abstract class OverlayWindow(protected val context: Context, kind: FloatingWindow) {
     protected val wm: WindowManager = context.getSystemService(WindowManager::class.java)
     protected var view: ComposeView? = null
     private var owner: OverlayOwner? = null
@@ -77,10 +81,12 @@ private abstract class OverlayWindow(protected val context: Context) {
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.WRAP_CONTENT,
         WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-            WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
+        kind.flags,
         PixelFormat.TRANSLUCENT
-    ).apply { gravity = Gravity.TOP or Gravity.START }
+    ).apply {
+        gravity = Gravity.TOP or Gravity.START
+        title = kind.title
+    }
 
     val showing: Boolean get() = view != null
 
@@ -97,39 +103,20 @@ private abstract class OverlayWindow(protected val context: Context) {
         val compose = ComposeView(context).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent {
-                // Black box (Settings → During screen sharing): shares and recordings show black where the card is.
-                val mode by ShareGuard.mode.collectAsState()
-                LaunchedEffect(mode) { secure(ShareGuard.secure(mode)) }
-                content()
-            }
+            setContent(content)
             setOnTouchListener { _, event ->
                 if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) onOutside()
                 false
             }
             addOnLayoutChangeListener { v, _, _, _, _, _, _, _, _ -> onSized(v) }
         }
-        params.flags = if (ShareGuard.secure(ShareGuard.mode.value)) {
-            params.flags or WindowManager.LayoutParams.FLAG_SECURE
-        } else {
-            params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
+        if (!PrivateWindows.add(wm, compose, params)) {
+            lifecycleOwner.stop()
+            return false
         }
-        return runCatching { wm.addView(compose, params) }.onSuccess {
-            view = compose
-            owner = lifecycleOwner
-            ShareWatch.acquire(context)
-        }.isSuccess
-    }
-
-    private fun secure(on: Boolean) {
-        val flags = if (on) {
-            params.flags or WindowManager.LayoutParams.FLAG_SECURE
-        } else {
-            params.flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
-        }
-        if (flags == params.flags) return
-        params.flags = flags
-        view?.let { runCatching { wm.updateViewLayout(it, params) } }
+        view = compose
+        owner = lifecycleOwner
+        return true
     }
 
     protected open fun onSized(v: View) = Unit
@@ -137,14 +124,11 @@ private abstract class OverlayWindow(protected val context: Context) {
     protected fun move(x: Int, y: Int) {
         params.x = x
         params.y = y
-        view?.let { runCatching { wm.updateViewLayout(it, params) } }
+        view?.let { PrivateWindows.update(wm, it, params) }
     }
 
     open fun hide() {
-        view?.let {
-            runCatching { wm.removeView(it) }
-            ShareWatch.release(context)
-        }
+        view?.let { PrivateWindows.remove(wm, it) }
         owner?.stop()
         view = null
         owner = null
@@ -152,9 +136,10 @@ private abstract class OverlayWindow(protected val context: Context) {
 }
 
 /**
- * The recording control (since v1.3, replacing the old click-through "Listening" bubble): a small pill ("● 02:14") on
- * the right edge in the top third, away from a call screen's mute and end buttons. Drag it anywhere (it snaps to the
- * nearer edge and remembers where), tap it for the controls, or shrink it to a dot. Nothing in it takes the keyboard.
+ * The recording controls (since v1.3, replacing the old click-through "Listening" bubble; internally "the pill"): a small
+ * pill ("● 02:14") on the right edge in the top third, away from a call screen's mute and end buttons. Drag it anywhere
+ * (it snaps to the nearer edge and remembers where), tap it for the controls, or shrink it to a dot. Nothing in it
+ * takes the keyboard.
  */
 class ControlPill(
     context: Context,
@@ -173,7 +158,8 @@ class ControlPill(
     /** Keeps the pill below [bottomPx] (the caption panel's lower edge) while the panel is open; null lets it go back. */
     fun avoid(bottomPx: Int?) = window.avoid(bottomPx)
 
-    private inner class PillWindow(context: Context, private var edge: String, private var yFraction: Float) : OverlayWindow(context) {
+    private inner class PillWindow(context: Context, private var edge: String, private var yFraction: Float) :
+        OverlayWindow(context, FloatingWindow.RECORDING_CONTROLS) {
         private var avoidBelow: Int? = null
 
         fun open() {
@@ -236,17 +222,15 @@ class ControlPill(
                 }
             val private = !ShareGuard.textVisible.collectAsState().value
             if (private && s.mode != PillState.Mode.HIDDEN) {
-                // While shared or hidden: a plain dot, no clock, language or buttons. A tap brings back cards the
-                // person hid; while a share is seen in "Hide cards" mode they stay a dot until it ends.
-                val dot = Modifier
-                    .pointerInput(Unit) { detectTapGestures(onTap = { ShareGuard.setHidden(false) }) }
-                    .pointerInput(Unit) {
-                        detectDragGestures(onDragEnd = { dropped() }) { change, amount ->
-                            change.consume()
-                            dragBy(amount.x, amount.y)
-                        }
+                // Hidden, or in a screen share Android reports: a plain grey dot, no clock, language or buttons. A tap
+                // shows the windows the person hid; while Android reports a screen share they stay a dot until it ends.
+                val drags = Modifier.pointerInput(Unit) {
+                    detectDragGestures(onDragEnd = { dropped() }) { change, amount ->
+                        change.consume()
+                        dragBy(amount.x, amount.y)
                     }
-                PrivateDot(dot)
+                }
+                PrivateDot(onShow = { ShareGuard.setHidden(false) }, modifier = drags)
                 return
             }
             when (s.mode) {
@@ -283,7 +267,7 @@ class CaptionPanel(
 
     val showing: Boolean get() = window.showing
 
-    private inner class PanelWindow(context: Context) : OverlayWindow(context) {
+    private inner class PanelWindow(context: Context) : OverlayWindow(context, FloatingWindow.CAPTIONS) {
         fun open() {
             if (showing) return
             params.width = minOf(screenWidth() - dp(24), dp(440))
@@ -301,7 +285,7 @@ class CaptionPanel(
 
         @Composable
         private fun PanelContent() {
-            // Shared or hidden: the captions are not drawn at all (the pill's dot stays).
+            // Hidden, or in a screen share Android reports: the captions are not drawn at all (the grey dot stays).
             if (!ShareGuard.textVisible.collectAsState().value) return
             val f by feed.collectAsState()
             val s by language.collectAsState()
