@@ -53,6 +53,28 @@ MediaProjection display capture), checked on the recorded video.
 So on the phone, protection while sharing has to come from FLAG_SECURE (the black box), not from detection.
 Meet, Zoom and WhatsApp shares are tested after that change.
 
+### Retest with the merged S5 build (2026-11-16, 16:13–16:24)
+
+The v1.1 build (phone code as of `5411d52e`: every floating window secure unless the setting is Show), installed with
+`pm install -r` and driven over adb. Captures: the phone's own screenshot (`screencap`) and adb's screen recorder
+(`screenrecord`). Both go through the same Android rule that leaves secure windows out of any non-secure display, the
+rule a MediaProjection share (Meet, Zoom, WhatsApp, Samsung's recorder) meets too. Each result is the share of black
+pixels inside the window's own frame, on every frame of the video; the rest of the screen was never looked at.
+
+| # | Check | Result |
+|---|---|---|
+| A1 | `dumpsys window`: "EchoLedger recording controls" (TYPE_APPLICATION_OVERLAY), setting Private | **SECURE** (Android 17 prints the flags as hex: `fl=1042108` holds 0x2000) |
+| A2 | A test voice note: a screenshot and a 4-second recording | **Black**: 100 % of the controls' frame, every frame |
+| A3 | Setting → Show, record; back to Private with the window still open | Show: not secure, the video shows the red dot and the clock (0–0.3 % black). Private again: SECURE and 100 % black at once, without reopening the window |
+| A4 | Hide EchoLedger windows on the controls; tap the grey dot; the tile twice (`click-tile`) | The controls become a 180 × 180 dot (still secure, 100 % black in the recording); the dot brings them back; the tile's first tap hides, the second shows them again (the earlier "second tap did nothing" is fixed) |
+| A5 | Hide (tile), then a new process (an app update: pid 13736 → 20791), a new voice note | Shown again, SECURE, 100 % black in the recording |
+| A6 | Live Translate (Watch translate), recorded | Waiting: the phone's power key was pressed as Watch translate started, and the phone locked |
+| A7 | Clean-up | Both test notes discarded from the controls; every test video deleted from the phone right after it was copied; quick-settings tiles and the screen timeout back as before |
+
+Samsung's screen recorder could not be started from adb (its "Start recording" button ignored taps sent by adb,
+twice), so A2–A5 used adb's recorder. The first measurement above, made with Samsung's recorder by hand, showed the
+same black rectangle.
+
 ## Meeting apps (whole screen / one window / tab)
 
 | App | Windows 11 | Windows 10 | macOS 27 (this Mac) | macOS 15 |

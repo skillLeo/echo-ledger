@@ -80,6 +80,10 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   visible window shows and focuses the main window; a test for the handler; checked on the Mac.
   - Code merged 2026-11-16 (`10c7a743`, reviewed; cargo 1,312 passed): the decision uses whether the MAIN window is on
     screen (macOS counts the always-built dictation box as visible). Waiting: MAC-31 on a build with it (Mac batch).
+  - MAC-31, 2026-11-16 16:25, on the installed CI build 5d9f9779 (contains `10c7a743`): with no main window open,
+    opening EchoLedger from Applications the way Finder and Spotlight do (`open -a`, a reopen event to the running copy)
+    opened the main window in front, in the same process, still hidden from capture. Waiting: the Dock, Launchpad, ⌘W
+    and ⌘M cases (keystrokes and clicks, Mac batch with Hassam).
 
 ## P1 — Before, during, after a call
 - [ ] 1.1 Calls always recorded as audio when Ready; transcribed only with permission. One after-call card (phone:

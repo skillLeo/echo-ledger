@@ -14,6 +14,10 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 
 **Part A — from the Mac over adb (you keep the phone unlocked; tap only when a system prompt appears):**
 
+Run 2026-11-16 16:13–16:24 on the v1.1 build: A1–A5 and A7 pass (SCREEN_SHARE_MATRIX.md, "Retest with the merged S5
+build"); A6 waiting (the phone locked by its power key). Samsung's recorder can't be started over adb, so the captures
+use adb's recorder and screenshots; the overlay buttons are found with `uiautomator dump --windows`.
+
 | # | Step | Pass when |
 |---|---|---|
 | A1 | `dumpsys window windows`: every "EchoLedger …" window | SECURE next to each while the setting is Private |

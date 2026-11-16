@@ -78,13 +78,16 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   - relay b-relay @f9e1f4c7: aligned with 1.9.0-b, 57/58 unit tests; next: the token-replay budget fix (decision: cap
     remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
     Dockerfile/systemd/README, clippy.
+  - Phone: the v1.1 build (phone code `5411d52e`) is INSTALLED on the S25 (16:13, `pm install -r`; settings kept).
+    Batch A: A1–A5 and A7 pass; A6 (Live Translate) waiting, the phone locked by its power key during the run.
   - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
     as mac-backup-160). Measured: every window state 0 incl. TUINSWindow; the installed app's own Share Check passes as
-    itself (capture allowed through "Device Control and Data Access" on macOS 27). Still to do with Hassam: MAC-31,
-    the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
+    itself (capture allowed through "Device Control and Data Access" on macOS 27). MAC-31's Finder path passed (16:25,
+    `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
+    and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
-    jump only without a main window) · waiting: MAC-31.
+    jump only without a main window) · MAC-31 Finder path pass (16:25); Dock, Launchpad, ⌘W, ⌘M waiting.
   - 2026-11-16 · v1.8 0.2 server (missed recordings) · `d71195cb` · changes needed → fixed → approve (2 minor follow
     in b-web) · contract 1.8.0-c · not deployed yet (next web deploy batches it with the audit fixes).
   - 2026-11-16 · v1.9 S5 phone (always secure, names, Hide for the session, audit U7/u23/R6/R28) · `406db0de` · changes
