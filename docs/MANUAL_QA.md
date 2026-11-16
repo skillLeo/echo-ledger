@@ -823,6 +823,9 @@ pressing **Sync** in the Library.
 | S-8 | Tray / menu bar: Show EchoLedger in screen share for 10 minutes. | The phone shows EchoLedger; after 10 minutes it is hidden again without touching anything. |
 | S-9 | Press Ctrl+Alt+Shift+P (⌘⌥⇧P), then again. | Every EchoLedger window goes and comes back; the app stays in the Dock, the menu bar, the tray and Alt+Tab / ⌘Tab. |
 | S-10 | Settings → Screen-share privacy → Copy diagnostics. | The text names the system, the setting, the last checks and the meeting apps; no window contents. |
+| S-11 | Mac: share the whole screen in Zoom or Teams (not confirmed yet); then hide Chrome's sharing bar in a Meet share; end the meeting. | The floating windows leave within about 0.3 s; with the bar hidden they stay off; about 3 s after the meeting ends they are back. |
+| S-12 | During that share, open EchoLedger from the menu bar or the Dock. | The main window opens with the line that it may be in the screen share; the floating windows stay off. |
+| S-13 | Windows: minimise the main window, press Hide EchoLedger windows, then Show EchoLedger windows. | Every window goes and comes back; the main window stays minimised. |
 
 ## Appendix C — Release day
 
