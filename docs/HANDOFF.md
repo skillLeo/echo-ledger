@@ -113,6 +113,16 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     "can't read" now falls back to Android's share-the-sound question; the Audio probe shows uid/state/usage and their
     source); 1,547 unit tests, lint clean. Re-review running (fresh reviewer). Next phone slot: the builder's steps
     (Copy diagnostics → helper build and "Players the helper sees"; A6 from the tile; Part C and D).
+  - Desktop b-desktop-followup @9b30d7e4: both review verdicts answered (6 commits: the main-thread rule's test filter
+    + more waiting calls, the badge rim, Mac-only test card, people's names in the privacy log, the full app menu,
+    every floating window a real non-activating NSPanel subclass, a 20 s save cap with exactly one reply, one shared
+    quitting state); cargo 1,385 + tests/mac_appkit.rs, clippy 0, vitest 2,204. Re-review running.
+    DECIDED (lead): the floating panels may use AppKit's private _setPreventsActivation: (guarded by
+    respondsToSelector, panels only), as tauri-nspanel does, because after the class switch the window server isn't
+    told they must not activate the app. Why: a click on the recording controls must not pull EchoLedger in front of a
+    full-screen meeting; it hides nothing from other software; we ship outside the Mac App Store (revisit if that
+    changes). No other private macOS API without a written decision here. MAC-22 on the device is the release gate.
+    After this merges, b-desktop-reopen (0.2 work) must merge v1.1 and resolve the duplicated follow-up commits.
   - GUIDE TEXT QUEUE for the web builder (docs/USER_GUIDE.md), from the builders' reports:
     (1) Phone calls (SIM) bullet, B18: keep "Some phones give both voices on one track…", replace the two sentences
     after it with the "SIM calls through the Phone app's own recordings" block (Galaxy: Phone app → ⋮ → Settings →
