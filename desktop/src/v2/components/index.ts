@@ -3,7 +3,7 @@ import "../../tokens.css";
 import "../styles/v2.css";
 
 export { Button, Icon, type ButtonProps, type ButtonVariant, type IconType } from "./Button";
-export { TextField, SearchField } from "./fields";
+export { TextField, SearchField, TextArea } from "./fields";
 export { Select, type SelectOption } from "./Select";
 export { List, ListRow, ListSection, type ListRowProps } from "./ListRow";
 export { Chip, FilterBar } from "./FilterBar";

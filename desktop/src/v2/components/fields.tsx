@@ -62,3 +62,24 @@ export function SearchField({ label, value, onChange, clearLabel = "Clear search
     </div>
   );
 }
+
+export type TextAreaProps = Omit<ComponentPropsWithRef<"textarea">, "children"> & { label: ReactNode; hint?: ReactNode; error?: ReactNode };
+
+/** A labelled multi-line field (a brief, instructions); grows with its text up to the rows given. */
+export function TextArea({ label, hint, error, id, className, rows = 3, ...rest }: TextAreaProps) {
+  const auto = useId();
+  const fieldId = id ?? auto;
+  const hintId = hint ? `${fieldId}-hint` : undefined;
+  const errorId = error ? `${fieldId}-error` : undefined;
+  return (
+    <div className={["el-field", className].filter(Boolean).join(" ")}>
+      <label className="el-field__label" htmlFor={fieldId}>{label}</label>
+      <div className="el-input el-input--area" data-invalid={error ? "true" : undefined}>
+        <textarea id={fieldId} rows={rows} dir="auto" aria-invalid={error ? true : undefined}
+          aria-describedby={[errorId, hintId].filter(Boolean).join(" ") || undefined} {...rest} />
+      </div>
+      {error && <p className="el-field__error" id={errorId}><Icon icon={ErrorIcon} />{error}</p>}
+      {hint && <p className="el-field__hint" id={hintId}>{hint}</p>}
+    </div>
+  );
+}

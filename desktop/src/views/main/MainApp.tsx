@@ -47,6 +47,7 @@ import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { anyV2, useUiFlags } from "../../v2/flags";
+import { LiveTranslateCard } from "./LiveTranslateCard";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
@@ -58,6 +59,7 @@ const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch 
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
+const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -825,6 +827,13 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
+            live={ui.flags["ui_v2.live"] ? (
+              <div className="el-root el-embedded">
+                <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
+                  onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} translate={<LiveTranslateCard run={run} />} />
+              </div>
+            ) : undefined}
             banners={<div className="shell-banners">{banners}</div>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>

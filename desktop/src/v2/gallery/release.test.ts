@@ -34,6 +34,7 @@ describe("a release build", () => {
       expect(chunk.code).not.toContain("mountGallery");
       // The development-only flag override (v2/flags.ts) does not ship either.
       expect(chunk.code).not.toContain("uiflags");
+      expect(chunk.code).not.toContain("assistfixture");
     }
     for (const asset of files.filter((f): f is OutputAsset => f.type === "asset")) {
       expect(asset.fileName).not.toMatch(/gallery/i);

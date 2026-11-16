@@ -134,6 +134,9 @@
   border: 0; background: transparent; color: var(--el-role-text-primary);
 }
 .el-input > input:focus-visible { outline: none; }
+.el-input--area { align-items: stretch; padding-block: var(--el-space-8); }
+.el-input > textarea { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; color: var(--el-role-text-primary); resize: vertical; font: inherit; }
+.el-input > textarea:focus-visible { outline: none; }
 .el-input > input::placeholder { color: var(--el-role-text-secondary); opacity: 1; }
 .el-input > input::-webkit-search-cancel-button { display: none; }
 .el-input .el-button { margin-inline-end: calc(var(--el-space-8) * -1); }
@@ -632,6 +635,14 @@ button.el-step__head { cursor: pointer; }
 .el-assist__captions { margin: 0; padding: var(--el-space-8) 0 0; list-style: none; border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); display: flex; flex-direction: column; gap: var(--el-space-2); }
 .el-assist__who { font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-secondary); }
 .el-assist__partial { color: var(--el-role-text-secondary); }
+
+/* ---- Forms (Live Assist prep) ------------------------------------------------------------------------------- */
+.el-form { display: flex; flex-direction: column; gap: var(--el-space-16); padding: var(--el-space-16); }
+.el-form__row { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3), 1fr)); gap: var(--el-space-16); }
+.el-consent { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-4); padding: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-consent > p { margin: 0; }
+.el-prep__actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--el-space-8); }
+.el-prep__when { inline-size: calc(var(--el-space-64) * 3.5); }
 
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
