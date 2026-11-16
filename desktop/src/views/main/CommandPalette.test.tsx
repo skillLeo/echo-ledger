@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { CommandPalette, paletteCommands, paletteMatches, emptyLine } from "./CommandPalette";
+import { CommandPalette, paletteCommands, paletteMatches, paletteScore, emptyLine } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makeRecording, makeStatus, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
@@ -16,6 +16,15 @@ describe("command palette (B9)", () => {
     expect(paletteMatches("language", { label: "Go to Settings", keywords: "captions language" })).toBe(true);
     expect(paletteMatches("record zoom", { label: "Start recording" })).toBe(false);
     expect(paletteMatches("", { label: "Anything" })).toBe(true);
+  });
+
+  it("ranks a name before a keyword and never matches a word inside another (D-087)", () => {
+    expect(paletteScore("new", { label: "New project", keywords: "create client folder add" })).toBe(3);
+    expect(paletteScore("new", { label: "Record a voice note", keywords: "microphone new dictate n" })).toBe(1);
+    expect(paletteScore("proj new", { label: "New project" })).toBe(2);
+    expect(paletteScore("ew", { label: "New project" })).toBe(0);
+    expect(paletteScore("ording", { label: "Stop recording" })).toBe(0);
+    expect(paletteMatches("record", { label: "Stop recording" })).toBe(true);
   });
 
   it("offers what makes sense right now", () => {
@@ -143,6 +152,40 @@ describe("command palette (B9)", () => {
     fireEvent.change(screen.getByRole("combobox"), { target: { value: "start" } });
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
     expect(props.run).toHaveBeenCalledTimes(1);
+  });
+
+  it("makes a new project from \"new\" and Enter, never a voice note (D-087)", () => {
+    const extra = { newProject: vi.fn() };
+    const run = vi.fn();
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={run} onOpenRecording={vi.fn()} extra={extra} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "new" } });
+    const actions = within(screen.getByRole("group", { name: "Actions" })).getAllByRole("option").map((o) => o.textContent);
+    expect(actions[0]).toBe("New project");
+    expect(actions.indexOf("Record a voice note")).toBeGreaterThan(0);
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(extra.newProject).toHaveBeenCalled();
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("finds pages by their name, group or words, every word typed, and opens the best one with Enter", () => {
+    const open = { devices: vi.fn(), acme: vi.fn() };
+    const pages = [
+      { id: "devices", label: "Devices", group: "Account", keywords: "phones computers", open: open.devices },
+      { id: "p1", label: "Acme Holdings", group: "Projects", open: open.acme },
+    ];
+    const show = (query: string) => {
+      cleanup();
+      render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={vi.fn()} pages={pages} />);
+      fireEvent.change(screen.getByRole("combobox"), { target: { value: query } });
+      return screen.queryByRole("group", { name: "Pages" });
+    };
+    expect(within(show("dev")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
+    expect(within(show("account phones")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
+    expect(show("vices")).toBeNull();
+    show("acme");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(open.acme).toHaveBeenCalled();
   });
 
   it("finds recordings by their transcript and opens one at the moment", async () => {

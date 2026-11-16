@@ -155,6 +155,13 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // D-087: in the window's search a name comes before a keyword: "new" offers New project first (also at 200 % text).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }]].map(([size, viewport]) => [`palette-new${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("new");
+    await page.waitForTimeout(600);
+  }, viewport]),
   // Review: a Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],

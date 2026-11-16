@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { clampSidebar, findPages, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
+import { clampSidebar, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
   SIDEBAR_DEFAULT, stepIndex } from "./shell";
 import { libraryPlaces } from "./folders";
 import { applyPreferences, DEFAULT_PREFERENCES, savePreferences } from "./shell";
@@ -61,21 +61,6 @@ describe("12- or 24-hour times everywhere (Account → Preferences; MANUAL_QA 16
       applyPreferences(DEFAULT_PREFERENCES);
     }
     expect(formatWhen(at, now)).toBe("Today · 2:05 PM");
-  });
-});
-
-describe("pages found by name (the window's search)", () => {
-  const pages = [
-    { id: "home", label: "Home", keywords: "record ready" },
-    { id: "devices", label: "Devices", group: "Account", keywords: "phones computers" },
-    { id: "p1", label: "Acme Holdings", group: "Projects" },
-  ];
-  it("finds a page by its name, its group or its words, every word typed", () => {
-    expect(findPages(pages, "dev").map((p) => p.id)).toEqual(["devices"]);
-    expect(findPages(pages, "account phones").map((p) => p.id)).toEqual(["devices"]);
-    expect(findPages(pages, "ACME").map((p) => p.id)).toEqual(["p1"]);
-    expect(findPages(pages, "  ")).toEqual([]);
-    expect(findPages(pages, "zzz")).toEqual([]);
   });
 });
 
