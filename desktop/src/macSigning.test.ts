@@ -237,6 +237,29 @@ describe.runIf(process.platform !== "win32")("check-mac-archive.sh", () => {
     expect(inside.result.status, inside.result.stderr).toBe(0);
   });
 
+  it("refuses two names for one file: by case, or by Unicode normal form", () => {
+    const twoFiles = (root: string) => {
+      writeFileSync(join(root, "EchoLedger.app/Contents/one.txt"), "1");
+      writeFileSync(join(root, "EchoLedger.app/Contents/two.txt"), "2");
+      return ["EchoLedger.app"];
+    };
+    const byCase = archive(twoFiles, ["-s", ",one.txt$,Readme.txt,", "-s", ",two.txt$,README.txt,"]);
+    expect(byCase.result.status).toBe(1);
+    expect(byCase.result.stderr).toContain("two names for one file (case or Unicode form)");
+    // macOS's tar writes both forms as one, so the listing a tar from elsewhere would give is played by a stand-in.
+    const root = mkdtempSync(join(tmpdir(), "mac-archive-form-"));
+    dirs.push(root);
+    const bin = join(root, "bin");
+    mkdirSync(bin);
+    writeFileSync(join(root, "names"), ["EchoLedger.app/", "EchoLedger.app/Contents/caf\u00e9.txt", "EchoLedger.app/Contents/cafe\u0301.txt", ""].join("\n"));
+    writeFileSync(join(bin, "tar"), `#!/bin/sh\ncase "$1" in -tzf) cat "${join(root, "names")}" ;; *) exit 9 ;; esac\n`);
+    chmodSync(join(bin, "tar"), 0o755);
+    writeFileSync(join(root, "a.tar.gz"), "x");
+    mkdirSync(join(root, "dest"));
+    const byForm = spawnSync("sh", [archiveCheck, join(root, "a.tar.gz"), join(root, "dest")], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    expect(byForm.status).toBe(1);
+    expect(byForm.stderr).toContain("two names for one file (case or Unicode form)");
+  });
 });
 
 describe("the Mac workflow signs only what can be released, and proves the signature", () => {

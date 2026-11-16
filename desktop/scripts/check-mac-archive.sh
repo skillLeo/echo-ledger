@@ -3,7 +3,8 @@
 # (scripts/release-mac.sh). Nothing in the archive may hide from the check of the unpacked app or unpack differently in
 # the updater:
 #   - every entry is EchoLedger.app or under EchoLedger.app/: no other top-level entry, no absolute path;
-#   - no `..` or `.` path component, no empty one, and no path twice (a second copy would replace the first);
+#   - no `..` or `.` path component, no empty one, and no path twice (a second copy would replace the first), also not
+#     as two names that differ only by case or Unicode normal form (one file to APFS, which ignores both);
 #   - no hard link (the bundler never writes one), and every symbolic link points inside EchoLedger.app: by its text,
 #     and followed on disk to the end of any chain of links (cd -P), so a link to a link cannot get out;
 #   - no name with a line break (it would read as two entries here).
@@ -31,6 +32,12 @@ bad=$(printf '%s\n' "$names" | awk '
   seen[n]++ { print "twice: " $0 }
 ')
 [ -z "$bad" ] || fail "$(printf '%s' "$bad" | head -n 1)"
+# The same name to APFS: case and Unicode normal form aside.
+same=$(printf '%s\n' "$names" | LC_ALL=en_US.UTF-8 perl -CS -MUnicode::Normalize -ne '
+  chomp; my $key = lc NFC($_); $key =~ s{/$}{};
+  if (exists $seen{$key}) { print "$seen{$key} and $_\n"; exit } $seen{$key} = $_;
+')
+[ -z "$same" ] || fail "two names for one file (case or Unicode form): $same"
 
 # Hard links: bsdtar lists them as "name link to target", GNU tar with an "h" type.
 if tar -tzvf "$archive" | grep -q -e ' link to ' -e '^h'; then
