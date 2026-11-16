@@ -53,7 +53,10 @@ class MissedRecordingWorker(context: Context, params: WorkerParameters) : Corout
         // (the detector checks the same recordings), so the notice names only calls that really were not recorded.
         withdrawCovered(applicationContext)
         val fresh = detect(applicationContext)
-        if (fresh.isNotEmpty()) MissedNotice.post(applicationContext, fresh)
+        // Only the account signed in now hears of its calls; an item kept for another account waits for it (since v1.8).
+        val current = (applicationContext as EchoLedgerApp).graph.settings.current().account
+        val mine = fresh.filter { Owner.mayUpload(it.owner, current) }
+        if (mine.isNotEmpty()) MissedNotice.post(applicationContext, mine)
         if (MissedRecordingStore.all(applicationContext).any { it.waiting || it.serverCopyToRead }) {
             MissedUploadWorker.enqueue(applicationContext)
         }

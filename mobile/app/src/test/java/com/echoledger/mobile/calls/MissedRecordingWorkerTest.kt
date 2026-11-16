@@ -209,6 +209,21 @@ class MissedRecordingWorkerTest : AppTest() {
     }
 
     @Test
+    fun `the missed-recording notice names only calls of the account signed in now`() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        reachBack()
+        val at = System.currentTimeMillis() - 30 * min
+        CallSightings.update(app) { listOf(seen("zoom", at, at + 5 * min, "us.zoom.videomeetings")) }
+        // Sara signed in after Omar's call, before the detector looked.
+        val sara = Owner.of("https://echo.example", "sara@example.com")
+        MissedRecordingStore.stamp(app, previous = account, next = sara, atMs = at + 10 * min)
+        runBlocking { app.graph.settings.update { it.copy(account = sara) } }
+        runBlocking { androidx.work.testing.TestListenableWorkerBuilder<MissedRecordingWorker>(app).build().doWork() }
+        assertEquals("found, and kept for Omar", account, MissedRecordingStore.all(app).single().owner)
+        assertEquals("Omar's missed call is not announced to Sara", null, notice())
+    }
+
+    @Test
     fun `of two calls the notice names, the one recorded after all leaves it and the other stays, quietly`() {
         org.robolectric.Shadows.shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
         reachBack()
