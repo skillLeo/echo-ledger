@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.0-d (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 1.8.0-e (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -108,7 +108,7 @@ Every addition below is marked **(since v1.1)**.
 | `platform` | `android`, `ios`, `windows`, `macos`, `linux` |
 | `source_device` (derived by server: android/ios→`phone`, windows/macos/linux→`desktop`, admin upload→`web`) | `phone` "Phone" icon `device-phone-mobile` · `desktop` "Desktop" icon `computer-desktop` · `web` "Web" icon `globe-alt` |
 | `source_app` | `whatsapp` "WhatsApp" · `whatsapp_business` "WhatsApp Business" · `whatsapp_web` "WhatsApp Web" (since v1.1) · `google_meet` "Google Meet" · `zoom` "Zoom" · `microsoft_teams` "Microsoft Teams" (since v1.1) · `telegram` "Telegram" · `signal` "Signal" · `messenger` "Messenger" · `instagram` "Instagram" · `skype` "Skype" · `slack` "Slack" · `discord` "Discord" (these seven since v1.3, calls recorded on the phone) · `phone_call` "Phone call" (since v1.2, a SIM call recorded on the phone) · `voice_note` "Voice note" · `other` "Other" |
-| session `status` | `recording`, `uploading`, `processing`, `completed`, `failed` |
+| session `status` | `recording`, `uploading`, `processing`, `completed`, `failed`, `audio_only` (since v1.8: uploaded, not transcribed; apps that don't know it show it like `completed` without a transcript) |
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
@@ -1342,6 +1342,38 @@ ready (`kind` `alternate`); then the new one becomes the `final` transcript and 
 `alternate`. Two versions are kept, the newest and the one before it; a new request replaces a run that is still
 going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
+
+### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e)
+v1.8 P1: when Ready, a call is always recorded as audio, but transcribed only with the person's permission (the
+after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Save audio).
+- `POST /api/sessions` (one-shot create) and `POST /api/sessions/{id}/finish` take `"transcribe": true | false`.
+  Absent = `true`, so older apps keep today's behaviour. With `false` the recording and its screens upload as usual,
+  no transcript is started, and when the upload completes the session's status is `audio_only`. A repeated create or
+  finish (idempotency) never changes the stored choice.
+- Audio-only recordings count for storage, never for minutes; minutes are counted only when a transcript runs.
+- Every Library item carries `transcribe_estimate`: `null` unless the status is `audio_only`, then
+  `{"minutes": 5, "minutes_left": 120}` — the minutes a transcript would use (the recording's length rounded up, times
+  the billed channels of the engine the routing would pick) and the minutes left this month for this workspace
+  (`null` = no limit).
+- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
+- `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
+  `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
+  "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already
+  transcribed or still uploading); `403 budget_exceeded` (`minutes_needed`, `minutes_left`) when the month's limit
+  can't cover it, and nothing starts; `403 needs_transcription_key` as for any transcript on Free.
+- `POST /api/sessions/transcribe` — `sessions:write`: bulk "Transcribe selected", `{"ids": ["…"]}` (1–50) →
+  `202 {"started": ["…"], "skipped": [{"id": "…", "code": "not_audio_only"}], "minutes": 42}`. All or nothing for the
+  budget: when the total exceeds what's left, `403 budget_exceeded` with `minutes_needed` and `minutes_left`, and
+  nothing starts. Ids of another workspace are skipped as `not_found`.
+- `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
+  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects).
+- Projects: `transcribe_calls` = `"ask"` (default) | `"always"` on the project (`GET /api/clients`, `PATCH
+  /api/clients/{id}`): "Always transcribe calls in this project". An app that files a call into such a project sends
+  `"transcribe": true` without asking.
+- App rules, the same on every app (not server data): the "After a call" setting is `ask` (default) |
+  `always_transcribe` | `always_audio`; v1.5's "Keep automatically" and "Ask me" both migrate to `ask` (the new rule
+  is permission first), and a person who wants the old behaviour picks Always transcribe. "Always transcribe calls with
+  this contact" is kept on the phone only and never sent.
 
 ### `GET /api/transcripts/{id}/views` — `library:read` (since v1.2)
 "Show as": reading views of a finished transcript, made with the Claude API (text only, no audio) and kept with

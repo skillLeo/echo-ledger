@@ -52,6 +52,9 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   detection) → an Activity item "Missed recording" with the reason (helper not armed, permission, detection, mic busy,
   crash) and a fix button; the admin panel counts missed recordings per device. **Acceptance:** unit tests per reason;
   API + isolation tests; the admin count.
+  - Server part merged 2026-11-16 (`d71195cb`, reviewed twice; contract 1.8.0-c; full pest 5,712): the endpoint, the
+    "Missed recording" activity item (needs action), Admin → Diagnostics → Missed recordings, 90-day retention with the
+    item. Waiting: the phone detector (b-phone) and the desktop detector.
 - [ ] 0.2b A capture journal per call (detected → armed → started → both channels have audio → saved), kept 7 days,
   in "Copy diagnostics". **Acceptance:** journal tests (rotation at 7 days, the stages in order).
 - [ ] 0.2c The real causes from 7 days of journals on the S25 and the laptop (phone window), each fixed with a test.
