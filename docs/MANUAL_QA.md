@@ -67,8 +67,8 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 
 | ☐ | # | Do this | You should see | Ref |
 |---|---|---|---|---|
-| ☐ | 25 | Use voice input in ChatGPT, Claude and Gemini for about 30 seconds each. | Nothing is recorded. The Record screen says "Ignored: never record". | V-D1 |
-| ☐ | 26 | Record a 20-second voice message in WhatsApp Desktop. | No recording starts. The Record screen says "Playing audio ✗ · Ignored: dictation". | V-D2 |
+| ☐ | 25 | Use voice input in ChatGPT, Claude and Gemini for about 30 seconds each. | Nothing is recorded. Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: <app> at <time>, because it's on your never-record list." (since v1.8.1) | V-D1 |
+| ☐ | 26 | Record a 20-second voice message in WhatsApp Desktop. | No recording starts. Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: WhatsApp at <time>, because no sound is playing, so it looks like dictation." (since v1.8.1) | V-D2 |
 | ☐ | 27 | Start a Google Meet call in Chrome with your second person. Keep typing in Notepad. | Recording starts within about 3 seconds. The pill appears at the top without taking the focus, and your typing is not interrupted. | V-D3, V-D7 |
 | ☐ | 28 | Click a button on the pill straight away. | It works on the first click. Clicks next to the pill reach the window underneath. | V-D7 |
 | ☐ | 29 | In the Meet call, open a ChatGPT tab for a minute, then come back. | The recording continues, still labelled Google Meet. | V-D4 |
@@ -324,7 +324,7 @@ Run these when the change touches the area, or before a release.
 | W-11 | Each global shortcut, and one that another app already uses. | Each works from any app. The conflict shows a message in Settings. |
 | W-12 | Dictation into Word, a browser field, and an app running as administrator. | Text is typed. For the administrator window it is pasted and the old clipboard comes back. |
 | W-14 | Cut the network during an upload, then quit and restart. | The upload resumes. Local audio is deleted only after the server confirms. |
-| C-D1 | Switch Zoom off in **Auto-record apps**, then join a Zoom call. | No recording. The Record screen says "Ignored: auto-record is off for this app". |
+| C-D1 | Switch Zoom off in **Auto-record apps**, then join a Zoom call. | No recording. Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: Zoom at <time>, because auto-record is off for this app." (since v1.8.1) |
 | C-D5 | **Caption style**: Large, Wide, 50 % opacity, compact, auto-hide, a custom Client colour. | The captions restyle at once and fade after the set time. |
 | C-D6 | **Microphone**: pick a USB headset, run the 10-second test, unplug it. | Both meters move and the test plays back. Unplugging falls back with a note. |
 | C-D7 | Block microphone access in Windows privacy settings. | **Microphone** says "Blocked" and **Open settings** opens the right page. |
