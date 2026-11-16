@@ -12,6 +12,11 @@ default-run = "assist-relay"
 name = "assist-relay"
 path = "src/main.rs"
 
+# The load test (LOADTEST.md): the relay binary on mocked models, many sessions at once.
+[[bin]]
+name = "assist-relay-loadtest"
+path = "tools/loadtest.rs"
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "tokio", "ws"] }
 base64 = "0.22.1"
