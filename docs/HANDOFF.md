@@ -1011,3 +1011,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - The Apple Silicon CI job was cancelled three times for lack of GitHub capacity; Mac builds are made locally on the
   owner's Mac (Rust at ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin, not on PATH) until a runner is free.
 - Daily device slot 20:00–21:30 PKT.
+- Merged `773762d3`: b-mac-signing at the reviewed 6699a83c. The self-signed identity is used only on main, v1.1 and v*
+  tags; the release script signs a freshly packed archive of the checked app. Open, logged for later: move the two
+  signing secrets into a GitHub environment that only release refs can use (needs the owner's repo settings).
+- Decided: the pill shape ("full") does not count toward the three corner radii (4/8/12).
