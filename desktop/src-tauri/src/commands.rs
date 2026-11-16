@@ -2472,7 +2472,7 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         browser_automation: settings.browser_automation,
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
-        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(),
+        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(crate::permissions::can_tell_not_asked()),
         allowed_before: state.permissions_allowed_before(&now),
     })
 }

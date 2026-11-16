@@ -178,10 +178,16 @@ impl Memory {
 
     /// Takes in what the system says now. A permission that was granted and is not any more goes on the notice, once
     /// per loss; granted again it leaves the notice and counts as granted. Screen Recording counts only while screen
-    /// moments are wanted: nobody needs to hear about what they do not use.
-    pub fn observe(&self, now: &Permissions, screens_wanted: bool) -> Memory {
+    /// moments are wanted: nobody needs to hear about what they do not use. System audio is read only through the
+    /// privacy call ([`can_tell_not_asked`]): without it, its "unknown" says nothing, so the memory of it stays as it
+    /// was and no loss is noted (D-134). The microphone (AVFoundation) and Screen Recording (CoreGraphics) are read
+    /// through public calls and always count.
+    pub fn observe(&self, now: &Permissions, screens_wanted: bool, can_tell_not_asked: bool) -> Memory {
         let mut next = self.clone();
         for kind in KINDS {
+            if kind == Kind::SystemAudio && !can_tell_not_asked {
+                continue;
+            }
             let had = next.granted.contains(&kind);
             // Allowed in System Settings and waiting for a reopen is granted: nothing went.
             let allowed = matches!(now.of(kind), Access::Allowed | Access::Reopen);
@@ -216,11 +222,14 @@ impl Memory {
             .collect()
     }
 
-    /// The one calm sentence about what went; none when nothing did.
-    pub fn sentence(&self) -> Option<String> {
+    /// The one calm sentence about what went; none when nothing did. A loss is said only while it can be checked: system
+    /// audio's needs the privacy call ([`can_tell_not_asked`]), so without it nothing is said about system audio, not
+    /// even a loss noted in an earlier run (D-134); a call that goes without sound still says so while it records.
+    pub fn sentence(&self, can_tell_not_asked: bool) -> Option<String> {
         let names: Vec<&str> = KINDS
             .into_iter()
             .filter(|k| self.notice.contains(k))
+            .filter(|k| *k != Kind::SystemAudio || can_tell_not_asked)
             .map(|k| match k {
                 Kind::Microphone => "the microphone",
                 Kind::SystemAudio => "system audio",
@@ -353,56 +362,56 @@ mod tests {
 
     #[test]
     fn a_permission_that_goes_is_said_once_per_loss() {
-        let start = Memory::default().observe(&ON, true);
+        let start = Memory::default().observe(&ON, true, true);
         assert_eq!(start.notice, Vec::<Kind>::new());
         assert_eq!(start.granted.len(), 3);
 
         // An update: macOS forgot the microphone.
-        let lost = start.observe(&Permissions { microphone: Access::Unknown, ..ON }, true);
+        let lost = start.observe(&Permissions { microphone: Access::Unknown, ..ON }, true, true);
         assert_eq!(lost.notice, vec![Kind::Microphone]);
-        assert!(lost.sentence().unwrap().contains("the microphone"));
+        assert!(lost.sentence(true).unwrap().contains("the microphone"));
 
         // The person dismissed it; the next starts say nothing more.
         let dismissed = Memory { notice: Vec::new(), ..lost };
-        let later = dismissed.observe(&Permissions { microphone: Access::Unknown, ..ON }, true);
+        let later = dismissed.observe(&Permissions { microphone: Access::Unknown, ..ON }, true, true);
         assert_eq!(later.notice, Vec::<Kind>::new(), "no nagging");
 
         // Granted again, then lost again: that is a new loss.
-        let again = later.observe(&ON, true);
+        let again = later.observe(&ON, true, true);
         assert!(again.granted.contains(&Kind::Microphone));
-        let lost_again = again.observe(&Permissions { microphone: Access::Denied, ..ON }, true);
+        let lost_again = again.observe(&Permissions { microphone: Access::Denied, ..ON }, true, true);
         assert_eq!(lost_again.notice, vec![Kind::Microphone]);
     }
 
     #[test]
     fn a_permission_granted_again_leaves_the_notice_by_itself() {
-        let lost = Memory::default().observe(&ON, true).observe(&Permissions { system_audio: Access::Denied, ..ON }, true);
+        let lost = Memory::default().observe(&ON, true, true).observe(&Permissions { system_audio: Access::Denied, ..ON }, true, true);
         assert_eq!(lost.notice, vec![Kind::SystemAudio]);
-        assert_eq!(lost.observe(&ON, true).notice, Vec::<Kind>::new());
+        assert_eq!(lost.observe(&ON, true, true).notice, Vec::<Kind>::new());
     }
 
     #[test]
     fn screen_recording_counts_only_while_screen_moments_are_wanted() {
-        let start = Memory::default().observe(&ON, false);
-        let without = start.observe(&Permissions { screen: Access::Denied, ..ON }, false);
+        let start = Memory::default().observe(&ON, false, true);
+        let without = start.observe(&Permissions { screen: Access::Denied, ..ON }, false, true);
         assert_eq!(without.notice, Vec::<Kind>::new());
         assert!(!without.granted.contains(&Kind::Screen), "forgotten: a later grant counts afresh");
-        assert_eq!(start.observe(&Permissions { screen: Access::Denied, ..ON }, true).notice, vec![Kind::Screen]);
+        assert_eq!(start.observe(&Permissions { screen: Access::Denied, ..ON }, true, true).notice, vec![Kind::Screen]);
     }
 
     #[test]
     fn something_never_granted_was_not_lost() {
-        let first = Memory::default().observe(&Permissions { microphone: Access::Unknown, system_audio: Access::Denied, screen: Access::Denied }, true);
+        let first = Memory::default().observe(&Permissions { microphone: Access::Unknown, system_audio: Access::Denied, screen: Access::Denied }, true, true);
         assert_eq!(first, Memory::default());
     }
 
     #[test]
     fn a_permission_allowed_before_but_not_asked_now_is_said_as_allowed_before() {
-        let start = Memory::default().observe(&ON, true);
+        let start = Memory::default().observe(&ON, true, true);
         assert_eq!(start.ever, vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
         // macOS calls the microphone "not asked" now (another build, a reset, a migrated Mac): allowed before.
         let fresh = Permissions { microphone: Access::Unknown, ..ON };
-        let after = start.observe(&fresh, true);
+        let after = start.observe(&fresh, true, true);
         assert_eq!(after.allowed_before(&fresh, true), vec![Kind::Microphone]);
         // Dismissing the banner forgets the notice, never what was granted.
         let dismissed = Memory { notice: Vec::new(), ..after.clone() };
@@ -412,19 +421,19 @@ mod tests {
         assert!(Memory::default().allowed_before(&fresh, true).is_empty());
         // A memory saved before this field existed learns it from what it knew.
         let old: Memory = serde_json::from_str(r#"{"granted":[],"notice":["microphone"]}"#).unwrap();
-        assert_eq!(old.observe(&fresh, true).allowed_before(&fresh, true), vec![Kind::Microphone]);
+        assert_eq!(old.observe(&fresh, true, true).allowed_before(&fresh, true), vec![Kind::Microphone]);
     }
 
     #[test]
     fn what_macos_cannot_say_or_a_permission_waiting_for_a_reopen_is_never_allowed_before() {
-        let start = Memory::default().observe(&ON, true);
+        let start = Memory::default().observe(&ON, true, true);
         let unknown = Permissions { microphone: Access::Unknown, system_audio: Access::Unknown, screen: Access::Unknown };
         // Without the privacy call, system audio and Screen Recording are only unknown: nothing is said about them.
-        assert_eq!(start.observe(&unknown, true).allowed_before(&unknown, false), vec![Kind::Microphone]);
-        assert_eq!(start.observe(&unknown, true).allowed_before(&unknown, true), vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
+        assert_eq!(start.observe(&unknown, true, true).allowed_before(&unknown, false), vec![Kind::Microphone]);
+        assert_eq!(start.observe(&unknown, true, true).allowed_before(&unknown, true), vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
         // Screen Recording switched on in System Settings while EchoLedger ran: waiting for a reopen, never "remove it".
         let reopen = Permissions { screen: Access::Reopen, ..ON };
-        let waiting = start.observe(&Permissions { screen: Access::Denied, ..ON }, true).observe(&reopen, true);
+        let waiting = start.observe(&Permissions { screen: Access::Denied, ..ON }, true, true).observe(&reopen, true, true);
         assert!(waiting.allowed_before(&reopen, true).is_empty());
         assert!(waiting.notice.is_empty(), "allowed again: the loss is not said");
         assert!(waiting.granted.contains(&Kind::Screen));
@@ -438,13 +447,36 @@ mod tests {
     }
 
     #[test]
+    fn system_audio_is_never_said_lost_without_the_privacy_call() {
+        // D-134: without the privacy call, system audio reads "unknown" whatever is true: nothing is noted or said.
+        let start = Memory::default().observe(&ON, true, true);
+        let unknown = Permissions { system_audio: Access::Unknown, ..ON };
+        let without = start.observe(&unknown, true, false);
+        assert!(without.notice.is_empty(), "a guess is not a loss");
+        assert!(without.granted.contains(&Kind::SystemAudio), "nothing is known, so nothing is forgotten");
+        assert_eq!(without.sentence(false), None);
+        // With the call, the same reading is a real loss and is said.
+        let with = start.observe(&unknown, true, true);
+        assert_eq!(with.notice, vec![Kind::SystemAudio]);
+        assert_eq!(with.sentence(true).as_deref(), Some("macOS no longer lets EchoLedger use system audio."));
+        // A loss noted in an earlier run is not said while it cannot be checked; the others still are.
+        assert_eq!(with.sentence(false), None);
+        let both = Memory { notice: vec![Kind::Microphone, Kind::SystemAudio], ..with.clone() };
+        assert_eq!(both.sentence(false).as_deref(), Some("macOS no longer lets EchoLedger use the microphone."));
+        // The microphone is read through a public call: its loss is said without the privacy call too.
+        let no_mic = start.observe(&Permissions { microphone: Access::Unknown, system_audio: Access::Unknown, ..ON }, true, false);
+        assert_eq!(no_mic.notice, vec![Kind::Microphone]);
+        assert_eq!(no_mic.sentence(false).as_deref(), Some("macOS no longer lets EchoLedger use the microphone."));
+    }
+
+    #[test]
     fn the_sentence_is_one_calm_line() {
         let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone], ever: Vec::new() };
-        let line = two.sentence().unwrap();
+        let line = two.sentence(true).unwrap();
         assert!(line.contains("the microphone and system audio"), "{line}");
         // One short sentence on the banner (its Set up button opens the steps).
         assert_eq!(line, "macOS no longer lets EchoLedger use the microphone and system audio.");
-        assert_eq!(Memory::default().sentence(), None);
+        assert_eq!(Memory::default().sentence(true), None);
     }
 
     #[test]

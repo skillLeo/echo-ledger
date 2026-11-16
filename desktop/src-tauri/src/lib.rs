@@ -269,7 +269,7 @@ impl AppState {
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
             let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
-            let next = memory.observe(&now, screens_wanted);
+            let next = memory.observe(&now, screens_wanted, permissions::can_tell_not_asked());
             if next != *memory {
                 next.save(&permissions::Memory::path(&self.data_dir));
                 *memory = next;
