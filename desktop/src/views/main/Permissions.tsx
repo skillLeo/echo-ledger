@@ -169,7 +169,11 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
     }
   };
   const button = (action: StepAction) => {
-    const cls = `btn${step.main === action ? " primary" : action === "settings" && access === "unknown" ? " ghost" : ""}`;
+    // The classic look stays as it was (only the new screens fill the main button): Quit & reopen filled; System
+    // Settings filled where it comes first (allowed before, cannot tell, stuck), ghost beside Allow, plain when off.
+    const settingsFirst = step.main === "settings" && (access === "reopen" || (access === "unknown" && permissions?.platform !== "windows"));
+    const cls = action === "reopen" ? "btn primary" : action === "allow" ? "btn"
+      : settingsFirst ? "btn primary" : access === "unknown" ? "btn ghost" : "btn";
     switch (action) {
       case "reopen": return <button key={action} type="button" className={cls} onClick={() => void reopen()}>Quit &amp; reopen</button>;
       case "allow": return <button key={action} type="button" className={cls} disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>;
