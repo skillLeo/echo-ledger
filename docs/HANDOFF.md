@@ -1025,3 +1025,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   `queue:restart` and drained workers (VPS) or a minute after `migrate` (shared hosting).
 - Merged `b16bfa64` (b-relay at the reviewed 266df3ca): the Live Assist relay with auth, the budget per token,
   the capped context, connection limits, the load test and the deploy notes; the streaming clients are next.
+- Merged b-phone-sweep at the reviewed 4baffd02: batch 1 (P-002–P-005: no delete of an unuploaded recording without
+  a confirmation or Undo; Discard with a delayed delete that survives process death), P-076 and the P-001
+  follow-ups. Batch 2 next, with the review minors (Saved · Undo through the delayed delete, an atomic
+  finishDiscard).
