@@ -2,12 +2,17 @@ package com.echoledger.mobile.calls
 
 import android.Manifest
 import android.app.NotificationManager
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
+import androidx.work.testing.WorkManagerTestInitHelper
 import com.echoledger.mobile.overlay.AfterCallChip
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.testsupport.AppTest
@@ -30,8 +35,9 @@ import org.robolectric.shadows.ShadowSettings
 
 /**
  * After a call (since v1.5): "Keep automatically" keeps the call and shows "Saved · … · Undo" for 6 s while the upload
- * waits; "Ask me" shows the ✓ / ✕ chip and keeps the call after 10 s; without the overlay permission a notification
- * does the same job.
+ * waits; "Ask me" shows the ✓ / Discard chip and keeps the call after 10 s; without the overlay permission a
+ * notification does the same job. Since v1.8.1 (bug P-003) the chip's Discard deletes nothing until "Discarded · Undo"
+ * is over.
  */
 class PostCallPromptTest : AppTest() {
     @get:Rule
@@ -167,9 +173,104 @@ class PostCallPromptTest : AppTest() {
 
         compose.onNodeWithText("Call with Omar · 4:12").performClick()
         compose.onNodeWithContentDescription("Keep").performClick()
-        compose.onNodeWithContentDescription("Discard").performClick()
+        compose.onNodeWithText("Discard").performClick()
         assertEquals(1, titled)
         assertEquals(1, kept)
         assertEquals(1, discarded)
+    }
+
+    @Test
+    fun `the chip's Discard is a trash with its word, never an x that reads as close`() {
+        var discarded = 0
+        compose.setContent {
+            EchoLedgerTheme("dark") {
+                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.ASK, 10_000, onKeep = {}, onDiscard = {
+                    discarded++
+                }, onUndo = {}, onTitle = {})
+            }
+        }
+
+        compose.onNodeWithText("Discard").assertIsDisplayed().assertHasClickAction().performClick()
+        assertEquals(1, discarded)
+    }
+
+    @Test
+    fun `Discarded names the call and offers Undo`() {
+        var undone = 0
+        compose.setContent {
+            EchoLedgerTheme("dark") {
+                AfterCallChip("Call with Omar", 252_000, DecisionPopup.Mode.DISCARDED, DecisionPopup.DISCARDED_MS, onKeep = {
+                }, onDiscard = {}, onUndo = { undone++ }, onTitle = {})
+            }
+        }
+
+        compose.onNodeWithText("Discarded · Call with Omar · 4:12").assertIsDisplayed()
+        compose.onNodeWithText("Undo").performClick()
+        assertEquals(1, undone)
+        compose.onAllNodesWithText("Discard").assertCountEquals(0)
+    }
+
+    private fun discardWork(id: String) =
+        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DiscardLaterWorker.workName(id)).get(10, TimeUnit.SECONDS)
+
+    private fun timeoutWork(id: String) =
+        WorkManager.getInstance(app).getWorkInfosForUniqueWork(DecisionTimeoutWorker.workName(id)).get(10, TimeUnit.SECONDS)
+
+    @Test
+    fun `Discard on the chip deletes nothing until Discarded and its Undo time are over`() {
+        overlayAllowed(true)
+        val rec = call(state = "pending_decision")
+        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
+
+        DecisionPopup.discard(app, rec, "dark")
+        assertEquals(DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue("the tap deletes nothing", app.graph.recordings.encryptedFile("call-1").exists())
+        assertTrue("it waits for nobody any more", app.graph.recordings.pendingDecisions().isEmpty())
+        assertTrue("and is not kept after ten seconds", timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+
+        ShadowLooper.idleMainLooper(DecisionPopup.DISCARDED_MS + 1, TimeUnit.MILLISECONDS)
+        assertFalse("Discarded leaves after 5 s", DecisionPopup.isShowing)
+        assertTrue("the file outlasts it, so a late Undo still finds it", app.graph.recordings.encryptedFile("call-1").exists())
+
+        // WorkManager keeps the delete when the app is closed or killed meanwhile; it runs only when the time is over.
+        val work = discardWork("call-1").single()
+        assertEquals(WorkInfo.State.ENQUEUED, work.state)
+        assertTrue(work.initialDelayMillis >= DecisionPopup.DISCARDED_MS)
+        WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(work.id)
+        pumpUntil("the call to be deleted") { app.graph.recordings.get("call-1") == null }
+        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `Undo on Discarded puts the call back on its chip, which keeps it after ten seconds as before`() {
+        overlayAllowed(true)
+        val rec = call(state = "pending_decision")
+        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
+        DecisionPopup.discard(app, rec, "dark")
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+
+        DecisionPopup.undoDiscard(app, "call-1", "dark")
+        pumpUntil("the chip to ask again") { DecisionPopup.showingMode == DecisionPopup.Mode.ASK }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertNull(app.peekRecording("call-1")?.discardAt)
+        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
+
+        ShadowLooper.idleMainLooper(DecisionPopup.ASK_KEEP_MS + 1, TimeUnit.MILLISECONDS)
+        pumpUntil("kept") { app.peekRecording("call-1")?.state == "queued" }
+    }
+
+    @Test
+    fun `a call decided elsewhere meanwhile is not shown as discarded`() {
+        overlayAllowed(true)
+        val rec = call(state = "pending_decision")
+        PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
+        runBlocking { Decisions.apply(app, "call-1", keep = true) }
+
+        DecisionPopup.discard(app, rec, "dark")
+        pumpUntil("the chip to go") { !DecisionPopup.isShowing }
+        assertEquals("queued", app.peekRecording("call-1")?.state)
+        assertTrue(discardWork("call-1").isEmpty())
     }
 }

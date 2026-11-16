@@ -1,4 +1,7 @@
-# Live Assist contract — revision 1.9.0-d (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-e (frozen 2026-11-17 for the sprint)
+
+1.9.0-e: the fields of `suggestion_start` and `suggestion_end` that carry fallbacks and upgrades, and the
+`mode_changed` reasons.
 
 1.9.0-d: the connection messages (`ready`, `auth`, `token_refresh` / `token_refreshed`), the full `error` shape,
 `seq`, the refusals before the upgrade (incl. `503 relay_busy`), the close codes, the token rules on refresh and
@@ -157,6 +160,19 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   list before the first connection. A pin mismatch refuses the connection with a clear message; recording is
   unaffected.
 - Clients set `TCP_NODELAY` on the socket.
+
+### Suggestions, fallbacks and upgrades (since 1.9.0-e)
+
+- `suggestion_start` also carries `turn_id` (the `other` turn it answers), `kind` (`answer`, `upgrade`, `rewrite`,
+  `fallback`), `speculative` (started on a partial; it may be cancelled) and `replaces` (the `suggestion_id` this one
+  replaces on the card, or `null`).
+- `suggestion_end` also carries `status`: `complete`, `cancelled` (the person kept talking, or `cancel`),
+  `superseded` (replaced by the suggestion whose `replaces` names it: a fallback after a provider failure mid-answer,
+  or a Balanced upgrade), or `failed` (followed by an `error`). A card shows the newest suggestion of a turn and drops
+  a superseded one when its replacement's first `token` arrives.
+- `mode_changed.reason`: `budget` (spend reached the next step down), `budget_restored` (a refreshed token raised
+  the budget), `plan` (the plan allows fewer modes), `assist_time` (the session's assist seconds ran out).
+- A provider's refusal is never shown: the suggestion ends `superseded` or `failed`, and the fallback answers.
 
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft
