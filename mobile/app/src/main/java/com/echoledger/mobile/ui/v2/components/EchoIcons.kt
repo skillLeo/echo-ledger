@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
@@ -69,6 +70,7 @@ object EchoIcons {
     val Move: ImageVector get() = Icons.Outlined.DriveFileMove
     val Delete: ImageVector get() = Icons.Outlined.DeleteOutline
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
+    val SignOut: ImageVector get() = Icons.AutoMirrored.Outlined.Logout
     val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 
     // Navigation

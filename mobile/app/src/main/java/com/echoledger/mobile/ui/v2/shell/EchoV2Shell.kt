@@ -32,6 +32,7 @@ import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
 import com.echoledger.mobile.ui.v2.library.V2TrashScreen
+import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
@@ -63,7 +64,11 @@ class ClassicScreens(
     val live: @Composable () -> Unit,
     val ask: @Composable () -> Unit,
     val settings: @Composable (onBack: () -> Unit) -> Unit,
-    val upgrade: () -> Unit
+    val upgrade: () -> Unit,
+    /** One classic settings page by its SettingsIndex id (SettingsScreen with openPage), for Settings v2. */
+    val settingsPage: @Composable (page: String, onBack: () -> Unit) -> Unit = { _, onBack -> settings(onBack) },
+    /** The classic setup screens, until `ui_v2.setup_health` is on. */
+    val setup: @Composable (onBack: () -> Unit) -> Unit = { onBack -> settings(onBack) }
 )
 
 /**
@@ -125,14 +130,26 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
     Column(Modifier.fillMaxSize().statusBarsPadding()) {
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (val r = route) {
-                V2Route.Settings -> V2SettingsHome(
-                    vm = vm,
-                    flags = flags,
-                    onSwitchToClassic = onSwitchToClassic,
-                    onUpgrade = classic.upgrade,
-                    onAllSettings = { route = V2Route.ClassicSettings },
-                    onBack = { route = V2Route.Tabs }
-                )
+                V2Route.Settings -> if (flags.settings) {
+                    V2SettingsScreen(
+                        vm = vm,
+                        flags = flags,
+                        onSwitchToClassic = onSwitchToClassic,
+                        onUpgrade = classic.upgrade,
+                        openClassicPage = classic.settingsPage,
+                        setupPage = { highlight, back -> SetupPage(vm, flags, classic, highlight, back) },
+                        onBack = { route = V2Route.Tabs }
+                    )
+                } else {
+                    V2SettingsHome(
+                        vm = vm,
+                        flags = flags,
+                        onSwitchToClassic = onSwitchToClassic,
+                        onUpgrade = classic.upgrade,
+                        onAllSettings = { route = V2Route.ClassicSettings },
+                        onBack = { route = V2Route.Tabs }
+                    )
+                }
 
                 V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
 
@@ -182,4 +199,10 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
             )
         }
     }
+}
+
+/** Settings › Setup & health: the v2 wizard and checks with `ui_v2.setup_health`, else the classic setup. */
+@Composable
+private fun SetupPage(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens, highlight: String?, onBack: () -> Unit) {
+    classic.setup(onBack)
 }

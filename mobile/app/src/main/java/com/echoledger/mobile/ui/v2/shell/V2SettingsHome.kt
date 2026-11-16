@@ -125,42 +125,10 @@ fun V2SettingsHomeContent(
 ) {
     val c = EchoV2.colors
     val text = v2Text
-    val cardPadding = Modifier.padding(
-        start = EchoTokens.Layout.pagePaddingMobile,
-        end = EchoTokens.Layout.pagePaddingMobile,
-        top = EchoTokens.Space.s8,
-        bottom = EchoTokens.Space.s8
-    )
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(text.settings, onBack = onBack)
         LazyColumn(Modifier.weight(1f)) {
-            item {
-                when (state) {
-                    ProfileState.Loading -> EchoCard(cardPadding) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
-                        ) {
-                            EchoSkeletonCircle()
-                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                                EchoSkeletonBlock(fraction = 0.5f, height = EchoTokens.Space.s16)
-                                EchoSkeletonBlock(fraction = 0.7f)
-                            }
-                        }
-                        EchoSkeletonBlock(fraction = 0.8f)
-                    }
-
-                    ProfileState.Error -> EchoBanner(
-                        text.accountError,
-                        EchoBannerKind.Error,
-                        cardPadding,
-                        actionLabel = text.tryAgain,
-                        onAction = onRetry
-                    )
-
-                    is ProfileState.Ready -> ProfileCard(state.profile, onUpgrade, cardPadding)
-                }
-            }
+            item { ProfileCardSlot(state, onUpgrade, onRetry) }
             if (flags.offersClassicSwitch) {
                 item {
                     EchoSwitch(
@@ -173,6 +141,40 @@ fun V2SettingsHomeContent(
             }
             item { EchoSettingRow(text.allSettings, icon = EchoIcons.Settings, onClick = onAllSettings) }
         }
+    }
+}
+
+/** The profile card in its three states: loading (static skeleton), the account didn't load (banner), or ready. */
+@Composable
+fun ProfileCardSlot(state: ProfileState, onUpgrade: () -> Unit, onRetry: () -> Unit) {
+    val text = v2Text
+    val cardPadding = Modifier.padding(
+        start = EchoTokens.Layout.pagePaddingMobile,
+        end = EchoTokens.Layout.pagePaddingMobile,
+        top = EchoTokens.Space.s8,
+        bottom = EchoTokens.Space.s8
+    )
+    when (state) {
+        ProfileState.Loading -> EchoCard(cardPadding) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
+                EchoSkeletonCircle()
+                Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                    EchoSkeletonBlock(fraction = 0.5f, height = EchoTokens.Space.s16)
+                    EchoSkeletonBlock(fraction = 0.7f)
+                }
+            }
+            EchoSkeletonBlock(fraction = 0.8f)
+        }
+
+        ProfileState.Error -> EchoBanner(
+            text.accountError,
+            EchoBannerKind.Error,
+            cardPadding,
+            actionLabel = text.tryAgain,
+            onAction = onRetry
+        )
+
+        is ProfileState.Ready -> ProfileCard(state.profile, onUpgrade, cardPadding)
     }
 }
 

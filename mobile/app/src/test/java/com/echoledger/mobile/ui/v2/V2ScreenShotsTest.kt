@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
@@ -17,6 +18,8 @@ import com.echoledger.mobile.ui.v2.library.TranscriptState
 import com.echoledger.mobile.ui.v2.library.V2LibraryContent
 import com.echoledger.mobile.ui.v2.library.V2RecordingContent
 import com.echoledger.mobile.ui.v2.library.V2TrashContent
+import com.echoledger.mobile.ui.v2.settings.AppearancePage
+import com.echoledger.mobile.ui.v2.settings.V2SettingsRoot
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.Profile
 import com.echoledger.mobile.ui.v2.shell.ProfileState
@@ -179,5 +182,41 @@ class V2ScreenShotsTest {
             onRetry = {},
             onBack = {}
         )
+    }
+
+    @Test
+    fun settingsV2() = shootAll("settings-v2") { urdu, _ ->
+        V2SettingsRoot(
+            settings = AppSettings(themeMode = "system", quietHours = true),
+            profile = ProfileState.Ready(
+                Profile(if (urdu) "عائشہ صدیقی" else "Ayesha Siddiqui", "ayesha@bilaltraders.pk", "Starter", 212, 300, 1_240_000_000, 318)
+            ),
+            signedIn = true,
+            onUpgrade = {},
+            onRetryProfile = {},
+            onOpen = { _, _ -> },
+            onSignOut = {},
+            onBack = {}
+        )
+    }
+
+    @Test
+    fun settingsV2Search() = shootAll("settings-v2-search") { urdu, _ ->
+        V2SettingsRoot(
+            settings = AppSettings(),
+            profile = ProfileState.Loading,
+            signedIn = true,
+            onUpgrade = {},
+            onRetryProfile = {},
+            onOpen = { _, _ -> },
+            onSignOut = {},
+            onBack = {},
+            initialQuery = if (urdu) "زبان" else "language"
+        )
+    }
+
+    @Test
+    fun settingsV2Appearance() = shootAll("settings-v2-appearance") { _, _ ->
+        AppearancePage(AppSettings(), {}, UiFlags(mapOf("ui_v2.shell" to true)), {}, "appearance.theme", {})
     }
 }
