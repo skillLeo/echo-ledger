@@ -209,7 +209,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "share_privacy.one_window", title: "I share one window or a tab", page: "share_privacy", section: "Meeting apps", kind: "switch", requires: { os: "macos" }, resettable: true,
     description: "EchoLedger stays on screen when you share your whole screen.",
     keywords: ["one window", "tab", "whole screen", "safety net"], ru: ["ek window", "tab"], ur: ["ایک ونڈو", "ٹیب"] },
-  { id: "share_privacy.demo", title: "Show in screen share for 10 minutes", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
+  { id: "share_privacy.demo", title: "Show in screen share for 10 min", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"], ru: ["dikhao", "demo"], ur: ["دکھائیں"] },
   { id: "share_privacy.hide_all", title: "Hide EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info",
     keywords: ["shortcut", "hide windows", "show echoledger windows", "hidden"], ru: ["windows chupao", "chupao"], ur: ["ونڈوز چھپائیں", "چھپائیں"] },
   { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"], ru: ["doosri screen"], ur: ["دوسری اسکرین"] },

@@ -321,7 +321,7 @@ const commands: Record<string, (args: Args) => unknown> = {
           { key: "microphone_test", title: "Microphone test", state: "ok", detail: "Heard your microphone (loudest about -28 dB).", fix: null },
           { key: "system_audio_test", title: "System audio test", state: "off", detail: "Not tested: system audio is off for EchoLedger.", fix: { label: "Open System Settings", settings: "system_audio" } },
           { key: "meeting_apps", title: "Meeting apps", state: "ok", detail: "Installed: Zoom, Chrome, Safari. Not installed: Teams, WhatsApp, Edge, Arc. EchoLedger recognises all of them.", fix: null },
-          { key: "overlay_windows", title: "Captions and pill on screen", state: "ok", detail: "The captions and the pill are on screen, above other windows, in every Space and over full-screen meetings.", fix: null },
+          { key: "overlay_windows", title: "Captions and recording controls on screen", state: "ok", detail: "The captions and the recording controls are on screen, above other windows, in every Space and over full-screen meetings.", fix: null },
           { key: "screen_capture_test", title: "Screen moment test", state: "ok", detail: "One frame captured and thrown away. Nothing was stored.", fix: null },
         ],
       }
