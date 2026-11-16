@@ -234,3 +234,24 @@ async fn a_refusal_or_a_drop_before_the_first_word_falls_back_inside_the_same_su
         assert!(asked.elapsed() < Duration::from_millis(1500), "{turn}: {:?}", asked.elapsed());
     }
 }
+
+#[tokio::test]
+async fn without_keys_the_app_is_told_to_ask_its_admin_and_the_vendor_stays_in_the_log() {
+    let server = MockHttp::start().await;
+    let providers = Providers::live(Arc::new(ProviderKeys::default()), &server.endpoints(), Retry::default());
+    let h = harness_on(RelayConfig::built_in(), providers);
+    let mut s = h.connect(fast_claims("s-nokeys"));
+    assert_eq!(s.next().await["type"], "ready");
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("error").await;
+    let error = seen.last().unwrap();
+    assert_eq!(error["code"], "provider_not_configured");
+    assert_eq!(error["message"], "Live Assist is not set up on the server yet. Ask your admin.");
+    for vendor in ["Anthropic", "Groq", "OpenAI", "Gemini", "Claude", "gpt"] {
+        assert!(!error.to_string().contains(vendor), "{error}");
+    }
+    let record = h.telemetry.suggestions().pop().expect("a record");
+    assert_eq!((record.provider, record.error), (ProviderKind::Groq, Some("provider_not_configured")), "the fallback's provider, in the log");
+    assert!(server.requests(ANTHROPIC).is_empty() && server.requests(GROQ).is_empty());
+}

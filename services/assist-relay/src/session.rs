@@ -1508,7 +1508,8 @@ fn retryable(error: ProviderError) -> bool {
 /// The sentence the app may show for a failed suggestion.
 fn plain_error(error: ProviderError) -> String {
     match error {
-        ProviderError::NotConfigured(kind) => format!("{} is not configured on this relay, so no suggestion could be made.", kind.label()),
+        // No vendor name for the app: the provider is in the log (the suggestion record's `provider`) only.
+        ProviderError::NotConfigured(_) => "Live Assist is not set up on the server yet. Ask your admin.".to_owned(),
         ProviderError::Timeout => "The model did not answer in time. Try again.".to_owned(),
         ProviderError::Declined => "The model declined to answer this one.".to_owned(),
         ProviderError::Unavailable | ProviderError::RateLimited | ProviderError::Protocol => {
