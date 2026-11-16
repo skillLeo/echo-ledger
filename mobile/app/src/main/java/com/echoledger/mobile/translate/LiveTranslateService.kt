@@ -24,6 +24,7 @@ import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.MainActivity
 import com.echoledger.mobile.R
+import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.data.UsageReport
 import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.UsageWorker
@@ -250,6 +251,9 @@ class LiveTranslateService :
             return
         }
         overlay = o
+        // The notification's Hide / Show follows Hide EchoLedger windows too.
+        stopGuard?.invoke()
+        stopGuard = ShareGuard.observe { main.post { updateNotification() } }
         applyStyle()
         startThermalGuard()
         main.post(ticker)
@@ -375,6 +379,8 @@ class LiveTranslateService :
         session = null
         overlay?.hideAll()
         overlay = null
+        stopGuard?.invoke()
+        stopGuard = null
         saveText()
         running.value = null
     }
@@ -430,6 +436,8 @@ class LiveTranslateService :
     // ---- box actions ----------------------------------------------------------------------------------------------
 
     override fun onGripTap() {
+        // While the floating windows are hidden the box stays untouchable: no Edit from the notification either.
+        if (!ShareGuard.textVisible.value) return updateNotification()
         overlay?.state(machine.on(BoxEvent.GripTap))
         updateNotification()
     }
@@ -461,6 +469,9 @@ class LiveTranslateService :
 
     private var settingsJob: Job? = null
 
+    /** Stops following Hide EchoLedger windows for the notification. */
+    private var stopGuard: (() -> Unit)? = null
+
     /**
      * Changes made in Settings while Live Translate runs apply at once (since 1.3.0.1): the grip dot on or off, the
      * box's style. Before, they waited for the next start.
@@ -482,8 +493,10 @@ class LiveTranslateService :
         }
     }
 
+    /** The notification's Show: the box back, and the floating windows the person hid (Hide EchoLedger windows). */
     private fun onShow() {
-        overlay?.state(machine.on(BoxEvent.Show))
+        ShareGuard.setHidden(false)
+        if (::machine.isInitialized) overlay?.state(machine.on(BoxEvent.Show))
         updateNotification()
     }
 
@@ -574,7 +587,8 @@ class LiveTranslateService :
     private fun notification(): Notification {
         val paused = ::machine.isInitialized && machine.state == BoxState.PAUSED
         val editing = ::machine.isInitialized && machine.state == BoxState.EDIT
-        val hidden = ::machine.isInitialized && machine.state == BoxState.HIDDEN
+        // Hidden by the box's own Hide, or with every floating window (Hide EchoLedger windows): Show brings both back.
+        val hidden = (::machine.isInitialized && machine.state == BoxState.HIDDEN) || ShareGuard.hiddenByUser.value
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(mode.label)

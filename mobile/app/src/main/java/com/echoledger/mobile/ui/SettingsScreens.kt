@@ -19,6 +19,7 @@ import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -97,6 +98,7 @@ import com.echoledger.mobile.core.SettingsCatalogue
 import com.echoledger.mobile.core.SettingsEntry
 import com.echoledger.mobile.core.SettingsGroup
 import com.echoledger.mobile.core.SettingsIndex
+import com.echoledger.mobile.core.ShareGuard
 import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
@@ -730,7 +732,7 @@ private fun LiveCaptionsCard(vm: MainViewModel, settings: AppSettings) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Live captions while recording")
-                Text("Floating bubble; needs the overlay permission", color = Brand.Muted, fontSize = 12.sp)
+                Text("A floating window over the call; needs Display over other apps", color = Brand.Muted, fontSize = 12.sp)
             }
             Switch(
                 checked = settings.captionsEnabled,
@@ -778,47 +780,54 @@ private fun ConsentCard(vm: MainViewModel, settings: AppSettings) {
 }
 
 /**
- * Settings → Privacy & data → During screen sharing (since v1.8.1). Android 15 and later tell the app when its cards
- * are seen in a screen share or recording; earlier versions rely on the Hide button and the Quick Settings tile.
+ * Settings → Privacy & data → During screen sharing (since v1.8.1; names from docs/DESIGN_SYSTEM.md "Screen-share
+ * privacy names"): Private (black box), the default, stored as "hide" (the v1.8.1 "black_box" reads as Private too), or
+ * Show. Android never says when a floating window is in a screen share, so the black box does not wait for a signal.
  */
 @Composable
 private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
     val choices = listOf(
-        "hide" to ("Hide cards" to "The recording pill, captions and other cards shrink to a small dot without text."),
-        "black_box" to ("Black box" to "The people watching see a black box where the cards are."),
-        "show" to ("Show" to "The cards stay as they are. Everyone watching can read them.")
+        Triple(
+            ShareGuard.Mode.PRIVATE,
+            "Private (black box)",
+            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual."
+        ),
+        Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
     )
     SectionCard {
         Text("During screen sharing", fontWeight = FontWeight.SemiBold)
         Text(
-            if (android.os.Build.VERSION.SDK_INT >= 35) {
-                "What people watching your screen share or recording see of EchoLedger's floating cards."
-            } else {
-                "This version of Android does not say when the screen is shared, so use Hide on a card or the " +
-                    "\"Hide EchoLedger cards\" Quick Settings tile before you share. Black box always works."
-            },
+            "EchoLedger's floating windows are the recording controls, captions, the after-call card and Live Translate.",
             color = Brand.Muted,
             fontSize = 13.sp
         )
-        val current = com.echoledger.mobile.core.ShareGuard.Mode.of(settings.screenShareMode).wire
-        choices.forEach { (value, text) ->
-            Row(
-                Modifier.fillMaxWidth()
-                    .selectable(
-                        selected = current == value,
-                        role = Role.RadioButton,
-                        onClick = { vm.updateSettings { it.copy(screenShareMode = value) } }
-                    )
-                    .padding(vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                RadioButton(selected = current == value, onClick = null)
-                Column(Modifier.padding(start = 8.dp)) {
-                    Text(text.first)
-                    Text(text.second, color = Brand.Muted, fontSize = 12.sp)
+        val current = ShareGuard.Mode.of(settings.screenShareMode)
+        Column(Modifier.selectableGroup()) {
+            choices.forEach { (mode, title, line) ->
+                Row(
+                    Modifier.fillMaxWidth()
+                        .selectable(
+                            selected = current == mode,
+                            role = Role.RadioButton,
+                            onClick = { vm.updateSettings { it.copy(screenShareMode = mode.wire) } }
+                        )
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = current == mode, onClick = null)
+                    Column(Modifier.padding(start = 8.dp)) {
+                        Text(title)
+                        Text(line, color = Brand.Muted, fontSize = 12.sp)
+                    }
                 }
             }
         }
+        Text(
+            "Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless " +
+                "you choose Show.",
+            color = Brand.Muted,
+            fontSize = 12.sp
+        )
     }
 }
 
