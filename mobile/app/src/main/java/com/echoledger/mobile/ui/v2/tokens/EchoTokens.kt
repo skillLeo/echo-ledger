@@ -33,6 +33,7 @@ object EchoTokens {
         val warningSoft = Color(0xFFFFFAEB)
         val dangerDefault = Color(0xFFB42318)
         val dangerSoft = Color(0xFFFEF3F2)
+        val scrimDefault = Color(0x661A1A1A)
     }
 
     object Dark {
@@ -59,6 +60,7 @@ object EchoTokens {
         val warningSoft = Color(0xFF2B1A05)
         val dangerDefault = Color(0xFFF97066)
         val dangerSoft = Color(0xFF2A0E0B)
+        val scrimDefault = Color(0x99000000)
     }
 
     object Space {
@@ -95,6 +97,23 @@ object EchoTokens {
         val controlTouchMin = 48.dp
     }
 
+    object Border {
+        val hairline = 1.dp
+        val strong = 2.dp
+    }
+
+    object Focus {
+        val width = 2.dp
+        val offset = 2.dp
+    }
+
+    object Icon {
+        val sm = 16.dp
+        val md = 20.dp
+        val lg = 24.dp
+        val xl = 40.dp
+    }
+
     object Component {
         val buttonRadius = 4.dp
         val buttonHeight = 36.dp
@@ -106,9 +125,18 @@ object EchoTokens {
         val dialogRadius = 12.dp
         val sheetRadius = 16.dp
         val chipRadius = 999.dp
+        val chipHeight = 32.dp
         val listRowHeight = 56.dp
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
+        val listRowHeightMobileTall = 72.dp
+        const val toastDurationMs = 6000
+        const val recordingDotPulseMs = 1500
+        val avatarSize = 40.dp
+        val statusDotSize = 8.dp
+        val sheetHandleWidth = 32.dp
+        val sheetHandleHeight = 4.dp
+        val tabsIndicator = 2.dp
     }
 
     object Motion {
@@ -129,5 +157,6 @@ object EchoTokens {
         val mono = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val urduBody = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))
         val arabicBody = TextStyle(fontSize = 15.sp, lineHeight = 26.sp, fontWeight = FontWeight(400))
+        val bodyMobile = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(400))
     }
 }

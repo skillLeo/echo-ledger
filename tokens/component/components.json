@@ -52,6 +52,10 @@
       "radius": {
         "$type": "dimension",
         "$value": "{radius.full}"
+      },
+      "height": {
+        "$type": "dimension",
+        "$value": "32px"
       }
     },
     "list-row": {
@@ -66,6 +70,10 @@
       "height-mobile": {
         "$type": "dimension",
         "$value": "{layout.row.mobile}"
+      },
+      "height-mobile-tall": {
+        "$type": "dimension",
+        "$value": "72px"
       }
     },
     "toast": {
@@ -79,6 +87,34 @@
       "pulse": {
         "$type": "duration",
         "$value": "{motion.pulse}"
+      }
+    },
+    "avatar": {
+      "size": {
+        "$type": "dimension",
+        "$value": "40px"
+      }
+    },
+    "status-dot": {
+      "size": {
+        "$type": "dimension",
+        "$value": "8px"
+      }
+    },
+    "sheet-handle": {
+      "width": {
+        "$type": "dimension",
+        "$value": "32px"
+      },
+      "height": {
+        "$type": "dimension",
+        "$value": "4px"
+      }
+    },
+    "tabs": {
+      "indicator": {
+        "$type": "dimension",
+        "$value": "{border.strong}"
       }
     }
   }

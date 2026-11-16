@@ -107,6 +107,13 @@
         "$type": "color",
         "$value": "{color.red.50}"
       }
+    },
+    "scrim": {
+      "default": {
+        "$type": "color",
+        "$value": "#1A1A1A66",
+        "$description": "Behind dialogs and sheets"
+      }
     }
   }
 }

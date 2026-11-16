@@ -88,7 +88,7 @@ function kotlin(light, dark) {
     const v = t.$value;
     return `val ${camel(t.path.slice(1))} = TextStyle(fontSize = ${px(v.fontSize)}.sp, lineHeight = ${px(v.lineHeight)}.sp, fontWeight = FontWeight(${v.fontWeight}))`;
   });
-  const comp = props(light.filter((t) => t.path[0] === 'component' && t.$type === 'dimension'), (t) => `val ${camel(t.path.slice(1))} = ${px(t.$value)}.dp`);
+  const comp = props(light.filter((t) => t.path[0] === 'component' && (t.$type === 'dimension' || t.$type === 'duration')), (t) => (t.$type === 'duration' ? `const val ${camel(t.path.slice(1))}Ms = ${ms(t.$value)}` : `val ${camel(t.path.slice(1))} = ${px(t.$value)}.dp`));
   return `// ${HEADER}
 package com.echoledger.mobile.ui.v2.tokens
 
@@ -118,6 +118,18 @@ ${dims('radius')}
 
     object Layout {
 ${dims('layout')}
+    }
+
+    object Border {
+${dims('border')}
+    }
+
+    object Focus {
+${dims('focus')}
+    }
+
+    object Icon {
+${dims('icon')}
     }
 
     object Component {
