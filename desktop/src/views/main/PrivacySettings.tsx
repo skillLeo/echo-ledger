@@ -30,8 +30,9 @@ export const PATTERN_FLASH = "While it checks, a checkered test window and a gre
 /** The main window opened during a whole-screen share that keeps the floating windows off (since v1.8.1). */
 export const SHARE_NOTICE = "You're sharing your whole screen, so this window may be visible in the screen share.";
 
-/** While a sharing bar keeps the windows off, "Show EchoLedger windows" would last until the next look: what happens. */
-export const BACK_AFTER_SHARE = "They come back when the screen share ends. To keep them on screen while you share, share one window or a tab.";
+/** While the sharing bar keeps the windows off, "Show EchoLedger windows" would last until the next look: what happens,
+ * in the tray's words (R1, tray.rs HIDDEN_WHILE_SHARING). */
+export const HIDDEN_WHILE_SHARING = "Hidden while you share your screen. They come back when the meeting ends.";
 
 /** The label of every button that opens the system's settings on this page. */
 export const OPEN_SYSTEM_SETTINGS = "Open System Settings";
@@ -94,10 +95,11 @@ export function useCountdown(seconds: number | null): number | null {
   return left ? left : null;
 }
 
-/** What "Hide EchoLedger windows" says now (pure): hidden, and why; none while the windows are on screen. */
+/** What "Hide EchoLedger windows" says now (pure): hidden, and why; none while the windows are on screen. While the
+ * sharing bar holds them, the section's line says why and when they come back, so the row only says Hidden. */
 export function hiddenValue(s: PrivacyStatus | null): string | null {
   if (s?.hiddenByShortcut) return "Hidden";
-  if (s?.hiddenForShare) return "Hidden while you share your screen";
+  if (s?.hiddenForShare) return s.barOnScreen ? "Hidden" : "Hidden while you share your screen";
   return null;
 }
 
@@ -171,7 +173,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
         </Section>
       )}
       <Section title="Sharing" footer={<>
-        {status?.barOnScreen && <p className="privacy-line" role="status" data-testid="back-after-share">{BACK_AFTER_SHARE}</p>}
+        {status?.barOnScreen && status.hiddenForShare && <p className="privacy-line" role="status" data-testid="back-after-share">{HIDDEN_WHILE_SHARING}</p>}
         <p>{ONE_WINDOW_TIP}</p><p>{LIMITS}</p>
         {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
       </>}>

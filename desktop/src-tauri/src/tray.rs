@@ -211,13 +211,35 @@ pub fn hidden_line(privacy: &crate::privacy::Privacy) -> Option<Hidden> {
     }
 }
 
-/// While a sharing bar keeps the windows off: when they come back, and what keeps them on screen next time.
-pub const BACK_AFTER_SHARE: &str = "They come back when the screen share ends";
+/// While the sharing bar keeps the windows off (R1): the tray and Settings › Screen-share privacy say exactly this.
+pub const HIDDEN_WHILE_SHARING: &str = "Hidden while you share your screen. They come back when the meeting ends.";
 
 #[derive(Default)]
 pub struct TrayCache {
     shape: Mutex<Option<MenuShape>>,
     state: Mutex<Option<TrayState>>,
+}
+
+impl TrayCache {
+    /// What the tray must change to show `state` and `shape`, kept as what it shows. The locks are let go when this
+    /// returns: the tray calls that follow wait for the main thread, and none may wait while holding them.
+    fn changes(&self, state: TrayState, shape: MenuShape) -> (Option<TrayState>, Option<MenuShape>) {
+        let state = {
+            let mut last = self.state.lock().unwrap_or_else(|p| p.into_inner());
+            let changed = *last != Some(state);
+            *last = Some(state);
+            changed.then_some(state)
+        };
+        let shape = {
+            let mut current = self.shape.lock().unwrap_or_else(|p| p.into_inner());
+            let changed = current.as_ref() != Some(&shape);
+            if changed {
+                *current = Some(shape.clone());
+            }
+            changed.then_some(shape)
+        };
+        (state, shape)
+    }
 }
 
 /// One line of the tray menu: an action, a check item (`checked` is `Some`) or a separator (C2: short, grouped).
@@ -245,8 +267,7 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
             entries.push(item("show_windows", "Show EchoLedger windows"));
         }
         Some(Hidden::ShareBar) => {
-            entries.push(Entry::Item { id: "hidden_share", label: "Hidden while you share your screen".into(), enabled: false, checked: None });
-            entries.push(Entry::Item { id: "back_after_share", label: BACK_AFTER_SHARE.into(), enabled: false, checked: None });
+            entries.push(Entry::Item { id: "hidden_share", label: HIDDEN_WHILE_SHARING.into(), enabled: false, checked: None });
         }
     }
     entries.push(Entry::Separator);
@@ -437,32 +458,7 @@ pub struct Switches {
 /// voice note spoken into the microphone; `viewer`: the viewer sentence when this computer may not record.
 #[allow(clippy::too_many_arguments)]
 pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, pill_hidden: bool, pending: usize, switches: Switches, viewer: Option<String>) {
-    let Some(cache) = app.try_state::<TrayCache>() else {
-        return;
-    };
-    let Some(tray) = app.tray_by_id(TRAY_ID) else {
-        return;
-    };
     let recording = matches!(state, TrayState::Recording | TrayState::Paused);
-
-    let mut last = cache.state.lock().unwrap_or_else(|p| p.into_inner());
-    if *last != Some(state) {
-        *last = Some(state);
-        let _ = tray.set_tooltip(Some(tooltip(state)));
-        if let Some(base) = tray_base(app) {
-            let shown = look(state, cfg!(target_os = "macos"));
-            let mut rgba = base.rgba().to_vec();
-            if let Some((tile, ink)) = shown.tile {
-                paint_tile(&mut rgba, base.width(), base.height(), tile, ink);
-            }
-            if let Some(colour) = shown.dot {
-                paint_dot(&mut rgba, base.width(), base.height(), colour);
-            }
-            let _ = tray.set_icon_with_as_template(Some(Image::new_owned(rgba, base.width(), base.height())), shown.template);
-        }
-    }
-    drop(last);
-
     let shape = MenuShape {
         recording,
         paused: recording && paused,
@@ -476,12 +472,38 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         share_demo: switches.share_demo,
         hidden: switches.hidden,
     };
-    let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
-    if current.as_ref() != Some(&shape) {
-        if let Ok(menu) = build_menu(app, &shape) {
-            let _ = tray.set_menu(Some(menu));
+    // The tray is drawn on the main thread and never waited for: a sync command there (Hide EchoLedger windows, a setting)
+    // refreshes the status while other threads (the safety net, uploads) do too, so nobody holds the tray's locks while
+    // waiting for the main thread. On the main thread itself this runs at once.
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || draw(&handle, state, shape));
+}
+
+/// On the main thread: what changed is decided under the cache's locks ([`TrayCache::changes`]), let go before the tray is
+/// touched.
+fn draw(app: &AppHandle, state: TrayState, shape: MenuShape) {
+    let (Some(cache), Some(tray)) = (app.try_state::<TrayCache>(), app.tray_by_id(TRAY_ID)) else {
+        return;
+    };
+    let (state, shape) = cache.changes(state, shape);
+    if let Some(state) = state {
+        let _ = tray.set_tooltip(Some(tooltip(state)));
+        if let Some(base) = tray_base(app) {
+            let shown = look(state, cfg!(target_os = "macos"));
+            let mut rgba = base.rgba().to_vec();
+            if let Some((tile, ink)) = shown.tile {
+                paint_tile(&mut rgba, base.width(), base.height(), tile, ink);
+            }
+            if let Some(colour) = shown.dot {
+                paint_dot(&mut rgba, base.width(), base.height(), colour);
+            }
+            let _ = tray.set_icon_with_as_template(Some(Image::new_owned(rgba, base.width(), base.height())), shown.template);
         }
-        *current = Some(shape);
+    }
+    if let Some(shape) = shape
+        && let Ok(menu) = build_menu(app, &shape)
+    {
+        let _ = tray.set_menu(Some(menu));
     }
 }
 
@@ -588,10 +610,43 @@ mod tests {
         assert_eq!(&labels(&share)[..4], ["Open EchoLedger", "Hidden while you share your screen", "Show EchoLedger windows", "---"]);
         let line = menu_entries(&share).into_iter().find(|e| matches!(e, Entry::Item { id: "hidden_share", .. })).unwrap();
         assert!(matches!(line, Entry::Item { enabled: false, .. }), "the reason is not an action");
-        // With the sharing bar on screen "Show" would last until the next look: the tray says when they come back.
+        // With the sharing bar on screen "Show" would last until the next look: the tray says when they come back (R1).
         let bar = MenuShape { hidden: Some(Hidden::ShareBar), ..MenuShape::default() };
-        assert_eq!(&labels(&bar)[..4], ["Open EchoLedger", "Hidden while you share your screen", "They come back when the screen share ends", "---"]);
-        assert!(menu_entries(&bar).iter().all(|e| !matches!(e, Entry::Item { id: "show_windows", .. }) && !matches!(e, Entry::Item { id: "back_after_share", enabled: true, .. })));
+        assert_eq!(&labels(&bar)[..3], ["Open EchoLedger", "Hidden while you share your screen. They come back when the meeting ends.", "---"]);
+        assert!(menu_entries(&bar).iter().all(|e| !matches!(e, Entry::Item { id: "show_windows", .. }) && !matches!(e, Entry::Item { enabled: true, id: "hidden_share", .. })));
+    }
+
+    #[test]
+    fn the_tray_decides_under_its_locks_and_draws_after_letting_them_go() {
+        let cache = TrayCache::default();
+        let idle = MenuShape::default();
+        assert_eq!(cache.changes(TrayState::Idle, idle.clone()), (Some(TrayState::Idle), Some(idle.clone())), "the first draw");
+        assert_eq!(cache.changes(TrayState::Idle, idle.clone()), (None, None), "nothing changed: nothing is drawn");
+        let hidden = MenuShape { hidden: Some(Hidden::Person), ..MenuShape::default() };
+        assert_eq!(cache.changes(TrayState::Idle, hidden.clone()), (None, Some(hidden)));
+        assert_eq!(cache.changes(TrayState::Recording, MenuShape { hidden: Some(Hidden::Person), ..MenuShape::default() }).0, Some(TrayState::Recording));
+        // The locks are free once the decision is made, from any thread.
+        assert!(cache.state.try_lock().is_ok() && cache.shape.try_lock().is_ok());
+        let shared = std::sync::Arc::new(TrayCache::default());
+        let other = std::sync::Arc::clone(&shared);
+        std::thread::spawn(move || other.changes(TrayState::Paused, MenuShape::default())).join().unwrap();
+        assert!(shared.state.try_lock().is_ok() && shared.shape.try_lock().is_ok());
+
+        // Structurally: the update any thread calls takes no lock and posts the drawing to the main thread, and no lock
+        // is held across a call that waits for the main thread.
+        let code = include_str!("tray.rs").split("#[cfg(test)]").next().unwrap();
+        let body = |name: &str| {
+            let at = code.find(name).unwrap_or_else(|| panic!("{name}"));
+            &code[at..at + code[at..].find("\n}\n").unwrap()]
+        };
+        let update = body("pub fn update(");
+        assert!(update.contains("app.run_on_main_thread(") && !update.contains(".lock()"), "update never waits for the main thread");
+        let draw = body("fn draw(");
+        assert!(!draw.contains(".lock()") && draw.contains("cache.changes("), "the locks are taken only inside changes()");
+        let changes = body("fn changes(");
+        for waits in ["set_menu", "set_tooltip", "set_icon", "build_menu", "Menu::new", "run_on_main_thread"] {
+            assert!(!changes.contains(waits), "{waits} under the tray's locks");
+        }
     }
 
     #[test]

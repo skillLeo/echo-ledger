@@ -847,6 +847,8 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         Platform::Other => Vec::new(),
     };
     let mac_version = os_version();
+    // Read before the answer is put together: no lock is held while the displays are asked of the main thread below.
+    let share = privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone();
     let apps: Vec<AppRow> = if platform == Platform::Mac {
         MeetingApp::ALL
             .into_iter()
@@ -873,7 +875,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         main_in_share: privacy.main_in_share(settings.hide_from_sharing),
         share_number: privacy.share_number(),
         bar_on_screen: privacy.bar_holds(),
-        share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+        share,
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),
         check_due: due(&store, &os, version, Utc::now()),

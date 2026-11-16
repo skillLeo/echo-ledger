@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { BACK_AFTER_SHARE, GUIDED_ALONE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
+import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
 import { resetClosedBanners } from "../../components/StateBanner";
 import { setting } from "../../lib/settingsRegistry";
 import ShareCheckWindow, { CONTROL_TEXT } from "../sharecheck/ShareCheckWindow";
@@ -192,11 +192,15 @@ describe("Settings › Screen-share privacy", () => {
     expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: false }]);
   });
 
-  it("does not offer Show while the sharing bar is on screen, and says when they come back", async () => {
+  it("does not offer Show while the sharing bar is on screen, and says when they come back in the tray's words", async () => {
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: true }));
     render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
-    expect(await screen.findByText("Hidden while you share your screen")).toBeInTheDocument();
-    expect(screen.getByTestId("back-after-share")).toHaveTextContent(BACK_AFTER_SHARE);
+    const line = await screen.findByTestId("back-after-share");
+    expect(line).toHaveTextContent(/^Hidden while you share your screen\. They come back when the meeting ends\.$/);
+    expect(HIDDEN_WHILE_SHARING).toBe("Hidden while you share your screen. They come back when the meeting ends.");
+    expect(line).not.toHaveTextContent(/one window/i);
+    expect(screen.getAllByText(ONE_WINDOW_TIP), "the one-window tip once, on the next line").toHaveLength(1);
+    expect(screen.queryByText("Hidden while you share your screen"), "said once, in the line").toBeNull();
     expect(screen.queryByRole("button", { name: "Show EchoLedger windows" }), "it would last until the next look").toBeNull();
     // The bar was hidden (Zoom hid its controls): Show works again.
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: false }));
