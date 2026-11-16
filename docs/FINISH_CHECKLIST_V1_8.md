@@ -11,7 +11,7 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
 | H1 | **The GitHub repo `skillLeo/echo-ledger` is public** — decided 2026-11-16 (D1): make it private; Hassam switches it. Checked: the updater, website and apps don't depend on it (updates come from `<server>/downloads/desktop.json`; the only GitHub links are font licences). After the switch, Mac builds run on a self-hosted runner on the development Mac (never on a public repo) | Anyone can download the whole product without logging in (checked 2026-11-16). No keys are in it, but the code, docs and server layout are | Say "make it private". Cost: private repos get 2,000 free GitHub Actions minutes a month and Mac builds count ×10, so the desktop builds would then run only on tags and on request (or GitHub Pro, $4/month, 3,000 minutes) |
 | H2 | Phone windows on the S25 (~30 min each) | 0.2 (read the capture journals), 0.3 (SIM calls), P9 (final check) | Say "phone free" |
 | H3 | Screen-share windows on the Windows laptop and the Mac, with a second device watching | 0.1 SM-W1…W6 and SM-M1…M10; v1.9 S0/S7 | Say "laptop free" / "Mac free" and have a phone ready to join the meeting |
-| H4 | The product name (Baatly recommended, Mukalma backup) and the final domain — D2: not final; docs/NAME_CHECK.md (local) has the checks; no Play production release before Hassam confirms | P6.1 website, P7 store listings; the Android applicationId can never change after the first Play release | Check baatly.com / .app / .ai, the @baatly handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide |
+| H4 | The product name (Baatly recommended, Mukalma backup) and the final domain — D2: not final; docs/NAME_CHECK.md (local) has the checks (2026-11-16: baatly.com is taken and listed for sale; baatly.app/.ai and mukalma.app/.ai are free; mukalma.com is a live site; no app or trademark with either exact name); no Play production release before Hassam confirms | P6.1 website, P7 store listings; the Android applicationId can never change after the first Play release | Check baatly.com / .app / .ai, the @baatly handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide |
 | H5 | Pick 1 of the 3 brand directions | P5.2 | Look at the screenshots in docs/design/brand/ when they are ready |
 | H6 | Google Play company account ($25 once) + a free D-U-N-S number for SkillLeo SMC Pvt Ltd — D6: organization accounts, Hassam creates them from docs/store/ACCOUNT_SETUP.md | P7.1 | play.google.com/console → create a developer account as an organization |
 | H7 | The Play demo videos (foreground services) and the reviewer test account | P7.1 | The list of videos and the account steps will be in docs/LAUNCH.md |
@@ -69,6 +69,8 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   menu bar icon opens it). `lib.rs` handles `RunEvent::Opened` and `ExitRequested` but not `RunEvent::Reopen`, which
   macOS sends to the running copy (found by Hassam 2026-11-16 on the installed v1.6.0). **Acceptance:** Reopen with no
   visible window shows and focuses the main window; a test for the handler; checked on the Mac.
+  - Code merged 2026-11-16 (`10c7a743`, reviewed; cargo 1,312 passed): the decision uses whether the MAIN window is on
+    screen (macOS counts the always-built dictation box as visible). Waiting: MAC-31 on a build with it (Mac batch).
 
 ## P1 — Before, during, after a call
 - [ ] 1.1 Calls always recorded as audio when Ready; transcribed only with permission. One after-call card (phone:
@@ -164,12 +166,20 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   the app and on the web; Play Console answers (Data safety, privacy URL, rating, 18+, no ads, reviewer account);
   store listing text and 8 screenshots + feature graphic + 512 px icon; AAB with Play App Signing; target API confirmed
   (37); honest review notes. **Acceptance:** a manifest test of the play flavor's permissions; docs/LAUNCH.md complete.
+  - 2026-11-16: docs/LAUNCH.md written (accounts, steps, draft Data safety answers). Found: the privacy policy's contact
+    line points to a personal mailbox, it does not mention the caller names and numbers the website build sends, and
+    there is no support page (`/contact` is 404; Apple requires a support URL) → web work with P6.4 and H13. To confirm
+    for the Data safety form: whether production sets `ECHOLEDGER_COUNTRY_HEADER` and whether access logs keep search
+    queries.
 - [ ] 7.2 Website APK: Android developer verification steps documented (package + signing key). **Acceptance:** the
   steps in docs/LAUNCH.md.
 - [ ] 7.3 Windows: an MSIX for the Microsoft Store (H8); the website installer kept; OV signing documented as the
   alternative. **Acceptance:** the MSIX built in CI.
 - [ ] 7.4 Mac: notarization ready in CI for when the Apple Developer ID is added (H9); USER_GUIDE says what changes.
   **Acceptance:** the CI job present and skipped cleanly without the secrets.
+  - 2026-11-16: the Mac app runs `osascript` to read browser tabs, but Entitlements.plist has no
+    `com.apple.security.automation.apple-events`; under the Hardened Runtime that entitlement is needed for Apple events
+    to other apps. Add it with the notarization job and test it on the first signed build.
 
 ## P8 — iPhone
 - [ ] P8 docs/IOS_PLAN.md written; the build starts only on "Apple account ready" (H9). **Acceptance:** the plan file.
