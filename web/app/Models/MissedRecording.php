@@ -1,0 +1,126 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Models;
+
+use App\Enums\SourceApp;
+use App\Models\Concerns\BelongsToWorkspace;
+use App\Services\TranscriptExporter;
+use Illuminate\Database\Eloquent\Concerns\HasUlids;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Carbon;
+
+/**
+ * A call an app saw but did not record (since v1.8, docs/API.md `POST /api/devices/missed-recordings`): its app, when
+ * it started, how long it lasted and why nothing was recorded. Never names, phone numbers or audio. Its person reads it
+ * in Activity ("Missed recording"); staff read it only as the counts of Admin → Diagnostics → Missed recordings.
+ *
+ * @property string $id
+ * @property int $user_id
+ * @property string|null $device_id
+ * @property string $client_ref
+ * @property string $platform
+ * @property string|null $app_version
+ * @property string $source_app
+ * @property Carbon $call_started_at
+ * @property int|null $call_duration_s
+ * @property string $reason
+ * @property string|null $detail
+ * @property Carbon $created_at
+ * @property-read Device|null $device
+ * @property-read User $user
+ */
+class MissedRecording extends Model
+{
+    use BelongsToWorkspace, HasUlids;
+
+    /** Why nothing was recorded, and how Activity says it to the person. */
+    public const REASONS = [
+        'helper_not_armed' => 'The helper was not connected',
+        'permission' => 'A permission was off',
+        'detection' => 'The call was not detected',
+        'mic_busy' => 'Another app was using the microphone',
+        'crash' => 'The app stopped during the call',
+        'plan' => 'Your plan did not allow the recording',
+        'unknown' => 'The reason is not known',
+    ];
+
+    /** A meeting in a browser that no known meeting app was recognised in. */
+    public const BROWSER = 'browser';
+
+    /** Short names an app may send for a call app, kept as the sessions' own `source_app` values. */
+    public const SOURCE_APP_ALIASES = ['phone' => 'phone_call', 'meet' => 'google_meet', 'teams' => 'microsoft_teams'];
+
+    /** The oldest call an app may report. */
+    public const MAX_AGE_DAYS = 30;
+
+    /** How far ahead of the server's clock a device's clock may run: a call that started "now" is not in the future. */
+    public const CLOCK_DRIFT_MINUTES = 5;
+
+    public const UPDATED_AT = null;
+
+    protected $fillable = ['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason', 'detail'];
+
+    /**
+     * Every `source_app` an app may send: the sessions' wire values (App\Enums\SourceApp), `browser`, and the short
+     * names of SOURCE_APP_ALIASES.
+     *
+     * @return list<string>
+     */
+    public static function sourceApps(): array
+    {
+        return [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), self::BROWSER, ...array_keys(self::SOURCE_APP_ALIASES)];
+    }
+
+    /** The value kept for what an app sent: a short name becomes the sessions' wire value. */
+    public static function storedSourceApp(string $sent): string
+    {
+        return self::SOURCE_APP_ALIASES[$sent] ?? $sent;
+    }
+
+    /** "WhatsApp call", "Phone call", "Call in a browser", or "Call" for an app EchoLedger does not name. */
+    public static function callName(string $sourceApp): string
+    {
+        if ($sourceApp === self::BROWSER) {
+            return 'Call in a browser';
+        }
+        $app = SourceApp::tryFrom(self::storedSourceApp($sourceApp));
+
+        return match ($app) {
+            null, SourceApp::Other => 'Call',
+            SourceApp::PhoneCall, SourceApp::VoiceNote => $app->getLabel(),
+            default => $app->getLabel().' call',
+        };
+    }
+
+    /** "WhatsApp call · 5:12 · The helper was not connected", without the length when the app did not know it. */
+    public function activityBody(): string
+    {
+        $parts = [self::callName($this->source_app)];
+        if ($this->call_duration_s !== null) {
+            $parts[] = TranscriptExporter::clock($this->call_duration_s * 1000);
+        }
+        $parts[] = self::REASONS[$this->reason] ?? self::REASONS['unknown'];
+
+        return implode(' · ', $parts);
+    }
+
+    /** @return BelongsTo<Device, $this> */
+    public function device(): BelongsTo
+    {
+        return $this->belongsTo(Device::class)->withoutGlobalScopes();
+    }
+
+    /** @return BelongsTo<User, $this> */
+    public function user(): BelongsTo
+    {
+        return $this->belongsTo(User::class);
+    }
+
+    protected function casts(): array
+    {
+        return ['call_started_at' => 'datetime', 'call_duration_s' => 'integer', 'created_at' => 'datetime'];
+    }
+}

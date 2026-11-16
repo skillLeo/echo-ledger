@@ -121,7 +121,8 @@ class Activity extends Page
         return match ($kind) {
             'transcript_ready' => 'indigo',
             'transcript_failed', 'upload_failed', 'budget_reached' => 'red',
-            'budget_warn' => 'amber',
+            // Since v1.8: a call an app did not record; the fix is in that app.
+            'budget_warn', 'missed_recording' => 'amber',
             default => 'slate',
         };
     }
@@ -136,6 +137,7 @@ class Activity extends Page
             'device_paired' => $stored === 'heroicon-o-computer-desktop' ? $stored : 'heroicon-o-device-phone-mobile',
             'budget_warn', 'budget_reached' => 'heroicon-o-chart-bar',
             'shared_with_you' => 'heroicon-o-users',
+            'missed_recording' => 'heroicon-o-phone-x-mark',
             default => 'heroicon-o-bell',
         };
     }

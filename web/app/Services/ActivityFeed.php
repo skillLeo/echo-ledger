@@ -16,6 +16,7 @@ use App\Filament\Support\Notice as Notification;
 use App\Mail\TranscriptReadyMail;
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\MissedRecording;
 use App\Models\Recording;
 use App\Models\Screen;
 use App\Models\Transcript;
@@ -53,10 +54,10 @@ final class ActivityFeed
 
     /**
      * Since v1.6 also the person's upgrade request decided, the super admin's new request and unusual use; since v1.7
-     * staff asking the person for another payment receipt.
+     * staff asking the person for another payment receipt; since v1.8 a call an app saw but did not record.
      */
     public const KINDS = ['transcript_ready', 'transcript_failed', 'upload_failed', 'device_paired', 'budget_warn', 'budget_reached', 'shared_with_you',
-        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested'];
+        'upgrade_approved', 'upgrade_declined', 'upgrade_requested', 'unusual_usage', 'cost_alert', 'upgrade_receipt_requested', 'missed_recording'];
 
     /** Read notifications are kept this long, unread ones twice as long. */
     public const KEEP_DAYS = 90;
@@ -83,6 +84,8 @@ final class ActivityFeed
         UsageLedgerEntry::created(fn (UsageLedgerEntry $e) => $feed()->budgetChanged($e));
         // Since v1.6 (P2.6): the server's monthly budget alert for staff.
         UsageLedgerEntry::created(fn () => app(CostAlerts::class)->check());
+        // Since v1.8 (P0 0.2): an app found a call it did not record. A repeated event is no new row, so no new item.
+        MissedRecording::created(fn (MissedRecording $m) => $feed()->missedRecording($m));
     }
 
     public function transcriptChanged(Transcript $transcript, bool $created): void
@@ -128,6 +131,24 @@ final class ActivityFeed
         if ($session instanceof CaptureSession && ! $session->trashed()) {
             $this->post($session->user, 'transcript_failed', 'Transcription failed', $session->displayTitle().': '.($transcript->error ?? 'try again from the recording.'), $session, 'heroicon-o-exclamation-triangle');
             app(ReadyNotices::class)->deliver($session, ready: false);
+        }
+    }
+
+    /**
+     * "Missed recording" (since v1.8): "WhatsApp call · 5:12 · The helper was not connected", to the device's person.
+     * The item carries `reason` and `missed_recording_id`: the apps show their own fix for the reason.
+     */
+    public function missedRecording(MissedRecording $missed): void
+    {
+        try {
+            $user = User::query()->find($missed->user_id);
+            if ($user instanceof User) {
+                $notification = self::make('Missed recording', $missed->activityBody(), 'missed_recording', null,
+                    extra: ['reason' => $missed->reason, 'missed_recording_id' => $missed->id])->icon('heroicon-o-phone-x-mark');
+                $user->notifyNow($notification->toDatabase());
+            }
+        } catch (Throwable $e) {
+            report($e);
         }
     }
 
@@ -255,12 +276,15 @@ final class ActivityFeed
     /**
      * The bell renders a notification's title and body as HTML (sanitised, but links and styles stay), and they hold
      * what people typed (titles, notes, names; since v1.5 from anyone on the server): they are stored escaped, so the
-     * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed.
+     * bell shows them as text. `escaped` tells payload() to give the apps the words as they were typed. [$extra]: what
+     * a kind carries besides (a missed recording's reason and id).
+     *
+     * @param  array<string, string>  $extra
      */
-    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null): Notification
+    private static function make(string $title, string $body, string $kind, ?string $sessionId, ?string $limit = null, ?string $url = null, array $extra = []): Notification
     {
         return Notification::make()->title(e($title))->body(e($body))
-            ->viewData(['kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : []), ...($url !== null ? ['url' => $url] : [])]);
+            ->viewData([...$extra, 'kind' => $kind, 'session_id' => $sessionId, 'escaped' => true, ...($limit !== null ? ['limit' => $limit] : []), ...($url !== null ? ['url' => $url] : [])]);
     }
 
     /** @return array<string, mixed> */
@@ -269,15 +293,19 @@ final class ActivityFeed
         $session = $n->data['viewData']['session_id'] ?? null;
         $text = fn (mixed $value): string => ($n->data['viewData']['escaped'] ?? false) === true
             ? htmlspecialchars_decode((string) $value, ENT_QUOTES) : (string) $value;
+        $kind = self::kindOf($n);
+        $string = fn (string $key): ?string => is_string($n->data['viewData'][$key] ?? null) ? $n->data['viewData'][$key] : null;
 
         return [
             'id' => $n->id,
-            'kind' => self::kindOf($n),
+            'kind' => $kind,
             'title' => $text($n->data['title'] ?? ''),
             'body' => $text($n->data['body'] ?? ''),
             'session_id' => is_string($session) ? $session : null,
             'read' => $n->read_at !== null,
             'at' => $n->created_at?->toAtomString(),
+            // Since v1.8 a missed recording also says why, and which one (docs/API.md `POST /api/devices/missed-recordings`).
+            ...($kind === 'missed_recording' ? ['reason' => $string('reason'), 'missed_recording_id' => $string('missed_recording_id')] : []),
         ];
     }
 

@@ -24,6 +24,7 @@ function abilityRoutes(): array
     return [
         'config' => ['GET', '/api/config', 'config:read'],
         'device report' => ['POST', '/api/devices/report', 'config:read'],
+        'missed recording' => ['POST', '/api/devices/missed-recordings', 'config:read'],
         'share check result' => ['POST', '/api/diagnostics/share-checks', 'config:read'],
         'sharing-bar patterns' => ['GET', '/api/config/share-bars', 'config:read'],
         'clients' => ['GET', '/api/clients', 'library:read'],
