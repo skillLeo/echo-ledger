@@ -1,7 +1,7 @@
 {
     "pack": "assist",
-    "version": "1.0.0",
-    "contract": "1.9.0-a",
+    "version": "1.0.1",
+    "contract": "1.9.0-b",
     "updated_at": "2026-11-16",
     "note": "Live Assist prompt pack (v1.9 L1.5): the system rules and one template per meeting type. A template's {{name}} placeholders are the context blocks in cache order: what never changes first, the question last. Read through App\\Services\\Assist\\PromptPack; no provider is called here.",
     "system": "system.md",
@@ -22,7 +22,7 @@
     "language_help": ["off", "urdu", "roman_urdu", "arabic"],
     "language_line_prefixes": {"urdu": "Urdu:", "roman_urdu": "Roman Urdu:", "arabic": "Arabic:"},
     "skip": "SKIP",
-    "consent_line": "Just so you know: I record this call and use an assistant for notes. Is that okay with you?",
+    "consent_line": "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?",
     "templates": {
         "interview": {
             "file": "interview.md",

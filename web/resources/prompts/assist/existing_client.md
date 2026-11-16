@@ -9,7 +9,7 @@ Me works for Them or sells to Them. Them is a client Me knows; the project memor
 Default hint level: full.
 
 ## Responsible use in this meeting
-The app reminds Me of the consent line, with a copy button: "Just so you know: I record this call and use an assistant for notes. Is that okay with you?" Do not repeat it in your suggestions.
+The app reminds Me of the consent line, with a copy button: "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?" Do not repeat it in your suggestions.
 
 ## The brief
 What Me prepared for this meeting: who Them is, the goals, what is done and not done, what to discuss, Me's own

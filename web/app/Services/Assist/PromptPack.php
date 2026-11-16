@@ -99,12 +99,20 @@ final class PromptPack
     /**
      * The prompt for one question: every context block of [$blocks] (keyed by placeholder) in its place, NONE for an
      * empty one, the hint level (the meeting type's default when not given) and the language help (off) checked. What
-     * the blocks hold is put in as it is: a placeholder inside a transcript stays text.
+     * the blocks hold is put in as it is: a placeholder inside a transcript stays text. A block the pack does not have
+     * (a misspelt name, or the system rules, which come from the pack) and a missing or empty question are refused.
      *
      * @param  array<string, string|null>  $blocks
      */
     public function render(string $meetingType, array $blocks): string
     {
+        $unknown = array_values(array_diff(array_keys($blocks), array_diff($this->placeholders(), ['system_rules'])));
+        if ($unknown !== []) {
+            throw new InvalidArgumentException('Unknown context block: '.implode(', ', $unknown).'.');
+        }
+        if (trim((string) ($blocks['question'] ?? '')) === '') {
+            throw new InvalidArgumentException('A prompt needs the question.');
+        }
         $hint = $blocks['hint_level'] ?? $this->defaultHintLevel($meetingType);
         if (! in_array($hint, $this->hintLevels(), true)) {
             throw new InvalidArgumentException("Unknown hint level: {$hint}.");
