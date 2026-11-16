@@ -211,3 +211,21 @@ async fn after_the_third_suggestion_most_of_the_input_is_read_from_the_cache() {
     }
     assert!(ratios[3] >= 0.8, "cached share after the third suggestion: {ratios:?}");
 }
+
+#[test]
+fn every_rewrite_has_its_own_now_without_skip_or_the_hint_shape() {
+    for (kind, language) in [
+        (RewriteKind::Regenerate, "Language: English"),
+        (RewriteKind::Shorter, "Language: English"),
+        (RewriteKind::Formal, "Language: English"),
+        (RewriteKind::Translate(LanguageHelp::Urdu), "\"Urdu:\""),
+        (RewriteKind::Translate(LanguageHelp::Arabic), "\"Arabic:\""),
+    ] {
+        let context =
+            build(&interview(), &transcript(4), Task::Rewrite { kind, question: ASKED, previous: "One month." }, TranscriptScope::Full);
+        let now = &context.segments.iter().find(|s| s.kind == SegmentKind::Now).unwrap().text;
+        assert!(now.contains("do not output SKIP"), "{kind:?}: {now}");
+        assert!(!now.contains("Or output exactly SKIP") && !now.contains("Hint level"), "{kind:?}: {now}");
+        assert!(now.contains(language), "{kind:?}: {now}");
+    }
+}

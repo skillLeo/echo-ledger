@@ -31,6 +31,19 @@ pub mod asks {
     /// `{language}` is "Urdu", "Roman Urdu" or "Arabic".
     pub const TRANSLATE: &str =
         "Explain the previous suggestion in {language} in one or two simple lines, then give the English line to say.";
+    /// The Now block of a rewrite, in place of the pack's (which asks for a new answer or SKIP, in the hint level's
+    /// shape). `{target}` is one of the `REWRITE_*` lines.
+    pub const REWRITE_NOW: &str = "\n\n## Now\nRewrite the previous suggestion below. This is not a new answer: do not \
+output SKIP, keep its facts, and add nothing that is not in the brief, the documents or the call.\n{target}\n\n\
+## The suggestion to rewrite\nWhat Them said, the previous suggestion, and what Me asked for.\n\n";
+    pub const REWRITE_REGENERATE: &str =
+        "Language: English. Write a different suggestion with the same shape as the previous one: a first line of at most 25 words, at most 3 bullets with the key words in **bold**.";
+    pub const REWRITE_SHORTER: &str = "Language: English. Only a first line of at most 12 words, and at most one bullet.";
+    pub const REWRITE_FORMAL: &str = "Language: English. A formal, polite tone; the same shape and length as the previous suggestion.";
+    /// `{language}` is "Urdu", "Roman Urdu" or "Arabic".
+    pub const REWRITE_TRANSLATE: &str = "Language: {language}, then English. First one or two simple lines in {language} that \
+start with \"{language}:\" and explain the previous suggestion; then one line that starts with \"Say:\" and gives the \
+English words to say.";
     /// Before the first block, once the oldest blocks were dropped.
     pub const EARLIER_DROPPED: &str = "(The earliest parts of the call are left out; the running summary covers them.)";
     /// Fast mode leaves the older transcript out.
@@ -419,7 +432,10 @@ impl ContextBuilder<'_> {
             transcript.latest().iter().filter(|t| Some(t.turn_id.as_str()) != skip_turn).map(TranscriptTurn::line).collect();
         segments.push(Segment::new(SegmentKind::LastTurns, Role::User, block(7, &latest.join("\n"))));
         let hint = call.hint_level.unwrap_or(template.default_hint_level);
-        let now = format!("{}{}{}{}{}", piece(8), hint_name(hint), piece(9), language_name(call.language_help), piece(10));
+        let now = match task {
+            Task::Rewrite { kind, .. } => rewrite_now(kind),
+            _ => format!("{}{}{}{}{}", piece(8), hint_name(hint), piece(9), language_name(call.language_help), piece(10)),
+        };
         segments.push(Segment::new(SegmentKind::Now, Role::User, now));
         segments.push(Segment::new(SegmentKind::Question, Role::User, format!("{}{}", question(task), piece(11))));
         Context { segments }
@@ -446,6 +462,17 @@ fn language_name(language: LanguageHelp) -> &'static str {
         LanguageHelp::RomanUrdu => "roman_urdu",
         LanguageHelp::Arabic => "arabic",
     }
+}
+
+/// A rewrite's own Now block: no SKIP, no hint-level shape, and the language to write in.
+fn rewrite_now(kind: RewriteKind) -> String {
+    let target = match kind {
+        RewriteKind::Regenerate => asks::REWRITE_REGENERATE.to_owned(),
+        RewriteKind::Shorter => asks::REWRITE_SHORTER.to_owned(),
+        RewriteKind::Formal => asks::REWRITE_FORMAL.to_owned(),
+        RewriteKind::Translate(language) => asks::REWRITE_TRANSLATE.replace("{language}", language.label()),
+    };
+    asks::REWRITE_NOW.replace("{target}", &target)
 }
 
 /// The question block: Them's words, and for help now and the rewrites what Me asked for.

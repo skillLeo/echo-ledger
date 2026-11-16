@@ -132,19 +132,15 @@ The last things Me and Them said, word for word.
 [00:09] Me: Line 1 of the call, with enough words to fill the transcript blocks at a steady pace for the test.
 [00:18] Them: Line 2 of the call, with enough words to fill the transcript blocks at a steady pace for the test.
 [00:27] Me: Line 3 of the call, with enough words to fill the transcript blocks at a steady pace for the test.
-<<< user | now | ~91 tokens >>>
+<<< user | now | ~124 tokens >>>
 
 
 ## Now
-Hint level: keywords
-Language help: off
+Rewrite the previous suggestion below. This is not a new answer: do not output SKIP, keep its facts, and add nothing that is not in the brief, the documents or the call.
+Language: Roman Urdu, then English. First one or two simple lines in Roman Urdu that start with "Roman Urdu:" and explain the previous suggestion; then one line that starts with "Say:" and gives the English words to say.
 
-Answer the question below in the shape of the output contract: a first line of at most 25 words in simple English, at
-most 3 bullets with the key words in **bold**, an optional "Say next:" line, and the language line only when language
-help is on. Or output exactly SKIP.
-
-## The question
-What Them just said.
+## The suggestion to rewrite
+What Them said, the previous suggestion, and what Me asked for.
 
 <<< user | question | ~47 tokens >>>
 What is your notice period?
