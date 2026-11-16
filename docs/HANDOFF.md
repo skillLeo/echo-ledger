@@ -1015,3 +1015,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   tags; the release script signs a freshly packed archive of the checked app. Open, logged for later: move the two
   signing secrets into a GitHub environment that only release refs can use (needs the owner's repo settings).
 - Decided: the pill shape ("full") does not count toward the three corner radii (4/8/12).
+- Merged `132df07c` (b-desktop-batches at the reviewed ec4f6c34): D-133–D-137 and the review minors; every coded
+  error in the app's own words (no vendor names), `own_key_rejected` with "Check my Groq key", `recording_missing`
+  without a retry. Merged `52e49da1` (b-mac-signing-2 at 23e35a08): the archive check follows links on disk and
+  refuses filesystem name twins. The first v1.1 CI run after this proves self-signed signing without trust settings.
