@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\TranscriptErrorCode;
+use App\Services\ClientAi\ClaudeClientAi;
 use Illuminate\Database\Connection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -128,7 +129,7 @@ function assertBackfilled(Connection $db, array $owned): void
 
 /** The three B20 migrations, and how many migrations came after them (rolled back first, migrated again after). */
 const WORKSPACE_STEPS = 3;
-const LATER_MIGRATIONS = 50;
+const LATER_MIGRATIONS = 51;
 
 it('runs the workspace migrations up, down and up again without losing or mixing data', function () {
     $db = cycleConnection();
@@ -204,7 +205,7 @@ it('refuses step 3 while a row has no workspace and changes nothing', function (
 const PHASE2_STEPS = 5;
 
 /** Migrations that came after them (rolled back first); add yours here as for LATER_MIGRATIONS. */
-const AFTER_PHASE2 = 35;
+const AFTER_PHASE2 = 36;
 
 /** A workspace's library as v1.5 Phase 2 leaves it: subfolders, filing, rules, project and people links, a send, a request link. */
 function seedPhase2Library(Connection $db): array
@@ -302,7 +303,7 @@ it('refuses to roll projects back while one person has two projects of the same 
 /** The v1.5 Phase 3 migration (screen moments), and how many came after it (rolled back first). */
 const PHASE3_STEPS = 1;
 
-const AFTER_PHASE3 = 33;
+const AFTER_PHASE3 = 34;
 
 it('runs the v1.5 Phase 3 migration down and up again on a library with screen moments', function () {
     $db = cycleConnection();
@@ -349,7 +350,7 @@ it('runs the v1.5 Phase 3 migration down and up again on a library with screen m
 /** The v1.5 account migrations (accounts, data exports), and how many came after them (rolled back first). */
 const ACCOUNT_STEPS = 2;
 
-const AFTER_ACCOUNTS = 31;
+const AFTER_ACCOUNTS = 32;
 
 it('runs the v1.5 account migrations down and up again without touching the library', function () {
     $db = cycleConnection();
@@ -405,12 +406,12 @@ it('runs the v1.5 account migrations down and up again without touching the libr
 });
 
 /** The v1.5 plans, roles and privacy migration; add later ones to the count as for LATER_MIGRATIONS. */
-const AFTER_PLANS = 30;
+const AFTER_PLANS = 31;
 
 /** Passport's four tables and Connected apps (v1.5, the Claude and ChatGPT connector); add later ones as for LATER_MIGRATIONS. */
 const CONNECTOR_STEPS = 5;
 
-const AFTER_CONNECTOR = 23;
+const AFTER_CONNECTOR = 24;
 
 const CONNECTOR_TABLES = ['oauth_auth_codes', 'oauth_access_tokens', 'oauth_refresh_tokens', 'oauth_clients', 'connected_apps'];
 
@@ -604,7 +605,7 @@ it('gives each person a project of their own for what they filed or nested in so
 });
 
 /** Migrations after the sent items' one (rolled back first): the title and preferences ones and the cheapest-first engine routes; add later ones here. */
-const AFTER_SENT_ITEMS = 21;
+const AFTER_SENT_ITEMS = 22;
 
 it('fills what a project sent before this release holds, keeps every row and can go back', function () {
     $db = cycleConnection();
@@ -670,7 +671,7 @@ it('fills what a project sent before this release holds, keeps every row and can
 });
 
 /** Migrations after the automatic titles' one (rolled back first); add later ones here. */
-const AFTER_TITLE_AUTO = 20;
+const AFTER_TITLE_AUTO = 21;
 
 it('marks automatic titles with a flag that starts false for every recording and can go back', function () {
     $db = cycleConnection();
@@ -699,7 +700,7 @@ it('marks automatic titles with a flag that starts false for every recording and
 });
 
 /** Migrations after the preferences one (the cheapest-first engine routes); add later ones here. */
-const AFTER_PREFERENCES = 19;
+const AFTER_PREFERENCES = 20;
 
 it('adds the email and Library choices empty for everyone and can go back', function () {
     $db = cycleConnection();
@@ -719,7 +720,7 @@ it('adds the email and Library choices empty for everyone and can go back', func
 });
 
 /** Migrations after v1.6's email codes (P1.1); add later ones here. */
-const AFTER_EMAIL_CODES = 17;
+const AFTER_EMAIL_CODES = 18;
 
 it('adds the email codes and keeps every older account\'s password, and can go back', function () {
     $db = cycleConnection();
@@ -742,7 +743,7 @@ it('adds the email codes and keeps every older account\'s password, and can go b
 });
 
 /** Migrations after v1.6's entitlements (P1.2); add later ones here. */
-const AFTER_ENTITLEMENTS = 16;
+const AFTER_ENTITLEMENTS = 17;
 
 it('adds what plans show and limit, plan end dates and a person\'s overrides, changing no workspace, and can go back', function () {
     $db = cycleConnection();
@@ -775,7 +776,7 @@ it('adds what plans show and limit, plan end dates and a person\'s overrides, ch
 });
 
 /** Migrations after v1.6's own transcription keys (P1.3); add later ones here. */
-const AFTER_TRANSCRIPTION_KEYS = 15;
+const AFTER_TRANSCRIPTION_KEYS = 16;
 
 it('adds a person\'s own transcription key, empty for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -795,7 +796,7 @@ it('adds a person\'s own transcription key, empty for everyone, and can go back'
 });
 
 /** Migrations after v1.6's default plans (P1.3); add later ones here. */
-const AFTER_DEFAULT_PLANS = 14;
+const AFTER_DEFAULT_PLANS = 15;
 
 it('makes Free, Pro and Business, moves Personal and v1.5 Free workspaces to Business, frees the super admins, and puts it all back', function () {
     $db = cycleConnection();
@@ -855,7 +856,7 @@ it('makes Free, Pro and Business, moves Personal and v1.5 Free workspaces to Bus
 });
 
 /** Migrations after v1.6's upgrade requests (P1.4); add later ones here. */
-const AFTER_UPGRADE_REQUESTS = 13;
+const AFTER_UPGRADE_REQUESTS = 14;
 
 it('adds the upgrade requests, and can go back', function () {
     $db = cycleConnection();
@@ -876,7 +877,7 @@ it('adds the upgrade requests, and can go back', function () {
 });
 
 /** Migrations after v1.6's suspend switch (P1.5); add later ones here. */
-const AFTER_SUSPENSION = 12;
+const AFTER_SUSPENSION = 13;
 
 it('adds the suspend switch, off for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -893,7 +894,7 @@ it('adds the suspend switch, off for everyone, and can go back', function () {
 });
 
 /** Migrations after v1.6's device identity (P3); add later ones here. */
-const AFTER_DEVICE_IDENTITY = 11;
+const AFTER_DEVICE_IDENTITY = 12;
 
 it('merges one person\'s duplicate devices into the newest, moving what they hold, and puts them back', function () {
     $db = cycleConnection();
@@ -937,7 +938,7 @@ it('merges one person\'s duplicate devices into the newest, moving what they hol
 });
 
 /** Migrations after v1.6's staff notes and Support access (P2.2); add later ones here. */
-const AFTER_ADMIN_NOTES = 10;
+const AFTER_ADMIN_NOTES = 11;
 
 it('adds staff notes and the Support access switch, off for everyone, and can go back', function () {
     $db = cycleConnection();
@@ -962,7 +963,7 @@ it('adds staff notes and the Support access switch, off for everyone, and can go
 });
 
 /** Migrations after v1.6's plan archive and currency (P2.3); add later ones here. */
-const AFTER_PLAN_ARCHIVE = 9;
+const AFTER_PLAN_ARCHIVE = 10;
 
 it('adds the plan archive and the display price in a currency, empty for every plan, and can go back', function () {
     $db = cycleConnection();
@@ -977,7 +978,7 @@ it('adds the plan archive and the display price in a currency, empty for every p
 });
 
 /** Migrations after v1.6's staff roles (P2.5); add later ones here. */
-const AFTER_STAFF_ROLES = 8;
+const AFTER_STAFF_ROLES = 9;
 
 it('adds the four staff roles, gives nobody one, and can go back', function () {
     $db = cycleConnection();
@@ -1006,7 +1007,7 @@ it('adds the four staff roles, gives nobody one, and can go back', function () {
 });
 
 /** Migrations after v1.6's bound pairing codes (P3 Sign in again); add later ones here. */
-const AFTER_BOUND_CODES = 7;
+const AFTER_BOUND_CODES = 8;
 
 it('adds the device a pairing code signs in again, empty for every code, and can go back', function () {
     $db = cycleConnection();
@@ -1032,7 +1033,7 @@ it('adds the device a pairing code signs in again, empty for every code, and can
 });
 
 /** Migrations after v1.8.1's Share Check results; add later ones here. */
-const AFTER_SHARE_CHECKS = 4;
+const AFTER_SHARE_CHECKS = 5;
 
 it('adds the Share Check results, keeps them when their device goes and drops them with their person, and can go back', function () {
     $db = cycleConnection();
@@ -1064,7 +1065,7 @@ it('adds the Share Check results, keeps them when their device goes and drops th
 });
 
 /** Migrations after v1.8's missed recordings (P0 0.2); add later ones here. */
-const AFTER_MISSED_RECORDINGS = 3;
+const AFTER_MISSED_RECORDINGS = 4;
 
 it('adds the missed recordings, one row per event of a device, kept when the device goes and dropped with the person or workspace, and can go back', function () {
     $db = cycleConnection();
@@ -1111,7 +1112,7 @@ it('adds the missed recordings, one row per event of a device, kept when the dev
 });
 
 /** Migrations after the v1.8.1 audit's index on the Share Check results (R26); add later ones here. */
-const AFTER_SHARE_CHECK_INDEX = 2;
+const AFTER_SHARE_CHECK_INDEX = 3;
 
 it('adds one index on what the screen-share matrix groups by, keeps every result, and can go back', function () {
     $db = cycleConnection();
@@ -1159,7 +1160,7 @@ it('adds one index on what the screen-share matrix groups by, keeps every result
 });
 
 /** Migrations after v1.8.1's plain words in the Pro plan's description (D-129); add later ones here. */
-const AFTER_PRO_PLAIN_WORDS = 1;
+const AFTER_PRO_PLAIN_WORDS = 2;
 
 it('says the Pro plan in plain words where its description is still v1.6\'s, leaves one the operator edited, and can go back', function () {
     $db = cycleConnection();
@@ -1191,7 +1192,7 @@ it('says the Pro plan in plain words where its description is still v1.6\'s, lea
 });
 
 /** Migrations after v1.8.1's plain words in the "Transcription failed" notifications already sent (D-131); add later ones here. */
-const AFTER_FAILED_WORDS = 0;
+const AFTER_FAILED_WORDS = 1;
 
 it('rewrites the "Transcription failed" notifications already sent in plain words, leaves the others, and can go back', function () {
     $db = cycleConnection();
@@ -1214,4 +1215,56 @@ it('rewrites the "Transcription failed" notifications already sent in plain word
     cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_FAILED_WORDS]);
     expect($body('00000000-0000-4000-8000-000000000001'))->not->toContain('Gemini')->and($db->table('notifications')->count())->toBe(2);
     cycleArtisan('migrate', ['--step' => 1]);
+});
+
+/** Migrations after v1.8.1's plain words in the AI's stored reasons; add later ones here. */
+const AFTER_AI_REASONS = 0;
+
+it('says the AI\'s stored reasons that name a provider in plain words, leaves plain ones, and can go back', function () {
+    $db = cycleConnection();
+    cycleArtisan('migrate:fresh');
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_AI_REASONS]);
+    $now = now();
+    $user = $db->table('users')->insertGetId(['name' => 'A', 'email' => 'a@example.test', 'password' => 'x', 'created_at' => $now, 'updated_at' => $now]);
+    $workspace = $db->table('workspaces')->insertGetId(['name' => 'A', 'plan_id' => $db->table('plans')->value('id'), 'created_at' => $now, 'updated_at' => $now]);
+    $client = (string) Str::ulid();
+    $db->table('clients')->insert(['id' => $client, 'workspace_id' => $workspace, 'user_id' => $user, 'name' => 'Acme', 'created_at' => $now, 'updated_at' => $now]);
+    $session = (string) Str::ulid();
+    $db->table('capture_sessions')->insert(['id' => $session, 'workspace_id' => $workspace, 'user_id' => $user, 'client_ref' => 'r1', 'source_device' => 'phone',
+        'source_app' => 'whatsapp', 'started_at' => $now, 'status' => 'completed', 'created_at' => $now, 'updated_at' => $now]);
+    $note = fn (string $id, string $session, ?string $error) => $db->table('call_notes')->insert(['id' => $id, 'workspace_id' => $workspace, 'client_id' => $client,
+        'capture_session_id' => $session, 'status' => 'failed', 'error' => $error, 'created_at' => $now, 'updated_at' => $now]);
+    $other = (string) Str::ulid();
+    $db->table('capture_sessions')->insert(['id' => $other, 'workspace_id' => $workspace, 'user_id' => $user, 'client_ref' => 'r2', 'source_device' => 'phone',
+        'source_app' => 'whatsapp', 'started_at' => $now, 'status' => 'completed', 'created_at' => $now, 'updated_at' => $now]);
+    $note($named = (string) Str::ulid(), $session, 'Claude did not return the notes in the expected form.');
+    $note($plain = (string) Str::ulid(), $other, 'The transcript is not ready yet.');
+    $db->table('client_briefs')->insert(['id' => $brief = (string) Str::ulid(), 'workspace_id' => $workspace, 'client_id' => $client, 'sections' => '{}',
+        'status' => 'failed', 'error' => 'Missing credential anthropic.api_key. Add it on Admin → API Credentials.', 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('client_files')->insert(['id' => $file = (string) Str::ulid(), 'workspace_id' => $workspace, 'user_id' => $user, 'client_id' => $client, 'name' => 'Scope.pdf',
+        'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => '{"type":"error","error":{"type":"overloaded_error"}} claude-haiku-5-5',
+        'created_at' => $now, 'updated_at' => $now]);
+    $views = fn (string $error): string => (string) json_encode(['views' => ['status' => 'failed', 'error' => $error, 'fingerprint' => 'f'], 'model' => 'x']);
+    $db->table('transcripts')->insert(['id' => $declined = (string) Str::ulid(), 'capture_session_id' => $session, 'kind' => 'final', 'provider' => 'groq',
+        'status' => 'completed', 'meta' => $views('Claude declined to convert this transcript.'), 'created_at' => $now, 'updated_at' => $now]);
+    $db->table('transcripts')->insert(['id' => $kept = (string) Str::ulid(), 'capture_session_id' => $other, 'kind' => 'final', 'provider' => 'groq',
+        'status' => 'completed', 'meta' => $views('The views could not be made.'), 'created_at' => $now, 'updated_at' => $now]);
+    $error = fn (string $table, string $id): ?string => $db->table($table)->where('id', $id)->value('error');
+    $viewsError = fn (string $id): ?string => json_decode((string) $db->table('transcripts')->where('id', $id)->value('meta'), true)['views']['error'] ?? null;
+
+    cycleArtisan('migrate', ['--step' => 1]);
+    $unavailable = ClaudeClientAi::UNAVAILABLE;
+    expect($error('call_notes', $named))->toBe($unavailable)
+        ->and($error('call_notes', $plain))->toBe('The transcript is not ready yet.')
+        ->and($error('client_briefs', $brief))->toBe($unavailable)
+        ->and($error('client_files', $file))->toBe($unavailable)
+        ->and($viewsError($declined))->toBe($unavailable)
+        ->and($viewsError($kept))->toBe('The views could not be made.')
+        ->and(json_decode((string) $db->table('transcripts')->where('id', $declined)->value('meta'), true)['model'])->toBe('x');
+
+    // down() leaves them plain; up() again changes nothing.
+    cycleArtisan('migrate:rollback', ['--step' => 1 + AFTER_AI_REASONS]);
+    expect($error('call_notes', $named))->toBe($unavailable);
+    cycleArtisan('migrate', ['--step' => 1]);
+    expect($error('call_notes', $named))->toBe($unavailable)->and($viewsError($declined))->toBe($unavailable);
 });

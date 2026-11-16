@@ -9,7 +9,10 @@ use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Support\UpgradeFlow;
+use App\Models\CallNote;
 use App\Models\CaptureSession;
+use App\Models\ClientBrief;
+use App\Models\ClientFile;
 use App\Models\Plan;
 use App\Models\Transcript;
 use App\Models\User;
@@ -78,6 +81,8 @@ const VENDOR_NAMES_ALLOWED = [
     // The phone tells the key, the credit and the service apart by these words (TranslateBudget.kt); they lose the name
     // once the phone reads the error code instead.
     'app/Http/Controllers/Api/LiveTranslateTokenController.php' => 'Live Translate\'s key and credit',
+    // The pattern that keeps them from people, never shown itself.
+    'app/Support/ProviderText.php' => 'the names it hides',
     // The Usage pages' cost per provider.
     'app/Services/Usage/UsageBreakdown.php' => 'the cost per provider',
     'app/Services/Usage/UsageReport.php' => 'the cost per provider',
@@ -222,6 +227,44 @@ it('says in plain words that the AI could not write a project\'s notes, keeping 
     expect(vendorNamesIn(ClaudeClientAi::UNAVAILABLE))->toBe([]);
     Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context): bool => $message === 'Project AI request failed'
         && str_contains((string) $context['error'], 'authentication_error'));
+});
+
+it('never sends or shows a reason the AI\'s work failed for that names a provider, even one kept from before', function () {
+    $device = Fx::device();
+    $owner = $device->user;
+    $project = Fx::client($owner);
+    $session = Fx::session($owner, $device, ['client_id' => $project->id]);
+    $transcript = Fx::transcript($session, 'Send the invoice.');
+    // What v1.8.0 and older kept: the AI's maker, its model, a credential's name.
+    CallNote::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'capture_session_id' => $session->id,
+        'status' => 'failed', 'error' => 'Claude did not return the notes in the expected form.']);
+    ClientBrief::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'sections' => ClientBrief::emptySections(),
+        'status' => 'failed', 'error' => '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} claude-sonnet-5-5']);
+    ClientFile::query()->create(['workspace_id' => $session->workspace_id, 'user_id' => $owner->id, 'client_id' => $project->id, 'name' => 'Scope.pdf',
+        'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => 'Missing credential anthropic.api_key. Add it on Admin → API Credentials.']);
+    $transcript->update(['meta' => ['views' => ['status' => 'failed', 'fingerprint' => TranscriptViews::fingerprint($transcript), 'error' => 'Claude declined to convert this transcript.']]]);
+    $api = $this->api(Fx::token($device));
+    $unavailable = ClaudeClientAi::UNAVAILABLE;
+
+    $workspace = $api->getJson("/api/clients/{$project->id}/workspace")->assertOk();
+    expect($workspace->json('data.brief.error'))->toBe($unavailable)
+        ->and($workspace->json('data.files.0.error'))->toBe($unavailable)
+        ->and($workspace->json('data.notes.0.error'))->toBe($unavailable)
+        ->and(vendorNamesIn((string) $workspace->getContent()))->toBe([]);
+    expect($api->getJson("/api/sessions/{$session->id}/notes")->assertOk()->json('data.error'))->toBe($unavailable)
+        ->and($api->getJson("/api/transcripts/{$transcript->id}/views")->assertOk()->json('error'))->toBe($unavailable);
+
+    // A plain reason stays as it is.
+    CallNote::query()->where('capture_session_id', $session->id)->update(['error' => 'The transcript is not ready yet.']);
+    expect($api->getJson("/api/sessions/{$session->id}/notes")->assertOk()->json('data.error'))->toBe('The transcript is not ready yet.');
+
+    // The console's project page says the same.
+    Filament::setCurrentPanel('app');
+    $this->actingAs($owner, 'web');
+    $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent()
+        .(string) $this->get('/app/clients/'.$project->id.'?tab=files')->assertOk()->getContent();
+    expect($html)->toContain(e($unavailable))->not->toContain('overloaded_error')->not->toContain('Missing credential')
+        ->and(vendorNamesIn($html))->toBe([]);
 });
 
 /** A recording of [$owner] with a ready recording and a final transcript holding [$transcript]. */

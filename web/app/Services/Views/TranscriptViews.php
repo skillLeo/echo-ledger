@@ -17,6 +17,7 @@ use App\Services\ShortNoteCheck;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Stt\ScriptCheck;
+use App\Support\ProviderText;
 use App\Support\UnsureMarkers;
 use App\Support\UrduText;
 use Illuminate\Support\Facades\Log;
@@ -215,7 +216,8 @@ final class TranscriptViews
             'default' => self::defaultView($available, self::sourceLanguage($transcript)),
             'model' => $ready ? ($views['model'] ?? null) : null,
             'made_at' => $ready ? ($views['made_at'] ?? null) : null,
-            'error' => $status === 'failed' ? ($views['error'] ?? null) : null,
+            // As people may read it: a reason kept from before v1.8.1 may name the AI's maker.
+            'error' => $status === 'failed' ? ProviderText::forPeople($views['error'] ?? null) : null,
             // Lines shown with their original words in a view because the view's text failed the checks twice.
             // Always a JSON object (view => line indexes), also when empty, so the apps can read it as a map.
             // Since v1.5 (Phase 1C): lines done of lines per view while the views are being made, {} otherwise.
