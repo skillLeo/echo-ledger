@@ -108,6 +108,30 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     EchoLedger hides its windows from screen sharing only, never itself from the rest of the computer. Brief: Regular
     for the whole run (also at login), the menu bar icon stays, closing the window keeps it running, the Dock icon
     reopens the window, Dock Quit / ⌘Q really quit (a running recording is saved as the tray's Quit does).
+  - Phone b-phone @4fde4ba1 (2026-11-16 evening): A4–A9, B7–B15, B17, the wording and the A6 Watch translate bug
+    fixed (three causes: getters giving -1, a failed helper call read as "nothing", a stale helper after pm install -r;
+    "can't read" now falls back to Android's share-the-sound question; the Audio probe shows uid/state/usage and their
+    source); 1,547 unit tests, lint clean. Re-review running (fresh reviewer). Next phone slot: the builder's steps
+    (Copy diagnostics → helper build and "Players the helper sees"; A6 from the tile; Part C and D).
+  - GUIDE TEXT QUEUE for the web builder (docs/USER_GUIDE.md), from the builders' reports:
+    (1) Phone calls (SIM) bullet, B18: keep "Some phones give both voices on one track…", replace the two sentences
+    after it with the "SIM calls through the Phone app's own recordings" block (Galaxy: Phone app → ⋮ → Settings →
+    Record calls → Auto record calls → All calls; Xiaomi/Redmi/POCO: Phone app → Settings → Call recording → Record
+    calls automatically → All numbers; Music and audio + Call log; Import the Phone app's recordings on; named after
+    the contact; late or overlapping calls come with one notification; only calls EchoLedger was asked to record;
+    unknown makers wait in Settings → Auto-record apps with Import this recording (name, length, Play) / Not this
+    call; nothing deleted unless Delete the Phone app's copy after import (Android 11+, asked each time, only after
+    the upload); a quiet note after a call EchoLedger couldn't hear; Pixel with Google's Phone app can't record SIM
+    calls). The full wording is in the phone builder's report of 2026-11-16 (session scratchpad review folder).
+    (2) Section 16 Watch translate: "If the capture helper can't tell which app is playing, Watch translate asks
+    Android to share the sound instead (the same question as without the helper): tap Start now. Help & diagnostics
+    → Audio probe shows what the helper sees."
+    (3) Mac install step 3 (after the desktop follow-up merges): "EchoLedger is in the Dock and in the menu bar (top
+    right). Click its Dock icon to open its window; click the menu bar icon for its menu (Open EchoLedger opens the
+    window). ⌘W closes the window and EchoLedger keeps running in the Dock and the menu bar. To quit, press ⌘Q, choose
+    Quit EchoLedger from the menu bar icon, or right-click the Dock icon and choose Quit; a recording that is running
+    is stopped and kept first." and "turns red while recording" → "shows a red badge while recording (amber while
+    paused)". Also docs/research/desktop-tauri.md still recommends Accessory.
   - The v1.8.1 desktop follow-up moved to b-desktop-followup = v1.1 + 8012890e, 0b6c3314, 800615e8, 0cfef403
     (clean cherry-picks of b-desktop-reopen's 025cde89, fc1f5cd8, 801c2cf4, e298867f), because b-desktop-reopen
     also carries the 0.2 work that isn't approved yet. Reviewer on it now; the Dock change comes as one more commit.
