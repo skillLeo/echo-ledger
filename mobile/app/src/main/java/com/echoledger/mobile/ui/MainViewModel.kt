@@ -906,8 +906,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun <T> workspaceCall(failed: String, block: suspend (com.echoledger.mobile.net.ApiClient) -> T): T? =
         withContext(Dispatchers.IO) {
             runCatching { block(graph.api() ?: error("Sign in on this phone first.")) }
-                // The server's words, unless they name an engine or an AI vendor (P-001): then the plain [failed].
-                .onFailure { _message.value = com.echoledger.mobile.core.VendorNames.plain(it.message, failed) }.getOrNull()
+                // By its code, else the server's words unless they name an engine or an AI vendor (P-001): then [failed].
+                .onFailure { _message.value = workspaceProblem(it, failed) }.getOrNull()
         }
 
     suspend fun workspace(clientId: String) = workspaceCall("The project's workspace could not be loaded.") { it.workspace(clientId) }
@@ -951,6 +951,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     suspend fun ask(clientId: String, question: String, language: String) =
         workspaceCall("The AI assistant could not answer right now. Try again in a minute.") { it.ask(clientId, question, language) }
+
+    /** The plain words for a refused workspace call, by its code (never the server's text about its AI provider). */
+    internal fun workspaceProblem(e: Throwable, failed: String): String = when ((e as? ApiException)?.code) {
+        "ai_unavailable" -> AI_NOT_SET_UP
+        else -> com.echoledger.mobile.core.VendorNames.plain(e.message, failed)
+    }
 
     suspend fun bundle(clientId: String) = workspaceCall("The text could not be made.") { it.bundle(clientId) }
 
@@ -1630,6 +1636,9 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
         /** The production server from the build (BuildConfig.DEFAULT_SERVER); tests set it to "" so nothing reaches it. */
         @Volatile var defaultServer: String = BuildConfig.DEFAULT_SERVER
+
+        /** `409 ai_unavailable`: the server has no AI provider set up (call notes, the brief and Ask). */
+        const val AI_NOT_SET_UP = "The AI assistant is not set up on the server yet."
 
         const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Profile → Devices → Sign in a device."
     }

@@ -240,7 +240,7 @@ class ScreenshotsTest : ScreenTest() {
     fun sessionBackup() = sessionState(
         "session-backup",
         ServerFixtures.transcript(backupEngine = true, providerLabel = "a backup engine"),
-        "Backup transcription — Re-transcribe?"
+        "Made with a backup service. Re-transcribe for the best quality?"
     )
 
     /** A line a second engine heard differently: "A second transcription heard: …" (never that engine's name). */

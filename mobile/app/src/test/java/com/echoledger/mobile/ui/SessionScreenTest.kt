@@ -315,7 +315,7 @@ class SessionScreenTest : ScreenTest() {
     fun `a transcript made by the backup engine offers the best one without naming either engine`() {
         serve(ServerFixtures.transcript(backupEngine = true, providerLabel = "Groq Whisper large-v3"))
         showSession(item())
-        awaitText("Backup transcription — Re-transcribe?")
+        awaitText("Made with a backup service. Re-transcribe for the best quality?")
         compose.onAllNodesWithText("Groq", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("AssemblyAI", substring = true).assertCountEquals(0)
     }

@@ -577,7 +577,7 @@ fun SessionScreen(
                             val retryScope = rememberCoroutineScope()
                             var retrying by remember { mutableStateOf(false) }
                             InlineBanner(
-                                "Backup transcription — Re-transcribe?",
+                                "Made with a backup service. Re-transcribe for the best quality?",
                                 Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
                                 kind = BannerKind.Warning,
                                 action = if (retrying) "Starting…" else "Re-transcribe",

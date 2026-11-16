@@ -168,7 +168,7 @@ fun DesignGallery(part: Int = -1) {
                 )
                 InlineBanner("Transcription failed: the server could not be reached.", kind = BannerKind.Error, action = "Retry")
                 InlineBanner("Call capture isn't ready.", kind = BannerKind.Warning, action = "Fix")
-                InlineBanner("Roman Urdu is made by Claude.", onDismiss = {})
+                InlineBanner("The Roman Urdu view is ready.", onDismiss = {})
                 Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                     listOf("Omar Khan", "Aria Studio", "Northwind", "Sara", "Bilal Ahmed", "Contoso", "Zara", "Me").forEach { Avatar(it) }
                 }

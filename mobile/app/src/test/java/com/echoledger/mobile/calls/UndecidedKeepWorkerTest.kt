@@ -1,11 +1,13 @@
 package com.echoledger.mobile.calls
 
+import android.content.Context
 import androidx.work.ListenableWorker
 import androidx.work.testing.TestListenableWorkerBuilder
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.storeRecording
+import com.echoledger.mobile.translate.LiveTranslateSession
 import com.echoledger.mobile.translate.TranslateStatus
 import java.time.Instant
 import kotlinx.coroutines.runBlocking
@@ -56,16 +58,33 @@ class UndecidedKeepWorkerTest : AppTest() {
     }
 
     @Test
-    fun `a Soniox refusal is remembered in short and cleared once translating works`() {
-        assertEquals("Needs credit", TranslateStatus.shortReason("Soniox has no credit left. Add credit at console.soniox.com."))
-        assertEquals("Needs credit", TranslateStatus.shortReason(com.echoledger.mobile.translate.LiveTranslateSession.NO_CREDIT))
+    fun `a refusal is remembered in short by which notice it is, and cleared once translating works`() {
+        assertEquals("Needs credit", TranslateStatus.shortReason(LiveTranslateSession.NO_CREDIT))
         assertEquals("Not set up on the server", TranslateStatus.shortReason(TranslateStatus.NOT_SET_UP))
-        assertEquals("Budget used up", TranslateStatus.shortReason("This month's Live Translate budget is used up."))
+        assertEquals("Budget used up", TranslateStatus.shortReason(TranslateStatus.BUDGET_USED_UP))
+        // The words of a server's or an engine's text decide nothing.
+        assertNull(TranslateStatus.shortReason("Soniox has no credit left. Add credit at console.soniox.com."))
+        assertNull(TranslateStatus.shortReason("The key was not accepted."))
+        assertNull(TranslateStatus.shortReason("This month's budget is used up."))
+        assertNull(TranslateStatus.shortReason(TranslateStatus.NOT_ANSWERING))
         assertNull(TranslateStatus.shortReason("Sign in on this phone first."))
 
-        TranslateStatus.remember(app, "Soniox has no credit left.")
+        TranslateStatus.remember(app, LiveTranslateSession.NO_CREDIT)
         assertEquals("Needs credit", TranslateStatus.blocked(app))
         TranslateStatus.remember(app, null)
+        assertNull(TranslateStatus.blocked(app))
+    }
+
+    @Test
+    fun `a short reason saved by an older version reads in today's words`() {
+        val saved = app.getSharedPreferences("live_translate_usage", Context.MODE_PRIVATE)
+        saved.edit().putString("blocked", "Needs Soniox credit").commit()
+        assertEquals("Needs credit", TranslateStatus.blocked(app))
+        saved.edit().putString("blocked", "Needs a Soniox key").commit()
+        assertEquals("Not set up on the server", TranslateStatus.blocked(app))
+        saved.edit().putString("blocked", "Budget used up").commit()
+        assertEquals("Budget used up", TranslateStatus.blocked(app))
+        saved.edit().putString("blocked", "Something else").commit()
         assertNull(TranslateStatus.blocked(app))
     }
 }
