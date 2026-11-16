@@ -26,6 +26,7 @@ import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
+import com.echoledger.mobile.calls.MissedReason
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
 import com.echoledger.mobile.calls.SamsungCallImport
@@ -188,6 +189,8 @@ class RecordingService : LifecycleService() {
         super.onCreate()
         lifecycleScope.launch {
             graph.settings.settings.collect {
+                // The capture journal keeps what the person chose, so a call found later is judged by the choices of then.
+                CallJournal.choices(this@RecordingService, CallJournal.choicesOf(it))
                 // The call-app list reaches the helper as soon as it is edited.
                 if (it.extraCallApps != settings.extraCallApps) graph.helper.setCallApps(CallTargets.packages(it.extraCallApps))
                 // Picked games: their mixes are armed before the game plays, and they are never call apps.
@@ -398,6 +401,7 @@ class RecordingService : LifecycleService() {
         // The Google Play build has no capture helper (since v1.5), so auto-record stays off there; a viewer records nothing.
         if (Build.VERSION.SDK_INT < 34 || !BuildConfig.CAPTURE_HELPER || settings.plan.viewer) {
             Log.w(TAG, "auto-record needs Android 14+ and the capture helper")
+            CallJournal.mark(this, CallJournal.State.REFUSED, if (settings.plan.viewer) "plan" else "android")
             persistArmed(false)
             settle()
             return
@@ -415,12 +419,15 @@ class RecordingService : LifecycleService() {
             graph.helper.setArmed(false)
             graph.helper.setCallListener(null)
             CaptureLog.add(this, "auto-record could not start", "Android did not allow it from the background")
+            CallJournal.mark(this, CallJournal.State.REFUSED, "background")
             Notifications.autoRecordOff(this)
             settle()
             return
         }
         Notifications.cancelAutoRecordOff(this)
-        CaptureLog.add(this, "auto-record on", if (helperAlive()) "helper ready" else "helper not running")
+        val ready = if (helperAlive()) "helper ready" else "helper not running"
+        CaptureLog.add(this, "auto-record on", ready)
+        CallJournal.mark(this, CallJournal.State.ARMED, ready)
         isArmed = true
         AutoRecordKeeper.keepChecking(this)
         persistArmed(true)
@@ -437,6 +444,7 @@ class RecordingService : LifecycleService() {
         persistArmed(false)
         AutoRecordKeeper.stopChecking(this)
         CaptureLog.add(this, "auto-record off")
+        CallJournal.mark(this, CallJournal.State.DISARMED)
         settle()
     }
 
@@ -445,6 +453,33 @@ class RecordingService : LifecycleService() {
 
     private var lastReady: Boolean? = null
     private var warnedThisCall = false
+
+    /** The journal's entry for the call the helper has reported, until it ends. */
+    private var journalCallId: String? = null
+
+    /** The journal's entry for a call seen in the audio mode while the helper was missing. */
+    private var audioCallId: String? = null
+
+    /**
+     * A call going on while the helper is missing (the watchdog's audio mode): into the journal as not recorded, so the
+     * missed-recording detector knows why. Only a call it can name: a SIM call, or an app call whose call notification
+     * just showed (another app's voice chat in that mode is not a call).
+     */
+    private fun journalUnseenCall(mode: Int) {
+        val app = if (mode == AudioManager.MODE_IN_CALL) {
+            SourceApp.PHONE_CALL
+        } else {
+            CallTargets.KNOWN.keys.firstNotNullOfOrNull { pkg ->
+                CallNotices.latest(pkg, sim = false, sinceMs = System.currentTimeMillis() - CallNotices.KEEP_MS)?.let {
+                    SourceApp.fromPackage(it.pkg)
+                }
+            } ?: return
+        }
+        val id = UUID.randomUUID().toString()
+        audioCallId = id
+        CallJournal.seen(this, id, app.wire, CallJournal.Seen.AUDIO)
+        CallJournal.fail(this, id, MissedReason.HELPER_NOT_ARMED.wire, MissedReason.HELPER_NOT_ARMED.detail)
+    }
 
     /**
      * While auto-record is on: reconnects a helper that went away (Shizuku), keeps the "ready / not ready" notice
@@ -461,6 +496,7 @@ class RecordingService : LifecycleService() {
             if (ready != lastReady) {
                 lastReady = ready
                 CaptureLog.add(this@RecordingService, "helper", if (ready) "ready" else "not running")
+                CallJournal.mark(this@RecordingService, if (ready) CallJournal.State.HELPER_READY else CallJournal.State.HELPER_LOST)
                 if (capture == null) goForeground(mic = false, title = "", detail = "")
             }
             val mode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
@@ -469,9 +505,14 @@ class RecordingService : LifecycleService() {
             if (inCall && !ready && !warnedThisCall) {
                 warnedThisCall = true
                 CaptureLog.add(this@RecordingService, "call seen without the helper")
+                journalUnseenCall(mode)
                 Notifications.captureNotReady(this@RecordingService)
             }
-            if (!inCall) warnedThisCall = false
+            if (!inCall) {
+                warnedThisCall = false
+                audioCallId?.let { CallJournal.ended(this@RecordingService, it) }
+                audioCallId = null
+            }
             backupIfMissed(ready)
             main.postDelayed(this, WATCHDOG_MS)
         }
@@ -528,6 +569,9 @@ class RecordingService : LifecycleService() {
     /** "Record" was tapped on the ask notification: the call is on, so nothing waits for an answer. */
     private var recordingAskedCall = false
 
+    /** The journal's entry for the phone call the ask notification is about. */
+    private var askedCallId: String? = null
+
     /** The call the backup start already tried, so a helper that refuses is not asked again every 5 s. */
     private var backupTried: String? = null
 
@@ -547,18 +591,29 @@ class RecordingService : LifecycleService() {
         if (!due) return
         backupTried = call.recordingId
         CaptureLog.add(this, "backup start", "${call.app.wire}: call seen without a recording")
-        startHelperCapture(call.app.wire, call.recordingId, fromCall = true)
+        startHelperCapture(call.app.wire, call.recordingId, fromCall = true, note = "backup start")
         capture?.let { refresh(it, "Recording started (backup)") }
     }
 
     private fun onCallEvent(event: CallEvent) {
+        if (event is CallEvent.CallStarted && callState !is CallState.InCall) {
+            // The capture journal (since v1.8): the helper saw a call while auto-record was armed.
+            journalCallId = event.recordingId
+            CallJournal.seen(this, event.recordingId, event.app.wire, CallJournal.Seen.HELPER)
+            CallJournal.stage(this, event.recordingId, CallJournal.Stage.ARMED, "helper ready")
+        }
+        if (event is CallEvent.CallEnded) journalCallId?.let { CallJournal.ended(this, it) }
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
             when (PhoneCalls.mode(settings.phoneCalls)) {
-                PhoneCalls.OFF -> return
+                PhoneCalls.OFF -> {
+                    CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "phone calls are off")
+                    return
+                }
 
                 PhoneCalls.ASK -> {
                     phoneCallAsked = true
+                    askedCallId = event.recordingId
                     CaptureLog.add(this, "phone call", "asked whether to record")
                     Notifications.askRecordPhoneCall(this)
                     return
@@ -566,10 +621,13 @@ class RecordingService : LifecycleService() {
             }
         } else if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) {
             // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
+            CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "auto-record is off for ${event.app.label}")
             return
         }
         if (event is CallEvent.CallEnded && phoneCallAsked) {
             phoneCallAsked = false
+            askedCallId?.let { CallJournal.finish(this, it, CallJournal.Result.NOT_WANTED, "Record was not chosen") }
+            askedCallId = null
             Notifications.cancelAskRecordPhoneCall(this)
         }
         reduceCall(event)
@@ -582,7 +640,10 @@ class RecordingService : LifecycleService() {
         phoneCallAsked = false
         CaptureLog.add(this, "phone call", "recording (asked)")
         recordingAskedCall = true
-        reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, UUID.randomUUID().toString(), System.currentTimeMillis()))
+        // The journal's entry for this call becomes the recording's.
+        val id = askedCallId ?: UUID.randomUUID().toString()
+        askedCallId = null
+        reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, id, System.currentTimeMillis()))
         recordingAskedCall = false
     }
 
@@ -593,7 +654,7 @@ class RecordingService : LifecycleService() {
             when (effect) {
                 is CallEffect.StartCapture -> startHelperCapture(effect.app.wire, effect.recordingId, fromCall = true)
                 is CallEffect.StopCaptureAndAsk -> stopCapture(fromCall = true, reason = "call ended")
-                is CallEffect.Discard -> discardCapture(effect.recordingId)
+                is CallEffect.Discard -> discardCapture(effect.recordingId, "shorter than 3 s")
                 is CallEffect.Keep -> UploadWorker.enqueue(this, effect.recordingId)
             }
         }
@@ -628,14 +689,20 @@ class RecordingService : LifecycleService() {
             mode == android.media.AudioManager.MODE_IN_COMMUNICATION
     }
 
-    private fun startHelperCapture(sourceApp: String, id: String, fromCall: Boolean) {
+    private fun startHelperCapture(sourceApp: String, id: String, fromCall: Boolean, note: String? = null) {
         if (capture != null) return
         val helper = graph.helper.helper
         if (helper == null) {
             // A call detected without the helper cannot fall back to the mic from the background.
-            if (fromCall) settle() else startMicCapture(id)
+            if (fromCall) {
+                journalFailed(id, MissedReason.HELPER_NOT_ARMED)
+                settle()
+            } else {
+                startMicCapture(id)
+            }
             return
         }
+        if (!fromCall) CallJournal.seen(this, id, sourceApp, CallJournal.Seen.BY_HAND)
         val phone = sourceApp == SourceApp.PHONE_CALL.wire
         val session = Capture(id, sourceApp, channels = 2, fromCall = fromCall, clientId = settings.clientId)
         session.title = if (phone) "Recording phone call" else "Recording call"
@@ -644,6 +711,7 @@ class RecordingService : LifecycleService() {
         if (!goForeground(mic = false, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
+            journalFailed(id, MissedReason.PERMISSION, "Android did not let the recording start in the background.")
             settle()
             return
         }
@@ -672,6 +740,7 @@ class RecordingService : LifecycleService() {
             pipe[0].close()
             session.cancel()
             capture = null
+            journalFailed(id, MissedReason.fromProblem(CaptureProblems.recent(this)))
             // A call that could not be recorded is said so at once (the helper's reason), never silently skipped.
             if (fromCall) {
                 Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = true)
@@ -700,6 +769,23 @@ class RecordingService : LifecycleService() {
             } else {
                 "your voice only"
             }
+        )
+        CallJournal.stage(
+            this,
+            id,
+            CallJournal.Stage.STARTED,
+            listOfNotNull(
+                note,
+                if (session.channels ==
+                    2
+                ) {
+                    null
+                } else if (phone) {
+                    "one track"
+                } else {
+                    "your voice only"
+                }
+            ).joinToString(", ").ifEmpty { null }
         )
         if (fromCall && !recordingAskedCall) waitForAnswer(session, phone)
         session.readerThread = thread(name = "el-pipe-reader") {
@@ -763,6 +849,7 @@ class RecordingService : LifecycleService() {
             settle()
             return
         }
+        CallJournal.seen(this, id, sourceApp, CallJournal.Seen.BY_HAND)
         val session = Capture(id, sourceApp, channels = 1, fromCall = false, clientId = settings.clientId)
         session.micFgs = true
         session.title = if (sourceApp == SourceApp.VOICE_NOTE.wire) "Voice note" else "Recording"
@@ -771,6 +858,7 @@ class RecordingService : LifecycleService() {
         if (!goForeground(mic = true, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
+            journalFailed(id, MissedReason.PERMISSION, "Android did not let the recording start in the background.")
             settle()
             return
         }
@@ -834,10 +922,19 @@ class RecordingService : LifecycleService() {
         val why = failure.message ?: failure.javaClass.simpleName
         CaptureProblems.record(this, "The microphone could not start: $why")
         CaptureLog.add(this, "microphone failed", failure.javaClass.simpleName)
+        journalFailed(session.id, if (failure is SecurityException) MissedReason.PERMISSION else MissedReason.MIC_BUSY)
         session.cancel()
         capture = null
         Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
         settle()
+    }
+
+    /**
+     * The journal: the recording [id] stopped before it was saved, for [reason] (said to the person in [detail], plain
+     * words; the reason's own sentence by default).
+     */
+    private fun journalFailed(id: String, reason: MissedReason, detail: String = reason.detail) {
+        CallJournal.fail(this, id, reason.wire, detail)
     }
 
     private fun afterStart(session: Capture) {
@@ -943,7 +1040,7 @@ class RecordingService : LifecycleService() {
         if (capture !== session) return
         CaptureLog.add(this, "discarded", "by you during the recording")
         session.serverSessionId?.let { DiscardWorker.enqueue(this, session.id, it) }
-        discardCapture(session.id)
+        discardCapture(session.id, "by you")
     }
 
     private suspend fun startCaptions(session: Capture, clientId: String?) {
@@ -1224,6 +1321,26 @@ class RecordingService : LifecycleService() {
                         (skip?.let { ", skipped: ${it.label.lowercase()}" } ?: "")
                 }
             )
+            when {
+                stored == null -> journalFailed(session.id, MissedReason.UNKNOWN, "Saving the recording failed.")
+
+                // No sound on any side: a microphone Android gave to another app, or a cause not known.
+                silent -> journalFailed(
+                    session.id,
+                    MissedReason.fromProblem(CaptureProblems.recent(this)).takeIf { it == MissedReason.MIC_BUSY } ?: MissedReason.UNKNOWN,
+                    "No sound was captured, so the recording was not kept."
+                )
+
+                skip != null -> CallJournal.finish(
+                    this,
+                    session.id,
+                    CallJournal.Result.SKIPPED,
+                    skip?.label?.lowercase(),
+                    stored.durationMs
+                )
+
+                else -> CallJournal.finish(this, session.id, CallJournal.Result.KEPT, keptMs = stored.durationMs)
+            }
             if (silent && stored != null) {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
@@ -1275,8 +1392,9 @@ class RecordingService : LifecycleService() {
         return (endedMs - talkMs - session.startedAt.toEpochMilli()).coerceAtLeast(0)
     }
 
-    /** Short (missed/rejected) calls are dropped without asking. */
-    private fun discardCapture(recordingId: String) {
+    /** Short (missed/rejected) calls are dropped without asking, and so is a recording the person discards. */
+    private fun discardCapture(recordingId: String, why: String) {
+        CallJournal.finish(this, recordingId, CallJournal.Result.DISCARDED, why)
         CallNotices.onNotice = null
         val session = capture
         if (session?.id == recordingId) {
@@ -1299,6 +1417,7 @@ class RecordingService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        if (armed) CallJournal.mark(this, CallJournal.State.DISARMED, "service stopped")
         armed = false
         isArmed = false
         capture?.let { stopCapture(fromCall = false, reason = "the recording service was closed") }
@@ -1435,6 +1554,7 @@ class RecordingService : LifecycleService() {
             } else {
                 meLevel = Levels.rms(samples)
             }
+            heard()
             val gate = gate
             if (gate != null && gate.waiting) {
                 val kept = gate.accept(bytes, length) ?: return
@@ -1443,6 +1563,21 @@ class RecordingService : LifecycleService() {
                 return
             }
             write(bytes, length, samples)
+        }
+
+        private var meHeard = false
+        private var otherHeard = false
+        private var bothHeard = false
+
+        /** The capture journal's "both channels have audio": each side heard once (the one track, for a one-track call). */
+        private fun heard() {
+            if (bothHeard) return
+            if (meLevel >= Levels.HEARD) meHeard = true
+            if (clientLevel >= Levels.HEARD) otherHeard = true
+            if (meHeard && (otherHeard || channels == 1)) {
+                bothHeard = true
+                CallJournal.stage(this@RecordingService, id, CallJournal.Stage.BOTH_AUDIO, if (channels == 1) "one track" else null)
+            }
         }
 
         /** Audio that goes into the recording: the file, the level and speech counts, and (with [stream]) live captions. */

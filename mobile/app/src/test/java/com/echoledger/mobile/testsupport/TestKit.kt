@@ -202,6 +202,8 @@ private fun busyThreads(): String = Thread.getAllStackTraces().entries
 /** Clears everything a test can persist through the application graph so tests stay independent. */
 suspend fun EchoLedgerApp.resetPersistedState() {
     settingsDataStoreEdit { it.clear() }
+    // Since v1.8: the capture journal starts empty.
+    com.echoledger.mobile.recording.CallJournal.clear(this)
     File(noBackupFilesDir, "library.bin").delete()
     File(noBackupFilesDir, "recordings").listFiles()?.forEach { it.deleteRecursively() }
 }

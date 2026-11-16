@@ -147,6 +147,24 @@ object SamsungCallImport {
                 }
             )
             if (stored != null) {
+                // The capture journal: this phone call is recorded after all, by the Phone app.
+                com.echoledger.mobile.recording.CallJournal.update(applicationContext) { book ->
+                    val seen = com.echoledger.mobile.recording.CallJournal.seen(
+                        book,
+                        stored.id,
+                        SourceApp.PHONE_CALL.wire,
+                        com.echoledger.mobile.recording.CallJournal.Seen.PHONE_APP,
+                        start
+                    )
+                    com.echoledger.mobile.recording.CallJournal.finish(
+                        seen,
+                        stored.id,
+                        com.echoledger.mobile.recording.CallJournal.Result.KEPT,
+                        end,
+                        "imported from the Phone app",
+                        stored.durationMs
+                    )
+                }
                 withContext(Dispatchers.Main) {
                     PostCallPrompt.show(applicationContext, stored, settings.afterCall, settings.themeMode)
                 }

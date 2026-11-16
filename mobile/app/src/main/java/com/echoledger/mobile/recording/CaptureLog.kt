@@ -35,7 +35,10 @@ object CaptureLog {
         return lines.toList()
     }
 
-    /** The text "Copy diagnostics" puts on the clipboard: the phone, the app and helper builds, then the log. */
+    /**
+     * The text "Copy diagnostics" puts on the clipboard: the phone, the app and helper builds, the log, then (since v1.8)
+     * the capture journal of the last 7 days and auto-record's timeline. No audio, names or numbers in any of it.
+     */
     fun report(context: Context, helperState: String): String = buildString {
         appendLine("EchoLedger capture diagnostics")
         appendLine("Phone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
@@ -43,6 +46,11 @@ object CaptureLog {
         appendLine("Helper: $helperState")
         appendLine("--")
         lines(context).forEach { appendLine(it) }
+        val journal = CallJournal.book(context)
+        appendLine("-- Calls, last ${CallJournal.KEEP_DAYS} days (detected → armed → started → both channels have audio → saved)")
+        CallJournal.describe(journal).ifEmpty { listOf("none") }.forEach { appendLine(it) }
+        appendLine("-- Auto-record")
+        CallJournal.describeMarks(journal).ifEmpty { listOf("nothing yet") }.forEach { appendLine(it) }
     }
 
     @Synchronized

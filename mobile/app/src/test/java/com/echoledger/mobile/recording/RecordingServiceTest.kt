@@ -201,6 +201,96 @@ class RecordingServiceTest : AppTest() {
         )
     }
 
+    /** The capture journal (v1.8 0.2b) from the service: the stages a call reached, and why it stopped. */
+    @Test
+    fun `a call the helper reports goes into the capture journal stage by stage, with why it stopped`() {
+        val helper = RecordingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        assertTrue(CallJournal.book(app).marks.any { it.kind == CallJournal.State.ARMED && it.value == "helper ready" })
+
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one, dropped without a word
+        helper.listener!!.onCallEnded()
+        pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("whatsapp", call.app)
+        assertEquals(CallJournal.Seen.HELPER, call.seenBy)
+        // Nothing said the call was answered, so it was saved and skipped (it can be restored for a day).
+        assertEquals(listOf("detected", "armed", "started", "saved"), call.stages.map { it.stage })
+        assertEquals("skipped", call.result)
+        assertEquals("not answered", call.note)
+        assertTrue(call.endedAtMs != null)
+    }
+
+    /** A helper that refuses to record, the way it does when another app holds the microphone. */
+    private class RefusingHelper : ICaptureHelper.Stub() {
+        var listener: ICallListener? = null
+
+        override fun version() = 1
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
+            listener?.onError("Call capture could not start: mic: did not start")
+            return false
+        }
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
+            startCapture(sink, sampleRate, micSource)
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = "[]"
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() = Unit
+        override fun setCallListener(listener: ICallListener?) {
+            this.listener = listener
+        }
+        override fun destroy() = Unit
+    }
+
+    @Test
+    fun `a call the helper cannot record is journaled where it stopped, with the reason from the helper's words`() {
+        val helper = RefusingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("zoom", call.app)
+        assertEquals(listOf("detected", "armed"), call.stages.map { it.stage })
+        assertEquals(CallJournal.Failure("started", "mic_busy", com.echoledger.mobile.calls.MissedReason.MIC_BUSY.detail), call.failure)
+        assertFalse(RecordingService.isRecording)
+    }
+
+    @Test
+    fun `a call in an app whose auto-record is off is journaled as not wanted, and nothing records`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordApps = mapOf("whatsapp" to false)) } }
+        val helper = RecordingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        pumpUntil("the choices to reach the journal") {
+            CallJournal.book(app).settings.lastOrNull()?.choices?.appsOff == listOf("whatsapp")
+        }
+
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("not_wanted", call.result)
+        assertEquals("auto-record is off for WhatsApp", call.note)
+        assertFalse(RecordingService.isRecording)
+    }
+
     @Test
     fun `recording without the microphone permission ends quietly`() {
         shadowOf(app).denyPermissions(android.Manifest.permission.RECORD_AUDIO)
