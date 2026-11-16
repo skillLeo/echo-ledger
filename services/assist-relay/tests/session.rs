@@ -336,7 +336,8 @@ async fn going_back_to_an_earlier_token_never_restores_budget() {
     s.send(json!({"type": "token_refresh", "token": sign(&y)})).await;
     let answers = s.drain(Duration::from_millis(500)).await;
     assert_eq!(answers[0]["type"], "token_refreshed");
-    assert!(answers.iter().any(|m| m["type"] == "mode_changed" && m["to"] == "fast"), "{answers:?}");
+    let back = answers.iter().find(|m| m["type"] == "mode_changed").expect("a mode change");
+    assert_eq!((back["to"].as_str(), back["reason"].as_str()), (Some("fast"), Some("budget_restored")), "the plan caps it at fast, the budget is the change");
     use_up(&mut s, "y").await;
 
     // Back to the first token: it continues where it was, so nothing comes back.

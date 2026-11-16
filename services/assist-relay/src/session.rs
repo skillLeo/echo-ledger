@@ -330,6 +330,8 @@ pub(crate) struct Engine {
     ledger: Ledger,
     connected_since: Option<Instant>,
     assist_used_up: bool,
+    /// The last mode change was the budget's: a refresh that raises the mode restores budget.
+    budget_limited: bool,
     /// The `seq` of the app's message being handled (quoted in errors about it).
     replying_to: Option<u64>,
     feed_tx: mpsc::Sender<Feed>,
@@ -387,6 +389,7 @@ impl Engine {
             ledger,
             connected_since: None,
             assist_used_up: false,
+            budget_limited: false,
             replying_to: None,
             feed_tx,
             feed_rx,
@@ -1361,15 +1364,20 @@ impl Engine {
             return;
         }
         let rank = |mode: EffectiveMode| mode.mode().map_or(0, |m| m as u8 + 1);
+        let rising = rank(next) > rank(previous);
         let reason = match cause {
+            // The budget had held the mode down and a new token raised it: that is the change, even when the plan
+            // now caps how far it goes.
+            _ if rising && why == Why::Refresh && self.budget_limited => ModeReason::BudgetRestored,
             None => ModeReason::AssistTime,
             Some(Cause::Budget) => ModeReason::Budget,
             Some(Cause::Plan) => ModeReason::Plan,
             Some(Cause::Requested) if why == Why::Settings => ModeReason::Requested,
-            Some(Cause::Requested) if rank(next) > rank(previous) => ModeReason::BudgetRestored,
+            Some(Cause::Requested) if rising => ModeReason::BudgetRestored,
             Some(Cause::Requested) => ModeReason::Requested,
         };
         self.effective = next;
+        self.budget_limited = matches!(reason, ModeReason::Budget);
         self.emit(ServerMessage::ModeChanged(ModeChanged { from: previous, to: next, reason }));
         self.deps.telemetry.event(&SessionEvent::ModeChanged {
             session: self.session_id.clone(),
