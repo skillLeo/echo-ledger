@@ -10,6 +10,7 @@ import {
   type Corner,
   type InputDevice,
   type MicUser,
+  type NotRecordedMic,
   type PermissionsStatus,
   type Settings,
   type SettingsPatch,
@@ -20,7 +21,7 @@ import { meterLevel } from "../../lib/controls";
 import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
-import { decisionText, micTone, micUserName, notRecorded } from "../../lib/explainer";
+import { decisionText, lastNotRecordedLine, micTone, micUserName, notRecorded } from "../../lib/explainer";
 import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
@@ -105,31 +106,23 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
   );
 }
 
-/** The last app using the microphone that was not recorded, kept while the window is open (the core keeps no list). */
-let lastNotRecorded: { user: MicUser; at: number } | null = null;
-
 /**
  * "Why a call wasn't recorded" (A1.8; moved here from Home, D-014): each app using the microphone now and what EchoLedger
- * does with it, in plain words, and the last one that was not recorded. Read every 2 s, only while this page is on screen
- * (C9).
+ * does with it, in plain words, and the last one that was not recorded, which the core keeps since EchoLedger started
+ * (with its reason and time), so a call from before this page was opened is explained too. Read every 2 s, only while
+ * this page is on screen (C9).
  */
 function WhyNotRecorded() {
   const [users, setUsers] = useState<MicUser[]>([]);
-  const [last, setLast] = useState(lastNotRecorded);
+  const [last, setLast] = useState<NotRecordedMic | null>(null);
   const shown = useWindowShown();
   useEffect(() => {
     if (!shown) return;
     let alive = true;
-    const tick = () => api.micUsers().then((list) => {
-      if (!alive) return;
-      const now = Array.isArray(list) ? list : [];
-      setUsers(now);
-      const missed = now.find(notRecorded);
-      if (missed) {
-        lastNotRecorded = { user: missed, at: Date.now() };
-        setLast(lastNotRecorded);
-      }
-    }).catch(() => undefined);
+    const tick = () => {
+      api.micUsers().then((list) => alive && setUsers(Array.isArray(list) ? list : [])).catch(() => undefined);
+      api.micLastNotRecorded().then((kept) => alive && setLast(kept?.user ? kept : null)).catch(() => undefined);
+    };
     tick();
     const timer = window.setInterval(tick, 2000);
     return () => {
@@ -148,16 +141,11 @@ function WhyNotRecorded() {
           </ul>
         )}
         {last && !users.some((u) => u.name === last.user.name && notRecorded(u)) && (
-          <p className="small muted" data-testid="last-not-recorded">Last not recorded: <span dir="auto">{micUserName(last.user)}</span>, {decisionText(last.user).replace(/^Not recorded: /, "").replace(/^Not recorded$/, "no reason given")}.</p>
+          <p className="small muted" data-testid="last-not-recorded" dir="auto">{lastNotRecordedLine(last)}</p>
         )}
       </div>
     </Section>
   );
-}
-
-/** Tests start with nothing missed. */
-export function resetLastNotRecorded(): void {
-  lastNotRecorded = null;
 }
 
 /**

@@ -623,7 +623,7 @@ export interface FarSidePayload {
 }
 
 /**
- * A process holding the microphone and why EchoLedger does or does not record it (Record view explainer).
+ * A process holding the microphone and why EchoLedger does or does not record it (Settings › Calls & meetings).
  * `app` is the call app it is identified as, `site` the matched browser host or rule id.
  */
 export interface MicUser {
@@ -634,6 +634,13 @@ export interface MicUser {
   site: string | null;
   decision: MicDecision;
   reason: IgnoreReason | null;
+}
+
+/** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
+export interface NotRecordedMic {
+  user: MicUser;
+  /** RFC 3339. */
+  at: string;
 }
 
 export interface LibraryItem {
@@ -1555,6 +1562,8 @@ export const api = {
   notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
+  /** The last app not recorded since EchoLedger started, and when; null when there was none. */
+  micLastNotRecorded: () => invoke<NotRecordedMic | null>("mic_last_not_recorded"),
   /** One recording per file, with one client and language for the batch (null: no client / automatic). */
   importVoiceNotes: (pathsList: string[], clientId: string | null = null, language: TranscriptionLanguage | null = null) =>
     invoke<ImportSummary>("import_voice_notes", { pathsList, clientId, language }),

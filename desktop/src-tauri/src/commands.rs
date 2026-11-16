@@ -1014,11 +1014,18 @@ pub async fn toggle_mic_note(app: AppHandle) -> AppResult<AppStatus> {
     Ok(status(&app))
 }
 
-/// Which applications hold the microphone and what auto mode decided for each (the Record screen explainer).
+/// Which applications hold the microphone and what auto mode decided for each (Settings › Calls & meetings).
 /// Served from the auto-mode loop's last observation (refreshed every second); never polls the system itself.
 #[tauri::command]
 pub async fn mic_users(app: AppHandle) -> Vec<crate::detect::MicUser> {
     app.state::<AppState>().detect.mic_users()
+}
+
+/// The last app that used the microphone without being recorded, and when (Settings › Calls & meetings explains it,
+/// also for a call from before the page was opened); none since EchoLedger started.
+#[tauri::command]
+pub async fn mic_last_not_recorded(app: AppHandle) -> Option<crate::detect::NotRecorded> {
+    app.state::<AppState>().detect.last_not_recorded()
 }
 
 /// Payload of `ask:show`: the unknown-app chip (A1.5).

@@ -1,7 +1,7 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, resetLastNotRecorded, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeMicUser, makeSettings } from "../../test/fixtures";
 import { answerConfirm, confirmAsked } from "../../test/confirm";
@@ -215,27 +215,41 @@ describe("an app's icon on a Settings row (D-001)", () => {
 });
 
 describe("Calls & meetings says why a call wasn't recorded (D-014)", () => {
-  it("lists the apps using the microphone in plain words and keeps the last one not recorded", async () => {
-    resetLastNotRecorded();
+  const callsPage = () => render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+  const slack = makeMicUser({ name: "slack.exe", app: null, site: null, decision: "ignored", reason: "unknown_app" });
+  const today = (hours: number, minutes: number) => { const d = new Date(); d.setHours(hours, minutes, 0, 0); return d.toISOString(); };
+
+  it("lists the apps using the microphone in plain words", async () => {
     respond("mic_users", [makeMicUser({ name: "chrome.exe", app: null, site: "meet.example.com", decision: "ignored", reason: "unknown_site" }), makeMicUser({ decision: "recording" })]);
-    render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    respond("mic_last_not_recorded", null);
+    callsPage();
     const why = await screen.findByTestId("why-not-recorded");
     await waitFor(() => expect(why).toHaveTextContent("meet.example.com: Not recorded: this website isn't one of your call sites"));
     expect(why).toHaveTextContent("Google Meet: Recorded now");
     expect(why).not.toHaveTextContent(/holds mic|playing audio|loopback|✓|✗/i);
+    expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
   });
 
-  it("says the last app not recorded once it stops using the microphone", async () => {
-    resetLastNotRecorded();
+  it("explains a call from before the page was opened, with its reason and time, from what the core kept", async () => {
+    respond("mic_users", []);
+    respond("mic_last_not_recorded", { user: slack, at: today(0, 5) });
+    callsPage();
+    await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("No app is using the microphone now."));
+    expect(await screen.findByTestId("last-not-recorded")).toHaveTextContent(/^Last not recorded: Slack at 12:05 am, because it isn't a call app EchoLedger knows\.$/);
+  });
+
+  it("says the last app not recorded once it stops using the microphone, not while it is listed", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {
-      respond("mic_users", [makeMicUser({ name: "slack.exe", app: null, site: null, decision: "ignored", reason: "unknown_app" })]);
-      render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+      respond("mic_users", [slack]);
+      respond("mic_last_not_recorded", { user: slack, at: today(0, 5) });
+      callsPage();
       await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("Slack: Not recorded"));
+      expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
       respond("mic_users", []);
       await act(async () => { vi.advanceTimersByTime(2_000); });
       await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("No app is using the microphone now."));
-      expect(screen.getByTestId("last-not-recorded")).toHaveTextContent("Last not recorded: Slack, it isn't a call app EchoLedger knows.");
+      expect(screen.getByTestId("last-not-recorded")).toHaveTextContent("Last not recorded: Slack at 12:05 am, because it isn't a call app EchoLedger knows.");
     } finally {
       vi.useRealTimers();
     }

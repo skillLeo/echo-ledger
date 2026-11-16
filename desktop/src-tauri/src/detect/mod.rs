@@ -72,6 +72,26 @@ pub fn explain(t: &TreeAudio, verdict: &Verdict, user_rules: &[SiteRule], record
     }
 }
 
+/// Whether an app using the microphone is left unrecorded (pure): ignored, or auto-record is off.
+pub fn not_recorded(user: &MicUser) -> bool {
+    matches!(user.decision.as_str(), "ignored" | "off")
+}
+
+/// The last app that used the microphone without being recorded, and when it was last seen so. Kept in memory while
+/// EchoLedger runs, so Settings › Calls & meetings can explain a call from earlier, not only one happening while that
+/// page is open. Names and reasons only: no sound, no words, no window titles.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotRecorded {
+    pub user: MicUser,
+    pub at: chrono::DateTime<chrono::Utc>,
+}
+
+/// What is kept after a look (pure): the first app of this look that is not recorded, seen now; else what was kept.
+pub fn last_not_recorded(users: &[MicUser], kept: Option<NotRecorded>, now: chrono::DateTime<chrono::Utc>) -> Option<NotRecorded> {
+    users.iter().find(|u| not_recorded(u)).map(|user| NotRecorded { user: user.clone(), at: now }).or(kept)
+}
+
 /// The never-record rule "Always ignore" adds: for a browser the tab's host when known, else the page title;
 /// for any other app its image name (or bundle id). None when there is nothing specific to match.
 pub fn never_rule_for(id: String, name: &str, browser: bool, host: Option<&str>, title: Option<&str>) -> Option<SiteRule> {
@@ -146,6 +166,8 @@ pub struct DetectState {
     looked: Mutex<Option<Instant>>,
     /// Starts a detected meeting that did not start recording after 5 s (Phase 1C).
     watchdog: Mutex<crate::call_guard::Watchdog>,
+    /// The last app not recorded and when ([`last_not_recorded`]), for "Why a call wasn't recorded".
+    missed: Mutex<Option<NotRecorded>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -156,6 +178,11 @@ impl DetectState {
     /// The last observation with its decisions (refreshed once per second by the loop).
     pub fn mic_users(&self) -> Vec<MicUser> {
         lock(&self.users).clone()
+    }
+
+    /// The last app that used the microphone without being recorded since EchoLedger started, and when.
+    pub fn last_not_recorded(&self) -> Option<NotRecorded> {
+        lock(&self.missed).clone()
     }
 
     /// Whether the loop looked at the microphone within `limit` (it stops only if its thread died).
@@ -248,7 +275,12 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
         let _ = app.emit("capture:far_side", payload);
     }
 
-    *lock(&detect.users) = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
+    let users: Vec<MicUser> = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
+    {
+        let mut missed = lock(&detect.missed);
+        *missed = last_not_recorded(&users, missed.take(), chrono::Utc::now());
+    }
+    *lock(&detect.users) = users;
     *lock(&detect.meeting) = meeting_tree(trees, rules, recorded.filter(|_| recording));
 
     // Caller names (since v1.2): who the recorded call is with, from its app's window titles.
@@ -344,4 +376,51 @@ pub async fn answer_ask(app: &AppHandle, id: &str, answer: &str) -> AppResult<()
         _ => {} // the chip already timed out: nothing to ignore
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn user(name: &str, decision: &str, reason: Option<&str>) -> MicUser {
+        MicUser { name: name.into(), app: None, holds_mic: true, plays_audio: false, site: None, decision: decision.into(), reason: reason.map(str::to_string) }
+    }
+
+    fn at(minute: u32) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(1_763_380_800 + i64::from(minute) * 60, 0).unwrap()
+    }
+
+    #[test]
+    fn the_last_app_not_recorded_is_kept_with_its_reason_and_time_after_it_stops() {
+        let slack = user("slack.exe", "ignored", Some("unknown_app"));
+        let meet = user("chrome.exe", "recording", None);
+        // Seen not recorded: kept with the time of the look.
+        let kept = last_not_recorded(&[meet.clone(), slack.clone()], None, at(0));
+        assert_eq!(kept, Some(NotRecorded { user: slack.clone(), at: at(0) }));
+        // Still there a minute later: the time moves on.
+        let kept = last_not_recorded(std::slice::from_ref(&slack), kept, at(1));
+        assert_eq!(kept.as_ref().map(|k| k.at), Some(at(1)));
+        // It stopped using the microphone, and a recorded call came and went: still explained, from when it was last seen.
+        let kept = last_not_recorded(&[meet], kept, at(5));
+        let kept = last_not_recorded(&[], kept, at(30));
+        assert_eq!(kept, Some(NotRecorded { user: slack, at: at(1) }));
+        // Auto-record off counts too; a later one takes its place.
+        let zoom = user("zoom.us", "off", Some("auto_off"));
+        assert_eq!(last_not_recorded(std::slice::from_ref(&zoom), kept, at(40)).map(|k| k.user), Some(zoom));
+        // Recorded, about to be recorded or asked about is not "not recorded".
+        for decision in ["recording", "auto_record", "ask"] {
+            assert_eq!(last_not_recorded(&[user("x", decision, None)], None, at(0)), None, "{decision}");
+        }
+    }
+
+    #[test]
+    fn it_says_names_reasons_and_a_time_only() {
+        let kept = NotRecorded { user: user("slack.exe", "ignored", Some("unknown_app")), at: at(0) };
+        let json = serde_json::to_value(&kept).unwrap();
+        assert_eq!(json["at"], "2025-11-17T12:00:00Z");
+        assert_eq!(json["user"]["name"], "slack.exe");
+        assert_eq!(json["user"]["reason"], "unknown_app");
+        let keys: Vec<&str> = json["user"].as_object().unwrap().keys().map(String::as_str).collect();
+        assert_eq!(keys.len(), 7, "{keys:?}");
+    }
 }

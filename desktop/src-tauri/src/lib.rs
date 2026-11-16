@@ -553,6 +553,7 @@ pub fn run() {
             commands::notify_when_ready,
             commands::hide_captions,
             commands::mic_users,
+            commands::mic_last_not_recorded,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { decisionText, micTone, micUserName, notRecorded } from "./explainer";
+import { decisionText, lastNotRecordedLine, micTone, micUserName, notRecorded, seenWhen } from "./explainer";
 import type { IgnoreReason, MicDecision } from "./ipc";
 import { makeMicUser } from "../test/fixtures";
 import detectRs from "../../src-tauri/src/detect/mod.rs?raw";
@@ -79,5 +79,24 @@ describe("every decision and reason the core sends has its own words (D-014)", (
     const said = reasons.map((reason) => decisionText({ decision: "ignored", reason: reason as IgnoreReason }));
     for (const [i, text] of said.entries()) expect(text, `the core names "${reasons[i]}"`).toMatch(/^Not recorded: \S/);
     expect(new Set(said).size, "two reasons read the same").toBe(reasons.length);
+  });
+});
+
+describe("the last app not recorded, as the core kept it (D-014)", () => {
+  const now = new Date(2026, 10, 17, 15, 0);
+  const at = new Date(2026, 10, 17, 14, 5).toISOString();
+
+  it("says when it was last seen, by Settings' clock", () => {
+    expect(seenWhen(at, now)).toBe("at 2:05 pm");
+    expect(seenWhen(new Date(2026, 10, 16, 9, 30).toISOString(), now)).toBe("yesterday at 9:30 am");
+    expect(seenWhen(new Date(2026, 10, 9, 18, 0).toISOString(), now)).toBe("on 9 Nov at 6:00 pm");
+    expect(seenWhen("not a time", now)).toBe("");
+  });
+
+  it("says which app, when and why, in one line", () => {
+    const slack = makeMicUser({ name: "slack.exe", app: null, site: null, decision: "ignored", reason: "unknown_app" });
+    expect(lastNotRecordedLine({ user: slack, at }, now)).toBe("Last not recorded: Slack at 2:05 pm, because it isn't a call app EchoLedger knows.");
+    expect(lastNotRecordedLine({ user: makeMicUser({ decision: "off" }), at }, now)).toBe("Last not recorded: Google Meet at 2:05 pm, because auto-record is off.");
+    expect(lastNotRecordedLine({ user: makeMicUser({ decision: "ignored", reason: null }), at }, now)).toBe("Last not recorded: Google Meet at 2:05 pm.");
   });
 });
