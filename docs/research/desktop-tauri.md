@@ -330,7 +330,7 @@ let app = tauri::Builder::default()
                 if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = e { /* toggle main */ }
             })
             .build(app)?;
-        #[cfg(target_os = "macos")] app.set_activation_policy(tauri::ActivationPolicy::Accessory);   // menu-bar app
+        #[cfg(target_os = "macos")] app.set_activation_policy(tauri::ActivationPolicy::Regular);   // a normal Dock app (since v1.8.1)
         Ok(())
     })
     .build(tauri::generate_context!()).expect("build");
@@ -338,6 +338,10 @@ app.run(|_h, event| {
     if let tauri::RunEvent::ExitRequested { code, api, .. } = &event { if code.is_none() { api.prevent_exit(); } }
 });
 ```
+
+Since v1.8.1 EchoLedger is a normal Dock app (`Regular`); it switches to `Accessory` only while another app is full
+screen on the display in use, so its menu bar menu opens over that app (desktop/src-tauri/src/spaces.rs). The research
+below is kept for the history of that choice.
 
 The `Info.plist` alternative to `Accessory` is `LSUIElement`: "whether the app is an agent app that runs in the background and doesn't appear in the Dock" ([Apple](https://developer.apple.com/tutorials/data/documentation/bundleresources/information-property-list/lsuielement.json)).
 
@@ -833,7 +837,7 @@ Platform config files are merged automatically (`tauri build --help`).
 4. **Never steal focus.** Build overlays visible with `focused(false)` and `focusable(false)`. Never `show()` or `set_focus()` them; hide by content plus click-through; re-create instead of re-showing. Also set `transparent`, `no_redirection_bitmap`, `decorations(false)`, `shadow(false)`, `always_on_top`, `skip_taskbar`, `visible_on_all_workspaces`, `accept_first_mouse(true)`. Make `content_protected` a setting, default on.
 5. **Click-through.** A Rust poll at about 30 Hz (`AppHandle::cursor_position()` + `inner_position()`, both physical) toggles `set_ignore_cursor_events` only on transitions, and pauses while idle. React pushes hit regions in device px when layout changes. Unit-test hit-testing and docking, including negative coordinates and mixed DPI.
 6. **Docking.** Use `Monitor::work_area()`, not positioner `BottomRight`. Persist the corner and offset after `WindowEvent::Moved` settles (debounce).
-7. **Tray and keep-alive.** `CloseRequested` on `main` calls `prevent_close()` + `hide()`. `ExitRequested` with `code == None` calls `prevent_exit()`. Quit calls `app.exit(0)`. macOS uses `ActivationPolicy::Accessory`. Register single-instance first; it re-shows `main`.
+7. **Tray and keep-alive.** `CloseRequested` on `main` calls `prevent_close()` + `hide()`. `ExitRequested` with `code == None` calls `prevent_exit()`. Quit calls `app.exit(0)`. macOS uses `ActivationPolicy::Regular` (since v1.8.1; `Accessory` only while another app is full screen on the display in use). Register single-instance first; it re-shows `main`.
 8. **Shortcuts.** One `with_handler` plus a `Bindings` map; the handler only spawns. Re-register from an async command, new binding before dropping the old. Persist accelerators in `settings.json` and surface "taken by another app" errors in Settings.
 9. **IPC.** `Channel<CaptionEvent>` for captions and dictation partials, `emit_to` for low-rate status. Separate capability files for main and overlay; restrict app commands with `AppManifest::commands`.
 10. **All network I/O in Rust.** CSP `connect-src ipc: http://ipc.localhost` only. Install the ring provider first. API traffic goes through `pinned_api_client` with a pin *set* (current key plus backup key). The STT WebSocket uses plain WebPKI. The device token stays in Rust.
