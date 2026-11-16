@@ -1081,3 +1081,12 @@ describe("MainApp and what the plan allows (v1.6)", () => {
     expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
   })
 });
+
+describe("the budget banner's state", () => {
+  it("names the month it is about, so closing it lasts that month (a new month asks again)", async () => {
+    const { budgetState } = await import("./MainApp");
+    expect(budgetState("warn", "2026-12-01")).toBe("warn|2026-12-01");
+    expect(budgetState("warn", "2027-01-01")).not.toBe(budgetState("warn", "2026-12-01"));
+    expect(budgetState("reached", null)).toBe("reached");
+  });
+});

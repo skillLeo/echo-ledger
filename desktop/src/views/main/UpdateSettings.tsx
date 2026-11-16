@@ -102,7 +102,7 @@ export function UpdateBanner({ appStatus, notify, onOpen }: { appStatus: AppStat
   };
   // A state (an update waits to install): no timer; × or a swipe closes it until another version (v1.6.1 Notices).
   return (
-    <StateBanner id="update-ready" slot="update-ready" state={status.version} tone="accent" testId="update-banner" role="status" icon={<DownloadIcon size={16} />}
+    <StateBanner id="update-ready" slot="update-ready" remember state={status.version} tone="accent" testId="update-banner" role="status" icon={<DownloadIcon size={16} />}
       onOpen={onOpen} openLabel={`Update ready: EchoLedger ${status.version}. Open the updates`}
       actions={<>
         <button type="button" className="btn compact primary" disabled={!!appStatus.recording} title={appStatus.recording ? RECORDING_BLOCKS : undefined} onClick={() => void install()}>Restart</button>

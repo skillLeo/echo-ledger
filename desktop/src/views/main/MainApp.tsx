@@ -692,7 +692,7 @@ export default function MainApp() {
           <OneSidedBanner said={oneSided} onDismiss={() => setOneSided(null)} onReady={() => { setOneSided(null); goTo("record"); }} onOpen={() => goTo("record")} />
           {/* The month's limit (a state): goes to Plan & usage; closed until it changes (warning, then reached). */}
           {status.budget !== "ok" && (status.budget === "reached" || status.budget === "warn") && (
-            <StateBanner id="budget" slot="budget" state={status.budget} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
+            <StateBanner id="budget" slot="budget" state={budgetState(status.budget, entitlements?.limits.monthly_minutes?.resets_at)} remember={!!entitlements?.limits.monthly_minutes?.resets_at} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
               onOpen={() => openAccount("plan")} openLabel={`${status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN} Open Plan & usage`}>
               <span>{status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN}</span>
             </StateBanner>
@@ -761,4 +761,10 @@ function OneSidedBanner({ said, onDismiss, onReady, onOpen }: { said: OneSided |
       <span className="one-sided-text"><b>{said.title}.</b></span>
     </Notice>
   );
+}
+
+/** The budget banner's state: the level and the month it is about (its reset date), so closing it lasts that month
+ * only; without the date it is closed for this run only. */
+export function budgetState(level: string, resetsAt: string | null | undefined): string {
+  return resetsAt ? `${level}|${resetsAt}` : level;
 }

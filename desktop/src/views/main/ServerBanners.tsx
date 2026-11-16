@@ -96,7 +96,7 @@ export function ServerBanners({ server, notify }: { server: ServerNotices | null
         </StateBanner>
       )}
       {server.maintenance && (
-        <StateBanner id="maintenance" slot="maintenance" state={`${server.maintenance.message}|${server.maintenance.until ?? ""}`} tone="quiet" testId="maintenance" icon={<RefreshIcon size={16} />}
+        <StateBanner id="maintenance" slot="maintenance" remember={!!server.maintenance.until} state={`${server.maintenance.message}|${server.maintenance.until ?? ""}`} tone="quiet" testId="maintenance" icon={<RefreshIcon size={16} />}
           details={<LearnMore>{backAbout(server.maintenance.until)} Recordings and uploads wait on this computer and go when it is back.</LearnMore>}>
           <span className="banner-text">
             <b>{server.maintenance.message && server.maintenance.message !== MAINTENANCE_TEXT ? server.maintenance.message : "The server is in maintenance."}</b>

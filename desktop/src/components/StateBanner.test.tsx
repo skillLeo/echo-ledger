@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { resetClosedBanners, StateBanner } from "./StateBanner";
+import { resetClosedBanners, restartForTests, StateBanner } from "./StateBanner";
 import { HomeView } from "../views/main/HomeView";
 import { UpdateBanner } from "../views/main/UpdateSettings";
 import { makeStatus } from "../test/fixtures";
@@ -25,17 +25,20 @@ describe("a banner about something still true (docs/DESIGN_SYSTEM.md Notices 3)"
     expect(screen.queryByTestId("calls")).not.toBeInTheDocument();
   });
 
-  it("stays closed after a restart, until its state changes", async () => {
-    const first = render(banner("mic-off"));
-    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+  it("comes back after a restart unless its state names one occurrence (then it stays closed until that changes)", () => {
+    const perRun = (state: string) => <StateBanner id="calls" state={state} testId="calls">Calls are not being recorded</StateBanner>;
+    const once = (version: string) => <StateBanner id="update" state={version} remember testId="update">Update ready</StateBanner>;
+    const first = render(<>{perRun("mic-off")}{once("1.9.0")}</>);
+    for (const name of ["Dismiss", "Dismiss"]) fireEvent.click(screen.getAllByRole("button", { name })[0]);
+    expect(screen.queryByTestId("calls")).toBeNull();
+    expect(screen.queryByTestId("update")).toBeNull();
     first.unmount();
-    // A new start reads what was closed from this computer.
-    vi.resetModules();
-    const again = await import("./StateBanner");
-    const view = render(<again.StateBanner id="calls" state="mic-off" testId="calls">Calls are not being recorded</again.StateBanner>);
-    expect(screen.queryByTestId("calls")).not.toBeInTheDocument();
-    view.rerender(<again.StateBanner id="calls" state="detection-off" testId="calls">Calls are not being recorded</again.StateBanner>);
+    restartForTests();
+    const view = render(<>{perRun("mic-off")}{once("1.9.0")}</>);
     expect(screen.getByTestId("calls")).toBeInTheDocument();
+    expect(screen.queryByTestId("update")).toBeNull();
+    view.rerender(<>{perRun("mic-off")}{once("1.9.1")}</>);
+    expect(screen.getByTestId("update")).toBeInTheDocument();
   });
 
   it("stays closed until its state changes", () => {

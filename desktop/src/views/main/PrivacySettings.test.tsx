@@ -6,7 +6,7 @@ import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/ta
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
 import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, hiddenReason, lastCheckValue } from "./PrivacySettings";
-import { resetClosedBanners } from "../../components/StateBanner";
+import { resetClosedBanners, restartForTests } from "../../components/StateBanner";
 import { setting } from "../../lib/settingsRegistry";
 import ShareCheckWindow, { CONTROL_TEXT } from "../sharecheck/ShareCheckWindow";
 import { PrivacyBadge, PrivacyBadgeView } from "../../components/PrivacyBadge";
@@ -332,6 +332,16 @@ describe("hidden windows and the flags", () => {
     // A later share, with the main window opened during it again.
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 2 }));
     await act(async () => emitEvent("privacy:changed", null));
+    expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
+  });
+
+  it("says it again in the first share after a restart (shares are counted from 1 in each run)", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 1 }));
+    const first = render(<ShareNotice />);
+    fireEvent.click(within(await screen.findByTestId("main-in-share")).getByRole("button", { name: /dismiss/i }));
+    first.unmount();
+    restartForTests();
+    render(<ShareNotice />);
     expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
   });
 
