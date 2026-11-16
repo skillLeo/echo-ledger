@@ -9,6 +9,7 @@ use App\Services\SettingsRepository;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request as HttpRequest;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
 uses(InteractsWithDeviceApi::class);
@@ -308,10 +309,14 @@ describe('Azure', function () {
         Http::assertSent(fn (HttpRequest $r) => $r->url() === 'https://westeurope.api.cognitive.microsoft.com/sts/v1.0/issueToken' && $r->hasHeader('Ocp-Apim-Subscription-Key', 'azure_test_key_1234567890'));
     });
 
-    it('answers 503 with a configuration hint when the region is missing', function () {
+    it('answers 503 in plain words when the region is missing, the configuration hint in the server log', function () {
+        Log::spy();
         app(SettingsRepository::class)->set('azure.region', null);
 
-        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503)->assertJsonPath('message', fn (string $m) => str_contains($m, 'region'));
+        // Since v1.8.1 (W-003) the apps get the documented message; what to configure is for the operator, in the log.
+        $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503)
+            ->assertJsonPath('code', 'provider_not_configured')->assertJsonPath('message', 'The speech provider is not configured.');
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context): bool => str_contains((string) $context['detail'], 'region'));
     });
 });
 
@@ -327,12 +332,16 @@ describe('on-device providers', function () {
 });
 
 describe('provider failures', function () {
-    it('answers 503 and names what to configure when the key is missing', function () {
+    it('answers 503 when the key is missing, naming what to configure in the server log only', function () {
+        Log::spy();
         app(CredentialVault::class)->forget('assemblyai', 'api_key');
 
         $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503);
 
-        expect($response->json('message'))->toContain('assemblyai.api_key');
+        // Since v1.8.1 (W-003) the apps get the documented message, never a credential's or a provider's name.
+        expect($response->json('message'))->toBe('The speech provider is not configured.')
+            ->and((string) $response->getContent())->not->toContain('assemblyai')->not->toContain('api_key');
+        Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context): bool => str_contains((string) $context['detail'], 'assemblyai.api_key'));
         Http::assertNothingSent();
     });
 

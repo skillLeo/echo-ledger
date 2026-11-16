@@ -78,9 +78,6 @@ const VENDOR_NAMES_ALLOWED = [
     // The Free plan's own Groq key, checked with Groq.
     'app/Services/Entitlements/TranscriptionKeys.php' => 'the Free plan\'s own key',
     'app/Filament/Auth/Settings/ManagesAppPages.php' => 'the Free plan\'s own key',
-    // The phone tells the key, the credit and the service apart by these words (TranslateBudget.kt); they lose the name
-    // once the phone reads the error code instead.
-    'app/Http/Controllers/Api/LiveTranslateTokenController.php' => 'Live Translate\'s key and credit',
     // The pattern that keeps them from people, never shown itself.
     'app/Support/ProviderText.php' => 'the names it hides',
     // The admin panel's cost per provider (Server usage, a customer's page); the console's Usage page shows the month
@@ -92,6 +89,12 @@ const VENDOR_NAMES_ALLOWED = [
     'resources/views/site/home.blade.php' => 'where the connector works',
     // The privacy policy names every provider that receives data, as the law asks.
     'resources/views/legal/privacy.blade.php' => 'the law',
+];
+
+/** Single strings that may name a provider, each with why (W-003). */
+const VENDOR_STRINGS_ALLOWED = [
+    // The phone tells "no key" apart by "Soniox key" (TranslateBudget.kt); only the person who runs the server adds it.
+    'app/Http/Controllers/Api/LiveTranslateTokenController.php' => ['Live Translate needs a Soniox key. Add it in API Credentials, then try again.'],
 ];
 
 /** Every string of the code and the views that names a provider, outside VENDOR_NAMES_ALLOWED: "path:line: text". */
@@ -106,7 +109,8 @@ function vendorNamesInSources(): array
         }
         foreach (token_get_all($code) as $token) {
             if (is_array($token) && in_array($token[0], [T_CONSTANT_ENCAPSED_STRING, T_ENCAPSED_AND_WHITESPACE, T_INLINE_HTML], true)
-                && vendorNamesIn($token[1]) !== [] && preg_match('/^[a-z0-9_.\-:\/]+$/', trim($token[1], '\'"')) !== 1) {
+                && vendorNamesIn($token[1]) !== [] && preg_match('/^[a-z0-9_.\-:\/]+$/', trim($token[1], '\'"')) !== 1
+                && ! in_array(trim($token[1], '\'"'), VENDOR_STRINGS_ALLOWED[$path] ?? [], true)) {
                 $hits[] = "{$path}:{$token[2]}: ".mb_substr(trim($token[1], '\'"'), 0, 120);
             }
         }

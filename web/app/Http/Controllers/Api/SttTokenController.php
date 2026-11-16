@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\SessionStatus;
 use App\Enums\SttUseCase;
+use App\Enums\TranscriptErrorCode;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Models\CaptureSession;
@@ -24,6 +25,7 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 /**
@@ -92,7 +94,11 @@ final class SttTokenController extends Controller
                 keyterms: $stt->keytermsFor($client),
             ));
         } catch (ProviderNotConfigured $e) {
-            throw new ApiError(503, 'provider_not_configured', $e->getMessage());
+            // The apps get the documented plain message; which credential is missing (it names the provider) is for the
+            // operator, in the server log (since v1.8.1, W-003).
+            Log::warning('Streaming token refused: the speech provider is not configured', ['use_case' => $useCase->value, 'detail' => $e->getMessage()]);
+
+            throw new ApiError(503, 'provider_not_configured', TranscriptErrorCode::ProviderNotConfigured->message());
         } catch (RequestException $e) {
             report($e);
 
