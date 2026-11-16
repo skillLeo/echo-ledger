@@ -576,8 +576,21 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     // Nothing that looks pickable but only opens the browser: no workspace is a menu item.
     expect(within(menu).queryByRole("menuitemradio")).not.toBeInTheDocument();
     expect(within(menu).queryByRole("menuitem", { name: /Personal|Acme team/ })).not.toBeInTheDocument();
+    // Visible as a heading, and heard with the one row that acts (screen readers skip what isn't an item in a menu).
+    expect(within(menu).getByText("Your other workspaces")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Switch or manage in the browser" })).toHaveAccessibleDescription(/This computer works in Acme team\..*Your other workspaces.*Personal/);
     fireEvent.click(within(menu).getByRole("menuitem", { name: "Switch or manage in the browser" }));
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/workspace", serverUrl: null }]));
+  });
+
+  it("lists every other workspace once, also when the server marks none as current (D-007)", async () => {
+    respond("account_get", account({ workspaces: [{ id: 1, name: "Acme team", role: "owner" }, { id: 2, name: "Personal", role: "owner" }] }));
+    await renderPaired();
+    fireEvent.click(await screen.findByRole("button", { name: /^Workspace: / }));
+    const others = within(screen.getByRole("list", { name: "Your other workspaces" })).getAllByRole("listitem").map((li) => li.textContent);
+    const here = screen.getByRole("button", { name: /^Workspace: / }).getAttribute("aria-label")!.replace("Workspace: ", "");
+    expect(others.some((o) => o?.startsWith(here))).toBe(false);
+    expect(others).toHaveLength(1);
   });
 
   it("makes things from +: a voice note, a new project, a request link", async () => {
@@ -787,9 +800,9 @@ describe("MainApp action runner", () => {
     await renderPaired();
     fireEvent.click(nav("Settings"));
     fireEvent.click(await within(await screen.findByRole("navigation", { name: "Settings" })).findByRole("button", { name: "Sign out" }));
+    // Settings' own Sign out dialog (not asked through confirmAction): one press, checked right after it.
     const question = screen.getByRole("alertdialog", { name: "Sign out of this computer?" });
     fireEvent.keyDown(document.activeElement!, { key: "k", ctrlKey: true });
-    fireEvent.keyDown(document.activeElement!, { key: "k", metaKey: true });
     expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
     fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
     fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });

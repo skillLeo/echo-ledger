@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageChip, languageLabel, learnPrompt, menuLabel, nextLanguage, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcribingText, transcriptStatusLine, usedBackupEngine } from "./languages";
 
 describe("languages", () => {
   it("offers Auto, English, Urdu and Arabic first, then the More languages, without Hindi or mixed choices", () => {
@@ -54,10 +54,11 @@ describe("languages", () => {
   });
 
   it("names the language of the final transcript, never its engine or model, and explains a wrong script (D-041)", () => {
-    expect(engineLine({ final_language: "ur", final_provider_label: "Groq Whisper large-v3", final_model: "whisper-large-v3" })).toBe("Urdu");
-    expect(engineLine({ final_language: "en", final_provider_label: "AssemblyAI", final_model: "universal-2" })).toBe("English");
-    expect(engineLine({ final_language: null, final_provider_label: "AssemblyAI" })).toBeNull();
-    expect(engineLine({ final_language: null, final_provider_label: null })).toBeNull();
+    expect(transcribedIn({ final_language: "ur", final_status: "completed" })).toBe("Urdu");
+    expect(transcribedIn({ final_language: "en", final_status: "completed" })).toBe("English");
+    expect(transcribedIn({ final_language: null, final_status: "completed" })).toBeNull();
+    // Only a finished transcript is "transcribed in" a language.
+    for (const status of ["processing", "pending", "failed", null]) expect(transcribedIn({ final_language: "ur", final_status: status })).toBeNull();
     expect(scriptWarning("devanagari")).toMatch(/Hindi letters came back/);
     expect(scriptWarning(null)).toBeNull();
   });

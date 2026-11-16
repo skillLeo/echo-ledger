@@ -98,11 +98,11 @@ export function nextLanguage(value: string | null | undefined): LanguageChoice {
   return at < 0 ? null : MAIN_LANGUAGES[(at + 1) % MAIN_LANGUAGES.length].value;
 }
 
-/** "Urdu · Groq Whisper large-v3 (whisper-large-v3)" for the player; null before a final transcript exists. */
-export function engineLine(transcript: { final_language?: string | null; final_provider_label?: string | null; final_model?: string | null } | undefined): string | null {
-  // The language only (D-041): which provider or model transcribed it is never shown to people; nothing when the
-  // language is not known ("Transcribed in Auto" would say nothing).
-  const code = normalizeLanguage(transcript?.final_language);
+/** The language the final transcript is in ("Urdu"), for "Transcribed in Urdu" (D-041): only once it is finished and
+ * its language is known (never "Transcribed in Auto"); which provider or model made it is never shown. */
+export function transcribedIn(transcript: { final_language?: string | null; final_status?: string | null } | undefined): string | null {
+  if (transcript?.final_status !== "completed") return null;
+  const code = normalizeLanguage(transcript.final_language);
   return code ? languageLabel(code) : null;
 }
 

@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -1366,7 +1366,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
-                  {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
+                  {transcribedIn(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript)}</div>}
                   {retrying && (
                     <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason) ?? undefined}>{retrying}</div>
                   )}
@@ -1618,7 +1618,7 @@ function LanguageChipSelect({ value, onChange, children }: { value: string; onCh
   return (
     <label ref={chip} className="chip-select">
       <span className="chip-key" aria-hidden="true">Language</span>
-      <select aria-label="Re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
+      <select aria-label="Language to re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
     </label>
   );
 }

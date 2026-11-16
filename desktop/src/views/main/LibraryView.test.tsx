@@ -1329,7 +1329,7 @@ describe("LibraryView Re-transcribe as", () => {
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "ur" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "ur" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
 
@@ -1342,7 +1342,9 @@ describe("LibraryView Re-transcribe as", () => {
     respond("session_retranscribe", {});
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
-    const select = screen.getByRole("combobox", { name: "Re-transcribe in" });
+    const select = screen.getByRole("combobox", { name: "Language to re-transcribe in" });
+    // The select's name holds the word shown on the chip (WCAG: label in name).
+    expect(select).toHaveAccessibleName("Language to re-transcribe in");
     // D-121: the chip's word and its select are one control: the word sits inside the select's own label.
     expect(select.closest(".chip-select")).toContainElement(select.closest(".chip-select")!.querySelector(".chip-key"));
     const project = within(detail()).getByRole("combobox", { name: "Project" });
@@ -1366,7 +1368,7 @@ describe("LibraryView Re-transcribe as", () => {
       ...ITEMS,
     ]);
     await selectItem("Mixed call", "kya kar rahe ho, meeting kab hai");
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "en" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(callsOf("session_retranscribe")).toEqual([]);
@@ -1376,7 +1378,7 @@ describe("LibraryView Re-transcribe as", () => {
     expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: "en" }]);
 
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "en" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(screen.queryByTestId("english-only-warning")).not.toBeInTheDocument();
@@ -1414,7 +1416,7 @@ describe("LibraryView Re-transcribe as", () => {
     await renderLibrary(versions("processing"));
     await selectItem("Urdu call", "Still the current text");
     expect(within(detail()).queryByRole("button", { name: /^Previous/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Re-transcribe in" })).toHaveValue("ur");
+    expect(screen.getByRole("combobox", { name: "Language to re-transcribe in" })).toHaveValue("ur");
   });
 
   it("offers no Re-transcribe for a recording without audio", async () => {

@@ -215,8 +215,9 @@ export default function MainApp() {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        // A question on screen is answered first: search never opens (or closes) behind it.
-        if (isConfirmOpen()) return;
+        // A question on screen is answered first: search never opens (or closes) behind it, whether it was asked through
+        // confirmAction or is a page's own confirm dialog (Sign out, Cancel this request).
+        if (isConfirmOpen() || document.querySelector('[role="alertdialog"]')) return;
         setPalette((open) => !open);
         return;
       }

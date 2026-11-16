@@ -1772,6 +1772,7 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
 /* The workspace switcher's other workspaces: said, not offered (D-007); the browser row switches. */
 .workspace-head { display: grid; gap: var(--space-1); }
 .workspace-others { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; color: var(--text); }
+.workspace-others-head { margin-top: var(--space-1); color: var(--text-muted); font-weight: 600; }
 
 /* A Settings action row ("Show in screen share for 10 min", "Copy diagnostics", "Lock now"…) reads as an action: its
    title in the link colour (D-090). */

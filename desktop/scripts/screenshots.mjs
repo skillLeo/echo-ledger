@@ -155,6 +155,11 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // Review: a Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],
+    [`plan-free-rows${size}`, "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); await page.getByRole("button", { name: /^Promo code/ }).scrollIntoViewIfNeeded(); }, viewport],
+  ]),
   // D-014 (lead's decision): why a call wasn't recorded, in plain words, in Calls & meetings.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`settings-calls-why${size}`, "settings", async (page) => {
     await settingsReady(page);
@@ -182,7 +187,7 @@ const SCREENS = [
   ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],
   ...[["-1100", { width: 1100, height: 740 }], ["-1300", { width: 1300, height: 800 }]].map(([size, viewport]) => [`library-long-language${size}`, "library", async (page) => {
     await page.waitForSelector(".segments .segment");
-    await page.selectOption("select[aria-label='Re-transcribe in']", "");
+    await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
   }, viewport]),
   // Batch 3 (D-121, D-007, D-090): whole controls, the workspace switcher, Settings' action rows.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [

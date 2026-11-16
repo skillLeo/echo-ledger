@@ -405,12 +405,31 @@ fn due_discards_go_one_by_one_and_one_that_fails_never_stops_the_others() {
 }
 
 #[test]
+fn a_discard_that_cannot_finish_takes_its_server_delete_back() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), Utc::now())).unwrap();
+    // Another session already waiting to be deleted stays queued whatever happens.
+    let mut queue = DiscardQueue::load(&files.discards);
+    queue.push("01SESSIONOTHERXXXXXXXXXXXXX".into());
+    queue.save(&files.discards).unwrap();
+    // The folder's mark can't be written (a folder sits where it goes): the discard stops.
+    std::fs::create_dir_all(root.path().join("recordings/a.leaving")).unwrap();
+
+    assert!(files.discard("a").is_err());
+
+    assert_eq!(DiscardQueue::load(&files.discards).items, vec!["01SESSIONOTHERXXXXXXXXXXXXX".to_string()], "its own delete taken back, the other kept");
+    assert!(files.load().find("a").is_some(), "the recording still waits");
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+}
+
+#[test]
 fn a_discarded_folder_is_marked_before_its_entry_leaves_pending_json() {
     // A crash between the two would otherwise leave a folder no queue knows, offered back as "Recovered recording".
     let source = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pending.rs")).unwrap();
     let discard = &source[source.find("    pub fn discard(&self, id: &str)").unwrap()..];
     let discard = &discard[..discard.find("\n    }\n").unwrap()];
-    let mark = discard.find("crate::recovery::mark_leaving(&decision.dir)?").expect("marked");
+    let mark = discard.find("crate::recovery::mark_leaving(&decision.dir)").expect("marked");
     let save = discard.find("store.save(&self.pending)").expect("saved");
     assert!(mark < save, "the mark comes first");
     // And a marked folder no queue knows is deleted at start, not recovered.

@@ -454,16 +454,34 @@ impl DecisionFiles {
         let mut store = self.load();
         let at = store.items.iter().position(|d| d.id == id).ok_or_else(|| AppError::msg(NOT_WAITING))?;
         let decision = store.items.remove(at);
+        // The server session queued for deletion by this discard (none when it was queued already).
+        let mut queued = None;
         if let Some(session) = decision.server_session_id.clone() {
             let mut discards = DiscardQueue::load(&self.discards);
+            if !discards.items.contains(&session) {
+                queued = Some(session.clone());
+            }
             discards.push(session);
             discards.save(&self.discards)?;
         }
+        // The recording stays when the discard can't finish: its server session is taken off the queue again (best
+        // effort), like its folder's mark.
+        let undo_queue = |queued: &Option<String>| {
+            if let Some(session) = queued {
+                let mut discards = DiscardQueue::load(&self.discards);
+                discards.items.retain(|s| s != session);
+                let _ = discards.save(&self.discards);
+            }
+        };
         // Marked before its entry goes: a crash in between deletes the folder at the next start, never offers it back
         // as "Recovered recording".
-        crate::recovery::mark_leaving(&decision.dir)?;
+        if let Err(e) = crate::recovery::mark_leaving(&decision.dir) {
+            undo_queue(&queued);
+            return Err(e.into());
+        }
         if let Err(e) = store.save(&self.pending) {
             crate::recovery::unmark_leaving(&decision.dir);
+            undo_queue(&queued);
             return Err(e);
         }
         crate::recovery::delete_recording_folder(&decision.dir);
