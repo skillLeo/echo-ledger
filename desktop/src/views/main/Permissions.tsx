@@ -46,6 +46,9 @@ export function accessOf(permissions: PermissionsStatus | null, kind: Permission
   return (kind === "system_audio" ? permissions.systemAudio : permissions.screen) ?? "unknown";
 }
 
+/** A permission an older copy of EchoLedger holds (D-120): macOS lists that copy too, so this one reads "not asked". */
+export const HELD_ELSEWHERE = "An older copy of EchoLedger has this permission: remove it in System Settings, then Allow";
+
 const STATE_TEXT: Record<PermissionState, string> = {
   allowed: "Allowed",
   denied: "Off: turn on EchoLedger in System Settings",
@@ -81,6 +84,8 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
   const [asking, setAsking] = useState(false);
   const text = PERMISSION_STEP[kind];
   const access = accessOf(permissions, kind);
+  // Granted before on this computer, "not asked" now: an older copy of EchoLedger holds it (D-120).
+  const elsewhere = access === "unknown" && !!permissions?.heldElsewhere?.includes(kind);
   const allow = async () => {
     setAsking(true);
     try {
@@ -98,11 +103,11 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       {text.note && <p className="small muted" data-testid="permission-note">{text.note}</p>}
       <div className="permission-state small" data-testid={`permission-state-${kind}`}>
         <span className={`status-dot ${access === "allowed" ? "ok" : access === "denied" ? "failed" : ""}`} aria-hidden="true" />
-        {STATE_TEXT[access]}
+        {elsewhere ? HELD_ELSEWHERE : STATE_TEXT[access]}
       </div>
       <div className="row permission-actions">
         {access === "unknown" && <button type="button" className="btn" disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>}
-        {access !== "allowed" && <button type="button" className={`btn ${access === "unknown" ? "ghost" : ""}`} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>}
+        {access !== "allowed" && <button type="button" className={`btn ${access === "unknown" && !elsewhere ? "ghost" : ""}`} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>}
       </div>
       {access !== "allowed" && <p className="small muted">{text.where}</p>}
     </div>

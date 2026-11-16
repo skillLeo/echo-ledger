@@ -155,6 +155,15 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // Batch 6 (D-001, D-120): the Calls page's app icons beside their names; a permission an older copy holds.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
+    [`permissions-older-copy-mac${size}`, "library-lost-mac&older=1", async (page) => {
+      await page.waitForSelector("[data-testid=permission-loss]");
+      await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
+      await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
+    }, viewport],
+  ]),
   // Batch 5 (D-023, D-024, D-029, D-031, D-046, D-003): nothing clipped or pushed sideways in the Library.
   ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],
   ...[["-1100", { width: 1100, height: 740 }], ["-1300", { width: 1300, height: 800 }]].map(([size, viewport]) => [`library-long-language${size}`, "library", async (page) => {

@@ -580,6 +580,8 @@ export interface PermissionsStatus {
   missing?: MissingPermission[];
   /** A permission that was granted has gone: one calm sentence, until dismissed or granted again. */
   lost?: string | null;
+  /** macOS: granted before on this computer, "not asked" now: another copy of EchoLedger holds it (D-120). */
+  heldElsewhere?: PermissionKind[];
 }
 
 /** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */

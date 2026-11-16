@@ -150,6 +150,10 @@ pub struct Memory {
     pub granted: Vec<Kind>,
     #[serde(default)]
     pub notice: Vec<Kind>,
+    /// Every permission ever granted on this computer, kept whatever happens later (D-120): one that macOS now calls
+    /// "not asked" was granted to another copy of EchoLedger (an older build), which System Settings still lists.
+    #[serde(default)]
+    pub ever: Vec<Kind>,
 }
 
 const KINDS: [Kind; 3] = [Kind::Microphone, Kind::SystemAudio, Kind::Screen];
@@ -176,6 +180,9 @@ impl Memory {
         let mut next = self.clone();
         for kind in KINDS {
             let had = next.granted.contains(&kind);
+            if (had || next.notice.contains(&kind) || now.of(kind) == Access::Allowed) && !next.ever.contains(&kind) {
+                next.ever.push(kind);
+            }
             if now.of(kind) == Access::Allowed {
                 if !had {
                     next.granted.push(kind);
@@ -189,6 +196,12 @@ impl Memory {
             }
         }
         next
+    }
+
+    /// The permissions macOS now calls "not asked" although this computer granted them before (D-120): another copy of
+    /// EchoLedger holds them, and this one has to be allowed afresh once that entry is removed.
+    pub fn held_by_another_copy(&self, now: &Permissions) -> Vec<Kind> {
+        KINDS.into_iter().filter(|k| self.ever.contains(k) && now.of(*k) == Access::Unknown).collect()
     }
 
     /// The one calm sentence about what went; none when nothing did.
@@ -348,8 +361,27 @@ mod tests {
     }
 
     #[test]
+    fn a_permission_granted_before_but_not_asked_now_is_held_by_another_copy() {
+        let start = Memory::default().observe(&ON, true);
+        assert_eq!(start.ever, vec![Kind::Microphone, Kind::SystemAudio, Kind::Screen]);
+        // This copy is new to macOS (another build): "not asked" for the microphone, while the old copy keeps it.
+        let fresh = Permissions { microphone: Access::Unknown, ..ON };
+        let after = start.observe(&fresh, true);
+        assert_eq!(after.held_by_another_copy(&fresh), vec![Kind::Microphone]);
+        // Dismissing the banner forgets the notice, never what was granted.
+        let dismissed = Memory { notice: Vec::new(), ..after.clone() };
+        assert_eq!(dismissed.held_by_another_copy(&fresh), vec![Kind::Microphone]);
+        // Turned off on purpose (denied) is said as off, not as another copy; never granted is just "not asked".
+        assert!(after.held_by_another_copy(&Permissions { microphone: Access::Denied, ..ON }).is_empty());
+        assert!(Memory::default().held_by_another_copy(&fresh).is_empty());
+        // A memory saved before this field existed learns it from what it knew.
+        let old: Memory = serde_json::from_str(r#"{"granted":[],"notice":["microphone"]}"#).unwrap();
+        assert_eq!(old.observe(&fresh, true).held_by_another_copy(&fresh), vec![Kind::Microphone]);
+    }
+
+    #[test]
     fn the_sentence_is_one_calm_line() {
-        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone] };
+        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone], ever: Vec::new() };
         let line = two.sentence().unwrap();
         assert!(line.contains("the microphone and system audio"), "{line}");
         // One short sentence on the banner (its Set up button opens the steps).
@@ -362,7 +394,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = Memory::path(dir.path());
         assert_eq!(Memory::load(&path), Memory::default());
-        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen] };
+        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen], ever: Vec::new() };
         memory.save(&path);
         assert_eq!(Memory::load(&path), memory);
         std::fs::write(&path, "not json").unwrap();

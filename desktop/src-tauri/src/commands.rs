@@ -2438,6 +2438,8 @@ pub struct PermissionsStatus {
     pub missing: Vec<crate::permissions::Missing>,
     /// A permission that was granted and has gone: the one calm sentence, until the person dismisses it or it returns.
     pub lost: Option<String>,
+    /// macOS: what this computer granted before but macOS now calls "not asked" (another copy of EchoLedger holds it).
+    pub held_elsewhere: Vec<crate::permissions::Kind>,
 }
 
 fn access_word(access: crate::permissions::Access) -> &'static str {
@@ -2462,6 +2464,7 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
         lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(),
+        held_elsewhere: if cfg!(target_os = "macos") { state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).held_by_another_copy(&now) } else { Vec::new() },
     })
 }
 

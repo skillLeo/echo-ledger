@@ -182,3 +182,34 @@ describe("Microphone & audio", () => {
     ]);
   });
 });
+
+describe("an app's icon on a Settings row (D-001)", () => {
+  it("never wears the bare app class, which is the main window's grid", () => {
+    const { container } = render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    const icons = container.querySelectorAll(".set-icon.app-glyph");
+    expect(icons.length).toBeGreaterThan(0);
+    expect(container.querySelector(".set-icon.app")).toBeNull();
+  });
+
+  it("keeps the bare app class for the main window alone, everywhere in the source", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx$/.test(name) && !/\.test\.tsx$/.test(name)) {
+          for (const m of readFileSync(path, "utf8").matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+            const tokens = (m[1] ?? m[2] ?? "").replace(/\$\{[^}]*\}/g, " ").split(/\s+/);
+            if (tokens.includes("app")) found.push(`${name}: ${m[0]}`);
+          }
+        }
+      }
+    };
+    walk(src);
+    expect(found).toEqual(["MainApp.tsx: className={`app ${collapsed ? \"collapsed\" : \"\"} ${pageWidth < NARROW_CONTENT ? \"narrow\" : \"\"} ${pageWidth < COLUMN_CONTENT ? \"no-column\" : \"\"}`}"]);
+  });
+});

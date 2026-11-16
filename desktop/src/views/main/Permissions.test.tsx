@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { PERMISSION_KINDS, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
+import { HELD_ELSEWHERE, PERMISSION_KINDS, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
@@ -188,6 +188,23 @@ describe("the banner on the Record page", () => {
     await emitEvent("recording:state", { active: true, missing: [NO_SYSTEM] });
     await flushAsync();
     expect(callsOf("permissions_status")).toHaveLength(reads + 1);
+  });
+});
+
+describe("a permission an older copy of EchoLedger holds (D-120)", () => {
+  it("says so instead of Not asked yet, with System Settings as the main button", () => {
+    render(<PermissionStep kind="microphone" permissions={mac({ microphone: "unknown", heldElsewhere: ["microphone"] })} onChange={vi.fn()} />);
+    expect(screen.getByTestId("permission-state-microphone")).toHaveTextContent(HELD_ELSEWHERE);
+    expect(screen.getByTestId("permission-state-microphone")).not.toHaveTextContent("Not asked yet");
+    expect(screen.getByRole("button", { name: "Open System Settings" })).not.toHaveClass("ghost");
+    expect(screen.getByRole("button", { name: "Allow" })).toBeInTheDocument();
+  });
+
+  it("keeps Not asked yet for what this computer never granted, and Off for what is turned off", () => {
+    render(<PermissionStep kind="system_audio" permissions={mac({ systemAudio: "unknown", heldElsewhere: ["microphone"] })} onChange={vi.fn()} />);
+    expect(screen.getByTestId("permission-state-system_audio")).toHaveTextContent("Not asked yet");
+    render(<PermissionStep kind="screen" permissions={mac({ screen: "denied", heldElsewhere: ["screen"] })} onChange={vi.fn()} />);
+    expect(screen.getByTestId("permission-state-screen")).toHaveTextContent(/^Off: turn on EchoLedger in System Settings$/);
   });
 });
 

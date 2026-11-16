@@ -72,7 +72,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         {CALL_APPS.map(([app, name]) => (
           <div key={app} className={`set-row ${settings.autoMode ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
             <label className="set-hit">
-              <span className="set-icon app" aria-hidden="true"><SourceAppIcon app={app} size={18} /></span>
+              <span className="set-icon app-glyph" aria-hidden="true"><SourceAppIcon app={app} size={18} /></span>
               <span className="set-title">{name}</span>
               <button type="button" className={`switch ${appRecords(settings.autoRecordApps, app) ? "on" : ""}`} role="switch" aria-checked={appRecords(settings.autoRecordApps, app)}
                 aria-label={`Auto-record ${name}`} disabled={!settings.autoMode} onClick={() => void patch({ autoRecordApps: { [app]: !appRecords(settings.autoRecordApps, app) } })} />

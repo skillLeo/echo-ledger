@@ -310,13 +310,15 @@ const commands: Record<string, (args: Args) => unknown> = {
   ],
   permissions_status: () => (mac
     ? {
-        microphone: onboarding ? "unknown" : "allowed",
+        // "&older=1": an older copy of EchoLedger holds the microphone (D-120): this one reads "not asked".
+        microphone: onboarding || params.get("older") === "1" ? "unknown" : "allowed",
         systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
         screen: onboarding ? "denied" : "allowed",
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
         lost: screen === "library-lost-mac" || screen === "library-banners-mac" ? "macOS no longer lets EchoLedger use the microphone." : null,
+        heldElsewhere: params.get("older") === "1" ? ["microphone"] : [],
       }
     : { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] }),
   mac_check_last: () => screen === "settings-mac-check"

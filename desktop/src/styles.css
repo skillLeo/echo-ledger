@@ -1477,7 +1477,8 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .set-value.warn, .set-sub.warn, .set-value.warning { color: var(--warning); }
 .set-value.full, .set-sub.full { color: var(--danger); }
 .set-icon { width: 20px; height: 20px; flex: none; display: grid; place-items: center; color: var(--text-muted); }
-.set-icon.app { color: var(--text-muted); }
+/* An app's icon on a Settings row: never the bare "app" class, which is the main window's grid (D-001). */
+.set-icon.app-glyph { color: var(--text-muted); }
 .set-trail { flex: none; color: var(--text-muted); }
 /* A row that opens what follows it: the chevron points down while closed and up while open. */
 .set-trail.disclosure { transform: rotate(90deg); transition: transform var(--motion-fast) var(--ease-out); }
