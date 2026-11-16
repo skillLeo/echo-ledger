@@ -510,7 +510,17 @@
 .el-shell { display: grid; grid-template-columns: auto minmax(0, 1fr); block-size: 100%; }
 .el-shell > .el-sidebar { overflow-y: auto; }
 [data-platform="macos"] .el-shell > .el-sidebar { padding-block-start: var(--el-space-40); }
-.el-shell__status { margin-block-start: auto; padding: var(--el-space-8); }
+.el-shell__foot { margin-block-start: auto; display: flex; flex-direction: column; gap: var(--el-space-4); }
+.el-shell__status { padding: var(--el-space-8); }
+.el-shell__me {
+  display: flex; align-items: center; gap: var(--el-space-8);
+  padding: var(--el-space-8); border: 0; border-radius: var(--el-radius-sm);
+  background: transparent; text-align: start; cursor: pointer; min-inline-size: 0;
+}
+.el-shell__me:hover { background: var(--el-role-border-default); }
+.el-sidebar .el-avatar { background: var(--el-role-border-default); }
+.el-shell__me-text { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-2); min-inline-size: 0; }
+.el-shell__me-name { font-weight: var(--el-text-body-strong-weight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-inline-size: 100%; }
 .el-shell__main { position: relative; display: flex; flex-direction: column; min-inline-size: 0; min-block-size: 0; overflow: hidden; }
 .el-shell__main > .el-empty { margin-block: auto; }
 .el-shell__main > .content { flex: 1 1 auto; min-block-size: 0; }
@@ -551,7 +561,8 @@
   .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
   .el-sidebar__brand { display: none; }
   .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
-  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child {
+  .el-shell__me { justify-content: center; padding-inline: 0; }
+  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child, .el-shell__me-text {
     position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
   }

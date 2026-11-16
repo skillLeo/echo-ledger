@@ -8,7 +8,7 @@ import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
-import { AccountCard, ClassicSwitch, initials, minutesLine } from "../settings/AccountCard";
+import { AccountCard, ClassicSwitch, StorageCard, initials, minutesLine } from "../settings/AccountCard";
 import { ALL_OFF, parseUiState } from "../flags";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -77,6 +77,13 @@ describe("Settings' account card", () => {
     expect(within(card).getByText("Free")).toBeInTheDocument();
     expect(within(card).getByText("212 of 300 minutes used this month")).toBeInTheDocument();
     expect(within(card).getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+  });
+
+  it("the storage numbers: the account's from the plan, this computer's free space, how long recordings stay", async () => {
+    respond("storage_info", { recordings_bytes: 3_435_973_837, recordings_count: 212, disk_free_bytes: 118_111_600_640, disk_total_bytes: null, retention_days: 0 });
+    resetEntitlementsForTests(makeEntitlements({ limits: { storage_bytes: { limit: 10_737_418_240, used: 3_435_973_837 } } }));
+    render(<StorageCard />);
+    await act(flushAsync);
     const storage = screen.getByRole("list", { name: "Storage" });
     expect(within(storage).getByText("Your recordings")).toBeInTheDocument();
     expect(within(storage).getByRole("progressbar", { name: "Storage used" })).toBeInTheDocument();
@@ -154,6 +161,21 @@ describe("the app with the flags", () => {
     expect(document.querySelector("[data-shell=v2]")).not.toBeNull();
     expect(document.querySelector(".sidebar")).toBeNull();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("the profile sits at the sidebar's foot and opens Settings, with the storage numbers and the switch on top", async () => {
+    backend({ "ui_v2.shell": true });
+    respond("account_get", { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
+    respond("storage_info", { recordings_bytes: 1_000_000, recordings_count: 3, disk_free_bytes: 5_000_000_000, disk_total_bytes: null, retention_days: 30 });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    const me = await screen.findByRole("button", { name: /^Ayesha Siddiqui.*Opens Settings\.$/ });
+    fireEvent.click(me);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByRole("list", { name: "Storage" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Switch back to classic" })).toBeInTheDocument();
   });
 
   it("ui_v2.library shows the new Library on the real list", async () => {

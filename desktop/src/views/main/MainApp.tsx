@@ -53,7 +53,7 @@ import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 const v2 = () => import("../../v2/app");
 const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
 const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
-const AccountCardV2 = lazy(() => v2().then((m) => ({ default: m.AccountCard })));
+const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })));
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 
 type Tab = MainTab;
@@ -751,7 +751,7 @@ export default function MainApp() {
       {tab === "settings" && (anyV2(ui) || ui.classic) && (
         <Suspense fallback={null}>
           <div className="el-root el-settings-top" data-v2="settings-top">
-            {ui.flags["ui_v2.shell"] && <AccountCardV2 />}
+            {ui.flags["ui_v2.shell"] && <StorageCardV2 />}
             <ClassicSwitchV2 state={ui} onState={setUi} />
           </div>
         </Suspense>
@@ -790,6 +790,7 @@ export default function MainApp() {
         <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
+            me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             banners={<div className="shell-banners">{banners}</div>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>

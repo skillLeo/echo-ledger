@@ -67,7 +67,8 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   const segments: Segment[] = transcript.state === "ready" && transcript.value
     ? transcript.value.segments.map((s) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: s.text }))
     : [];
-  const active = transcript.state === "ready" && transcript.value ? activeIndex(transcript.value.segments, position * 1000) : -1;
+  // The line being played is marked once playing has started, not on a page just opened.
+  const active = transcript.state === "ready" && transcript.value && (playing || position > 0) ? activeIndex(transcript.value.segments, position * 1000) : -1;
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   const meta = [source, item.client?.name, formatWhen(item.started_at)].filter(Boolean).join(" · ");
 

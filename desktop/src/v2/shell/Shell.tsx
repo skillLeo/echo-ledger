@@ -2,7 +2,8 @@
 // Modules not rebuilt yet show today's page inside the new frame; Live and Ask, which have no page of their own on
 // the desktop yet, say where to find them meanwhile.
 import { useEffect, useState, type ReactNode } from "react";
-import { Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
+import { Avatar, Badge, Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
+import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
 
 export type Module = "home" | "library" | "live" | "ask" | "settings";
@@ -29,13 +30,15 @@ export type ShellProps = {
   tab: MainTab;
   onGo: (tab: MainTab) => void;
   status: ShellStatus;
+  /** Who is signed in: the profile at the sidebar's foot, which opens Settings. */
+  me?: { name: string; email: string; plan: string | null } | null;
   /** The banners above every page (one at a time). */
   banners?: ReactNode;
   /** Today's page for the current tab. */
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, banners, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, banners, children }: ShellProps) {
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask.
@@ -55,7 +58,21 @@ export function Shell({ tab, onGo, status, banners, children }: ShellProps) {
   return (
     <div className="el-root el-shell" data-shell="v2">
       <Sidebar label="Main" brand={<span>EchoLedger</span>}
-        footer={<div className="el-shell__status el-caption"><Status kind={status.kind} live>{status.text}</Status></div>}>
+        footer={
+          <div className="el-shell__foot">
+            {me && (
+              <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email}
+                aria-label={`${me.name}${me.plan ? `, ${me.plan} plan` : ""}. Opens Settings.`}>
+                <Avatar initials={initials(me.name, me.email)} size="sm" />
+                <span className="el-shell__me-text">
+                  <span className="el-shell__me-name">{me.name}</span>
+                  {me.plan && <Badge>{me.plan}</Badge>}
+                </span>
+              </button>
+            )}
+            <div className="el-shell__status el-caption"><Status kind={status.kind} live>{status.text}</Status></div>
+          </div>
+        }>
         {item("home", "Home", Icons.HomeIcon)}
         {item("library", "Library", Icons.LibraryIcon)}
         {item("live", "Live", Icons.RecordIcon)}

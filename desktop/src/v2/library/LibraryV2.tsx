@@ -45,7 +45,7 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
   }, []);
   const loadBin = useCallback(async () => {
     try {
-      setBin((await api.bin()).data);
+      setBin((await api.bin())?.data ?? []);
       setBinError(null);
     } catch (e) {
       setBinError(errorMessage(e));

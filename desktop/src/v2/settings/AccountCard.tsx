@@ -1,19 +1,16 @@
-// The top of Settings in the new look: who is signed in, the plan with Upgrade, the month's minutes and the storage
-// numbers (v1.8 P2.5/P2.6): the account's from the plan, and this computer's free space. "Switch back to classic"
-// sits under it while any redesigned screen is on (docs/API.md "Interface flags").
+// Settings in the new look (v1.8 P2.5/P2.6): the profile with the plan and Upgrade, the storage numbers (the
+// account's from the plan, this computer's free space) and "Switch back to classic" while any redesigned screen is on
+// (docs/API.md "Interface flags"). Today's Settings already shows the profile, so the app shows the storage numbers
+// and the switch above it; the profile card waits for Settings' own flag (ui_v2.settings).
 import { useEffect, useState } from "react";
 import { api, errorMessage, type Account, type StorageInfo } from "../../lib/ipc";
 import { fileSize } from "../../lib/format";
 import { openUpgradeSheet, plansAbove, useEntitlements } from "../../lib/entitlements";
-import { Avatar, Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, Progress, Skeleton } from "../components";
+import { Avatar, Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, Progress, Skeleton, SkeletonRow } from "../components";
 import { anyV2, setClassic, type UiState } from "../flags";
+import { initials } from "./initials";
 
-/** "AS" for Ayesha Siddiqui; the email's first letter without a name. */
-export function initials(name: string | null | undefined, email: string | null | undefined): string {
-  const words = (name ?? "").trim().split(/\s+/).filter(Boolean);
-  if (words.length > 0) return words.slice(0, 2).map((w) => [...w][0]!.toLocaleUpperCase()).join("");
-  return ([...(email ?? "").trim()][0] ?? "?").toLocaleUpperCase();
-}
+export { initials };
 
 /** "212 of 300 minutes used this month"; without a limit, just what was used. */
 export function minutesLine(used: number | null | undefined, limit: number | null | undefined): string | null {
@@ -22,9 +19,9 @@ export function minutesLine(used: number | null | undefined, limit: number | nul
   return limit != null ? `${u} of ${Math.round(limit)} minutes used this month` : `${u} minutes used this month`;
 }
 
+/** Who is signed in, the plan with Upgrade and the month's minutes (for Settings in the new look, ui_v2.settings). */
 export function AccountCard() {
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
-  const [storage, setStorage] = useState<StorageInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const entitlements = useEntitlements();
@@ -37,7 +34,6 @@ export function AccountCard() {
       setAccount(null);
       setError(errorMessage(e));
     });
-    api.storage().then((s) => live && setStorage(s)).catch(() => undefined);
     return () => {
       live = false;
     };
@@ -64,8 +60,6 @@ export function AccountCard() {
   const minutes = entitlements?.limits.monthly_minutes;
   const usage = minutesLine(minutes?.used, minutes?.limit);
   const canUpgrade = !!entitlements && plansAbove(entitlements).length > 0;
-  const stored = entitlements?.limits.storage_bytes;
-  const usedBytes = stored?.used ?? storage?.recordings_bytes ?? null;
   return (
     <>
       <Card className="el-profile" label={account.name || account.email}>
@@ -82,6 +76,28 @@ export function AccountCard() {
         </div>
         {canUpgrade && <Button variant="primary" onClick={() => openUpgradeSheet(null, { plan: plansAbove(entitlements)[0]?.key ?? null })}>Upgrade</Button>}
       </Card>
+    </>
+  );
+}
+
+/** The storage numbers (v1.8 P2.5): the account's from the plan, this computer's free space, how long recordings stay. */
+export function StorageCard() {
+  const [storage, setStorage] = useState<StorageInfo | null | undefined>(undefined);
+  const entitlements = useEntitlements();
+  useEffect(() => {
+    let live = true;
+    api.storage().then((s) => live && setStorage(s ?? null)).catch(() => live && setStorage(null));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const stored = entitlements?.limits.storage_bytes;
+  const usedBytes = stored?.used ?? storage?.recordings_bytes ?? null;
+  if (storage === undefined) {
+    return <Loading label="Loading storage"><Card className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></Card></Loading>;
+  }
+  return (
+    <>
       {(usedBytes != null || storage) && (
         <section className="el-group" aria-label="Storage">
           <h2 className="el-caption el-body-strong el-group__title">Storage</h2>
