@@ -238,11 +238,13 @@ const SCREENS = [
     await page.waitForSelector(".segments .seg-check");
     await page.locator(".segments .seg-check").scrollIntoViewIfNeeded();
   }, viewport]),
-  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button.
-  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`library-untitled${size}`, "library&untitled=1", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".detail-title").waitFor();
-  }, viewport]),
+  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button. In a
+  // narrow window the list and the page are one under the other: the row is scrolled into view, and "-page" shows the
+  // heading (a screen whose untitled recording is not in view is not taken).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].flatMap(([size, viewport]) => [
+    [`library-untitled${size}`, "library&untitled=1", async (page) => showUntitled(page, size ? "row" : "both"), viewport],
+    ...(size ? [[`library-untitled-page${size}`, "library&untitled=1", async (page) => showUntitled(page, "heading"), viewport]] : []),
+  ]),
   // D-121: the Library's row opened its folders in a narrow window; widened until the page's own column shows, the
   // sidebar's copy has closed (the full-size window, the column on the page).
   ["sidebar-library-widened", "library", async (page) => {
@@ -729,6 +731,24 @@ async function launch() {
 }
 
 /** Waits for the page's fonts and lets it settle, then takes the picture. */
+/** The untitled recording in view (D-031): its row in the list, its page's heading, or both; throws when it is not. */
+async function showUntitled(page, what) {
+  await page.waitForSelector(".segments .segment");
+  const row = page.getByTestId("library-list").locator(".item-title", { hasText: /^Recording$/ });
+  const heading = page.locator(".detail-title", { hasText: /^Recording/ });
+  if (what === "row") await row.scrollIntoViewIfNeeded();
+  if (what === "heading") await heading.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const wanted = what === "both" ? [row, heading] : [what === "row" ? row : heading];
+  for (const target of wanted) {
+    const box = await target.boundingBox();
+    const size = page.viewportSize();
+    if (!box || box.y < 0 || box.y + box.height > size.height || box.x < 0 || box.x + box.width > size.width) {
+      throw new Error("the untitled recording is not in view");
+    }
+  }
+}
+
 /** Opens Help & shortcuts from the sidebar and checks its buttons are on screen, inside the sheet (D-133). */
 async function openHelp(page) {
   await page.waitForSelector(".segments .segment");
