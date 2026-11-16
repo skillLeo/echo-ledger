@@ -54,7 +54,6 @@ pub fn poll_period(has_regions: bool, all_ignoring: bool) -> Duration {
 #[derive(Clone, Copy, Debug)]
 pub struct OverlaySetup {
     pub corner: Corner,
-    pub content_protected: bool,
     pub caption_lines: u8,
     pub caption_size: CaptionSize,
     pub caption_width: CaptionWidth,
@@ -62,11 +61,11 @@ pub struct OverlaySetup {
 }
 
 impl OverlaySetup {
-    /// Read when a window is built, so a rebuilt one has the current corner, size, protection and pill position.
+    /// Read when a window is built, so a rebuilt one has the current corner, size and pill position (its capture flag
+    /// comes from the privacy service).
     pub fn from_settings(settings: &Settings) -> Self {
         Self {
             corner: settings.overlay_corner,
-            content_protected: settings.content_protection,
             caption_lines: settings.caption_lines,
             caption_size: settings.caption_style.size,
             caption_width: settings.caption_style.width,
@@ -88,9 +87,10 @@ fn title(label: &str) -> &'static str {
 
 /// One builder for every overlay-type window. Flags verified against tauri-2.12.5
 /// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
-/// `always_on_top` 615, `accept_first_mouse` 962).
-fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protected: bool) -> tauri::Result<WebviewWindow<R>> {
-    crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
+/// `always_on_top` 615, `accept_first_mouse` 962). The capture flag is set by the privacy service before the window is
+/// first shown (`privacy::prepare`), and checked once it is built (`privacy::built`).
+fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -> tauri::Result<WebviewWindow<R>> {
+    let builder = crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
         .title(title(label))
         .inner_size(size.0, size.1)
         .transparent(true)
@@ -101,12 +101,13 @@ fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64), protecte
         .always_on_top(true)
         .skip_taskbar(true)
         .visible_on_all_workspaces(true)
-        .content_protected(protected)
         .focused(false)
         .focusable(false)
         .accept_first_mouse(true)
-        .visible(true)
-        .build()
+        .visible(true);
+    let window = crate::privacy::prepare(app, builder, label, crate::privacy::Kind::Floating).build()?;
+    crate::privacy::built(app, &window);
+    Ok(window)
 }
 
 /// Builds one overlay-type window when it does not exist yet, click-through and docked or placed from the settings
@@ -121,7 +122,7 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         PILL => PILL_SIZE,
         _ => REVIEW_SIZE,
     };
-    let window = build(app, label, size, setup.content_protected)?;
+    let window = build(app, label, size)?;
     #[cfg(target_os = "macos")]
     macos::keep_above_everything(&window);
     let _ = window.set_ignore_cursor_events(true);
@@ -242,14 +243,14 @@ fn dock_on_primary<R: Runtime>(window: &WebviewWindow<R>, corner: Corner) {
     put(window, dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)));
 }
 
-/// The Live Translate window (v1.3): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
+/// The Live Translate window (v1.3; hidden from screen sharing like the other floating windows since v1.8.1): top-centre for a game's voice chat, bottom-centre for a video's subtitles, on
 /// the primary monitor's work area; click-through until the person unlocks it (Ctrl+Shift+T). Never focused.
 pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) -> tauri::Result<()> {
     if app.get_webview_window(crate::translate::WINDOW).is_some() {
         return Ok(());
     }
     let size = if subtitles { (900.0, 140.0) } else { (560.0, 132.0) };
-    let window = build(app, crate::translate::WINDOW, size, false)?;
+    let window = build(app, crate::translate::WINDOW, size)?;
     #[cfg(target_os = "macos")]
     macos::keep_above_everything(&window);
     let _ = window.set_ignore_cursor_events(true);
@@ -259,6 +260,28 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
         let x = area.x + (area.w as i32 - outer.0 as i32) / 2;
         let y = if subtitles { area.y + area.h as i32 - outer.1 as i32 - margin } else { area.y + margin };
         put(&window, (x, y));
+    }
+    Ok(())
+}
+
+/// Moves every floating window to display `index` (Screen-share privacy: keep EchoLedger on the display that isn't
+/// shared): the captions to their corner, the pill to the top centre, the others to the bottom right.
+pub fn move_to_display<R: Runtime>(app: &AppHandle<R>, index: usize) -> Result<(), String> {
+    let labels = [OVERLAY, DICTATION, PILL, REVIEW, crate::translate::WINDOW];
+    let Some(first) = labels.iter().find_map(|l| app.get_webview_window(l)) else { return Ok(()) };
+    let desk = Desk::read(&first).ok_or("The displays could not be read.")?;
+    let (area, scale) = *desk.areas.get(index).ok_or("That display is not connected.")?;
+    let corner = app.try_state::<crate::AppState>().map_or(Corner::BottomRight, |s| s.settings().overlay_corner);
+    for label in labels {
+        let Some(window) = app.get_webview_window(label) else { continue };
+        let Some((_, size)) = frame_of(&window) else { continue };
+        let at = match label {
+            PILL => (area.x + (area.w as i32 - size.0 as i32) / 2, area.y + margin_units(scale, PILL_MARGIN_LOGICAL)),
+            OVERLAY => dock(area, size, corner, margin_units(scale, MARGIN_LOGICAL)),
+            DICTATION => dock(area, size, top_center_corner(corner), margin_units(scale, MARGIN_LOGICAL)),
+            _ => dock(area, size, Corner::BottomRight, margin_units(scale, MARGIN_LOGICAL)),
+        };
+        put(&window, at);
     }
     Ok(())
 }
@@ -299,14 +322,6 @@ pub fn resize_captions<R: Runtime>(app: &AppHandle<R>, caption_lines: u8, style:
     // `set_size` and the size read back by `redock` go through the same event-loop queue, in order.
     if window.set_size(LogicalSize::new(w, h)).is_ok() {
         redock(&window, corner);
-    }
-}
-
-pub fn set_content_protection<R: Runtime>(app: &AppHandle<R>, protected: bool) {
-    for label in WINDOWS {
-        if let Some(w) = app.get_webview_window(label) {
-            let _ = w.set_content_protected(protected);
-        }
     }
 }
 

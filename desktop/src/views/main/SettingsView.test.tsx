@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { LEGACY_SECTIONS, SettingsView, settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
 import { errorMessage, type Account, type AppStatus, type Entitlements, type Settings } from "../../lib/ipc";
 import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
+import { makePrivacyStatus, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { findSetting, HELP_ARTICLES, SETTINGS, setting } from "../../lib/settingsRegistry";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 
@@ -63,6 +63,7 @@ async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, 
   respond("dictation_history", []);
   respond("upgrade_request_latest", e?.upgrade_request ?? null);
   respond("mac_check_last", null);
+  respond("privacy_status", makePrivacyStatus());
   echoSettings(makeSettings(settings));
   resetEntitlementsForTests(e);
   const helpers = makeRun();
@@ -328,15 +329,6 @@ describe("rows that save", () => {
     fireEvent.click(live);
     await waitFor(() => expect(errors).toContain("Settings could not be saved"));
     expect(live).toHaveAttribute("aria-checked", "false");
-  });
-
-  it("shows during screen share as the inverse of the old content protection", async () => {
-    await setup({ settings: { contentProtection: true } });
-    await go("Captions");
-    const share = screen.getByRole("switch", { name: "Show during screen share" });
-    expect(share).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(share);
-    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { contentProtection: false } }));
   });
 
   it("sends clientId null for None and the project's id otherwise", async () => {

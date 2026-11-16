@@ -1,0 +1,114 @@
+{
+  "note": "Window lists as CGWindowListCopyWindowInfo (macOS) or EnumWindows (Windows) give them during calls: owner name, title and layer. expect is the meeting app whose share is running (null: none), mode screen / window / tab, unknown the titles no pattern knows that are logged.",
+  "cases": [
+    {
+      "name": "Zoom on a Mac, whole-screen share",
+      "platform": "macos",
+      "windows": [
+        { "owner": "zoom.us", "title": "Zoom Meeting", "layer": 0 },
+        { "owner": "zoom.us", "title": "zoom share toolbar window", "layer": 25 },
+        { "owner": "zoom.us", "title": "zoom share statusbar window", "layer": 25 },
+        { "owner": "Finder", "title": "", "layer": 0 }
+      ],
+      "expect": "zoom", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "Zoom on a Mac in a meeting, nothing shared",
+      "platform": "macos",
+      "windows": [
+        { "owner": "zoom.us", "title": "Zoom Meeting", "layer": 0 },
+        { "owner": "zoom.us", "title": "Zoom Workplace", "layer": 0 },
+        { "owner": "Control Centre", "title": "", "layer": 25 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
+      "name": "Meet in Chrome, whole screen",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Google Chrome", "title": "Meet - abc-defg-hij", "layer": 0 },
+        { "owner": "Google Chrome", "title": "meet.google.com is sharing your screen.", "layer": 3 }
+      ],
+      "expect": "meet", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "Meet in Edge, one tab",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Microsoft Edge", "title": "meet.google.com is sharing this tab", "layer": 3 }
+      ],
+      "expect": "meet", "mode": "tab", "unknown": []
+    },
+    {
+      "name": "Teams on a Mac",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Microsoft Teams", "title": "Weekly sync | Microsoft Teams", "layer": 0 },
+        { "owner": "Microsoft Teams", "title": "Sharing control bar | Microsoft Teams", "layer": 3 }
+      ],
+      "expect": "teams", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "A Slack huddle",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Slack", "title": "Huddle with Sara", "layer": 0 },
+        { "owner": "Slack", "title": "You're sharing your screen", "layer": 3 }
+      ],
+      "expect": "slack", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "WhatsApp on a Mac",
+      "platform": "macos",
+      "windows": [
+        { "owner": "WhatsApp", "title": "You're sharing your screen", "layer": 3 }
+      ],
+      "expect": "whatsapp", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "A Zoom bar no pattern knows yet is logged, title only",
+      "platform": "macos",
+      "windows": [
+        { "owner": "zoom.us", "title": "Screen sharing meeting controls", "layer": 25 },
+        { "owner": "Notes", "title": "Sharing ideas", "layer": 0 }
+      ],
+      "expect": null, "unknown": ["Screen sharing meeting controls"]
+    },
+    {
+      "name": "Zoom on Windows",
+      "platform": "windows",
+      "windows": [
+        { "owner": "Zoom.exe", "title": "Zoom Meeting", "layer": 0 },
+        { "owner": "Zoom.exe", "title": "You are screen sharing", "layer": 0 }
+      ],
+      "expect": "zoom", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "A Mac pattern never matches on Windows",
+      "platform": "windows",
+      "windows": [
+        { "owner": "zoom.us", "title": "zoom share toolbar window", "layer": 25 }
+      ],
+      "expect": null, "unknown": ["zoom share toolbar window"]
+    },
+    {
+      "name": "A browser bar no pattern knows is logged, a page title never is",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Safari", "title": "Safari is sharing your screen with meet.google.com", "layer": 3 },
+        { "owner": "Safari", "title": "Screen sharing tips - Example Blog", "layer": 0 }
+      ],
+      "expect": null, "unknown": ["Safari is sharing your screen with meet.google.com"]
+    },
+    {
+      "name": "An ordinary desktop",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Safari", "title": "Sharing your screen safely - Example Blog", "layer": 0 },
+        { "owner": "Mail", "title": "Inbox", "layer": 0 },
+        { "owner": "Dock", "title": "", "layer": 20 }
+      ],
+      "expect": null, "unknown": []
+    }
+  ]
+}

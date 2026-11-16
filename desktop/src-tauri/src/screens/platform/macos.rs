@@ -244,6 +244,34 @@ impl Grab for Screenshots {
     }
 }
 
+/// The main display as a meeting app sees it, for the Share Check: one ScreenCaptureKit screenshot of the whole display
+/// with no window excluded (EchoLedger's own included), with the display's frame in points.
+pub fn main_display_unfiltered() -> Result<(Frame, CGRect), String> {
+    autoreleasepool(|_| {
+        let content = shareable().ok_or("ScreenCaptureKit did not answer.")?;
+        let main = CGMainDisplayID();
+        let display = unsafe { content.displays() }.iter().find(|d| unsafe { d.displayID() } == main).or_else(|| unsafe { content.displays() }.iter().next()).ok_or("No display to capture.")?;
+        let frame_pt = unsafe { display.frame() };
+        let nothing: Retained<NSArray<SCWindow>> = NSArray::new();
+        let filter = unsafe { SCContentFilter::initWithDisplay_excludingWindows(SCContentFilter::alloc(), &display, &nothing) };
+        let info = unsafe { SCShareableContent::infoForFilter(&filter) };
+        let rect = unsafe { info.contentRect() };
+        let (width, height) = capture_size(rect.size.width, rect.size.height, f64::from(unsafe { info.pointPixelScale() }));
+        let config = unsafe { SCStreamConfiguration::new() };
+        unsafe {
+            config.setWidth(width);
+            config.setHeight(height);
+            config.setPixelFormat(BGRA);
+            config.setShowsCursor(false);
+            // sRGB, the space the check's colours are drawn in: otherwise the display's own space (Display P3 on a
+            // MacBook) turns the control's green into another green.
+            config.setColorSpaceName(objc2_core_graphics::kCGColorSpaceSRGB);
+        }
+        let image = screenshot(&filter, &config)?;
+        Ok((frame_of(&image)?, frame_pt))
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

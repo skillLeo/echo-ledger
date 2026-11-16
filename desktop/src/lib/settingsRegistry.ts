@@ -86,6 +86,7 @@ export const SHORTCUT_ACTIONS: readonly (readonly [string, string])[] = [
   ["dictation", "Dictation"],
   ["voice_note", "Capture a voice note"],
   ["mark", "Bookmark this moment"],
+  ["hide_all", "Hide all EchoLedger windows"],
 ];
 
 /** The questions Help answers (desktop wording). */
@@ -141,9 +142,6 @@ export const SETTINGS: readonly SettingEntry[] = [
 
   { id: "captions", title: "Captions", page: null, root: "Recording", kind: "page", keywords: ["captions", "live text", "overlay", "bubble"], ru: ["caption", "likhai"], ur: ["کیپشن"] },
   { id: "captions.enabled", title: "Live captions while recording", page: "captions", kind: "switch", resettable: true, keywords: ["live captions", "subtitles while recording"] },
-  { id: "captions.screen_share", title: "Show during screen share", page: "captions", kind: "switch", resettable: true,
-    description: "When this is off, you still see your captions, but people watching your shared screen don't.",
-    keywords: ["screen sharing", "presentation", "hide overlays"] },
   { id: "captions.style", title: "Style", page: "captions", kind: "page", keywords: ["caption style", "look"] },
   { id: "captions.size", title: "Text size", page: "captions.style", kind: "segmented", resettable: true,
     options: opts(["small", "Small"], ["medium", "Medium", true], ["large", "Large"]), keywords: ["font size", "bigger text", "smaller"], ru: ["bara", "chhota"], ur: ["سائز"] },

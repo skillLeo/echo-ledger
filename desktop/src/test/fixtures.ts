@@ -11,6 +11,7 @@ import type {
   NavigatePayload,
   PendingItem,
   PlanInfo,
+  PrivacyStatus,
   RecordingInfo,
   RecordingState,
   SavedToast,
@@ -99,10 +100,14 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
       copy_last2_min: "CommandOrControl+Shift+C",
       dictation: "CommandOrControl+Shift+D",
       mark: "CommandOrControl+Shift+B",
+      hide_all: "CommandOrControl+Alt+Shift+P",
     },
     captionsOnRecord: true,
     autoMode: true,
-    contentProtection: true,
+    hideFromSharing: "all",
+    oldWindowsSharing: "black_box",
+    shareOneWindow: false,
+    sendDiagnostics: false,
     overlayCorner: "bottom_right",
     autostart: false,
     dictationOutput: "type",
@@ -427,4 +432,29 @@ export function sampleEntitlements(planKey: "free" | "pro" | "ultra"): Entitleme
 export function makeUpgradeRequest(stage: "awaiting_payment" | "in_review" | "needs_receipt" | "approved" | "declined" | "cancelled", overrides: Partial<UpgradeRequest> = {}): UpgradeRequest {
   const real = structuredClone((UPGRADE_STAGES as unknown as Record<string, UpgradeRequest>)[stage]);
   return { ...real, ...overrides };
+}
+
+/** Screen-share privacy (since v1.8.1): a Windows 11 computer whose flags read back as set, checked today. */
+export function makePrivacyStatus(overrides: Partial<PrivacyStatus> = {}): PrivacyStatus {
+  return {
+    platform: "windows",
+    badge: "private",
+    badgeLabel: "Private",
+    system: "Windows 11 24H2",
+    hiding: "all",
+    oldWindows: false,
+    lines: [],
+    demoSecondsLeft: null,
+    hiddenByShortcut: false,
+    hiddenForShare: false,
+    share: null,
+    lastCheck: { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: "wgc", result: "pass", reason: null }, { method: "dxgi", result: "pass", reason: null }] },
+    checkRunning: false,
+    checkDue: null,
+    apps: [],
+    zoomInstalled: false,
+    permission: true,
+    displays: 1,
+    ...overrides,
+  };
 }

@@ -408,19 +408,23 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
 const SHIELD_WAIT: Duration = Duration::from_secs(2);
 
 /// Windows: a monitor's capture cannot leave EchoLedger's own windows out of its picture as macOS does, so while a
-/// whole screen is captured the main window, which can show other recordings, is hidden from screen captures (as
-/// Settings' "hide from screen sharing" hides the overlays, which keep that switch), and given back once the capture
-/// closed. Waits until Windows applied it; true when the main window is as asked (or there is none).
+/// whole screen is captured the main window, which can show other recordings, is hidden from screen captures whatever
+/// "Hide EchoLedger from screen sharing" says, and given back to that setting once the capture closed (the privacy
+/// service sets and reads the flag). Waits until Windows applied it; true when the main window is as asked (or there is
+/// none).
 #[cfg(windows)]
 fn hide_own_windows(app: &AppHandle, hidden: bool) -> bool {
     app.state::<crate::AppState>().screens.own_hidden.store(hidden, Ordering::SeqCst);
     let main = app.get_webview_window(crate::lifecycle::MAIN);
+    let wanted = crate::privacy::affinity_for(app, crate::lifecycle::MAIN);
+    let handle = app.clone();
     let (tx, rx) = std::sync::mpsc::channel();
     let posted = app.run_on_main_thread(move || {
         // On the main thread the change takes effect before the call returns.
         let done = main.is_none_or(|w| {
-            let _ = w.set_content_protected(hidden);
-            w.hwnd().ok().and_then(|h| platform::windows::hidden_from_capture(h.0 as isize)) == Some(hidden)
+            let (Ok(hwnd), Some(wanted)) = (w.hwnd(), wanted) else { return false };
+            let hwnd = hwnd.0 as isize;
+            crate::privacy::set_and_read_back(&handle, crate::lifecycle::MAIN, hwnd, wanted) && platform::windows::hidden_from_capture(hwnd).is_some_and(|h| h || !hidden)
         });
         let _ = tx.send(done);
     });

@@ -179,6 +179,9 @@ struct MenuShape {
     calls_ready: Option<bool>,
     /// A viewer's computer records nothing (v1.5): the sentence the menu shows instead of the recording lines.
     viewer: Option<String>,
+    /// Screen-share privacy (v1.8.1): the demo is on (`Some(true)`), off (`Some(false)`), or EchoLedger is not hidden
+    /// from shares at all (none: no line).
+    share_demo: Option<bool>,
 }
 
 #[derive(Default)]
@@ -239,6 +242,11 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
     entries.push(Entry::Separator);
     entries.push(Entry::Item { id: "captions", label: "Live captions".into(), enabled: true, checked: Some(shape.captions) });
     entries.push(Entry::Item { id: "auto", label: "Record calls automatically".into(), enabled: true, checked: Some(shape.auto) });
+    match shape.share_demo {
+        Some(false) => entries.push(item("share_demo", "Show EchoLedger in screen share for 10 minutes")),
+        Some(true) => entries.push(item("share_demo", "Hide EchoLedger from screen share again")),
+        None => {}
+    }
     if shape.review > 0 {
         entries.push(item("review", format!("Review recordings ({})", shape.review)));
     }
@@ -314,6 +322,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::actions::review_waiting(&app);
                         Ok(())
                     }
+                    "share_demo" => {
+                        if app.state::<crate::privacy::Privacy>().demo_active(std::time::Instant::now()) {
+                            crate::privacy::end_demo(&app);
+                        } else {
+                            crate::privacy::show_in_shares_for(&app, crate::privacy::DEMO);
+                        }
+                        Ok(())
+                    }
                     "quit" => {
                         let state = app.state::<crate::AppState>();
                         if state.capture.is_recording() {
@@ -359,6 +375,8 @@ pub struct Switches {
     pub auto: bool,
     /// The Ready check (Phase 1C): none before the first check or while signed out.
     pub calls_ready: Option<bool>,
+    /// The screen-share demo is on; none while EchoLedger is not hidden from shares.
+    pub share_demo: Option<bool>,
 }
 
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
@@ -401,6 +419,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         auto: switches.auto,
         calls_ready: switches.calls_ready,
         viewer,
+        share_demo: switches.share_demo,
     };
     let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
     if current.as_ref() != Some(&shape) {
@@ -440,7 +459,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false) };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -449,7 +468,17 @@ mod tests {
         assert!(labels.contains(&"[ ] Record calls automatically".to_string()));
         assert!(labels.contains(&"Review recordings (2)".to_string()));
         assert_eq!(labels.iter().filter(|l| *l == "---").count(), 3);
-        assert!(labels.len() <= 13, "the tray menu stays short");
+        assert!(labels.len() <= 14, "the tray menu stays short");
+    }
+
+    #[test]
+    fn the_screen_share_demo_is_one_line_that_turns_itself_back() {
+        let off = labels(&MenuShape { share_demo: Some(false), ..MenuShape::default() });
+        assert!(off.contains(&"Show EchoLedger in screen share for 10 minutes".to_string()));
+        let on = labels(&MenuShape { share_demo: Some(true), ..MenuShape::default() });
+        assert!(on.contains(&"Hide EchoLedger from screen share again".to_string()));
+        let shown_anyway = labels(&MenuShape { share_demo: None, ..MenuShape::default() });
+        assert!(!shown_anyway.iter().any(|l| l.contains("screen share")), "nothing to lift while the setting is Off");
     }
 
     #[test]
@@ -490,9 +519,9 @@ mod tests {
 
     #[test]
     fn menu_ids_keep_their_actions() {
-        let shape = MenuShape { recording: true, show_controls: true, review: 1, ..MenuShape::default() };
+        let shape = MenuShape { recording: true, show_controls: true, review: 1, share_demo: Some(false), ..MenuShape::default() };
         let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
-        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "review", "quit"]);
+        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "share_demo", "review", "quit"]);
     }
 
     #[test]

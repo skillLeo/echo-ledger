@@ -157,6 +157,30 @@ fn primary_monitor() -> isize {
     unsafe { MonitorFromPoint(POINT { x: 0, y: 0 }, MONITOR_DEFAULTTOPRIMARY) }.0 as isize
 }
 
+/// The primary monitor and its rectangle (physical pixels), for the Share Check.
+pub fn primary_monitor_rect() -> (isize, Bounds) {
+    let primary = primary_monitor();
+    let rect = monitors_now().into_iter().find(|(m, _)| *m == primary).map_or(Bounds::default(), |(_, b)| b);
+    (primary, rect)
+}
+
+/// One Windows.Graphics.Capture frame of a whole monitor, nothing left out but what Windows itself leaves out (the
+/// Share Check): waits up to 3 s for the first frame.
+pub fn monitor_frame(monitor: isize) -> Result<Frame, String> {
+    thread_init();
+    let mut capture = WgcCapture::open(Target::Display(monitor)).map_err(|e| format!("The screen capture could not start: {}", e.message()))?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    loop {
+        if let Some(frame) = capture.grab()? {
+            return Ok(frame);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Err("The screen capture gave no frame.".into());
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+}
+
 pub fn find_target(wanted: &Wanted<'_>) -> Result<Target, HoldReason> {
     if wanted.meeting.is_some_and(|m| is_excluded(&m.name, wanted.excluded)) {
         return Err(HoldReason::ExcludedApp);

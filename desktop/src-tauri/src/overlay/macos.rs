@@ -64,3 +64,19 @@ pub fn window_facts<R: Runtime>(window: &WebviewWindow<R>, label: &'static str) 
     });
     rx.recv_timeout(Duration::from_secs(2)).ok()
 }
+
+/// Orders a window out (it stays open, in the Dock's and the app's window lists), or back in front without making it
+/// key or bringing EchoLedger forward (`orderFrontRegardless`): the privacy service's hide and show.
+pub fn order<R: Runtime>(window: &WebviewWindow<R>, front: bool) {
+    let target = window.clone();
+    let _ = window.run_on_main_thread(move || {
+        let Ok(pointer) = target.ns_window() else { return };
+        // SAFETY: as in `keep_above_everything`.
+        let ns_window: &NSWindow = unsafe { &*(pointer as *const NSWindow) };
+        if front {
+            ns_window.orderFrontRegardless();
+        } else {
+            ns_window.orderOut(None);
+        }
+    });
+}

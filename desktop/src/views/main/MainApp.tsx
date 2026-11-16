@@ -288,6 +288,7 @@ export default function MainApp() {
         const id = nav.pendingId;
         if (id) setFocus({ id, rename: !!nav.rename, seq: ++navigations.current });
         if (nav.recordingId) setOpenRequest({ id: nav.recordingId, ms: 0, seq: ++navigations.current });
+        if (nav.view === "settings" && nav.section) setSettingsSection({ id: nav.section, seq: ++navigations.current });
       }),
     ];
     // After the kept view is applied, so a navigation sent while the window was built wins over it.

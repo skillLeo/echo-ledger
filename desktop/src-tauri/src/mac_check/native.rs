@@ -30,6 +30,18 @@ unsafe extern "C" {
     fn sysctlbyname(name: *const c_char, old: *mut c_void, old_len: *mut usize, new: *mut c_void, new_len: usize) -> c_int;
 }
 
+/// A text `sysctl` value ("kern.osversion" is the build, such as "26C5035r"); empty when it cannot be read.
+pub fn sysctl_text(name: &std::ffi::CStr) -> String {
+    let mut buffer = [0_u8; 64];
+    let mut length = buffer.len();
+    // SAFETY: the buffer and its length are valid for the call, which writes at most that many bytes.
+    let status = unsafe { sysctlbyname(name.as_ptr(), buffer.as_mut_ptr().cast(), &mut length, std::ptr::null_mut(), 0) };
+    if status != 0 {
+        return String::new();
+    }
+    String::from_utf8_lossy(&buffer[..length.min(buffer.len())]).trim_end_matches('\0').to_string()
+}
+
 /// `hw.model`, such as "Mac14,2".
 pub fn model() -> String {
     let mut buffer = [0_u8; 64];

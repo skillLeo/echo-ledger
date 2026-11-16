@@ -521,6 +521,33 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `GET /api/config/share-bars` (since v1.8.1): the sharing-bar patterns as the server sends them (the body is kept as
+    /// it came), with their `ETag`; `If-None-Match` with the kept tag answers `304`, which is none here, and so is a
+    /// server without the route.
+    pub async fn share_bars(&self, etag: Option<&str>) -> AppResult<Option<(String, Option<String>)>> {
+        let mut req = self.authed(self.http.get(self.url("config/share-bars")))?;
+        if let Some(tag) = etag {
+            req = req.header("If-None-Match", tag);
+        }
+        let resp = req.send().await?;
+        if resp.status().as_u16() == 304 {
+            return Ok(None);
+        }
+        if !resp.status().is_success() {
+            let e = Self::error(resp).await;
+            return if e.is_missing_route() { Ok(None) } else { Err(e) };
+        }
+        let tag = resp.headers().get(reqwest::header::ETAG).and_then(|v| v.to_str().ok()).map(str::to_string);
+        Ok(Some((resp.text().await?, tag)))
+    }
+
+    /// `POST /api/diagnostics/share-checks` (since v1.8.1): one Share Check result, sent only when the person allows
+    /// diagnostics. No pictures, titles or window contents: only the fields of [`ShareCheckReport`].
+    pub async fn share_check_report(&self, report: &ShareCheckReport) -> AppResult<()> {
+        let resp = self.authed(self.http.post(self.url("diagnostics/share-checks")))?.json(report).send().await?;
+        Self::ok_empty(resp).await
+    }
+
     pub async fn config(&self) -> AppResult<ServerConfig> {
         let resp = self.authed(self.http.get(self.url("config")))?.send().await?;
         Self::parse(resp).await

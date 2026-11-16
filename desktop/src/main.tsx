@@ -13,14 +13,22 @@ const DictationApp = lazy(() => import("./views/dictation/DictationApp"));
 const PillApp = lazy(() => import("./views/pill/PillApp"));
 const ReviewApp = lazy(() => import("./views/review/ReviewApp"));
 const TranslateOverlayApp = lazy(() => import("./views/translate/TranslateOverlayApp"));
+const ShareCheckWindow = lazy(() => import("./views/sharecheck/ShareCheckWindow"));
+const ShareCheckTest = () => <ShareCheckWindow kind="test" />;
+const ShareCheckControl = () => <ShareCheckWindow kind="control" />;
+const ShareCheckCard = () => <ShareCheckWindow kind="card" />;
 
 /** Views of the overlay windows the core builds on demand (lifecycle.rs); any other label is the main window. */
-const WINDOW_VIEWS = new Map([
+const WINDOW_VIEWS = new Map<string, React.ComponentType>([
   ["overlay", OverlayApp],
   ["dictation", DictationApp],
   ["pill", PillApp],
   ["review", ReviewApp],
   ["translate", TranslateOverlayApp],
+  // Share Check (since v1.8.1): its test window, its control and the guided test's card.
+  ["share-check-test", ShareCheckTest],
+  ["share-check-control", ShareCheckControl],
+  ["share-check-card", ShareCheckCard],
 ]);
 
 function currentLabel(): string {

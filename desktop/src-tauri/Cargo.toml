@@ -49,6 +49,10 @@ uuid = { version = "1", features = ["v4"] }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std", "serde"] }
 # Screen moments (v1.5) are stored as lossy WebP: libwebp built in by libwebp-sys (no image crate).
 webp = { version = "0.3.1", default-features = false }
+# Screen-share privacy (v1.8.1): the sharing-bar patterns (regular expressions shared with the server) and meeting
+# apps' versions from their Info.plist (both already in the tree through Tauri).
+regex = { version = "1.13.1", default-features = false, features = ["std", "unicode-case", "unicode-perl"] }
+plist = "1.10.3"
 
 [target.'cfg(any(windows, target_os = "macos"))'.dependencies]
 # The native open and save dialogs, used from the core only (the webview never picks a path). Not through
@@ -105,7 +109,7 @@ objc2-local-authentication = { version = "0.3.2", features = ["LAContext", "LAEr
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "objc2-core-foundation", "NSResponder", "NSScreen", "NSWindow", "NSWorkspace", "NSGraphics"] }
 # Screen moments (v1.5): screenshots of the meeting window or display, and the Screen Recording permission.
 objc2-screen-capture-kit = { version = "0.3.2", default-features = false, features = ["std", "block2", "libc", "objc2-core-foundation", "objc2-core-graphics", "SCShareableContent", "SCStream", "SCScreenshotManager"] }
-objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage", "CGDataProvider", "CGDirectDisplay", "CGWindow"] }
+objc2-core-graphics = { version = "0.3.2", default-features = false, features = ["std", "CGImage", "CGDataProvider", "CGDirectDisplay", "CGWindow", "CGColorSpace"] }
 
 [dev-dependencies]
 tempfile = "3"

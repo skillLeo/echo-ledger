@@ -19,6 +19,26 @@ pub enum AfterCall {
     Ask,
 }
 
+/// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ShareHiding {
+    #[default]
+    All,
+    Floating,
+    Off,
+}
+
+/// Windows before 10 version 2004 cannot leave a window out of a capture: a black box where EchoLedger is (the text
+/// stays private), or the window shown as it is.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OldWindowsSharing {
+    #[default]
+    BlackBox,
+    Show,
+}
+
 /// Accepted values of `captionLines`.
 pub const CAPTION_LINES: [u8; 3] = [2, 3, 5];
 pub const DEFAULT_CAPTION_LINES: u8 = 3;
@@ -53,7 +73,7 @@ pub const CAPTION_AUTO_HIDE: [u16; 4] = [0, 5, 10, 30];
 pub const CAPTION_OPACITY_MIN: u8 = 40;
 pub const CAPTION_OPACITY_MAX: u8 = 100;
 
-/// How the caption overlay looks (B4). Hidden from screen sharing is `contentProtection`; the position is
+/// How the caption overlay looks (B4). Hidden from screen sharing is `hideFromSharing` (`privacy`); the position is
 /// `overlayCorner` (or a drag); the line count is `captionLines`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -219,8 +239,16 @@ pub struct Settings {
     pub auto_mode: bool,
     /// Per call app (`source_app` wire value): `false` keeps auto mode from recording it. Missing apps are on.
     pub auto_record_apps: HashMap<String, bool>,
-    /// Hide overlays from screen sharing / recording (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone).
-    pub content_protection: bool,
+    /// Which EchoLedger windows are left out of screen shares (WDA_EXCLUDEFROMCAPTURE / NSWindowSharingNone); replaces
+    /// v1.8's `contentProtection` (floating windows only), see [`Settings::from_value`].
+    pub hide_from_sharing: ShareHiding,
+    /// Windows before build 19041: a black box (default) or shown normally.
+    pub old_windows_sharing: OldWindowsSharing,
+    /// "I share one window or a tab" (macOS): whole-screen shares are not watched for, the windows stay on screen.
+    pub share_one_window: bool,
+    /// "Send diagnostics": Share Check results (system, app version, method, result; never pictures or titles) go to
+    /// the server. Off until the person turns it on.
+    pub send_diagnostics: bool,
     pub overlay_corner: Corner,
     pub autostart: bool,
     /// "type" (keystrokes into the focused app) | "clipboard"
@@ -298,7 +326,10 @@ impl Default for Settings {
             captions_on_record: true,
             auto_mode: true, // recording calls is the core feature; the recording indicator and tray state stay visible
             auto_record_apps: HashMap::new(),
-            content_protection: true,
+            hide_from_sharing: ShareHiding::All,
+            old_windows_sharing: OldWindowsSharing::BlackBox,
+            share_one_window: false,
+            send_diagnostics: false,
             overlay_corner: Corner::BottomRight,
             autostart: false,
             dictation_output: "type".into(),
@@ -361,6 +392,9 @@ impl Settings {
         let Value::Object(file) = value else { return Self::default() };
         // A file from before the wizard (B19) that is already paired: the person has set EchoLedger up.
         let set_up_before = !file.contains_key("onboardingDone") && file.get("deviceId").is_some_and(|v| !v.is_null());
+        // v1.8's "Show during screen share" (`contentProtection: false`) kept the floating windows in shares, and the main
+        // window was in them anyway: that person keeps seeing both, so Off. Everyone else gets the new default (All).
+        let showed_in_shares = !file.contains_key("hideFromSharing") && file.get("contentProtection") == Some(&Value::Bool(false));
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
         for (key, value) in file {
             let value = match key.as_str() {
@@ -397,6 +431,9 @@ impl Settings {
         }
         let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
         settings.onboarding_done |= set_up_before;
+        if showed_in_shares {
+            settings.hide_from_sharing = ShareHiding::Off;
+        }
         for action in crate::shortcuts::ADDED_LATER {
             if let Some(accelerator) = action.default_accelerator() {
                 settings.shortcuts.entry(action).or_insert_with(|| accelerator.to_string());

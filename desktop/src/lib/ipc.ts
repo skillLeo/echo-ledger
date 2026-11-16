@@ -3,7 +3,11 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
-export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "translate_lock" | "translate_hide";
+export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "hide_all" | "translate_lock" | "translate_hide";
+/** "Hide EchoLedger from screen sharing" (since v1.8.1). */
+export type ShareHiding = "all" | "floating" | "off";
+/** Windows before 10 version 2004: a black box where EchoLedger is, or the window as it is. */
+export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
 export type AfterCall = "keep" | "ask";
@@ -359,7 +363,10 @@ export interface Settings {
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
-  contentProtection: boolean;
+  hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection
+  oldWindowsSharing: OldWindowsSharing; // Windows before build 19041
+  shareOneWindow: boolean; // "I share one window or a tab" (macOS)
+  sendDiagnostics: boolean; // Share Check results to the server, off until turned on
   overlayCorner: Corner;
   autostart: boolean;
   dictationOutput: "type" | "clipboard";
@@ -485,7 +492,10 @@ export interface CaptionStyle {
 export interface SettingsPatch {
   captionsOnRecord?: boolean;
   autoMode?: boolean;
-  contentProtection?: boolean;
+  hideFromSharing?: ShareHiding;
+  oldWindowsSharing?: OldWindowsSharing;
+  shareOneWindow?: boolean;
+  sendDiagnostics?: boolean;
   autostart?: boolean;
   dictationOutput?: "type" | "clipboard";
   clientId?: string | null;
@@ -1292,6 +1302,90 @@ export interface NavigatePayload {
   recordingId?: string | null;
   /** A share, project or request link to open in place (an echoledger://open link, since v1.5). */
   link?: string | null;
+  /** A Settings page or setting to open (since v1.8.1: the privacy badge opens "share_privacy.check"). */
+  section?: string | null;
+}
+
+// ---- Screen-share privacy (since v1.8.1) -------------------------------------------------------------------------------
+
+/** The privacy badge on every floating window: from the last real check. */
+export type PrivacyBadge = "private" | "not_checked" | "visible";
+export type CheckOutcome = "pass" | "fail" | "error";
+/** Why a Share Check ran. */
+export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call";
+export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
+/** What the guided test says of a meeting app on this Mac. */
+export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";
+
+export interface CheckMethod {
+  method: string;
+  result: CheckOutcome;
+  /** `permission_missing` | `capture_failed` | `control_missing`. */
+  reason: string | null;
+}
+
+/** One Share Check run, as the page shows it: the captured screen stays in this object only (never kept). */
+export interface ShareCheckView {
+  result: CheckOutcome;
+  reason: string | null;
+  methods: CheckMethod[];
+  system: string;
+  at: string;
+  /** "What others see": the captured screen, scaled down (a data: URL). */
+  picture: string | null;
+  width: number;
+  height: number;
+  /** Fractions of the picture: [x, y, w, h]. */
+  testArea: [number, number, number, number] | null;
+  controlArea: [number, number, number, number] | null;
+}
+
+export interface MeetingAppRow {
+  app: MeetingApp;
+  name: string;
+  version: string | null;
+  state: MeetingAppState;
+  line: string;
+  needsTest: boolean;
+}
+
+export interface PrivacyLine {
+  warning: boolean;
+  text: string;
+}
+
+export interface LastCheck {
+  at: string;
+  result: CheckOutcome;
+  reason: string | null;
+  methods: CheckMethod[];
+}
+
+export interface ShareSeen {
+  app: MeetingApp | null;
+  mode: "screen" | "window" | "tab";
+  hid: boolean;
+}
+
+export interface PrivacyStatus {
+  platform: string;
+  badge: PrivacyBadge;
+  badgeLabel: string;
+  system: string;
+  hiding: ShareHiding;
+  oldWindows: boolean;
+  lines: PrivacyLine[];
+  demoSecondsLeft: number | null;
+  hiddenByShortcut: boolean;
+  hiddenForShare: boolean;
+  share: ShareSeen | null;
+  lastCheck: LastCheck | null;
+  checkRunning: boolean;
+  checkDue: CheckWhy | null;
+  apps: MeetingAppRow[];
+  zoomInstalled: boolean;
+  permission: boolean;
+  displays: number;
 }
 
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
@@ -1327,6 +1421,10 @@ export interface EventPayloads {
   "update:status": UpdateStatus;
   "ready:changed": ReadyReport;
   "capture:one_sided": OneSided;
+  /** Something about screen-share privacy changed: read `privacy_status` again (since v1.8.1). */
+  "privacy:changed": null;
+  /** EchoLedger's windows are off the screen (the shortcut or the Mac safety net): draw nothing. */
+  "privacy:conceal": boolean;
 }
 
 export type AppEvent = keyof EventPayloads;
@@ -1340,6 +1438,18 @@ export const UPDATE_REQUIRED_TEXT = "This version of EchoLedger is no longer acc
 
 export const api = {
   status: () => invoke<AppStatus>("app_status"),
+  // Screen-share privacy (since v1.8.1).
+  privacyStatus: () => invoke<PrivacyStatus>("privacy_status"),
+  shareCheckRun: (why: CheckWhy | null = null) => invoke<ShareCheckView>("share_check_run", { why }),
+  shareCheckDrawn: () => invoke<void>("share_check_drawn"),
+  shareCheckCard: (open: boolean) => invoke<void>("share_check_card", { open }),
+  shareCheckAnswer: (meetingApp: MeetingApp, visible: boolean) => invoke<PrivacyStatus>("share_check_answer", { meetingApp, visible }),
+  privacyShowInShares: (minutes: number) => invoke<void>("privacy_show_in_shares", { minutes }),
+  privacyConcealed: () => invoke<boolean>("privacy_concealed"),
+  privacyHideAll: () => invoke<void>("privacy_hide_all"),
+  privacyOpenCheck: () => invoke<void>("privacy_open_check"),
+  privacyDiagnostics: () => invoke<string>("privacy_diagnostics"),
+  privacyMoveToDisplay: (index: number) => invoke<void>("privacy_move_to_display", { index }),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),

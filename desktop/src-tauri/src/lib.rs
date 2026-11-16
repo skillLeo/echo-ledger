@@ -25,6 +25,7 @@ pub mod owner;
 pub mod pending;
 pub mod permissions;
 pub mod plan;
+pub mod privacy;
 pub mod projects;
 pub mod readiness;
 pub mod receipts;
@@ -354,6 +355,8 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(overlay::HitRegions::default())
+        // Before any window is built: every window registers with it and gets its capture flag from it.
+        .manage(privacy::Privacy::new())
         .manage(lifecycle::WindowLifecycle::default())
         .manage(shortcuts::Bindings::default())
         .manage(stt::captions::CaptionHub::default())
@@ -372,7 +375,11 @@ pub fn run() {
                 overlay::spawn_clickthrough_poll(handle.clone());
                 #[cfg(target_os = "macos")]
                 app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-                smoke::drive(handle);
+                if smoke::share_check_requested(std::env::args()) {
+                    smoke::drive_share_check(handle);
+                } else {
+                    smoke::drive(handle);
+                }
                 return Ok(());
             }
             let settings = app.state::<AppState>().settings();
@@ -405,12 +412,20 @@ pub fn run() {
             commands::spawn_idle_lock(handle.clone());
             actions::spawn_activity_poll(handle.clone());
             updates::spawn_quiet_checks(handle.clone());
+            // Screen-share privacy (v1.8.1): the 5 s read-back (Windows), the safety net (Mac), the automatic Share Check.
+            #[cfg(windows)]
+            privacy::spawn_recheck(handle.clone());
+            #[cfg(target_os = "macos")]
+            privacy::watch::spawn(handle.clone());
+            privacy::check::spawn_auto(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = startup.state::<AppState>();
                 if let Ok(api) = state.api() {
+                    // Newer sharing-bar patterns, when the server has them (the built-in ones otherwise).
+                    let _ = privacy::bars::refresh(&api, &state.data_dir).await;
                     if let Ok(config) = api.config().await {
                         state.apply_config(config);
                         // The tray follows the role too: a viewer's menu has no recording lines.
@@ -443,6 +458,17 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::app_status,
+            commands::privacy_status,
+            commands::share_check_run,
+            commands::share_check_drawn,
+            commands::share_check_card,
+            commands::share_check_answer,
+            commands::privacy_show_in_shares,
+            commands::privacy_concealed,
+            commands::privacy_hide_all,
+            commands::privacy_open_check,
+            commands::privacy_diagnostics,
+            commands::privacy_move_to_display,
             commands::translate_apps,
             commands::translate_status,
             commands::translate_start,
