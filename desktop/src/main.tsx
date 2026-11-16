@@ -5,6 +5,7 @@ import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
+import { wantsV2Gallery } from "./v2/gallery/guard";
 
 // One index.html for every window; the view is chosen from the window label.
 const MainApp = lazy(() => import("./views/main/MainApp"));
@@ -60,10 +61,17 @@ if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined
 
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <Suspense fallback={null}>
-      <View />
-    </Suspense>
-  </React.StrictMode>,
-);
+const root = document.getElementById("root") as HTMLElement;
+// The v2 design gallery: a development build with ?v2gallery only. The build check stays inline so a release build
+// removes this branch and the gallery with it.
+if (import.meta.env.DEV && wantsV2Gallery(location.search)) {
+  void import("./v2/gallery/mount").then((m) => m.mountGallery(root));
+} else {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <Suspense fallback={null}>
+        <View />
+      </Suspense>
+    </React.StrictMode>,
+  );
+}

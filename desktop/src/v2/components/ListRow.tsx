@@ -61,7 +61,7 @@ export function ListRow({
         </span>
       ))}
       <span className="el-row__main">
-        <span className="el-row__title" id={`${id}-title`} dir="auto">{title}</span>
+        <span className={`el-row__title${icon && iconStyle === "avatar" ? " el-row__title--strong" : ""}`} id={`${id}-title`} dir="auto">{title}</span>
         {(meta || badge) && (
           <span className="el-row__meta el-caption">
             {badge && <span id={`${id}-badge`}>{badge}</span>}

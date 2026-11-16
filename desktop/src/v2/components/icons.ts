@@ -41,6 +41,9 @@ export {
   RecordIcon,
   SparkleIcon,
   InboxIcon,
+  ChatIcon as AskIcon,
+  StoreIcon,
+  VideoIcon,
   SkipIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";

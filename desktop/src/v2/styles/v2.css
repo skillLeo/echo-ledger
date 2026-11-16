@@ -25,14 +25,17 @@
 .el-root :where(ul, ol) { list-style: none; }
 .el-root :where(button, input, select, textarea) { font: inherit; color: inherit; }
 
-/* Urdu: Nastaliq needs room above and below; titles keep their size and gain line height. */
+/* Urdu: Nastaliq at the urdu.body size, with room above and below; titles keep their size and gain line height.
+   Latin words and digits inside Urdu fall back to the sans face: the urdu.body token ends in `serif`, so the family
+   is written here until the token carries the sans fallback itself. */
 .el-root:lang(ur),
-.el-root :lang(ur) {
-  font-family: var(--el-text-urdu-body-font);
+.el-root [lang="ur"] {
+  font-family: "Noto Nastaliq Urdu", var(--el-font-family-sans);
+  font-size: var(--el-text-urdu-body-size);
   line-height: var(--el-text-urdu-body-line);
 }
-.el-root:lang(ur) .el-num,
-.el-root :lang(ur) .el-num { font-family: var(--el-text-mono-font); }
+.el-root [lang="en"] { font-family: var(--el-font-family-sans); }
+:lang(ur) .el-num { font-family: var(--el-text-mono-font); }
 
 /* Keyboard focus: always visible, the accent ring outside the control. */
 .el-root :focus { outline: none; }
@@ -49,7 +52,7 @@
 .el-caption { font-size: var(--el-text-caption-size); line-height: var(--el-text-caption-line); color: var(--el-role-text-secondary); }
 .el-secondary { color: var(--el-role-text-secondary); }
 :lang(ur) .el-title-l, :lang(ur) .el-title-m, :lang(ur) .el-title-s { line-height: 1.9; }
-:lang(ur) .el-caption { line-height: 2; }
+:lang(ur) .el-caption { font-size: var(--el-text-body-size); line-height: 2; }
 
 /* Numbers, durations and times stay left-to-right inside right-to-left text. */
 .el-num {
@@ -186,6 +189,7 @@
 .el-row--compact { min-block-size: var(--el-component-list-row-height-compact); padding-block: var(--el-space-4); }
 .el-row--interactive:hover { background: var(--el-role-bg-subtle); }
 .el-row[aria-current="true"], .el-row--selected { background: var(--el-role-accent-soft); }
+.el-row__hit:focus-visible { outline-offset: calc(var(--el-space-2) * -1); }
 .el-row__hit {
   position: absolute; inset: 0;
   border: 0; padding: 0; background: transparent;
@@ -204,7 +208,7 @@
 }
 .el-row__main { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; }
 .el-row__title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.el-row--interactive .el-row__title, .el-row__title--strong { font-weight: var(--el-text-body-strong-weight); }
+.el-row__title--strong { font-weight: var(--el-text-body-strong-weight); }
 .el-row__meta { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; color: var(--el-role-text-secondary); }
 .el-row__meta-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-inline-size: 0; }
 .el-row__end {
@@ -215,7 +219,7 @@
 .el-row__value { display: flex; align-items: center; gap: var(--el-space-4); color: var(--el-role-text-secondary); flex: none; max-inline-size: 45%; }
 .el-row__value-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-row__control { position: relative; flex: none; display: flex; align-items: center; }
-.el-row__chevron { color: var(--el-role-text-secondary); }
+.el-row__chevron { display: flex; color: var(--el-role-text-secondary); }
 
 /* ---- Chip and FilterBar ------------------------------------------------------------------------------------- */
 .el-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
@@ -487,7 +491,7 @@
 .el-transcript { display: flex; flex-direction: column; }
 .el-segment { display: grid; grid-template-columns: calc(var(--el-space-64) * 2) 1fr; gap: var(--el-space-16); padding-block: var(--el-space-12); border-block-end: thin solid var(--el-role-border-default); }
 .el-segment:last-child { border-block-end: 0; }
-.el-segment__who { display: flex; flex-direction: column; min-inline-size: 0; }
+.el-segment__who { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .el-segment__speaker { font-weight: var(--el-text-body-strong-weight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-segment__time { color: var(--el-role-text-secondary); }
 .el-segment__time.el-num { font-size: var(--el-text-caption-size); }

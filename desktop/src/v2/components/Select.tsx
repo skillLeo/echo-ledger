@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent, type ReactNode 
 import { Icon } from "./Button";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 
-export type SelectOption = { value: string; label: string };
+/** `dir` for labels with no letters ("1.5×"), which otherwise follow the page's direction. */
+export type SelectOption = { value: string; label: string; dir?: "ltr" | "rtl" };
 
 export type SelectProps = {
   /** The visible label above the control, or, with `hideLabel`, only its accessible name. */
@@ -86,14 +87,14 @@ export function Select({ label, hideLabel, options, value, onChange, disabled, c
         aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} aria-labelledby={`${id}-label ${id}-value`}
         aria-activedescendant={open ? `${id}-opt-${active}` : undefined}
         onClick={() => (open ? setOpen(false) : show())} onKeyDown={keyDown}>
-        <span className="el-select__value" id={`${id}-value`} dir="auto">{options[selected]?.label}</span>
+        <span className="el-select__value" id={`${id}-value`} dir={options[selected]?.dir ?? "auto"}>{options[selected]?.label}</span>
         <Icon icon={ChevronDownIcon} />
       </button>
       {open && (
         <ul className="el-menu" role="listbox" id={`${id}-list`} aria-labelledby={`${id}-label`} tabIndex={-1}>
           {options.map((o, i) => (
             <li key={o.value} id={`${id}-opt-${i}`} role="option" className="el-menu__option" aria-selected={i === selected}
-              data-active={i === active || undefined} dir="auto"
+              data-active={i === active || undefined} dir={o.dir ?? "auto"}
               onMouseDown={(e) => e.preventDefault()} onMouseEnter={() => setActive(i)} onClick={() => pick(i)}>
               <span className="el-menu__check">{i === selected && <Icon icon={CheckIcon} />}</span>
               {o.label}
