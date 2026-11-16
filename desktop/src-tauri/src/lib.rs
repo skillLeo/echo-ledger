@@ -699,6 +699,7 @@ pub fn run() {
             commands::recording_state,
             commands::pending_list,
             commands::pending_keep,
+            commands::pending_keep_audio,
             commands::pending_discard,
             commands::pending_rename,
             commands::pending_assign_client,

@@ -275,6 +275,10 @@ pub struct ScreenUpload {
 }
 
 /// Deserialises an optional value, turning a value of the wrong shape into `None` instead of failing the parent.
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
 fn lenient<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
 where
     D: serde::Deserializer<'de>,
@@ -512,6 +516,10 @@ pub struct CreateSessionRequest {
     /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caller: Option<CallerDto>,
+    /// Contract 1.8.0-e: `false` uploads the recording as audio only (no transcript); sent only then, since absent is
+    /// `true` and older servers never see the key.
+    #[serde(skip_serializing_if = "is_true")]
+    pub transcribe: bool,
 }
 
 /// Open session (since v1.1): `POST /api/sessions` without the `artifacts` key, status `recording`. Created only
@@ -547,6 +555,10 @@ pub struct FinishSessionRequest {
     /// Who the recording was with, when this computer saw it (since v1.2: a meeting window's title).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub caller: Option<CallerDto>,
+    /// Contract 1.8.0-e: `false` uploads the recording as audio only (no transcript); sent only then, since absent is
+    /// `true` and older servers never see the key.
+    #[serde(skip_serializing_if = "is_true")]
+    pub transcribe: bool,
 }
 
 /// Caller names (since v1.2): who a recording was with and where the name came from (`window_title` here).

@@ -302,7 +302,7 @@ describe("Ask-me chip", () => {
     const { container } = await renderWindow(makeAfterCallState({ ask: item }));
     const line = container.querySelector<HTMLElement>(".after-progress > span")!;
     expect(line.style.animationDuration).toBe("6s");
-    expect(line.style.getPropertyValue("--from")).toBe("0.6");
+    expect(line.style.getPropertyValue("--from")).toBe("0.5");
   });
 
   it("keeps the chip and says why when an answer fails", async () => {

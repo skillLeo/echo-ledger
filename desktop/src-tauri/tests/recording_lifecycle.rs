@@ -133,7 +133,7 @@ fn after_a_call_applies_to_calls_and_voice_notes_are_always_kept() {
     for note in [RecordingMode::VoiceNote, RecordingMode::MicNote] {
         assert_eq!(pending::after_call(AfterCall::Ask, note), AfterCall::Keep, "a voice note was stopped on purpose");
     }
-    assert_eq!(pending::CHIP_SECONDS, 10, "the chip keeps the recording after 10 s");
+    assert_eq!(pending::CHIP_SECONDS, 12, "v1.8 P1: no answer within 12 s saves the audio");
 }
 
 // ---- pending store -----------------------------------------------------------------------------------------------
@@ -497,12 +497,42 @@ fn the_chip_keeps_only_recordings_whose_time_is_up_and_never_one_that_waits() {
 
     assert_eq!(files.keep_due(now).unwrap(), vec!["due".to_string()], "only the chip whose time is over");
     assert_eq!(UploadQueue::load(&files.uploads).items.len(), 1);
+    assert!(!UploadQueue::load(&files.uploads).items[0].transcribe, "no answer is \"Save audio\": uploaded, not transcribed");
     assert!(root.path().join("recordings/due/recording.flac").exists(), "kept audio stays until the server has it");
 
     let later = now + chrono::Duration::minutes(5);
     assert_eq!(files.keep_due(later).unwrap(), vec!["counting".to_string()]);
     assert_eq!(files.load().items.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), vec!["waiting"], "a waiting recording is never kept by itself");
     assert!(files.keep_due(later).unwrap().is_empty());
+}
+
+#[test]
+fn keep_transcribes_and_save_audio_uploads_without_a_transcript() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "kept", None, now)).unwrap();
+    files.add(decision(root.path(), "audio", None, now).keeping_at(now + chrono::Duration::seconds(12))).unwrap();
+
+    assert!(files.keep("kept").unwrap().transcribe);
+    let audio = files.keep_audio("audio").unwrap();
+    assert!(!audio.transcribe);
+    assert!(files.load().items.is_empty(), "both left the waiting list");
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert_eq!(queued, vec![("ref-kept".to_string(), true), ("ref-audio".to_string(), false)], "the choice survives a restart");
+    assert!(files.keep_audio("audio").is_err(), "a recording that no longer waits");
+}
+
+#[test]
+fn an_upload_queued_before_save_audio_existed_is_still_transcribed() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "old", None, Utc::now())).unwrap();
+    files.keep("old").unwrap();
+    let mut file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&files.uploads).unwrap()).unwrap();
+    file["items"][0].as_object_mut().unwrap().remove("transcribe").expect("the field is written");
+    std::fs::write(&files.uploads, file.to_string()).unwrap();
+    assert!(UploadQueue::load(&files.uploads).items[0].transcribe);
 }
 
 #[test]

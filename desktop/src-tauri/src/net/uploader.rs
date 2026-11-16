@@ -126,6 +126,14 @@ pub struct PendingUpload {
     /// (`crate::recovered`), so the mark outlives "Recovered recording" as its title.
     #[serde(default)]
     pub recovered: bool,
+    /// Transcribed once uploaded (contract 1.8.0-e); false: "Save audio", uploaded as audio only. Items queued before
+    /// it existed are transcribed, as they always were.
+    #[serde(default = "transcribe_default")]
+    pub transcribe: bool,
+}
+
+fn transcribe_default() -> bool {
+    true
 }
 
 impl Default for PendingUpload {
@@ -162,6 +170,7 @@ impl Default for PendingUpload {
             progress: None,
             owner: None,
             recovered: false,
+            transcribe: true,
         }
     }
 }
@@ -505,6 +514,10 @@ pub async fn upload_with(
         persist(item);
     }
 
+    // Saved as audio only, the call stays "Not transcribed": its live captions are not posted as a transcript either.
+    if !item.transcribe {
+        item.live_segments.clear();
+    }
     if !item.live_segments.is_empty() {
         let transcript = DeviceTranscript {
             kind: "live".into(),
@@ -554,6 +567,7 @@ async fn open_slots(
                     pauses: item.pauses.clone(),
                     language_marks: item.language_marks.clone(),
                     caller: item.caller.clone(),
+                    transcribe: item.transcribe,
                 };
                 api.finish_session(&open, &request).await
             }
@@ -572,6 +586,7 @@ async fn open_slots(
                     pauses: item.pauses.clone(),
                     language_marks: item.language_marks.clone(),
                     caller: item.caller.clone(),
+                    transcribe: item.transcribe,
                 };
                 if item.imported { api.create_session_skipping_duplicate(&request).await } else { api.create_session(&request).await }
             }

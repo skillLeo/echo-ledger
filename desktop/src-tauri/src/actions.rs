@@ -640,10 +640,20 @@ fn schedule_purge(app: &AppHandle, at: chrono::DateTime<Utc>) {
 
 /// Keep: the recording moves to the upload queue and the final transcript follows.
 pub fn keep_decision(app: &AppHandle, id: &str) -> AppResult<()> {
+    keep_decision_as(app, id, true)
+}
+
+/// "Save audio" (contract 1.8.0-e): kept and uploaded as audio only, not transcribed.
+pub fn keep_decision_audio(app: &AppHandle, id: &str) -> AppResult<()> {
+    keep_decision_as(app, id, false)
+}
+
+fn keep_decision_as(app: &AppHandle, id: &str, transcribe: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).keep(id)?;
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        if transcribe { files.keep(id)? } else { files.keep_audio(id)? };
     }
     state.upload_notify.notify_one();
     after_decision(app, id);

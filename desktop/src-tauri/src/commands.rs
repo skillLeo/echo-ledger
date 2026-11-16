@@ -2794,6 +2794,13 @@ pub async fn pending_keep(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::keep_decision(&app, &id)
 }
 
+/// "Save audio" on a waiting call: kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in
+/// "Not transcribed", where "Transcribe" starts its transcript later.
+#[tauri::command]
+pub async fn pending_keep_audio(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::keep_decision_audio(&app, &id)
+}
+
 #[tauri::command]
 pub async fn pending_discard(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::discard_decision(&app, &id)

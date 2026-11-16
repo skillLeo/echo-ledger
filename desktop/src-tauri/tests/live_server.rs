@@ -114,6 +114,7 @@ async fn every_call_the_desktop_makes_passes_the_server_and_reads_back() {
             .await,
         );
         let finish = FinishSessionRequest {
+            transcribe: true,
             ended_at: "2026-11-01T10:05:00Z".into(),
             duration_ms: 300000,
             title: Some("Live test".into()),
@@ -134,6 +135,7 @@ async fn every_call_the_desktop_makes_passes_the_server_and_reads_back() {
         }
     }
     let create = CreateSessionRequest {
+        transcribe: true,
         client_ref: uuid::Uuid::new_v4().to_string(),
         source_app: "other".into(),
         client_id: None,

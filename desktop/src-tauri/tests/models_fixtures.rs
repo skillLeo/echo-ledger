@@ -518,6 +518,7 @@ fn artifact() -> ArtifactDto {
 #[test]
 fn create_session_request_uses_the_api_field_names() {
     let request = CreateSessionRequest {
+        transcribe: true,
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],

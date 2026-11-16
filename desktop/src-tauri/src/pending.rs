@@ -23,8 +23,9 @@ use crate::settings::AfterCall;
 /// Every `pending_*` command answers this when the id is not (or no longer) waiting.
 pub const NOT_WAITING: &str = "This recording is no longer waiting.";
 pub const TITLE_TOO_LONG: &str = "Use 200 characters or fewer.";
-/// "Ask me": the chip keeps the recording by itself this long after the call ended.
-pub const CHIP_SECONDS: i64 = 10;
+/// "Ask me": with no answer this long after the call ended, the chip saves the recording as audio only, not
+/// transcribed (v1.8 P1: "No answer within 12 s → Save audio"; contract 1.8.0-e).
+pub const CHIP_SECONDS: i64 = 12;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_FIRST_LINE_CHARS: usize = 140;
 /// The title of a recording recovered after a restart (since v1.3).
@@ -435,9 +436,18 @@ impl DecisionFiles {
     /// Keep: the recording joins the upload queue (once), then leaves `pending.json`, so a crash in between can
     /// never lose it.
     pub fn keep(&self, id: &str) -> AppResult<PendingUpload> {
+        self.keep_as(id, true)
+    }
+
+    /// "Save audio" (contract 1.8.0-e): kept and uploaded as audio only, not transcribed; it lands in "Not transcribed".
+    pub fn keep_audio(&self, id: &str) -> AppResult<PendingUpload> {
+        self.keep_as(id, false)
+    }
+
+    fn keep_as(&self, id: &str, transcribe: bool) -> AppResult<PendingUpload> {
         let mut store = self.load();
         let at = store.items.iter().position(|d| d.id == id).ok_or_else(|| AppError::msg(NOT_WAITING))?;
-        let upload = store.items[at].to_upload();
+        let upload = PendingUpload { transcribe, ..store.items[at].to_upload() };
         let mut queue = UploadQueue::load(&self.uploads);
         if !queue.items.iter().any(|i| i.id() == upload.id()) {
             queue.items.push(upload.clone());
@@ -540,12 +550,13 @@ impl DecisionFiles {
         }
     }
 
-    /// Keeps every recording whose chip time is over at `now` (also one whose time ran out while the app was closed)
-    /// and returns their ids. Recordings that wait for the person are left alone.
+    /// Saves as audio only every recording whose chip time is over at `now` (also one whose time ran out while the app
+    /// was closed) and returns their ids: no answer is "Save audio", never a transcript (v1.8 P1). Recordings that
+    /// wait for the person are left alone.
     pub fn keep_due(&self, now: DateTime<Utc>) -> AppResult<Vec<String>> {
         let due: Vec<String> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
         for id in &due {
-            self.keep(id)?;
+            self.keep_audio(id)?;
         }
         Ok(due)
     }

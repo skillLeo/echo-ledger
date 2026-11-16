@@ -1720,6 +1720,8 @@ export const api = {
   recordingState: () => invoke<RecordingState>("recording_state"),
   pendingList: () => invoke<PendingItem[]>("pending_list"),
   pendingKeep: (id: string) => invoke<void>("pending_keep", { id }),
+  /** "Save audio": kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in "Not transcribed". */
+  pendingKeepAudio: (id: string) => invoke<void>("pending_keep_audio", { id }),
   pendingDiscard: (id: string) => invoke<void>("pending_discard", { id }),
   pendingRename: (id: string, title: string) => invoke<PendingItem>("pending_rename", { id, title }),
   pendingAssignClient: (id: string, clientId: string | null) => invoke<PendingItem>("pending_assign_client", { id, clientId }),

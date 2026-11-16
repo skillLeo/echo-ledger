@@ -18,7 +18,7 @@ const AfterCallStackV2 = lazy(() => import("../../v2/controls/AfterCallStack").t
 /** How long a failed action's message replaces the title. */
 const ERROR_MS = 4000;
 /** The chip's full time (pending::CHIP_SECONDS): its timer line starts from the part that is left. */
-export const CHIP_SECONDS = 10;
+export const CHIP_SECONDS = 12;
 /** How long a kept chip shows its check before it leaves (since v1.5). */
 export const KEPT_MS = 900;
 

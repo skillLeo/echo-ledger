@@ -654,6 +654,7 @@ fn pending_voice_note(out: &RecordingOutput) -> PendingUpload {
 
 fn session_request(client_ref: &str, source_app: &str, size: u64) -> CreateSessionRequest {
     CreateSessionRequest {
+        transcribe: true,
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],
