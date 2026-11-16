@@ -13,6 +13,7 @@ use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
+use axum::serve::ListenerExt;
 use futures_util::stream::{SplitSink, SplitStream};
 use futures_util::{SinkExt, StreamExt};
 use serde::Serialize;
@@ -294,6 +295,11 @@ pub async fn serve(
         })
     };
     let closing = registry.clone();
+    // No Nagle: a suggestion is many small frames (start, then a token a word), and a frame held back until the last
+    // one is acknowledged costs tens of milliseconds.
+    let listener = listener.tap_io(|tcp| {
+        let _ = tcp.set_nodelay(true);
+    });
     let result = axum::serve(listener, router(state))
         .with_graceful_shutdown(async move {
             shutdown.await;
