@@ -79,7 +79,22 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
     Dockerfile/systemd/README, clippy.
   - Phone: the v1.1 build (phone code `5411d52e`) is INSTALLED on the S25 (16:13, `pm install -r`; settings kept).
-    Batch A: A1–A5 and A7 pass; A6 (Live Translate) waiting, the phone locked by its power key during the run.
+    Batch A: A1–A5 and A7 pass. A6 (Live Translate) is blocked by a bug for the phone builder: from the Watch
+    translate tile, with a video playing in Samsung's video player (USAGE_MEDIA, started, uid 10133) and the helper
+    ready, the app says "Nothing is playing yet" (twice, 16:36). LiveTranslateService takes that path only when
+    TranslateTargets finds no playing app with a uid, so look at what helper.players() returns on Android 17 (the
+    hidden getClientUid/getPlayerState getters) and add a test for it.
+  - Mac menu bar, Hassam 2026-11-16: the red recording icon "looks unprofessional, no padding". The red tile fills the
+    whole 18 pt icon edge to edge, so it looks cramped next to other items. Decision for the desktop builder (next
+    round, before v1.8.1): a smaller rounded red badge inside the 18 pt canvas (about 14 pt, centred, transparent
+    margin), the mark inset in it, amber when paused; a screenshot next to other menu bar items for the review.
+  - Mac meeting shares (S-5/S-6): Meet started 16:44 (Chrome, meeting jdd-cdmz-meb, the phone asked to join from the
+    Meet app over adb), paused before the share because Hassam took a call. Method from now on: the phone is the viewer
+    and `scratchpad/phone/meetmap.py` maps each EchoLedger window into the phone's view of the share and measures its
+    red recording dot, cropping only EchoLedger's small windows. The magenta panels tried first are retired: they
+    showed through EchoLedger's transparent windows on Hassam's screen, and a transparent window would read as a pass.
+    Next: a new Meet, the phone joins, Hassam clicks Join now, Admit, Share screen → Entire screen → Built-in
+    Retina Display → Share; then Zoom in each capture mode.
   - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
     as mac-backup-160). Measured: every window state 0 incl. TUINSWindow; the installed app's own Share Check passes as
     itself (capture allowed through "Device Control and Data Access" on macOS 27). MAC-31's Finder path passed (16:25,

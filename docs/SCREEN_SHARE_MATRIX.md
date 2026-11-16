@@ -68,7 +68,7 @@ pixels inside the window's own frame, on every frame of the video; the rest of t
 | A3 | Setting → Show, record; back to Private with the window still open | Show: not secure, the video shows the red dot and the clock (0–0.3 % black). Private again: SECURE and 100 % black at once, without reopening the window |
 | A4 | Hide EchoLedger windows on the controls; tap the grey dot; the tile twice (`click-tile`) | The controls become a 180 × 180 dot (still secure, 100 % black in the recording); the dot brings them back; the tile's first tap hides, the second shows them again (the earlier "second tap did nothing" is fixed) |
 | A5 | Hide (tile), then a new process (an app update: pid 13736 → 20791), a new voice note | Shown again, SECURE, 100 % black in the recording |
-| A6 | Live Translate (Watch translate), recorded | Waiting: the phone's power key was pressed as Watch translate started, and the phone locked |
+| A6 | Live Translate (Watch translate), recorded | Waiting: blocked by a Live Translate bug (16:36, twice). With a test video playing in Samsung's video player (USAGE_MEDIA, started, uid 10133) and the helper ready, the Watch translate tile says "Nothing is playing yet"; no Watch app list is saved. Handed to the phone builder |
 | A7 | Clean-up | Both test notes discarded from the controls; every test video deleted from the phone right after it was copied; quick-settings tiles and the screen timeout back as before |
 
 Samsung's screen recorder could not be started from adb (its "Start recording" button ignored taps sent by adb,
