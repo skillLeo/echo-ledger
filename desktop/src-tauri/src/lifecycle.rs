@@ -421,6 +421,19 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     let builder = crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?);
     let window = crate::privacy::window(app, builder, MAIN, crate::privacy::Kind::Main, |b| if shielded { b.content_protected(true) } else { b })?;
     crate::material::apply(&window);
+    // Opened while the person is on another Space (another app full screen, another desktop), it comes to that Space.
+    #[cfg(target_os = "macos")]
+    {
+        let main = window.clone();
+        let _ = app.run_on_main_thread(move || {
+            if let Ok(pointer) = main.ns_window() {
+                // SAFETY: Tauri hands out the window's own NSWindow, alive while `main` is, on the main thread here.
+                crate::spaces::mac::follow_active_space(unsafe { &*(pointer as *const objc2_app_kit::NSWindow) });
+            }
+        });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = &window;
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;

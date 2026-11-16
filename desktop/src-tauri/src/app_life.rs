@@ -323,7 +323,9 @@ mod tests {
 
     #[test]
     fn echoledger_is_a_normal_mac_app() {
-        // Never the Dock-less modes, in any run: not in the code, not in Info.plist.
+        // Never the Dock-less modes, in any run: not in the code, not in Info.plist. The one exception is spaces.rs: while
+        // another app's full-screen window fills a display (the Dock hidden there anyway) EchoLedger's menu bar menu
+        // opens over it only without the Dock icon, which comes back as soon as no such window is on screen.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files = Vec::new();
         fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -340,6 +342,15 @@ mod tests {
         for file in &files {
             let text = std::fs::read_to_string(file).unwrap();
             let app_code = text.split("\n#[cfg(test)]\nmod tests").next().unwrap();
+            if file.ends_with("spaces.rs") {
+                assert_eq!(app_code.matches("ActivationPolicy::Accessory").count(), 1, "only the full-screen switch");
+                assert!(app_code.contains("Dock::Away => NSApplicationActivationPolicy::Accessory,"));
+                assert!(app_code.contains("if another_app_full_screen { Dock::Away } else { Dock::Shown }"));
+                for dockless in ["ActivationPolicy::Prohibited", "set_dock_visibility(false)"] {
+                    assert!(!app_code.contains(dockless), "{}: {dockless}", file.display());
+                }
+                continue;
+            }
             for dockless in ["ActivationPolicy::Accessory", "ActivationPolicy::Prohibited", "set_dock_visibility(false)"] {
                 assert!(!app_code.contains(dockless), "{}: {dockless}", file.display());
             }
