@@ -1,7 +1,8 @@
 # Live Assist relay protocol (protocol 1)
 
 The messages between an app and the relay in `services/assist-relay`, in detail. They follow the Live Assist contract
-**1.9.0-d** (docs/API_ASSIST.md), which wins where the two differ. Field names are snake_case, every error has a
+**1.9.0-e** (docs/API_ASSIST.md), which wins where the two differ. The relay's names still differ from 1.9.0-e in the
+places listed under "Differences from contract 1.9.0-e" at the end; those wait for a decision on which side changes. Field names are snake_case, every error has a
 machine-readable `code` and a plain-words `message`, durations are milliseconds and timestamps ISO-8601 UTC
 (`2026-11-16T09:15:00+00:00`).
 
@@ -266,7 +267,12 @@ gpt-oss-120b on Groq).
   can answer within the latency budget.
 - **Before anything is shown** (an error, a refusal, a dropped connection, or no first token within the model's
   first-token timeout), the same suggestion goes to the fallback model; the app sees one suggestion whose
-  `suggestion_end.model` is the fallback.
+  `suggestion_end.model` is the fallback. The abandoned attempt's usage (an estimate when the provider sent none) is
+  in that suggestion's `usage`, marked `estimated`; a request the provider turned away unprocessed (rate limited, no
+  key) costs nothing.
+- **Refusals are never shown** from models with safety classifiers (Sonnet 5.5 and Opus 5.5, `hold_until_complete`
+  in the settings): their answer is held until the stream ends, so a refusal there is a failure before anything is
+  shown. A streaming model (Haiku 5.5, gpt-oss) that refuses after words reached the card is handled as below.
 - **After words reached the card** (a dropped connection or a refusal mid-answer), the suggestion ends `superseded`
   and the fallback model answers the same request as a new suggestion with `replaces` set to it, timed from the same
   end of turn. The app replaces the card's text. A Balanced draft's upgrade carries over: the fallback's answer is the
@@ -286,6 +292,16 @@ gpt-oss-120b on Groq).
 | `4409` | Replaced by a newer connection for the same session: don't reconnect |
 
 The relay never sends `1000` itself.
+
+## Differences from contract 1.9.0-e (pending a decision)
+
+| Topic | Contract 1.9.0-e | The relay today |
+|---|---|---|
+| `suggestion_start.kind` | `answer`, `upgrade`, `rewrite`, `fallback` | `answer`, `help_now`, `regenerate`, `shorter`, `formal`, `translate`, `upgrade`. A fallback's replacement keeps the kind of what it replaces (usually `answer`) and is recognised by `replaces` |
+| `suggestion_end.status` | `complete`, `cancelled`, `superseded`, `failed` (then an `error`) | `done`, `cancelled`, `superseded`. A failed suggestion gets no `suggestion_end`: it ends with an `error` that carries its `suggestion_id` |
+| `superseded` | replaced by the suggestion whose `replaces` names it | also when the next question's suggestion takes the card (that one has `replaces: null`); and a final that changed the words of a speculative start that had already finished carries `replaces` |
+| `mode_changed.reason` | `budget`, `budget_restored`, `plan`, `assist_time` | the same, plus `requested` (the app changed `settings.mode`) |
+| Refusals never shown | always | held models only (Sonnet 5.5, Opus 5.5). A streaming model's refusal after shown words is visible until the fallback's first token replaces it |
 
 ## Still open
 
