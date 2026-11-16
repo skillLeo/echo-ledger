@@ -589,7 +589,7 @@ class LiveTranslateService :
         val editing = ::machine.isInitialized && machine.state == BoxState.EDIT
         // Hidden by the box's own Hide, or with every floating window (Hide EchoLedger windows): Show brings both back.
         val hidden = (::machine.isInitialized && machine.state == BoxState.HIDDEN) || ShareGuard.hiddenByUser.value
-        return NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(mode.label)
             .setContentText(if (paused) "Paused" else "Translating to ${TranslateLanguages.label(target)}")
@@ -598,7 +598,9 @@ class LiveTranslateService :
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(open(this))
             .addAction(0, if (paused) "Resume" else "Pause", action(if (paused) ACTION_RESUME else ACTION_PAUSE, 1))
-            .addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
+        // Edit and Lock only while the box can be seen: hidden or private, Show comes first.
+        if (ShareGuard.textVisible.value) builder.addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
+        return builder
             .addAction(0, if (hidden) "Show" else "Hide", action(if (hidden) ACTION_SHOW else ACTION_HIDE, 3))
             .addAction(0, "Stop", action(ACTION_STOP, 4))
             .build()
@@ -617,6 +619,16 @@ class LiveTranslateService :
     private fun updateNotification() {
         if (running.value == null) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+    }
+
+    /** Tests only: a Game or Watch session with its box and notification, without sound or a translator. */
+    internal fun openForTest(mode: TranslateMode = TranslateMode.GAME) {
+        this.mode = mode
+        machine = BoxMachine(elapsed)
+        createChannel(this)
+        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        running.value = mode
+        showOverlay()
     }
 
     private fun action(name: String, code: Int): PendingIntent = PendingIntent.getService(

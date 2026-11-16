@@ -347,21 +347,60 @@ class PrivateWindowsTest : AppTest() {
     }
 
     @Test
-    fun `the Live Translate notification's Show brings back hidden windows, and its Edit does nothing while hidden`() {
-        ShareGuard.setHidden(true)
-        val service = buildService(
+    fun `while hidden the Live Translate notification offers Show and no Edit, and its Edit leaves the box locked`() {
+        val controller = buildService(
             com.echoledger.mobile.translate.LiveTranslateService::class.java,
             android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
-                .setAction(com.echoledger.mobile.translate.LiveTranslateService.ACTION_EDIT)
         ).create()
-        service.startCommand(0, 1) // the notification's Edit while hidden: ignored, no crash
-        assertTrue(ShareGuard.hiddenByUser.value)
+        controller.get().openForTest()
+        idle()
+        val nm = app.getSystemService(android.app.NotificationManager::class.java)
+        fun actions() = shadowOf(nm).getNotification(com.echoledger.mobile.translate.LiveTranslateService.NOTIFICATION_ID)
+            .actions.orEmpty().map { it.title.toString() }
+        assertEquals(listOf("Pause", "Edit", "Hide", "Stop"), actions())
 
-        service.withIntent(
+        ShareGuard.setHidden(true)
+        idle()
+        assertEquals("while hidden: Show, and no Edit", listOf("Pause", "Show", "Stop"), actions())
+        // The notification's Edit sent anyway (an old notification): the box stays locked.
+        controller.withIntent(
+            android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
+                .setAction(com.echoledger.mobile.translate.LiveTranslateService.ACTION_EDIT)
+        ).startCommand(0, 2)
+        idle()
+        assertEquals(TranslateOverlay.LOCKED_FLAGS or FLAG_SECURE, flagsOf(FloatingWindow.LIVE_TRANSLATE))
+
+        controller.withIntent(
             android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
                 .setAction(com.echoledger.mobile.translate.LiveTranslateService.ACTION_SHOW)
-        ).startCommand(0, 2)
+        ).startCommand(0, 3)
+        idle()
         assertFalse(ShareGuard.hiddenByUser.value)
+        assertEquals(
+            "shown again it is still locked: the Edit sent while hidden did nothing",
+            TranslateOverlay.LOCKED_FLAGS or FLAG_SECURE,
+            flagsOf(FloatingWindow.LIVE_TRANSLATE)
+        )
+        assertEquals(listOf("Pause", "Edit", "Hide", "Stop"), actions())
+        controller.get().onStop()
+    }
+
+    @Test
+    fun `turning the grip on while hidden adds no grip over the grey dot`() {
+        ShareGuard.setHidden(true)
+        val box = TranslateOverlay(app, subtitles = false, actions = NoActions)
+        assertTrue(box.show(null, 0.8f, showGrip = false))
+        closers += { box.hideAll() }
+        idle()
+        box.showGrip(true)
+        idle()
+        assertEquals("the grey dot stands for it", View.GONE, onScreenView(FloatingWindow.LIVE_TRANSLATE_GRIP).visibility)
+        assertTrue(dotView() != null)
+
+        ShareGuard.setHidden(false)
+        idle()
+        assertEquals(View.VISIBLE, onScreenView(FloatingWindow.LIVE_TRANSLATE_GRIP).visibility)
+        assertNull(dotView())
     }
 
     private object NoActions : TranslateBoxActions {
