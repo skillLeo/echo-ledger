@@ -33,6 +33,7 @@ object EchoTokens {
         val warningSoft = Color(0xFFFFFAEB)
         val dangerDefault = Color(0xFFB42318)
         val dangerSoft = Color(0xFFFEF3F2)
+        val scrimDefault = Color(0x661A1A1A)
     }
 
     object Dark {
@@ -59,6 +60,7 @@ object EchoTokens {
         val warningSoft = Color(0xFF2B1A05)
         val dangerDefault = Color(0xFFF97066)
         val dangerSoft = Color(0xFF2A0E0B)
+        val scrimDefault = Color(0x99000000)
     }
 
     object Space {
@@ -93,6 +95,22 @@ object EchoTokens {
         val controlHeight = 36.dp
         val controlHeightMobile = 48.dp
         val controlTouchMin = 48.dp
+    }
+
+    object Border {
+        val hairline = 1.dp
+        val strong = 2.dp
+    }
+
+    object Focus {
+        val width = 2.dp
+        val offset = 2.dp
+    }
+
+    object Icon {
+        val sm = 16.dp
+        val md = 20.dp
+        val lg = 24.dp
     }
 
     object Component {

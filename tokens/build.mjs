@@ -120,6 +120,18 @@ ${dims('radius')}
 ${dims('layout')}
     }
 
+    object Border {
+${dims('border')}
+    }
+
+    object Focus {
+${dims('focus')}
+    }
+
+    object Icon {
+${dims('icon')}
+    }
+
     object Component {
 ${comp}
     }
