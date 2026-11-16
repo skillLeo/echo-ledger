@@ -398,6 +398,47 @@ class PhoneAppRecordingsTest {
     }
 
     @Test
+    fun `a kind of file the media store names oddly falls back to its name, only 3GPP and AMR-WB are refused`() {
+        fun type(mime: String?, name: String) = PhoneAppRecordings.typeOf(MediaFile(1, name, "Call/", 0, 1_000, mime = mime))
+        assertEquals("audio/mp4" to "aac", type("audio/x-samsung-m4a", "Call recording.m4a"))
+        assertEquals("audio/mpeg" to "mp3", type("application/octet-stream", "Ali.mp3"))
+        assertNull(type("audio/3gpp", "Call.m4a"))
+        assertNull(type("audio/3gpp2", "Call.m4a"))
+        assertNull(type("audio/amr-wb", "Call.amr"))
+        assertNull("odd type and an unknown name", type("audio/x-odd", "Call.xyz"))
+    }
+
+    @Test
+    fun `trust is asked only of files in a call's time window, once per app, and a failed lookup is a maker unknown`() {
+        val c = call()
+        val inside = samsung(1, c)
+        val outside = samsung(2, call(at = t0 + 3 * 60 * 60 * sec))
+        var asked = 0
+        PhoneAppRecordings.match(listOf(c), listOf(outside), zone = zone, trustOf = { _, _ ->
+            asked++
+            Trust.OK
+        })
+        assertEquals("a file outside every window is never looked at", 0, asked)
+        assertEquals(1, PhoneAppRecordings.match(listOf(c), listOf(inside), zone = zone, trustOf = { _, _ -> Trust.OK }).size)
+
+        var lookups = 0
+        val phone = PhoneAppRecordings.ThisPhone("samsung", null, isSystemApp = {
+            lookups++
+            true
+        })
+        PhoneAppRecordings.ownerTrust(inside, phone)
+        PhoneAppRecordings.ownerTrust(samsung(3, c), phone)
+        assertEquals("one lookup per app", 1, lookups)
+        val failing = PhoneAppRecordings.ThisPhone("samsung", null, isSystemApp = { throw SecurityException("lookup") })
+        assertEquals(Trust.UNKNOWN_MAKER, PhoneAppRecordings.ownerTrust(inside, failing))
+        assertEquals(
+            "another app is still another app",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.ownerTrust(inside.copy(owner = "com.example.cleaner"), failing)
+        )
+    }
+
+    @Test
     fun `only the call folders are asked for, so music and podcasts never push call files out of the newest`() {
         val (selection, args) = PhoneAppRecordings.selection(t0)
         assertTrue(selection, selection.startsWith("date_added >= ? AND ("))

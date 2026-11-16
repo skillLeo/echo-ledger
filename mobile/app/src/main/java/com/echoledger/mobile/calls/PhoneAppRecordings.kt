@@ -153,18 +153,28 @@ object PhoneAppRecordings {
      */
     fun typeOf(file: MediaFile): Pair<String, String>? {
         val mime = file.mime?.trim()?.lowercase()?.substringBefore(';')?.takeIf { it.isNotEmpty() }
+        if (mime in REFUSED_TYPES) return null
         val byMime = when (mime) {
             "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/mp4a-latm" -> "audio/mp4" to "aac"
+
             "audio/aac", "audio/x-aac", "audio/aac-adts" -> "audio/aac" to "aac"
+
             "audio/mpeg", "audio/mp3", "audio/x-mp3" -> "audio/mpeg" to "mp3"
+
             "audio/amr" -> "audio/amr" to "amr"
+
             "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave" -> "audio/wav" to "pcm"
+
             "audio/ogg", "application/ogg" -> "audio/ogg" to "vorbis"
+
             "audio/opus" -> "audio/ogg" to "opus"
+
             "audio/webm" -> "audio/webm" to "opus"
+
             "audio/flac", "audio/x-flac" -> "audio/flac" to "flac"
-            null -> null
-            else -> return null
+
+            // A type the media store names oddly (or none): the name's extension decides.
+            else -> null
         }
         if (byMime != null) return byMime
         return when (file.name.substringAfterLast('.', "").lowercase()) {
@@ -278,18 +288,14 @@ object PhoneAppRecordings {
         val usable = files.filter { it.id !in handled && it.durationMs >= 1_000 && folderOf(it.path) != null }
         val pairs = calls.filter { it.talkS > 0 }.flatMap { call ->
             usable.mapNotNull { file ->
-                // Trust comes before the slot: another app's or an oversize file never takes the call's place, and a
-                // file the phone does not name the maker of only when no trusted one fits.
-                val trust = trustOf?.invoke(file, call) ?: Trust.OK
-                if (trust == Trust.NOT_THE_PHONE_APP || trust == Trust.TOO_LARGE) return@mapNotNull null
+                // The call's time window first (nothing is asked of a file outside it), then trust, before the slot:
+                // another app's or an oversize file never takes the call's place, and a file the phone does not name the
+                // maker of only when no trusted one fits.
                 val span = spanOf(file, zone)
                 val talkMs = call.talkS * 1000
-                val window = windowOf(call)
-                val fits = span.first in (call.dateMs - 5_000)..(call.dateMs + RING_MAX_MS) &&
-                    span.last in call.dateMs..window.last &&
-                    file.addedMs in window && file.modifiedMs in window &&
-                    lengthFits(file.durationMs, call.talkS)
-                if (!fits) return@mapNotNull null
+                if (!inWindow(file, call, zone) || !lengthFits(file.durationMs, call.talkS)) return@mapNotNull null
+                val trust = trustOf?.invoke(file, call) ?: Trust.OK
+                if (trust == Trust.NOT_THE_PHONE_APP || trust == Trust.TOO_LARGE) return@mapNotNull null
                 val score = (if (trust == Trust.UNKNOWN_MAKER) 10_000_000_000L else 0L) +
                     (if (names(file, call)) 0L else 1_000_000_000L) + abs(file.durationMs - talkMs) + abs(span.first - call.dateMs) / 4
                 Triple(call, file, score)
@@ -300,6 +306,15 @@ object PhoneAppRecordings {
             if (out.none { it.first == call || it.second.id == file.id }) out += call to file
         }
         return out.sortedBy { it.first.dateMs }
+    }
+
+    /** Whether [file] was written during [call] (pure): it started between the call's start and its answer, and was added and last changed before 3 minutes after the call can have ended. */
+    fun inWindow(file: MediaFile, call: LogCall, zone: ZoneId = ZoneId.systemDefault()): Boolean {
+        val span = spanOf(file, zone)
+        val window = windowOf(call)
+        return span.first in (call.dateMs - 5_000)..(call.dateMs + RING_MAX_MS) &&
+            span.last in call.dateMs..window.last &&
+            file.addedMs in window && file.modifiedMs in window
     }
 
     /** Whether a file that matched a call may be brought in by itself. */
@@ -317,8 +332,18 @@ object PhoneAppRecordings {
         TOO_LARGE
     }
 
-    /** This phone, as trust needs it: its maker, its default dialer, and whether an app came with the phone. */
-    class ThisPhone(val manufacturer: String, val defaultDialer: String?, val isSystemApp: (String) -> Boolean)
+    /**
+     * This phone, as trust needs it: its maker, its default dialer, and whether an app came with the phone ([isSystemApp]:
+     * null when the phone could not say).
+     */
+    class ThisPhone(val manufacturer: String, val defaultDialer: String?, private val isSystemApp: (String) -> Boolean?) {
+        private val known = HashMap<String, Boolean?>()
+
+        /** Whether [pkg] came with the phone, asked once per app; null when the lookup failed (nothing is assumed). */
+        fun cameWithPhone(pkg: String): Boolean? = synchronized(known) {
+            if (pkg in known) known[pkg] else runCatching { isSystemApp(pkg) }.getOrNull().also { known[pkg] = it }
+        }
+    }
 
     /**
      * Whether [file], matched to [call], may be brought in (pure): its size fits the call, and [ownerTrust] trusts its
@@ -332,13 +357,20 @@ object PhoneAppRecordings {
     /**
      * Who made [file] (pure): the phone's default dialer, or this phone maker's own Phone app as a system app (installed
      * with the phone, or an update of one). A package name alone proves nothing: an app installed later may take any name.
+     * When the phone cannot say whether that app came with it (the lookup failed), the maker is unknown: the person
+     * decides; it is never taken for another app.
      */
     fun ownerTrust(file: MediaFile, phone: ThisPhone): Trust {
         val owner = file.owner?.trim()?.takeIf { it.isNotEmpty() } ?: return Trust.UNKNOWN_MAKER
         if (phone.defaultDialer != null && owner == phone.defaultDialer) return Trust.OK
         val folder = folderOf(file.path) ?: return Trust.NOT_THE_PHONE_APP
         val thisMaker = phone.manufacturer.trim().lowercase() in folder.makers
-        return if (thisMaker && owner in folder.owners && phone.isSystemApp(owner)) Trust.OK else Trust.NOT_THE_PHONE_APP
+        if (!thisMaker || owner !in folder.owners) return Trust.NOT_THE_PHONE_APP
+        return when (phone.cameWithPhone(owner)) {
+            true -> Trust.OK
+            false -> Trust.NOT_THE_PHONE_APP
+            null -> Trust.UNKNOWN_MAKER
+        }
     }
 
     /**
@@ -679,11 +711,12 @@ object PhoneAppRecordings {
         override fun thisPhone(): ThisPhone = ThisPhone(
             manufacturer = Build.MANUFACTURER,
             defaultDialer = runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull(),
+            // A lookup that fails (the package hidden from EchoLedger, an error) says nothing: null, never "no".
             isSystemApp = { pkg ->
                 runCatching {
                     val flags = context.packageManager.getApplicationInfo(pkg, 0).flags
                     flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
-                }.getOrDefault(false)
+                }.getOrNull()
             }
         )
     }
@@ -809,12 +842,16 @@ object PhoneAppRecordings {
         val handled = ids(p.getString(HANDLED, null))
         val phone = sources.thisPhone()
         val files = sources.files(since - RING_MAX_MS).filter { it.id !in handled }
-        // A file another app made in a call folder is never looked at again (and never takes a call's place).
-        val foreign = files.filter { folderOf(it.path) != null && ownerTrust(it, phone) == Trust.NOT_THE_PHONE_APP }
+        val calls = sources.calls(since - RING_MAX_MS).filter { it.dateMs >= since - RING_MAX_MS }
+        // A file another app made in a call folder during a call is never looked at again (and never takes the call's
+        // place); one outside every call's time window is not asked about at all.
+        val foreign = files.filter { f ->
+            folderOf(f.path) != null && calls.any { inWindow(f, it) } && ownerTrust(f, phone) == Trust.NOT_THE_PHONE_APP
+        }
         foreign.forEach { log(context, note(Trust.NOT_THE_PHONE_APP, it.owner)) }
         if (foreign.isNotEmpty()) markHandled(context, foreign.map { it.id })
         val pairs = match(
-            sources.calls(since - RING_MAX_MS).filter { it.dateMs >= since - RING_MAX_MS },
+            calls,
             files - foreign.toSet(),
             handled.toSet(),
             trustOf = { file, call -> trust(file, call, phone) }
@@ -985,6 +1022,9 @@ object PhoneAppRecordings {
         Row.SAVING -> Copy.Later
         else -> Copy.Refused("not imported: the file changed after the call.")
     }
+
+    /** Kinds of audio the server does not take, refused whatever the file's name says. */
+    private val REFUSED_TYPES = setOf("audio/3gpp", "audio/3gpp2", "video/3gpp", "video/3gpp2", "audio/amr-wb")
 
     /** The note for a kind of audio file the server does not take. */
     const val UNSUPPORTED = "not imported: EchoLedger can't take this kind of audio file."
@@ -1207,9 +1247,13 @@ object PhoneAppRecordings {
     fun schedule(context: Context, startMs: Long, endMs: Long, manufacturer: String = Build.MANUFACTURER) {
         // No known call folder on this phone: nothing can come, so the detector does not wait either.
         if (!supported(manufacturer)) return
-        PendingImports.add(context, startMs, endMs)
+        val now = System.currentTimeMillis()
+        PendingImports.add(context, startMs, endMs, now)
         runCatching {
-            val request = OneTimeWorkRequestBuilder<Worker>().setInitialDelay(20, TimeUnit.SECONDS).build()
+            val request = OneTimeWorkRequestBuilder<Worker>()
+                .setInitialDelay(20, TimeUnit.SECONDS)
+                .setInputData(workDataOf(KEY_SCHEDULED_AT to now))
+                .build()
             // Never REPLACE: that would cancel a look in the middle of storing a file; the new look runs after it.
             WorkManager.getInstance(context).enqueueUniqueWork(SOON, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
@@ -1218,6 +1262,9 @@ object PhoneAppRecordings {
     /** After the person answered for a recording, the detector looks again this soon. */
     private const val ANSWERED_DELAY_MS = 30_000L
     private const val KEY_WATCH = "watch"
+
+    /** When a look after a call was queued: when it gives up, it ends only the waits there were then. */
+    const val KEY_SCHEDULED_AT = "scheduled_at"
     const val WATCH = "phone-app-recordings-watch"
     const val SOON = "phone-app-recordings-soon"
     private const val TRIES = 5
@@ -1243,12 +1290,13 @@ object PhoneAppRecordings {
         }
 
         /**
-         * The looks after a call are over: the detector may judge what is left, a little later. A call whose recording
-         * waits for the person still waits.
+         * The looks after a call are over: the detector may judge what is left, a little later. Only the waits there were
+         * when these looks were queued end: a call that ended since has its own look queued behind them, and a call
+         * whose recording waits for the person still waits.
          */
         private fun gaveUp(context: Context) {
             val before = PendingImports.waiting(context).size
-            PendingImports.endLooks(context)
+            PendingImports.endLooks(context, inputData.getLong(KEY_SCHEDULED_AT, Long.MAX_VALUE))
             if (PendingImports.waiting(context).size < before) MissedRecordingWorker.soon(context)
         }
     }

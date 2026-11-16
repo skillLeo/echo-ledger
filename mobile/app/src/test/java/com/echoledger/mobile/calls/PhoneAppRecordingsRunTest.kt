@@ -73,7 +73,10 @@ class PhoneAppRecordingsRunTest : AppTest() {
             return ByteArrayInputStream(bytes[file.id] ?: ByteArray(file.sizeBytes.toInt()) { (it % 251).toByte() })
         }
 
-        override fun thisPhone() = PhoneAppRecordings.ThisPhone("samsung", dialer, isSystemApp = { it in system })
+        /** How the phone answers "did this app come with the phone?" (a test may make the lookup fail). */
+        var lookup: (String) -> Boolean = { it in system }
+
+        override fun thisPhone() = PhoneAppRecordings.ThisPhone("samsung", dialer, isSystemApp = { lookup(it) })
     }
 
     @Before
@@ -273,6 +276,15 @@ class PhoneAppRecordingsRunTest : AppTest() {
         val imported = run(both, atMs = t + 40 * 60 * sec).imported.single()
         assertEquals(listOf(4L), both.opened)
         assertEquals((d.talkS - 6) * sec, app.graph.recordings.get(imported)!!.durationMs)
+    }
+
+    @Test
+    fun `a Phone app the phone cannot look up is a maker it cannot name - the person decides, it is never set aside`() {
+        val c = call()
+        val store = Store(mutableListOf(recording(1, c)), listOf(c))
+        store.lookup = { throw SecurityException("package lookup") }
+        assertEquals(emptyList<String>(), run(store).imported)
+        assertEquals("it waits for the person", listOf(PhoneAppRecordings.Candidate(1, c.dateMs)), PhoneAppRecordings.candidates(app))
     }
 
     @Test

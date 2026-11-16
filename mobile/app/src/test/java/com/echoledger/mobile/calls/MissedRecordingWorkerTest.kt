@@ -301,6 +301,21 @@ class MissedRecordingWorkerTest : AppTest() {
     }
 
     @Test
+    fun `a look that gives up ends only the waits that were there when its chain began`() {
+        val now = System.currentTimeMillis()
+        // Call A's look was queued; call B ended while it ran, and B's own look is queued behind it.
+        PendingImports.add(app, t, t + 60_000, nowMs = now)
+        PendingImports.add(app, t + 5 * min, t + 6 * min, nowMs = now + 1_000)
+        // A's look gives up (here: the import was switched off meanwhile).
+        runBlocking { app.graph.settings.update { it.copy(phoneAppImport = false) } }
+        val worker = androidx.work.testing.TestListenableWorkerBuilder<PhoneAppRecordings.Worker>(app)
+            .setInputData(androidx.work.workDataOf(PhoneAppRecordings.KEY_SCHEDULED_AT to now))
+            .build()
+        runBlocking { worker.doWork() }
+        assertEquals("B still waits for its own look", listOf((t + 5 * min)..(t + 6 * min)), PendingImports.waiting(app, now + 2_000))
+    }
+
+    @Test
     fun `scheduling the Phone app's import makes the call wait, and a wait ends by itself`() {
         PhoneAppRecordings.schedule(app, t, t + 60_000, manufacturer = "samsung")
         assertEquals(listOf(t..t + 60_000), PendingImports.waiting(app, t + 70_000))
