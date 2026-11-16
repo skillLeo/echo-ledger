@@ -17,6 +17,7 @@ pub mod identity;
 pub mod lifecycle;
 pub mod lock;
 pub mod mac_check;
+mod main_thread;
 pub mod material;
 pub mod net;
 pub mod notifications;
