@@ -22,6 +22,12 @@ without Phase S.
 - 2026-11-16 evening: the desktop follow-up is merged (`dce18dfe`, reviewed: approve), with the Mac freeze found in
   the Meet test fixed everywhere, the Mac menu bar fixes and EchoLedger as a normal Dock app. Waiting: CI builds,
   then MAC-22 (release gate) and MAC-32 on the Mac; the phone re-review; the version bump; the delta audit.
+- 2026-11-16 ~21:30: MAC-22 PASS on macOS 27.3 (full-screen Zoom and Meet; Pause keeps the meeting in front) and
+  MAC-32 a–d, f PASS (Dock, quit while recording keeps it, ⌘Q twice, ⌘H), on the CI build of 4f8f775d whose Mac
+  smoke reports every floating window as a non-activating panel hidden from capture (macOS 26 Intel and Apple
+  Silicon). Phone follow-ups merged (13ced291). Left: the phone batch (A6 retest, Part C calls, Part D), the Windows
+  laptop batch, start-at-login, the version bump and the delta audit; Windows 11 Arm CI smoke is covered by the
+  runner's own Windows.UI.Core.CoreWindow (another process) — mark that job allowed to fail, with this reason.
 
 Three passes on the whole release diff (v1.7.0 `a6ac1b9b` → `fd088715`): security (2 major, 5 minor), UX/design (8 major,
 18 minor), reliability/performance (8 major, 20 minor). Every finding is fixed before the v1.8.1 release or written

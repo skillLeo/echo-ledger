@@ -97,3 +97,8 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 8. v1.8.1 follow-up build (the freeze fix, the menu on a click, the badge, the Dock app): MAC-22 is a release gate
    (full-screen Zoom and Meet, a recording running), then MAC-32 (Dock click, Dock Quit / ⌘Q twice / logout while
    recording, start at login, ⌘H). One list for Hassam, about 20 minutes, all clicks written out in plain words.
+   Run 2026-11-16 ~21:30 on macOS 27.3 with the CI build of 4f8f775d (merged bee66862), Hassam's answers: all yes —
+   Dock icon and dot, ⌘Tab; the menu opens on a click; recording controls over full-screen Zoom and full-screen Meet,
+   Pause leaves the meeting in front; ⌘H hides the window, not the controls; Dock Quit while recording closes within
+   20 s and the recording is kept (not "Recovered"); ⌘Q twice keeps it too. Not run: start at login (MAC-32 e), the
+   phone-as-viewer whole-screen shares for Zoom (both capture modes), MAC-22 on macOS 14.4/15 (no machine).
