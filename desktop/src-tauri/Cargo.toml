@@ -127,6 +127,8 @@ proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 
 # tests/mac_appkit.rs builds tao's own window and app delegate (the version and features Tauri uses, nothing new built).
 [target.'cfg(target_os = "macos")'.dev-dependencies]
+# This dev pin also fixes the app's own tao (Cargo resolves one 0.37.x). On a Tauri/tao bump, re-run
+# tests/mac_appkit.rs and the Mac smoke test (the floating panels' class switch checks tao's window shape) first.
 tao = { version = "=0.37.2", default-features = false, features = ["rwh_06"] }
 
 # AppKit on the main thread: the floating windows become panels, the delegate answers quits from outside (macOS).
