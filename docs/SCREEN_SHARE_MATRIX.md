@@ -80,3 +80,9 @@ while its windows were open): "EchoLedger recording controls", "EchoLedger capti
 window was 1 in v1.6.0). One untitled 500 × 500 window reports 1 but is never on screen (onscreen false; also present in
 v1.6.0; no EchoLedger code makes a window of that size), most likely a framework helper window: to identify. Live
 Translate is not opened by the smoke test and still needs its read.
+
+Installed on the development Mac on 2026-11-16 (the CI build of `5d9f9779`, ad hoc, in /Applications over v1.6.0):
+the main window "EchoLedger" and "EchoLedger dictation" report sharing state 0 while running normally, and the untitled
+500 × 500 window (macOS's text-input indicator window, TUINSWindow) now reports 0 too (the audit fix sets every window
+of the app's own process). EchoLedger was listed only under "System Audio Recording Only", not under Screen & System
+Audio Recording — the same as the v1.6.0 it replaced: the cause of "no screen moments" on this Mac (v1.8 0.1 c).
