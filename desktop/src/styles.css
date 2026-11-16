@@ -620,6 +620,11 @@ button.segment.active { background: var(--accent-soft); }
    transcript showed through above the find bar and below the player. */
 .app.narrow .detail .find-bar { top: calc(-1 * var(--space-5)); }
 .app.narrow .detail .player-dock { bottom: calc(-1 * var(--space-5)); }
+/* A narrow and short page (200 % text in the smallest window, D-137): the player, two rows tall there, would stick over
+   the end of the list and the recording's head; it stays where it is, under the transcript's toolbar. */
+@media (max-height: 480px) {
+  .app.narrow .detail .player-dock { position: static; }
+}
 .app.narrow .topbar-search-text { display: none; }
 .app.narrow .topbar-search { flex: 0 0 auto; min-width: 0; }
 .app.narrow .workspace-role { display: none; }

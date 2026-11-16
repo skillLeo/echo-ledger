@@ -33,9 +33,9 @@ function prop(selector: string, name: string, list: CSSRule[] = rules): string {
   return values[values.length - 1] ?? "";
 }
 
+/** The rules of every block with this media condition, in order (a condition can have more than one block). */
 function media(condition: string): CSSRule[] {
-  const rule = rules.find((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition);
-  return rule ? Array.from(rule.cssRules) : [];
+  return rules.filter((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition).flatMap((r) => Array.from(r.cssRules));
 }
 
 type Theme = "dark" | "light";
@@ -421,6 +421,13 @@ describe("a chip's word and its select are one control (D-121)", () => {
     expect(prop(".chip-select > .chip-key", "position")).toBe("absolute");
     expect(prop(".head-chip .chip-select > select", "padding-inline-start")).toContain("var(--chip-key-w");
     expect(prop(".chip-select", "cursor")).toBe("pointer");
+  });
+});
+
+describe("the stacked Library at 200 % text (D-137)", () => {
+  it("keeps the player in its place in a narrow, short page, so it never covers the list", () => {
+    expect(prop(".player-dock", "position")).toBe("sticky");
+    expect(prop(".app.narrow .detail .player-dock", "position", media("(max-height: 480px)"))).toBe("static");
   });
 });
 
