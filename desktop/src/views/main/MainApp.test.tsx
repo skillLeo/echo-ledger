@@ -383,10 +383,11 @@ describe("MainApp sidebar and keys", () => {
     fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
     const help = await screen.findByRole("dialog", { name: "Help & shortcuts" });
     expect(help).not.toHaveTextContent(/Account → Preferences|console under Help/);
-    expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. The user guide is in Settings › Help.");
+    expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.");
+    expect(help).not.toHaveTextContent(/user guide/i);
     expect(within(help).getByTestId("capture-help")).toHaveTextContent(/Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support/);
     expect(within(help).getByText(/Shift\+← \/ Shift\+→/)).toBeInTheDocument();
-    fireEvent.click(within(help).getByRole("button", { name: "User guide" }));
+    fireEvent.click(within(help).getByRole("button", { name: "Help articles" }));
     expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
     fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
     fireEvent.click(within(await screen.findByRole("dialog", { name: "Help & shortcuts" })).getByRole("button", { name: "Screen-share privacy" }));

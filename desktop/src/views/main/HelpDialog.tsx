@@ -1,6 +1,6 @@
 // Help & shortcuts (v1.6, P4.1): every key of the window in one place ("?" opens it), the global shortcuts as set in
-// Settings › Keyboard shortcuts, and where to read more (the user guide in Settings › Help); how to get a screenshot of
-// EchoLedger and what to send for support. It fits the window: the lists scroll, the title and buttons stay.
+// Settings › Keyboard shortcuts, and where to read more (answers to common questions in Settings › Help); how to get a
+// screenshot of EchoLedger and what to send for support. It fits the window: the lists scroll, the title and buttons stay.
 import { useEffect, useState } from "react";
 import { api, type Settings, type ShortcutAction } from "../../lib/ipc";
 import { prettyShortcut } from "../../lib/format";
@@ -61,12 +61,12 @@ export function HelpDialog({ platform, onClose, onSettings }: { platform: string
             <div key={action}><dt><span className="kbd">{settings?.shortcuts[action] ? prettyShortcut(settings.shortcuts[action], platform) : "Not set"}</span></dt><dd>{what}</dd></div>
           ))}
         </dl>
-        <p className="small muted">Change the shortcuts in Settings › Keyboard shortcuts. The user guide is in Settings › Help.</p>
+        <p className="small muted">Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.</p>
         <p className="small muted" data-testid="capture-help">{CAPTURE_HELP}</p>
       </div>
       <div className="row sheet-actions help-actions">
         <button type="button" className="btn ghost" onClick={() => go("shortcuts")}>Keyboard shortcuts</button>
-        <button type="button" className="btn ghost" onClick={() => go("help")}>User guide</button>
+        <button type="button" className="btn ghost" onClick={() => go("help")}>Help articles</button>
         <button type="button" className="btn ghost" onClick={() => go("share_privacy")}>Screen-share privacy</button>
         <span className="spacer" />
         <button type="button" className="btn primary" onClick={onClose}>Close</button>
