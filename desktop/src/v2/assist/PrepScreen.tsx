@@ -10,7 +10,7 @@ import { CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
 export const MEETING_TYPES: readonly { value: MeetingType; label: string }[] = [
   { value: "interview", label: "Interview" },
   { value: "existing_client", label: "Existing client" },
-  { value: "new_client", label: "New client" },
+  { value: "new_client", label: "Prospective client" },
   { value: "boss", label: "Boss" },
   { value: "general", label: "Other meeting" },
 ];
