@@ -20,7 +20,7 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 | A2 | Start a test voice note; Samsung's screen recorder (full screen) on, then off | The video shows a black box where the recording controls are; the phone shows them normally |
 | A3 | Setting → **Show**, record again; then back to **Private (black box)** | Show: the video shows the recording controls with the clock; back to Private: black again, also for windows already open |
 | A4 | The recording controls → **Hide EchoLedger windows**, tap the grey dot; then the tile twice (`cmd statusbar expand-settings` first, then `click-tile`) | Grey dot, then back; the tile hides and shows |
-| A5 | Hide, then force a new process (the app updated or stopped by Android), start a voice note | Still hidden after the restart; the dot shows them |
+| A5 | Hide, then force a new process (the app updated or stopped by Android), start a voice note | Shown again after the restart (Hide lasts until shown or a restart), and still a black box in a screen recording |
 | A6 | Live Translate → Watch translate on a video (you tap **Start now**), record the screen | Box and toolbar are black in the video |
 | A7 | Discard the test voice note; delete the test videos | Nothing left behind |
 
