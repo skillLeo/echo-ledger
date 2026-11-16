@@ -19,7 +19,8 @@ today's screens.
 3. No emoji in labels, buttons, headings or badges.
 4. No cards with a coloured left border.
 5. At most 3 corner radii in use (4, 8 and 12; "full" is the pill shape of chips, avatars and the recording pill and
-   does not count).
+   does not count). The rule holds per platform: desktop and web use 4/8/12; the phone uses 4/8/16, its dialogs taking
+   the sheet radius 16.
 6. Shadows only on floating layers (menus, dialogs, overlays).
 7. At most one badge per row; no "New" badges older than 30 days.
 8. No looping animation except the recording dot.
@@ -50,6 +51,9 @@ semantic roles. Style Dictionary builds CSS variables + a Tailwind theme (web, d
 | danger | #B42318 | #F97066 | Destructive actions, errors |
 
 Red is only for recording and destructive actions.
+
+Wallpaper colours (Android dynamic colour) are not used by the redesigned screens: the accent stays teal and every
+surface stays neutral, so the app looks the same on every phone and the record button never changes colour.
 
 ### Type (web and desktop; native apps map to Material 3 roles and iOS text styles)
 | Token | Size / line | Weight | Use |
