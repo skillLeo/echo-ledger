@@ -150,9 +150,6 @@ impl Decoder for ChatDecoder {
         let mut out = Decoded::default();
         if event.data.trim() == "[DONE]" {
             out.finished = true;
-            if self.refused {
-                out.fail(ProviderError::Declined);
-            }
             return out;
         }
         let Ok(chunk) = serde_json::from_str::<Chunk>(&event.data) else {
@@ -166,7 +163,12 @@ impl Decoder for ChatDecoder {
             if let Some(text) = choice.delta.as_ref().and_then(|d| d.content.as_deref()) {
                 out.text(text);
             }
-            self.refused |= choice.finish_reason.as_deref() == Some("content_filter");
+            // A refusal fails the attempt at once, without waiting for [DONE] (contract 1.9.0-f).
+            if choice.finish_reason.as_deref() == Some("content_filter") && !self.refused {
+                self.refused = true;
+                out.fail(ProviderError::Declined);
+                out.finished = true;
+            }
         }
         if let Some(usage) = chunk.usage.or_else(|| chunk.x_groq.and_then(|x| x.usage)) {
             self.usage = Some(usage);
@@ -233,7 +235,8 @@ mod tests {
         assert_eq!(openai.finish(), Some(StreamEvent::Usage(Usage { input_tokens: 50, output_tokens: 5, ..Usage::default() })));
 
         let mut filtered = ChatDecoder::default();
-        filtered.decode(event(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}"#));
-        assert_eq!(filtered.decode(event("[DONE]")).items, vec![Err(ProviderError::Declined)]);
+        let at_once = filtered.decode(event(r#"{"choices":[{"index":0,"delta":{},"finish_reason":"content_filter"}]}"#));
+        assert_eq!(at_once.items, vec![Err(ProviderError::Declined)], "the refusal fails the attempt at once");
+        assert!(filtered.decode(event("[DONE]")).items.is_empty());
     }
 }

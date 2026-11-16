@@ -245,12 +245,16 @@ impl Decoder for AnthropicDecoder {
             ApiEvent::ContentBlockDelta { delta: Delta::Other } | ApiEvent::Other => {}
             ApiEvent::MessageDelta { delta, usage } => {
                 self.usage.merge(usage.unwrap_or_default());
-                self.refused |= delta.stop_reason.as_deref() == Some("refusal");
+                // [Handling stop reasons] The refusal is known here, one event before message_stop: fail the attempt
+                // now, so a suggestion that already showed words is ended at once (contract 1.9.0-f).
+                if delta.stop_reason.as_deref() == Some("refusal") {
+                    self.refused = true;
+                    out.fail(ProviderError::Declined);
+                    out.finished = true;
+                }
             }
             ApiEvent::MessageStop => {
-                if self.refused {
-                    out.fail(ProviderError::Declined);
-                } else {
+                if !self.refused {
                     out.items.push(Ok(StreamEvent::Usage(self.usage.usage())));
                 }
                 out.finished = true;
@@ -411,8 +415,9 @@ mod tests {
         );
 
         let mut refused = AnthropicDecoder::default();
-        refused.decode(event(r#"{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}"#));
-        assert_eq!(refused.decode(event(r#"{"type":"message_stop"}"#)).items, vec![Err(ProviderError::Declined)]);
+        let at_delta = refused.decode(event(r#"{"type":"message_delta","delta":{"stop_reason":"refusal"},"usage":{"output_tokens":0}}"#));
+        assert_eq!(at_delta.items, vec![Err(ProviderError::Declined)], "the refusal fails the attempt at once");
+        assert!(refused.decode(event(r#"{"type":"message_stop"}"#)).items.is_empty());
         let overloaded = AnthropicDecoder::default().decode(event(r#"{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}"#));
         assert_eq!(overloaded.items, vec![Err(ProviderError::Unavailable)]);
     }

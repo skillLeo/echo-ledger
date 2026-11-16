@@ -313,3 +313,39 @@ async fn a_refusal_after_streamed_words_is_never_shown_and_the_fallback_answers(
     // The refused answer is not reported as shown text.
     assert!(h.reports.reports().iter().all(|r| !format!("{r:?}").contains("REFUSED")));
 }
+
+#[tokio::test]
+async fn a_streamed_models_refusal_after_shown_words_ends_that_suggestion_at_once() {
+    let server = MockHttp::start().await;
+    // Haiku (streamed) shows words, then refuses; events 400 ms apart, so message_stop comes 400 ms after the refusal.
+    let gap = Duration::from_millis(400);
+    server.push(ANTHROPIC, Reply::Sse { fixture: "anthropic_haiku_refusal_midstream.sse", first: Duration::from_millis(120), gap, cut_after: None });
+    server.push(GROQ, Reply::sse("groq_answer.sse"));
+    let mut s = fast_session(&server, "s-streamed-refusal").await;
+    let asked = Instant::now();
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+
+    let mut seen = Vec::new();
+    let superseded_at = loop {
+        let message = s.next().await;
+        let done = message["type"] == "suggestion_end";
+        seen.push(message);
+        if done {
+            break asked.elapsed();
+        }
+    };
+    let first = seen[0]["suggestion_id"].as_str().unwrap().to_owned();
+    assert!(text_of(&seen, &first).contains("REFUSED-PARTIAL"), "a streamed model shows its words: {seen:?}");
+    let end = seen.last().unwrap();
+    assert_eq!((end["suggestion_id"].as_str(), end["status"].as_str()), (Some(first.as_str()), Some("superseded")));
+    // The refusal (message_delta) is the 6th event, at about 120 + 5 x 400 ms; message_stop would be 400 ms later.
+    assert!(superseded_at < Duration::from_millis(120 + 5 * 400 + 300), "ended at the refusal, not at message_stop: {superseded_at:?}");
+
+    // Then, and only then, the fallback; no refused word after the end.
+    let rest = s.until("suggestion_end").await;
+    let start = &rest[0];
+    assert_eq!((start["type"].as_str(), start["replaces"].as_str()), (Some("suggestion_start"), Some(first.as_str())));
+    assert_eq!(start["model"], "openai/gpt-oss-120b");
+    assert!(rest.iter().all(|m| !m.to_string().contains("REFUSED")), "{rest:?}");
+    assert_eq!(text_of(&rest, start["suggestion_id"].as_str().unwrap()), "One month, from Groq.");
+}
