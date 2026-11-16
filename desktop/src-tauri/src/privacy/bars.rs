@@ -148,6 +148,12 @@ const BAR_WORDS: [&str; 3] = ["share", "sharing", "presenting"];
 /// How much of a title is kept in the log: enough to write a pattern, never a whole chat or channel name.
 pub const LOGGED_TITLE: usize = 80;
 
+/// What a word of a title is made of: "-", "_" and "#" stay inside it, so a channel such as "#share-ideas" or a file
+/// "share_notes" is one word, never the bar word "share" (and so never logged).
+fn is_word_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '-' | '_' | '#')
+}
+
 /// Floating windows (layer above 0) of meeting apps and browsers whose title uses a sharing bar's words and that no
 /// pattern matches: to log (pure). A window at the normal layer is a meeting, a chat, a channel or a page, whose title
 /// is the person's own content, and is never logged.
@@ -158,7 +164,7 @@ pub fn unknown(patterns: &Patterns, platform: &str, windows: &[Listed]) -> Vec<L
             let owner = w.owner.to_lowercase();
             let owner = owner.trim_start_matches('\u{200e}');
             let app = MEETING_OWNERS.iter().chain(BROWSER_OWNERS.iter()).any(|o| owner.starts_with(o));
-            let words: Vec<String> = w.title.to_lowercase().split(|c: char| !c.is_alphanumeric()).map(str::to_string).collect();
+            let words: Vec<String> = w.title.to_lowercase().split(|c: char| !is_word_char(c)).map(str::to_string).collect();
             w.layer != 0 && app && BAR_WORDS.iter().any(|k| words.iter().any(|word| word == k)) && patterns.matching(platform, &w.owner, &w.title).is_none()
         })
         .cloned()

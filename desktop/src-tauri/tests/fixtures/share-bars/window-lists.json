@@ -129,6 +129,16 @@
       "expect": null, "unknown": []
     },
     {
+      "name": "A floating window named after a channel or file with share in it is the person's content, never logged",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Slack", "title": "#share-ideas", "layer": 3 },
+        { "owner": "Slack", "title": "Huddle in #share_notes", "layer": 3 },
+        { "owner": "Microsoft Teams", "title": "share-ideas | Microsoft Teams", "layer": 3 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
       "name": "A Mac pattern never matches on Windows",
       "platform": "windows",
       "windows": [
