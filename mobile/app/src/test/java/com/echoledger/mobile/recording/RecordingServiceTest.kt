@@ -293,12 +293,12 @@ class RecordingServiceTest : AppTest() {
     private fun stereo(near: ShortArray, far: ShortArray): ShortArray =
         ShortArray(minOf(near.size, far.size) * 2) { i -> if (i % 2 == 0) near[i / 2] else far[i / 2] }
 
-    /** A WhatsApp call through [helper] that lasts a little over 3 s; its journal entry once it is finished. */
-    private fun callThrough(helper: ScriptedHelper): CallJournal.Call {
+    /** A call ([pkg]: WhatsApp) through [helper] that lasts a little over 3 s; its journal entry once it is finished. */
+    private fun callThrough(helper: ScriptedHelper, pkg: String = "com.whatsapp"): CallJournal.Call {
         app.graph.helper.attach(helper, source = "adb")
         start(RecordingService.ACTION_ARM)
         pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
-        helper.listener!!.onCallStarted("com.whatsapp")
+        helper.listener!!.onCallStarted(pkg)
         pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
         Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one
         // A busy machine reads the pipe slowly: the call ends once its sound has been taken in.
@@ -413,6 +413,72 @@ class RecordingServiceTest : AppTest() {
         val call = CallJournal.book(app).calls.single()
         assertEquals("phone_call", call.app)
         assertEquals(CallJournal.Failure("started", "unknown", com.echoledger.mobile.calls.MissedReason.PHONE_LINE), call.failure)
+    }
+
+    /** v1.8 0.3 review: a SIM call whose line would not open, said once and quietly; never the helper advice. */
+    @Test
+    fun `a phone line that would not open says nothing when the Phone app's recording is coming, else one quiet line`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_CALL_LOG,
+            com.echoledger.mobile.calls.PhoneAppRecordings.permission()
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: phone line (both directions): did not start; phone line: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        val notifications = shadowOf(app.getSystemService(android.app.NotificationManager::class.java))
+        fun titles() = notifications.allNotifications.map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }
+
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(
+            "the Phone app records every call: its recording comes in, nothing to say: ${titles()}",
+            titles().none {
+                it?.contains("not recorded") ==
+                    true ||
+                    it == "No audio was captured"
+            }
+        )
+        helper.listener!!.onCallEnded()
+
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "0"
+        )
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the second call to be journaled") { CallJournal.book(app).calls.count { it.finished } == 2 }
+        pumpUntil("the line about it") { titles().contains("Phone call not recorded") }
+        val text = notifications.allNotifications.single {
+            it.extras.getString(android.app.Notification.EXTRA_TITLE) ==
+                "Phone call not recorded"
+        }
+            .extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString()
+        assertTrue(text, text.contains(com.echoledger.mobile.calls.PhoneAppRecordings.guide("samsung")))
+        assertFalse(text, text.contains("helper"))
+        assertTrue("never the high-priority helper alert", titles().none { it == "Call not recorded" || it == "No audio was captured" })
+    }
+
+    /** v1.8 0.3 review: a SIM call EchoLedger recorded itself is not left waiting for the Phone app's copy. */
+    @Test
+    fun `a phone call EchoLedger recorded on both sides is not left waiting for the Phone app's copy`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val far = join(tone(1_000), quiet(2_000), speech(4_000))
+        val call =
+            callThrough(ScriptedHelper(stereo(join(quiet(3_000), speech(4_000)), far)), com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        assertEquals("phone_call", call.app)
+        assertTrue(call.reached(CallJournal.Stage.BOTH_AUDIO))
+        assertEquals(emptyList<LongRange>(), com.echoledger.mobile.calls.PendingImports.waiting(app))
     }
 
     @Test

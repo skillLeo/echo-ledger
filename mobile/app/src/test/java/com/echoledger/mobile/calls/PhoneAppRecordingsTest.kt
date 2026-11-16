@@ -341,14 +341,108 @@ class PhoneAppRecordingsTest {
             "not imported, shorter than 10 s (Skip calls shorter than).",
             PhoneAppRecordings.note(Verdict.SHORT, call(talkS = 5), file, null, null, always(), 10)
         )
+        assertEquals(
+            "kept, both sides heard, its file already sent",
+            "EchoLedger heard both sides itself; the Phone app's copy stays in its folder.",
+            PhoneAppRecordings.note(Verdict.OWN, c, file, null, null, always(), 10)
+        )
+    }
+
+    // ---- what is read, and when the card shows (review of 0.3) ----------------------------------------------------
+
+    @Test
+    fun `a row read again is the same file, one the Phone app is still saving, one changed for good, or gone`() {
+        val c = call()
+        val file = samsung(1, c)
+        assertEquals(PhoneAppRecordings.Row.SAME, PhoneAppRecordings.rowNow(file, file, c))
+        assertEquals(PhoneAppRecordings.Row.GONE, PhoneAppRecordings.rowNow(file, null, c))
+        val growing = file.copy(
+            sizeBytes = file.sizeBytes + 4_000,
+            modifiedMs = file.modifiedMs + 5 * sec,
+            durationMs =
+                file.durationMs + 1 * sec
+        )
+        assertEquals("still in the call's window", PhoneAppRecordings.Row.SAVING, PhoneAppRecordings.rowNow(file, growing, c))
+        val late = file.copy(sizeBytes = 1, modifiedMs = file.modifiedMs + 60 * 60 * sec)
+        assertEquals("changed an hour later", PhoneAppRecordings.Row.CHANGED, PhoneAppRecordings.rowNow(file, late, c))
+        assertEquals("moved", PhoneAppRecordings.Row.CHANGED, PhoneAppRecordings.rowNow(file, file.copy(path = "Music/"), c))
+        assertEquals(
+            "now another app's",
+            PhoneAppRecordings.Row.CHANGED,
+            PhoneAppRecordings.rowNow(file, file.copy(owner = "com.example.cleaner"), c)
+        )
+        assertEquals(
+            "the same folder, written as the media store does",
+            PhoneAppRecordings.Row.SAME,
+            PhoneAppRecordings.rowNow(file, file.copy(path = "recordings/Call"), c)
+        )
     }
 
     @Test
-    fun `a call is named after the contact, else its number`() {
-        assertEquals("Call with Omar Khan", PhoneAppRecordings.title("Omar Khan", "+923001234567"))
-        assertEquals("Call with +92 300 1234567", PhoneAppRecordings.title(null, "+92 300 1234567"))
-        assertEquals("Call with +92 300 1234567", PhoneAppRecordings.title(" ", "+92 300 1234567"))
-        assertNull(PhoneAppRecordings.title(null, "Private"))
+    fun `each kind of call recording file is sent as the server takes it, and a kind it cannot take is not`() {
+        fun type(mime: String?, name: String = "Call recording.bin") =
+            PhoneAppRecordings.typeOf(MediaFile(1, name, "Call/", 0, 1_000, mime = mime))
+        assertEquals("audio/mp4" to "aac", type("audio/mp4"))
+        assertEquals("audio/mp4" to "aac", type("audio/x-m4a"))
+        assertEquals("audio/mpeg" to "mp3", type("audio/mpeg"))
+        assertEquals("audio/amr" to "amr", type("audio/amr"))
+        assertEquals("audio/aac" to "aac", type("audio/aac"))
+        assertEquals("audio/wav" to "pcm", type("audio/x-wav"))
+        assertEquals("audio/ogg" to "vorbis", type("application/ogg"))
+        assertNull("3GPP is not taken", type("audio/3gpp", "Call.3gp"))
+        assertNull("nor AMR-WB", type("audio/amr-wb", "Call.awb"))
+        assertEquals("no type: the name decides", "audio/mpeg" to "mp3", type(null, "Ali_20261029101500.mp3"))
+        assertEquals("audio/amr" to "amr", type(null, "Ali.AMR"))
+        assertNull(type(null, "Ali.3gp"))
+        assertNull(type(null, "no extension"))
+    }
+
+    @Test
+    fun `only the call folders are asked for, so music and podcasts never push call files out of the newest`() {
+        val (selection, args) = PhoneAppRecordings.selection(t0)
+        assertTrue(selection, selection.startsWith("date_added >= ? AND ("))
+        assertEquals(PhoneAppRecordings.FOLDERS.map { it.path }.distinct().size, Regex("relative_path LIKE \\?").findAll(selection).count())
+        assertEquals(((t0 - 10_000) / 1000).toString(), args.first())
+        assertTrue(args.contains("Recordings/Call/%"))
+        assertTrue(args.contains("MIUI/sound_recorder/call_rec/%"))
+    }
+
+    @Test
+    fun `the after-call card shows right after the call, never during another call or recording, nor long after`() {
+        assertTrue(PhoneAppRecordings.cardNow(t0, t0 + 40 * sec, live = false))
+        assertFalse("a call or a recording is live", PhoneAppRecordings.cardNow(t0, t0 + 40 * sec, live = true))
+        assertFalse("ended 3 minutes ago (the first look after an update)", PhoneAppRecordings.cardNow(t0, t0 + 3 * 60 * sec, live = false))
+    }
+
+    @Test
+    fun `the media store is watched only where the Phone app's recordings can be found`() {
+        val on = com.echoledger.mobile.data.AppSettings(phoneCalls = "always", phoneAppImport = true)
+        assertTrue(PhoneAppRecordings.watching(on, allowed = true, manufacturer = "samsung"))
+        assertFalse(
+            "a Pixel: Google's Phone app keeps its recordings to itself",
+            PhoneAppRecordings.watching(on, allowed = true, manufacturer = "Google")
+        )
+        assertFalse(PhoneAppRecordings.watching(on, allowed = false, manufacturer = "samsung"))
+        assertFalse(PhoneAppRecordings.watching(on.copy(phoneAppImport = false), allowed = true, manufacturer = "samsung"))
+    }
+
+    @Test
+    fun `a pending delete waits for its recording to reach the server, and goes when the recording went first`() {
+        val list = PhoneAppRecordings.parseDeletes("11:rec-a;12:rec-b:u;13:rec-c;14".replace(';', ','))
+        assertEquals(
+            listOf(
+                PhoneAppRecordings.PendingDelete(11, "rec-a"),
+                PhoneAppRecordings.PendingDelete(12, "rec-b", uploaded = true),
+                PhoneAppRecordings.PendingDelete(13, "rec-c"),
+                PhoneAppRecordings.PendingDelete(14, null)
+            ),
+            list
+        )
+        assertEquals(list, PhoneAppRecordings.parseDeletes(PhoneAppRecordings.formatDeletes(list)))
+        // rec-a is still on the phone, rec-c was deleted (Undo), 14 is an older build's (no recording known).
+        val (due, waiting) = PhoneAppRecordings.dueDeletes(list) { it == "rec-a" }
+        assertEquals(listOf(12L), due.map { it.fileId })
+        assertEquals(listOf(11L), waiting.map { it.fileId })
     }
 
     @Test

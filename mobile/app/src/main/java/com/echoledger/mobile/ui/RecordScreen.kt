@@ -340,7 +340,7 @@ fun RecordScreen(
             // The apps auto-record listens to, right under its switch (since 1.3.2).
             if (capabilities.helperInBuild) {
                 Box(Modifier.padding(horizontal = Space.screen, vertical = Space.s2)) {
-                    AutoRecordSection(vm, settings)
+                    AutoRecordSection(vm, settings, phoneAppBlock = false)
                 }
             }
         }

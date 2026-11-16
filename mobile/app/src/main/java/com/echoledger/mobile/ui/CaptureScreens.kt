@@ -284,9 +284,12 @@ private fun LiveTranscript(feed: com.echoledger.mobile.overlay.CaptionFeed, capt
     }
 }
 
-/** Settings → Auto-record apps (B1): a switch per app whose calls the phone detects, with the explainer line. */
+/**
+ * Settings → Auto-record apps (B1): a switch per app whose calls the phone detects, with the explainer line. The Phone
+ * app's own recordings ([phoneAppBlock]) are set up in Settings only; the Record tab shows the switches.
+ */
 @Composable
-fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
+fun AutoRecordSection(vm: MainViewModel, settings: AppSettings, phoneAppBlock: Boolean = true) {
     SectionCard {
         Text("Auto-record apps", fontWeight = FontWeight.SemiBold)
         // Said once for the list (since v1.3) instead of under every app.
@@ -365,7 +368,9 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
                 ask.launch(PhoneCallLog.permissionsToAsk())
             }
         }
-        if (PhoneCalls.mode(settings.phoneCalls) != PhoneCalls.OFF) PhoneAppRecordingsBlock(settings, onChange = { vm.updateSettings(it) })
+        if (phoneAppBlock && PhoneCalls.mode(settings.phoneCalls) != PhoneCalls.OFF) {
+            PhoneAppRecordingsBlock(settings, onChange = { vm.updateSettings(it) })
+        }
     }
 }
 
@@ -373,29 +378,41 @@ fun AutoRecordSection(vm: MainViewModel, settings: AppSettings) {
  * The Phone app's own recordings (since v1.8, 0.3): how to let the Phone app record each call (the exact One UI path on
  * a Galaxy), a button to its settings, whether it records now (Samsung), the import switch, the delete option (off by
  * default; Android asks before each delete), the recordings waiting for the person, and what happened to the last call.
+ * A phone with no known call folder (a Pixel: Google's Phone app keeps its recordings to itself) gets one plain line.
+ * [fileOf] reads a waiting recording's file (its name and length) for the question before importing it.
  */
 @Composable
 internal fun PhoneAppRecordingsBlock(
     settings: AppSettings,
     onChange: ((AppSettings) -> AppSettings) -> Unit,
-    manufacturer: String = android.os.Build.MANUFACTURER
+    manufacturer: String = android.os.Build.MANUFACTURER,
+    fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)? = null
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var looked by remember { mutableIntStateOf(0) }
     androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) { looked++ }
-    val autoRecord = remember(looked) { com.echoledger.mobile.calls.PhoneAppRecordings.samsungAutoRecord(context, manufacturer) }
     val canRead = remember(looked) { com.echoledger.mobile.calls.PhoneAppRecordings.allowed(context) }
+    // The media store is watched while the import is wanted and allowed, and no longer once it is not.
+    LaunchedEffect(settings.phoneAppImport, settings.phoneCalls, canRead) {
+        com.echoledger.mobile.calls.PhoneAppRecordings.sync(context, settings, manufacturer)
+    }
+    if (!com.echoledger.mobile.calls.PhoneAppRecordings.supported(manufacturer)) {
+        Text(
+            "On this phone the Phone app keeps its call recordings to itself, so EchoLedger can't bring them in.",
+            color = Brand.Muted,
+            fontSize = 12.sp,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        return
+    }
+    val autoRecord = remember(looked) { com.echoledger.mobile.calls.PhoneAppRecordings.samsungAutoRecord(context, manufacturer) }
     val note = remember(looked, settings.phoneAppImport) { com.echoledger.mobile.calls.PhoneAppRecordings.lastNote(context) }
     val waiting = remember(looked) { com.echoledger.mobile.calls.PhoneAppRecordings.candidates(context) }
     var confirm by remember { mutableStateOf<com.echoledger.mobile.calls.PhoneAppRecordings.Candidate?>(null) }
     val allow = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { looked++ }
     val callSettings = remember { Intent(android.telecom.TelecomManager.ACTION_SHOW_CALL_SETTINGS) }
     val canOpen = remember { callSettings.resolveActivity(context.packageManager) != null }
-    // The media store is watched while the import is wanted and allowed, and no longer once it is not.
-    LaunchedEffect(settings.phoneAppImport, settings.phoneCalls, canRead) {
-        com.echoledger.mobile.calls.PhoneAppRecordings.sync(context, settings)
-    }
     val clock = remember { java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault()) }
     Column(Modifier.padding(top = 8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("The Phone app's own recordings", fontWeight = FontWeight.SemiBold)
@@ -449,7 +466,7 @@ internal fun PhoneAppRecordingsBlock(
                 Text(
                     if (canDelete) {
                         "Off: EchoLedger never deletes or moves anything in the Phone app's folder. " +
-                            "On: Android asks you before each delete."
+                            "On: once the recording is safely in EchoLedger, Android asks you before each delete."
                     } else {
                         "Needs Android 11 or later. EchoLedger never deletes or moves anything in the Phone app's folder."
                     },
@@ -476,12 +493,16 @@ internal fun PhoneAppRecordingsBlock(
                 com.echoledger.mobile.ui.design.EchoButton(
                     "Import this recording",
                     { confirm = c },
+                    modifier = Modifier.semantics { contentDescription = "Import the recording of your call at $time" },
                     kind = com.echoledger.mobile.ui.design.ButtonKind.Secondary
                 )
-                TextButton(onClick = {
-                    com.echoledger.mobile.calls.PhoneAppRecordings.dropCandidate(context, c.fileId)
-                    looked++
-                }) { Text("Not this call") }
+                TextButton(
+                    onClick = {
+                        com.echoledger.mobile.calls.PhoneAppRecordings.dropCandidate(context, c.fileId)
+                        looked++
+                    },
+                    modifier = Modifier.semantics { contentDescription = "Not the recording of your call at $time" }
+                ) { Text("Not this call") }
             }
         }
         note?.let { (at, text) ->
@@ -489,28 +510,112 @@ internal fun PhoneAppRecordingsBlock(
         }
     }
     confirm?.let { c ->
-        val time = clock.format(java.time.Instant.ofEpochMilli(c.callAtMs))
-        androidx.compose.material3.AlertDialog(
-            onDismissRequest = { confirm = null },
-            title = { Text("Import this recording?") },
-            text = { Text("Import it only if it is your call at $time. EchoLedger could not check that the Phone app made the file.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = null
-                    // The import runs in the app's own scope: leaving this screen never stops it half-way.
-                    val app = context.applicationContext as com.echoledger.mobile.EchoLedgerApp
-                    val job = app.graph.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-                        com.echoledger.mobile.calls.PhoneAppRecordings.importCandidate(app, c.fileId)
-                    }
-                    scope.launch {
-                        job.join()
-                        looked++
-                    }
-                }) { Text("Import") }
-            },
-            dismissButton = { TextButton(onClick = { confirm = null }) { Text("Cancel") } }
-        )
+        ImportRecordingDialog(c, clock.format(java.time.Instant.ofEpochMilli(c.callAtMs)), fileOf, onDismiss = { confirm = null }) {
+            confirm = null
+            // The import runs in the app's own scope: leaving this screen never stops it half-way.
+            val app = context.applicationContext as com.echoledger.mobile.EchoLedgerApp
+            val job = app.graph.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                com.echoledger.mobile.calls.PhoneAppRecordings.importCandidate(app, c.fileId)
+            }
+            scope.launch {
+                job.join()
+                looked++
+            }
+        }
     }
+}
+
+/**
+ * "Import this recording?" for the file of the call at [time]: its name and length as the media store has them, and
+ * Play to listen first, so the person knows it is that call's before EchoLedger takes it in.
+ */
+@Composable
+private fun ImportRecordingDialog(
+    candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
+    time: String,
+    fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
+    onDismiss: () -> Unit,
+    onImport: () -> Unit
+) {
+    val context = LocalContext.current
+    var file by remember(candidate) { mutableStateOf<com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?>(null) }
+    LaunchedEffect(candidate) {
+        file = runCatching {
+            fileOf?.invoke(context, candidate.fileId) ?: kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                com.echoledger.mobile.calls.PhoneAppRecordings.Phone(context)
+                    .reload(com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile(candidate.fileId, "", "", 0, 0))
+            }
+        }.getOrNull()
+    }
+    var player by remember(candidate) { mutableStateOf<android.media.MediaPlayer?>(null) }
+    DisposableEffect(candidate) {
+        onDispose {
+            runCatching { player?.release() }
+            player = null
+        }
+    }
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import this recording?") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Import it only if it is your call at $time. EchoLedger could not check that the Phone app made the file.")
+                file?.let { f ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(f.name.ifBlank { "Recording" }, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text(formatDuration(f.durationMs).ifEmpty { "0:00" }, color = Brand.Muted, fontSize = 12.sp)
+                        }
+                        TextButton(
+                            onClick = {
+                                val playing = player
+                                if (playing != null) {
+                                    runCatching { playing.release() }
+                                    player = null
+                                } else {
+                                    player = runCatching {
+                                        android.media.MediaPlayer().apply {
+                                            setDataSource(
+                                                context,
+                                                com.echoledger.mobile.calls.PhoneAppRecordings.uris(listOf(f.id)).single()
+                                            )
+                                            setOnCompletionListener { mp ->
+                                                mp.release()
+                                                player = null
+                                            }
+                                            prepare()
+                                            start()
+                                        }
+                                    }.getOrNull()
+                                }
+                            },
+                            modifier = Modifier.semantics {
+                                contentDescription =
+                                    if (player !=
+                                        null
+                                    ) {
+                                        "Stop the recording of your call at $time"
+                                    } else {
+                                        "Play the recording of your call at $time"
+                                    }
+                            }
+                        ) { Text(if (player != null) "Stop" else "Play") }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onImport,
+                modifier = Modifier.semantics {
+                    contentDescription = "Import the recording of your call at $time"
+                }
+            ) {
+                Text("Import")
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 /** A row of single-choice options. */

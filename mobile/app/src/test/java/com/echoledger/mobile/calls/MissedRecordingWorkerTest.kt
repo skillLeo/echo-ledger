@@ -265,9 +265,9 @@ class MissedRecordingWorkerTest : AppTest() {
 
     @Test
     fun `a call whose recording waits for the person outlasts the time limit and the end of the looks`() {
-        PhoneAppRecordings.schedule(app, t, t + 60_000)
+        PhoneAppRecordings.schedule(app, t, t + 60_000, manufacturer = "samsung")
         PendingImports.waitForPerson(app, t - 5_000, t + 65_000)
-        PhoneAppRecordings.schedule(app, t + 10 * min, t + 12 * min)
+        PhoneAppRecordings.schedule(app, t + 10 * min, t + 12 * min, manufacturer = "samsung")
         PendingImports.endLooks(app)
         val farLater = System.currentTimeMillis() + 6 * day
         assertEquals(
@@ -287,11 +287,14 @@ class MissedRecordingWorkerTest : AppTest() {
 
     @Test
     fun `scheduling the Phone app's import makes the call wait, and a wait ends by itself`() {
-        PhoneAppRecordings.schedule(app, t, t + 60_000)
+        PhoneAppRecordings.schedule(app, t, t + 60_000, manufacturer = "samsung")
         assertEquals(listOf(t..t + 60_000), PendingImports.waiting(app, t + 70_000))
         assertTrue(
             "never longer than its limit",
             PendingImports.waiting(app, System.currentTimeMillis() + PendingImports.MAX_WAIT_MS + 1).isEmpty()
         )
+        PendingImports.done(app, t)
+        PhoneAppRecordings.schedule(app, t + 5 * min, t + 6 * min, manufacturer = "Google")
+        assertTrue("a phone with no known call folder: nothing can come, nothing waits", PendingImports.waiting(app, t + 7 * min).isEmpty())
     }
 }

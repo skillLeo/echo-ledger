@@ -118,6 +118,17 @@ object PhoneAppRecordings {
     }
 
     /**
+     * The media store query for files added since [sinceMs] in a known call folder (or one below it): only those, so a
+     * day of podcasts or music never pushes the calls' files out of the newest 200.
+     */
+    fun selection(sinceMs: Long): Pair<String, Array<String>> {
+        val paths = FOLDERS.map { it.path }.distinct()
+        val inFolders = paths.joinToString(" OR ") { "${MediaStore.MediaColumns.RELATIVE_PATH} LIKE ?" }
+        return "${MediaStore.MediaColumns.DATE_ADDED} >= ? AND ($inFolders)" to
+            (listOf(((sinceMs - 10_000) / 1000).toString()) + paths.map { "$it/%" }).toTypedArray()
+    }
+
+    /**
      * One audio file in the media store: [addedMs] and [modifiedMs] as the media store says (DATE_ADDED, DATE_MODIFIED),
      * [owner] the app that made it (OWNER_PACKAGE_NAME; null when the phone does not say), [sizeBytes] 0 when unknown.
      */
@@ -129,9 +140,44 @@ object PhoneAppRecordings {
         val durationMs: Long,
         val modifiedMs: Long = addedMs,
         val owner: String? = null,
-        val sizeBytes: Long = 0
+        val sizeBytes: Long = 0,
+        /** The media store's MIME_TYPE (null when it gives none: the name's extension decides). */
+        val mime: String? = null
     ) {
         val endMs: Long get() = maxOf(addedMs, modifiedMs)
+    }
+
+    /**
+     * What [file] is, as the server takes it (MIME type and codec, contract `accepted_mimes`), from the media store's
+     * MIME type, else the name's extension; null for a kind the server cannot take (3GPP, AMR-WB, anything else).
+     */
+    fun typeOf(file: MediaFile): Pair<String, String>? {
+        val mime = file.mime?.trim()?.lowercase()?.substringBefore(';')?.takeIf { it.isNotEmpty() }
+        val byMime = when (mime) {
+            "audio/mp4", "audio/x-m4a", "audio/m4a", "audio/mp4a-latm" -> "audio/mp4" to "aac"
+            "audio/aac", "audio/x-aac", "audio/aac-adts" -> "audio/aac" to "aac"
+            "audio/mpeg", "audio/mp3", "audio/x-mp3" -> "audio/mpeg" to "mp3"
+            "audio/amr" -> "audio/amr" to "amr"
+            "audio/wav", "audio/x-wav", "audio/wave", "audio/vnd.wave" -> "audio/wav" to "pcm"
+            "audio/ogg", "application/ogg" -> "audio/ogg" to "vorbis"
+            "audio/opus" -> "audio/ogg" to "opus"
+            "audio/webm" -> "audio/webm" to "opus"
+            "audio/flac", "audio/x-flac" -> "audio/flac" to "flac"
+            null -> null
+            else -> return null
+        }
+        if (byMime != null) return byMime
+        return when (file.name.substringAfterLast('.', "").lowercase()) {
+            "m4a", "mp4" -> "audio/mp4" to "aac"
+            "aac" -> "audio/aac" to "aac"
+            "mp3" -> "audio/mpeg" to "mp3"
+            "amr" -> "audio/amr" to "amr"
+            "wav" -> "audio/wav" to "pcm"
+            "ogg" -> "audio/ogg" to "vorbis"
+            "opus" -> "audio/ogg" to "opus"
+            "flac" -> "audio/flac" to "flac"
+            else -> null
+        }
     }
 
     /**
@@ -414,7 +460,7 @@ object PhoneAppRecordings {
             "EchoLedger's own recording kept (" + (if (own.channels == 2) "both sides apart" else "both voices on one track") +
                 "); the Phone app's copy stays in its folder."
         } else {
-            "EchoLedger recorded this call itself; the Phone app's copy stays in its folder."
+            "EchoLedger heard both sides itself; the Phone app's copy stays in its folder."
         }
 
         Verdict.SHORT -> if (shortestS > 0 && call.talkS * 1000 >= CallStateMachine.MIN_DURATION_MS) {
@@ -447,10 +493,6 @@ object PhoneAppRecordings {
         Trust.TOO_LARGE -> "not imported: the file is larger than a recording of this call can be."
     }
 
-    /** "Call with Omar" or "Call with +92 300 1234567": the contact's name, else the number. */
-    fun title(name: String?, number: String?): String? = name?.trim()?.takeIf { it.isNotEmpty() }?.let { "Call with $it" }
-        ?: number?.trim()?.takeIf { it.any(Char::isDigit) }?.let { "Call with $it" }
-
     // ---- the guide (Settings → Calls & meetings → Auto-record apps → Phone calls) ---------------------------------
 
     /** Where the Phone app turns on its own call recording, in plain words, for this phone's maker. */
@@ -465,18 +507,32 @@ object PhoneAppRecordings {
         else -> "In your Phone app's settings, turn on recording every call automatically, if your phone has it."
     }
 
-    /** What the phone-line notification says when a SIM call gave no sound. */
-    fun silentLineNotice(context: Context, settings: AppSettings, manufacturer: String = Build.MANUFACTURER): String = when {
-        !settings.phoneAppImport -> "The phone line gave no sound, so this call was not recorded."
+    /**
+     * What to say after a SIM call EchoLedger could not hear (the phone line gave no sound, or would not open): nothing
+     * when the Phone app's own recording of it is on its way (the import on and allowed, and the Phone app records every
+     * call: the import's card follows), else one plain line with what to do. Never the helper advice: restarting the
+     * helper cannot open a line the phone keeps for its own Phone app.
+     */
+    fun lineNotice(context: Context, settings: AppSettings, manufacturer: String = Build.MANUFACTURER): String? = when {
+        !wanted(settings) -> "EchoLedger couldn't hear the phone line, so this call was not recorded."
 
-        phoneAppRecords(context, manufacturer) ->
-            "The phone line gave no sound. EchoLedger will bring in the Phone app's own recording of this call in a moment."
+        !supported(manufacturer) ->
+            "EchoLedger couldn't hear the phone line, so this call was not recorded. This phone's Phone app keeps its " +
+                "recordings to itself."
+
+        !allowed(context) ->
+            "EchoLedger couldn't hear the phone line. Allow it to read audio files and the call log, and it brings in " +
+                "the Phone app's own recordings."
+
+        phoneAppRecords(context, manufacturer) -> null
 
         manufacturer.equals("samsung", ignoreCase = true) ->
-            "The phone line gave no sound. Let the Phone app record calls: ${guide(manufacturer)} EchoLedger then brings in each recording."
+            "EchoLedger couldn't hear the phone line. Let the Phone app record calls: ${guide(manufacturer)} EchoLedger " +
+                "then brings in each recording."
 
         else ->
-            "The phone line gave no sound. If your Phone app can record every call, turn that on: EchoLedger then brings in each recording."
+            "EchoLedger couldn't hear the phone line. If your Phone app can record every call, turn that on: EchoLedger " +
+                "then brings in each recording."
     }
 
     /**
@@ -541,7 +597,8 @@ object PhoneAppRecordings {
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.DATE_MODIFIED,
             MediaStore.MediaColumns.OWNER_PACKAGE_NAME,
-            MediaStore.Audio.Media.SIZE
+            MediaStore.Audio.Media.SIZE,
+            MediaStore.MediaColumns.MIME_TYPE
         )
 
         private fun query(selection: String, args: Array<String>, limit: Int): List<MediaFile> = runCatching {
@@ -564,7 +621,8 @@ object PhoneAppRecordings {
                                     durationMs = c.getLong(4),
                                     modifiedMs = c.getLong(5) * 1000,
                                     owner = if (c.isNull(6)) null else c.getString(6),
-                                    sizeBytes = if (c.isNull(7)) 0 else c.getLong(7)
+                                    sizeBytes = if (c.isNull(7)) 0 else c.getLong(7),
+                                    mime = if (c.isNull(8)) null else c.getString(8)
                                 )
                             )
                         }
@@ -572,8 +630,10 @@ object PhoneAppRecordings {
                 }.orEmpty()
         }.getOrDefault(emptyList())
 
-        override fun files(sinceMs: Long): List<MediaFile> =
-            query("${MediaStore.Audio.Media.DATE_ADDED} >= ?", arrayOf(((sinceMs - 10_000) / 1000).toString()), 200)
+        override fun files(sinceMs: Long): List<MediaFile> {
+            val (selection, args) = selection(sinceMs)
+            return query(selection, args, 200)
+        }
 
         override fun reload(file: MediaFile): MediaFile? =
             query("${MediaStore.Audio.Media._ID} = ?", arrayOf(file.id.toString()), 1).firstOrNull()
@@ -640,24 +700,67 @@ object PhoneAppRecordings {
         return p.getLong(NOTE_AT, 0) to text
     }
 
-    /** The Phone app's copies the person agreed to delete after import, waiting for Android's confirmation. */
-    fun pendingDeletes(context: Context): List<Long> = ids(prefs(context).getString(DELETE, null))
+    /**
+     * A Phone app copy the person agreed to delete after import: the file, the recording it became ([recordingId]), and
+     * whether that recording reached the server ([uploaded]). Until it did, the copy waits; once that recording is gone
+     * without reaching the server (Undo, Delete, Discard), the copy is never deleted.
+     */
+    data class PendingDelete(val fileId: Long, val recordingId: String?, val uploaded: Boolean = false)
+
+    /** The pending deletes as kept ("file:recording:u"); a bare file id (an older build's) has no recording. */
+    fun parseDeletes(text: String?): List<PendingDelete> = text.orEmpty().split(',').mapNotNull { part ->
+        val bits = part.split(':')
+        val id = bits.firstOrNull()?.toLongOrNull() ?: return@mapNotNull null
+        PendingDelete(id, bits.getOrNull(1)?.takeIf { it.isNotBlank() }, bits.getOrNull(2) == "u")
+    }
+
+    fun formatDeletes(list: List<PendingDelete>): String =
+        list.joinToString(",") { "${it.fileId}:${it.recordingId.orEmpty()}" + if (it.uploaded) ":u" else "" }
+
+    private fun deletes(context: Context): List<PendingDelete> = parseDeletes(prefs(context).getString(DELETE, null))
+
+    private fun saveDeletes(context: Context, list: List<PendingDelete>) =
+        prefs(context).edit().putString(DELETE, formatDeletes(list.takeLast(MAX_DELETES))).apply()
+
+    /** The Phone app's copies the person agreed to delete after import, waiting for the upload and Android's question. */
+    fun pendingDeletes(context: Context): List<Long> = deletes(context).map { it.fileId }
 
     fun clearPendingDeletes(context: Context) = prefs(context).edit().remove(DELETE).apply()
+
+    /** The recording [recordingId] reached the server: its Phone app copy may now be offered for deletion. */
+    fun uploaded(context: Context, recordingId: String) {
+        val list = deletes(context)
+        if (list.none { it.recordingId == recordingId && !it.uploaded }) return
+        saveDeletes(context, list.map { if (it.recordingId == recordingId) it.copy(uploaded = true) else it })
+    }
+
+    /**
+     * Which pending deletes are due now (pure): those whose recording reached the server; the ones still on the phone
+     * ([exists]) wait, and the rest (the recording deleted before it was sent, or none known) are dropped.
+     */
+    fun dueDeletes(list: List<PendingDelete>, exists: (String) -> Boolean): Pair<List<PendingDelete>, List<PendingDelete>> =
+        list.filter { it.uploaded } to list.filter { !it.uploaded && it.recordingId != null && exists(it.recordingId) }
 
     /** The media store addresses of [ids], for Android's delete confirmation and for reading. */
     fun uris(ids: List<Long>): List<Uri> = ids.map { ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, it) }
 
     /**
      * The Phone app's copies to ask Android to delete now (the app shows Android's own confirmation, which the person
-     * answers): only imported ones, only with "Delete the Phone app's copy after import" on (Android 11 and later). With
-     * the option off they are forgotten, so nothing is ever deleted.
+     * answers): only imported ones whose recording reached the server, only with "Delete the Phone app's copy after
+     * import" on (Android 11 and later). With the option off they are forgotten, so nothing is ever deleted; a copy whose
+     * recording was deleted before it was sent is forgotten too, so the call is never lost twice.
      */
     fun takeDeletes(context: Context, settings: AppSettings): List<Uri> {
-        val ids = pendingDeletes(context)
-        if (ids.isEmpty()) return emptyList()
-        clearPendingDeletes(context)
-        return if (settings.deletePhoneAppCopy && Build.VERSION.SDK_INT >= 30) uris(ids) else emptyList()
+        val list = deletes(context)
+        if (list.isEmpty()) return emptyList()
+        if (!settings.deletePhoneAppCopy || Build.VERSION.SDK_INT < 30) {
+            clearPendingDeletes(context)
+            return emptyList()
+        }
+        val recordings = (context.applicationContext as EchoLedgerApp).graph.recordings
+        val (due, waiting) = dueDeletes(list) { id -> recordings.get(id) != null }
+        if (waiting.isEmpty()) clearPendingDeletes(context) else saveDeletes(context, waiting)
+        return uris(due.map { it.fileId })
     }
 
     /** A matched recording the phone does not say the maker of, waiting for the person: the file, and its call's start. */
@@ -721,6 +824,7 @@ object PhoneAppRecordings {
         val own = ownRecordings(book, graph.recordings.all())
         val busy = RecordingService.isRecording || RecordingService.isSaving
         val imported = mutableListOf<String>()
+        val quiet = mutableListOf<LocalRecording>()
         val done = (handled + foreign.map { it.id }).toMutableList()
         var settled = 0
         var waiting = 0
@@ -739,13 +843,16 @@ object PhoneAppRecordings {
             if (verdict == Verdict.IMPORT) {
                 val trust = trust(file, call, phone)
                 if (trust == Trust.OK) {
-                    when (val copy = importFile(context, sources, file, call, settings)) {
-                        // A file that cannot be read now is looked at again on the next run.
+                    when (val copy = importFile(context, sources, file, call, settings, nowMs, prompt = true)) {
+                        // A file that cannot be read now, or that the Phone app is still saving, is looked at again later.
                         Copy.Later -> continue
 
                         is Copy.Refused -> note = copy.note
 
-                        is Copy.Done -> imported += copy.stored.id
+                        is Copy.Done -> {
+                            imported += copy.stored.id
+                            if (copy.quiet) quiet += copy.stored
+                        }
                     }
                 } else {
                     note = note(trust, file.owner)
@@ -772,6 +879,8 @@ object PhoneAppRecordings {
             }
         }
         markHandled(context, done)
+        // Brought in without the card: one quiet notification for all of them.
+        if (quiet.isNotEmpty()) Notifications.phoneAppImported(context, quiet.size, quiet.any { it.state == "pending_decision" })
         Outcome(imported, settled, waiting)
     }
 
@@ -811,7 +920,7 @@ object PhoneAppRecordings {
                 ?: return@withLock answered("not imported: the file no longer fits the call.")
         val trust = trust(file, call, sources.thisPhone())
         if (trust == Trust.TOO_LARGE || trust == Trust.NOT_THE_PHONE_APP) return@withLock answered(note(trust, file.owner))
-        when (val copy = importFile(context, sources, file, call, settings)) {
+        when (val copy = importFile(context, sources, file, call, settings, System.currentTimeMillis(), prompt = false)) {
             Copy.Later -> "not imported yet: the file could not be read.".also { log(context, it) }
 
             is Copy.Refused -> answered(copy.note)
@@ -845,35 +954,85 @@ object PhoneAppRecordings {
             Own(start, start + rec.durationMs, rec.channels)
         }
 
-    /** How a copy went: brought in, refused for good (said why), or to be tried again later. */
+    /** How a copy went: brought in ([quiet]: without the after-call card), refused for good (said why), or later. */
     private sealed interface Copy {
-        data class Done(val stored: LocalRecording) : Copy
+        data class Done(val stored: LocalRecording, val quiet: Boolean) : Copy
 
         data class Refused(val note: String) : Copy
 
         data object Later : Copy
     }
 
+    /** A matched file's row, read again: still the one matched, being saved still, changed for good, or gone. */
+    enum class Row { SAME, SAVING, CHANGED, GONE }
+
+    /**
+     * Whether [now] (the row of [matched] read again) is still the file matched to [call] (pure). A row moved to another
+     * folder or now said to be another app's is not; one whose length, size or time changed while it still fits the
+     * call's window is the Phone app still saving it, looked at again on a later run; changed after that, it is not.
+     */
+    fun rowNow(matched: MediaFile, now: MediaFile?, call: LogCall): Row = when {
+        now == null -> Row.GONE
+        now.owner != matched.owner || !now.path.trim('/').equals(matched.path.trim('/'), ignoreCase = true) -> Row.CHANGED
+        now.modifiedMs == matched.modifiedMs && now.sizeBytes == matched.sizeBytes && now.durationMs == matched.durationMs -> Row.SAME
+        now.addedMs in windowOf(call) && now.modifiedMs in windowOf(call) -> Row.SAVING
+        else -> Row.CHANGED
+    }
+
+    /** What a row that is not [Row.SAME] means for the import. */
+    private fun copyFor(row: Row): Copy = when (row) {
+        Row.GONE -> Copy.Refused("not imported: the file is gone.")
+        Row.SAVING -> Copy.Later
+        else -> Copy.Refused("not imported: the file changed after the call.")
+    }
+
+    /** The note for a kind of audio file the server does not take. */
+    const val UNSUPPORTED = "not imported: EchoLedger can't take this kind of audio file."
+
+    /** The after-call card shows for a call that ended at most this long ago (else a quiet notification says it). */
+    const val CARD_MS = 2 * 60_000L
+
+    /**
+     * Whether the after-call card shows for an import now (pure): never while a call or a recording is live, nor for a
+     * call that ended more than [CARD_MS] ago (the first look after an update, a file found late).
+     */
+    fun cardNow(callEndMs: Long, nowMs: Long, live: Boolean): Boolean = !live && nowMs - callEndMs <= CARD_MS
+
     /**
      * Copies [file] into EchoLedger's encrypted storage as [call]'s recording, through the media store only; the original
-     * is only read. Its row is read again first (a file changed since it was matched is not this call's), and the copy
-     * stops at the most a recording of the call can be.
+     * is only read. The stream is opened first and the file's row read again before and after the copy: a file changed
+     * since it was matched is not this call's, and one the Phone app is still saving is looked at again later. The copy
+     * stops at the most a recording of the call can be. [prompt]: the card (or the quiet notice) may follow.
      */
-    private suspend fun importFile(context: Context, sources: Sources, file: MediaFile, call: LogCall, settings: AppSettings): Copy {
+    private suspend fun importFile(
+        context: Context,
+        sources: Sources,
+        file: MediaFile,
+        call: LogCall,
+        settings: AppSettings,
+        nowMs: Long,
+        prompt: Boolean
+    ): Copy {
         val graph = (context.applicationContext as EchoLedgerApp).graph
-        val now = sources.reload(file) ?: return Copy.Refused("not imported: the file is gone.")
-        if (now.modifiedMs != file.modifiedMs || now.sizeBytes != file.sizeBytes || now.durationMs != file.durationMs) {
-            return Copy.Refused("not imported: the file changed after the call.")
-        }
+        val (mime, codec) = typeOf(file) ?: return Copy.Refused(UNSUPPORTED)
         val limit = maxBytes(call.talkS)
-        val copy = File(context.cacheDir, "import-${UUID.randomUUID()}.m4a")
-        val copied: Long? = runCatching {
-            sources.open(file)?.use { input ->
+        val copy = File(context.cacheDir, "import-${UUID.randomUUID()}.tmp")
+        val input = runCatching { sources.open(file) }.getOrNull()
+        if (input == null) {
+            log(context, "not imported yet: the file could not be read.")
+            return Copy.Later
+        }
+        val copied: Long? = input.use { stream ->
+            rowNow(file, sources.reload(file), call).takeIf { it != Row.SAME }?.let { row ->
+                if (row == Row.SAVING) log(context, "not imported yet: the Phone app is still saving the file.")
+                return copyFor(row)
+            }
+            runCatching {
                 copy.outputStream().use { out ->
                     val buffer = ByteArray(64 * 1024)
                     var total = 0L
                     while (true) {
-                        val n = input.read(buffer)
+                        val n = stream.read(buffer)
                         if (n < 0) break
                         total += n
                         if (total > limit) return@use -1L
@@ -881,8 +1040,11 @@ object PhoneAppRecordings {
                     }
                     total
                 }
-            }
-        }.getOrNull()
+            }.getOrNull()
+        }
+        // The row once more: a file written to while it was read is not stored as it was.
+        val after = rowNow(file, sources.reload(file), call)
+        val short = copied != null && copied >= 0 && file.sizeBytes > 0 && copied != file.sizeBytes
         when {
             copied == null -> {
                 copy.delete()
@@ -895,14 +1057,19 @@ object PhoneAppRecordings {
                 return Copy.Refused(note(Trust.TOO_LARGE))
             }
 
-            file.sizeBytes > 0 && copied != file.sizeBytes -> {
+            after != Row.SAME -> {
                 copy.delete()
-                return Copy.Refused("not imported: the file changed while it was read.")
+                if (after == Row.SAVING) log(context, "not imported yet: the Phone app is still saving the file.")
+                return copyFor(after)
+            }
+
+            short -> {
+                copy.delete()
+                return if (file.endMs in windowOf(call)) Copy.Later else Copy.Refused("not imported: the file changed while it was read.")
             }
         }
         val name = call.name?.takeIf { it.isNotBlank() } ?: call.number?.let { PhoneCallLog.contactNameOf(context, it) }
         val span = spanOf(file)
-        val mp3 = file.name.endsWith(".mp3", ignoreCase = true)
         val meta = LocalRecording(
             id = UUID.randomUUID().toString(),
             sourceApp = SourceApp.PHONE_CALL.wire,
@@ -910,8 +1077,8 @@ object PhoneAppRecordings {
             startedAt = Instant.ofEpochMilli(span.first).toString(),
             endedAt = Instant.ofEpochMilli(span.first + file.durationMs).toString(),
             durationMs = file.durationMs,
-            mime = if (mp3) "audio/mpeg" else "audio/mp4",
-            codec = if (mp3) "mp3" else "aac",
+            mime = mime,
+            codec = codec,
             channels = 1,
             sampleRate = 48_000,
             plainSize = 0,
@@ -932,19 +1099,25 @@ object PhoneAppRecordings {
         markHandled(context, listOf(file.id))
         afterStoreForTest?.invoke()
         // The rest happens even when the run is being cancelled now.
-        withContext(NonCancellable) { afterStore(context, stored, file, call, span, settings) }
-        return Copy.Done(stored)
+        val quiet = withContext(NonCancellable) { afterStore(context, stored, file, call, span, settings, nowMs, prompt) }
+        return Copy.Done(stored, quiet)
     }
 
-    /** After a file was stored as a call's recording: the journal, a missed report it covers, the delete, the card. */
+    /**
+     * After a file was stored as a call's recording: the journal, a missed report it covers, the delete, then the card
+     * when [prompt] and the moment allow it ([cardNow]), else the recording follows "After a call" with nothing on the
+     * screen. Returns whether it went quietly (the run says so in one notification).
+     */
     private suspend fun afterStore(
         context: Context,
         stored: LocalRecording,
         file: MediaFile,
         call: LogCall,
         span: LongRange,
-        settings: AppSettings
-    ) {
+        settings: AppSettings,
+        nowMs: Long,
+        prompt: Boolean
+    ): Boolean {
         // The capture journal: this phone call is recorded, by the Phone app.
         CallJournal.update(context) { book ->
             CallJournal.finish(
@@ -965,15 +1138,22 @@ object PhoneAppRecordings {
         if (covered.isNotEmpty()) MissedNotice.update(context)
         if (covered.any { it.sent }) runCatching { MissedUploadWorker.enqueue(context) }
         if (settings.deletePhoneAppCopy && Build.VERSION.SDK_INT >= 30) {
-            prefs(context).edit().putString(DELETE, (pendingDeletes(context) + file.id).distinct().joinToString(",")).apply()
+            saveDeletes(context, deletes(context).filter { it.fileId != file.id } + PendingDelete(file.id, stored.id))
         }
-        withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, stored, settings.afterCall, settings.themeMode) }
+        val callEnd = maxOf(call.dateMs + call.talkS * 1000, span.first + file.durationMs)
+        if (prompt && cardNow(callEnd, nowMs, MissedRecordingWorker.ongoing(context))) {
+            withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, stored, settings.afterCall, settings.themeMode) }
+            return false
+        }
+        PostCallPrompt.quietly(context, stored)
+        return prompt
     }
 
     /** The start of the line every imported recording says (also how the import knows its own). */
     const val IMPORTED = "Imported from the Phone app's own call recording"
     private const val DAY_MS = 24 * 60 * 60 * 1000L
     private const val MAX_HANDLED = 300
+    private const val MAX_DELETES = 50
     private const val HANDLED = "handled"
     private const val DELETE = "delete"
     private const val ASK = "ask"
@@ -986,11 +1166,22 @@ object PhoneAppRecordings {
      * Starts watching the media store while the import is wanted and allowed, and stops otherwise (the app opened, the
      * Phone calls settings changed). A new audio file anywhere then starts a run within a minute, even with the app closed.
      */
-    fun sync(context: Context, settings: AppSettings) {
+    fun sync(context: Context, settings: AppSettings, manufacturer: String = Build.MANUFACTURER) {
         runCatching {
-            if (wanted(settings) && allowed(context)) watch(context) else WorkManager.getInstance(context).cancelUniqueWork(WATCH)
+            if (watching(settings, allowed(context), manufacturer)) {
+                watch(context)
+            } else {
+                WorkManager.getInstance(context).cancelUniqueWork(WATCH)
+            }
         }
     }
+
+    /**
+     * Whether the media store is watched (pure): the import wanted and allowed, on a phone whose maker has a known call
+     * folder (a Pixel's Phone app keeps its recordings to itself, so there is nothing to watch for).
+     */
+    fun watching(settings: AppSettings, allowed: Boolean, manufacturer: String): Boolean =
+        wanted(settings) && allowed && supported(manufacturer)
 
     /** The media store watch (WorkManager's content trigger); each run watches [again] after itself. */
     fun watch(context: Context, again: Boolean = false) {
@@ -1013,7 +1204,9 @@ object PhoneAppRecordings {
      * when the Phone app has saved its recording, and a few more times while it (or EchoLedger itself) is still saving.
      * Until then the missed-recording detector leaves the call alone.
      */
-    fun schedule(context: Context, startMs: Long, endMs: Long) {
+    fun schedule(context: Context, startMs: Long, endMs: Long, manufacturer: String = Build.MANUFACTURER) {
+        // No known call folder on this phone: nothing can come, so the detector does not wait either.
+        if (!supported(manufacturer)) return
         PendingImports.add(context, startMs, endMs)
         runCatching {
             val request = OneTimeWorkRequestBuilder<Worker>().setInitialDelay(20, TimeUnit.SECONDS).build()

@@ -622,9 +622,10 @@ class RecordingService : LifecycleService() {
         }
         if (event is CallEvent.CallEnded) {
             journalCallId?.let { CallJournal.ended(this, it) }
-            // A SIM call EchoLedger recorded or tried to: the Phone app's own recording of it is looked for once it has
-            // been saved (since v1.8, 0.3), and kept only when EchoLedger heard nothing itself. The detector waits for it.
-            (callState as? CallState.InCall)?.takeIf { it.app == SourceApp.PHONE_CALL }?.let {
+            // A SIM call EchoLedger never got to record: the Phone app's own recording of it is looked for once it has
+            // been saved (since v1.8, 0.3), and the detector waits for it. One being recorded is decided when it is
+            // saved (a silent, one-sided or lost recording looks for it too).
+            (callState as? CallState.InCall)?.takeIf { it.app == SourceApp.PHONE_CALL && capture?.id != it.recordingId }?.let {
                 com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, it.startedAtMs, System.currentTimeMillis())
             }
             // The missed-recording detector looks at this call once its recording is saved.
@@ -775,8 +776,14 @@ class RecordingService : LifecycleService() {
                 whenProblemSince(askedAt) { problem ->
                     val (reason, detail) = MissedReason.ofProblem(problem)
                     journalFailed(id, reason, detail)
-                    if (phone) simCallSummary("nothing opened: ${problem ?: "no reason given"}")
-                    Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
+                    if (phone) {
+                        simCallSummary("nothing opened: ${problem ?: "no reason given"}")
+                        // The line the phone keeps for its own Phone app: never the helper advice (since v1.8 0.3).
+                        com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(applicationContext, settings)
+                            ?.let { Notifications.phoneLineNotRecorded(applicationContext, it) }
+                    } else {
+                        Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
+                    }
                 }
                 settle()
             } else {
@@ -1423,10 +1430,16 @@ class RecordingService : LifecycleService() {
             }
             val themeMode = settings.themeMode
             main.post {
-                if (silent && session.sourceApp == SourceApp.PHONE_CALL.wire) {
-                    // The phone line gave nothing: the Phone app's own recording of this call is brought in instead.
+                val sim = session.sourceApp == SourceApp.PHONE_CALL.wire
+                // A SIM call whose own recording was lost, silent or one-sided: the Phone app's copy is looked for.
+                if (sim && (stored == null || silent || oneSided != null)) {
                     com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, session.startedAt.toEpochMilli(), endedMs)
-                    Notifications.noAudio(this, com.echoledger.mobile.calls.PhoneAppRecordings.silentLineNotice(this, settings))
+                }
+                if (silent && sim) {
+                    // The phone line gave nothing: said quietly, or not at all when the Phone app's recording is coming.
+                    com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(this, settings)?.let {
+                        Notifications.phoneLineNotRecorded(this, it)
+                    }
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {

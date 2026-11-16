@@ -573,13 +573,60 @@ class ScreenshotsTest : ScreenTest() {
             .commit()
         shoot {
             Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
-                PhoneAppRecordingsBlock(AppSettings(phoneCalls = "always"), onChange = {}, manufacturer = "samsung")
+                PhoneAppRecordingsBlock(
+                    AppSettings(phoneCalls = "always"),
+                    onChange = {},
+                    manufacturer = "samsung",
+                    fileOf = { _, id ->
+                        com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile(
+                            id,
+                            "Call recording Omar Khan_261116_094215.m4a",
+                            "Recordings/Call/",
+                            tenFortyTwo - 3_600_000,
+                            125_000
+                        )
+                    }
+                )
             }
         }
         pumpUntil("the guide") { runCatching { compose.onNodeWithText("Import this recording").assertExists() }.isSuccess }
         compose.onNodeWithText("Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls.").assertExists()
         compose.onNodeWithText("Open the Phone app's settings").assertExists()
+        // Each waiting call's buttons say which call they are for (TalkBack).
+        compose.onNodeWithContentDescription("Import the recording of your call at 09:42").assertExists()
+        compose.onNodeWithContentDescription("Not the recording of your call at 09:42").assertExists()
         capture("settings-phone-app")
+
+        // "Import this recording": the file's name and length, and Play, before anything is taken in (v1.8 0.3 review).
+        compose.onNodeWithText("Import this recording").performClick()
+        pumpUntil("the question with the file") {
+            runCatching { compose.onNodeWithText("Call recording Omar Khan_261116_094215.m4a").assertExists() }.isSuccess
+        }
+        compose.onNodeWithText("2:05").assertExists()
+        compose.onNodeWithContentDescription("Play the recording of your call at 09:42").assertExists()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-light.png"))
+    }
+
+    /** On a phone with no known call folder (a Pixel: Google's Phone app keeps its recordings), one plain line. */
+    @Test
+    fun phoneAppRecordingsElsewhere() {
+        shoot {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                PhoneAppRecordingsBlock(AppSettings(phoneCalls = "always"), onChange = {}, manufacturer = "Google")
+            }
+        }
+        compose.onNodeWithText(
+            "On this phone the Phone app keeps its call recordings to itself, so EchoLedger can't bring them in."
+        ).assertExists()
+        compose.onNodeWithText("Import the Phone app's recordings").assertDoesNotExist()
+        capture("settings-phone-app-pixel")
     }
 
     @Test

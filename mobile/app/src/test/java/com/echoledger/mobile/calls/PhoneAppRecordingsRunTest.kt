@@ -49,13 +49,26 @@ class PhoneAppRecordingsRunTest : AppTest() {
         val bytes = mutableMapOf<Long, ByteArray>()
         val changed = mutableMapOf<Long, MediaFile>()
 
+        /** The row a file has from its [laterFrom]th reload on (the Phone app wrote to it while it was read). */
+        val later = mutableMapOf<Long, MediaFile>()
+        var laterFrom = 2
+        val events = mutableListOf<String>()
+        private val reloads = mutableMapOf<Long, Int>()
+
         override fun files(sinceMs: Long) = files.filter { it.addedMs >= sinceMs - 10_000 }
 
         override fun calls(sinceMs: Long) = calls.filter { it.dateMs >= sinceMs }
 
-        override fun reload(file: MediaFile): MediaFile? = changed[file.id] ?: files.firstOrNull { it.id == file.id }
+        override fun reload(file: MediaFile): MediaFile? {
+            events += "reload ${file.id}"
+            val n = (reloads[file.id] ?: 0) + 1
+            reloads[file.id] = n
+            later[file.id]?.takeIf { n >= laterFrom }?.let { return it }
+            return changed[file.id] ?: files.firstOrNull { it.id == file.id }
+        }
 
         override fun open(file: MediaFile): InputStream? {
+            events += "open ${file.id}"
             opened += file.id
             return ByteArrayInputStream(bytes[file.id] ?: ByteArray(file.sizeBytes.toInt()) { (it % 251).toByte() })
         }
@@ -82,7 +95,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
         return MediaFile(id, "Call recording $id.m4a", "Recordings/Call/", end, durationS * sec, end, owner, 4_000)
     }
 
-    private fun run(store: Store, atMs: Long = t + 10 * 60 * sec) = runBlocking { PhoneAppRecordings.run(app, store, atMs) }
+    /** One look, by default 46 s after [call]'s recording was written (the card shows for a call that just ended). */
+    private fun run(store: Store, atMs: Long = t + 3 * 60 * sec) = runBlocking { PhoneAppRecordings.run(app, store, atMs) }
 
     private fun note() = PhoneAppRecordings.lastNote(app)?.second
 
@@ -324,7 +338,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals("imported the Phone app's recording (125 s), as you chose.", note)
         assertEquals(1, app.graph.recordings.all().size)
         assertTrue(PhoneAppRecordings.candidates(app).isEmpty())
-        assertEquals(app.graph.recordings.all().single().id, DecisionPopup.showingFor)
+        assertNull("chosen in Settings, long after the call: no card over the screen", DecisionPopup.showingFor)
     }
 
     @Test
@@ -353,7 +367,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
         CallSightings.update(app) {
             listOf(CallSightings.Seen("phone_call", c.dateMs + 8 * sec, c.dateMs + 134 * sec, "com.samsung.android.incallui"))
         }
-        PhoneAppRecordings.schedule(app, c.dateMs + 8 * sec, c.dateMs + 135 * sec)
+        PhoneAppRecordings.schedule(app, c.dateMs + 8 * sec, c.dateMs + 135 * sec, manufacturer = "samsung")
         val store = Store(mutableListOf(recording(1, c, owner = null)), listOf(c))
         run(store)
         assertEquals(listOf(1L), PhoneAppRecordings.candidates(app).map { it.fileId })
@@ -411,8 +425,8 @@ class PhoneAppRecordingsRunTest : AppTest() {
             app,
             listOf(MissedRecordings.Found("phone_call", a.dateMs + 90 * sec, 60, MissedReason.HELPER_NOT_ARMED, ""))
         ).single()
-        PhoneAppRecordings.schedule(app, a.dateMs + 8 * sec, a.dateMs + 40 * sec)
-        PhoneAppRecordings.schedule(app, a.dateMs + 90 * sec, a.dateMs + 150 * sec)
+        PhoneAppRecordings.schedule(app, a.dateMs + 8 * sec, a.dateMs + 40 * sec, manufacturer = "samsung")
+        PhoneAppRecordings.schedule(app, a.dateMs + 90 * sec, a.dateMs + 150 * sec, manufacturer = "samsung")
         assertEquals(1, run(Store(mutableListOf(recording(1, a)), listOf(a))).imported.size)
         assertEquals(listOf((a.dateMs + 90 * sec)..(a.dateMs + 150 * sec)), PendingImports.waiting(app))
         assertFalse(MissedRecordingStore.all(app).single { it.ref == next.ref }.withdrawn)
@@ -421,7 +435,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
     @Test
     fun `while the import looks after a call the missed-recording detector waits, and stops waiting once it is settled`() {
         val c = call()
-        PhoneAppRecordings.schedule(app, c.dateMs + 8 * sec, c.dateMs + 135 * sec)
+        PhoneAppRecordings.schedule(app, c.dateMs + 8 * sec, c.dateMs + 135 * sec, manufacturer = "samsung")
         assertEquals(1, PendingImports.waiting(app).size)
         run(Store(mutableListOf(recording(1, c)), listOf(c)))
         assertEquals(emptyList<LongRange>(), PendingImports.waiting(app))
@@ -435,6 +449,138 @@ class PhoneAppRecordingsRunTest : AppTest() {
         assertEquals(emptyList<String>(), run(store).imported)
         runBlocking { app.graph.settings.update { it.copy(phoneAppImport = true, phoneCalls = "off") } }
         assertEquals(emptyList<String>(), run(store).imported)
+        runBlocking {
+            app.graph.settings.update {
+                it.copy(phoneCalls = "always", plan = com.echoledger.mobile.core.PlanState(workspace = "Acme team", role = "viewer"))
+            }
+        }
+        assertEquals("a viewer records nothing", emptyList<String>(), run(store).imported)
         assertEquals(emptyList<Long>(), store.opened)
+        runBlocking { app.graph.settings.update { it.copy(plan = com.echoledger.mobile.core.PlanState()) } }
+        assertEquals("the same call comes in for a member", 1, run(store).imported.size)
+    }
+
+    // ---- review of 0.3, minor points --------------------------------------------------------------------------------
+
+    @Test
+    fun `after a phone call EchoLedger could not hear, nothing is said while the Phone app's recording is on its way`() {
+        val settings = runBlocking { app.graph.settings.current() }
+        shadowOf(app).grantPermissions(android.Manifest.permission.READ_CALL_LOG, PhoneAppRecordings.permission())
+        android.provider.Settings.System.putString(app.contentResolver, PhoneAppRecordings.SAMSUNG_AUTO_RECORD, "1")
+        assertNull(PhoneAppRecordings.lineNotice(app, settings, "samsung"))
+        android.provider.Settings.System.putString(app.contentResolver, PhoneAppRecordings.SAMSUNG_AUTO_RECORD, "0")
+        val off = PhoneAppRecordings.lineNotice(app, settings, "samsung")!!
+        assertTrue(off, off.contains(PhoneAppRecordings.guide("samsung")))
+        val lines = listOf(
+            off,
+            PhoneAppRecordings.lineNotice(app, settings.copy(phoneAppImport = false), "samsung")!!,
+            PhoneAppRecordings.lineNotice(app, settings, "Google")!!,
+            PhoneAppRecordings.lineNotice(app, settings, "xiaomi")!!
+        )
+        lines.forEach { assertFalse("never the helper advice: $it", it.contains("helper", ignoreCase = true)) }
+        shadowOf(app).denyPermissions(android.Manifest.permission.READ_CALL_LOG)
+        assertTrue(PhoneAppRecordings.lineNotice(app, settings, "samsung")!!.contains("Allow it to read audio files and the call log"))
+    }
+
+    @Test
+    fun `a file the Phone app is still saving is looked at again, never refused for good`() {
+        val c = call()
+        val file = recording(1, c)
+        val store = Store(mutableListOf(file), listOf(c))
+        // Matched while the Phone app still writes to it: a moment later it is longer and larger.
+        store.changed[1] = file.copy(durationMs = file.durationMs + 2 * sec, sizeBytes = 4_064, modifiedMs = file.modifiedMs + 3 * sec)
+        assertEquals(emptyList<String>(), run(store).imported)
+        assertTrue("not refused: ${note()}", note() == null)
+        // The next look matches the finished file and brings it in.
+        store.files[0] = store.changed.remove(1)!!
+        assertEquals(1, run(store, atMs = t + 4 * 60 * sec).imported.size)
+    }
+
+    @Test
+    fun `the file is opened before its row is checked, and its row is checked again after the copy`() {
+        val c = call()
+        val file = recording(1, c)
+        val store = Store(mutableListOf(file), listOf(c))
+        // The Phone app wrote to it while EchoLedger read it.
+        store.later[1] = file.copy(sizeBytes = 4_032, modifiedMs = file.modifiedMs + 2 * sec)
+        assertEquals("not stored as it was", emptyList<String>(), run(store).imported)
+        assertEquals(listOf("open 1", "reload 1", "reload 1"), store.events.take(3))
+        assertTrue(app.graph.recordings.all().isEmpty())
+        assertTrue("no copy left behind", app.cacheDir.listFiles().orEmpty().none { it.name.startsWith("import-") })
+    }
+
+    @Test
+    fun `a kind of file the server cannot take is not brought in`() {
+        val c = call()
+        val store = Store(mutableListOf(recording(1, c).copy(name = "Call recording 1.3gp")), listOf(c))
+        assertEquals(emptyList<String>(), run(store).imported)
+        assertEquals("Not imported: EchoLedger can't take this kind of audio file.", note())
+        assertEquals(emptyList<Long>(), store.opened)
+    }
+
+    @Test
+    fun `an amr and an mp3 recording are sent as what they are`() {
+        val c = call()
+        val d = call(at = t + 20 * 60 * sec, number = "+923007654321", name = "Sara")
+        val store = Store(
+            mutableListOf(recording(1, c).copy(name = "Call recording 1.amr"), recording(2, d).copy(name = "Sara_20261029101500.mp3")),
+            listOf(c, d)
+        )
+        val imported = run(store, atMs = t + 30 * 60 * sec).imported.map { app.graph.recordings.get(it)!! }
+        assertEquals(listOf("audio/amr" to "amr", "audio/mpeg" to "mp3"), imported.sortedBy { it.startedAt }.map { it.mime to it.codec })
+    }
+
+    @Test
+    fun `the Phone app's copy is never deleted when its recording was deleted before it reached the server`() {
+        runBlocking { app.graph.settings.update { it.copy(deletePhoneAppCopy = true) } }
+        val c = call()
+        val imported = run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single()
+        val settings = runBlocking { app.graph.settings.current() }
+        assertEquals("not before it reached the server", emptyList<Any>(), PhoneAppRecordings.takeDeletes(app, settings))
+        assertEquals("still waiting", listOf(1L), PhoneAppRecordings.pendingDeletes(app))
+        // The person pressed Delete on the card (or Undo): the call's only other copy is the Phone app's.
+        app.graph.recordings.delete(imported)
+        assertEquals(emptyList<Any>(), PhoneAppRecordings.takeDeletes(app, settings))
+        assertEquals("forgotten", emptyList<Long>(), PhoneAppRecordings.pendingDeletes(app))
+    }
+
+    @Test
+    fun `the Phone app's copy is offered for deletion once its recording reached the server`() {
+        runBlocking { app.graph.settings.update { it.copy(deletePhoneAppCopy = true) } }
+        val c = call()
+        val imported = run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.single()
+        PhoneAppRecordings.uploaded(app, imported)
+        app.graph.recordings.delete(imported) // the uploader removes the phone's copy once the server has it
+        assertEquals(PhoneAppRecordings.uris(listOf(1L)), PhoneAppRecordings.takeDeletes(app, runBlocking { app.graph.settings.current() }))
+        assertEquals(emptyList<Long>(), PhoneAppRecordings.pendingDeletes(app))
+    }
+
+    @Test
+    fun `calls that ended a while ago come in without the card, with one quiet notification for all`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val c = call()
+        val d = call(at = t + 20 * 60 * sec, number = "+923007654321", name = "Sara")
+        val store = Store(mutableListOf(recording(1, c), recording(2, d)), listOf(c, d))
+        // The first look after the update, half an hour after the second call.
+        assertEquals(2, run(store, atMs = t + 50 * 60 * sec).imported.size)
+        assertNull("no card for calls long over", DecisionPopup.showingFor)
+        val notices = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+        assertEquals(
+            listOf("2 call recordings brought in"),
+            notices.map {
+                it.extras.getString("android.title")
+            }.filter { it!!.contains("brought in") }
+        )
+    }
+
+    @Test
+    fun `no card while another call or a recording is going on`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        val c = call()
+        app.getSystemService(android.media.AudioManager::class.java).mode = android.media.AudioManager.MODE_IN_CALL
+        assertEquals(1, run(Store(mutableListOf(recording(1, c)), listOf(c))).imported.size)
+        assertNull(DecisionPopup.showingFor)
+        val notices = shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications
+        assertTrue(notices.any { it.extras.getString("android.title") == "Call recording brought in" })
     }
 }
