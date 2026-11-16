@@ -426,6 +426,19 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
   Desktop, or monitoring software on your computer, and it never tries to be: it hides its windows from screen sharing
   only.
 
+**On the phone:** Settings → Privacy & data → **During screen sharing**:
+
+- **Hide cards** (default): the recording pill, captions, the after-call chip and Live Translate shrink to a small grey
+  dot without text.
+- **Black box**: people watching see a black box where the cards are.
+- **Show**: cards stay as they are.
+
+Android 15 and later notice a screen share or recording by themselves. On older Android, use **Hide EchoLedger cards**
+before sharing: it's a button on the open recording pill and a Quick Settings tile. Tap the dot (or the tile again) to
+show the cards.
+
+What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
+
 ## 6. After a call
 
 Since v1.5 EchoLedger records a call from the moment it is **answered**, not while it rings, and it does not interrupt
@@ -872,25 +885,6 @@ call?". They read what you can open in the apps, and nothing else: they cannot r
 anything. You disconnect them under **Profile → Connected apps**.
 
 How to add it, what the AI can and cannot see, and example questions: [Claude and ChatGPT connector](CONNECTOR.md).
-
-## Private notes
-
-Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
-
-Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.
-
-**On the phone:** Settings → Privacy & data → **During screen sharing**:
-
-- **Hide cards** (default): the recording pill, captions, the after-call chip and Live Translate shrink to a small grey
-  dot without text.
-- **Black box**: people watching see a black box where the cards are.
-- **Show**: cards stay as they are.
-
-Android 15 and later notice a screen share or recording by themselves. On older Android, use **Hide EchoLedger cards**
-before sharing: it's a button on the open recording pill and a Quick Settings tile. Tap the dot (or the tile again) to
-show the cards.
-
-What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
 
 ## 16. Live Translate: games and videos
 
