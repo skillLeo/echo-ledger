@@ -2,7 +2,7 @@
 
 The plan is docs/PLAN_V2_0.md (local only); the order is docs/ROADMAP.md (local only): v2.0 starts when v1.9.0 is
 tagged. Before that, only the docs-only V0 groundwork lane runs (when a builder slot is idle), and every bug from the
-v1.8/v1.9 sweeps that isn't fixed now is logged in `docs/v2/audit/bugs.csv`. Each item is ticked only with
+v1.8/v1.9 sweeps that isn't fixed now is logged in [v2/audit/bugs.csv](v2/audit/bugs.csv). Each item is ticked only with
 its proof (test name, screenshot path or log), a reviewer approve and a HANDOFF line.
 
 ## Needs Hassam
