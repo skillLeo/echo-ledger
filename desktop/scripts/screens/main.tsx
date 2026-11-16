@@ -65,7 +65,11 @@ const planParam = params.get("plan");
 
 // v1.8.1 Screen-share privacy: "settings-share" (Windows 11), "settings-share-mac" (Zoom installed, the per-app lines),
 // "settings-share-old" (Windows 10 1909: the black box line), "settings-share-pass-mac" / "-fail-mac" / "-error-mac"
-// (Share Check's three results), "controls-share-visible" (the floating windows' badge in amber).
+// (the check's three results; "settings-share-pass" the same on Windows), "settings-share-off" / "-floating" / "-demo"
+// (the setting Off, Only floating windows, the 10 minutes running), "controls-share-visible" and
+// "controls-share-notchecked" (the floating windows' badge), "controls-translate-box" / "-subtitles" (Live Translate
+// with its badge), "controls-check-card" (the test card of the test with the phone), "library-share-notice-mac" (the
+// main window opened during a whole-screen share).
 const share = screen.includes("share");
 const shareResult = screen.includes("-fail") ? "fail" : screen.includes("-error") ? "error" : "pass";
 /** A desktop as a capture would show it: a page, its text, the green control, and the test window where it leaked. */
@@ -99,28 +103,35 @@ const MAC_APPS = [
   { app: "slack", name: "Slack", version: null, state: "not_checked", line: "Slack: not checked", needsTest: false },
   { app: "whatsapp", name: "WhatsApp", version: "26.1.0", state: "not_checked", line: "WhatsApp: not checked", needsTest: true },
 ];
+/** The setting "Hide EchoLedger from screen sharing" of the screen. */
+const hiding = screen.includes("share-off") ? "off" : screen.includes("share-floating") ? "floating" : "all";
 function privacyStatus() {
   const old = screen.includes("share-old");
-  const visible = old || screen.includes("share-visible") || shareResult === "fail" && screen.includes("-fail");
-  const badge = visible ? "visible" : screen.includes("share-error") ? "not_checked" : "private";
+  const shownOnPurpose = hiding === "off" || screen.includes("share-demo");
+  const visible = shownOnPurpose || screen.includes("share-visible") || shareResult === "fail" && screen.includes("-fail");
+  const badge = old ? "black_box" : visible ? "visible" : screen.includes("share-error") || screen.includes("share-notchecked") ? "not_checked" : "private";
+  const inShare = screen.includes("share-notice");
   return {
     platform: mac ? "macos" : "windows",
     badge,
-    badgeLabel: badge === "visible" ? "Visible in shares" : badge === "not_checked" ? "Not checked" : "Private",
+    badgeLabel: badge === "visible" ? "Visible in screen share" : badge === "not_checked" ? "Not checked" : badge === "black_box" ? "Black box" : "Private",
     system: mac ? "macOS 27.3" : old ? "Windows 10 (build 18363)" : "Windows 11 24H2",
-    hiding: "all",
+    hiding,
     oldWindows: old,
     lines: old ? [{ warning: true, text: "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.", fix: null }] : [],
-    demoSecondsLeft: null,
+    demoSecondsLeft: screen.includes("share-demo") ? 540 : null,
     hiddenByShortcut: false,
-    hiddenForShare: false,
-    share: null,
-    lastCheck: old ? null : { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: mac ? "sck" : "wgc", result: "pass", reason: null }] },
+    hiddenForShare: inShare,
+    mainInShare: inShare,
+    share: inShare ? { app: "teams", mode: "screen", hid: true } : null,
+    lastCheck: old ? { at: new Date().toISOString(), result: "pass", reason: "old_windows", methods: [{ method: "wgc", result: "pass", reason: "old_windows" }] }
+      : screen.includes("share-notchecked") ? null : { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: mac ? "sck" : "wgc", result: "pass", reason: null }] },
     checkRunning: false,
     checkDue: null,
     apps: mac ? MAC_APPS : [],
     zoomInstalled: mac,
     permission: !screen.includes("-error"),
+    floatingOpen: true,
     displays: mac ? 2 : 1,
   };
 }
@@ -248,7 +259,7 @@ const commands: Record<string, (args: Args) => unknown> = {
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false } }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : ITEMS),
@@ -274,7 +285,11 @@ const commands: Record<string, (args: Args) => unknown> = {
   client_ask: () => ({ data: ANSWER }),
   mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
   translate_apps: () => [],
-  translate_status: () => null,
+  translate_status: () => screen.startsWith("controls-translate") ? {
+    mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
+    original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",
+    text: screen.endsWith("subtitles") ? "We were never supposed to meet like this." : "We need to rotate to site B right now",
+  } : null,
   input_devices: () => [
     { id: "default", name: "Microphone (Realtek Audio)", isDefault: !bluetooth, bluetooth: false },
     ...(bluetooth ? [{ id: "airpods", name: "AirPods Pro", isDefault: true, bluetooth: true }] : []),
@@ -336,8 +351,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   share_check_run: () => ({
     result: shareResult,
     reason: shareResult === "error" ? "permission_missing" : null,
-    methods: [{ method: "sck", result: shareResult, reason: shareResult === "error" ? "permission_missing" : null }],
-    system: "macOS 27.3",
+    methods: mac ? [{ method: "sck", result: shareResult, reason: shareResult === "error" ? "permission_missing" : null }]
+      : [{ method: "wgc", result: shareResult, reason: null }, { method: "dxgi", result: shareResult, reason: null }],
+    system: mac ? "macOS 27.3" : "Windows 11 24H2",
     at: new Date().toISOString(),
     picture: shareResult === "error" ? null : capturedScreen(shareResult === "fail"),
     width: 960,
@@ -360,6 +376,21 @@ async function render() {
   if (!controls) {
     const { default: MainApp } = await import("../../src/views/main/MainApp");
     root.render(<React.StrictMode><MainApp /></React.StrictMode>);
+    return;
+  }
+  if (screen.startsWith("controls-translate")) {
+    const { default: TranslateOverlayApp } = await import("../../src/views/translate/TranslateOverlayApp");
+    // The window itself (the screenshot's viewport is its size): the box over a game, the subtitles over a video.
+    document.documentElement.dataset.window = "translate";
+    document.body.style.background = screen.endsWith("subtitles") ? "#20242b" : "#3b4250";
+    root.render(<TranslateOverlayApp />);
+    return;
+  }
+  if (screen === "controls-check-card") {
+    const { default: ShareCheckWindow } = await import("../../src/views/sharecheck/ShareCheckWindow");
+    // The card window itself, 640 x 360 (the screenshot's viewport).
+    document.documentElement.dataset.window = "share-check-card";
+    root.render(<ShareCheckWindow kind="card" />);
     return;
   }
   if (screen === "controls-dictation-refused") {

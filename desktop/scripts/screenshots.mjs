@@ -344,7 +344,18 @@ const SCREENS = [
   ["settings-about", "settings", async (page) => { await settingsReady(page); await nav(page, "About"); }],
   // v1.8.1: Screen-share privacy and its Share Check, and the badge on the floating windows.
   ["settings-share-privacy", "settings-share", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector("[data-testid=privacy-badge]"); }],
-  ["settings-share-privacy-mac", "settings-share-mac", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector("[data-testid=zoom-steps]"); }],
+  ["settings-share-privacy-mac", "settings-share-mac", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.getByRole("button", { name: /Set up Zoom/ }).click();
+    await page.waitForSelector("[data-testid=zoom-steps]");
+  }],
+  // v1.8.1 audit: the setting Off, Only floating windows, and the 10 minutes running.
+  ...["off", "floating", "demo"].map((state) => [`settings-share-privacy-${state}`, `settings-share-${state}`, async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.waitForSelector("[data-testid=privacy-badge]");
+  }]),
   ["settings-share-privacy-old-windows", "settings-share-old", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector(".privacy-line.warning"); }],
   ...["pass", "fail", "error"].map((result) => [`share-check-${result}`, `settings-share-${result}-mac`, async (page) => {
     await settingsReady(page);
@@ -355,11 +366,46 @@ const SCREENS = [
     await page.waitForSelector("[data-testid=check-result]");
     await page.waitForTimeout(200);
   }]),
+  // A Windows result, and the test with the phone on a Mac with its question, answers and Cancel.
+  ["share-check-windows-pass", "settings-share-pass", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.locator("#setting-share_privacy\\.check").click();
+    await page.getByRole("heading", { level: 1, name: "Check screen-share privacy" }).waitFor();
+    await page.getByRole("button", { name: "Check now" }).click();
+    await page.waitForSelector("[data-testid=check-result]");
+    await page.waitForTimeout(200);
+  }],
+  ["share-check-guided-mac", "settings-share-mac", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.locator("#setting-share_privacy\\.check").click();
+    await page.getByRole("heading", { level: 1, name: "Check screen-share privacy" }).waitFor();
+    await page.getByRole("button", { name: "Test", exact: true }).first().click();
+    await page.waitForSelector("[data-testid=guided]");
+    await page.locator("[data-testid=guided]").scrollIntoViewIfNeeded();
+  }],
+  ["settings-captions", "settings", async (page) => { await settingsReady(page); await nav(page, "Captions"); await page.waitForSelector(".caption-sample"); }],
+  ["onboarding-private-notes-mac", "onboarding-mac", async (page) => {
+    for (let i = 0; i < 8 && !(await page.locator("[data-testid=onboarding-share-check]").count()); i++) {
+      await page.getByRole("button", { name: /^(Continue|Skip the test)$/ }).first().click();
+    }
+    await page.waitForSelector("[data-testid=onboarding-share-check]");
+  }],
+  ["library-share-notice-mac", "library-share-notice-mac", async (page) => { await page.waitForSelector("[data-testid=main-in-share]"); }],
   ["settings-shortcuts-mac", "settings-keys-mac", async (page) => { await settingsReady(page); await nav(page, "Keyboard shortcuts"); }],
   ["controls-badge-visible", "controls-share-visible", async (page) => {
     await page.waitForSelector("[data-testid=recording-pill]");
     await page.waitForSelector("[data-testid=privacy-badge].visible");
   }],
+  ["controls-badge-not-checked", "controls-share-notchecked", async (page) => {
+    await page.waitForSelector("[data-testid=recording-pill]");
+    await page.waitForSelector("[data-testid=privacy-badge].not_checked");
+  }],
+  // Windows of their own, at their size: Live Translate (the box, the subtitles) and the test card.
+  ["controls-translate-box", "controls-translate-box", async (page) => { await page.waitForSelector(".translate-overlay [data-testid=privacy-badge]"); }, { width: 480, height: 120 }],
+  ["controls-translate-subtitles", "controls-translate-subtitles", async (page) => { await page.waitForSelector(".translate-overlay [data-testid=privacy-badge]"); }, { width: 720, height: 90 }],
+  ["controls-check-card", "controls-check-card", async (page) => { await page.waitForSelector("[data-testid=check-card]"); }, { width: 640, height: 360 }],
   ["settings-mac-check", "settings-mac-check", async (page) => {
     await settingsReady(page);
     await nav(page, "Help");
