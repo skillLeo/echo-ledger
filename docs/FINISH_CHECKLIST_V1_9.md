@@ -44,11 +44,20 @@ without Phase S.
   floating windows visible and the main window visible); tray "Show EchoLedger in screen share for 10 minutes"; Live
   Translate follows the setting unless its history shows the visible default was on purpose (then its own switch).
   **Acceptance:** every window registers (test); migration test; the 10-minute demo returns to the setting (test).
+  **Desktop done 2026-11-16 (branch v181-desktop):** `desktop/src-tauri/src/privacy/` (`prepare` sets the flag on every
+  builder, `KNOWN` lists main, captions, dictation, pill, after-call, Live Translate, the Assist card and the check's
+  windows; test `every_window_echoledger_builds_is_registered_with_its_kind`); `hideFromSharing` all / floating / off,
+  `contentProtection: false` migrates to off (`show_during_screen_share_from_v1_8_keeps_echoledger_visible_in_shares`);
+  tray demo (`the_ten_minute_demo_returns_to_the_setting_by_itself`). Live Translate: `git log -S create_translate_window`
+  (4ea46df5) gives no reason for the unprotected build, so it follows the floating windows.
 - [ ] S2 Windows: build number (RtlGetVersion); on 19041+ set `WDA_EXCLUDEFROMCAPTURE` and read it back for every
   window (mismatch → amber + diagnostic); older builds → `WDA_MONITOR` black box by default with the amber line and a
   "Black box" / "Show normally" setting; Remote Desktop (SM_REMOTESESSION) → amber line; a 5 s read-back while a
   protected window is visible, re-set on change (no contents in logs). Mac: the macOS version recorded; status from the
   Share Check. **Acceptance:** tests for the build gate, mismatch, RDP and the 5 s re-check.
+  **Desktop done 2026-11-16:** `privacy/win.rs` behind the `Affinity` trait (tests: build gate, read-back mismatch, RDP
+  and old-Windows lines, the 5 s re-check), `spawn_recheck`; Mac: the system name and build in every result. Windows
+  `cargo check`/clippy clean (cross-checked from the Mac); the real calls need the Windows laptop (N5).
 - [ ] S3 Share Check ("See what others see") from Settings → Privacy, the badge and onboarding, and by itself after an
   app update, a system update, weekly and 2 min before a scheduled Live Assist call: a protected magenta test window and
   an unprotected green control, the monitor captured like a meeting app (Windows: WGC CreateForMonitor + DXGI Desktop
@@ -60,6 +69,13 @@ without Phase S.
   meeting app (test card, "I can see it" / "I can't see it"), saved per app + app version + macOS version, asked again
   after their updates. **Acceptance:** pixel-counter tests on fixtures (pass / fail / error); API + isolation tests for
   the diagnostics; the admin matrix test.
+  **Desktop done 2026-11-16:** `privacy/check.rs`, `capture.rs` (WGC + DXGI; SCScreenshotManager, nothing excluded,
+  sRGB), `pixels.rs` (fixtures pass / fail / black-box / error), Settings › Screen-share privacy › Check screen-share
+  privacy, the badge, onboarding's last step, automatic (first run, app update, system update, weekly) and
+  `before_call` for Live Assist; reports to `POST /api/diagnostics/share-checks` only with Send diagnostics on (mocked
+  in tests/api_client.rs). Measured on this Mac (macOS 27.3): pass, magenta 0 px, green 64,480 / 64,480 px; an
+  unprotected test window fails (28,620 px). Guided test per app on the Mac stored per app version + macOS version. The
+  server, its isolation tests and the admin matrix are the server's part.
 - [ ] S4 Mac per-app setup and safety net: Zoom's "Advanced capture with window filtering" shown with screenshots
   (labels checked in the latest Zoom); Zoom's current mode read read-only from its local settings if possible ("Zoom is
   set up"); share-less tips and the second-display offer; whole-screen share detection from the window list (known
@@ -68,6 +84,13 @@ without Phase S.
   orders out within 300 ms and returns when the share ends (cards continue on the phone when linked, L6); setting "I
   share one window or a tab"; a plain warning before a scheduled call in an unconfirmed app. **Acceptance:** pattern
   tests on window-list fixtures; the 300 ms hide test; MANUAL_QA on the Mac.
+  **Desktop done 2026-11-16:** `privacy/bars.rs` (the server's file built in, newer patterns with their ETag, fixture
+  tests in tests/share_bars.rs), `privacy/watch.rs` (`CGWindowListCopyWindowInfo` every 140 ms while a window is on
+  screen + the meeting auto mode detected; hide test `the_windows_leave_within_300_ms`), `privacy/apps.rs` (versions from
+  Info.plist, per-app lines, `warning_before_call`). Zoom's capture mode is in its encrypted `zoomus.enc.db`: not
+  readable, never written (research doc). Zoom's setting is shown in words (no third-party screenshots in the app).
+  Safari's own sharing bar has no pattern in version 1 of the file: unknown bars are logged to add it. Left: the
+  MANUAL_QA S-5 to S-7 rows on the Mac with a phone (N5); phone hand-over of cards is L6.
 - [ ] S5 Android card privacy: on Android 15+ `addScreenRecordingCallback` (DETECT_SCREEN_RECORDING) from the
   component that owns the floating pill / card → VISIBLE collapses to a dot without text, NOT_VISIBLE restores; tested
   on the S25 with a Meet share, a Zoom share, a WhatsApp video share, Samsung's screen recorder and single-app sharing
@@ -80,6 +103,10 @@ without Phase S.
   global shortcut (conflict-checked, not ⌘⌥H); Settings → Privacy page (switch and status, last check + Check now, the
   one-window tip, the honest limits list); USER_GUIDE and website "Private notes" text + a link to the public matrix.
   **Acceptance:** badge state tests; shortcut conflict tests; the copy in USER_GUIDE.
+  **Desktop done 2026-11-16:** the badge on the pill, captions, dictation, after-call card and Live Translate (badge
+  state tests in Rust `status.rs` and vitest), the per-app list on a Mac, "Hide all EchoLedger windows" Ctrl/⌘+Alt+Shift+P
+  (not ⌘⌥H; conflict tests in shortcuts.rs and lib/privacy.test.ts), Settings › Screen-share privacy with the status,
+  last check + Check now, the one-window tip and the limits; USER_GUIDE "Private notes". Website text is web's part.
 - [ ] S7 Tests and release: unit tests (registration, migration, build gate, read-back mismatch, RDP, re-check, pixel
   counter, sharing-bar patterns, badge states, words rule); Windows CI capture test (protected magenta + green control,
   WGC and DXGI; skipped with a clear reason when the runner has no capture session, never a silent pass); the manual
@@ -88,6 +115,10 @@ without Phase S.
   (desktop installers + phone build). **Acceptance:** CI green; the matrix filled; the release recorded in HANDOFF.
 
 ## Phase L — Live Assist (after v1.8.0)
+  **Desktop part done 2026-11-16:** the unit tests above; Windows CI runs `desktop/scripts/share-check-windows.ps1` on
+  each smoke runner (`--smoke-test --share-check`: pass = 0 magenta and green present, fail on magenta, a runner without
+  a capture session is marked skipped with its reason, never a silent pass). Left: the manual matrix (N5) and the
+  release.
 - [ ] L0 Inventory in PLAN_V1_9.md; the assist relay in services/assist-relay (Rust axum + tokio, HTTP/2 keep-alive;
   Dockerfile + systemd unit per docs/DEPLOY_VPS.md; VPS = N2); brand constants in one place per app. **Acceptance:** the
   relay builds and its tests pass; one product-name constant per app.

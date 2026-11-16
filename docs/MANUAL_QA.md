@@ -808,6 +808,21 @@ pressing **Sync** in the Library.
 | V-X2 | TalkBack: swipe through Library, a recording, Record and Settings. | Every button and switch is read with a name. |
 | V-X3 | Turn on reduce motion in each system. | Overlays appear without sliding. Nothing pulses. |
 
+### Desktop v1.8.1: private screen share (needs a second device watching the share)
+
+| # | Check | Expected |
+|---|---|---|
+| S-1 | Settings → Screen-share privacy → Check screen-share privacy → Check now. | A magenta square and a green square flash for about a second; the line says Hidden on Windows 10 2004+ / 11 and on a Mac that leaves the window out; the picture shows the green square and no magenta. |
+| S-2 | Windows: share the whole screen in Zoom, Meet (Chrome), Teams, a Slack huddle and WhatsApp desktop with the captions, the pill, the after-call card, Live Translate and the main window open. Watch on the phone. | The phone shows the apps behind EchoLedger, never EchoLedger. Fill docs/SCREEN_SHARE_MATRIX.md. |
+| S-3 | Windows 10 before 2004 (a VM is fine). | The amber line about a black box; the phone shows black boxes; Show normally shows the windows. |
+| S-4 | Remote Desktop into the PC. | The amber Remote Desktop line; the badge is amber. |
+| S-5 | Mac: Test with your phone for Zoom, Teams, Meet, Slack and WhatsApp (whole screen). | The answer is kept; the per-app line changes; after an app or macOS update the app asks again. |
+| S-6 | Mac: Zoom in each Screen capture mode (auto, with window filtering, without window filtering), whole screen. | Note in the matrix which modes show EchoLedger. |
+| S-7 | Mac: start a whole-screen share in an app not confirmed (Teams). | Every EchoLedger window leaves the screen at once (under 300 ms) and comes back when the share ends; with I share one window or a tab on, they stay. A tab share in Chrome never hides them. |
+| S-8 | Tray / menu bar: Show EchoLedger in screen share for 10 minutes. | The phone shows EchoLedger; after 10 minutes it is hidden again without touching anything. |
+| S-9 | Press Ctrl+Alt+Shift+P (⌘⌥⇧P), then again. | Every EchoLedger window goes and comes back; the app stays in the Dock, the menu bar, the tray and Alt+Tab / ⌘Tab. |
+| S-10 | Settings → Screen-share privacy → Copy diagnostics. | The text names the system, the setting, the last checks and the meeting apps; no window contents. |
+
 ## Appendix C — Release day
 
 | # | Check | Expected |
