@@ -6,7 +6,10 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onLast
@@ -24,6 +27,7 @@ import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
@@ -365,7 +369,30 @@ class RecordScreenTest : ScreenTest() {
         compose.onNodeWithText("WhatsApp Business · Oct 24 · 2:05 PM").assertIsDisplayed()
         compose.onNodeWithText("The artifacts.0.sha256 field format is invalid.").assertIsDisplayed()
         compose.onNodeWithText("Retry").assertIsDisplayed()
-        compose.onNodeWithText("Discard").assertIsDisplayed()
+        compose.onNodeWithText("Delete").assertIsDisplayed()
+    }
+
+    @Test
+    fun `Delete on a failed upload asks first, because this phone has its only copy`() {
+        app.storeRecording(id = "bad", state = "failed", lastError = "Chunk checksum mismatch.")
+        showRecord()
+        awaitText("could not be uploaded")
+        assertFalse("never a Discard that reads like dismissing the error", present("Discard"))
+
+        compose.onNodeWithText("Delete").click()
+        awaitText("It was never uploaded, so this phone has the only copy.")
+        awaitAppIdle()
+        assertTrue("nothing is deleted by the tap", app.graph.recordings.encryptedFile("bad").exists())
+        compose.onNodeWithText("Cancel").click()
+        awaitGone("It was never uploaded")
+        assertNotNull(app.graph.recordings.get("bad"))
+
+        compose.onNodeWithText("Delete").click()
+        awaitText("It was never uploaded")
+        compose.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).click()
+        awaitGone("could not be uploaded")
+        assertNull(app.graph.recordings.get("bad"))
+        assertFalse(app.graph.recordings.encryptedFile("bad").exists())
     }
 
     @Test
@@ -406,13 +433,15 @@ class RecordScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `Discard on a failed recording removes it for good`() {
+    fun `Delete on a failed recording, once confirmed, removes it for good`() {
         app.storeRecording(id = "bad", state = "failed", lastError = "Chunk checksum mismatch.")
         app.storeRecording(id = "also-bad", state = "failed", lastError = "Payload too large.", startedAt = "2026-10-23T09:00:00Z")
         showRecord()
         awaitText("2 recording(s) could not be uploaded")
 
-        compose.onAllNodesWithText("Discard")[0].click()
+        compose.onAllNodesWithText("Delete")[0].click()
+        awaitText("It was never uploaded")
+        compose.onNode(hasText("Delete") and hasAnyAncestor(isDialog())).click()
         awaitText("1 recording(s) could not be uploaded")
 
         assertEquals(1, app.graph.recordings.all().size)

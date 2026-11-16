@@ -31,6 +31,10 @@
     "lg": {
       "$type": "dimension",
       "$value": "24px"
+    },
+    "xl": {
+      "$type": "dimension",
+      "$value": "40px"
     }
   },
   "breakpoint": {

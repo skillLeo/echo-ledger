@@ -422,10 +422,9 @@
             <p class="el-meta-line">
                 <span x-text="d.kind === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript'"></span>
                 <span x-show="d.status && d.status !== 'completed'" x-text="'· ' + (d.status || '').replace('_', ' ')"></span>
-                <span x-show="d.model" x-text="'· ' + d.model"></span>
                 <span x-text="'· ' + d.language"></span>
                 <span x-show="d.edited">· edited</span>
-                <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'اردو'}[view] || '') + ' view by ' + (d.views ? d.views.model : '')"></span>
+                <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'اردو'}[view] || '') + ' view'"></span>
                 <span x-show="d.views && d.views.status === 'making'">· making the views…</span>
             </p>
             {{-- Show as: Roman Urdu · اردو · English · Original. A view not made yet is made when it is chosen. --}}

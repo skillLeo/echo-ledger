@@ -348,9 +348,11 @@ it('M1 refuses a workspace owner "Make default" and does not offer it', function
     $before = Setting::query()->where('key', 'routing.final')->value('value');
     $this->actingAs($owner, 'web');
 
-    $modal = Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->mountAction('engine_results');
-    expect(implode('', array_map('strval', (array) ($modal->effects['partials'] ?? []))))->toContain('Use this version')->not->toContain('Make default for');
+    // Since v1.8.1 (W-002) Engine results is the operator's alone: it does not open for an owner at all.
+    Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->assertActionHidden('engine_results')
+        ->call('mountAction', 'engine_results')->assertSet('mountedActions', []);
     Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->call('pickEngine', $run->id)->assertForbidden();
+    Livewire::test(ViewCaptureSession::class, ['record' => $session->id])->call('useEngineRun', $run->id)->assertForbidden();
 
     expect(Setting::query()->where('key', 'routing.final')->value('value'))->toBe($before);
 });

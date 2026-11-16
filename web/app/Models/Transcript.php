@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Enums\SttProviderKey;
+use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Services\SettingsRepository;
@@ -85,6 +86,12 @@ class Transcript extends Model
     public function providerKey(): ?SttProviderKey
     {
         return SttProviderKey::tryFrom($this->provider);
+    }
+
+    /** Why it failed, in plain words for people (TranscriptErrorCode::plainWords); null unless it failed. */
+    public function failureText(): ?string
+    {
+        return $this->status === TranscriptStatus::Failed ? TranscriptErrorCode::plainWords(TranscriptErrorCode::tryFrom((string) $this->error_code)) : null;
     }
 
     public function preview(int $length = 160): string

@@ -192,17 +192,26 @@ export function failureLine(code: string | null | undefined): string {
     case "interrupted":
       return "Transcription was interrupted.";
     case "recording_missing":
-      return "The recording is missing or isn't ready yet.";
+      return "The audio did not fully reach the server, or it is no longer stored.";
     case "needs_transcription_key":
       return "No transcription key is added yet.";
+    // Contract 1.8.1-b: the provider refused the person's own key (the one vendor name people act on).
+    case "own_key_rejected":
+      return "Groq did not accept your key. Check it in Account → Transcription key, then try again.";
     default:
       return "Something went wrong while transcribing this recording.";
   }
 }
 
-/** Failures that trying again as it was cannot fix (D-130): nothing was heard, no key is added yet, this month's limit is
- * reached, or the server has no transcription set up. Each needs something else first, so they offer no Try again. */
-const NOT_FIXED_BY_TRYING_AGAIN = ["no_audio", "needs_transcription_key", "budget_exceeded", "provider_not_configured"];
+/** Failures that trying again as it was cannot fix (D-130): nothing was heard, no key is added or the key was refused,
+ * this month's limit is reached, the server has no transcription set up, or the audio is not (fully) on the server.
+ * Each needs something else first, so they offer no Try again. */
+const NOT_FIXED_BY_TRYING_AGAIN = ["no_audio", "needs_transcription_key", "own_key_rejected", "budget_exceeded", "provider_not_configured", "recording_missing"];
+
+/** Failures fixed in Account → Transcription key (pure): no key yet, or the key was refused. */
+export function needsKeyAction(code: string | null | undefined): boolean {
+  return code === "needs_transcription_key" || code === "own_key_rejected";
+}
 
 /** Whether a failed transcription offers Try again (pure): yes for anything a second try can fix, an unknown code too. */
 export function canTryAgain(code: string | null | undefined): boolean {

@@ -683,6 +683,33 @@ describe("LibraryView transcript", () => {
     }
   });
 
+  it("says the own key was refused, opens the key's page and offers no Try again (contract 1.8.1-b)", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Groq did not accept your key.", error_code: "own_key_rejected" });
+    const opened = vi.fn();
+    const listener = (e: Event) => opened((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_SECTION_EVENT, listener);
+    try {
+      await renderLibrary();
+      await selectItem("Google Meet standup");
+      const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+      expect(notice).toHaveTextContent("Groq did not accept your key. Check it in Account → Transcription key, then try again.");
+      expect(within(notice).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      fireEvent.click(within(within(notice).getByTestId("needs-key")).getByRole("button", { name: "Check my Groq key" }));
+      expect(opened).toHaveBeenCalledWith("transcription-key");
+    } finally {
+      window.removeEventListener(OPEN_SECTION_EVENT, listener);
+    }
+  });
+
+  it("offers no Try again once the audio is not on the server (contract 1.8.1-b)", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "The audio is no longer stored.", error_code: "recording_missing" });
+    await renderLibrary();
+    await selectItem("Google Meet standup");
+    const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+    expect(notice).toHaveTextContent("The audio did not fully reach the server, or it is no longer stored.");
+    expect(within(notice).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
   it("puts the views' badge where Show as would be when the plan leaves the views out (v1.6)", async () => {
     resetEntitlementsForTests(makeEntitlements());
     try {

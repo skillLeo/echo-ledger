@@ -23,6 +23,7 @@
   --el-icon-sm: 16px;
   --el-icon-md: 20px;
   --el-icon-lg: 24px;
+  --el-icon-xl: 40px;
   --el-breakpoint-compact: 720px;
   --el-breakpoint-medium: 1024px;
   --el-breakpoint-wide: 1440px;
@@ -88,6 +89,10 @@
   --el-text-arabic-body-size: 15px;
   --el-text-arabic-body-line: 26px;
   --el-text-arabic-body-weight: 400;
+  --el-text-body-mobile-font: system-ui, -apple-system, "Segoe UI Variable", "Segoe UI", Roboto, sans-serif;
+  --el-text-body-mobile-size: 16px;
+  --el-text-body-mobile-line: 24px;
+  --el-text-body-mobile-weight: 400;
   --el-layout-page-padding-desktop: 24px;
   --el-layout-page-padding-mobile: 16px;
   --el-layout-row-comfortable: 56px;
@@ -106,11 +111,18 @@
   --el-component-dialog-radius: 12px;
   --el-component-sheet-radius: 16px;
   --el-component-chip-radius: 999px;
+  --el-component-chip-height: 32px;
   --el-component-list-row-height: 56px;
   --el-component-list-row-height-compact: 44px;
   --el-component-list-row-height-mobile: 64px;
+  --el-component-list-row-height-mobile-tall: 72px;
   --el-component-toast-duration: 6000ms;
   --el-component-recording-dot-pulse: 1500ms;
+  --el-component-avatar-size: 40px;
+  --el-component-status-dot-size: 8px;
+  --el-component-sheet-handle-width: 32px;
+  --el-component-sheet-handle-height: 4px;
+  --el-component-tabs-indicator: 2px;
   --el-role-bg-canvas: #FAFAF9;
   --el-role-bg-surface: #FFFFFF;
   --el-role-bg-subtle: #F4F4F2;

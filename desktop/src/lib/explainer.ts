@@ -40,6 +40,12 @@ export function notRecorded(user: Pick<MicUser, "decision">): boolean {
   return user.decision === "ignored" || user.decision === "off";
 }
 
+/** The same app as the core counts it (pure): the same program, on the same website for a browser. The line about the
+ * last one not recorded is left out while that app is listed: the list says what happens with it now. */
+export function sameMicApp(a: Pick<MicUser, "name" | "site">, b: Pick<MicUser, "name" | "site">): boolean {
+  return a.name === b.name && (a.site ?? null) === (b.site ?? null);
+}
+
 /** When it was last seen (pure): "at 3:42 pm", "yesterday at 3:42 pm" or "on 9 Dec at 3:42 pm" (Settings' clock). */
 export function seenWhen(iso: string, now: Date = new Date()): string {
   const at = new Date(iso);

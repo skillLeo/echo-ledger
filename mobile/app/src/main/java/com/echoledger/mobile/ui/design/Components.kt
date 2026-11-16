@@ -370,7 +370,9 @@ fun RecordingRow(
     sharedKey: String? = null,
     divider: Boolean = true,
     /** 56 dp with a smaller tile (since v1.6, the Library's Density Compact). */
-    compact: Boolean = false
+    compact: Boolean = false,
+    /** At the row's end after the time (since v1.8.1: an upload's ⋮ menu). */
+    trailing: (@Composable () -> Unit)? = null
 ) {
     val c = LocalEchoColors.current
     val type = LocalEchoType.current
@@ -468,6 +470,7 @@ fun RecordingRow(
                     )
                 }
             }
+            trailing?.invoke()
         }
         if (divider) HorizontalDivider(Modifier.padding(start = Space.screen + 44.dp + Space.s3), thickness = 1.dp, color = c.border)
     }

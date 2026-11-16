@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToWorkspace;
+use App\Support\ProviderText;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Carbon;
@@ -76,9 +77,15 @@ class ClientBrief extends Model
             'sections' => self::clean($this->sections),
             'edited' => $this->edited,
             'status' => $this->status,
-            'error' => $this->error,
+            'error' => $this->errorForPeople(),
             'generated_at' => $this->generated_at?->toIso8601ZuluString(),
             'updated_at' => $this->updated_at->toIso8601ZuluString(),
         ];
+    }
+
+    /** Why it failed, as people may read it: never a provider's or a credential's name (since v1.8.1). */
+    public function errorForPeople(): ?string
+    {
+        return ProviderText::forPeople($this->error);
     }
 }

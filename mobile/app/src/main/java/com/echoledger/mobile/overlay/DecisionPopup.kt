@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -26,7 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -67,15 +68,18 @@ import kotlinx.coroutines.launch
  * open (SYSTEM_ALERT_WINDOW). It never takes focus and leaves the screen around it alone.
  * - [Mode.SAVED] ("After a call: Keep automatically"): "Saved · Call with Omar · 4:12 · Undo" for [SAVED_MS]; the
  *   upload waits that long, so Undo still deletes everything.
- * - [Mode.ASK] ("Ask me"): the title with ✓ and ✕; the title opens the app to rename it or pick a client; after
- *   [ASK_KEEP_MS] without a tap the call is kept.
+ * - [Mode.ASK] ("Ask me"): the title with ✓ Keep and a labelled Discard (a trash, never an "×" that reads as close);
+ *   the title opens the app to rename it or pick a client; after [ASK_KEEP_MS] without a tap the call is kept.
+ * - [Mode.DISCARDED] (since v1.8.1, bug P-003): after Discard, "Discarded · Call with Omar · 4:12 · Undo" for
+ *   [DISCARDED_MS]. Nothing is deleted meanwhile ([Decisions.discardLater]); Undo puts the ✓ / Discard chip back.
  * VERIFY ON DEVICE (OEM overlay policies vary).
  */
 object DecisionPopup {
-    enum class Mode { SAVED, ASK }
+    enum class Mode { SAVED, ASK, DISCARDED }
 
     const val SAVED_MS = 6_000L
     const val ASK_KEEP_MS = 10_000L
+    const val DISCARDED_MS = 5_000L
 
     private val handler = Handler(Looper.getMainLooper())
     private var view: ComposeView? = null
@@ -104,7 +108,11 @@ object DecisionPopup {
         val app = context.applicationContext
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
         val lifecycleOwner = OverlayOwner().also { it.start() }
-        val visibleMs = if (mode == Mode.SAVED) SAVED_MS else ASK_KEEP_MS
+        val visibleMs = when (mode) {
+            Mode.SAVED -> SAVED_MS
+            Mode.ASK -> ASK_KEEP_MS
+            Mode.DISCARDED -> DISCARDED_MS
+        }
         val compose = ComposeView(app).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
@@ -122,8 +130,8 @@ object DecisionPopup {
                         mode = mode,
                         visibleMs = visibleMs,
                         onKeep = { decide(app, rec.id, keep = true) },
-                        onDiscard = { decide(app, rec.id, keep = false) },
-                        onUndo = { undo(app, rec.id) },
+                        onDiscard = { discard(app, rec, themeMode) },
+                        onUndo = { if (mode == Mode.DISCARDED) undoDiscard(app, rec.id, themeMode) else undo(app, rec.id) },
                         onTitle = {
                             hide()
                             app.startActivity(
@@ -164,7 +172,8 @@ object DecisionPopup {
         windowManager = wm
         showingFor = rec.id
         showingMode = mode
-        // Saved: the chip only goes (the call is kept already). Ask: nobody chose, so the call is kept.
+        // Saved: the chip only goes (the call is kept already); Discarded too (the file goes a little later). Ask: nobody
+        // chose, so the call is kept.
         val task = Runnable { if (mode == Mode.ASK) decide(app, rec.id, keep = true) else hide() }
         timeout = task
         handler.postDelayed(task, visibleMs)
@@ -194,12 +203,35 @@ object DecisionPopup {
         CoroutineScope(Dispatchers.IO).launch { Decisions.undoKeep(context, id) }
     }
 
+    /** The chip's Discard: "Discarded · … · Undo" at once; the file goes only when that is over. */
+    internal fun discard(context: Context, rec: LocalRecording, themeMode: String) {
+        show(context, rec, themeMode, Mode.DISCARDED)
+        CoroutineScope(Dispatchers.IO).launch {
+            // Decided meanwhile (a notification, the app): nothing was discarded, so the chip does not say so.
+            if (Decisions.discardLater(context, rec.id) == null) {
+                handler.post { if (showingFor == rec.id && showingMode == Mode.DISCARDED) hide() }
+            }
+        }
+    }
+
+    /** Undo on "Discarded": the call is back on its chip, counting again from the start (kept by itself after 10 s). */
+    internal fun undoDiscard(context: Context, id: String, themeMode: String) {
+        hide()
+        CoroutineScope(Dispatchers.IO).launch {
+            val back = Decisions.undoDiscard(context, id) ?: return@launch
+            handler.post {
+                com.echoledger.mobile.calls.PostCallPrompt.show(context, back, com.echoledger.mobile.calls.PostCallPrompt.ASK, themeMode)
+            }
+        }
+    }
+
     private const val BOTTOM_MARGIN_DP = 72
 }
 
 /**
  * The chip itself: pill-sized, the control pill's near-black look in both themes, one line ("Saved · Call with Omar ·
- * 4:12" with Undo, or the title and length with ✓ and ✕), and a thin line that shows how long it stays.
+ * 4:12" or "Discarded · …" with Undo, or the title and length with Discard and ✓), and a thin line that shows how long
+ * it stays.
  */
 @Composable
 fun AfterCallChip(
@@ -232,15 +264,34 @@ fun AfterCallChip(
             .clip(shape)
             .background(PillColors.background)
             .border(1.dp, PillColors.hairline, shape)
-            .semantics { contentDescription = if (mode == DecisionPopup.Mode.SAVED) "Saved: $title" else "Keep $title?" }
+            .semantics {
+                contentDescription = when (mode) {
+                    DecisionPopup.Mode.SAVED -> "Saved: $title"
+                    DecisionPopup.Mode.ASK -> "Keep $title?"
+                    DecisionPopup.Mode.DISCARDED -> "Discarded: $title"
+                }
+            }
     ) {
         Row(
             Modifier.padding(start = Space.s4, end = Space.s1, top = Space.s1, bottom = Space.s1),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            val label = if (mode == DecisionPopup.Mode.SAVED) "Saved · $title · $duration" else "$title · $duration"
-            if (mode == DecisionPopup.Mode.SAVED) {
-                SuccessCheck(PillColors.accent, Modifier.padding(end = Space.s2))
+            val label = when (mode) {
+                DecisionPopup.Mode.SAVED -> "Saved · $title · $duration"
+                DecisionPopup.Mode.ASK -> "$title · $duration"
+                DecisionPopup.Mode.DISCARDED -> "Discarded · $title · $duration"
+            }
+            when (mode) {
+                DecisionPopup.Mode.SAVED -> SuccessCheck(PillColors.accent, Modifier.padding(end = Space.s2))
+
+                DecisionPopup.Mode.DISCARDED -> Icon(
+                    Icons.Rounded.Delete,
+                    contentDescription = null,
+                    tint = PillColors.muted,
+                    modifier = Modifier.padding(end = Space.s2).size(18.dp)
+                )
+
+                DecisionPopup.Mode.ASK -> Unit
             }
             Text(
                 label,
@@ -259,7 +310,7 @@ fun AfterCallChip(
                     )
                     .padding(vertical = Space.s2)
             )
-            if (mode == DecisionPopup.Mode.SAVED) {
+            if (mode != DecisionPopup.Mode.ASK) {
                 Text(
                     "Undo",
                     style = type.labelL,
@@ -271,7 +322,8 @@ fun AfterCallChip(
                         .padding(horizontal = Space.s3, vertical = Space.s2)
                 )
             } else {
-                ChipIcon(Icons.Rounded.Close, "Discard", onDiscard)
+                // A trash with its word (since v1.8.1): an "×" read as close, yet it deleted the call.
+                ChipTextButton(Icons.Rounded.Delete, "Discard", onDiscard)
                 ChipIcon(Icons.Rounded.Check, "Keep", onKeep, primary = true)
             }
         }
@@ -297,10 +349,28 @@ private fun ChipIcon(icon: androidx.compose.ui.graphics.vector.ImageVector, labe
     }
 }
 
+/** A chip button with its word beside its icon ("Discard"), white on the pill, 40 dp high. */
+@Composable
+private fun ChipTextButton(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .padding(start = Space.s1)
+            .heightIn(min = 40.dp)
+            .clip(RoundedCornerShape(50))
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = Space.s3),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        Text(label, style = LocalEchoType.current.labelL, color = Color.White, maxLines = 1, modifier = Modifier.padding(start = Space.s1))
+    }
+}
+
 /** The control pill's colours (near-black with a hairline), the same in light and dark. */
 private object PillColors {
     val background = Color(0xEB111113)
     val hairline = Color(0x33FFFFFF)
+    val muted = Color(0xB3FFFFFF)
     val accent = Color(0xFF9EB1FF)
     val accentFill = Color(0xFF3E63DD)
 }

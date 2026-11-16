@@ -111,6 +111,7 @@ object EchoTokens {
         val sm = 16.dp
         val md = 20.dp
         val lg = 24.dp
+        val xl = 40.dp
     }
 
     object Component {
@@ -124,9 +125,18 @@ object EchoTokens {
         val dialogRadius = 12.dp
         val sheetRadius = 16.dp
         val chipRadius = 999.dp
+        val chipHeight = 32.dp
         val listRowHeight = 56.dp
         val listRowHeightCompact = 44.dp
         val listRowHeightMobile = 64.dp
+        val listRowHeightMobileTall = 72.dp
+        const val toastDurationMs = 6000
+        const val recordingDotPulseMs = 1500
+        val avatarSize = 40.dp
+        val statusDotSize = 8.dp
+        val sheetHandleWidth = 32.dp
+        val sheetHandleHeight = 4.dp
+        val tabsIndicator = 2.dp
     }
 
     object Motion {
@@ -147,5 +157,6 @@ object EchoTokens {
         val mono = TextStyle(fontSize = 13.sp, lineHeight = 20.sp, fontWeight = FontWeight(400))
         val urduBody = TextStyle(fontSize = 16.sp, lineHeight = 30.sp, fontWeight = FontWeight(400))
         val arabicBody = TextStyle(fontSize = 15.sp, lineHeight = 26.sp, fontWeight = FontWeight(400))
+        val bodyMobile = TextStyle(fontSize = 16.sp, lineHeight = 24.sp, fontWeight = FontWeight(400))
     }
 }

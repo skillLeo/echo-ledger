@@ -89,6 +89,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('diagnostics/share-checks', ShareCheckController::class)->middleware(['abilities:config:read', 'throttle:share-check'])->name('api.diagnostics.share-checks');
         Route::get('config/share-bars', ShareBarsController::class)->middleware('abilities:config:read')->name('api.config.share-bars');
         Route::get('account', [AccountController::class, 'show'])->middleware('abilities:config:read')->name('api.account');
+        // Interface flags (2.0.0-a): the person's "Switch back to classic".
+        Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
         // Upgrade requests (v1.6): the newest one of this device's person.

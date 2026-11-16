@@ -649,4 +649,19 @@ class MainViewModelTest : AppTest() {
         assertTrue(command, command.contains("${app.packageName}.handoff"))
         assertTrue(command, command.contains("pm path ${app.packageName}"))
     }
+
+    @Test
+    fun `an AI feature the server has not set up says so by its code, never the server's text`() {
+        pairLocally()
+        val refused = """{"message":"Anthropic API key missing in API Credentials","code":"ai_unavailable"}"""
+        server.on("POST", "/api/clients/c1/ask", FakeServer.json(409, refused))
+        server.on("POST", "/api/sessions/s1/notes", FakeServer.json(409, refused.replace("Anthropic", "Some other")))
+
+        assertNull(runBlocking { vm.ask("c1", "What did we agree?", "en") })
+        assertEquals("The AI assistant is not set up on the server yet.", vm.message.value)
+        vm.consumeMessage()
+        // Not a vendor's name to replace: the code alone decides.
+        assertNull(runBlocking { vm.makeNotes("s1", "en") })
+        assertEquals("The AI assistant is not set up on the server yet.", vm.message.value)
+    }
 }

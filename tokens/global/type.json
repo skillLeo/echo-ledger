@@ -140,6 +140,16 @@
         "lineHeight": "26px",
         "fontWeight": 400
       }
+    },
+    "body-mobile": {
+      "$type": "typography",
+      "$value": {
+        "fontFamily": "{font.family.sans}",
+        "fontSize": "16px",
+        "lineHeight": "24px",
+        "fontWeight": 400
+      },
+      "$description": "Body text on phones (Material bodyLarge)"
     }
   }
 }
