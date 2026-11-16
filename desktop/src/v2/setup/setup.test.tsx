@@ -50,6 +50,7 @@ describe("the permissions wizard", () => {
   it("shows the steps in order, done ones checked, and the current one with what it is for and Allow", async () => {
     respond("permission_request", { ...MAC_PERMS, systemAudio: "allowed" });
     await show();
+    expect(screen.getByRole("status")).toHaveTextContent("1 thing to fix before calls are recorded");
     const steps = within(screen.getByRole("list", { name: "Permissions" })).getAllByRole("listitem");
     expect(steps).toHaveLength(3);
     expect(steps[0]).toHaveTextContent("MicrophoneAllowed");
@@ -82,6 +83,7 @@ describe("the health checks", () => {
     fireEvent.click(within(ready).getByRole("button", { name: "Allow system audio" }));
     await act(flushAsync);
     expect(callsOf("ready_fix")).toEqual([{ action: "allow_system_audio" }]);
+    expect(screen.getByRole("status")).toHaveTextContent(/^Ready to record calls$/);
     expect(within(screen.getByRole("list", { name: "Ready check" })).queryByRole("button")).toBeNull();
   });
 

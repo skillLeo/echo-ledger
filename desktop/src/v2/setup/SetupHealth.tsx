@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { api, errorMessage, type CheckItem, type CheckReport, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { ALLOWED_BEFORE, PERMISSION_STEP, accessOf, usePermissions } from "../../views/main/Permissions";
-import { readyHeadline, useReadyReport } from "../../views/main/ReadyCheck";
+import { READY, readyHeadline, useReadyReport } from "../../views/main/ReadyCheck";
 import {
   Button, Card, EmptyState, HealthCheckRow, Icons, Loading, SetupStep, Skeleton, Status, Steps, type HealthState,
 } from "../components";
@@ -81,7 +81,8 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
       <header className="el-page__head">
         <div className="el-page__titles">
           <h1 className="el-title-l">Setup &amp; health</h1>
-          {report && <Status kind={report.ready ? "ready" : "setup"} live>{readyHeadline(report)}</Status>}
+          {/* The dot carries the state: the words go without the classic headline's check mark. */}
+          {report && <Status kind={report.ready ? "ready" : "setup"} live>{report.ready ? READY : readyHeadline(report)}</Status>}
         </div>
       </header>
       {problem && <p className="el-field__error" role="alert">{problem}</p>}

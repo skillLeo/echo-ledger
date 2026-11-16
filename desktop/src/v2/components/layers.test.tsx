@@ -18,7 +18,7 @@ describe.each([["Dialog", Dialog], ["Sheet", Sheet]] as const)("%s", (_name, Lay
     return (
       <>
         <Button onClick={() => setOpen(true)}>Delete recording</Button>
-        <Layer open={open} title="Delete this recording?" description="It moves to Trash for 30 days."
+        <Layer open={open} title="Delete this recording?" description="It stays in Trash for 48 hours."
           onClose={() => { setOpen(false); onClose(); }}
           actions={<><Button onClick={() => setOpen(false)}>Cancel</Button><Button variant="danger">Delete</Button></>} />
       </>
@@ -30,7 +30,7 @@ describe.each([["Dialog", Dialog], ["Sheet", Sheet]] as const)("%s", (_name, Lay
     fireEvent.click(screen.getByRole("button", { name: "Delete recording" }));
     const dialog = screen.getByRole("dialog", { name: "Delete this recording?" });
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAccessibleDescription("It moves to Trash for 30 days.");
+    expect(dialog).toHaveAccessibleDescription("It stays in Trash for 48 hours.");
   });
 
   it("moves focus in, past the close button, and keeps Tab inside", () => {
