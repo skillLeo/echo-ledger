@@ -135,7 +135,7 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   single instance; "Show in Dock" / "Show in menu bar"; a monochrome template menu-bar icon (Open, Record now, Captions,
   Pause, Quit); a proper app menu (About, Settings… ⌘,, Check for updates, Hide ⌘H, Quit ⌘Q; ⌘W keeps recording, said
   once). **Acceptance:** Rust tests for the policy and reopen; MANUAL_QA on the Mac.
-- [ ] 3.3 Appearance on all apps: theme, 6 accent colours, text size, density; desktop window style (Solid default /
+- [→] 3.3 **Moved to v2.0 (ROADMAP Stage C, 2026-11-16): design values + Settings › Appearance (FINISH_CHECKLIST_V2_0.md).** Appearance on all apps: theme, 6 accent colours, text size, density; desktop window style (Solid default /
   Translucent) and sidebar style; phone "Use wallpaper colours" (off); web theme, accent, density; saved per device; a
   quick theme switch in the avatar menu. **Acceptance:** settings tests per app; screenshots.
 
@@ -151,6 +151,9 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   connector's get_recording uses the same names. **Acceptance:** export tests; the PDF opened in Claude (P9).
 
 ## P5 — Looks professional, not generated
+
+**All of P5 moved to v2.0 (ROADMAP Stage C, 2026-11-16): the AI-look audit (V0.6), the design values (V2) and the rebuilt screens (V3). Bugs found meanwhile go to docs/v2/audit/bugs.csv unless the triage rule says fix now.**
+
 - [ ] 5.1 Audit and remove the tells (all caps, middle-dot strings, "→" on buttons, emoji/sparkles, identical cards,
   gradients, purple defaults, generic copy, "Submit", mixed fonts, wrapped pills, more than one primary button).
   **Acceptance:** a lint/scan per app for the mechanical ones; a screenshot review for the rest.
@@ -162,10 +165,10 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   WhatsApp, Gmail and Linear. **Acceptance:** the review notes and fixes in HANDOFF.
 
 ## P6 — SaaS
-- [ ] 6.1 Public website on the main domain (H4): home, pricing from the admin plans, downloads (badges, direct
+- [ ] 6.1 **Look moved to v2.0 (V3.10); v1.8 keeps only what the stores need: plain privacy, terms, support and download pages.** Public website on the main domain (H4): home, pricing from the admin plans, downloads (badges, direct
   files, iPhone "coming soon"), help center, privacy, terms, contact. **Acceptance:** page tests; Lighthouse-style
   accessibility and speed check.
-- [ ] 6.2 First run: sign-up → 3 questions → "Get the apps" with QR codes + "Email me the links" → one first success →
+- [→] 6.2 **First-run screens moved to v2.0 (V3.4 first run, ROADMAP Stage C).** First run: sign-up → 3 questions → "Get the apps" with QR codes + "Email me the links" → one first success →
   a 5-step checklist on Home. **Acceptance:** flow tests on web and apps.
 - [ ] 6.3 Invitations: email or link with role and expiry; seats shown; "Join Acme on EchoLedger" → sign up → apps;
   personal accounts stay private. **Acceptance:** API + isolation tests; the join page.
@@ -195,7 +198,7 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
     to other apps. Add it with the notarization job and test it on the first signed build.
 
 ## P8 — iPhone
-- [ ] P8 docs/IOS_PLAN.md written; the build starts only on "Apple account ready" (H9). **Acceptance:** the plan file.
+- [→] P8 **Moved: the iPhone app starts after v2.0's design system (V2), built once in the new system, unless Hassam says "iPhone now" (ROADMAP).** docs/IOS_PLAN.md written; the build starts only on "Apple account ready" (H9). **Acceptance:** the plan file.
 
 ## P9 — Release + verify
 - [ ] Full suites green; web deployed with the usual safety steps; Windows installer + MSIX; Mac DMG; the phone full
