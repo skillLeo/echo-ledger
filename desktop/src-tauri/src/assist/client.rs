@@ -102,7 +102,8 @@ pub fn after_close(code: Option<u16>) -> AfterClose {
         Some(close::REPLACED) => AfterClose::End(Ended::Replaced),
         Some(close::WRONG_SESSION) => AfterClose::End(Ended::WrongSession),
         Some(close::TOKEN_EXPIRED) => AfterClose::RefreshThenReconnect,
-        // 1012 restarting, 4408 idle, 1009 too big, any other code, or no close frame at all (the network).
+        // 1012 restarting, 4408 idle, 1009 too big, any other code, or no close frame at all (the network). Before the
+        // upgrade, 503 relay_busy and 429 are retried the same way (ConnectError::Other).
         _ => AfterClose::Reconnect,
     }
 }
@@ -189,7 +190,7 @@ pub fn nodelay(socket: &Socket) -> bool {
     }
 }
 
-/// The app's side of a running session: send messages, stop it.
+/// The app's side of a running session: send messages, stop it. Dropping every copy of it ends the session too.
 #[derive(Clone)]
 pub struct AssistHandle {
     outgoing: mpsc::UnboundedSender<ClientMessage>,
