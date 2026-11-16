@@ -27,6 +27,25 @@ describe("command palette (B9)", () => {
     expect(paletteMatches("record", { label: "Stop recording" })).toBe(true);
   });
 
+  it("splits what is typed as it splits names, keeps marks inside a word, and ignores case (D-087)", () => {
+    expect(paletteScore("d'souza", { label: "D'Souza Traders" })).toBe(3);
+    expect(paletteScore("D'Souza tra", { label: "D'Souza Traders" })).toBe(3);
+    expect(paletteScore("ali & sons", { label: "Ali & Sons" })).toBe(3);
+    expect(paletteScore("ali sons", { label: "Ali & Sons" })).toBe(3);
+    expect(paletteScore("r&d", { label: "R&D budget" })).toBe(3);
+    expect(paletteScore("a-team", { label: "The A-Team" })).toBe(2);
+    expect(paletteScore("ACME", { label: "Acme Holdings" })).toBe(3);
+    // Urdu with a pesh, and an accent typed as its own mark: one word each, never cut at the mark.
+    expect(paletteScore("مُلا", { label: "مُلاقات نوٹس" })).toBe(3);
+    expect(paletteScore("لا", { label: "مُلاقات نوٹس" })).toBe(0);
+    expect(paletteScore("cafe\u0301", { label: "Cafe\u0301 Noir" })).toBe(3);
+    expect(paletteScore("sume", { label: "Re\u0301sume\u0301 review" })).toBe(0);
+    // Nothing typed lists everything; punctuation alone finds nothing.
+    expect(paletteScore("", { label: "Ali & Sons" })).toBe(1);
+    expect(paletteScore("   ", { label: "Ali & Sons" })).toBe(1);
+    expect(paletteScore("&", { label: "Ali & Sons" })).toBe(0);
+  });
+
   it("offers what makes sense right now", () => {
     const actions = { go: vi.fn(), run: vi.fn() };
     const idle = paletteCommands(makeStatus(), actions).map((c) => c.id);
@@ -173,6 +192,8 @@ describe("command palette (B9)", () => {
     const pages = [
       { id: "devices", label: "Devices", group: "Account", keywords: "phones computers", open: open.devices },
       { id: "p1", label: "Acme Holdings", group: "Projects", open: open.acme },
+      { id: "p2", label: "D'Souza Traders", group: "Projects", open: vi.fn() },
+      { id: "p3", label: "Ali & Sons", group: "Projects", open: vi.fn() },
     ];
     const show = (query: string) => {
       cleanup();
@@ -183,6 +204,12 @@ describe("command palette (B9)", () => {
     expect(within(show("dev")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
     expect(within(show("account phones")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Devices · Account"]);
     expect(show("vices")).toBeNull();
+    // Names with punctuation, typed with it (D-087); capitals ignored; nothing typed lists no pages.
+    expect(within(show("d'souza")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to D'Souza Traders · Projects"]);
+    expect(within(show("ali & sons")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Ali & Sons · Projects"]);
+    expect(within(show("ACME")!).getAllByRole("option").map((o) => o.textContent)).toEqual(["Go to Acme Holdings · Projects"]);
+    expect(show("  ")).toBeNull();
+    expect(show("zzz")).toBeNull();
     show("acme");
     fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
     expect(open.acme).toHaveBeenCalled();

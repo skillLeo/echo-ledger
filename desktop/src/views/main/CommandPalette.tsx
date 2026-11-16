@@ -24,26 +24,32 @@ export interface PaletteCommand {
   run: () => void;
 }
 
-const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{N}]+/u).filter(Boolean);
+/** A text's words for matching (pure): lower case, split at whatever is not a letter, a combining mark or a digit. What
+ * is typed is split the same way as the names, so "d'souza" finds "D'Souza Traders" and "ali & sons" finds "Ali & Sons";
+ * a mark (Urdu's zer or pesh, an accent typed apart) stays inside its word. */
+export const wordsOf = (text: string): string[] => text.toLowerCase().split(/[^\p{L}\p{M}\p{N}]+/u).filter(Boolean);
 
 /**
  * How well a row matches what was typed (pure, D-087): 3 its name starts with it, 2 every typed word starts a word of
  * its name, 1 some word only starts a word of its keywords, 0 none (also a word found only inside another one: "ew" is
- * not "new"). Names come first, so "new" and Enter make a new project, never a voice note found by its keyword.
+ * not "new"). Names come first, so "new" and Enter make a new project, never a voice note found by its keyword. Nothing
+ * typed matches everything; only punctuation typed matches nothing.
  */
 export function paletteScore(query: string, command: Pick<PaletteCommand, "label" | "keywords">): number {
-  const typed = query.trim().toLowerCase();
-  if (!typed) return 1;
+  const typed = wordsOf(query);
+  if (typed.length === 0) return query.trim() ? 0 : 1;
   const name = wordsOf(command.label);
   const keys = wordsOf(command.keywords ?? "");
   let byKeyword = false;
-  for (const word of typed.split(/\s+/)) {
+  for (const word of typed) {
     if (name.some((n) => n.startsWith(word))) continue;
     if (!keys.some((k) => k.startsWith(word))) return 0;
     byKeyword = true;
   }
   if (byKeyword) return 1;
-  return command.label.toLowerCase().startsWith(typed) ? 3 : 2;
+  // The name starts with what was typed, word by word: the last word typed may be the start of one.
+  const last = typed.length - 1;
+  return typed.every((word, i) => (i < last ? name[i] === word : name[i]?.startsWith(word))) ? 3 : 2;
 }
 
 /** Whether a row matches what was typed at all ([`paletteScore`] above 0). */

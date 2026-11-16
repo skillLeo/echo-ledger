@@ -162,6 +162,13 @@ const SCREENS = [
     await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("new");
     await page.waitForTimeout(600);
   }, viewport]),
+  // D-087: what is typed is split as names are, so punctuation typed with a name still finds it.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`palette-punctuation${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("calls & meetings");
+    await page.waitForTimeout(600);
+  }, viewport]),
   // A Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],
