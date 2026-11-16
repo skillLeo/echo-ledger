@@ -7,6 +7,7 @@ use App\Filament\Pages\Usage;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\SettingsRepository;
+use App\Services\Usage\UsageBreakdown;
 use App\Services\Usage\UsageReport;
 use Filament\Facades\Filament;
 use Illuminate\Support\Carbon;
@@ -110,6 +111,27 @@ it('shows one cost on the Usage page, and names the Double-check part only when 
     providerlessUsageRow($owner, ['provider' => 'groq', 'report_id' => 'check/'.Str::ulid().'/2', 'model' => 'double-check', 'duration_ms' => 30_000, 'billed_ms' => 30_000, 'cost_usd' => 0.01]);
     [$tile, $totals, $html] = $costs();
     expect($tile)->toBe('$0.87')->and($totals)->toBe($tile)->and($html)->toContain('incl. $0.01 Double-check');
+});
+
+it('takes By person and Last six months from the same stored costs as the tile, whatever the admin\'s price table says', function () {
+    $owner = Fx::user();
+    usageMonth($owner);
+    // The admin panel's price table, far from what each use was priced at.
+    app(UsageBreakdown::class)->savePrices(['groq' => ['final_hour' => 60.0, 'live_hour' => 60.0]]);
+    $this->actingAs($owner, 'web');
+
+    $html = (string) $this->get('/app/usage')->assertOk()->getContent();
+    preg_match('/Estimated cost<\/div>\s*<div[^>]*>\s*(\$[\d.,]+)/', $html, $tile);
+    $people = Str::between($html, 'By person', 'Last six months');
+    $trend = Str::after($html, 'Last six months');
+    preg_match('/Oct 2026.*?(\$[\d.,]+)/s', $trend, $month);
+
+    expect($tile[1] ?? null)->toBe('$0.36')
+        ->and($people)->toContain('$0.36')->not->toContain('$60')->not->toContain('$12')
+        ->and($month[1] ?? null)->toBe('$0.36');
+    // The admin panel keeps its price table.
+    [$from, $to] = [Carbon::parse('2026-10-01'), Carbon::parse('2026-11-01')];
+    expect(app(UsageBreakdown::class)->report($from, $to, $owner->current_workspace_id)['totals']['cost_usd'])->toBeGreaterThan(100.0);
 });
 
 it('downloads the owner\'s month one line per use, never per provider', function () {

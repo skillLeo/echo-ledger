@@ -69,7 +69,7 @@
     </x-filament::section>
 
     @if ($people !== null)
-        @include('filament.pages.usage-people', ['people' => $people])
+        @include('filament.pages.usage-people', ['people' => $people, 'description' => 'Cost as each use was priced, like the totals above. Never what anyone recorded.'])
     @endif
 
     @livewire(\App\Filament\Widgets\Usage\DailyUsageChart::class, ['month' => $report['month']], key('usage-chart-'.$report['month']))

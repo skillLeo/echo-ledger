@@ -50,7 +50,23 @@ final class UsageBreakdown
         'watch_translate' => 'Watch translate',
     ];
 
+    /** Whether each use costs what the ledger stored with it, instead of the price table (stored()). */
+    private bool $stored = false;
+
     public function __construct(private readonly SettingsRepository $settings, private readonly PlanLimits $limits) {}
+
+    /**
+     * The same numbers with each use's cost as the ledger stored it, every use counted (since v1.8.1): the console's
+     * Usage page, whose tile and Totals (UsageReport) add up the stored costs, so every cost on that page agrees. The
+     * admin panel keeps the price table.
+     */
+    public function stored(): self
+    {
+        $copy = clone $this;
+        $copy->stored = true;
+
+        return $copy;
+    }
 
     /**
      * The price table: the list prices with the super admin's changes over them.
@@ -257,7 +273,9 @@ final class UsageBreakdown
         $in = (int) $row->input_tokens;
         $out = (int) $row->output_tokens;
         $table = $prices[$provider] ?? null;
-        if (! (bool) $row->billable) {
+        if ($this->stored) {
+            $cost = (float) $row->cost_usd;
+        } elseif (! (bool) $row->billable) {
             $cost = 0.0;
         } elseif ($table === null) {
             // A provider the table does not list (self-hosted, Azure): what the ledger stored.

@@ -130,7 +130,8 @@ class Usage extends Page
         $server = $user instanceof User && $user->is_super_admin ? app(UsageSummary::class)->toArray() : null;
         $own = $this->ownOnly();
         [$from, $to] = $this->range();
-        $breakdown = app(UsageBreakdown::class);
+        // The costs as the ledger stored them, like the tile and Totals (UsageReport): one cost source on the page.
+        $breakdown = app(UsageBreakdown::class)->stored();
 
         return [
             'report' => app(UsageReport::class)->forMonth($workspaceId, $month, $own),

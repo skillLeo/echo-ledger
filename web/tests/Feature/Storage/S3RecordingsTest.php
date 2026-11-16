@@ -1244,9 +1244,9 @@ it('gives the device the documented text when a final transcript fails on the bu
 
     $answer = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
         ->assertJsonPath('status', 'failed')
-        // Since v1.8.1 the audio is missing, not the run interrupted: "Transcribe again" would only fail the same way.
-        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::RecordingMissing))
-        ->assertJsonPath('error_code', 'recording_missing');
+        // A dropped request is a passing fault: the run is interrupted, never "the audio is gone".
+        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::Interrupted))
+        ->assertJsonPath('error_code', 'interrupted');
     expect($answer->getContent())->not->toContain(FakeS3Server::HOST)->not->toContain(FakeS3Server::BUCKET)->not->toContain((string) $recording->stored_path);
 
     // What is no storage trouble keeps its own text, as before.
@@ -1255,7 +1255,37 @@ it('gives the device the documented text when a final transcript fails on the bu
     expect($other->refresh()->error)->toBe('Something else');
 });
 
-it('fails a final transcript whose stored audio cannot be read as missing audio, without sending anything to an engine', function () {
+it('lets a final transcript whose bucket drops the request throw, so the queue tries again, and never calls it missing audio', function () {
+    $session = $this->makeReadySession($this->device, Fixtures::audio(3000), ['status' => SessionStatus::Processing]);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
+    app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_test_key_1234567890');
+    Http::fake(['api.assemblyai.com/*' => Http::response([], 500)]);
+    // The object is there; the download is cut short.
+    $this->bucket->cutNextDownloads(100, 3);
+
+    expect(fn () => (new TranscribeFinalJob($transcript->id))->handle(app(SttManager::class), app(ChunkedUploadService::class), app(TranscriptStore::class)))
+        ->toThrow(RuntimeException::class);
+    expect($transcript->refresh()->status)->toBe(TranscriptStatus::Pending)->and($transcript->error_code)->toBeNull();
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'assemblyai.com'));
+});
+
+it('fails a final transcript whose stored audio is damaged as missing audio, without sending anything to an engine', function () {
+    $session = $this->makeReadySession($this->device, Fixtures::audio(3000), ['status' => SessionStatus::Processing]);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
+    app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_test_key_1234567890');
+    // The stored object is there in full, but it does not decrypt.
+    foreach (array_keys($this->bucket->objects) as $key) {
+        $this->bucket->objects[$key]['body'] = RecordingCipher::MAGIC.str_repeat("\0", 200);
+    }
+    Http::fake(['api.assemblyai.com/*' => Http::response([], 500)]);
+
+    dispatch_sync(new TranscribeFinalJob($transcript->id));
+
+    expect($transcript->refresh()->status)->toBe(TranscriptStatus::Failed)->and($transcript->error_code)->toBe('recording_missing');
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'assemblyai.com'));
+});
+
+it('fails a final transcript whose stored audio is gone as missing audio, without sending anything to an engine', function () {
     $session = $this->makeReadySession($this->device, Fixtures::audio(3000), ['status' => SessionStatus::Processing]);
     $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
     app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_test_key_1234567890');

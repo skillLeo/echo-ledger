@@ -10,6 +10,7 @@ use App\Enums\SttProviderKey;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
+use App\Exceptions\RecordingUndecryptable;
 use App\Models\Transcript;
 use App\Services\ActivityFeed;
 use App\Services\ChunkedUploadService;
@@ -37,7 +38,6 @@ use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Facades\Log;
 use League\Flysystem\FilesystemException;
-use RuntimeException;
 use Throwable;
 
 /**
@@ -133,14 +133,21 @@ final class TranscribeFinalJob implements ShouldQueue
             $channel2 = $recordings->get(RecordingRole::Channel2->value);
             $caps = $driver->capabilities();
             $useChannels = $channel1?->isReady() && $channel2?->isReady() && ($caps->needsChannelArtifacts || $caps->usesChannelArtifacts);
-            // Since v1.8.1: a stored file that is gone or cannot be read or decrypted is missing audio, not an interrupted
-            // run, so "Transcribe again" does not loop on it. Which file and why go to the log only.
+            // Since v1.8.1: a stored file that is not there, or that was read in full and does not decrypt, is missing
+            // audio, not an interrupted run, so "Transcribe again" does not loop on it. Anything passing (a dropped
+            // request, a bucket's 503, a download cut short, a full temp disk) throws: the queue tries again, and the
+            // last failure is an interrupted run (failed()). Which file and why go to the log only.
             try {
+                foreach (array_filter([$primary, $useChannels ? $channel1 : null, $useChannels ? $channel2 : null]) as $stored) {
+                    if (! $uploads->storedFileExists($stored)) {
+                        throw new RecordingUndecryptable("Recording {$stored->id} is not stored.");
+                    }
+                }
                 $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
                 $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
                 $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
-            } catch (FilesystemException|RuntimeException $e) {
-                Log::warning('Final transcript: the stored audio could not be read', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+            } catch (RecordingUndecryptable $e) {
+                Log::warning('Final transcript: the stored audio is missing or damaged', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 300)]);
                 $store->failWith($transcript, TranscriptErrorCode::RecordingMissing);
 
                 return;
@@ -299,14 +306,11 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            // A storage error names the file, and the audio is not there to transcribe (since v1.8.1: recording_missing,
-            // not interrupted, so "Transcribe again" does not loop); the log keeps the rest.
-            if ($exception instanceof FilesystemException) {
-                app(TranscriptStore::class)->failWith($transcript, TranscriptErrorCode::RecordingMissing);
-
-                return;
-            }
-            $error = mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
+            // A storage error names the file: the device gets the documented text, the log the rest. It is a passing
+            // fault after every try (missing or damaged audio fails in handle(), as recording_missing).
+            $error = $exception instanceof FilesystemException
+                ? TranscriptErrorCode::Interrupted->message()
+                : mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
             // Since v1.5 a crashed run of an Urdu or Auto recording is an interrupted one: it waits and its engine is tried
             // again (EngineWait), and once the wait is over the next engine takes it as a backup (EngineFallbackJob).
             if ($transcript->kind === TranscriptKind::Final && EngineWait::forUrdu($transcript)) {
