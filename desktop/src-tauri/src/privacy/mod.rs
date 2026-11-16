@@ -391,7 +391,8 @@ fn enforce<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: b
         use win::Affinity;
         let Ok(hwnd) = window.hwnd() else { return };
         let hwnd = hwnd.0 as isize;
-        let wanted = win::wanted(protect, win::System.build(), settings.old_windows_sharing);
+        let shielded = window.label() == crate::lifecycle::MAIN && app.try_state::<crate::AppState>().is_some_and(|s| s.screens.own_hidden());
+        let wanted = win::affinity(protect, shielded, win::System.build(), settings.old_windows_sharing);
         let (app, label) = (app.clone(), window.label().to_string());
         let _ = window.run_on_main_thread(move || {
             set_and_read_back(&app, &label, hwnd, wanted);
@@ -427,8 +428,9 @@ pub fn set_and_read_back<R: Runtime>(app: &AppHandle<R>, label: &str, hwnd: isiz
 pub fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> {
     use win::Affinity;
     let protect = wanted_for(app, label)?;
-    let settings = app.try_state::<crate::AppState>()?.settings();
-    Some(win::wanted(protect, win::System.build(), settings.old_windows_sharing))
+    let state = app.try_state::<crate::AppState>()?;
+    let shielded = label == crate::lifecycle::MAIN && state.screens.own_hidden();
+    Some(win::affinity(protect, shielded, win::System.build(), state.settings().old_windows_sharing))
 }
 
 /// Gives every built window the flag the setting wants now (after a settings change, the demo starting or ending).

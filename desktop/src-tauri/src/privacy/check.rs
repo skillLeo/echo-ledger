@@ -54,6 +54,9 @@ pub struct MethodResult {
     /// Why the capture failed, in the system's words (for the diagnostics; never a picture or a title).
     #[serde(default)]
     pub detail: Option<String>,
+    /// The capture came back one colour all over (no screen session): the smoke test skips rather than fails then.
+    #[serde(default)]
+    pub blank: bool,
 }
 
 /// One run, as kept.
@@ -277,7 +280,7 @@ fn places(app: &AppHandle) -> ((f64, f64), (f64, f64)) {
 }
 
 /// A window's frame in the units [`capture::Shot`] uses (points on a Mac, physical pixels on Windows).
-fn frame_units(window: &tauri::WebviewWindow) -> Option<((f64, f64), (f64, f64))> {
+fn frame_units(window: &tauri::WebviewWindow) -> Option<Frame> {
     let (position, size) = (window.inner_position().ok()?, window.inner_size().ok()?);
     let scale = if cfg!(target_os = "macos") { window.scale_factor().ok()? } else { 1.0 };
     Some(((f64::from(position.x) / scale, f64::from(position.y) / scale), (f64::from(size.width) / scale, f64::from(size.height) / scale)))
@@ -301,9 +304,12 @@ fn preview(frame: &crate::screens::platform::Frame) -> Option<(String, u32, u32)
     Some((format!("data:image/webp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&encoded.webp)), encoded.width, encoded.height))
 }
 
+/// A window's frame: its top-left corner and its size.
+pub type Frame = ((f64, f64), (f64, f64));
+
 /// Whether something lies over the test window (pure): a window in front of it whose frame overlaps its frame. A covered
 /// test window could read as hidden while it is not, so the check measures nothing then.
-pub fn covered(test: ((f64, f64), (f64, f64)), in_front: &[((f64, f64), (f64, f64))]) -> bool {
+pub fn covered(test: Frame, in_front: &[Frame]) -> bool {
     let ((x, y), (w, h)) = test;
     in_front.iter().any(|((fx, fy), (fw, fh))| *fx < x + w && x < fx + fw && *fy < y + h && y < fy + fh)
 }
@@ -311,7 +317,7 @@ pub fn covered(test: ((f64, f64), (f64, f64)), in_front: &[((f64, f64), (f64, f6
 /// The frames (points, the main display's top-left corner at 0, 0) of every visible window in front of window
 /// `number`, from the system's window list (front to back); none when it is not in the list.
 #[cfg(target_os = "macos")]
-fn windows_in_front_of(number: i64) -> Option<Vec<((f64, f64), (f64, f64))>> {
+fn windows_in_front_of(number: i64) -> Option<Vec<Frame>> {
     use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
     use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowAlpha, kCGWindowBounds, kCGWindowNumber};
 
@@ -348,7 +354,7 @@ fn windows_in_front_of(number: i64) -> Option<Vec<((f64, f64), (f64, f64))>> {
 
 /// Whether the test window is covered now (none when the system could not say): on a Mac the windows in front of it in
 /// the window list; on Windows the window hit at its four corners and its middle.
-fn test_window_covered(window: &tauri::WebviewWindow, frame: ((f64, f64), (f64, f64))) -> Option<bool> {
+fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<bool> {
     #[cfg(target_os = "macos")]
     {
         let pointer = window.ns_window().ok()?;
@@ -411,7 +417,7 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
     let mut methods: Vec<MethodResult> = Vec::new();
     let mut best: Option<(capture::Shot, Rect, Rect, Outcome)> = None;
     if !allowed {
-        methods.push(MethodResult { method: "sck".into(), result: Outcome::Error, reason: Some("permission_missing".into()), counts: None, detail: None });
+        methods.push(MethodResult { method: "sck".into(), result: Outcome::Error, reason: Some("permission_missing".into()), counts: None, detail: None, blank: false });
     } else {
         privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).clear();
         let (test_at, control_at) = places(app);
@@ -436,10 +442,10 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
         if !drawn {
             diag::log(&state.data_dir, "Share Check: the check's windows did not draw.");
-            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()) });
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()), blank: false });
         } else if is_covered {
             diag::log(&state.data_dir, "Share Check: another window covered the test window.");
-            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()) });
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()), blank: false });
         }
         let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
         for (method, shot) in shots {
@@ -456,7 +462,8 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                         let rgb = |r: Option<[u8; 3]>| r.map_or_else(|| "nothing".to_string(), |c| format!("rgb({}, {}, {})", c[0], c[1], c[2]));
                         format!("the control area averages {}, the test area {}, picture {}x{}", rgb(pixels::average(&picture, control_rect)), rgb(pixels::average(&picture, test_rect)), shot.frame.width, shot.frame.height)
                     });
-                    methods.push(MethodResult { method: method.into(), result, reason, counts: Some(counts), detail });
+                    let blank = result == Outcome::Error && pixels::uniform(&picture);
+                    methods.push(MethodResult { method: method.into(), result, reason, counts: Some(counts), detail, blank });
                     // "What others see": a picture that shows the test window first, else the first that showed the screen.
                     let rank = |o: Outcome| match o {
                         Outcome::Fail => 2,
@@ -475,7 +482,7 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                         }
                         Failure::Permission => None,
                     };
-                    methods.push(MethodResult { method: method.into(), result: Outcome::Error, reason: Some(reason_of(&failure).into()), counts: None, detail });
+                    methods.push(MethodResult { method: method.into(), result: Outcome::Error, reason: Some(reason_of(&failure).into()), counts: None, detail, blank: false });
                 }
             }
         }

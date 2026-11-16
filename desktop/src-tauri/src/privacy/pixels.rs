@@ -85,6 +85,16 @@ pub fn average(picture: &Picture<'_>, area: Rect) -> Option<[u8; 3]> {
     (n > 0).then(|| [(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8])
 }
 
+/// Whether a picture is one colour all over (sampled on a 64 x 64 grid): a capture that came back blank, as a machine
+/// without a screen session gives it. A real screen never is.
+pub fn uniform(picture: &Picture<'_>) -> bool {
+    let at = |x: u32, y: u32| picture.bgra.get(y as usize * picture.stride + x as usize * 4..y as usize * picture.stride + x as usize * 4 + 4);
+    let Some(first) = at(0, 0) else { return true };
+    let first = [first[2], first[1], first[0]];
+    let (step_x, step_y) = ((picture.width / 64).max(1), (picture.height / 64).max(1));
+    (0..picture.height).step_by(step_y as usize).all(|y| (0..picture.width).step_by(step_x as usize).all(|x| at(x, y).is_none_or(|px| near(px, first))))
+}
+
 /// What one capture showed.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -223,6 +233,14 @@ mod tests {
 
     fn judge_desk(bgra: &[u8]) -> Outcome {
         verdict(measure(&Picture { width: 160, height: 100, stride: 640, bgra }, TEST_AT, CONTROL_AT))
+    }
+
+    #[test]
+    fn a_blank_capture_is_told_from_a_screen() {
+        let black = vec![0u8; 160 * 100 * 4];
+        assert!(uniform(&Picture { width: 160, height: 100, stride: 640, bgra: &black }), "a runner with no screen session");
+        let screen = desk(|_, _| None);
+        assert!(!uniform(&Picture { width: 160, height: 100, stride: 640, bgra: &screen }), "a desk with the control on it");
     }
 
     #[test]

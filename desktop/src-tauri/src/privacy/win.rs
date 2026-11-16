@@ -49,6 +49,16 @@ pub fn wanted(protect: bool, build: Option<u32>, old: OldWindowsSharing) -> u32 
     }
 }
 
+/// The affinity of a window, with the shield (pure): while screen moments capture a whole screen the main window is
+/// kept out of the capture whatever the setting says, as a black box at least on Windows before 19041 (where "Show
+/// normally" would leave it in the picture).
+pub fn affinity(protect: bool, shielded: bool, build: Option<u32>, old: OldWindowsSharing) -> u32 {
+    if shielded {
+        return if build.is_some_and(|b| b >= EXCLUDE_BUILD) { WDA_EXCLUDEFROMCAPTURE } else { WDA_MONITOR };
+    }
+    wanted(protect, build, old)
+}
+
 /// What reading a window's flag back found.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "snake_case", tag = "state")]
@@ -301,6 +311,15 @@ mod tests {
         assert_eq!(wanted(true, Some(18_363), OldWindowsSharing::Show), WDA_NONE, "Show normally");
         assert_eq!(wanted(true, None, OldWindowsSharing::BlackBox), WDA_MONITOR, "an unknown build is treated as old");
         assert_eq!(wanted(false, Some(26_100), OldWindowsSharing::BlackBox), WDA_NONE, "not protected");
+    }
+
+    #[test]
+    fn the_screen_moments_shield_gives_at_least_a_black_box() {
+        assert_eq!(affinity(false, true, Some(26_100), OldWindowsSharing::BlackBox), WDA_EXCLUDEFROMCAPTURE, "shielded whatever the setting");
+        assert_eq!(affinity(true, true, Some(18_363), OldWindowsSharing::Show), WDA_MONITOR, "older Windows: a black box even with Show normally");
+        assert_eq!(affinity(false, true, None, OldWindowsSharing::Show), WDA_MONITOR, "an unknown build too");
+        assert_eq!(affinity(true, false, Some(18_363), OldWindowsSharing::Show), WDA_NONE, "without the shield the setting decides");
+        assert_eq!(affinity(true, false, Some(26_100), OldWindowsSharing::BlackBox), WDA_EXCLUDEFROMCAPTURE);
     }
 
     #[test]
