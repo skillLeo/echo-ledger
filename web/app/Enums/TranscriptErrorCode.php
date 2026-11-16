@@ -41,6 +41,24 @@ enum TranscriptErrorCode: string
     }
 
     /**
+     * Why a transcript failed, in plain words for the console and the bell (since v1.8.1, D-129): never the stored
+     * `error`, which may quote the engine or its provider. The apps say the same from `error_code`; a missing or unknown
+     * code reads as an engine problem. The Free plan's own Groq key is the one name people must act on.
+     */
+    public static function plainWords(?self $code): string
+    {
+        return match ($code) {
+            self::NoAudio => 'Nothing could be heard in this recording.',
+            self::BudgetExceeded => 'The monthly transcription limit was reached.',
+            self::RecordingMissing => 'The audio did not fully reach the server.',
+            self::ProviderNotConfigured => 'No speech engine is set up for this language yet.',
+            self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key.',
+            self::Interrupted => 'Transcription was interrupted. Your audio is safe: try again.',
+            default => 'The speech engines could not transcribe it this time. Your audio is safe: try again.',
+        };
+    }
+
+    /**
      * Whether another engine may succeed where this one failed (since v1.3 the next engine in the routing table is
      * tried): a provider problem, not the recording's (no audio, missing) or the limit's.
      */

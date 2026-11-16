@@ -32,7 +32,7 @@ final class Entitlements
         'views' => 'Roman Urdu, English and Urdu views are not in your plan',
         'double_check' => 'Double-check is not in your plan',
         'screen_moments' => 'Screen moments are not in your plan',
-        'connector' => 'The Claude and ChatGPT connector is not in your plan',
+        'connector' => 'Asking an AI assistant about your recordings is not in your plan',
         'team' => 'Team workspaces are not in your plan',
         'premium_engines' => 'Premium engines are not in your plan',
         'live_translate' => 'Live Translate is not in your plan',

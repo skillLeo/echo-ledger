@@ -148,7 +148,8 @@ final class SettingsRegistry
             $e('devices.pair', 'Sign in a device', 'devices', 'action', ['keywords' => ['qr', 'pair', 'add device']]),
             $e('devices.item.reauth', 'Sign in again', 'devices', 'action', ['anchor' => 'devices', 'keywords' => ['expired device', 'reconnect', 'qr']]),
             $e('devices.item.forget', 'Remove from list', 'devices', 'action', ['anchor' => 'devices', 'keywords' => ['forget device', 'old device', 'signed out']]),
-            $e('devices.connected', 'Claude and ChatGPT', 'devices', 'info', ['aliases' => ['Connected apps'], 'keywords' => ['connected apps', 'ai', 'disconnect', 'chatgpt', 'claude']]),
+            // The feature's own name (D-129); the apps people connect from are search words only, never shown.
+            $e('devices.connected', 'Ask an AI assistant', 'devices', 'info', ['aliases' => ['Connected apps'], 'keywords' => ['connected apps', 'ai', 'disconnect', 'chatgpt', 'claude']]),
 
             $e('workspace', 'Workspace', 'workspace', 'page', ['section' => 'Account', 'requires' => ['workspace_admin' => true],
                 'keywords' => ['team', 'members', 'invite', 'roles'], 'ru' => ['team', 'log'], 'ur' => ['ٹیم']]),

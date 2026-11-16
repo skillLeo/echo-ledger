@@ -13,7 +13,7 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
 | v1.6 P1.4: the plan's badge and the upgrade sheet where the plan leaves a feature out: a project's AI notes and Ask,
-| and Profile → Connected apps (the Claude and ChatGPT connector).
+| and Profile → Connected apps (Ask an AI assistant, the connector).
 */
 
 beforeEach(function () {
@@ -49,9 +49,11 @@ it('shows no lock on a plan with AI notes', function () {
 it('shows the badge and the sheet on Connected apps when the plan leaves the connector out', function () {
     badgePlanFor((int) $this->person->current_workspace_id, 'free');
     $html = (string) $this->get('/app/settings/devices')->assertOk()->getContent();
-    expect($html)->toContain('id="setting-devices.connected"')->toContain('<span class="el-tag">Pro</span>')->toContain('/app/settings/plan/upgrade?feature=connector');
+    expect($html)->toContain('id="setting-devices.connected"')->toContain('<span class="el-tag">Pro</span>')->toContain('/app/settings/plan/upgrade?feature=connector')
+        // The feature's own name, never the assistants' makers (D-129).
+        ->toContain('Ask an AI assistant')->not->toContain('Claude')->not->toContain('ChatGPT');
 
     badgePlanFor((int) $this->person->current_workspace_id, 'business');
     SettingsContext::forget();
-    expect((string) $this->get('/app/settings/devices')->assertOk()->getContent())->toContain('Not connected')->not->toContain('feature=connector');
+    expect((string) $this->get('/app/settings/devices')->assertOk()->getContent())->toContain('Not connected')->toContain('Ask an AI assistant')->not->toContain('feature=connector');
 });

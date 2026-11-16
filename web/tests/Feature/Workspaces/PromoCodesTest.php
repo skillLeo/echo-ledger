@@ -324,8 +324,9 @@ it('runs its migration up, down and up again', function () {
     expect(Schema::connection('promo_cycle')->hasTable('promo_codes'))->toBeTrue()
         ->and(Schema::connection('promo_cycle')->hasColumns('upgrade_requests', ['promo_code', 'percent', 'amount_due']))->toBeTrue();
     // Since v1.7 the payment receipts' migration comes after it, since v1.8.1 the Share Check results', since v1.8 (0.2)
-    // the missed recordings', then the v1.8.1 audit's index on the Share Check results.
-    $run('migrate:rollback', ['--step' => 5]);
+    // the missed recordings', then the v1.8.1 audit's index on the Share Check results and the plain words in the Pro
+    // plan's description (D-129).
+    $run('migrate:rollback', ['--step' => 6]);
     expect(Schema::connection('promo_cycle')->hasTable('promo_codes'))->toBeFalse()->and(Schema::connection('promo_cycle')->hasTable('promo_code_uses'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'promo_code'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'plan'))->toBeTrue();

@@ -12,7 +12,7 @@
             <div class="el-setting-row">
                 <div>
                     <h3 id="ai-heading" class="el-setting-title">AI notes @if ($aiLocked){!! $aiBadge?->toHtml() !!}@endif</h3>
-                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: no Claude request for this project.</p>
+                    <p class="el-muted" style="font-size: 14px">Notes after every call, the memory and suggested fixes. Off: nothing from this project is sent to the AI.</p>
                 </div>
                 <button type="button" class="el-switch" role="switch" aria-checked="{{ $client->ai_notes && ! $aiLocked ? 'true' : 'false' }}" aria-labelledby="ai-heading" wire:click="toggleAiNotes" @if ($aiLocked) data-locked @endif></button>
             </div>

@@ -131,7 +131,7 @@
         </x-filament::section>
 
         @if ($report['live_translate'] !== [])
-            <x-filament::section heading="Live Translate" description="Game and Watch translate on the phone (Soniox real-time). Counted against Live Translate's own budget, not the limit above.">
+            <x-filament::section heading="Live Translate" description="Game and Watch translate on the phone. Counted against Live Translate's own budget, not the limit above.">
                 <table style="width:100%;font-size:.85rem;border-collapse:collapse">
                     <tbody>
                         @foreach ($report['live_translate'] as $row)

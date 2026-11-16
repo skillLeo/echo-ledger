@@ -506,8 +506,8 @@ it('runs its migration up, down and up again, with a reference for every request
 
     $run('migrate:fresh');
     // Since v1.8.1 the Share Check results' migration comes after it, since v1.8 (0.2) the missed recordings', then the
-    // v1.8.1 audit's index on the Share Check results.
-    $run('migrate:rollback', ['--step' => 4]);
+    // v1.8.1 audit's index on the Share Check results and the plain words in the Pro plan's description (D-129).
+    $run('migrate:rollback', ['--step' => 5]);
     expect($schema->hasTable('upgrade_request_proofs'))->toBeFalse()->and($schema->hasColumn('plans', 'price_pkr'))->toBeFalse();
     foreach ($columns as $column) {
         expect($schema->hasColumn('upgrade_requests', $column))->toBeFalse($column);
@@ -532,7 +532,7 @@ it('runs its migration up, down and up again, with a reference for every request
         ->and($schema->hasColumns('upgrade_request_proofs', ['id', 'upgrade_request_id', 'user_id', 'kind', 'mime', 'name', 'bytes', 'width', 'height', 'sha256', 'path', 'thumb_path', 'locked_at', 'erased_at']))->toBeTrue();
     // down() takes the prices with their column and leaves the requests as they were; up() seeds them again.
     $db->table('plans')->where('key', 'pro')->update(['price_pkr' => 3500]);
-    $run('migrate:rollback', ['--step' => 4]);
+    $run('migrate:rollback', ['--step' => 5]);
     expect($db->table('upgrade_requests')->orderBy('id')->get()->map(fn ($r) => (array) $r)->all())->toBe($before);
     $run('migrate');
     expect((int) $db->table('plans')->where('key', 'pro')->value('price_pkr'))->toBe(2999);

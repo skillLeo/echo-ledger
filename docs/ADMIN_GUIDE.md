@@ -190,8 +190,9 @@ reports.
   a month), longest recording (minutes), recordings a day. An empty number means no limit. **Engines** says which
   speech engines the plan may use (the person's own Groq key and the computer's own transcription cost you nothing).
 - **Features** (since v1.6): every paid feature is a switch: transcription on EchoLedger, Roman Urdu/English/Urdu
-  views, double-check, screen moments, the Claude and ChatGPT connector, team workspace, premium engines (ElevenLabs,
-  Gemini), Live Translate, AI notes. Recording, organising, search, share links, export and the Ready check are free
+  views, double-check, screen moments, Ask an AI assistant (the Claude and ChatGPT connector), team workspace, premium
+  engines (ElevenLabs and Gemini), Live Translate, AI notes. People see each feature under the same plain name, never
+  the providers' (since v1.8.1). Recording, organising, search, share links, export and the Ready check are free
   and in every plan. A new plan starts with every paid feature off.
 - **Assign** puts a workspace on a plan, **until** a date if you like (then it goes back to the default plan; checked
   every hour). **Delete** works only for a plan no workspace uses, and not for the default one.
@@ -318,7 +319,7 @@ Next to the ones in [web/DEPLOY.md](../web/DEPLOY.md):
 People can connect Claude or ChatGPT to their own recordings; the steps are in [CONNECTOR.md](CONNECTOR.md). It only
 reads, and sees only what that person can open in the apps.
 
-- **Turn it on or off** per plan: Admin panel → Plans → the Connector feature.
+- **Turn it on or off** per plan: Admin panel → Plans → the **Ask an AI assistant** feature.
 - **Once on the server:** `php artisan passport:keys`, then `chmod 600 storage/oauth-private.key storage/oauth-public.key`,
   run as the user PHP runs as. Until then `/mcp` and its sign-in page answer with a server error. [DEPLOY.md](../web/DEPLOY.md)
   has checks you can run with curl.

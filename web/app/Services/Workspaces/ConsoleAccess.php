@@ -60,4 +60,15 @@ final class ConsoleAccess
     {
         return app(self::class)->level() !== self::FULL;
     }
+
+    /**
+     * The server's operator (the super admin), who sets up its engines and their keys: only they see which engine wrote
+     * a transcript and the engine's own error text (since v1.8.1, D-129); everyone else reads plain words.
+     */
+    public static function operator(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User && $user->is_super_admin;
+    }
 }

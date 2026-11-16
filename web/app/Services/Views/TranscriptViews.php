@@ -315,10 +315,13 @@ final class TranscriptViews
         }
     }
 
-    /** Said in every app when the Anthropic key is missing, with where to add it. */
+    /**
+     * Said in every app when the AI key is missing, with where to add it: in plain words, never which provider (since
+     * v1.8.1, D-129); API Credentials names it for the person who runs the server.
+     */
     public static function missingKeyMessage(): string
     {
-        return 'Roman Urdu and English need the server\'s Anthropic key. Whoever runs this server adds it under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials';
+        return 'Roman Urdu and English views are not set up on this server yet. Whoever runs it adds the AI key under API Credentials: '.rtrim((string) config('app.url'), '/').'/admin/api-credentials';
     }
 
     /** Whether views can be made at all now (a key is set). */

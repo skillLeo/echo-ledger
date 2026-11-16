@@ -191,8 +191,8 @@ signed-out ones. While the **Sign in a device** code is open, it says **Waiting 
 Ultra signed in" and closes by itself. Your plan says how many devices can be signed in at once.
 **Sign in again** on a device that is signed out, revoked or expired shows a code and a QR code for that device only
 (10 minutes, once): scan it in the app on that phone or computer and it comes back on the same row, with its name and
-recordings. Where your plan leaves something out (a project's AI notes and Ask, Claude and ChatGPT under **Connected
-apps**), the plan's badge shows with **See plans**.
+recordings. Where your plan leaves something out (a project's AI notes and Ask, **Ask an AI assistant** under
+**Connected apps**), the plan's badge shows with **See plans**.
 
 **Your devices (phone, since v1.6).** **You → Devices** lists the same devices with their readable names. **Rename**
 works on any of them, this phone too; **Sign out** signs another one out at once.
@@ -722,8 +722,8 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - Words and lines the engine was not sure of have a **dotted underline** in the desktop app, the phone app and the
   console. Tap or click one to hear it. The text stays exactly as the engine heard it.
 - **Double-check** (console: **Settings → Engine per language**, off by default): a second engine listens again to
-  up to 12 of those lines. Where it heard something different, its words appear in grey under the line, for example
-  "Groq Whisper large-v3 heard: …". You decide; the transcript is not changed. Each checked line costs well under
+  up to 12 of those lines. Where it heard something different, its words appear in grey under the line (in the
+  console: "Second engine heard: …"). You decide; the transcript is not changed. Each checked line costs well under
   one cent.
 
 - **For a client:** give the client a default language. Every recording with that client uses it.
@@ -740,7 +740,7 @@ Tell EchoLedger which language is spoken and the transcript gets much better. Th
 - If you change the language for a recording with a client, EchoLedger asks **"Use Urdu for Acme from now on?"**.
   **Yes** makes it that client's default.
 
-The library, the player and exports show the language and the engine that wrote the transcript. If an Urdu
+The library, the player and exports show the language of the transcript. If an Urdu
 transcript comes back in Hindi letters (or the other way round), the recording page says **Wrong script detected**:
 one tap transcribes it again with the next engine. Search finds Urdu words however the engine spelled them, and
 English words inside Urdu speech are found too. If a transcript is still not good, open the recording in the
@@ -755,7 +755,7 @@ recording and press **Show as…**; after a minute or two the player shows **Ori
 the link in a view. In the desktop Library and on the phone's recording page the same switch writes the views on the
 first tap and shows them when ready (exports from there follow the view on screen). Urdu shows in Nastaliq letters and
 Arabic in Naskh. The views are
-written by Claude (your administrator adds the Anthropic key) and are labelled as views: the transcript itself never
+written by AI (your administrator adds its key) and are labelled as views: the transcript itself never
 changes. If you edit the transcript, make the views again. To open transcripts in a view by default (for example always
 Roman Urdu), choose it in **Settings → Engine per language → Open transcripts as**; the original stays one tap away.
 
@@ -783,8 +783,8 @@ project with billing on).
 
 Urdu and mixed (Auto) recordings are never handed to a weaker engine because the best one is busy. When it is rate
 limited or down, the recording waits and is tried again (after 2, 4, 8, 16, then every 30 minutes), up to **6 hours**
-(**Settings → Engine per language → Urdu waits for its best engine up to**). The recording page says **"Waiting for
-Groq — retrying at 2:05 pm"** meanwhile. Only after the wait does the next engine write it, and the recording then
+(**Settings → Engine per language → Urdu waits for its best engine up to**). The recording page says **"Waiting to
+transcribe — retrying at 2:05 pm"** meanwhile. Only after the wait does the next engine write it, and the recording then
 says **"Backup engine — Re-transcribe?"**; **Re-transcribe** tries the best engine again. English and the other
 languages still move to the next engine at once. The console's **API Credentials → Groq** row shows your plan's
 limits and this hour's use; EchoLedger paces its requests to stay under them.
@@ -853,7 +853,7 @@ new devices and shares are listed but not counted. Above nine it says **9+**.
   feature, in the same order as the server, with a line on what it does: a tick when your plan has it, otherwise its
   badge. The line at the top says how many your plan has ("Your plan has 6 of 15 features"). Locked features stay in
   view where they would be: the **AI notes** and **Screens** tabs of a project and **Ask** on its Notes, the **Keep
-  screen moments** switch, **Double-check**, **Screens**, **Ask Claude or ChatGPT** and the premium engines on a
+  screen moments** switch, **Double-check**, **Screens**, **Ask an AI assistant** and **Premium engines** on a
   recording, **Invite people** in the workspace menu and the command palette, and **Live Translate**. Clicking one opens
   the plans for that feature, never the feature itself.
 - **Free plan: your own Groq key.** Free accounts transcribe with their own free Groq key. Open **Account →
@@ -894,7 +894,7 @@ the transcript) know what "this page" or "click here" meant.
   **Export → Meeting pack** makes a PDF (the transcript with each screen at its moment; Claude and ChatGPT read both)
   or a ZIP with the transcript, the pictures and, if you like, the audio.
 
-## 15c. Ask Claude or ChatGPT about your recordings (since v1.5)
+## 15c. Ask an AI assistant about your recordings (since v1.5)
 
 Add EchoLedger as a connector in Claude or ChatGPT, and you can ask them things like "What did Omar ask for on Tuesday's
 call?". They read what you can open in the apps, and nothing else: they cannot record, change, share or delete

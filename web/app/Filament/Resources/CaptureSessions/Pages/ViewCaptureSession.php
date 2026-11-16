@@ -230,14 +230,15 @@ class ViewCaptureSession extends ViewRecord
         if ($session->status === SessionStatus::Uploading) {
             return 'Uploading. This page updates by itself.';
         }
-        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait).
+        // Since v1.5 an Urdu or Auto recording waits for its engine when that one is busy or down (EngineWait). Since
+        // v1.8.1 (D-129) the line never says which engine, as on the desktop.
         $final = $session->finalTranscript()->first();
         $retryAt = $final !== null ? EngineWait::fields($final)['retry_at'] : null;
         if ($final !== null && $retryAt !== null) {
             $zone = app(SettingsRepository::class)->displayTimezone();
             $at = Carbon::parse($retryAt)->setTimezone($zone);
 
-            return 'Waiting for '.($final->providerKey()?->getLabel() ?? $final->provider).' — retrying at '
+            return 'Waiting to transcribe — retrying at '
                 .$at->format($at->isSameDay(now()->setTimezone($zone)) ? 'g:i A' : 'M j, g:i A').'. This page updates by itself.';
         }
 
@@ -335,7 +336,7 @@ class ViewCaptureSession extends ViewRecord
         if (! TranscriptViews::entitled($transcript) && app(TranscriptViews::class)->state($transcript)['status'] !== 'ready') {
             $this->mountAction('upgradeViews');
 
-            return app(TranscriptViews::class)->state($transcript);
+            return TranscriptPlayerEntry::views(app(TranscriptViews::class)->state($transcript));
         }
         try {
             $state = app(TranscriptViews::class)->request($transcript);
@@ -345,7 +346,7 @@ class ViewCaptureSession extends ViewRecord
         }
         $this->viewsMaking = $state['status'] === 'making';
 
-        return $state;
+        return TranscriptPlayerEntry::views($state);
     }
 
     /** The poll while views are being made or call notes written: hands the player the views once they are ready. */
@@ -731,24 +732,20 @@ class ViewCaptureSession extends ViewRecord
 
     /**
      * Shown when the final transcript came back in the wrong script for its language (Urdu as Devanagari, for
-     * example): one click sends it to the next engine for that language as a second version to compare.
+     * example): one click sends it to the next engine for that language as a second version to compare. The server
+     * picks that engine, so its name is not said (since v1.8.1, D-129).
      */
     private function wrongScriptAction(): Action
     {
         return Action::make('wrong_script')
-            ->label(function (CaptureSession $record): string {
-                $next = $this->nextEngine($record);
-
-                return 'Wrong script detected'.($next !== null ? ' · Transcribe with '.$next->getLabel() : '');
-            })
+            ->label(fn (CaptureSession $record): string => 'Wrong script detected'.($this->nextEngine($record) !== null ? ' · Transcribe with the next engine' : ''))
             ->icon(Heroicon::OutlinedExclamationTriangle)
             ->color('warning')
             ->visible(fn (CaptureSession $record): bool => is_string($record->finalTranscript?->meta['script_warning'] ?? null))
             ->requiresConfirmation()
             ->modalHeading('Wrong script detected')
             ->modalDescription(fn (CaptureSession $record): string => 'The transcript is mostly in '.ScriptCheck::label((string) ($record->finalTranscript?->meta['script_warning'] ?? ''))
-                .', not in the script of '.LanguageChoice::label($record->finalTranscript?->language).'. Send the recording to '
-                .($this->nextEngine($record)?->getLabel() ?? 'another engine').' and compare the two versions.')
+                .', not in the script of '.LanguageChoice::label($record->finalTranscript?->language).'. Send the recording to the next engine for this language and compare the two versions.')
             ->modalSubmitActionLabel('Transcribe again')
             ->action(function (CaptureSession $record): void {
                 $next = $this->nextEngine($record);
@@ -765,7 +762,7 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Second version queued with '.$next->getLabel())->body('Open “Compare versions” when it is done.')->success()->send();
+                Notification::make()->title('Second version queued')->body('Open “Compare versions” when it is done.')->success()->send();
             });
     }
 
@@ -991,7 +988,8 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language).' with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+                // The server picks the engine for the language, so it is not named (since v1.8.1, D-129).
+                Notification::make()->title('Re-transcribing in '.LanguageChoice::label($run->language))->success()->send();
             });
     }
 
@@ -1017,7 +1015,7 @@ class ViewCaptureSession extends ViewRecord
 
                     return;
                 }
-                Notification::make()->title('Re-transcribing with '.($run->providerKey()?->getLabel() ?? $run->provider))->success()->send();
+                Notification::make()->title('Re-transcribing with the first engine')->success()->send();
             });
     }
 

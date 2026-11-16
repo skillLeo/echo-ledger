@@ -25,7 +25,7 @@
             <p class="muted">No speech was found in this recording.</p>
         @else
             @if ($viewLabel ?? null)
-                <p class="muted">{{ $viewLabel }} view, written by Claude from the transcript. The transcript itself is unchanged.</p>
+                <p class="muted">{{ $viewLabel }} view, written by AI from the transcript. The transcript itself is unchanged.</p>
             @endif
             @foreach ($lines as $line)
                 <p class="line" dir="auto"><span class="at">{{ \App\Services\TranscriptExporter::clock($line['start_ms']) }}</span><span class="who spk-{{ $line['channel'] === 2 ? 2 : 1 }}">{{ $line['speaker'] }}</span><span>{{ $line['text'] }}</span></p>
