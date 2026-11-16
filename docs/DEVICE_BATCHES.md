@@ -50,10 +50,12 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 
 The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share privacy".
 
-1. Install the v1.8.1 Mac build from CI; read every EchoLedger window's sharing state with `CGWindowListCopyWindowInfo`
-   (0 for each) for the matrix.
+1. Install the v1.8.1 Mac build from CI over the installed v1.6.0 (Hassam present: macOS asks again for the microphone
+   and Screen Recording, because the build is not Apple-signed yet); the window states were already read from the CI
+   build on 2026-11-16 (0 for each).
 2. S-1 Share Check on the installed build.
 3. S-5 Test with your phone: Zoom, Teams, Meet in Chrome, Slack, WhatsApp, whole screen.
 4. S-6 Zoom in each Screen capture mode, and confirm Zoom 7's menu labels for the setup steps.
 5. S-7 a whole-screen share in an app not yet confirmed (the windows leave within 300 ms and come back).
 6. S-8, S-9, S-10.
+7. MAC-31 (v1.8 0.4): opening EchoLedger again from Finder, Launchpad, Spotlight and the Dock opens its window.

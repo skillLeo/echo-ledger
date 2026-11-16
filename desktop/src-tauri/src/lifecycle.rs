@@ -301,6 +301,30 @@ fn reveal_main(app: &AppHandle) {
     }
 }
 
+/// What opening EchoLedger again does while it runs. A Mac starts no second copy when the app is opened from Finder,
+/// Launchpad, Spotlight or the Dock (so the single-instance plugin hears nothing): it sends the running copy a reopen.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reopen {
+    /// What a second launch does (`actions::show_main_from_outside`): the main window is built when there is none, else
+    /// shown, unminimized and focused, and the app comes forward with it.
+    OpenMain,
+    /// The main window is on screen: it and the app come forward (the menu bar's Open). Nothing is built and its page
+    /// stays where it is.
+    BringForward,
+}
+
+/// The answer to a reopen (pure). `has_visible_windows` is AppKit's and counts the overlays too: the dictation box is on
+/// screen (drawing nothing) while its shortcut is bound, as it is by default, and the recording pill, the captions and
+/// the after-call card while they are up. So it is true even with the main window closed: the main window decides.
+pub fn reopen_action(has_visible_windows: bool, main_on_screen: bool) -> Reopen {
+    if has_visible_windows && main_on_screen { Reopen::BringForward } else { Reopen::OpenMain }
+}
+
+/// The main window is on screen: built, shown and not minimized (closed, it is destroyed; put away, it is ordered out).
+pub fn main_on_screen(app: &AppHandle) -> bool {
+    app.get_webview_window(MAIN).is_some_and(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+}
+
 /// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray.
 pub fn main_closing(app: &AppHandle) {
     slots(app).closing(MAIN);
@@ -499,6 +523,30 @@ mod tests {
         assert_eq!(s.event(MAIN, "main:navigate", json!({})), Delivery::Dropped);
         assert!(!s.destroyed(MAIN, now));
         assert!(s.show(MAIN, "open", now));
+    }
+
+    #[test]
+    fn opening_the_app_again_opens_the_main_window_unless_it_is_on_screen() {
+        assert_eq!(reopen_action(false, false), Reopen::OpenMain, "closed to the menu bar, nothing else up");
+        // The case seen on the Mac: the dictation box (on screen while its shortcut is bound), the pill or the captions
+        // make AppKit say a window is visible, and the main window is closed or minimized.
+        assert_eq!(reopen_action(true, false), Reopen::OpenMain, "an overlay on screen never stands in for the main window");
+        assert_eq!(reopen_action(true, true), Reopen::BringForward, "on screen: brought forward, nothing built");
+        assert_eq!(reopen_action(false, true), Reopen::OpenMain, "AppKit saw nothing on screen: the full open");
+    }
+
+    #[test]
+    fn opening_the_app_again_never_builds_a_second_main_window() {
+        let mut s = Slots::default();
+        let now = t0();
+        assert!(s.show(MAIN, "open", now), "closed to the menu bar: built");
+        assert!(!s.show(MAIN, "open", now), "opened again while it is being built: the same window, shown when its page is ready");
+        s.ready(MAIN, now);
+        assert!(!s.show(MAIN, "open", now), "opened again once it is up: shown and focused, not built");
+        s.closing(MAIN);
+        assert!(!s.show(MAIN, "open", now), "opened again while it closes: never a second one beside it");
+        assert!(s.destroyed(MAIN, now), "built again once the old one is gone");
+        assert_eq!(s.phase(MAIN), Phase::Creating);
     }
 
     #[test]

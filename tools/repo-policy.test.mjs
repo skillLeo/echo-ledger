@@ -441,6 +441,21 @@ const BANNED_WORDS = [
   /\bbypass(?:es|ed|ing)?\b/i,
   /دھوک[اہے]/u, // Urdu "dhoka" (deceit, cheating) in its usual endings
   /(?:^|[\s،؟.,!?"'(])(?:ال)?غش(?:$|[\s،؟.,!?"')])/u, // Arabic "ghish" (cheating)
+  // Urdu: undetectable, "can't be caught", stealthily / secret mode, hidden from examiners or invigilators, bypass.
+  /ناقابلِ?\s*شناخت/u,
+  /پکڑ[ای]\s+نہیں\s+جا\s+سک/u,
+  /چوری\s+چھپے|خفیہ\s+موڈ/u,
+  /(?:نگرانوں|نگران|ممتحن|ممتحنوں)\s+سے\s+(?:پوشیدہ|چھپا|غائب)/u,
+  /بائی\s*پاس/u,
+  // Arabic: undetectable, stealth, invisible to proctors, bypass / circumvent.
+  /غير\s+قابل\s+للكشف|لا\s+يمكن\s+(?:اكتشافه|كشفه)/u,
+  /(?:وضع\s+)?التخفي|خلسة/u,
+  /(?:غير\s+مرئي|مخفي)\s+(?:عن|لل|على)\s*(?:ال)?مراقب/u,
+  /تجاوز\s+(?:الحماية|المراقبة|الرقابة)|التحايل/u,
+  // Roman Urdu: dhoka (cheat), chupke se (stealthily), "pakra nahi jata" (can't be caught).
+  /\bdho(?:k|kh)(?:a|ay|e|ey)\b/i,
+  /\bchupke\s+se\b/i,
+  /\bpakr[ai]\s+nahi(?:n)?\s+ja/i,
 ];
 
 /** Which banned words `text` uses (the pattern sources); empty when it is clean. */
@@ -456,8 +471,13 @@ function userFacingText(path, text) {
   if (/\.(xml|md)$/.test(path)) return text;
   if (path.endsWith('.blade.php')) return text.replace(/\{\{--[\s\S]*?--\}\}/g, '');
   const literals = text.match(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'|`(?:[^`\\]|\\.)*`/g) ?? [];
-  return literals.filter((s) => s.includes(' ')).join('\n');
+  // JSX text between tags (most of the desktop UI) and one-word labels count too (release audit, 2026-11-16).
+  const jsx = path.endsWith('.tsx') ? (text.match(/>[^<>{}]*[A-Za-z\u0600-\u06FF][^<>{}]*</g) ?? []) : [];
+  return [...literals, ...jsx].join('\n');
 }
+
+/** For the planted tests only. */
+export const userFacingTextForTest = (path, text) => userFacingText(path, text);
 
 const USER_FACING = (p) =>
   !/(^|\/)(tests?|__tests__|fixtures?)\//.test(p) &&
@@ -478,11 +498,29 @@ describe('words rule', () => {
       'Bypass the screen share',
       'یہ دھوکہ ہے',
       'هذا غش واضح',
+      'ناقابلِ شناخت ونڈو',
+      'یہ پکڑا نہیں جا سکتا',
+      'چوری چھپے مدد',
+      'نگرانوں سے پوشیدہ',
+      'اسکرین شیئر بائی پاس کریں',
+      'نافذة غير قابل للكشف',
+      'وضع التخفي للمقابلات',
+      'غير مرئي للمراقبين',
+      'تجاوز الحماية بسهولة',
+      'Interview mein dhoka',
+      'Chupke se jawab',
+      'Yeh pakra nahi jata',
+      '<p>Stealth</p>',
     ]) {
       assert.notDeepEqual(bannedWordsIn(planted), [], planted);
     }
     assert.deepEqual(bannedWordsIn('Your notes stay private when you share your screen.'), []);
     assert.deepEqual(bannedWordsIn('Hidden from screen share. Private notes.'), []);
+    // Everyday words that look close must stay allowed: copy (نقل), hidden (مخفي) on its own, limit exceeded (تجاوز الحد).
+    assert.deepEqual(bannedWordsIn('نقل کریں · مخفي عن مشاركة الشاشة · تجاوز الحد الشهري · Shared with you'), []);
+    // JSX text and one-word labels are read.
+    assert.match(userFacingTextForTest('a.tsx', '<Button>Bypass</Button>'), /Bypass/);
+    assert.match(userFacingTextForTest('a.kt', 'Text("Stealth")'), /Stealth/);
   });
 
   test('no user-facing string uses a banned word', () => {
