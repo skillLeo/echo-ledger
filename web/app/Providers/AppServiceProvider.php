@@ -28,6 +28,7 @@ use App\Services\ClientAi\ClientAi;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\Entitlements\PromoCodes;
+use App\Services\InterfaceFlags;
 use App\Services\MailSettings;
 use App\Services\RecordingCipher;
 use App\Services\Screens\ClaudeScreenDescriber;
@@ -101,6 +102,7 @@ class AppServiceProvider extends ServiceProvider
         // Caches each member's role for one request (C9: no query per table row).
         $this->app->scoped(Workspaces::class);
         $this->app->scoped(SttManager::class);
+        $this->app->scoped(InterfaceFlags::class);
         $this->app->scoped(TranscriptionSpeed::class);
         $this->app->bind(RecordingCipher::class, fn (): RecordingCipher => RecordingCipher::fromConfig());
     }
@@ -121,6 +123,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         self::useAppUrl($this->app);
+
+        // The interface flags (since 2.0.0-a), decided with Pennant.
+        InterfaceFlags::define();
 
         // Pages and emails write the product's name as @brand (since v1.9, L0), read when they are shown.
         Blade::directive('brand', static fn (): string => '<?php echo e(\App\Support\Brand::name()); ?>');

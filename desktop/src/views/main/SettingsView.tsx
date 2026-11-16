@@ -115,8 +115,11 @@ function useWidth(ref: React.RefObject<HTMLElement | null>): number {
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 
-export function SettingsView({ status, run, onUnpaired, theme, onTheme, section = null }: {
+export function SettingsView({ status, run, onUnpaired, theme, onTheme, section = null, pageOnly = null }: {
   status: AppStatus;
+  /** Settings in the new look (ui_v2.settings) keeps its own home and search: only the opened page is shown here, and
+   * leaving a top page goes back to that home. */
+  pageOnly?: { onHome: () => void } | null;
   /** A page or setting to open ("plan", "lock#lock.after", or a v1.6 section id), with a fresh `seq`. */
   section?: { id: string; seq: number } | null;
   run: Run;
@@ -509,8 +512,8 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
   );
   const pageView = shownPage && (
     <div className="settings-page" data-page={shownPage}>
-      {(!wide || back) && (
-        <button type="button" className="btn text back-link" onClick={() => open(back)}><LucideChevronLeftIcon size={16} />{backLabel}</button>
+      {(!wide || back || pageOnly) && (
+        <button type="button" className="btn text back-link" onClick={() => (pageOnly && !back ? pageOnly.onHome() : open(back))}><LucideChevronLeftIcon size={16} />{backLabel}</button>
       )}
       <div className="set-page-head">
         <h1 className="set-page-title">{setting(shownPage).title}</h1>
@@ -520,6 +523,18 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
     </div>
   );
   const content = results_ || pageView || (wide ? overview : null);
+  const dialogs = signingOut && (
+    <ConfirmDialog title="Sign out of this computer?" body={signOutBody(status.pendingUploads) ?? undefined} confirm="Sign out"
+      onConfirm={() => void signOut()} onClose={() => setSigningOut(false)} />
+  );
+  if (pageOnly) {
+    return (
+      <div ref={root} className="settings-root narrow page-only" data-testid="settings">
+        {pageView}
+        {dialogs}
+      </div>
+    );
+  }
   return (
     <div ref={root} className={`settings-root ${wide ? "wide" : "narrow"}`} data-testid="settings">
       {wide ? (
@@ -533,10 +548,7 @@ export function SettingsView({ status, run, onUnpaired, theme, onTheme, section 
           {shownPage ? pageView : searching ? <>{searchBox}{results_}</> : list}
         </div>
       )}
-      {signingOut && (
-        <ConfirmDialog title="Sign out of this computer?" body={signOutBody(status.pendingUploads) ?? undefined} confirm="Sign out"
-          onConfirm={() => void signOut()} onClose={() => setSigningOut(false)} />
-      )}
+      {dialogs}
     </div>
   );
 }

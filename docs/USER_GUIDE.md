@@ -65,9 +65,10 @@ recording that would hold nothing does not start and says why, even with the win
 **Record now** in the menu bar icon's menu opens the window with the reason, and a meeting that cannot be recorded
 gets a notification.
 
-**Updates and permissions (since v1.8.1).** The Mac app is now always signed with the same certificate. The update to
-1.8.1 asks once more for the **Microphone**, **System audio** and **Screen recording**, and your saved sign-in may ask
-once to use the keychain (choose **Always Allow**). After that they stay allowed through later updates. EchoLedger still
+**Updates and permissions (since v1.8.1).** From 1.8.1 the Mac app is signed with its own self-signed certificate, the
+same one every time. The first self-signed build (the update to 1.8.1, or a new install) asks once for the
+**Microphone**, **System audio** and **Screen Recording**, and your saved sign-in may ask once to use the keychain
+(choose **Always Allow**). After that they stay allowed across updates: later updates do not ask again. EchoLedger still
 looks at them every time it starts; if one that was allowed has gone, it says so once, in one sentence, with the same
 steps to set it up again.
 

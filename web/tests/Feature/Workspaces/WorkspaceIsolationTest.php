@@ -82,7 +82,8 @@ it('never lets workspace A read, change or delete workspace B through the API', 
             ->and(ShareLink::query()->find($b['share']->id)?->revoked_at)->toBeNull()
             ->and(SessionMarker::query()->find($b['marker']->id))->not->toBeNull()
             ->and(Screen::query()->find($b['screen']->id))->not->toBeNull()
-            ->and($b['transcript']->fresh()->text)->toContain('BOBSECRETTRANSCRIPT');
+            ->and($b['transcript']->fresh()->text)->toContain('BOBSECRETTRANSCRIPT')
+            ->and($b['bob']->fresh()->ui_classic)->toBeFalse();
     });
 });
 

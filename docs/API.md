@@ -3,7 +3,9 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-a (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-b (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-b: `GET /api/config` gains `"trash": {"keep_hours": 48}`, how long a deleted recording can be restored; the apps
+show this number and never a fixed one (missing on an older server: 48).
 2.0.0-a: `GET /api/config` gains `ui_flags` and the new `PUT /api/account/ui`; see "Interface flags (since 2.0.0-a)". The
 Live Assist contract is [API_ASSIST.md](API_ASSIST.md), frozen at the same date.
 1.8.1-b: the new `error_code` `own_key_rejected` (the person's own Groq key was refused), and `recording_missing` also

@@ -60,10 +60,17 @@ if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined
 
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
-  <React.StrictMode>
-    <Suspense fallback={null}>
-      <View />
-    </Suspense>
-  </React.StrictMode>,
-);
+const root = document.getElementById("root") as HTMLElement;
+// The v2 design gallery: a development build with ?v2gallery only. The build check comes first and nothing of the
+// gallery is imported above, so a release build removes this branch and the gallery with it (v2/gallery/release.test.ts).
+if (import.meta.env.DEV && new URLSearchParams(location.search).has("v2gallery")) {
+  void import("./v2/gallery/mount").then((m) => m.mountGallery(root));
+} else {
+  ReactDOM.createRoot(root).render(
+    <React.StrictMode>
+      <Suspense fallback={null}>
+        <View />
+      </Suspense>
+    </React.StrictMode>,
+  );
+}
