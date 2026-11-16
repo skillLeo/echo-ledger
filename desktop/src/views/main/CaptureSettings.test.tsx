@@ -238,6 +238,22 @@ describe("Calls & meetings says why a call wasn't recorded (D-014)", () => {
     expect(await screen.findByTestId("last-not-recorded")).toHaveTextContent(/^Last not recorded: Slack at 12:05 am, because it isn't a call app EchoLedger knows\.$/);
   });
 
+  it("explains the missed call while another app is listed, and leaves it out while that app is listed (D-014)", async () => {
+    // A noise filter holds the microphone all the time; the core chose the Zoom call that was missed.
+    const krisp = makeMicUser({ name: "Krisp", app: null, site: null, playsAudio: false, decision: "ignored", reason: "unknown_app" });
+    const zoom = makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" });
+    respond("mic_users", [krisp]);
+    respond("mic_last_not_recorded", { user: zoom, at: today(0, 5) });
+    const { unmount } = callsPage();
+    expect(await screen.findByTestId("last-not-recorded")).toHaveTextContent("Last not recorded: Zoom at 12:05 am, because auto-record is off for this app.");
+    unmount();
+    // Zoom is listed again (being recorded now): the list says what happens with it, so the line is left out.
+    respond("mic_users", [krisp, { ...zoom, decision: "recording", reason: null }]);
+    callsPage();
+    await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("Zoom: Recorded now"));
+    expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
+  });
+
   it("says the last app not recorded once it stops using the microphone, not while it is listed", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     try {

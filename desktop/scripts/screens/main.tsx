@@ -314,8 +314,10 @@ const commands: Record<string, (args: Args) => unknown> = {
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),
-  mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
-  // What the core kept: a Zoom call earlier today, not recorded because its switch is off (D-014).
+  // A noise filter holds the microphone all the time, beside the Meet tab and an editor (D-014).
+  mic_users: () => [makeMicUser({ name: "Krisp", app: null, playsAudio: false, site: null, decision: "ignored", reason: "unknown_app" }), makeMicUser(),
+    makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
+  // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
   mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
   translate_apps: () => [],
   translate_status: () => screen.startsWith("controls-translate") ? {
