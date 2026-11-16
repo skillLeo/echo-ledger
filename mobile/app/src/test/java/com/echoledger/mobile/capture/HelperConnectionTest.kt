@@ -12,10 +12,15 @@ import org.junit.Test
 
 /** The app's view of the privileged capture helper. */
 class HelperConnectionTest : AppTest() {
-    private class Helper(private val reportedUid: Int, private val failUid: Boolean = false) : ICaptureHelper.Stub() {
+    private class Helper(
+        private val reportedUid: Int,
+        private val failUid: Boolean = false,
+        private val build: Int = com.echoledger.mobile.BuildConfig.HELPER_BUILD
+    ) : ICaptureHelper.Stub() {
         var listener: ICallListener? = null
+        var destroyed = false
 
-        override fun version() = com.echoledger.mobile.BuildConfig.HELPER_BUILD
+        override fun version() = build
 
         override fun uid(): Int = if (failUid) throw IllegalStateException("helper died") else reportedUid
 
@@ -52,7 +57,9 @@ class HelperConnectionTest : AppTest() {
             this.listener = listener
         }
 
-        override fun destroy() = Unit
+        override fun destroy() {
+            destroyed = true
+        }
     }
 
     private class Listener : ICallListener.Stub() {
@@ -133,7 +140,15 @@ class HelperConnectionTest : AppTest() {
 
         connection.attach(helper, "adb")
 
-        assertEquals(HelperConnection.State(connected = true, source = "adb", helperUid = 2000), connection.state.value)
+        assertEquals(
+            HelperConnection.State(
+                connected = true,
+                source = "adb",
+                helperUid = 2000,
+                helperBuild = com.echoledger.mobile.BuildConfig.HELPER_BUILD
+            ),
+            connection.state.value
+        )
         assertSame(helper, connection.helper)
     }
 
@@ -202,6 +217,67 @@ class HelperConnectionTest : AppTest() {
         connection.setCallListener(null)
 
         assertNull(helper.listener)
+    }
+
+    // ---- after an app update: the helper left running from before (the Android 17 report, v1.8) -------------------
+
+    @Test
+    fun `a helper left running from before an update never takes a current helper's place, and is asked to make way`() {
+        val connection = connection()
+        var restarts = 0
+        connection.restartStale = { restarts++ }
+        val old = Helper(2000, build = com.echoledger.mobile.BuildConfig.HELPER_BUILD - 7)
+        connection.attach(old, "adb")
+        assertTrue(connection.state.value.stale)
+        assertEquals(com.echoledger.mobile.BuildConfig.HELPER_BUILD - 7, connection.state.value.helperBuild)
+        assertEquals("this version is asked for through Shizuku", 1, restarts)
+
+        // This version arrives (Shizuku started it): it takes over, and the old one is stopped.
+        val current = Helper(2000)
+        connection.attach(current, "shizuku")
+        assertTrue(connection.helper === current)
+        assertFalse(connection.state.value.stale)
+        assertTrue("the old one is stopped, so the two never both hold a call's mix", old.destroyed)
+
+        // The old one hands its binder over again (every 30 s): it is not taken back.
+        connection.attach(old, "adb")
+        assertTrue(connection.helper === current)
+        assertFalse(current.destroyed)
+    }
+
+    @Test
+    fun `a helper whose process is already gone is never kept as the helper`() {
+        val connection = connection()
+        connection.attach(ICaptureHelper.Stub.asInterface(GoneBinder()), "adb")
+        assertNull(connection.helper)
+        assertFalse(connection.state.value.connected)
+    }
+
+    @Test
+    fun `a helper found gone during a call is let go and connected again, and the players read says so`() {
+        val connection = connection()
+        val gone = ICaptureHelper.Stub.asInterface(GoneBinder())
+        // Attached while it was alive (its death notice has not come yet): its next call finds it gone.
+        val field = HelperConnection::class.java.getDeclaredField("helper").apply { isAccessible = true }
+        field.set(connection, gone)
+        val answer = connection.players()
+        assertTrue(answer.problem, answer.problem!!.contains("stopped answering"))
+        assertNull("let go", connection.helper)
+        assertFalse(connection.state.value.connected)
+    }
+
+    /** A binder whose process is gone. */
+    private class GoneBinder : android.os.IBinder {
+        override fun getInterfaceDescriptor(): String = "com.echoledger.mobile.capture.ICaptureHelper"
+        override fun pingBinder() = false
+        override fun isBinderAlive() = false
+        override fun queryLocalInterface(descriptor: String): android.os.IInterface? = null
+        override fun dump(fd: java.io.FileDescriptor, args: Array<out String>?) = Unit
+        override fun dumpAsync(fd: java.io.FileDescriptor, args: Array<out String>?) = Unit
+        override fun transact(code: Int, data: android.os.Parcel, reply: android.os.Parcel?, flags: Int): Boolean =
+            throw android.os.DeadObjectException()
+        override fun linkToDeath(recipient: android.os.IBinder.DeathRecipient, flags: Int) = throw android.os.DeadObjectException()
+        override fun unlinkToDeath(recipient: android.os.IBinder.DeathRecipient, flags: Int) = false
     }
 
     @Test

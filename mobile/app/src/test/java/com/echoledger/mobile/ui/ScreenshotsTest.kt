@@ -614,6 +614,55 @@ class ScreenshotsTest : ScreenTest() {
         com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-light.png"))
     }
 
+    /** A capture helper that answers players() with [json] (the Audio probe's screenshots). */
+    private class PlayersHelper(private val json: String) : com.echoledger.mobile.capture.ICaptureHelper.Stub() {
+        override fun version() = com.echoledger.mobile.BuildConfig.HELPER_BUILD
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun arm(on: Boolean): String = "armed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = json
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() = Unit
+        override fun setCallListener(listener: com.echoledger.mobile.capture.ICallListener?) = Unit
+        override fun destroy() = Unit
+    }
+
+    /**
+     * Settings → Help & diagnostics → Audio probe (v1.8, the Android 17 report): each player with what the helper read
+     * of it (uid, state, usage), and one whose app the helper could not name listed apart instead of dropped.
+     */
+    @Test
+    fun audioProbe() {
+        app.graph.helper.attach(
+            PlayersHelper(
+                """[{"uid":10133,"uid_from":"text","packages":["com.samsung.android.video"],"usage":1,"content_type":3,
+                    "capture_policy":1,"state":2,"state_from":"text","piid":2215},
+                   {"uid":-1,"uid_from":"none","packages":[],"usage":1,"content_type":2,"capture_policy":1,"state":-1,
+                    "state_from":"none","piid":2216}]"""
+            ),
+            source = "adb"
+        )
+        shoot { AudioProbeSheet(vm, helperReady = true, onDismiss = {}) }
+        pumpUntil("the players") { runCatching { compose.onNodeWithText("An app the helper can't name").assertExists() }.isSuccess }
+        compose.onNodeWithText("Media · film · allows capture · uid 10133 · started").assertExists()
+        compose.onNodeWithText("uid unknown (none) · state unknown (none) · Media · music · allows capture · piid 2216").assertExists()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-light.png"))
+    }
+
     /** On a phone with no known call folder (a Pixel: Google's Phone app keeps its recordings), one plain line. */
     @Test
     fun phoneAppRecordingsElsewhere() {

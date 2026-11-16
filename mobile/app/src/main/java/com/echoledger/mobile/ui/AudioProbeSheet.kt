@@ -33,6 +33,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.translate.AudioProbe
+import com.echoledger.mobile.translate.HelperPlayers
 import com.echoledger.mobile.translate.ProbePlayer
 import com.echoledger.mobile.translate.SpeechGate
 import com.echoledger.mobile.translate.TranslateApps
@@ -69,13 +70,16 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
     val type = LocalEchoType.current
     val c = LocalEchoColors.current
     val scope = rememberCoroutineScope()
-    var players by remember { mutableStateOf<List<ProbePlayer>>(emptyList()) }
+    var answer by remember { mutableStateOf(HelperPlayers(emptyList())) }
+    val players = AudioProbe.byApp(answer.players)
+    // Players the helper could not name the app of (since v1.8): shown with what the helper said, never dropped.
+    val unplaced = AudioProbe.unplaced(answer.players)
     var capturing by remember { mutableStateOf<Int?>(null) }
     var level by remember { mutableFloatStateOf(0f) }
     var results by remember { mutableStateOf<Map<Int, ProbeResult>>(emptyMap()) }
     LaunchedEffect(helperReady) {
         while (helperReady) {
-            players = AudioProbe.byApp(vm.probePlayers())
+            answer = vm.probePlayers()
             delay(1_000)
         }
     }
@@ -101,7 +105,9 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
                         color = c.text
                     )
                 }
-            } else if (players.isEmpty()) {
+            } else if (answer.problem != null) {
+                item { Text(answer.problem.orEmpty(), style = type.bodyM, color = c.danger) }
+            } else if (players.isEmpty() && unplaced.isEmpty()) {
                 item { Text("Nothing is playing sound right now.", style = type.bodyM, color = c.textMuted) }
             }
             items(players, key = { "${it.uid}-${it.usage}" }) { p ->
@@ -113,7 +119,11 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
                         Spacer(Modifier.width(Space.s3))
                         Column(Modifier.weight(1f)) {
                             Text(label, style = type.bodyL, color = c.text)
-                            Text(AudioProbe.describe(p) + if (p.playing) "" else " · paused", style = type.caption, color = c.textMuted)
+                            Text(
+                                AudioProbe.describe(p) + " · uid ${p.uid} · " + AudioProbe.state(p.state),
+                                style = type.caption,
+                                color = c.textMuted
+                            )
                         }
                     }
                     when {
@@ -149,9 +159,21 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
                     }
                 }
             }
+            items(unplaced.size, key = { "unplaced-$it" }) { i ->
+                val p = unplaced[i]
+                Column(Modifier.fillMaxWidth().padding(vertical = Space.s2), verticalArrangement = Arrangement.spacedBy(Space.s1)) {
+                    Text("An app the helper can't name", style = type.bodyL, color = c.text)
+                    Text(AudioProbe.line(p), style = type.caption, color = c.textMuted)
+                    Text(
+                        "Watch translate asks Android to share the sound for this one.",
+                        style = type.labelM,
+                        color = c.textMuted
+                    )
+                }
+            }
             item {
                 EchoButton("Copy findings", {
-                    val text = findings(players, results.values.toList()) { pkg -> TranslateApps.label(context, pkg) }
+                    val text = findings(answer, players, results.values.toList()) { pkg -> TranslateApps.label(context, pkg) }
                     scope.launch { clipboard.setClipEntry(ClipData.newPlainText("EchoLedger audio probe", text).toClipEntry()) }
                     vm.showMessage("Findings copied")
                 }, kind = ButtonKind.Text)
@@ -160,23 +182,31 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
     }
 }
 
-/** The probe as a plain table: app, uid, usage, content, capture policy, and the capture result. */
-private fun findings(players: List<ProbePlayer>, results: List<ProbeResult>, label: (String) -> String): String = buildString {
-    appendLine("EchoLedger audio probe")
-    players.forEach { p ->
-        val r = results.firstOrNull { it.player.uid == p.uid && it.player.usage == p.usage }
-        append(p.packageName?.let(label) ?: "uid ${p.uid}").append(" | uid ").append(p.uid).append(" | ").append(AudioProbe.describe(p))
-        append(" | ").append(
-            when {
-                r == null -> "not captured"
-                r.problem != null -> "error: ${r.problem}"
-                r.heard -> "heard (peak ${r.peak}, speech ${r.speechShare}%)"
-                else -> "silent"
-            }
-        )
-        appendLine()
+/**
+ * The probe as a plain table: what the helper returned for every player (uid, state, usage, content, capture policy, and
+ * where it read them), then each app with its capture result.
+ */
+private fun findings(answer: HelperPlayers, players: List<ProbePlayer>, results: List<ProbeResult>, label: (String) -> String): String =
+    buildString {
+        appendLine("EchoLedger audio probe")
+        appendLine("-- What the helper returned")
+        AudioProbe.lines(answer).forEach { appendLine(it) }
+        appendLine("-- Apps")
+        players.forEach { p ->
+            val r = results.firstOrNull { it.player.uid == p.uid && it.player.usage == p.usage }
+            val app = p.packageName?.let(label) ?: "uid ${p.uid}"
+            append("$app | uid ${p.uid} | ${AudioProbe.state(p.state)} | ${AudioProbe.describe(p)}")
+            append(" | ").append(
+                when {
+                    r == null -> "not captured"
+                    r.problem != null -> "error: ${r.problem}"
+                    r.heard -> "heard (peak ${r.peak}, speech ${r.speechShare}%)"
+                    else -> "silent"
+                }
+            )
+            appendLine()
+        }
     }
-}
 
 /** Plays a probe capture back once (16 kHz mono). */
 private fun play(pcm: ShortArray) {

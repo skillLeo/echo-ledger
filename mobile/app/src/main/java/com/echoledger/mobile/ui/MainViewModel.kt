@@ -1287,11 +1287,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val h = graph.helper.state.value
         val state = if (h.connected) {
             val caps = runCatching { graph.helper.helper?.capabilities() }.getOrNull()
-            "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}${caps?.let { " ($it)" } ?: ""}"
+            val build = h.helperBuild?.let { ", helper build $it" }.orEmpty()
+            "connected via ${h.source}, uid ${h.helperUid}${if (h.stale) ", older version" else ""}$build${caps?.let { " ($it)" } ?: ""}"
         } else {
             "not connected (${h.error ?: "never started"})"
         }
-        com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state)
+        // Since v1.8: what the helper says of each player now (uid, state, usage), as Live Translate reads it.
+        val players = if (h.connected) com.echoledger.mobile.translate.AudioProbe.lines(graph.helper.players()) else emptyList()
+        com.echoledger.mobile.recording.CaptureLog.report(getApplication(), state, players)
     }
 
     fun connectShizuku() {
@@ -1583,11 +1586,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     // ---- Audio probe (since v1.3, plan B0) ------------------------------------------------------------------------
 
-    /** The players the helper sees right now; empty without a helper. */
-    suspend fun probePlayers(): List<com.echoledger.mobile.translate.ProbePlayer> = withContext(Dispatchers.IO) {
-        val h = graph.helper.helper ?: return@withContext emptyList()
-        com.echoledger.mobile.translate.AudioProbe.parse(runCatching { h.players() }.getOrNull())
-    }
+    /** The players the helper sees right now, or why it gave no answer (no helper, a failed call, a stale helper). */
+    suspend fun probePlayers(): com.echoledger.mobile.translate.HelperPlayers = withContext(Dispatchers.IO) { graph.helper.players() }
 
     /**
      * Arms a mix for [player]'s app (beside the picked games), then captures [seconds] of its sound: the 16 kHz PCM

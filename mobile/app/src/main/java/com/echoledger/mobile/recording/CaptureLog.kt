@@ -39,11 +39,16 @@ object CaptureLog {
      * The text "Copy diagnostics" puts on the clipboard: the phone, the app and helper builds, the log, then (since v1.8)
      * the capture journal of the last 7 days and auto-record's timeline. No audio, names or numbers in any of it.
      */
-    fun report(context: Context, helperState: String): String = buildString {
+    fun report(context: Context, helperState: String, players: List<String> = emptyList()): String = buildString {
         appendLine("EchoLedger capture diagnostics")
         appendLine("Phone: ${Build.MANUFACTURER} ${Build.MODEL}, Android ${Build.VERSION.RELEASE} (SDK ${Build.VERSION.SDK_INT})")
         appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}), helper build ${BuildConfig.HELPER_BUILD}")
         appendLine("Helper: $helperState")
+        // Since v1.8: the players the helper sees now (uid, state, usage), what Live Translate chooses from.
+        if (players.isNotEmpty()) {
+            appendLine("-- Players the helper sees")
+            players.forEach { appendLine(it) }
+        }
         appendLine("--")
         lines(context).forEach { appendLine(it) }
         val journal = CallJournal.book(context)

@@ -27,6 +27,8 @@ class TranslateToggleActivity : Activity() {
         mode = TranslateMode.of(intent.getStringExtra(LiveTranslateService.EXTRA_MODE)) ?: TranslateMode.GAME
         pkg = intent.getStringExtra(LiveTranslateService.EXTRA_PACKAGE)
         val forceStart = intent.getBooleanExtra(EXTRA_START_ONLY, false)
+        // Since v1.8: the capture helper could not tell which app is playing, so Android's own sharing is asked for.
+        val shareSound = intent.getBooleanExtra(EXTRA_SHARE_SOUND, false)
         if (LiveTranslateService.running.value == mode && !forceStart) {
             LiveTranslateService.stop(this)
             finish()
@@ -46,7 +48,7 @@ class TranslateToggleActivity : Activity() {
             return
         }
         val helperRunning = (application as EchoLedgerApp).graph.helper.helper != null
-        if (helperRunning) {
+        if (helperRunning && !shareSound) {
             startForegroundService(LiveTranslateService.startIntent(this, mode, pkg))
             finish()
         } else {
@@ -69,13 +71,20 @@ class TranslateToggleActivity : Activity() {
     companion object {
         private const val REQUEST_PROJECTION = 7
         const val EXTRA_START_ONLY = "start_only"
+        const val EXTRA_SHARE_SOUND = "share_sound"
 
-        fun intent(context: Context, mode: TranslateMode, packageName: String? = null, startOnly: Boolean = false): Intent =
-            Intent(context, TranslateToggleActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(LiveTranslateService.EXTRA_MODE, mode.key)
-                .putExtra(EXTRA_START_ONLY, startOnly)
-                .apply { packageName?.let { putExtra(LiveTranslateService.EXTRA_PACKAGE, it) } }
+        fun intent(
+            context: Context,
+            mode: TranslateMode,
+            packageName: String? = null,
+            startOnly: Boolean = false,
+            shareSound: Boolean = false
+        ): Intent = Intent(context, TranslateToggleActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            .putExtra(LiveTranslateService.EXTRA_MODE, mode.key)
+            .putExtra(EXTRA_START_ONLY, startOnly)
+            .putExtra(EXTRA_SHARE_SOUND, shareSound)
+            .apply { packageName?.let { putExtra(LiveTranslateService.EXTRA_PACKAGE, it) } }
     }
 }
 

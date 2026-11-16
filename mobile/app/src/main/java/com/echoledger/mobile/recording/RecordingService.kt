@@ -218,12 +218,15 @@ class RecordingService : LifecycleService() {
             while (true) {
                 kotlinx.coroutines.delay(com.echoledger.mobile.translate.GameWatch.POLL_MS)
                 val game = settings.liveTranslate.game
-                val helper = graph.helper.helper ?: continue
+                if (graph.helper.helper == null) continue
                 if (game.games.isEmpty()) continue
                 val running =
                     com.echoledger.mobile.translate.LiveTranslateService.running.value == com.echoledger.mobile.translate.TranslateMode.GAME
                 if (!running) startedByUs = false
-                val players = com.echoledger.mobile.translate.AudioProbe.parse(runCatching { helper.players() }.getOrNull())
+                // An answer the helper could not give is not "the game has gone" (since v1.8): this look is skipped.
+                val answer = graph.helper.players()
+                if (answer.problem != null) continue
+                val players = answer.players
                 when (
                     val action = watch.decide(
                         players,

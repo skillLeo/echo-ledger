@@ -19,13 +19,17 @@ import rikka.shizuku.Shizuku
  * helper through BinderHandoffProvider. Shizuku performs the one-time Wireless-debugging pairing itself.
  */
 class HelperConnection(private val context: Context) {
-    /** [stale]: the running helper was started by an older build of the app (it must be restarted to get fixes). */
+    /**
+     * [stale]: the running helper was started by an older build of the app (it must be restarted to get fixes);
+     * [helperBuild] its build number (this app's is BuildConfig.HELPER_BUILD), for diagnostics.
+     */
     data class State(
         val connected: Boolean = false,
         val source: String? = null,
         val helperUid: Int? = null,
         val error: String? = null,
-        val stale: Boolean = false
+        val stale: Boolean = false,
+        val helperBuild: Int? = null
     )
 
     private val _state = MutableStateFlow(State())
@@ -59,19 +63,63 @@ class HelperConnection(private val context: Context) {
     /** Starts the helper again when it is gone and Shizuku is up and allowed (after a kill, and on the 15-minute check). */
     fun reconnect(): Boolean = helper == null && bindShizuku()
 
+    /** Replaces a helper older than this app through Shizuku, when Shizuku is up and allowed (tests replace it). */
+    @Volatile var restartStale: () -> Unit = { bindShizuku() }
+
+    /**
+     * A call to [binder] found it gone (its process stopped, or was replaced by an update) before the death notice came:
+     * it is let go and connected again, never kept as a helper that answers nothing.
+     */
+    fun lost(binder: ICaptureHelper) {
+        if (helper?.asBinder() !== binder.asBinder()) return
+        helper = null
+        _armState.value = null
+        _state.value = State(error = "Capture helper stopped (reboot or Wireless debugging off). Re-enable it from Setup.")
+        reconnect()
+    }
+
+    /** The players the helper sees, or why there is no answer (Live Translate, the Audio probe, Copy diagnostics). */
+    fun players(): com.echoledger.mobile.translate.HelperPlayers {
+        val h = helper
+        val state = _state.value
+        return com.echoledger.mobile.translate.AudioProbe.read(h, state.stale, state.helperBuild) { lost(it) }
+    }
+
+    /**
+     * A helper's binder arrived (Shizuku, or the ADB helper's hand-off every 30 s). Since v1.8 (the Android 17 report):
+     * a binder that is already dead is not kept (it would answer every call with nothing); a helper older than this app
+     * (still running from before an update) never replaces a current one that is alive, and while one is the helper,
+     * Shizuku is asked for this version, which then replaces it and stops the old one.
+     */
     fun attach(binder: ICaptureHelper, source: String) {
         if (helper?.asBinder() === binder.asBinder() && _state.value.connected) return // the ADB helper repeats its hand-off
+        if (!binder.asBinder().isBinderAlive) return
+        val version = runCatching { binder.version() }.getOrNull()
+        val stale = version != BuildConfig.HELPER_BUILD
+        val current = helper
+        if (stale && current != null && !_state.value.stale && current.asBinder().isBinderAlive) return
+        if (runCatching { binder.asBinder().linkToDeath(death, 0) }.isFailure) return
+        // The one before no longer speaks for the helper: its death must not take this one's place away.
+        if (current != null && current.asBinder() !== binder.asBinder()) runCatching { current.asBinder().unlinkToDeath(death, 0) }
         helper = binder
         com.echoledger.mobile.recording.ReadinessWatch.helperSeen(context)
-        runCatching { binder.asBinder().linkToDeath(death, 0) }
         callListener?.let { runCatching { binder.setCallListener(it) } }
-        val version = runCatching { binder.version() }.getOrNull()
         _state.value = State(
             connected = true,
             source = source,
             helperUid = runCatching { binder.uid() }.getOrNull(),
-            stale = version != BuildConfig.HELPER_BUILD
+            stale = stale,
+            helperBuild = version
         )
+        // An older helper is replaced: this version through Shizuku when it can start one; one still running from
+        // before (the ADB helper keeps handing its binder over) is stopped once this version is here, so the two never
+        // both record or both hold a call's mix.
+        if (stale) {
+            restartStale()
+        } else if (current != null && current.asBinder() !== binder.asBinder()) {
+            val old = runCatching { current.version() }.getOrNull()
+            if (old != null && old != BuildConfig.HELPER_BUILD) runCatching { current.destroy() }
+        }
         // A helper that just (re)started has no mix: arm it now, before the next call's voice track exists.
         pushCallApps(binder)
         if (armWanted) applyArm(binder, true)
