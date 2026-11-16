@@ -31,6 +31,7 @@ export {
   LucideCircleDashedIcon as PendingIcon,
   LucideClockIcon as ClockIcon,
   LucideLogOutIcon as SignOutIcon,
+  LucideCalendarIcon as CalendarIcon,
   LucideSmartphoneIcon as DeviceIcon,
 } from "../../components/Icons";
 export {

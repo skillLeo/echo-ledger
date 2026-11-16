@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import MainApp from "../../views/main/MainApp";
 import type { MainTab } from "../../lib/mainView";
 import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
@@ -51,6 +51,24 @@ describe("the shell", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open Projects" }));
     expect(screen.getByText("page projects")).toBeInTheDocument();
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("a Live page that loads late stays open (it suspends once, then shows)", async () => {
+    const LatePage = lazy(() => Promise.resolve({ default: () => <h1>Live page</h1> }));
+    function LiveHost() {
+      const [tab, setTab] = useState<MainTab>("library");
+      return (
+        <Suspense fallback={null}>
+          <Shell tab={tab} onGo={setTab} status={{ kind: "ready", text: "Ready to record" }} live={<Suspense fallback={null}><LatePage /></Suspense>}><p>page {tab}</p></Shell>
+        </Suspense>
+      );
+    }
+    render(<LiveHost />);
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Live" }));
+    expect(await screen.findByRole("heading", { name: "Live page" })).toBeInTheDocument();
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { name: "Live page" })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Live" })).toHaveAttribute("aria-current", "page");
   });
 
   it("maps today's pages to modules and words the status", () => {

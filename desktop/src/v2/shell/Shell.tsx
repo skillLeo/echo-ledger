@@ -1,7 +1,7 @@
 // The v2 app shell (ui_v2.shell): five modules in the sidebar, the status line at its foot, and the page beside it.
 // Modules not rebuilt yet show today's page inside the new frame; Live and Ask, which have no page of their own on
 // the desktop yet, say where to find them meanwhile.
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Avatar, Badge, Button, EmptyState, Icons, NavItem, Sidebar, Status } from "../components";
 import { initials } from "../settings/initials";
 import type { MainTab } from "../../lib/mainView";
@@ -43,8 +43,13 @@ export type ShellProps = {
 export function Shell({ tab, onGo, status, me, live, banners, children }: ShellProps) {
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
-  // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask.
-  useEffect(() => setOwn(null), [tab]);
+  // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
+  // rendering, not in an effect: a page that suspends and shows again re-runs effects, which would close Live.
+  const [lastTab, setLastTab] = useState(tab);
+  if (tab !== lastTab) {
+    setLastTab(tab);
+    setOwn(null);
+  }
   const current: Module = own ?? moduleOf(tab);
   const go = (m: Module) => {
     if (m === "live" || m === "ask") {

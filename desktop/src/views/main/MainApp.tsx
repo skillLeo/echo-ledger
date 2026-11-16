@@ -828,11 +828,11 @@ export default function MainApp() {
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             live={ui.flags["ui_v2.live"] ? (
-              <div className="el-root el-embedded">
+              <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
                   onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
                   onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} translate={<LiveTranslateCard run={run} />} />
-              </div>
+              </div></Suspense>
             ) : undefined}
             banners={<div className="shell-banners">{banners}</div>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
