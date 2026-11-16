@@ -140,11 +140,6 @@ jobs:
     name: Smoke test, ${{ matrix.label }}
     needs: build
     runs-on: ${{ matrix.runner }}
-    # The Windows 11 Arm runner may fail without failing the run: on that image another process's window
-    # (Windows.UI.Core.CoreWindow, the runner image's own; see the Share Check's diagnostic output) covers the
-    # test window, so the Share Check there measures that window, not EchoLedger's. Server 2022 and 2025 run the
-    # same smoke test and Share Check and must pass.
-    continue-on-error: ${{ matrix.allow_failure }}
     strategy:
       fail-fast: false
       matrix:
@@ -172,8 +167,13 @@ jobs:
         shell: pwsh
         run: ./desktop/scripts/smoke-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
 
+      # Only this check may fail on the Windows 11 Arm runner without failing the run: on that image another process's
+      # window (Windows.UI.Core.CoreWindow, the runner image's own; see the check's diagnostic output) covers the test
+      # window, so the check there measures that window, not EchoLedger's. Server 2022 and 2025 must pass it, and the
+      # smoke test and its second run must pass on every runner, Arm included.
       - name: Share Check (a protected magenta window and a green control, captured with WGC and DXGI)
         shell: pwsh
+        continue-on-error: ${{ matrix.allow_failure }}
         run: ./desktop/scripts/share-check-windows.ps1 -Exe (Resolve-Path app/echoledger-desktop.exe).Path
 
       - name: Run it again as a person would on their own PC, without the runner's folder
