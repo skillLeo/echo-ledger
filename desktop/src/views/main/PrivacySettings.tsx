@@ -10,6 +10,8 @@ import { setting } from "../../lib/settingsRegistry";
 import { prettyShortcut } from "../../lib/format";
 import { ActionRow, InfoRow, LinkRow, Section, SelectRow, SwitchRow, Tag, useCopied } from "./SettingsControls";
 import { PrivacyBadgeView } from "../../components/PrivacyBadge";
+import { StateBanner } from "../../components/StateBanner";
+import { AlertIcon } from "../../components/Icons";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
@@ -19,6 +21,38 @@ export const ONE_WINDOW_TIP = "Share one window or a tab for the strongest priva
 export const LIMITS = "Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.";
 /** Zoom on a Mac: the one setting that keeps EchoLedger out of a whole-screen share (labels of Zoom 6 and 7). */
 export const ZOOM_SETTING = "In Zoom, open Settings › Share Screen › Advanced and set Screen capture mode to Advanced capture with window filtering. EchoLedger can't read or change Zoom's settings, so test it once with your phone.";
+
+/** The main window opened during a whole-screen share that keeps the floating windows off (since v1.8.1). */
+export const SHARE_NOTICE = "You're sharing your whole screen, so this window may be visible in the screen share.";
+
+/** The one plain line at the top of the main window while it is on screen during such a share. */
+export function ShareNotice() {
+  const status = usePrivacyStatus();
+  if (!status?.mainInShare) return null;
+  return (
+    <StateBanner id="main-in-share" state="on" tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
+      <span>{SHARE_NOTICE}</span>
+    </StateBanner>
+  );
+}
+
+/** A status line's button (pure label). */
+export const LINE_FIX_LABEL = { open_settings: "Open System Settings", hide_again: "Hide again" } as const;
+
+function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const press = () => {
+    setProblem(null);
+    const done = fix === "open_settings" ? api.openPrivacySettings("screen") : api.privacyHideAgain();
+    void done.catch((e) => setProblem(errorMessage(e)));
+  };
+  return (
+    <>
+      <button type="button" className="btn compact" onClick={press}>{LINE_FIX_LABEL[fix]}</button>
+      {problem && <span className="privacy-line warning" role="alert">{problem}</span>}
+    </>
+  );
+}
 
 /** The last check in a few words, for its row (pure). */
 export function lastCheckValue(result: "pass" | "fail" | "error" | null, at: string | null, now: Date = new Date()): string {
@@ -62,7 +96,12 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
       </Section>
       {status && status.lines.length > 0 && (
         <div className="privacy-lines" role="status">
-          {status.lines.map((l) => <p key={l.text} className={l.warning ? "privacy-line warning" : "privacy-line"}>{l.text}</p>)}
+          {status.lines.map((l) => (
+            <p key={l.text} className={l.warning ? "privacy-line warning" : "privacy-line"}>
+              {l.text}
+              {l.fix && <> <LineFix fix={l.fix} /></>}
+            </p>
+          ))}
         </div>
       )}
       <Section title="Check">

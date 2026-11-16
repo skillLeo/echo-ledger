@@ -1,9 +1,13 @@
 //! Windows: the display affinity of every EchoLedger window, set and read back. `WDA_EXCLUDEFROMCAPTURE` (build 19041
 //! and later) leaves a window out of every capture; on older builds the same call silently acts like `WDA_MONITOR` (a
 //! black box), so there the person chooses a black box (default) or the window as it is. Remote Desktop ignores the
-//! flag. The flag can be turned off from inside the process (IOActive, 3 Sep 2026), so while a protected window is
-//! visible it is read back every 5 s and set again when it changed. The Win32 calls sit behind [`Affinity`], so the
-//! rules are tested on any system; [`System`] is the real one.
+//! flag. EchoLedger sets the flag when a window is built and when the setting or the demo changes. The flag can be
+//! turned off from inside the process (IOActive, 3 Sep 2026; a capture or monitoring tool, for example), so while a
+//! protected window is visible it is read back every 5 s. A flag that changed without EchoLedger is never set again by
+//! itself (the scope rule: nothing against monitoring tools): the change is logged (which window and what was read,
+//! never its contents), the windows count as visible in screen share for the rest of the session, and the privacy page
+//! offers "Hide again", which sets every flag again only when the person presses it. The Win32 calls sit behind
+//! [`Affinity`], so the rules are tested on any system; [`System`] is the real one.
 
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -28,6 +32,8 @@ pub trait Affinity {
     fn set(&self, hwnd: isize, affinity: u32) -> bool;
     /// `GetWindowDisplayAffinity`; none when Windows did not say.
     fn get(&self, hwnd: isize) -> Option<u32>;
+    /// `IsWindow`: the handle still names a window (one destroyed meanwhile is never read).
+    fn exists(&self, hwnd: isize) -> bool;
 }
 
 /// The affinity a window should have (pure).
@@ -62,29 +68,26 @@ pub fn apply(system: &dyn Affinity, hwnd: isize, wanted: u32) -> Readback {
     }
 }
 
-/// One window the 5 s check reads back.
+/// One window the 5 s check reads back, looked up on the main thread when the check runs.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Watched {
     pub label: String,
     pub hwnd: isize,
-    pub wanted: u32,
 }
 
-/// A diagnostics line: which window, what was read, what happened; never the window's contents or title.
+/// A diagnostics line: which window, what was read, and that it was left as it is; never the window's contents or title.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Changed {
     pub label: String,
-    pub wanted: u32,
+    /// What EchoLedger had set.
+    pub set: u32,
     pub read: Option<u32>,
-    /// Setting it again held.
-    pub restored: bool,
 }
 
 impl Changed {
     pub fn line(&self) -> String {
         let read = self.read.map_or_else(|| "nothing".to_string(), |r| format!("0x{r:x}"));
-        let then = if self.restored { "set again, it held" } else { "set again, it did not hold" };
-        format!("The {} window's capture flag read {read} instead of 0x{:x}: {then}.", self.label, self.wanted)
+        format!("The {} window's capture flag read {read} instead of 0x{:x}, changed by something else on this computer: left as it is until Hide again.", self.label, self.set)
     }
 }
 
@@ -92,36 +95,67 @@ impl Changed {
 #[derive(Debug, Default)]
 pub struct Watch {
     pub last: BTreeMap<String, Readback>,
+    /// What EchoLedger itself set on each window last: the 5 s check compares with this, so a setting or demo change
+    /// that is still on its way never reads as a change from outside.
+    applied: BTreeMap<String, u32>,
+    /// A flag changed without EchoLedger this session: visible in screen share until "Hide again".
+    changed_outside: bool,
 }
 
 impl Watch {
-    /// The 5 s check: reads each visible protected window back, sets a changed one again and reports it (pure apart
-    /// from the calls on `system`).
+    /// The 5 s check (pure apart from the calls on `system`): reads each visible window back against what EchoLedger
+    /// set; a flag that changed is reported and left as it is. A window that is gone is forgotten, never read.
     pub fn tick(&mut self, system: &dyn Affinity, windows: &[Watched]) -> Vec<Changed> {
         let mut changed = Vec::new();
         for w in windows {
+            let Some(&set) = self.applied.get(&w.label) else { continue };
+            if !system.exists(w.hwnd) {
+                self.forget(&w.label);
+                continue;
+            }
+            if set == WDA_NONE {
+                continue; // shown on purpose: nothing to keep
+            }
             let read = system.get(w.hwnd);
-            if read == Some(w.wanted) {
+            if read == Some(set) {
                 self.last.insert(w.label.clone(), Readback::Held);
                 continue;
             }
-            let after = apply(system, w.hwnd, w.wanted);
-            changed.push(Changed { label: w.label.clone(), wanted: w.wanted, read, restored: after == Readback::Held });
-            self.last.insert(w.label.clone(), after);
+            self.changed_outside = true;
+            self.last.insert(w.label.clone(), Readback::Mismatch { wanted: set, read });
+            changed.push(Changed { label: w.label.clone(), set, read });
         }
         changed
     }
 
-    pub fn record(&mut self, label: &str, readback: Readback) {
-        self.last.insert(label.to_string(), readback);
+    /// EchoLedger set `affinity` on `label` (a window built, the setting or the demo changed, Hide again) and read back
+    /// `readback`.
+    pub fn applied(&mut self, label: &str, affinity: u32, readback: Readback) {
+        self.applied.insert(label.to_string(), affinity);
+        if affinity == WDA_NONE {
+            self.last.remove(label);
+        } else {
+            self.last.insert(label.to_string(), readback);
+        }
     }
 
+    /// The window is gone (destroyed, or closed by the Share Check).
     pub fn forget(&mut self, label: &str) {
         self.last.remove(label);
+        self.applied.remove(label);
+    }
+
+    /// "Hide again": the flags are about to be set again by the person's choice.
+    pub fn hide_again(&mut self) {
+        self.changed_outside = false;
+    }
+
+    pub fn changed_outside(&self) -> bool {
+        self.changed_outside
     }
 
     pub fn any_mismatch(&self) -> bool {
-        self.last.values().any(|r| matches!(r, Readback::Mismatch { .. }))
+        self.changed_outside || self.last.values().any(|r| matches!(r, Readback::Mismatch { .. }))
     }
 
     pub fn any_held(&self) -> bool {
@@ -157,11 +191,15 @@ impl Line {
 pub const OLD_WINDOWS_LINE: &str = "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.";
 pub const OLD_WINDOWS_SHOWN_LINE: &str = "On this Windows version, EchoLedger can't be left out of a share, so it shows as it is. Choose Black box to keep its text private, or update Windows.";
 pub const REMOTE_LINE: &str = "In Remote Desktop, EchoLedger windows are visible to the remote side.";
-pub const MISMATCH_LINE: &str = "Windows didn't keep EchoLedger hidden from screen sharing. It was set again; run the check to be sure.";
+pub const MISMATCH_LINE: &str = "Windows didn't keep an EchoLedger window hidden from screen share. Run the check to be sure.";
+pub const CHANGED_OUTSIDE_LINE: &str = "Something on this computer turned off screen-share privacy for an EchoLedger window, so it is visible in screen share. EchoLedger left it as it is.";
 
-/// The amber lines of the Windows status (pure).
-pub fn lines(build: Option<u32>, remote: bool, old: OldWindowsSharing, mismatch: bool) -> Vec<Line> {
+/// The amber lines of the Windows status (pure): a flag changed without EchoLedger comes first, with "Hide again".
+pub fn lines(build: Option<u32>, remote: bool, old: OldWindowsSharing, mismatch: bool, changed_outside: bool) -> Vec<Line> {
     let mut out = Vec::new();
+    if changed_outside {
+        out.push(Line { fix: Some(Fix::HideAgain), ..Line::warning(CHANGED_OUTSIDE_LINE) });
+    }
     if remote {
         out.push(Line::warning(REMOTE_LINE));
     }
@@ -169,7 +207,7 @@ pub fn lines(build: Option<u32>, remote: bool, old: OldWindowsSharing, mismatch:
         let text = if old == OldWindowsSharing::BlackBox { OLD_WINDOWS_LINE } else { OLD_WINDOWS_SHOWN_LINE };
         out.push(Line::warning(text));
     }
-    if mismatch {
+    if mismatch && !changed_outside {
         out.push(Line::warning(MISMATCH_LINE));
     }
     out
@@ -203,6 +241,12 @@ impl Affinity for System {
         unsafe { GetWindowDisplayAffinity(HWND(hwnd as *mut _), &mut affinity) }.ok()?;
         Some(affinity)
     }
+
+    fn exists(&self, hwnd: isize) -> bool {
+        use windows::Win32::Foundation::HWND;
+        use windows::Win32::UI::WindowsAndMessaging::IsWindow;
+        unsafe { IsWindow(Some(HWND(hwnd as *mut _))) }.as_bool()
+    }
 }
 
 #[cfg(test)]
@@ -220,6 +264,8 @@ mod tests {
         /// Windows that ignore a set (an old build silently turns EXCLUDE into MONITOR: modelled separately).
         stuck: Vec<isize>,
         sets: RefCell<Vec<(isize, u32)>>,
+        /// Windows destroyed since they were looked up.
+        gone: Vec<isize>,
     }
 
     impl Affinity for FakeWindows {
@@ -239,7 +285,11 @@ mod tests {
             true
         }
         fn get(&self, hwnd: isize) -> Option<u32> {
+            assert!(!self.gone.contains(&hwnd), "a destroyed window is never read");
             self.affinity.borrow().get(&hwnd).copied()
+        }
+        fn exists(&self, hwnd: isize) -> bool {
+            !self.gone.contains(&hwnd)
         }
     }
 
@@ -265,42 +315,77 @@ mod tests {
         assert_eq!(apply(&stuck, 7, WDA_EXCLUDEFROMCAPTURE), Readback::Mismatch { wanted: WDA_EXCLUDEFROMCAPTURE, read: None });
     }
 
+    fn watched(labels: &[(&str, isize)]) -> Vec<Watched> {
+        labels.iter().map(|(label, hwnd)| Watched { label: label.to_string(), hwnd: *hwnd }).collect()
+    }
+
     #[test]
-    fn the_five_second_check_sets_a_changed_flag_again_and_logs_it_without_contents() {
+    fn a_flag_changed_from_outside_is_reported_and_left_until_hide_again() {
         let windows = FakeWindows { build: Some(22_631), ..Default::default() };
-        let watched = vec![Watched { label: "pill".into(), hwnd: 1, wanted: WDA_EXCLUDEFROMCAPTURE }, Watched { label: "overlay".into(), hwnd: 2, wanted: WDA_EXCLUDEFROMCAPTURE }];
-        for w in &watched {
-            apply(&windows, w.hwnd, w.wanted);
-        }
         let mut watch = Watch::default();
-        assert!(watch.tick(&windows, &watched).is_empty(), "nothing changed");
+        for (label, hwnd) in [("pill", 1), ("overlay", 2)] {
+            let readback = apply(&windows, hwnd, WDA_EXCLUDEFROMCAPTURE);
+            watch.applied(label, WDA_EXCLUDEFROMCAPTURE, readback);
+        }
+        let both = watched(&[("pill", 1), ("overlay", 2)]);
+        assert!(watch.tick(&windows, &both).is_empty(), "nothing changed");
         assert!(watch.any_held() && !watch.any_mismatch());
-        let sets_before = windows.sets.borrow().len();
-        assert_eq!(sets_before, 2, "an unchanged flag is only read, never set again");
 
         // Something in the process turned the pill's flag off.
         windows.affinity.borrow_mut().insert(1, WDA_NONE);
-        let changed = watch.tick(&windows, &watched);
-        assert_eq!(changed, vec![Changed { label: "pill".into(), wanted: WDA_EXCLUDEFROMCAPTURE, read: Some(WDA_NONE), restored: true }]);
-        assert_eq!(windows.get(1), Some(WDA_EXCLUDEFROMCAPTURE), "set again");
-        assert_eq!(changed[0].line(), "The pill window's capture flag read 0x0 instead of 0x11: set again, it held.");
-        assert!(!watch.any_mismatch());
+        let sets = windows.sets.borrow().len();
+        let changed = watch.tick(&windows, &both);
+        assert_eq!(changed, vec![Changed { label: "pill".into(), set: WDA_EXCLUDEFROMCAPTURE, read: Some(WDA_NONE) }]);
+        assert_eq!(windows.sets.borrow().len(), sets, "never set again by itself");
+        assert_eq!(windows.get(1), Some(WDA_NONE), "left as it is");
+        assert_eq!(changed[0].line(), "The pill window's capture flag read 0x0 instead of 0x11, changed by something else on this computer: left as it is until Hide again.");
+        assert!(watch.any_mismatch() && watch.changed_outside(), "visible in screen share");
+        assert_eq!(lines(Some(22_631), false, OldWindowsSharing::BlackBox, true, true), vec![Line { fix: Some(Fix::HideAgain), ..Line::warning(CHANGED_OUTSIDE_LINE) }]);
 
-        // One that cannot be set again stays a mismatch (the badge turns amber).
-        let stuck = FakeWindows { build: Some(22_631), stuck: vec![1], ..Default::default() };
-        let changed = watch.tick(&stuck, &watched[..1]);
-        assert!(!changed[0].restored);
-        assert!(watch.any_mismatch());
+        // It stays so for the session, even once a window is built again and its flag holds...
+        watch.applied("pill", WDA_EXCLUDEFROMCAPTURE, apply(&windows, 1, WDA_EXCLUDEFROMCAPTURE));
+        assert!(watch.tick(&windows, &both).is_empty());
+        assert!(watch.any_mismatch(), "until the person chooses Hide again");
+        watch.hide_again();
+        assert!(!watch.any_mismatch());
         assert_eq!(RECHECK_EVERY, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn a_change_echoledger_makes_itself_is_never_taken_for_one_from_outside() {
+        let windows = FakeWindows { build: Some(26_100), ..Default::default() };
+        let mut watch = Watch::default();
+        watch.applied("main", WDA_EXCLUDEFROMCAPTURE, apply(&windows, 5, WDA_EXCLUDEFROMCAPTURE));
+        // The setting went to Off: EchoLedger sets the main window to none and records it before the check reads it.
+        watch.applied("main", WDA_NONE, apply(&windows, 5, WDA_NONE));
+        assert!(watch.tick(&windows, &watched(&[("main", 5)])).is_empty());
+        assert!(!watch.any_mismatch(), "shown on purpose is no change from outside");
+        // A window EchoLedger never set (being built) is not read yet.
+        assert!(watch.tick(&windows, &watched(&[("review", 9)])).is_empty());
+    }
+
+    #[test]
+    fn a_window_destroyed_between_the_lookup_and_the_read_is_forgotten_not_reported() {
+        let mut windows = FakeWindows { build: Some(26_100), ..Default::default() };
+        let mut watch = Watch::default();
+        watch.applied("review", WDA_EXCLUDEFROMCAPTURE, apply(&windows, 3, WDA_EXCLUDEFROMCAPTURE));
+        windows.gone.push(3);
+        assert!(watch.tick(&windows, &watched(&[("review", 3)])).is_empty(), "the after-call card closed after its grace");
+        assert!(!watch.any_mismatch() && !watch.any_held(), "nothing is kept for it");
+        // And forgetting a label (WindowEvent::Destroyed) drops what was set on it.
+        watch.applied("pill", WDA_EXCLUDEFROMCAPTURE, Readback::Mismatch { wanted: WDA_EXCLUDEFROMCAPTURE, read: None });
+        assert!(watch.any_mismatch());
+        watch.forget("pill");
+        assert!(!watch.any_mismatch());
     }
 
     #[test]
     fn remote_desktop_and_old_builds_give_amber_lines() {
         let remote = FakeWindows { build: Some(26_100), remote: true, ..Default::default() };
-        assert_eq!(lines(remote.build(), remote.remote_session(), OldWindowsSharing::BlackBox, false), vec![Line::warning(REMOTE_LINE)]);
-        assert_eq!(lines(Some(18_363), false, OldWindowsSharing::BlackBox, false)[0].text, OLD_WINDOWS_LINE);
-        assert_eq!(lines(Some(18_363), false, OldWindowsSharing::Show, false)[0].text, OLD_WINDOWS_SHOWN_LINE);
-        assert!(lines(Some(26_100), false, OldWindowsSharing::BlackBox, false).is_empty(), "nothing to say");
-        assert_eq!(lines(Some(26_100), false, OldWindowsSharing::BlackBox, true)[0].text, MISMATCH_LINE);
+        assert_eq!(lines(remote.build(), remote.remote_session(), OldWindowsSharing::BlackBox, false, false), vec![Line::warning(REMOTE_LINE)]);
+        assert_eq!(lines(Some(18_363), false, OldWindowsSharing::BlackBox, false, false)[0].text, OLD_WINDOWS_LINE);
+        assert_eq!(lines(Some(18_363), false, OldWindowsSharing::Show, false, false)[0].text, OLD_WINDOWS_SHOWN_LINE);
+        assert!(lines(Some(26_100), false, OldWindowsSharing::BlackBox, false, false).is_empty(), "nothing to say");
+        assert_eq!(lines(Some(26_100), false, OldWindowsSharing::BlackBox, true, false)[0].text, MISMATCH_LINE);
     }
 }

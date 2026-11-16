@@ -2841,6 +2841,15 @@ pub fn privacy_hide_all(app: AppHandle) {
     crate::privacy::toggle_hide_all(&app);
 }
 
+/// "Hide again" (Windows): after something else on the computer changed an EchoLedger window's capture flag, the person
+/// sets every flag again. Only the main window's privacy page asks.
+#[tauri::command]
+pub fn privacy_hide_again(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
+    crate::privacy::hide_again(&app);
+    Ok(())
+}
+
 /// A tap on the privacy badge: Share Check in the main window.
 #[tauri::command]
 pub fn privacy_open_check(app: AppHandle) {

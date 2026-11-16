@@ -371,13 +371,16 @@ fn opening_the_app_again_goes_where_a_second_launch_goes() {
     let lib = std::fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
     assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"), "a second launch opens the main window");
     let run = &lib[lib.find("app.run(|handle, event|").expect("the run loop")..];
-    let reopen = run.find("if let RunEvent::Reopen { has_visible_windows, .. } = &event {").expect("the run loop answers a reopen");
+    let reopen = run.find("if let RunEvent::Reopen { .. } = &event {").expect("the run loop answers a reopen");
     assert!(run[..reopen].trim_end().ends_with("#[cfg(target_os = \"macos\")]"), "the reopen arm is the Mac's");
-    assert!(run[reopen..].contains("actions::reopen(handle, *has_visible_windows);"), "a reopen goes to actions::reopen");
+    assert!(run[reopen..].trim_start_matches("if let RunEvent::Reopen { .. } = &event {").trim_start().starts_with("actions::show_main_from_outside(handle, &[]);"), "a reopen goes where a second launch goes");
     let actions = std::fs::read_to_string(manifest_dir().join("src/actions.rs")).unwrap();
-    let body = &actions[actions.find("pub fn reopen(app: &AppHandle, has_visible_windows: bool) {").expect("actions::reopen")..];
-    let body = &body[..body.find("\n}\n").expect("the end of actions::reopen")];
-    assert!(body.contains("reopen_action(has_visible_windows, main_on_screen(app))"), "the main window decides, not AppKit's count alone");
-    assert!(body.contains("Reopen::OpenMain => show_main_from_outside(app, &[])"), "opened as at a second launch");
-    assert!(body.contains("Reopen::BringForward => crate::tray::show_main(app)"), "brought forward as the menu bar's Open does");
+    let body = &actions[actions.find("pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {").expect("show_main_from_outside")..];
+    let body = &body[..body.find("\n}\n").expect("the end of show_main_from_outside")];
+    // The notified recording is taken (so forgotten) every time, and whether a main window existed is read before the
+    // open builds one: only then does the decision open the recording.
+    let (taken, exists, shown) = (body.find(".notified.lock()").expect("the notified recording"), body.find("get_webview_window(crate::lifecycle::MAIN).is_some()").expect("a main window exists"), body.find("crate::tray::show_main(app);").expect("shown"));
+    assert!(body[taken..].starts_with(".notified.lock().unwrap_or_else(|p| p.into_inner()).take()"), "never kept for a later open");
+    assert!(taken < shown && exists < shown, "read before the open");
+    assert!(body.contains("crate::lifecycle::reopen_action(main_exists, notified.is_some())"), "the pure decision says whether the page changes");
 }

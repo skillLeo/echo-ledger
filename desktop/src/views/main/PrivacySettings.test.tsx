@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { LIMITS, ONE_WINDOW_TIP, ShareCheckPage, SharePrivacyPage } from "./PrivacySettings";
+import { LIMITS, ONE_WINDOW_TIP, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage } from "./PrivacySettings";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 
 const PICTURE = "data:image/webp;base64,UklGRg==";
@@ -83,7 +83,7 @@ describe("Settings › Screen-share privacy", () => {
   beforeEach(() => resetTauriMock());
 
   it("shows the status, the last check, the tip and the limits; Windows' amber lines", async () => {
-    respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in shares", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side." }] }));
+    respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in shares", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
     const patch = vi.fn(async () => true);
     render(<SharePrivacyPage settings={makeSettings()} patch={patch} onCheck={() => undefined} />);
     expect(await screen.findByText("In Remote Desktop, EchoLedger windows are visible to the remote side.")).toBeInTheDocument();
@@ -139,5 +139,44 @@ describe("the privacy badge", () => {
     respond("privacy_status", makePrivacyStatus({ badge: "private" }));
     await act(async () => emitEvent("privacy:changed", null));
     expect(await screen.findByRole("button", { name: /Hidden from screen share/ })).toBeInTheDocument();
+  });
+});
+
+describe("hidden windows and the flags", () => {
+  beforeEach(() => resetTauriMock());
+  afterEach(() => resetTauriMock());
+
+  it("says in the main window that it may be in the screen share once the person opened it during one", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true }));
+    render(<ShareNotice />);
+    expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
+    expect(screen.getByTestId("main-in-share")).toHaveAttribute("role", "status");
+  });
+
+  it("says nothing when the main window is not on screen for a share", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: false }));
+    const { container } = render(<ShareNotice />);
+    await waitFor(() => expect(callsOf("privacy_status").length).toBeGreaterThan(0));
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("offers Hide again when something else changed a flag, and sets them again only when pressed", async () => {
+    const changed = "Something on this computer turned off screen-share privacy for an EchoLedger window, so it is visible in screen share. EchoLedger left it as it is.";
+    respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in screen share", lines: [{ warning: true, text: changed, fix: "hide_again" }] }));
+    respond("privacy_hide_again", null);
+    render(<SharePrivacyPage settings={makeSettings()} patch={async () => true} onCheck={() => undefined} />);
+    expect(await screen.findByText(changed, { exact: false })).toBeInTheDocument();
+    expect(callsOf("privacy_hide_again")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Hide again" }));
+    expect(callsOf("privacy_hide_again")).toHaveLength(1);
+  });
+
+  it("sends a Mac without Screen Recording to System Settings from the safety net's line", async () => {
+    const line = "EchoLedger needs the Screen Recording permission to notice when you share your whole screen and hide its windows. Allow it in System Settings.";
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false, lines: [{ warning: true, text: line, fix: "open_settings" }] }));
+    respond("open_privacy_settings", null);
+    render(<SharePrivacyPage settings={makeSettings()} patch={async () => true} onCheck={() => undefined} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Open System Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
   });
 });

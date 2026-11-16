@@ -88,7 +88,7 @@ fn title(label: &str) -> &'static str {
 /// One builder for every overlay-type window. Flags verified against tauri-2.12.5
 /// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
 /// `always_on_top` 615, `accept_first_mouse` 962). The capture flag is set by the privacy service before the window is
-/// first shown (`privacy::prepare`), and checked once it is built (`privacy::built`).
+/// first shown and checked once it is built (`privacy::window`).
 fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -> tauri::Result<WebviewWindow<R>> {
     let builder = crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
         .title(title(label))
@@ -105,9 +105,7 @@ fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -> tauri
         .focusable(false)
         .accept_first_mouse(true)
         .visible(true);
-    let window = crate::privacy::prepare(app, builder, label, crate::privacy::Kind::Floating).build()?;
-    crate::privacy::built(app, &window);
-    Ok(window)
+    crate::privacy::window(app, builder, label, crate::privacy::Kind::Floating, |b| b)
 }
 
 /// Builds one overlay-type window when it does not exist yet, click-through and docked or placed from the settings

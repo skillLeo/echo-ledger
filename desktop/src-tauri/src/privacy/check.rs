@@ -236,8 +236,7 @@ fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> taur
         .focused(false)
         .focusable(false)
         .visible(true);
-    let window = super::prepare(app, crate::smoke::isolate(builder), label, kind).build()?;
-    super::built(app, &window);
+    let window = super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)?;
     #[cfg(target_os = "macos")]
     crate::overlay::macos::keep_above_everything(&window);
     Ok(window)
@@ -503,8 +502,7 @@ pub fn guided_open(app: &AppHandle) -> AppResult<()> {
         .always_on_top(true)
         .skip_taskbar(true)
         .visible(true);
-    let window = super::prepare(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test).build().map_err(|e| AppError::msg(e.to_string()))?;
-    super::built(app, &window);
+    super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(())
 }
 
@@ -581,6 +579,8 @@ pub struct PrivacyStatus {
     pub hidden_by_shortcut: bool,
     /// The safety net took EchoLedger off the screen for a share (macOS).
     pub hidden_for_share: bool,
+    /// The person opened the main window during that share: it says it may be in the screen share.
+    pub main_in_share: bool,
     pub share: Option<super::watch::Seen>,
     pub last_check: Option<LastCheck>,
     pub check_running: bool,
@@ -604,7 +604,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let build = windows_build();
     let remote = remote_session();
     let watch = privacy.watch.lock().unwrap_or_else(|p| p.into_inner());
-    let (mismatch, held) = (watch.any_mismatch(), watch.any_held());
+    let (mismatch, held, changed_outside) = (watch.any_mismatch(), watch.any_held(), watch.changed_outside());
     drop(watch);
     let now = std::time::Instant::now();
     let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result) };
@@ -614,7 +614,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     #[cfg(not(target_os = "macos"))]
     let permission = true;
     let lines = match platform {
-        Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch),
+        Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch, changed_outside),
         Platform::Mac => mac_lines(permission, super::watch::allowed(settings.hide_from_sharing, settings.share_one_window, false, false)),
         Platform::Other => Vec::new(),
     };
@@ -642,6 +642,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         demo_seconds_left: privacy.demo_left(now).map(|d| d.as_secs().max(1)),
         hidden_by_shortcut: privacy.hidden_for(super::HideReason::Person),
         hidden_for_share: privacy.hidden_for(super::HideReason::Share),
+        main_in_share: privacy.main_in_share(settings.hide_from_sharing),
         share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),

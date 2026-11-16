@@ -292,6 +292,8 @@ pub fn spawn(app: tauri::AppHandle) {
                 let now = Instant::now();
                 if now.saturating_duration_since(permission.1) >= PERMISSION_EVERY {
                     permission = (crate::screens::platform::macos::permission(), now);
+                    // The system makes windows of its own in this process later (TextInputUI's, once a page loaded).
+                    super::seal_others(&app);
                 }
                 if now.saturating_duration_since(patterns_at) >= PATTERNS_EVERY {
                     patterns = super::bars::current(&state.data_dir);

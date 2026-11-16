@@ -1352,6 +1352,8 @@ export interface MeetingAppRow {
 export interface PrivacyLine {
   warning: boolean;
   text: string;
+  /** The one button that fixes it: the system's Screen Recording settings (Mac), or setting the flags again (Windows). */
+  fix: "open_settings" | "hide_again" | null;
 }
 
 export interface LastCheck {
@@ -1378,6 +1380,8 @@ export interface PrivacyStatus {
   demoSecondsLeft: number | null;
   hiddenByShortcut: boolean;
   hiddenForShare: boolean;
+  /** The person opened the main window during a whole-screen share: it says it may be in the screen share. */
+  mainInShare: boolean;
   share: ShareSeen | null;
   lastCheck: LastCheck | null;
   checkRunning: boolean;
@@ -1447,6 +1451,8 @@ export const api = {
   privacyShowInShares: (minutes: number) => invoke<void>("privacy_show_in_shares", { minutes }),
   privacyConcealed: () => invoke<boolean>("privacy_concealed"),
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
+  /** Windows: sets every capture flag again after something else on the computer changed one. */
+  privacyHideAgain: () => invoke<void>("privacy_hide_again"),
   privacyOpenCheck: () => invoke<void>("privacy_open_check"),
   privacyDiagnostics: () => invoke<string>("privacy_diagnostics"),
   privacyMoveToDisplay: (index: number) => invoke<void>("privacy_move_to_display", { index }),

@@ -110,7 +110,7 @@ function privacyStatus() {
     system: mac ? "macOS 27.3" : old ? "Windows 10 (build 18363)" : "Windows 11 24H2",
     hiding: "all",
     oldWindows: old,
-    lines: old ? [{ warning: true, text: "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result." }] : [],
+    lines: old ? [{ warning: true, text: "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.", fix: null }] : [],
     demoSecondsLeft: null,
     hiddenByShortcut: false,
     hiddenForShare: false,
