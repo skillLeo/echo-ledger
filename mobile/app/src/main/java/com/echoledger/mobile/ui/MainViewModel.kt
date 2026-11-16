@@ -906,7 +906,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private suspend fun <T> workspaceCall(failed: String, block: suspend (com.echoledger.mobile.net.ApiClient) -> T): T? =
         withContext(Dispatchers.IO) {
             runCatching { block(graph.api() ?: error("Sign in on this phone first.")) }
-                .onFailure { _message.value = it.message ?: failed }.getOrNull()
+                // The server's words, unless they name an engine or an AI vendor (P-001): then the plain [failed].
+                .onFailure { _message.value = com.echoledger.mobile.core.VendorNames.plain(it.message, failed) }.getOrNull()
         }
 
     suspend fun workspace(clientId: String) = workspaceCall("The project's workspace could not be loaded.") { it.workspace(clientId) }
@@ -949,7 +950,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     suspend fun ask(clientId: String, question: String, language: String) =
-        workspaceCall("Claude could not answer right now. Try again in a minute.") { it.ask(clientId, question, language) }
+        workspaceCall("The AI assistant could not answer right now. Try again in a minute.") { it.ask(clientId, question, language) }
 
     suspend fun bundle(clientId: String) = workspaceCall("The text could not be made.") { it.bundle(clientId) }
 
@@ -1552,7 +1553,10 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                     try {
                         api.liveTranslateToken(mode.key, target, hints, continueOverBudget = prefs.budgetOverrideMonth == usage.month())
                     } catch (e: com.echoledger.mobile.net.ApiException) {
-                        throw com.echoledger.mobile.translate.TokenUnavailable(e.message, permanent = true)
+                        throw com.echoledger.mobile.translate.TokenUnavailable(
+                            com.echoledger.mobile.translate.TranslateStatus.tokenProblem(e),
+                            permanent = true
+                        )
                     }
                 },
                 onOpenMs = { usage.add(mode, it) }

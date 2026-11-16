@@ -227,7 +227,11 @@ class LiveTranslateService :
                     try {
                         api.liveTranslateToken(tokenMode, target, hints, continueOverBudget = prefs.budgetOverrideMonth == usage.month())
                     } catch (e: ApiException) {
-                        throw TokenUnavailable(e.message, permanent = e.status in setOf(403, 503) || e.code == "budget_exceeded")
+                        throw TokenUnavailable(
+                            TranslateStatus.tokenProblem(e),
+                            permanent =
+                                e.status in setOf(403, 503) || e.code == "budget_exceeded"
+                        )
                     }
                 },
                 onSentence = { sentences += it },

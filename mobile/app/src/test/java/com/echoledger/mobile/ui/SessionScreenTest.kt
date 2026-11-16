@@ -139,7 +139,8 @@ class SessionScreenTest : ScreenTest() {
         showSession()
         awaitText("Hello there.")
 
-        compose.onNodeWithText("Final transcript · AssemblyAI").assertIsDisplayed()
+        compose.onNodeWithText("Final transcript").assertIsDisplayed()
+        compose.onAllNodesWithText("AssemblyAI", substring = true).assertCountEquals(0)
         compose.onNodeWithText("Hello there.").assertIsDisplayed()
         compose.onNodeWithText("Hi, thanks for calling.").assertIsDisplayed()
         compose.onAllNodesWithText("You", substring = false).assertCountEquals(1)
@@ -291,11 +292,13 @@ class SessionScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a failed transcript shows the reason from the server`() {
+    fun `a failed transcript says why in the phone's own words for its error, never the engine's`() {
+        // An older server's text names the engine (contract 1.8.1-a: the phone shows its own words per error_code).
         serve(
             ServerFixtures.transcript(
                 status = "failed",
-                error = "The speech provider could not decode this file.",
+                error = "Groq Whisper large-v3 rejected the audio: invalid_request_error",
+                errorCode = "provider_rejected",
                 segments = "[]",
                 text = null
             )
@@ -303,16 +306,27 @@ class SessionScreenTest : ScreenTest() {
         showSession(item(finalStatus = "failed"))
         awaitText("Transcription failed")
 
-        compose.onNodeWithText("The speech provider could not decode this file.", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("The transcription service could not transcribe this recording.", substring = true).assertIsDisplayed()
+        compose.onAllNodesWithText("Groq", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Copy text").assertCountEquals(0)
     }
 
     @Test
-    fun `a failed transcript without a reason shows a generic one`() {
-        serve(ServerFixtures.transcript(status = "failed", error = null, segments = "[]", text = null))
+    fun `a transcript made by the backup engine offers the best one without naming either engine`() {
+        serve(ServerFixtures.transcript(backupEngine = true, providerLabel = "Groq Whisper large-v3"))
+        showSession(item())
+        awaitText("Backup transcription — Re-transcribe?")
+        compose.onAllNodesWithText("Groq", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("AssemblyAI", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a failed transcript without a known error says so plainly`() {
+        serve(ServerFixtures.transcript(status = "failed", error = "Whisper said no", segments = "[]", text = null))
         showSession(item(finalStatus = "failed"))
 
-        awaitText("The speech provider could not process this recording.")
+        awaitText("The transcript could not be made. Tap Retry.")
+        compose.onAllNodesWithText("Whisper", substring = true).assertCountEquals(0)
     }
 
     @Test

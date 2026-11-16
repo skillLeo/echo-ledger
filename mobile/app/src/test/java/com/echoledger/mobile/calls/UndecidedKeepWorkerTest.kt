@@ -57,12 +57,14 @@ class UndecidedKeepWorkerTest : AppTest() {
 
     @Test
     fun `a Soniox refusal is remembered in short and cleared once translating works`() {
-        assertEquals("Needs Soniox credit", TranslateStatus.shortReason("Soniox has no credit left. Add credit at console.soniox.com."))
+        assertEquals("Needs credit", TranslateStatus.shortReason("Soniox has no credit left. Add credit at console.soniox.com."))
+        assertEquals("Needs credit", TranslateStatus.shortReason(com.echoledger.mobile.translate.LiveTranslateSession.NO_CREDIT))
+        assertEquals("Not set up on the server", TranslateStatus.shortReason(TranslateStatus.NOT_SET_UP))
         assertEquals("Budget used up", TranslateStatus.shortReason("This month's Live Translate budget is used up."))
         assertNull(TranslateStatus.shortReason("Sign in on this phone first."))
 
         TranslateStatus.remember(app, "Soniox has no credit left.")
-        assertEquals("Needs Soniox credit", TranslateStatus.blocked(app))
+        assertEquals("Needs credit", TranslateStatus.blocked(app))
         TranslateStatus.remember(app, null)
         assertNull(TranslateStatus.blocked(app))
     }

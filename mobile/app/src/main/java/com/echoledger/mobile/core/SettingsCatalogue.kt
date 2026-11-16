@@ -30,7 +30,7 @@ object SettingsCatalogue {
         SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic font typeface"),
         SettingsEntry("this-phone", SettingsGroup.General, "This phone", "account server unpair name certificate pinned setup guide"),
         SettingsEntry("plan", SettingsGroup.General, "Plan & usage", "plan free pro business upgrade limits minutes devices storage price"),
-        SettingsEntry("transcription-key", SettingsGroup.General, "Transcription key", "groq key free own transcription whisper"),
+        SettingsEntry("transcription-key", SettingsGroup.General, "Transcription key", "groq key free own transcription"),
         SettingsEntry("transcription", SettingsGroup.General, "Transcription", "language english urdu arabic roman view vocabulary terms"),
         SettingsEntry("client", SettingsGroup.General, "Project keyterms", "client names jargon accuracy"),
         SettingsEntry("notifications", SettingsGroup.General, "Notifications", "quiet hours bell activity alerts"),

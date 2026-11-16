@@ -130,9 +130,14 @@ object ServerFixtures {
         kind: String = "final",
         error: String? = null,
         segments: String = DEFAULT_SEGMENTS,
-        text: String? = "Hello there. Hi, thanks for calling."
+        text: String? = "Hello there. Hi, thanks for calling.",
+        errorCode: String? = null,
+        backupEngine: Boolean = false,
+        providerLabel: String? = null
     ) = """
         {"id":"$TRANSCRIPT_ID","session_id":"$SESSION_ID","kind":"$kind","provider":"assemblyai","status":"$status","language":"en",
+         "error_code":${errorCode?.let { "\"$it\"" } ?: "null"},"backup_engine":$backupEngine,
+         "provider_label":${providerLabel?.let { "\"$it\"" } ?: "null"},
          "text":${text?.let { "\"$it\"" } ?: "null"},"segments":$segments,"error":${error?.let { "\"$it\"" } ?: "null"},
          "created_at":"2026-10-24T09:10:00+00:00","completed_at":"2026-10-24T09:11:00+00:00"}
     """.trimIndent()

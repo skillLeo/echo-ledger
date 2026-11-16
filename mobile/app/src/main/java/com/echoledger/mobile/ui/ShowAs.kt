@@ -42,13 +42,12 @@ enum class ShowAs(val key: String, val label: String) {
             return segments.indices.map { texts.getOrNull(it) }
         }
 
-        /** The line under the switch: who wrote the view, that it is being written, or why it failed. */
+        /** The line under the switch: that the view is ready (never the model that wrote it), being written, or failed. */
         fun status(view: ShowAs, views: TranscriptViewsDto?): String? {
             if (view == ORIGINAL) return null
-            val by = views?.model?.let { " by $it" }.orEmpty()
             return when (views?.status) {
-                "ready" -> "${view.label} view$by. The transcript itself is unchanged."
-                "failed" -> "The view could not be made: ${views?.error ?: "try again later."}"
+                "ready" -> "${view.label} view. The transcript itself is unchanged."
+                "failed" -> "The view could not be made: ${com.echoledger.mobile.core.VendorNames.plain(views?.error, "try again later.")}"
                 else -> "Writing the ${view.label} view… this takes a minute or two."
             }
         }
