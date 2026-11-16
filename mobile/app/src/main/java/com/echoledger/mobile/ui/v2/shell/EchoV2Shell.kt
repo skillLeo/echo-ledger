@@ -15,6 +15,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -95,10 +96,12 @@ fun EchoV2Shell(
 @Composable
 private fun MessagesToToasts(vm: MainViewModel, toasts: EchoToastState) {
     val message by vm.message.collectAsState()
+    // Shown from a scope that outlives the effect: consuming the message restarts the effect.
+    val scope = rememberCoroutineScope()
     LaunchedEffect(message) {
         val text = message ?: return@LaunchedEffect
         vm.consumeMessage()
-        launch { toasts.show(text) }
+        scope.launch { toasts.show(text) }
     }
 }
 

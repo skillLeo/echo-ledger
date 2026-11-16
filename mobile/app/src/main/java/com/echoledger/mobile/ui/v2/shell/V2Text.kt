@@ -218,7 +218,7 @@ data class V2Text(
             classicLookHelp = "اس فون اور ویب پر پچھلے ڈیزائن پر واپس جائیں",
             plan = { name -> "$name پلان" },
             minutesUsed = { used, limit -> "اس مہینے $limit میں سے $used منٹ استعمال ہوئے" },
-            storageUsed = { size, count -> "$count ریکارڈنگز میں $size" },
+            storageUsed = { size, count -> "$count ریکارڈنگز میں \u2066$size\u2069" },
             upgrade = "اپ گریڈ کریں",
             accountError = "آپ کا اکاؤنٹ اور پلان لوڈ نہیں ہو سکا۔ اس فون کی ترتیبات کام کر رہی ہیں۔",
             notSignedIn = "سائن ان نہیں"
