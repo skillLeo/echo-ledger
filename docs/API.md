@@ -4,8 +4,8 @@ Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mob
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
 **Contract revision: 1.8.1-a (2026-11-17)** — bumped whenever a section below changes; briefs name the revision they build on.
-1.8.1-a: a failed transcript's `error` is the documented plain message of its `error_code` only — never the provider's
-own text (bugs D-129/D-131); see "Transcript `error_code` messages".
+1.8.1-a: a failed transcript's `error` is the plain sentence of its `error_code` only — never the provider's own text
+(bugs D-129/D-131); the same sentences in Activity; see "Transcript `error_code` messages".
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -125,24 +125,26 @@ Every addition below is marked **(since v1.1)**.
  "words": [{"text": "Smoke", "start_ms": 250, "end_ms": 650, "confidence": 0.97}]}
 ```
 
-**Transcript `error_code` messages** (since v1.1). The server message is platform-neutral; each app adds its own
-hint for `no_audio` (desktop: check the microphone and the audio device; Android: check Setup → Call capture).
+**Transcript `error_code` messages** (since v1.1; plain words since contract 1.8.1-a). The `error` field of a failed
+transcript (in `GET /api/transcripts/{id}`, a session's `transcripts` and the session detail) is exactly the sentence for
+its code below — never the provider's own text, which stays in the server logs and the operator's view. Library items
+carry no `error`, only `transcript.final_error_code`. Apps show their own words per `error_code` (desktop: check the
+microphone and the audio device for `no_audio`; Android: check Setup → Call capture) and may ignore `error`.
 
 | `error_code` | `error` (message) |
 |---|---|
-| `no_audio` | `No audio was captured in this recording.` |
-| `budget_exceeded` | `Monthly transcription limit reached` |
-| `provider_unreachable` | `The speech provider could not be reached. Try again later.` |
-| `provider_rejected` | `The speech provider could not transcribe this recording.` (since 1.8.1-a: no provider reason; the engine's own words stay in server logs and the operator view) |
-| `provider_not_configured` | `The speech provider is not configured.` (since 1.8.1-a: no engine or key name) |
-| `provider_timeout` | `The speech provider did not finish within 6 hours.` |
-| `interrupted` | `Transcription was interrupted. Retry it from the console.` |
-| `recording_missing` | `The recording is missing or not ready.` |
-| `needs_transcription_key` | `Add your free Groq key in Account → Transcription key` (the one vendor name people must act on) |
-| missing or unknown code | `The transcript could not be made.` |
+| `no_audio` | `Nothing could be heard in this recording.` |
+| `budget_exceeded` | `The monthly transcription limit was reached.` |
+| `provider_unreachable` | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
+| `provider_rejected` | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
+| `provider_timeout` | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
+| `provider_not_configured` | `No speech engine is set up for this language yet.` |
+| `interrupted` | `Transcription was interrupted. Your audio is safe: try again.` |
+| `recording_missing` | `The audio did not fully reach the server.` |
+| `needs_transcription_key` | `Add your free Groq key in Account → Transcription key.` (the one vendor name people must act on) |
+| missing or unknown code | `The speech engines could not transcribe it this time. Your audio is safe: try again.` |
 
-Since 1.8.1-a the `error` field (transcripts, session detail, library items) and the Activity item for a failed
-transcript carry only these messages. Apps show their own words per `error_code` and may ignore `error`.
+The Activity item for a failed transcript (`transcript_failed`) reads `<recording title>: <the sentence above>`.
 
 ---
 
