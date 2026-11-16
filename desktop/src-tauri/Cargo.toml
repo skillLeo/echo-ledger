@@ -125,6 +125,10 @@ syn = { version = "2.0.119", features = ["full", "visit"] }
 quote = "1.0.47"
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 
+# tests/mac_appkit.rs builds tao's own window and app delegate (the version and features Tauri uses, nothing new built).
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+tao = { version = "=0.37.2", default-features = false, features = ["rwh_06"] }
+
 # AppKit on the main thread: the floating windows become panels, the delegate answers quits from outside (macOS).
 [[test]]
 name = "mac_appkit"

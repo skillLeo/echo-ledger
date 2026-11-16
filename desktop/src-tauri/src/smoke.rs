@@ -28,16 +28,20 @@ const USE: &str = "smoke";
 /// Exit codes other than 0: something failed to open, or the test ran out of time.
 pub const EXIT_WINDOW_FAILED: i32 = 2;
 pub const EXIT_TIMED_OUT: i32 = 3;
-/// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`).
-pub const EXIT_MAC_APP: i32 = 4;
+/// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`). Not 4, 5 or 6, the Share Check's.
+pub const EXIT_MAC_APP: i32 = 7;
 
 /// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
-/// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus).
+/// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
+/// under the default setting, is still hidden from screen capture after its class changed.
 pub fn mac_app_problem(answers_quits: bool, windows: &[crate::mac_check::WindowFacts]) -> Option<String> {
     if !answers_quits {
         return Some("the application delegate does not answer applicationShouldTerminate:".into());
     }
-    windows.iter().find(|w| !w.panel).map(|w| format!("the {} window is not a non-activating panel ({}, style 0x{:x})", w.label, w.class, w.style))
+    if let Some(w) = windows.iter().find(|w| !w.panel) {
+        return Some(format!("the {} window is not a non-activating panel ({})", w.label, w.line()));
+    }
+    windows.iter().find(|w| !w.hidden_from_capture()).map(|w| format!("the {} window is not hidden from screen capture ({})", w.label, w.line()))
 }
 
 /// The test's own folder while it runs; everything that would touch the real one asks here first.
@@ -156,7 +160,11 @@ pub fn drive(app: tauri::AppHandle) {
                 say(&format!("failed: {problem}"));
                 finish(&dir, EXIT_MAC_APP);
             }
-            say("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels");
+            for window in &windows {
+                say(&format!("  {}: {}", window.label, window.line()));
+            }
+            let setter = windows.iter().filter(|w| w.activation_setter).count();
+            say(&format!("ok: quits from the Dock keep a recording first; the floating windows are non-activating panels hidden from screen capture (activation setter applied to {setter} of {})", windows.len()));
         }
         let _ = std::fs::remove_dir_all(&dir);
         app.exit(0);
@@ -260,14 +268,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_mac_smoke_test_fails_without_the_quit_answer_or_the_panels() {
-        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true };
+    fn the_mac_smoke_test_fails_without_the_quit_answer_the_panels_or_the_capture_flag() {
+        let panel = |label: &'static str| crate::mac_check::WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 };
         let good = [panel("overlay"), panel("pill")];
         assert_eq!(mac_app_problem(true, &good), None);
         assert!(mac_app_problem(false, &good).unwrap().contains("applicationShouldTerminate:"));
         let plain = crate::mac_check::WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, ..panel("pill") };
-        assert_eq!(mac_app_problem(true, &[panel("overlay"), plain]).unwrap(), "the pill window is not a non-activating panel (TaoWindow, style 0x0)");
-        assert_eq!(EXIT_MAC_APP, 4);
+        assert!(mac_app_problem(true, &[panel("overlay"), plain]).unwrap().starts_with("the pill window is not a non-activating panel (TaoWindow, style 0x0"));
+        // The capture flag must survive the class change: a panel shown in screen capture fails.
+        let shown = crate::mac_check::WindowFacts { sharing: 1, ..panel("overlay") };
+        assert!(mac_app_problem(true, &[shown, panel("pill")]).unwrap().starts_with("the overlay window is not hidden from screen capture (EchoLedgerFloatingPanel, style 0x80, sharing 1"));
+        // Without the activation setter it still passes (the output says how many got it).
+        assert_eq!(mac_app_problem(true, &[crate::mac_check::WindowFacts { activation_setter: false, ..panel("pill") }]), None);
+        assert_eq!(EXIT_MAC_APP, 7);
+        assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_MAC_APP), "its own code");
     }
 
     fn args(list: &[&str]) -> Vec<String> {
