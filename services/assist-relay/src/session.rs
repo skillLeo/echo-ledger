@@ -1074,11 +1074,14 @@ impl Engine {
 
     /// A shown suggestion broke after its first words (the connection dropped, or the model declined mid-answer). It
     /// ends `superseded`, and the fallback model answers the same request as a new suggestion that `replaces` it, timed
-    /// from the same end of turn. The fallback gets no fallback of its own.
+    /// from the same end of turn. The fallback gets no fallback of its own. A Balanced draft's upgrade carries over:
+    /// the fallback's answer becomes the draft it may replace, with the same rule as before.
     fn replace_on_fallback(&mut self, id: &str, fallback: String) {
-        let Some(active) = self.active.get(id) else {
+        let Some(active) = self.active.get_mut(id) else {
             return;
         };
+        // Taken off the broken draft so that finishing it does not discard the upgrade.
+        let upgrade = active.linked.take();
         let (origin, mode, context, t0) = (active.origin.clone(), active.mode, active.context.clone(), active.t0);
         self.finish_shown(id, Finish::Superseded);
         let new_id = self.next_id();
@@ -1090,7 +1093,7 @@ impl Engine {
             mode,
             model: fallback.clone(),
             speculative: false,
-            draft: false,
+            draft: upgrade.is_some(),
             replaces: Some(id.to_owned()),
         }));
         if let Some(spec) = self.spec.as_mut()
@@ -1098,7 +1101,10 @@ impl Engine {
         {
             spec.suggestion_id = new_id.clone();
         }
-        self.launch(new_id.clone(), Visibility::Shown, origin, mode, fallback, None, context, t0, None);
+        self.launch(new_id.clone(), Visibility::Shown, origin, mode, fallback, None, context, t0, upgrade.clone());
+        if let Some(upgrade) = upgrade.and_then(|upgrade| self.active.get_mut(&upgrade)) {
+            upgrade.linked = Some(new_id.clone());
+        }
         if let Some(active) = self.active.get_mut(&new_id) {
             active.fallback_used = true;
         }

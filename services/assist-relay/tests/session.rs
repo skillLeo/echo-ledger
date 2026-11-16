@@ -254,6 +254,46 @@ async fn a_model_that_breaks_mid_answer_is_replaced_by_the_fallback_model() {
     assert!(records.iter().any(|r| r.suggestion == id && r.fallback_used));
 }
 
+/// A Balanced hard question whose Haiku draft breaks after three words: the fallback (gpt-oss) answers as the draft.
+async fn broken_draft(h: &Harness, s: &mut Driver, turn: &str) -> (String, String) {
+    ready(s).await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Break(3));
+    s.send(final_turn(turn, "other", HARD)).await;
+    let first = s.until("suggestion_end").await;
+    assert_eq!((first[0]["draft"].as_bool(), first.last().unwrap()["status"].as_str()), (Some(true), Some("superseded")));
+    let broken = first[0]["suggestion_id"].as_str().unwrap().to_owned();
+    let replacement = s.until("suggestion_end").await;
+    let start = &replacement[0];
+    assert_eq!(start["replaces"], broken.as_str());
+    assert_eq!((start["model"].as_str(), start["draft"].as_bool()), (Some("openai/gpt-oss-120b"), Some(true)), "still a draft");
+    assert_eq!(replacement.last().unwrap()["status"], "done");
+    (broken, start["suggestion_id"].as_str().unwrap().to_owned())
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_draft_replaced_mid_answer_keeps_its_upgrade() {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(claims("s-break-upgrade"));
+    let (_, fallback_id) = broken_draft(&h, &mut s, "o-21").await;
+    let upgrade = s.until("suggestion_end").await;
+    let start = &upgrade[0];
+    assert_eq!((start["kind"].as_str(), start["model"].as_str()), (Some("upgrade"), Some("claude-sonnet-5-5")));
+    assert_eq!(start["replaces"], fallback_id.as_str(), "it replaces the fallback's answer");
+    assert_eq!(text_of(&upgrade, start["suggestion_id"].as_str().unwrap()), mock_reply(Purpose::Answer, HARD));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_draft_replaced_mid_answer_loses_its_upgrade_once_i_speak() {
+    let h = harness(RelayConfig::built_in());
+    let mut s = h.connect(claims("s-break-upgrade-me"));
+    broken_draft(&h, &mut s, "o-22").await;
+    s.send(json!({"type": "turn_partial", "turn_id": "m-22", "channel": "me", "text": "So at Acme I", "silence_ms": 0})).await;
+    let later = s.drain(Duration::from_secs(3)).await;
+    assert!(of_type(&later, "suggestion_start").is_empty(), "{later:?}");
+    let upgrade = h.telemetry.suggestions().into_iter().find(|r| r.trigger == Trigger::Upgrade).expect("an upgrade record");
+    assert_eq!(upgrade.outcome, Outcome::Discarded);
+}
+
 #[tokio::test(start_paused = true)]
 async fn a_model_that_never_answers_ends_in_a_retryable_error_after_the_fallback() {
     let h = harness(RelayConfig::built_in());

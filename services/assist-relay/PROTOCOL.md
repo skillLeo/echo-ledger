@@ -269,7 +269,8 @@ gpt-oss-120b on Groq).
   `suggestion_end.model` is the fallback.
 - **After words reached the card** (a dropped connection or a refusal mid-answer), the suggestion ends `superseded`
   and the fallback model answers the same request as a new suggestion with `replaces` set to it, timed from the same
-  end of turn. The app replaces the card's text.
+  end of turn. The app replaces the card's text. A Balanced draft's upgrade carries over: the fallback's answer is the
+  new draft (`draft: true`), and the upgrade replaces it under the usual rule (not after I spoke, not a `SKIP`).
 - Without a fallback (or when it fails too), the suggestion ends with an `error` (`retry: true` except for
   `model_declined` and `provider_not_configured`).
 
