@@ -29,7 +29,8 @@ today's navigation.
   time · status; search + 3 quick filters (Source, Date, Status) + a Filters panel, applied filters as removable chips;
   saved views Today · Untranscribed · Starred · Voice notes; select many → Transcribe · Move to workspace · Delete (undo).
 - 2.2 Workspaces (projects with memory): tabs Recordings · Ask · Memory & instructions.
-- 2.3 Trash: restore for 30 days.
+- 2.3 Trash: restore for as long as the server keeps deleted recordings (`trash.keep_hours` in the config: 48 hours
+  today). The plan asks for 30 days; that changes the privacy policy's promise, so it waits for the owner's decision.
 - The recording page opens from any row: tabs Transcript · Summary · Ask · Moments · Details; actions Play · Share
   (WhatsApp, link, file) · Transcribe · Move · Delete.
 

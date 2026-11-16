@@ -14,6 +14,7 @@ use App\Models\CaptureSession;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\Accounts\SettingsRegistry;
 use App\Services\Entitlements\TranscriptionKeys;
+use App\Services\InterfaceFlags;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\LanguageChoice;
 use App\Support\Formats;
@@ -44,6 +45,9 @@ trait ManagesAppPages
                 'layout' => ['appearance.library_view', Shell::LAYOUTS],
             ],
             'languages' => ['' => 'Automatic', 'en' => 'English', 'ur' => 'Urdu', 'ar' => 'Arabic'],
+            // Since 2.0.0-a: "Switch back to classic", offered while a redesigned screen is on for this person.
+            'classicOffered' => app(InterfaceFlags::class)->anyUiV2($this->account()),
+            'classic' => (bool) $this->account()->ui_classic,
             'more' => LanguageChoice::MORE,
         ];
     }
@@ -104,6 +108,17 @@ trait ManagesAppPages
     }
 
     /** One category of emails on or off. */
+    /** Settings › Appearance → Switch back to classic (since 2.0.0-a): the same setting as PUT /api/account/ui. */
+    public function toggleClassic(): void
+    {
+        $user = $this->account();
+        if (! $user->ui_classic && ! app(InterfaceFlags::class)->anyUiV2($user)) {
+            return;
+        }
+        app(InterfaceFlags::class)->setClassic($user, ! $user->ui_classic);
+        SettingsContext::forget();
+    }
+
     public function toggleEmail(string $category): void
     {
         if (! isset(EmailPreferences::CATEGORIES[$category])) {
