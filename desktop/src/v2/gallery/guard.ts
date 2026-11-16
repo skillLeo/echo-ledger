@@ -1,10 +1,5 @@
-// The v2 gallery opens only from a development build with ?v2gallery in the address. main.tsx tests
-// `import.meta.env.DEV` inline before calling this, so a release build drops the gallery and this check entirely.
-
-/** Whether the address asks for the v2 gallery (development builds only; main.tsx checks the build first). */
-export function wantsV2Gallery(search: string): boolean {
-  return new URLSearchParams(search).has("v2gallery");
-}
+// The v2 gallery opens only from a development build with ?v2gallery in the address; main.tsx checks both inline
+// and imports nothing from here, so a release build has none of the gallery (release.test.ts builds one to check).
 
 export type GalleryParams = {
   screen: "library" | "recording" | "settings";

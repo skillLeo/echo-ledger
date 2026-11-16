@@ -3,34 +3,26 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { galleryParams, wantsV2Gallery } from "./guard";
+import { galleryParams } from "./guard";
 import { Gallery } from "./Gallery";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 describe("the gallery guard", () => {
-  it("asks for the gallery only with ?v2gallery", () => {
-    expect(wantsV2Gallery("?v2gallery")).toBe(true);
-    expect(wantsV2Gallery("?v2gallery&screen=settings")).toBe(true);
-    expect(wantsV2Gallery("")).toBe(false);
-    expect(wantsV2Gallery("?screen=library")).toBe(false);
-    expect(wantsV2Gallery("?v2galleryx")).toBe(false);
-  });
-
   it("reads the screen, theme and language, with safe defaults", () => {
     expect(galleryParams("?v2gallery")).toEqual({ screen: "library", theme: "light", lang: "en" });
     expect(galleryParams("?v2gallery&screen=settings&theme=dark&lang=ur")).toEqual({ screen: "settings", theme: "dark", lang: "ur" });
     expect(galleryParams("?screen=<x>&lang=fr")).toEqual({ screen: "library", theme: "light", lang: "en" });
   });
 
-  it("main.tsx reaches the gallery only behind an inline development-build check, which a release build removes", () => {
+  it("main.tsx reaches the gallery only behind an inline development-build check, and imports nothing of it", () => {
     const main = readFileSync(join(here, "..", "..", "main.tsx"), "utf8");
-    const uses = main.split("\n").filter((line) => line.includes("v2/gallery/mount"));
-    expect(uses).toHaveLength(1);
-    const branch = main.slice(main.indexOf("if (import.meta.env.DEV && wantsV2Gallery(location.search))"));
-    expect(branch.length).toBeLessThan(main.length);
+    expect(main.split("\n").filter((line) => line.includes("v2/gallery") && !line.trimStart().startsWith("//"))).toHaveLength(1);
+    const guard = 'if (import.meta.env.DEV && new URLSearchParams(location.search).has("v2gallery")) {';
+    expect(main).toContain(guard);
+    const branch = main.slice(main.indexOf(guard));
     expect(branch.slice(0, branch.indexOf("} else {"))).toContain('import("./v2/gallery/mount")');
-    expect(main).not.toMatch(/^import .*v2\/gallery\/(mount|Gallery)/m);
+    expect(main).not.toMatch(/^import .*v2\//m);
   });
 });
 

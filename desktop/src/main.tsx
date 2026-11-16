@@ -5,7 +5,6 @@ import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
-import { wantsV2Gallery } from "./v2/gallery/guard";
 
 // One index.html for every window; the view is chosen from the window label.
 const MainApp = lazy(() => import("./views/main/MainApp"));
@@ -62,9 +61,9 @@ if (label === "main") api.setWindowTheme(getThemeChoice()).catch(() => undefined
 const View = WINDOW_VIEWS.get(label) ?? MainApp;
 
 const root = document.getElementById("root") as HTMLElement;
-// The v2 design gallery: a development build with ?v2gallery only. The build check stays inline so a release build
-// removes this branch and the gallery with it.
-if (import.meta.env.DEV && wantsV2Gallery(location.search)) {
+// The v2 design gallery: a development build with ?v2gallery only. The build check comes first and nothing of the
+// gallery is imported above, so a release build removes this branch and the gallery with it (v2/gallery/release.test.ts).
+if (import.meta.env.DEV && new URLSearchParams(location.search).has("v2gallery")) {
   void import("./v2/gallery/mount").then((m) => m.mountGallery(root));
 } else {
   ReactDOM.createRoot(root).render(
