@@ -86,6 +86,8 @@ pub enum SessionEvent {
     ModeChanged { session: String, from: EffectiveMode, to: EffectiveMode, reason: &'static str },
     TokenRefreshed { session: String },
     AuthRejected { reason: &'static str },
+    /// A connection turned away before the upgrade (`relay_busy`).
+    Refused { reason: &'static str },
     Warmed { session: String, model: String, cost_micros: u64, error: Option<&'static str> },
 }
 
@@ -150,6 +152,9 @@ impl TelemetrySink for LogSink {
             }
             SessionEvent::AuthRejected { reason } => {
                 tracing::warn!(target: "assist_relay::telemetry", event = "auth_rejected", reason);
+            }
+            SessionEvent::Refused { reason } => {
+                tracing::warn!(target: "assist_relay::telemetry", event = "connection_refused", reason);
             }
             SessionEvent::Warmed { session, model, cost_micros, error } => {
                 tracing::debug!(target: "assist_relay::telemetry", event = "warmed", session = %session, model = %model, cost_micros, error);

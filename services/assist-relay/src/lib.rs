@@ -61,7 +61,13 @@ pub fn app_state(parts: Parts) -> AppState {
         reports: parts.reports,
         verifier: verifier.clone(),
     };
-    AppState { registry: Registry::new(deps), verifier, config: parts.config, telemetry: parts.telemetry }
+    AppState {
+        registry: Registry::new(deps),
+        verifier,
+        config: parts.config,
+        telemetry: parts.telemetry,
+        connections: Arc::default(),
+    }
 }
 
 /// `assist-relay --check-health`: asks the local relay's `/healthz` (for container health checks, where there is no

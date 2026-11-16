@@ -100,6 +100,13 @@ pub struct Limits {
     pub max_facts: usize,
     pub messages_per_second: u32,
     pub burst: u32,
+    /// Open WebSockets the relay holds at once (signed in or still waiting for `auth`); more get `503 relay_busy`.
+    #[serde(default = "default_max_connections")]
+    pub max_connections: usize,
+}
+
+fn default_max_connections() -> usize {
+    1000
 }
 
 #[derive(Debug, Clone, Deserialize)]

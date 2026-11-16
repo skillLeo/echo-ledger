@@ -53,6 +53,9 @@ max_document_chars = 400000
 max_facts = 200
 messages_per_second = 40
 burst = 80
+# Open connections at once, for the whole relay. A session needs about 0.2 MiB and at most about 1 MiB, so 1000 fit
+# in the systemd unit's 2 GB with room to spare (DEPLOY.md); more answer 503 relay_busy and the app tries again.
+max_connections = 1000
 
 # Mode -> model. Each plan's modes come from the assist token; Max is Ultra only.
 [modes.fast]

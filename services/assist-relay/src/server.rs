@@ -4,6 +4,7 @@
 //! within 5 seconds; until then nothing else is read.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use axum::Router;
@@ -40,6 +41,27 @@ pub struct AppState {
     pub verifier: Arc<TokenVerifier>,
     pub config: Arc<Shared<RelayConfig>>,
     pub telemetry: Arc<dyn TelemetrySink>,
+    /// Open WebSockets, for `limits.max_connections`.
+    pub connections: Arc<AtomicUsize>,
+}
+
+/// One open WebSocket, counted until it is dropped.
+struct Slot(Arc<AtomicUsize>);
+
+impl Slot {
+    fn take(counter: &Arc<AtomicUsize>, max: usize) -> Option<Slot> {
+        if counter.fetch_add(1, Ordering::AcqRel) >= max {
+            counter.fetch_sub(1, Ordering::AcqRel);
+            return None;
+        }
+        Some(Slot(counter.clone()))
+    }
+}
+
+impl Drop for Slot {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::AcqRel);
+    }
 }
 
 pub fn router(state: AppState) -> Router {
@@ -109,10 +131,17 @@ async fn connect(
         return http_error(StatusCode::BAD_REQUEST, "websocket_required", "Connect with a WebSocket.");
     };
     let limits = state.config.get().limits.clone();
+    let Some(slot) = Slot::take(&state.connections, limits.max_connections) else {
+        state.telemetry.event(&SessionEvent::Refused { reason: "relay_busy" });
+        return http_error(StatusCode::SERVICE_UNAVAILABLE, "relay_busy", "The relay is full. Try again in a moment.");
+    };
     upgrade
         .max_message_size(limits.max_message_bytes)
         .max_frame_size(limits.max_message_bytes)
-        .on_upgrade(move |socket| run_socket(socket, state, claims))
+        .on_upgrade(move |socket| async move {
+            run_socket(socket, state, claims).await;
+            drop(slot);
+        })
 }
 
 fn reject(state: &AppState, error: AuthError) -> Response {

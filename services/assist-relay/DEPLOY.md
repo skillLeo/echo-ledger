@@ -178,6 +178,10 @@ map $http_upgrade $connection_upgrade {
     ''      close;
 }
 
+# Per address: open relay connections, and new connections a minute (a WebSocket is one request when it opens).
+limit_conn_zone $binary_remote_addr zone=relay_conn:10m;
+limit_req_zone  $binary_remote_addr zone=relay_open:10m rate=30r/m;
+
 server {
     listen 80;
     server_name <relay host>;
@@ -194,6 +198,10 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
 
     location = /v1/assist {
+        limit_conn relay_conn 20;
+        limit_req zone=relay_open burst=20 nodelay;
+        limit_conn_status 429;
+        limit_req_status 429;
         proxy_pass http://127.0.0.1:8787;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
@@ -223,6 +231,13 @@ sudo certbot --nginx -d <relay host> --reuse-key
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
+- **Limits per address.** One app holds one connection per call and reconnects now and then, so 20 open
+  connections and 30 new ones a minute (bursts of 20) per address leave room for an office or a mobile network
+  where many people share one public address (carrier NAT is common in Pakistan), while one address can't hold the
+  relay's capacity. Beyond them nginx answers `429` before the relay sees anything. The relay has its own ceiling for
+  everyone together, `max_connections` in `[limits]` (1000; `503 relay_busy` beyond it). Each session needs about
+  0.2 MiB measured and, estimated, at most about 1 MiB, so 1000 sessions fit in the unit's `MemoryMax=2G`. Raise both
+  together, with the VPS's memory, if real traffic comes close.
 - nginx sets `TCP_NODELAY` on WebSocket proxying by default (`tcp_nodelay on`). Keep it on. Without it, small frames
   wait for acknowledgements and add tens of milliseconds per suggestion (LOADTEST.md).
 - `--reuse-key` keeps the TLS key across renewals, so a public-key pin stays valid. If the apps pin the relay's key as
