@@ -209,7 +209,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
           {query && <button type="button" className="btn ghost icon-only palette-clear" aria-label="Clear" onMouseDown={(e) => e.preventDefault()} onClick={() => { setQuery(""); setIndex(0); inputRef.current?.focus(); }}><LucideXIcon size={14} /></button>}
         </div>
         <div id={listId} className="palette-list" role="listbox" aria-label="Results">
-          {options.length === 0 && <div className="palette-empty small muted" role="status">{lookingUp ? "Searching recordings and transcripts…" : `Nothing matches “${query.trim()}” in recordings, transcripts, settings or pages.`}</div>}
+          {options.length === 0 && <div className="palette-empty small muted" role="status">{emptyLine(query, lookingUp)}</div>}
           {groups.map(([name, list]) => (
             <div key={name} role="group" aria-labelledby={`${listId}-g-${name}`} className="palette-group">
               <div id={`${listId}-g-${name}`} className="palette-group-head" role="presentation">{name}</div>
@@ -237,4 +237,13 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
       </div>
     </div>
   );
+}
+
+/** What the palette says when nothing is listed (pure): recordings are searched from two letters, so one letter asks
+ * for another rather than saying nothing matches. */
+export function emptyLine(query: string, lookingUp: boolean): string {
+  const q = query.trim();
+  if (q.length === 1) return "Type one more letter to search recordings.";
+  if (lookingUp) return "Searching recordings and transcripts…";
+  return `Nothing matches “${q}” in recordings, transcripts, settings or pages.`;
 }

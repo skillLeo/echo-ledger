@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
-import { CommandPalette, paletteCommands, paletteMatches } from "./CommandPalette";
+import { CommandPalette, paletteCommands, paletteMatches, emptyLine } from "./CommandPalette";
 import { resetTauriMock, respond } from "../../test/tauri";
 import { makeItem, makeRecording, makeStatus, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
@@ -154,6 +154,17 @@ describe("command palette (B9)", () => {
     expect(option.querySelector("mark")).toHaveTextContent("invoice");
     fireEvent.mouseDown(option);
     expect(props.onOpenRecording).toHaveBeenCalledWith("s1", 65_000);
+  });
+
+  it("asks for one more letter rather than saying nothing matches a single letter", () => {
+    expect(emptyLine("q", false)).toBe("Type one more letter to search recordings.");
+    expect(emptyLine(" q ", true)).toBe("Type one more letter to search recordings.");
+    expect(emptyLine("qz", true)).toBe("Searching recordings and transcripts…");
+    expect(emptyLine("qz", false)).toBe("Nothing matches “qz” in recordings, transcripts, settings or pages.");
+    renderPalette();
+    // A letter no command, page or setting has.
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "ж" } });
+    expect(screen.getByRole("status")).toHaveTextContent("Type one more letter to search recordings.");
   });
 
   it("closes with Escape and says when nothing matches", async () => {

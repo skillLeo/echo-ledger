@@ -269,6 +269,24 @@ const SCREENS = [
   ["library-banners-mac", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]")],
   ["library-banners-mac-narrow", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 860, height: 560 }],
   ["library-banners-mac-text200", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 1100, height: 740, scale: 2 }],
+  // Review (c2cd2044): Settings' list and search, the sidebar's Search button and a banner with Learn more open, at the
+  // smallest window and at 200 % text.
+  ...[["", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }]].flatMap(([size, viewport]) => [
+    [`review-settings-list${size || "-narrow"}`, "settings&plan=ultra&unlimited=1", settingsReady, viewport],
+    [`review-settings-search${size || "-narrow"}`, "settings&plan=free", async (page) => {
+      await settingsReady(page);
+      await page.getByRole("textbox", { name: "Search settings" }).fill("lock");
+      await page.waitForSelector("[data-testid=settings-results]");
+    }, viewport],
+    [`review-sidebar-search${size || "-narrow"}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().focus();
+    }, viewport],
+    [`review-banner-learn-more${size || "-narrow"}`, "library-maintenance", async (page) => {
+      await page.waitForSelector("[data-testid=maintenance]");
+      await page.getByTestId("maintenance").getByRole("button", { name: "Learn more" }).click();
+    }, viewport],
+  ]),
   // A recovered recording keeps its chip after its transcript renamed it.
   ["library-recovered", "library-recovered", async (page) => page.waitForSelector(".recovered-chip")],
   ["library-recovered-narrow", "library-recovered", async (page) => page.waitForSelector(".recovered-chip"), { width: 860, height: 560 }],

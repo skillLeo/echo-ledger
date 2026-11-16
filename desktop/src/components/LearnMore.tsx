@@ -6,10 +6,10 @@ export function LearnMore({ children, label = "Learn more" }: { children: ReactN
   const id = useId();
   return (
     <>
+      <span id={id} className="banner-details small" hidden={!open} dir="auto">{children}</span>
       <button type="button" className="btn inline-link learn-more" aria-expanded={open} aria-controls={id} onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}>
         {open ? "Show less" : label}
       </button>
-      <span id={id} className="banner-details small" hidden={!open} dir="auto">{children}</span>
     </>
   );
 }

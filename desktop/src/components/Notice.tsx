@@ -195,12 +195,14 @@ export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLab
       onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDismiss(); } }}
       onClick={onClick} onTransitionEnd={() => setSettling(false)}>
       {icon && <span className="notice-icon" aria-hidden="true">{icon}</span>}
-      {onOpen ? (
-        <button type="button" className="notice-open" onClick={open} aria-label={openLabel}>{children}</button>
-      ) : (
-        <span className="notice-text">{children}</span>
-      )}
-      {details && <span className="notice-details">{details}</span>}
+      <span className="notice-main">
+        {onOpen ? (
+          <button type="button" className="notice-open" onClick={open} aria-label={openLabel}>{children}</button>
+        ) : (
+          <span className="notice-text">{children}</span>
+        )}
+        {details && <span className="notice-details">{details}</span>}
+      </span>
       {actions && <span className="notice-actions">{actions}</span>}
       <button type="button" className="notice-close" aria-label="Dismiss" title="Dismiss (Esc)" onClick={(e) => { e.stopPropagation(); onDismiss(); }}>
         <CloseIcon size={14} />

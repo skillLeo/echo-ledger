@@ -1740,5 +1740,9 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
 
 /* A banner's details behind "Learn more" (components/LearnMore.tsx): on their own line under the sentence. */
 .learn-more { font-size: var(--text-sm); }
-.notice-details { flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-2); }
-.banner-details:not([hidden]) { flex-basis: 100%; color: inherit; opacity: 0.9; }
+/* The sentence, then what it leaves out under it (never in a column of its own beside it). */
+.notice-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.notice-main > .notice-open, .notice-main > .notice-text { align-self: stretch; }
+.notice-details { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.notice-details .learn-more { font-weight: 600; padding: 0; min-height: 0; background: transparent; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
+.banner-details:not([hidden]) { display: block; color: inherit; opacity: 0.9; }
