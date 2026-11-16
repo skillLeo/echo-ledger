@@ -77,9 +77,9 @@ pub fn not_recorded(user: &MicUser) -> bool {
     matches!(user.decision.as_str(), "ignored" | "off")
 }
 
-/// The last app that used the microphone without being recorded, and when it was last seen so. Kept in memory while
-/// EchoLedger runs, so Settings › Calls & meetings can explain a call from earlier, not only one happening while that
-/// page is open. Names and reasons only: no sound, no words, no window titles.
+/// An app that used the microphone without being recorded, and when it was last seen so. Kept in memory while
+/// EchoLedger runs, one entry per app, so Settings › Calls & meetings can explain a call from earlier, not only one
+/// happening while that page is open. Names and reasons only: no sound, no words, no window titles.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NotRecorded {
@@ -87,9 +87,43 @@ pub struct NotRecorded {
     pub at: chrono::DateTime<chrono::Utc>,
 }
 
-/// What is kept after a look (pure): the first app of this look that is not recorded, seen now; else what was kept.
-pub fn last_not_recorded(users: &[MicUser], kept: Option<NotRecorded>, now: chrono::DateTime<chrono::Utc>) -> Option<NotRecorded> {
-    users.iter().find(|u| not_recorded(u)).map(|user| NotRecorded { user: user.clone(), at: now }).or(kept)
+/// How many apps not recorded are kept, the most recently seen.
+pub const KEPT_NOT_RECORDED: usize = 8;
+
+/// The same app as far as "not recorded" goes: the same program, on the same website for a browser.
+fn same_app(a: &MicUser, b: &MicUser) -> bool {
+    a.name == b.name && a.site == b.site
+}
+
+/// What is kept after a look (pure): every app of this look that is not recorded, each in its own entry seen now, then
+/// the apps kept before that this look did not see again, as they were; newest first, at most [`KEPT_NOT_RECORDED`].
+pub fn keep_not_recorded(users: &[MicUser], kept: Vec<NotRecorded>, now: chrono::DateTime<chrono::Utc>) -> Vec<NotRecorded> {
+    let mut next: Vec<NotRecorded> = Vec::new();
+    for user in users.iter().filter(|u| not_recorded(u)) {
+        if !next.iter().any(|k| same_app(&k.user, user)) {
+            next.push(NotRecorded { user: user.clone(), at: now });
+        }
+    }
+    let older: Vec<NotRecorded> = kept.into_iter().filter(|k| !next.iter().any(|n| same_app(&n.user, &k.user))).collect();
+    next.extend(older);
+    // Stable: this look's apps keep their order, then the older ones by their time.
+    next.sort_by_key(|k| std::cmp::Reverse(k.at));
+    next.truncate(KEPT_NOT_RECORDED);
+    next
+}
+
+/// Whether an app looks like a call (pure): a call app EchoLedger knows, or one that plays sound. An app that only
+/// holds the microphone (a noise filter, a voice changer, dictation) comes after any of those.
+fn call_like(user: &MicUser) -> bool {
+    user.app.is_some() || user.plays_audio
+}
+
+/// The one "Why a call wasn't recorded" explains (pure): of the apps kept (newest first), only those not using the
+/// microphone now (the list above it explains those), the newest that looks like a call, else the newest of the rest.
+/// So an app always holding the microphone (a noise filter, a browser tab) never hides the call that was missed.
+pub fn last_not_recorded(kept: &[NotRecorded], now_using: &[MicUser]) -> Option<NotRecorded> {
+    let gone = || kept.iter().filter(|k| !now_using.iter().any(|u| same_app(u, &k.user)));
+    gone().find(|k| call_like(&k.user)).or_else(|| gone().next()).cloned()
 }
 
 /// The never-record rule "Always ignore" adds: for a browser the tab's host when known, else the page title;
@@ -166,8 +200,8 @@ pub struct DetectState {
     looked: Mutex<Option<Instant>>,
     /// Starts a detected meeting that did not start recording after 5 s (Phase 1C).
     watchdog: Mutex<crate::call_guard::Watchdog>,
-    /// The last app not recorded and when ([`last_not_recorded`]), for "Why a call wasn't recorded".
-    missed: Mutex<Option<NotRecorded>>,
+    /// The apps not recorded and when, newest first ([`keep_not_recorded`]), for "Why a call wasn't recorded".
+    missed: Mutex<Vec<NotRecorded>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -182,7 +216,9 @@ impl DetectState {
 
     /// The last app that used the microphone without being recorded since EchoLedger started, and when.
     pub fn last_not_recorded(&self) -> Option<NotRecorded> {
-        lock(&self.missed).clone()
+        let kept = lock(&self.missed).clone();
+        let now_using = lock(&self.users).clone();
+        last_not_recorded(&kept, &now_using)
     }
 
     /// Whether the loop looked at the microphone within `limit` (it stops only if its thread died).
@@ -278,7 +314,7 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     let users: Vec<MicUser> = trees.iter().zip(&verdicts).map(|(t, v)| explain(t, v, rules, recorded.filter(|_| recording))).collect();
     {
         let mut missed = lock(&detect.missed);
-        *missed = last_not_recorded(&users, missed.take(), chrono::Utc::now());
+        *missed = keep_not_recorded(&users, std::mem::take(&mut *missed), chrono::Utc::now());
     }
     *lock(&detect.users) = users;
     *lock(&detect.meeting) = meeting_tree(trees, rules, recorded.filter(|_| recording));
@@ -390,27 +426,74 @@ mod tests {
         chrono::DateTime::from_timestamp(1_763_380_800 + i64::from(minute) * 60, 0).unwrap()
     }
 
+    fn call(name: &str, app: &str, reason: &str) -> MicUser {
+        MicUser { app: Some(app.into()), plays_audio: true, ..user(name, "ignored", Some(reason)) }
+    }
+
+    /// One look after another: what is kept, and the line's app with what uses the microphone now.
+    fn looks(steps: &[(u32, &[MicUser])]) -> (Vec<NotRecorded>, Option<NotRecorded>) {
+        let mut kept = Vec::new();
+        let mut now_using: &[MicUser] = &[];
+        for (minute, users) in steps {
+            kept = keep_not_recorded(users, kept, at(*minute));
+            now_using = users;
+        }
+        let last = last_not_recorded(&kept, now_using);
+        (kept, last)
+    }
+
     #[test]
     fn the_last_app_not_recorded_is_kept_with_its_reason_and_time_after_it_stops() {
         let slack = user("slack.exe", "ignored", Some("unknown_app"));
         let meet = user("chrome.exe", "recording", None);
-        // Seen not recorded: kept with the time of the look.
-        let kept = last_not_recorded(&[meet.clone(), slack.clone()], None, at(0));
-        assert_eq!(kept, Some(NotRecorded { user: slack.clone(), at: at(0) }));
-        // Still there a minute later: the time moves on.
-        let kept = last_not_recorded(std::slice::from_ref(&slack), kept, at(1));
-        assert_eq!(kept.as_ref().map(|k| k.at), Some(at(1)));
-        // It stopped using the microphone, and a recorded call came and went: still explained, from when it was last seen.
-        let kept = last_not_recorded(&[meet], kept, at(5));
-        let kept = last_not_recorded(&[], kept, at(30));
-        assert_eq!(kept, Some(NotRecorded { user: slack, at: at(1) }));
-        // Auto-record off counts too; a later one takes its place.
-        let zoom = user("zoom.us", "off", Some("auto_off"));
-        assert_eq!(last_not_recorded(std::slice::from_ref(&zoom), kept, at(40)).map(|k| k.user), Some(zoom));
+        // While it is listed, the list explains it: the line is for apps gone from it.
+        let (kept, last) = looks(&[(0, &[meet.clone(), slack.clone()])]);
+        assert_eq!(kept, vec![NotRecorded { user: slack.clone(), at: at(0) }]);
+        assert_eq!(last, None);
+        // Still there a minute later: the time moves on; then it stopped, and a recorded call came and went.
+        let (_, last) = looks(&[(0, std::slice::from_ref(&slack)), (1, std::slice::from_ref(&slack)), (5, std::slice::from_ref(&meet)), (30, &[])]);
+        assert_eq!(last, Some(NotRecorded { user: slack.clone(), at: at(1) }));
+        // Auto-record off counts too; a later one comes first.
+        let zoom = call("zoom.us", "zoom", "auto_off");
+        let (_, last) = looks(&[(0, std::slice::from_ref(&slack)), (1, &[]), (40, &[MicUser { decision: "off".into(), ..zoom.clone() }]), (41, &[])]);
+        assert_eq!(last.map(|k| (k.user.name, k.at)), Some(("zoom.us".to_string(), at(40))));
         // Recorded, about to be recorded or asked about is not "not recorded".
         for decision in ["recording", "auto_record", "ask"] {
-            assert_eq!(last_not_recorded(&[user("x", decision, None)], None, at(0)), None, "{decision}");
+            assert!(keep_not_recorded(&[user("x", decision, None)], Vec::new(), at(0)).is_empty(), "{decision}");
         }
+    }
+
+    #[test]
+    fn an_app_always_on_the_microphone_never_hides_the_call_that_was_missed() {
+        // A noise filter holds the microphone all day, listed first; Zoom's call is not recorded (its switch is off).
+        let krisp = user("Krisp", "ignored", Some("unknown_app"));
+        let zoom = call("zoom.us", "zoom", "app_off");
+        let (kept, last) = looks(&[(0, &[krisp.clone(), zoom.clone()]), (20, &[krisp.clone(), zoom.clone()]), (21, std::slice::from_ref(&krisp))]);
+        assert_eq!(kept.len(), 2, "one entry per app");
+        // The call ended, the filter is still listed: the line explains Zoom, and is not hidden by the filter.
+        assert_eq!(last, Some(NotRecorded { user: zoom.clone(), at: at(20) }));
+        // A voice changer seen after the call, gone since: the call still comes first, as it looks like a call.
+        let changer = user("Voice changer", "ignored", Some("dictation"));
+        let (_, last) = looks(&[(0, &[krisp.clone(), zoom.clone()]), (20, &[krisp.clone(), changer.clone()]), (25, std::slice::from_ref(&krisp))]);
+        assert_eq!(last.map(|k| k.user.name), Some("zoom.us".to_string()));
+        // Nothing that looks like a call was missed: the newest of the rest.
+        let (_, last) = looks(&[(0, std::slice::from_ref(&changer)), (3, std::slice::from_ref(&krisp)), (4, &[])]);
+        assert_eq!(last, Some(NotRecorded { user: krisp.clone(), at: at(3) }));
+        // A browser counts per website.
+        let tab = |site: &str| MicUser { site: Some(site.into()), ..user("chrome.exe", "ignored", Some("unknown_site")) };
+        let (kept, _) = looks(&[(0, &[tab("a.example")]), (1, &[tab("b.example")])]);
+        assert_eq!(kept.len(), 2);
+    }
+
+    #[test]
+    fn only_the_most_recent_apps_are_kept() {
+        let mut kept = Vec::new();
+        for minute in 0..12u32 {
+            kept = keep_not_recorded(&[user(&format!("app{minute}"), "ignored", Some("unknown_app"))], kept, at(minute));
+        }
+        assert_eq!(kept.len(), KEPT_NOT_RECORDED);
+        assert_eq!(kept[0].user.name, "app11");
+        assert_eq!(kept[KEPT_NOT_RECORDED - 1].user.name, "app4");
     }
 
     #[test]

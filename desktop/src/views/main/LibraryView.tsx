@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, canTryAgain, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, canTryAgain, needsKeyAction, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -1442,11 +1442,14 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {!readOnly && canTryAgain(transcript.error_code) && (
                         <div className="notice-hint"><button type="button" className="btn compact" onClick={() => void retranscribeSame()}>Try again</button></div>
                       )}
-                      {/* The Free plan (v1.6): transcribed with the person's own Groq key, and none is added yet. */}
-                      {transcript.error_code === "needs_transcription_key" && (
+                      {/* The Free plan (v1.6): transcribed with the person's own Groq key, none is added yet or it was
+                          refused (1.8.1-b): the key's page, one click away. */}
+                      {needsKeyAction(transcript.error_code) && (
                         <div className="notice-hint needs-key" data-testid="needs-key">
-                          <span>{NEEDS_KEY_TEXT}</span>
-                          <button type="button" className="btn compact" onClick={() => openSettingsSection("transcription-key")}>Add my Groq key</button>
+                          {transcript.error_code === "needs_transcription_key" && <span>{NEEDS_KEY_TEXT}</span>}
+                          <button type="button" className="btn compact" onClick={() => openSettingsSection("transcription-key")}>
+                            {transcript.error_code === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}
+                          </button>
                         </div>
                       )}
                     </div>

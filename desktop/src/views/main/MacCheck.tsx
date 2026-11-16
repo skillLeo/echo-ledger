@@ -16,14 +16,26 @@ export function sendBlocked(status: Pick<AppStatus, "paired">): string | null {
 
 function CheckRow({ item }: { item: CheckItem }) {
   const { fix } = item;
+  const [refused, setRefused] = useState<string | null>(null);
+  // Quit & reopen (Screen Recording allowed while EchoLedger ran), refused in the middle of a recording; else the pane.
+  const act = () => {
+    if (!fix) return;
+    if (!fix.reopen) {
+      void api.openPrivacySettings(fix.settings).catch(() => undefined);
+      return;
+    }
+    setRefused(null);
+    api.quitAndReopen().catch((e) => setRefused(errorMessage(e)));
+  };
   return (
     <li className={`check-row ${item.state}`} data-testid={`check-${item.key}`}>
       <span className="check-mark" role="img" aria-label={STATE_WORD[item.state]}>{item.state === "ok" ? <CheckIcon size={15} /> : <CloseIcon size={15} />}</span>
       <div className="check-main">
         <div className="check-title">{item.title}{item.state !== "ok" && <span className="small muted"> · {STATE_WORD[item.state]}</span>}</div>
         <div className="small muted">{item.detail}</div>
+        {refused && <div className="small error-text" role="alert">{refused}</div>}
       </div>
-      {fix && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings(fix.settings).catch(() => undefined)}>{fix.label}</button>}
+      {fix && <button type="button" className={`btn compact ${fix.reopen ? "primary" : ""}`.trim()} onClick={act}>{fix.label}</button>}
     </li>
   );
 }

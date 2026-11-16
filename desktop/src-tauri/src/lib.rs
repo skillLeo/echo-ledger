@@ -263,13 +263,18 @@ impl AppState {
         self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).allowed_before(now, permissions::can_tell_not_asked())
     }
 
+    /// Whether Screen Recording still waits for a reopen although EchoLedger was reopened since it was allowed.
+    pub fn screen_reopen_did_not_apply(&self, now: &permissions::Permissions) -> bool {
+        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).reopen_did_not_apply(now, permissions::this_run())
+    }
+
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
     pub fn permissions_now(&self) -> permissions::Permissions {
         let now = permissions::read();
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
             let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
-            let next = memory.observe(&now, screens_wanted);
+            let next = memory.observe(&now, screens_wanted, permissions::can_tell_not_asked()).note_reopen(&now, permissions::this_run());
             if next != *memory {
                 next.save(&permissions::Memory::path(&self.data_dir));
                 *memory = next;

@@ -635,7 +635,8 @@ fn a_rate_limit_message_says_when_to_try_again() {
     };
     assert_eq!(
         serde_json::to_value(&error).unwrap(),
-        json!("Server returned 429: Too Many Attempts. Try again in 7 s.")
+        // The app's words, never the server's text (D-135), and still when to try again.
+        json!("The server is busy. Try again in 7 s.")
     );
     assert_eq!(error.code(), Some("rate_limited"));
 }
