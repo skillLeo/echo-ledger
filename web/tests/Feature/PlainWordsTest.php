@@ -7,6 +7,7 @@ use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
+use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Support\UpgradeFlow;
 use App\Models\CaptureSession;
 use App\Models\Plan;
@@ -25,6 +26,7 @@ use Filament\Facades\Filament;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
+use Livewire\Livewire;
 use Psr\Http\Message\RequestInterface;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
@@ -299,6 +301,48 @@ describe('the console\'s recording page', function () {
             ->assertSee('Transcribed by')->assertSee('Google Gemini')
             ->assertSee('Gemini could not read the audio.')
             ->assertSee(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected));
+    });
+});
+
+describe('the console\'s Library side panel', function () {
+    beforeEach(function () {
+        Fx::fakeRecordingsDisk();
+        Filament::setCurrentPanel('app');
+    });
+
+    afterEach(fn () => Fx::cleanupDisks());
+
+    /** A failed recording of [$owner] whose engines' own words name them, as EngineFallbackJob writes them. */
+    function plainWordsFailedRecording(User $owner): CaptureSession
+    {
+        $session = plainWordsRecording($owner, ['provider' => 'gemini', 'status' => TranscriptStatus::Failed, 'error_code' => 'provider_rejected',
+            'error' => 'The speech provider could not transcribe this recording: Gemini could not read the audio. (Tried: AssemblyAI, Google Gemini. No other engine with a key can do this language: add one on API Credentials.)']);
+        $session->update(['status' => 'failed']);
+
+        return $session->fresh();
+    }
+
+    it('says why a recording failed in plain words to someone who is not the server\'s operator', function () {
+        $owner = Fx::user();
+        $session = plainWordsFailedRecording($owner);
+        $this->actingAs($owner, 'web');
+
+        $html = Livewire::test(ListCaptureSessions::class)->set('selected', $session->id)->html();
+
+        // Without Livewire's block markers, as people read it.
+        expect((string) preg_replace('/<!--.*?-->/s', '', $html))->toContain('Failed: '.e(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected)))
+            ->and(vendorNamesIn($html))->toBe([])
+            ->and($html)->not->toContain('data-engine-error');
+    });
+
+    it('also shows the engine\'s own words to the server\'s operator', function () {
+        $operator = Fx::superAdmin();
+        $session = plainWordsFailedRecording($operator);
+        $this->actingAs($operator, 'web');
+
+        expect(Livewire::test(ListCaptureSessions::class)->set('selected', $session->id)->html())
+            ->toContain(e(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected)))
+            ->toContain('data-engine-error')->toContain('Gemini could not read the audio.');
     });
 });
 
