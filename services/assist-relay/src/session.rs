@@ -40,6 +40,7 @@ use crate::time::{iso8601, ms, unix_now};
 
 /// WebSocket close codes the relay uses.
 pub mod close {
+    pub const TOO_BIG: u16 = 1009;
     pub const SERVICE_RESTART: u16 = 1012;
     pub const TOKEN_EXPIRED: u16 = 4401;
     pub const WRONG_SESSION: u16 = 4403;

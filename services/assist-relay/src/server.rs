@@ -274,7 +274,13 @@ async fn read_loop(
                 let _ = out.try_send(Outbound::Close { code: close::IDLE, reason: "no messages" });
                 break;
             }
-            Ok(None | Some(Err(_))) => break,
+            Ok(Some(Err(error))) => {
+                if too_big(error) {
+                    let _ = out.try_send(Outbound::Close { code: close::TOO_BIG, reason: "message too big" });
+                }
+                break;
+            }
+            Ok(None) => break,
             Ok(Some(Ok(frame))) => frame,
         };
         let received_at = Instant::now();
@@ -307,6 +313,12 @@ async fn read_loop(
             break;
         }
     }
+}
+
+/// A read that failed on the size limit (`limits.max_message_bytes`).
+fn too_big(error: axum::Error) -> bool {
+    use tokio_tungstenite::tungstenite;
+    matches!(error.into_inner().downcast_ref::<tungstenite::Error>(), Some(tungstenite::Error::Capacity(_)))
 }
 
 /// Serves until `shutdown` completes, then closes every session's connection (1012) and waits briefly for them.

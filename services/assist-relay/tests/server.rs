@@ -38,3 +38,14 @@ async fn connections_beyond_the_limit_get_503_and_a_freed_slot_is_reused() {
     let mut third = third.expect("a slot came free");
     assert_eq!(receive(&mut third).await["type"], "ready");
 }
+
+#[tokio::test]
+async fn a_message_above_the_limit_closes_with_1009() {
+    let relay = listen(RelayConfig::built_in()).await;
+    let mut socket = open(relay.addr, Some(&sign(&claims("s-big")))).await.expect("socket");
+    assert_eq!(receive(&mut socket).await["type"], "ready");
+    let big = "x".repeat(3 * 1024 * 1024);
+    let _ = futures_util::SinkExt::send(&mut socket, tungstenite::Message::Text(big.into())).await;
+    let closed = receive_until(&mut socket, "close").await;
+    assert_eq!(closed.last().unwrap()["code"], 1009, "{closed:?}");
+}
