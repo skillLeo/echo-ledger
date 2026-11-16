@@ -271,7 +271,9 @@ mod tests {
     #[test]
     fn on_a_mac_only_a_floating_window_can_be_a_sharing_bar() {
         let p = Patterns::fallback();
-        let meeting = Listed { owner: "Microsoft Teams".into(), title: "Presenting Q3 | Microsoft Teams".into(), layer: 0 };
+        // Since share-bars.json version 2 (release audit R24) a meeting called "Presenting Q3" is never a bar.
+        assert!(p.matching("macos", "Microsoft Teams", "Presenting Q3 | Microsoft Teams").is_none(), "a meeting's own name is no bar");
+        let meeting = Listed { owner: "Microsoft Teams".into(), title: "Sharing control bar | Microsoft Teams".into(), layer: 0 };
         assert!(p.matching("macos", &meeting.owner, &meeting.title).is_some(), "the title alone reads like Teams' bar");
         assert_eq!(find(&p, "macos", std::slice::from_ref(&meeting)), None, "a meeting window at the normal layer is no bar");
         assert_eq!(find(&p, "macos", &[Listed { layer: 3, ..meeting }]).map(|f| f.app), Some("teams".to_string()));
