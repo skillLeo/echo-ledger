@@ -14,6 +14,7 @@
 use std::future::Future;
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicBool, Ordering};
+#[cfg(any(target_os = "macos", test))]
 use std::time::Duration;
 
 use tokio::sync::watch;
