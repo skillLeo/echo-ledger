@@ -6,13 +6,15 @@ import { api, listenTo, type CheckOutcome, type LastCheck, type PrivacyBadge, ty
 
 export const BADGE_LABEL: Record<PrivacyBadge, string> = {
   private: "Private",
+  black_box: "Black box",
   not_checked: "Not checked",
-  visible: "Visible in shares",
+  visible: "Visible in screen share",
 };
 
 /** What a tap on the badge is for, for screen readers and the tooltip. */
 export const BADGE_HINT: Record<PrivacyBadge, string> = {
   private: "Hidden from screen share. Open Share Check",
+  black_box: "People see a black box instead of EchoLedger. Open Share Check",
   not_checked: "Not checked on this system yet. Open Share Check",
   visible: "EchoLedger can show in screen shares. Open Share Check",
 };
@@ -36,6 +38,9 @@ export interface ResultLine {
 
 /** The one plain line under a Share Check result (pure). */
 export function resultLine(result: CheckOutcome, reason: string | null, system: string, at: string, platform: string, now: Date = new Date()): ResultLine {
+  if (result === "pass" && reason === "old_windows") {
+    return { text: `Private: people see a black box instead of EchoLedger. Checked on ${system}, ${checkedWhen(at, now)}.`, tone: "success", fix: null };
+  }
   if (result === "pass") {
     return { text: `Hidden. People who see your whole screen won't see EchoLedger. Checked on ${system}, ${checkedWhen(at, now)}.`, tone: "success", fix: null };
   }
@@ -45,6 +50,9 @@ export function resultLine(result: CheckOutcome, reason: string | null, system: 
   }
   if (reason === "permission_missing") {
     return { text: "EchoLedger needs the Screen Recording permission to see what others see. Allow it in System Settings, then check again.", tone: "warning", fix: "open_settings" };
+  }
+  if (reason === "covered") {
+    return { text: "Another window covered the test window, so nothing was checked. Move it away and try again.", tone: "warning", fix: "try_again" };
   }
   if (reason === "capture_failed") {
     return { text: "The screen capture didn't work, so nothing was checked. Try again.", tone: "warning", fix: "try_again" };

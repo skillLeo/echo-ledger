@@ -1309,10 +1309,10 @@ export interface NavigatePayload {
 // ---- Screen-share privacy (since v1.8.1) -------------------------------------------------------------------------------
 
 /** The privacy badge on every floating window: from the last real check. */
-export type PrivacyBadge = "private" | "not_checked" | "visible";
+export type PrivacyBadge = "private" | "black_box" | "not_checked" | "visible";
 export type CheckOutcome = "pass" | "fail" | "error";
 /** Why a Share Check ran. */
-export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call";
+export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call" | "retry";
 export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
 /** What the guided test says of a meeting app on this Mac. */
 export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";

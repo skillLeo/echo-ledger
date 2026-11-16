@@ -36,6 +36,8 @@ pub enum Why {
     SystemUpdate,
     Weekly,
     BeforeCall,
+    /// The last automatic run measured nothing (an Error): tried again at the next tick, a few times.
+    Retry,
 }
 
 /// One capture method's result in a run.
@@ -78,6 +80,8 @@ pub struct Store {
 const KEEP_CHECKS: usize = 30;
 /// A week: the automatic check runs again after this long.
 pub const WEEKLY: chrono::TimeDelta = chrono::TimeDelta::days(7);
+/// How many automatic runs in a row may measure nothing on one system and app version before the check waits a week.
+pub const RETRIES: usize = 3;
 
 pub fn store_path(data_dir: &Path) -> PathBuf {
     data_dir.join("share-check.json")
@@ -90,8 +94,19 @@ impl Store {
 
     pub fn save(&self, data_dir: &Path) {
         if let Ok(bytes) = serde_json::to_vec_pretty(self) {
-            let _ = std::fs::write(store_path(data_dir), bytes);
+            let _ = diag::write_atomic(&store_path(data_dir), &bytes);
         }
+    }
+
+    /// Changes the kept store under one lock: the checks, the guided answers and the commands all write it, and each
+    /// change starts from the last one (a written file is replaced whole, never read half-written).
+    pub fn update(data_dir: &Path, change: impl FnOnce(&mut Store)) -> Store {
+        static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _one_at_a_time = WRITING.lock().unwrap_or_else(|p| p.into_inner());
+        let mut store = Store::load(data_dir);
+        change(&mut store);
+        store.save(data_dir);
+        store
     }
 
     pub fn add(&mut self, record: Record) {
@@ -110,16 +125,19 @@ impl Store {
     }
 }
 
-/// Whether the automatic check is due, and why (pure): never run, the app or the system changed since the last run,
-/// or a week went by.
+/// Whether the automatic check is due, and why (pure): never run, the app or the system changed since the last run, a
+/// week went by, or the last run measured nothing (tried again at the next tick, [`RETRIES`] times in a row at most).
 pub fn due(store: &Store, os_build: &str, app_version: &str, now: DateTime<Utc>) -> Option<Why> {
     let Some(last) = store.checks.last() else { return Some(Why::First) };
+    let errors_in_a_row = store.checks.iter().rev().take_while(|r| r.os_build == os_build && r.app_version == app_version && r.result == Outcome::Error).count();
     if last.app_version != app_version {
         Some(Why::AppUpdate)
     } else if last.os_build != os_build {
         Some(Why::SystemUpdate)
     } else if now - last.at >= WEEKLY {
         Some(Why::Weekly)
+    } else if last.result == Outcome::Error && errors_in_a_row < RETRIES {
+        Some(Why::Retry)
     } else {
         None
     }
@@ -283,10 +301,89 @@ fn preview(frame: &crate::screens::platform::Frame) -> Option<(String, u32, u32)
     Some((format!("data:image/webp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&encoded.webp)), encoded.width, encoded.height))
 }
 
-/// Runs the Share Check now. One at a time; the windows close whatever happens.
+/// Whether something lies over the test window (pure): a window in front of it whose frame overlaps its frame. A covered
+/// test window could read as hidden while it is not, so the check measures nothing then.
+pub fn covered(test: ((f64, f64), (f64, f64)), in_front: &[((f64, f64), (f64, f64))]) -> bool {
+    let ((x, y), (w, h)) = test;
+    in_front.iter().any(|((fx, fy), (fw, fh))| *fx < x + w && x < fx + fw && *fy < y + h && y < fy + fh)
+}
+
+/// The frames (points, the main display's top-left corner at 0, 0) of every visible window in front of window
+/// `number`, from the system's window list (front to back); none when it is not in the list.
+#[cfg(target_os = "macos")]
+fn windows_in_front_of(number: i64) -> Option<Vec<((f64, f64), (f64, f64))>> {
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
+    use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowAlpha, kCGWindowBounds, kCGWindowNumber};
+
+    fn value<'a>(dict: &'a CFDictionary, key: &CFString) -> Option<&'a CFType> {
+        // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
+        let value = unsafe { dict.value((key as *const CFString).cast()) } as *const CFType;
+        unsafe { value.as_ref() }
+    }
+    fn number_of<'a>(dict: &'a CFDictionary, key: &CFString) -> Option<&'a CFNumber> {
+        value(dict, key).and_then(|v| v.downcast_ref::<CFNumber>())
+    }
+    let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements, 0)?;
+    // SAFETY: the window-list keys are constants of CoreGraphics.
+    let (number_key, bounds_key, alpha_key) = unsafe { (kCGWindowNumber, kCGWindowBounds, kCGWindowAlpha) };
+    let mut front = Vec::new();
+    for i in 0..list.count() {
+        // SAFETY: the index is in range; each value of this array is a CFDictionary the array keeps alive.
+        let item = unsafe { list.value_at_index(i) } as *const CFType;
+        let Some(dict) = (unsafe { item.as_ref() }).and_then(|t| t.downcast_ref::<CFDictionary>()) else { continue };
+        if number_of(dict, number_key).and_then(|n| n.as_i64()) == Some(number) {
+            return Some(front);
+        }
+        if number_of(dict, alpha_key).and_then(|a| a.as_f64()).is_some_and(|a| a <= 0.01) {
+            continue;
+        }
+        let Some(bounds) = value(dict, bounds_key).and_then(|v| v.downcast_ref::<CFDictionary>()) else { continue };
+        let field = |name: &'static str| number_of(bounds, &CFString::from_static_str(name)).and_then(|n| n.as_f64());
+        if let (Some(x), Some(y), Some(w), Some(h)) = (field("X"), field("Y"), field("Width"), field("Height")) {
+            front.push(((x, y), (w, h)));
+        }
+    }
+    None
+}
+
+/// Whether the test window is covered now (none when the system could not say): on a Mac the windows in front of it in
+/// the window list; on Windows the window hit at its four corners and its middle.
+fn test_window_covered(window: &tauri::WebviewWindow, frame: ((f64, f64), (f64, f64))) -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let pointer = window.ns_window().ok()?;
+        // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is; the number is a plain read.
+        let number = unsafe { &*(pointer as *const objc2_app_kit::NSWindow) }.windowNumber() as i64;
+        windows_in_front_of(number).map(|front| covered(frame, &front))
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+        let own = window.hwnd().ok()?.0 as isize;
+        let ((x, y), (w, h)) = frame;
+        let points = [(x + 8.0, y + 8.0), (x + w - 8.0, y + 8.0), (x + 8.0, y + h - 8.0), (x + w - 8.0, y + h - 8.0), (x + w / 2.0, y + h / 2.0)];
+        Some(points.iter().any(|(px, py)| {
+            // SAFETY: plain queries of the window under a screen point and its top-level window.
+            let hit = unsafe { GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT) };
+            hit.0 as isize != own
+        }))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = (window, frame);
+        None
+    }
+}
+
+/// Runs the Share Check now. One at a time, never while the guided test's card is open; the windows close whatever
+/// happens.
 pub async fn run(app: &AppHandle, why: Why) -> AppResult<View> {
+    if app.get_webview_window(GUIDED_CARD).is_some() {
+        return Err(AppError::msg("The test with your phone is still open. Finish it first."));
+    }
     if RUNNING.swap(true, Ordering::SeqCst) {
-        return Err(AppError::msg("A Share Check is already running."));
+        return Err(AppError::msg("EchoLedger is already checking screen-share privacy."));
     }
     let result = run_inner(app, why).await;
     for label in [CHECK_TEST, CHECK_CONTROL] {
@@ -320,21 +417,31 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         let (test_at, control_at) = places(app);
         let test = build_patch(app, CHECK_TEST, Kind::Test, test_at).map_err(|e| AppError::msg(format!("The test window could not open: {e}")))?;
         let control = build_patch(app, CHECK_CONTROL, Kind::Control, control_at).map_err(|e| AppError::msg(format!("The control window could not open: {e}")))?;
+        // Both of the check's own windows by name: the guided card's page says it drew too, and must not count.
+        let both_drawn = || {
+            let drawn = privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner());
+            drawn.contains(CHECK_TEST) && drawn.contains(CHECK_CONTROL)
+        };
         let deadline = tokio::time::Instant::now() + DRAW_WAIT;
-        while privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).len() < 2 && tokio::time::Instant::now() < deadline {
+        while !both_drawn() && tokio::time::Instant::now() < deadline {
             let _ = tokio::time::timeout(Duration::from_millis(200), privacy.drawn.notified()).await;
         }
         tokio::time::sleep(SETTLE).await;
         let (Some(test_frame), Some(control_frame)) = (frame_units(&test), frame_units(&control)) else {
             return Err(AppError::msg("The check's windows did not open."));
         };
-        // A window that never drew shows no colour at all: measuring it would pass for nothing.
-        let drawn = privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).len();
-        if drawn < 2 {
+        // A window that never drew shows no colour at all, and one something covers shows what covers it: measuring
+        // either would pass for nothing.
+        let drawn = both_drawn();
+        let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
+        if !drawn {
             diag::log(&state.data_dir, "Share Check: the check's windows did not draw.");
             methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()) });
+        } else if is_covered {
+            diag::log(&state.data_dir, "Share Check: another window covered the test window.");
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()) });
         }
-        let shots = if drawn < 2 { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
+        let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
         for (method, shot) in shots {
             match shot {
                 Ok(shot) => {
@@ -375,12 +482,15 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
     }
     let outcomes: Vec<Outcome> = methods.iter().map(|m| m.result).collect();
     let result = pixels::combined(&outcomes);
-    let reason = if result == Outcome::Error { methods.iter().find_map(|m| m.reason.clone()) } else { None };
+    // Windows before 19041 with "Black box": hidden as a black box, which the result says (and the server hears).
+    let black_box = result == Outcome::Pass && black_box_here(state.settings().old_windows_sharing);
+    if black_box {
+        methods.iter_mut().filter(|m| m.result == Outcome::Pass).for_each(|m| m.reason = Some("old_windows".into()));
+    }
+    let reason = if result == Outcome::Error { methods.iter().find_map(|m| m.reason.clone()) } else if black_box { Some("old_windows".into()) } else { None };
     let at = Utc::now();
     let record = Record { at, os_build: os_build(), app_version: app_version().into(), result, reason: reason.clone(), methods: methods.clone(), why };
-    let mut store = Store::load(&state.data_dir);
-    store.add(record);
-    store.save(&state.data_dir);
+    Store::update(&state.data_dir, |store| store.add(record));
     for m in methods.iter().filter(|m| m.method != "none") {
         report(app, ShareCheckReport {
             platform: platform_wire().into(),
@@ -399,6 +509,11 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         None => (None, 0, 0, None, None),
     };
     Ok(View { result, reason, methods, system, at, picture, width, height, test_area, control_area })
+}
+
+/// Windows before build 19041 gives a black box instead of leaving the window out (with the setting "Black box").
+fn black_box_here(old: crate::settings::OldWindowsSharing) -> bool {
+    Platform::here() == Platform::Windows && super::win::wanted(true, windows_build(), old) == super::win::WDA_MONITOR
 }
 
 pub fn wire(outcome: Outcome) -> &'static str {
@@ -452,7 +567,7 @@ pub async fn before_call(app: &AppHandle, meeting: Option<MeetingApp>) -> (Optio
     let store = Store::load(&state.data_dir);
     let view = if due(&store, &os_build(), app_version(), Utc::now()).is_some() { run(app, Why::BeforeCall).await.ok() } else { None };
     let warning = meeting.filter(|_| cfg!(target_os = "macos")).and_then(|m| {
-        let state_now = apps::state_of(m, apps::installed_version(m).as_deref(), &os_version(), &Store::load(&state.data_dir).guided);
+        let state_now = apps::state_of(m, apps::version(m).as_deref(), &os_version(), &Store::load(&state.data_dir).guided);
         apps::warning_before_call(m, state_now)
     });
     (view, warning)
@@ -488,6 +603,9 @@ pub fn guided_open(app: &AppHandle) -> AppResult<()> {
     if app.get_webview_window(GUIDED_CARD).is_some() {
         return Ok(());
     }
+    if RUNNING.load(Ordering::SeqCst) {
+        return Err(AppError::msg("Wait for the check to finish, then test with your phone."));
+    }
     let (origin, size) = app.primary_monitor().ok().flatten().map_or(((0.0, 0.0), (1280.0, 800.0)), |m| {
         let s = m.scale_factor();
         ((f64::from(m.position().x) / s, f64::from(m.position().y) / s), (f64::from(m.size().width) / s, f64::from(m.size().height) / s))
@@ -517,9 +635,7 @@ pub fn guided_close(app: &AppHandle) {
 pub fn guided_answer(app: &AppHandle, meeting: MeetingApp, visible: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let version = apps::installed_version(meeting).unwrap_or_else(|| "unknown".into());
-    let mut store = Store::load(&state.data_dir);
-    store.guided.push(Guided { app: meeting, app_version: version.clone(), os_version: os_version(), visible, at: Utc::now() });
-    store.save(&state.data_dir);
+    Store::update(&state.data_dir, |store| store.guided.push(Guided { app: meeting, app_version: version.clone(), os_version: os_version(), visible, at: Utc::now() }));
     app.state::<Privacy>().note_guided_answer();
     diag::log(&state.data_dir, &format!("Guided test, {} {version}: {}.", meeting.name(), if visible { "visible" } else { "hidden" }));
     report(app, ShareCheckReport {
@@ -607,7 +723,8 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let (mismatch, held, changed_outside) = (watch.any_mismatch(), watch.any_held(), watch.changed_outside());
     drop(watch);
     let now = std::time::Instant::now();
-    let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result) };
+    let black_box = platform == Platform::Windows && build.is_none_or(|b| b < super::win::EXCLUDE_BUILD) && settings.old_windows_sharing == crate::settings::OldWindowsSharing::BlackBox;
+    let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result), black_box };
     let badge = status::badge(&facts);
     #[cfg(target_os = "macos")]
     let permission = crate::screens::platform::macos::permission();
@@ -623,7 +740,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         MeetingApp::ALL
             .into_iter()
             .map(|app| {
-                let version = apps::installed_version(app);
+                let version = apps::version(app);
                 let state = apps::state_of(app, version.as_deref(), &mac_version, &store.guided);
                 AppRow { app, name: app.name(), needs_test: apps::needs_test(version.as_deref(), state), line: apps::line(app, state), version, state }
             })
@@ -709,6 +826,48 @@ mod tests {
         assert_eq!(due(&store, "27.4 (26D10)", "1.8.1", now), Some(Why::SystemUpdate));
         assert_eq!(due(&store, "27.3 (26C5035r)", "1.8.1", at("2026-11-23T09:00:00Z")), Some(Why::Weekly));
         assert_eq!(due(&store, "27.3 (26C5035r)", "1.8.1", at("2026-11-23T08:59:00Z")), None);
+    }
+
+    #[test]
+    fn an_automatic_run_that_measured_nothing_is_tried_again_a_few_times() {
+        let mut store = Store::default();
+        let now = at("2026-11-16T18:00:00Z");
+        store.add(record("2026-11-16T09:00:00Z", "27.3", "1.8.1", Outcome::Pass));
+        store.add(record("2026-11-16T10:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), Some(Why::Retry), "not counted as done for a week");
+        store.add(record("2026-11-16T16:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), Some(Why::Retry));
+        store.add(record("2026-11-16T22:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), None, "three in a row: it waits a week, not every 6 h for ever");
+        store.add(record("2026-11-17T04:00:00Z", "27.3", "1.8.1", Outcome::Pass));
+        assert_eq!(due(&store, "27.3", "1.8.1", at("2026-11-17T05:00:00Z")), None, "measured again");
+    }
+
+    #[test]
+    fn the_store_written_from_several_threads_keeps_every_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let dir = dir.path().to_path_buf();
+                std::thread::spawn(move || {
+                    for i in 0..10 {
+                        Store::update(&dir, |s| s.guided.push(Guided { app: MeetingApp::Zoom, app_version: format!("{t}.{i}"), os_version: "27.3".into(), visible: false, at: Utc::now() }));
+                    }
+                })
+            })
+            .collect();
+        threads.into_iter().for_each(|t| t.join().unwrap());
+        assert_eq!(Store::load(dir.path()).guided.len(), 80, "no change was lost and no torn read emptied the file");
+    }
+
+    #[test]
+    fn a_covered_test_window_is_told_apart() {
+        let test = ((540.0, 400.0), (220.0, 150.0));
+        assert!(!covered(test, &[]));
+        assert!(!covered(test, &[((0.0, 0.0), (1312.0, 25.0)), ((784.0, 400.0), (220.0, 150.0))]), "the menu bar and the control beside it");
+        assert!(covered(test, &[((600.0, 440.0), (40.0, 30.0))]), "a small window over the patch");
+        assert!(covered(test, &[((0.0, 0.0), (1312.0, 848.0))]), "a full-screen window in front");
+        assert!(!covered(test, &[((760.0, 400.0), (24.0, 150.0))]), "touching its edge is not over it");
     }
 
     #[test]

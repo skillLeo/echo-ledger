@@ -1,7 +1,8 @@
-//! The Share Check's verdict from a captured picture (pure): the protected test window is magenta, the unprotected
-//! control window green. A pixel is one of them when each channel is within [`TOLERANCE`] of its colour, so a
-//! compressed or colour-managed capture still counts. Pass = control found and no test pixel; Fail = test pixels
-//! found (the window is in the share); Error = the control is missing (the capture did not show the screen at all).
+//! The Share Check's verdict from a captured picture (pure): the protected test window is a magenta and black check
+//! pattern, the unprotected control window green. A pixel is one of them when each channel is within [`TOLERANCE`] of
+//! its colour, so a compressed or colour-managed capture still counts. Fail = the pattern's magenta covers a good share
+//! of the test window's place (the window is in the screen share; a pink logo or wallpaper behind it is not); Pass =
+//! the control found and the pattern not; Error = the control is missing (the capture did not show the screen at all).
 
 /// Per channel, the most a captured pixel may differ from the colour it is counted as.
 pub const TOLERANCE: u8 = 25;
@@ -13,6 +14,10 @@ pub const TEST_DARK: [u8; 3] = [0, 0, 0];
 pub const CONTROL: [u8; 3] = [0, 200, 0];
 /// The control counts as found from this share of its area on (a frame caught mid-change still shows most of it).
 pub const CONTROL_FOUND_SHARE: f64 = 0.5;
+/// The test window counts as seen from this share of its place in magenta: its pattern is half magenta, so a window in
+/// the capture shows about 50 %, scaled or compressed still well over 10 %; a few pink pixels of whatever is behind it do
+/// not reach it.
+pub const TEST_FOUND_SHARE: f64 = 0.1;
 
 /// A rectangle in the picture's pixels (right and bottom exclusive).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, serde::Serialize)]
@@ -88,12 +93,15 @@ pub struct Counts {
     pub control: u64,
     /// The control's area in the picture, which "found" is measured against.
     pub control_area: u64,
+    /// The test window's area in the picture, which "seen" is measured against (0 in runs kept before v1.8.1).
+    #[serde(default)]
+    pub test_area: u64,
 }
 
 /// Counts the test colour where the test window is and the control colour where the control is.
 pub fn measure(picture: &Picture<'_>, test: Rect, control: Rect) -> Counts {
-    let control_clipped = control.clipped(picture.width, picture.height);
-    Counts { test: count(picture, TEST, Some(test)), control: count(picture, CONTROL, Some(control_clipped)), control_area: control_clipped.area() }
+    let (test, control) = (test.clipped(picture.width, picture.height), control.clipped(picture.width, picture.height));
+    Counts { test: count(picture, TEST, Some(test)), control: count(picture, CONTROL, Some(control)), control_area: control.area(), test_area: test.area() }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -104,10 +112,10 @@ pub enum Outcome {
     Error,
 }
 
-/// The verdict of one capture (pure): any test pixel is a Fail, whatever else the picture shows; otherwise the control
-/// must show (most of its area), or the capture is an Error.
+/// The verdict of one capture (pure): the test window's pattern seen is a Fail, whatever else the picture shows;
+/// otherwise the control must show (most of its area), or the capture is an Error.
 pub fn verdict(counts: Counts) -> Outcome {
-    if counts.test > 0 {
+    if counts.test_area > 0 && counts.test as f64 >= counts.test_area as f64 * TEST_FOUND_SHARE {
         return Outcome::Fail;
     }
     let found = counts.control_area > 0 && counts.control as f64 >= counts.control_area as f64 * CONTROL_FOUND_SHARE;
@@ -191,10 +199,40 @@ mod tests {
 
     #[test]
     fn a_mostly_drawn_control_is_found_a_sliver_is_not() {
-        assert_eq!(verdict(Counts { test: 0, control: 800, control_area: 1600 }), Outcome::Pass);
-        assert_eq!(verdict(Counts { test: 0, control: 100, control_area: 1600 }), Outcome::Error);
-        assert_eq!(verdict(Counts { test: 1, control: 1600, control_area: 1600 }), Outcome::Fail, "one test pixel is enough");
+        assert_eq!(verdict(Counts { test: 0, control: 800, control_area: 1600, test_area: 2400 }), Outcome::Pass);
+        assert_eq!(verdict(Counts { test: 0, control: 100, control_area: 1600, test_area: 2400 }), Outcome::Error);
+        assert_eq!(verdict(Counts { test: 1200, control: 1600, control_area: 1600, test_area: 2400 }), Outcome::Fail, "the pattern is half magenta");
+        assert_eq!(verdict(Counts { test: 240, control: 0, control_area: 1600, test_area: 2400 }), Outcome::Fail, "seen even without the control");
         assert_eq!(verdict(Counts::default()), Outcome::Error);
+    }
+
+    /// A 160 x 100 BGRA picture of a desk: grey, the control's green where it is, and `test` painted where the test
+    /// window is.
+    fn desk(test: impl Fn(u32, u32) -> Option<[u8; 3]>) -> Vec<u8> {
+        let mut bgra = Vec::with_capacity(160 * 100 * 4);
+        for y in 0..100 {
+            for x in 0..160 {
+                let in_control = (100..140).contains(&x) && (30..70).contains(&y);
+                let in_test = (20..80).contains(&x) && (30..70).contains(&y);
+                let [r, g, b] = if in_control { CONTROL } else if in_test { test(x - 20, y - 30).unwrap_or([128, 128, 128]) } else { [128, 128, 128] };
+                bgra.extend_from_slice(&[b, g, r, 255]);
+            }
+        }
+        bgra
+    }
+
+    fn judge_desk(bgra: &[u8]) -> Outcome {
+        verdict(measure(&Picture { width: 160, height: 100, stride: 640, bgra }, TEST_AT, CONTROL_AT))
+    }
+
+    #[test]
+    fn a_pink_logo_behind_the_test_window_is_not_echoledger() {
+        // The window left out of the capture; behind it, a wallpaper with a small pink logo (24 pixels).
+        let logo = desk(|x, y| (x < 6 && y < 4).then_some([250, 10, 245]));
+        assert_eq!(judge_desk(&logo), Outcome::Pass);
+        // The window itself in the capture: its 32 px check pattern (8 px here), half magenta.
+        let pattern = desk(|x, y| ((x / 8 + y / 8) % 2 == 0).then_some(TEST).or(Some(TEST_DARK)));
+        assert_eq!(judge_desk(&pattern), Outcome::Fail);
     }
 
     #[test]

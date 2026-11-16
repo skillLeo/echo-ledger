@@ -5,7 +5,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 import { callsOf, emitEvent, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { LIMITS, ONE_WINDOW_TIP, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage } from "./PrivacySettings";
+import { LIMITS, ONE_WINDOW_TIP, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 
 const PICTURE = "data:image/webp;base64,UklGRg==";
@@ -178,5 +178,15 @@ describe("hidden windows and the flags", () => {
     render(<SharePrivacyPage settings={makeSettings()} patch={async () => true} onCheck={() => undefined} />);
     fireEvent.click(await screen.findByRole("button", { name: "Open System Settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
+  });
+});
+
+describe("the last check's row", () => {
+  it("says Black box for an older Windows that shows one, and Hidden otherwise", () => {
+    const now = new Date(2026, 10, 16, 15, 0);
+    const today = new Date(2026, 10, 16, 9, 0).toISOString();
+    expect(lastCheckValue("pass", today, now, "old_windows")).toBe("Black box, today");
+    expect(lastCheckValue("pass", today, now)).toBe("Hidden, today");
+    expect(lastCheckValue(null, null, now)).toBe("Not checked yet");
   });
 });

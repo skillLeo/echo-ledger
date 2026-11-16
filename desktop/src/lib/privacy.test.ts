@@ -20,6 +20,14 @@ describe("Share Check words", () => {
     expect(resultLine("error", "control_missing", "Windows 11 24H2", NOW.toISOString(), "windows", NOW).text).toMatch(/nothing was checked/);
   });
 
+  it("says an older Windows' black box as private, and a covered test window as nothing checked", () => {
+    expect(resultLine("pass", "old_windows", "Windows 10 (build 18363)", NOW.toISOString(), "windows", NOW).text)
+      .toBe("Private: people see a black box instead of EchoLedger. Checked on Windows 10 (build 18363), today.");
+    const covered = resultLine("error", "covered", "macOS 27.3", NOW.toISOString(), "macos", NOW);
+    expect(covered.text).toBe("Another window covered the test window, so nothing was checked. Move it away and try again.");
+    expect(covered.fix).toBe("try_again");
+  });
+
   it("dates older checks and says when nothing was checked", () => {
     expect(checkedWhen(new Date(2026, 10, 2).toISOString(), NOW)).toBe("on 2 Nov");
     expect(lastCheckLine(null, "macOS 27.3", "macos", NOW)).toBe("Not checked yet");
@@ -30,7 +38,7 @@ describe("Share Check words", () => {
   it("keeps to the words rule", () => {
     const words = [...Object.values(BADGE_LABEL), ...Object.values(BADGE_HINT)].join(" ").toLowerCase();
     for (const banned of ["undetectable", "stealth", "invisible", "cheat", "bypass"]) expect(words).not.toContain(banned);
-    expect(BADGE_LABEL).toEqual({ private: "Private", not_checked: "Not checked", visible: "Visible in shares" });
+    expect(BADGE_LABEL).toEqual({ private: "Private", black_box: "Black box", not_checked: "Not checked", visible: "Visible in screen share" });
   });
 });
 

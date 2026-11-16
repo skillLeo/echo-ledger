@@ -55,8 +55,9 @@ function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
 }
 
 /** The last check in a few words, for its row (pure). */
-export function lastCheckValue(result: "pass" | "fail" | "error" | null, at: string | null, now: Date = new Date()): string {
+export function lastCheckValue(result: "pass" | "fail" | "error" | null, at: string | null, now: Date = new Date(), reason: string | null = null): string {
   if (!result || !at) return "Not checked yet";
+  if (result === "pass" && reason === "old_windows") return `Black box, ${checkedWhen(at, now)}`;
   if (result === "pass") return `Hidden, ${checkedWhen(at, now)}`;
   if (result === "fail") return `Visible, ${checkedWhen(at, now)}`;
   return "Nothing measured";
@@ -106,7 +107,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
       )}
       <Section title="Check">
         <LinkRow id="share_privacy.check" value={status ? (status.lastCheck ? null : "Not checked yet") : null} onOpen={onCheck} chevron />
-        <InfoRow id="share_privacy.last_check" value={lastCheckValue(status?.lastCheck?.result ?? null, status?.lastCheck?.at ?? null)}>
+        <InfoRow id="share_privacy.last_check" value={lastCheckValue(status?.lastCheck?.result ?? null, status?.lastCheck?.at ?? null, new Date(), status?.lastCheck?.reason ?? null)}>
           <button type="button" className="btn compact" onClick={onCheck}>Check now</button>
         </InfoRow>
       </Section>

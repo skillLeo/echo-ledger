@@ -384,3 +384,21 @@ fn opening_the_app_again_goes_where_a_second_launch_goes() {
     assert!(taken < shown && exists < shown, "read before the open");
     assert!(body.contains("crate::lifecycle::reopen_action(main_exists, notified.is_some())"), "the pure decision says whether the page changes");
 }
+
+// ---- Screen-share privacy commands (v1.8.1 audit, S4) ------------------------------------------------------------
+
+#[test]
+fn privacy_commands_that_change_or_reveal_answer_the_main_window_only() {
+    // A floating window's page has no business with a picture of the screen, the log, or what is hidden.
+    let commands = std::fs::read_to_string(manifest_dir().join("src/commands.rs")).unwrap();
+    for name in ["share_check_run", "share_check_card", "share_check_answer", "privacy_show_in_shares", "privacy_hide_all", "privacy_hide_again", "privacy_diagnostics", "privacy_move_to_display"] {
+        let start = commands.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("{name} is gone"));
+        let body = &commands[start..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(body.lines().next().unwrap().contains("window: WebviewWindow"), "{name} knows which window asked");
+        assert_eq!(body.lines().nth(1).unwrap().trim(), "crate::privacy::from_main_window(window.label())?;", "{name} refuses other windows first");
+    }
+    let drawn = &commands[commands.find("fn share_check_drawn(").unwrap()..];
+    assert!(drawn[..drawn.find("\n}\n").unwrap()].contains("[crate::privacy::CHECK_TEST, crate::privacy::CHECK_CONTROL].contains(&window.label())"), "only the check's own windows count as drawn");
+    assert!(commands.contains("pub async fn privacy_status(app: AppHandle)"), "the status every badge reads stays off the main thread");
+}

@@ -349,6 +349,10 @@ export const LucideMonitorSmartphoneIcon = (p: IconProps) => (
 export const LucideDatabaseIcon = (p: IconProps) => (
   <Svg {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></Svg>
 );
+/** A filled square in a frame: the black box older Windows shows where EchoLedger is. */
+export const LucideSquareFilledIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="18" x="3" y="3" rx="2" /><rect width="10" height="10" x="7" y="7" rx="1" fill="currentColor" stroke="none" /></Svg>
+);
 export const LucideCircleHelpIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></Svg>
 );

@@ -4,9 +4,9 @@
 import type { PrivacyBadge as Badge } from "../lib/ipc";
 import { api } from "../lib/ipc";
 import { BADGE_HINT, BADGE_LABEL, usePrivacyStatus } from "../lib/privacy";
-import { LucideCircleHelpIcon, LucideEyeIcon, LucideLockIcon, type IconProps } from "./Icons";
+import { LucideCircleHelpIcon, LucideEyeIcon, LucideLockIcon, LucideSquareFilledIcon, type IconProps } from "./Icons";
 
-const ICON: Record<Badge, (p: IconProps) => React.ReactNode> = { private: LucideLockIcon, not_checked: LucideCircleHelpIcon, visible: LucideEyeIcon };
+const ICON: Record<Badge, (p: IconProps) => React.ReactNode> = { private: LucideLockIcon, black_box: LucideSquareFilledIcon, not_checked: LucideCircleHelpIcon, visible: LucideEyeIcon };
 
 /** The badge for a known state (Settings shows it next to the status; the overlays through [PrivacyBadge]). */
 export function PrivacyBadgeView({ badge, compact = false, onOpen }: { badge: Badge; compact?: boolean; onOpen?: () => void }) {

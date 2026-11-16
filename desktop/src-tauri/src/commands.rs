@@ -2785,21 +2785,27 @@ pub fn translate_toggle_lock(app: AppHandle) {
 
 // ---- Screen-share privacy (v1.8.1) -------------------------------------------------------------------------------------
 
-/// The privacy badge and Settings → Screen-share privacy.
+/// The privacy badge and Settings → Screen-share privacy. Asynchronous: every badge asks again on each change, and the
+/// status reads files and the system, which never happens on the main thread.
 #[tauri::command]
-pub fn privacy_status(app: AppHandle) -> crate::privacy::check::PrivacyStatus {
+pub async fn privacy_status(app: AppHandle) -> crate::privacy::check::PrivacyStatus {
     crate::privacy::check::status(&app)
 }
 
-/// Share Check now ("Check screen-share privacy", the badge, onboarding).
+/// "Check screen-share privacy" now (Settings, onboarding). Only the main window: the result carries a picture of the
+/// whole screen.
 #[tauri::command]
-pub async fn share_check_run(app: AppHandle, why: Option<crate::privacy::check::Why>) -> AppResult<crate::privacy::check::View> {
+pub async fn share_check_run(app: AppHandle, window: WebviewWindow, why: Option<crate::privacy::check::Why>) -> AppResult<crate::privacy::check::View> {
+    crate::privacy::from_main_window(window.label())?;
     crate::privacy::check::run(&app, why.unwrap_or(crate::privacy::check::Why::Asked)).await
 }
 
-/// The Share Check's windows say they have drawn.
+/// The check's test and control windows say they have drawn (any other page saying so is not counted).
 #[tauri::command]
 pub fn share_check_drawn(window: WebviewWindow) {
+    if ![crate::privacy::CHECK_TEST, crate::privacy::CHECK_CONTROL].contains(&window.label()) {
+        return;
+    }
     let app = window.app_handle();
     let privacy = app.state::<crate::privacy::Privacy>();
     privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).insert(window.label().to_string());
@@ -2808,25 +2814,29 @@ pub fn share_check_drawn(window: WebviewWindow) {
 
 /// The guided test's big card (Mac).
 #[tauri::command]
-pub fn share_check_card(app: AppHandle, open: bool) -> AppResult<()> {
+pub fn share_check_card(app: AppHandle, window: WebviewWindow, open: bool) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
     if open { crate::privacy::check::guided_open(&app) } else { crate::privacy::check::guided_close(&app); Ok(()) }
 }
 
 /// "I can see it" (`visible`) or "I can't see it" for a meeting app.
 #[tauri::command]
-pub fn share_check_answer(app: AppHandle, meeting_app: crate::privacy::apps::MeetingApp, visible: bool) -> AppResult<crate::privacy::check::PrivacyStatus> {
+pub fn share_check_answer(app: AppHandle, window: WebviewWindow, meeting_app: crate::privacy::apps::MeetingApp, visible: bool) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::from_main_window(window.label())?;
     crate::privacy::check::guided_answer(&app, meeting_app, visible)?;
     Ok(crate::privacy::check::status(&app))
 }
 
 /// The tray's demo from Settings: `minutes` > 0 starts it, 0 ends it.
 #[tauri::command]
-pub fn privacy_show_in_shares(app: AppHandle, minutes: u64) {
+pub fn privacy_show_in_shares(app: AppHandle, window: WebviewWindow, minutes: u64) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
     if minutes == 0 {
         crate::privacy::end_demo(&app);
     } else {
         crate::privacy::show_in_shares_for(&app, std::time::Duration::from_secs(minutes.min(10) * 60));
     }
+    Ok(())
 }
 
 /// Whether EchoLedger's windows are off the screen now (their pages draw nothing then).
@@ -2835,10 +2845,12 @@ pub fn privacy_concealed(app: AppHandle) -> bool {
     app.state::<crate::privacy::Privacy>().concealed()
 }
 
-/// "Hide all EchoLedger windows" from a page.
+/// "Hide EchoLedger windows" from the main window.
 #[tauri::command]
-pub fn privacy_hide_all(app: AppHandle) {
+pub fn privacy_hide_all(app: AppHandle, window: WebviewWindow) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
     crate::privacy::toggle_hide_all(&app);
+    Ok(())
 }
 
 /// "Hide again" (Windows): after something else on the computer changed an EchoLedger window's capture flag, the person
@@ -2856,14 +2868,16 @@ pub fn privacy_open_check(app: AppHandle) {
     crate::actions::open_settings(&app, "share_privacy.check");
 }
 
-/// "Copy diagnostics" on the privacy page: the text to copy (nothing is sent).
+/// "Copy diagnostics" on the privacy page: the text to copy (nothing is sent). Only the main window.
 #[tauri::command]
-pub fn privacy_diagnostics(app: AppHandle) -> String {
-    crate::privacy::check::diagnostics_text(&app)
+pub async fn privacy_diagnostics(app: AppHandle, window: WebviewWindow) -> AppResult<String> {
+    crate::privacy::from_main_window(window.label())?;
+    Ok(crate::privacy::check::diagnostics_text(&app))
 }
 
 /// Moves the floating windows to another display (the one that isn't shared).
 #[tauri::command]
-pub fn privacy_move_to_display(app: AppHandle, index: usize) -> AppResult<()> {
+pub fn privacy_move_to_display(app: AppHandle, window: WebviewWindow, index: usize) -> AppResult<()> {
+    crate::privacy::from_main_window(window.label())?;
     crate::overlay::move_to_display(&app, index).map_err(AppError::msg)
 }
