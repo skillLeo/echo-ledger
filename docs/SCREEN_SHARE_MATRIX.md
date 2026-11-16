@@ -26,6 +26,9 @@ and its text show · **—** = not tested yet.
 | 2026-11-16 | macOS 27.3 (26C5035r) | v1.8.1 desktop (debug build, `--smoke-test --share-check`, the privacy service's own Share Check) | ScreenCaptureKit `SCScreenshotManager`, display filter, nothing excluded, sRGB | **Pass** (twice) | Protected magenta test window 0 px; green control 64,480 of 64,480 px (its whole area at the 1920 px capture size) |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build with the test window built unprotected (a check that the check can fail) | the same | **Fail**, as it should | Magenta 28,620 px (the check pattern's magenta half); green 64,480 px |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build before the capture asked for sRGB | the same, in the display's colour space | Error (control missing) | The green control (sRGB 0, 200, 0) came back as about (90, 197, 58) in Display P3, outside the tolerance of 25: the check now captures in sRGB |
+| 2026-11-16 | Windows 11 24H2 (10.0.26100, Server 2025 CI runner) | v1.8.1 desktop (commit 23e58956, `--smoke-test --share-check`) | WGC and DXGI | **Pass** | Protected magenta test window 0 px with both; green control 28,704 of 28,704 px (CI run 43783710402) |
+| 2026-11-16 | Windows 10 22H2 kernel (10.0.20348, Server 2022 CI runner) | the same | WGC and DXGI | **Pass** | Magenta 0 px; green 28,704 of 28,704 px |
+| 2026-11-16 | Windows 11 25H2 on Arm (x64 app under emulation, CI runner) | the same | WGC and DXGI | Skipped | The runner has no capture session (`control_missing`): nothing could be measured; needs a real Arm PC |
 
 So on this Mac the window flag holds for ScreenCaptureKit display captures, streams and a mid-capture filter change.
 Meeting apps can still capture differently (another filter, another API, their own modes such as Zoom's "without window
