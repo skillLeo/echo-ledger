@@ -101,6 +101,16 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     re-review points, a main-thread-wait audit of every path with a source check, menu on left click on macOS, the
     recording badge with a margin, PNGs for the review) and phone on b-phone (A4–A9, B7–B15, B17, wording, the A6
     Watch translate bug). Web, relay and desktop-1 stay paused (usage); the reviewer reviews each when they report.
+  - 18:14 Hassam asked to quit the Mac app: quit with TERM (nothing recording; the recovered recording had left the
+    upload queue). 18:16 his next finding, DECIDED: EchoLedger must be a normal Mac app. Today lib.rs:447 sets
+    ActivationPolicy::Accessory at start, so it has no Dock icon or running dot, isn't in ⌘Tab or Force Quit, and
+    can't be quit from the Dock. Why change: MANUAL_QA S-9 expects it in the Dock and ⌘Tab, and the scope rule says
+    EchoLedger hides its windows from screen sharing only, never itself from the rest of the computer. Brief: Regular
+    for the whole run (also at login), the menu bar icon stays, closing the window keeps it running, the Dock icon
+    reopens the window, Dock Quit / ⌘Q really quit (a running recording is saved as the tray's Quit does).
+  - The v1.8.1 desktop follow-up moved to b-desktop-followup = v1.1 + 8012890e, 0b6c3314, 800615e8, 0cfef403
+    (clean cherry-picks of b-desktop-reopen's 025cde89, fc1f5cd8, 801c2cf4, e298867f), because b-desktop-reopen
+    also carries the 0.2 work that isn't approved yet. Reviewer on it now; the Dock change comes as one more commit.
   - Mac meeting shares (S-5/S-6): Meet started 16:44 (Chrome, meeting jdd-cdmz-meb, the phone asked to join from the
     Meet app over adb), paused before the share because Hassam took a call. Method from now on: the phone is the viewer
     and `scratchpad/phone/meetmap.py` maps each EchoLedger window into the phone's view of the share and measures its
