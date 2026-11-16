@@ -458,6 +458,19 @@ class MissedRecordingsTest {
     }
 
     @Test
+    fun `a call the helper only saw after it reconnected mid-call is judged by its own notice, never dropped`() {
+        // WhatsApp was answered at t0 with the helper gone; it came back a minute into the call and could not record.
+        var b = CallJournal.mark(ready(), State.HELPER_LOST, t0 - min)
+        b = CallJournal.mark(b, State.HELPER_READY, t0 + 59_000)
+        b = journalCall(b, "c1", "whatsapp", t0 + 60_000, 540) {
+            CallJournal.fail(it, "c1", MissedReason.MIC_BUSY.wire, MissedReason.MIC_BUSY.detail, t0 + 60_500)
+        }
+        val found = find(b, listOf(notice("whatsapp", t0, 600))).single()
+        assertEquals(t0, found.startedAtMs)
+        assertEquals(MissedReason.HELPER_NOT_ARMED, found.reason)
+    }
+
+    @Test
     fun `an answered redial's own notice still answers it`() {
         var b = CallJournal.seen(ready(), "b", "phone_call", Seen.HELPER, t0)
         b = CallJournal.stage(b, "b", Stage.ARMED, t0 + 100, "helper ready")

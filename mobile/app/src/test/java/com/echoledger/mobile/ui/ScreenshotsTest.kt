@@ -234,6 +234,8 @@ class ScreenshotsTest : ScreenTest() {
             ) { SessionScreen(vm, item, onBack = {}) }
         }
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Hello there.", substring = true).fetchSemanticsNode() }.isSuccess }
+        // The call notes load on their own: wait for their buttons, then bring the action row into view.
+        compose.waitUntil(10_000) { runCatching { compose.onNodeWithText("In Roman Urdu").fetchSemanticsNode() }.isSuccess }
         compose.onNode(androidx.compose.ui.test.hasScrollAction()).performScrollToNode(androidx.compose.ui.test.hasText("Send to WhatsApp"))
         compose.waitForIdle()
         listOf("Send to WhatsApp", "In Roman Urdu").forEach { label ->

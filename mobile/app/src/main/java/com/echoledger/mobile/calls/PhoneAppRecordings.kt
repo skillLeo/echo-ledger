@@ -37,6 +37,7 @@ import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -815,7 +816,66 @@ object PhoneAppRecordings {
         prefs(context).edit().putString(ASK, kept.joinToString(",") { "${it.fileId}:${it.callAtMs}" }).apply()
         val gone = before.filter { old -> kept.none { it.callAtMs == old.callAtMs } }
         gone.forEach { PendingImports.done(context, it.callAtMs) }
-        if (gone.isNotEmpty()) runCatching { MissedRecordingWorker.soon(context, ANSWERED_DELAY_MS) }
+        if (gone.isNotEmpty()) {
+            runCatching { MissedRecordingWorker.soon(context, ANSWERED_DELAY_MS) }
+            releaseLater(context)
+        }
+    }
+
+    // ---- EchoLedger's own one-sided recording held for the Phone app's copy ------------------------------------------
+
+    /** A held recording: EchoLedger's own (your voice only) of the call from [startMs] to [endMs]. */
+    data class Held(val recordingId: String, val startMs: Long, val endMs: Long)
+
+    fun parseHeld(text: String?): List<Held> = text.orEmpty().split(',').mapNotNull { part ->
+        val bits = part.split(':')
+        if (bits.size != 3) return@mapNotNull null
+        Held(bits[0], bits[1].toLongOrNull() ?: return@mapNotNull null, bits[2].toLongOrNull() ?: return@mapNotNull null)
+    }
+
+    private fun saveHeld(context: Context, list: List<Held>) =
+        prefs(context).edit().putString(HELD, list.takeLast(20).joinToString(",") { "${it.recordingId}:${it.startMs}:${it.endMs}" }).apply()
+
+    /**
+     * EchoLedger's own recording [recordingId] of the SIM call from [startMs] to [endMs] has your voice only and waits,
+     * undecided and with no card, for the Phone app's two-sided copy, which takes its place.
+     */
+    @Synchronized
+    fun hold(context: Context, recordingId: String, startMs: Long, endMs: Long) = saveHeld(
+        context,
+        parseHeld(prefs(context).getString(HELD, null)).filter { it.recordingId != recordingId } + Held(recordingId, startMs, endMs)
+    )
+
+    /**
+     * The held recordings (pure) whose call no longer waits for the Phone app's copy ([waiting]: the calls still waiting):
+     * the import settled it without bringing a copy (refused, another app's, "Not this call"), or its looks gave up.
+     */
+    fun released(held: List<Held>, waiting: List<LongRange>): List<Held> =
+        held.filter { h -> waiting.none { it.first <= h.endMs + 10_000 && it.last >= h.startMs - 10_000 } }
+
+    /**
+     * Held recordings whose copy is not coming are released: still undecided and on the phone, they follow "After a
+     * call" as if just saved (the card right after the call, else quietly: kept, or kept 10 s later on "Ask me"). One the
+     * copy replaced is gone already and simply forgotten.
+     */
+    suspend fun releaseHeld(context: Context, nowMs: Long = System.currentTimeMillis()) {
+        val done = synchronized(this) {
+            val held = parseHeld(prefs(context).getString(HELD, null))
+            released(held, PendingImports.waiting(context, nowMs)).also { if (it.isNotEmpty()) saveHeld(context, held - it.toSet()) }
+        }
+        if (done.isEmpty()) return
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        val settings = graph.settings.current()
+        done.forEach { h ->
+            val rec = graph.recordings.get(h.recordingId)?.takeIf { it.state == "pending_decision" } ?: return@forEach
+            val now = graph.recordings.update(rec.id) { it.copy(state = PostCallPrompt.stateFor(settings.afterCall)) } ?: return@forEach
+            log(context, "the Phone app's copy did not come: EchoLedger's own recording (your voice only) is kept as usual.")
+            if (cardNow(h.endMs, nowMs, MissedRecordingWorker.ongoing(context))) {
+                withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, now, settings.afterCall, settings.themeMode) }
+            } else {
+                PostCallPrompt.quietly(context, now)
+            }
+        }
     }
 
     /** "Not this call": the recording is no longer offered. */
@@ -919,6 +979,8 @@ object PhoneAppRecordings {
         markHandled(context, done)
         // Brought in without the card: one quiet notification for all of them.
         if (quiet.isNotEmpty()) Notifications.phoneAppImported(context, quiet.size)
+        // A call settled without a copy lets its held recording go.
+        releaseHeld(context, nowMs)
         Outcome(imported, settled, waiting)
     }
 
@@ -1226,6 +1288,7 @@ object PhoneAppRecordings {
     private const val HANDLED = "handled"
     private const val DELETE = "delete"
     private const val ASK = "ask"
+    private const val HELD = "held"
     private const val NOTE = "note"
     private const val NOTE_AT = "note_at"
 
@@ -1243,6 +1306,14 @@ object PhoneAppRecordings {
                 WorkManager.getInstance(context).cancelUniqueWork(WATCH)
             }
         }
+        // The app opened: a held recording whose wait ran out (the app was stopped meanwhile) goes now.
+        releaseLater(context)
+    }
+
+    /** [releaseHeld] off the caller's thread (the screens call in on the main thread). */
+    private fun releaseLater(context: Context) {
+        val app = context.applicationContext as? EchoLedgerApp ?: return
+        app.graph.scope.launch(Dispatchers.IO) { runCatching { releaseHeld(app) } }
     }
 
     /**
@@ -1323,10 +1394,11 @@ object PhoneAppRecordings {
          * when these looks were queued end: a call that ended since has its own look queued behind them, and a call
          * whose recording waits for the person still waits.
          */
-        private fun gaveUp(context: Context) {
+        private suspend fun gaveUp(context: Context) {
             val before = PendingImports.waiting(context).size
             PendingImports.endLooks(context, inputData.getLong(KEY_SCHEDULED_AT, Long.MAX_VALUE))
             if (PendingImports.waiting(context).size < before) MissedRecordingWorker.soon(context)
+            releaseHeld(context)
         }
     }
 }

@@ -95,8 +95,10 @@ object MissedRecordings {
             judgeJournal(book, call, match, spans, nowMs, ongoing)
         }
         val paired = rowOf.values.toSet()
+        // A notice that answers none of the journal's calls is a call of its own (the same rule as above): one the helper
+        // only saw a while after it was answered (it reconnected mid-call) is judged by the notice, never dropped.
         val unseen = rows.filter { it !in paired } +
-            notices.filter { s -> calls.none { same(s.app, it.app) && overlapsCall(s, it.atMs, windowEnd(book, it, nowMs)) } }
+            notices.filter { s -> calls.none { same(s.app, it.app) && answers(s, it.atMs, windowEnd(book, it, nowMs)) } }
         val fromSightings = merge(unseen).mapNotNull { judgeSighting(book, it, spans, nowMs) }
         val all = (fromJournal + fromSightings)
             .filter { it.startedAtMs >= from }
