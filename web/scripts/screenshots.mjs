@@ -132,6 +132,8 @@ const pages = {
     'admin-staff': { path: '/admin/staff' },
     // Diagnostics (since v1.8): the calls the apps saw but did not record (php artisan db:seed --class=ConsoleTourSeeder).
     'admin-missed-recordings': { path: '/admin/missed-recordings' },
+    // Diagnostics (since v1.8.1): the screen-share checks; the demo data has none, so this is the empty state.
+    'admin-share-checks': { path: '/admin/share-checks' },
     'api-credentials': { path: '/admin/api-credentials' },
     settings: { path: '/admin/settings' },
     // The Recording tab holds "Always double-check recordings filed under a project" and the AI budget for projects.

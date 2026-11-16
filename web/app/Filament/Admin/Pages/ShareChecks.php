@@ -7,6 +7,7 @@ namespace App\Filament\Admin\Pages;
 use App\Models\ShareCheckResult;
 use App\Services\Staff\StaffAccess;
 use BackedEnum;
+use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\EmbeddedTable;
 use Filament\Schemas\Schema;
@@ -78,7 +79,7 @@ class ShareChecks extends Page implements HasTable
         return $table
             ->query(fn (): Builder => self::matrix())
             ->emptyStateHeading('No screen-share checks yet')
-            ->emptyStateDescription('In the desktop app: Settings → Privacy → Check now, with diagnostics allowed.')
+            ->emptyStateDescription('Settings → Screen-share privacy → Check screen-share privacy, with Send diagnostics on.')
             ->columns([
                 TextColumn::make('platform')->label('System')
                     ->formatStateUsing(fn (ShareCheckResult $record): string => (self::PLATFORMS[$record->platform] ?? $record->platform).' '.$record->os_build),
@@ -93,6 +94,10 @@ class ShareChecks extends Page implements HasTable
                 TextColumn::make('last_at')->label('Last check')
                     ->formatStateUsing(fn (mixed $state): string => Carbon::parse((string) $state)->toFormattedDateString()),
             ])
+            // The filter button's badge shows once a filter is on, not as a 0 (see the theme); its name says the number.
+            ->filtersTriggerAction(fn (Action $action, Table $table): Action => $action
+                ->extraAttributes(fn (): array => ['data-active-filters' => (string) $table->getActiveFiltersCount()])
+                ->label(fn (): string => 'Filters ('.$table->getActiveFiltersCount().' active)'))
             ->filters([
                 SelectFilter::make('platform')->label('System')->options(self::PLATFORMS),
                 // The groups with at least one such result, their other counts kept: a HAVING, so on the base query

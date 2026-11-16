@@ -334,8 +334,10 @@ unless the person taps it. Use it to see what works on your team's phones. The l
 ## 9b. Screen-share checks (since v1.8.1)
 
 **Admin panel → Diagnostics → Screen-share checks** (staff with the device-reports permission) shows whether
-EchoLedger's windows stayed out of screen shares, from the Share Check results people's apps sent with diagnostics
-allowed. Results never carry pictures, window titles or window contents, and the page never shows who sent them.
+EchoLedger's windows stayed out of screen share, from the results of **Check screen-share privacy** that people's apps
+sent with **Send diagnostics** on. Results never carry pictures, window titles or window contents, and the page never
+shows who sent them. A result only counts for the system of the device that sent it, and its versions hold only version
+characters (letters, digits, spaces and `. ( ) _ + -`).
 
 - **One row per group:** the system and its OS build, the app version and the way of checking (Windows Graphics
   Capture, Desktop Duplication, ScreenCaptureKit, the flag read-back, a guided test with a meeting app, or the phone's
@@ -345,6 +347,8 @@ allowed. Results never carry pictures, window titles or window contents, and the
   **Error** = the check could not run (no Screen Recording permission, the capture failed, or the control window was
   missing), so it says nothing about privacy. **Last check** is the newest result of the row.
 - **Filters:** the system, and a result (the rows with at least one result of that kind; their other counts stay).
+- **How long it is kept:** each result is deleted 180 days after it arrived (the daily `model:prune`), so the matrix
+  shows the last half year; it goes at once with its person.
 - **What to do with it:** a Fail on a system or meeting app that the [screen-share matrix](SCREEN_SHARE_MATRIX.md) marks
   Hidden means something changed (a system or meeting-app update); test it by hand and update the matrix and the
   privacy text in the apps. Many Errors on one build usually mean a permission or capture problem in that app version.
