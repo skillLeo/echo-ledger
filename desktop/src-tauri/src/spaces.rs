@@ -1,83 +1,135 @@
 //! EchoLedger and the Mac's Spaces: its menu bar menu over another app's full-screen window, and the main window opened
-//! on the Space in use.
+//! on the Space in use from that menu.
 //!
 //! macOS opens a Dock app's menu bar menu on the desktop, below another app's full-screen window: a click on
 //! EchoLedger's icon there only highlighted it. An app without a Dock icon (`NSApplicationActivationPolicyAccessory`)
-//! has its menu open over it, as a menu bar app's does; switching when the menu opens is too late. So while another
-//! app's full-screen window fills a display (where the Dock is hidden anyway) EchoLedger runs without its Dock icon, and
-//! has it back as soon as none does. It is checked each time the Space in use changes, and again once the switch has
-//! settled. A click on the icon never activates EchoLedger or shows a window (tray.rs); only "Open EchoLedger" does, and
-//! the main window then comes to the Space in use instead of taking the person to the one it was on.
+//! has its menu open over it, as a menu bar app's does; switching when the menu opens is too late. A click on the icon
+//! never activates EchoLedger or shows a window (tray.rs); only "Open EchoLedger" does.
+//!
+//! Decision (the lead's; the one exception to "EchoLedger is a normal Mac app", app_life.rs): EchoLedger goes without
+//! its Dock icon only while the display in use (the one under the pointer) shows another app in a real full-screen
+//! Space, where the Dock is hidden anyway, and gets it back as soon as it does not. A full-screen app on another display,
+//! a window merely filling a display (zoomed under an auto-hiding menu bar) and EchoLedger's own full-screen window
+//! never count. Whether a Space is full screen is read from the system's list of Spaces (each display's current Space and
+//! its type, as the window server keeps it); macOS has no public call for it, so the two functions are looked up when
+//! the app runs and, without them, EchoLedger simply keeps its Dock icon. It is read when the Space in use or the
+//! displays change, and switched only when two reads [`SETTLED`] apart agree (never mid-slide). The normal-Mac-app test
+//! allows no other activation policy change anywhere.
+//!
+//! "Open EchoLedger" from the menu brings an open main window to the Space in use (`MoveToActiveSpace` while it opens,
+//! then the window's own behaviour again), so a Dock click or ⌘Tab later still goes to the window where it is.
 
-/// A window's or a display's frame: top-left corner and size, in points, the main display's top-left corner at 0, 0.
-pub type Frame = ((f64, f64), (f64, f64));
+use std::time::Duration;
+
+/// How long two reads must agree before the Dock icon changes: the switch's slide has settled by then.
+pub const SETTLED: Duration = Duration::from_millis(700);
+
+/// The type the window server gives a full-screen Space (a normal desktop is 0).
+pub const FULL_SCREEN_SPACE: i64 = 4;
 
 /// Whether EchoLedger keeps its Dock icon.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dock {
     /// A normal Mac app: Dock icon, ⌘Tab, its menu bar while in front.
     Shown,
-    /// While another app's full-screen window fills a display: its menu bar menu opens over that window.
+    /// While the display in use shows another app full screen: its menu bar menu opens over it.
     Away,
 }
 
-/// What EchoLedger's Dock icon is while another app's full-screen window does or does not fill a display (pure).
-pub fn dock_for(another_app_full_screen: bool) -> Dock {
-    if another_app_full_screen { Dock::Away } else { Dock::Shown }
+/// What the display in use shows, as read.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct InUse {
+    /// The type of its current Space; none when the system did not say.
+    pub space_type: Option<i64>,
+    /// One of EchoLedger's own windows is full screen on it.
+    pub ours_full_screen: bool,
 }
 
-/// Whether a window of the system's window list is another app's full-screen window (pure): at the normal window level
-/// (layer 0), not EchoLedger's, and filling one display to within a point (a zoomed window leaves the menu bar).
-pub fn fills_a_display(ours: bool, layer: i64, window: Frame, displays: &[Frame]) -> bool {
-    let close = |a: f64, b: f64| (a - b).abs() <= 1.0;
-    !ours
-        && layer == 0
-        && displays.iter().any(|((x, y), (w, h))| {
-            let ((wx, wy), (ww, wh)) = window;
-            close(wx, *x) && close(wy, *y) && close(ww, *w) && close(wh, *h)
-        })
+/// The decision (pure): without the Dock icon only for another app's real full-screen Space on the display in use.
+pub fn dock_for(in_use: InUse) -> Dock {
+    if in_use.space_type == Some(FULL_SCREEN_SPACE) && !in_use.ours_full_screen { Dock::Away } else { Dock::Shown }
+}
+
+/// The current Space's type of display `uuid` in the system's list of (display, current Space type) (pure). With one
+/// set of Spaces for all displays ("Displays have separate Spaces" off) the list's one entry is every display's.
+pub fn space_type_of(uuid: &str, displays: &[(String, i64)]) -> Option<i64> {
+    let one = match displays {
+        [(_, only)] => Some(*only),
+        _ => None,
+    };
+    displays.iter().find(|(id, _)| id.eq_ignore_ascii_case(uuid)).map(|(_, t)| *t).or(one)
+}
+
+/// One read against the read before it (pure): the Dock to apply now (only when both agree), and whether to read again.
+pub fn settle(before: Option<Dock>, now: Dock) -> (Option<Dock>, bool) {
+    if before == Some(now) { (Some(now), false) } else { (None, true) }
 }
 
 #[cfg(target_os = "macos")]
 pub mod mac {
-    use super::{Dock, Frame, dock_for, fills_a_display};
-    use objc2::MainThreadMarker;
-    use objc2_app_kit::{NSApplication, NSApplicationActivationPolicy, NSScreen, NSWindow, NSWindowCollectionBehavior, NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification};
-    use objc2_foundation::{NSNotification, NSOperationQueue};
+    use super::{Dock, InUse, SETTLED, dock_for, settle, space_type_of};
+    use objc2::{MainThreadMarker, Message};
+    use objc2::rc::Retained;
+    use objc2::runtime::AnyObject;
+    use objc2_app_kit::{
+        NSApplication, NSApplicationActivationPolicy, NSApplicationDidChangeScreenParametersNotification, NSEvent, NSScreen, NSWindow,
+        NSWindowCollectionBehavior, NSWindowStyleMask, NSWorkspace, NSWorkspaceActiveSpaceDidChangeNotification,
+    };
+    use objc2_core_foundation::{CFArray, CFDictionary, CFNumber, CFRetained, CFString, CFType};
+    use objc2_foundation::{NSNotification, NSNotificationCenter, NSNotificationName, NSNumber, NSOperationQueue, NSString};
+    use std::ffi::{c_char, c_void};
     use std::ptr::NonNull;
-    use std::time::Duration;
+    use std::sync::Mutex;
 
-    /// How long after a Space change it is checked again: the window list is read once the switch's slide has settled.
-    const SETTLED: Duration = Duration::from_millis(700);
     /// The first check after launch, once the launch's own activation policy is applied.
-    const AFTER_LAUNCH: Duration = Duration::from_secs(1);
+    const AFTER_LAUNCH: std::time::Duration = std::time::Duration::from_secs(1);
+    /// How long the main window comes to the Space in use after "Open EchoLedger" before its own behaviour is back.
+    const BRING_HERE_FOR: std::time::Duration = std::time::Duration::from_secs(2);
 
-    /// Checks on every change of the Space in use, for the app's whole run; the first check runs after launch.
+    /// The last read, waiting for the next one to agree.
+    static LAST_READ: Mutex<Option<Dock>> = Mutex::new(None);
+
+    /// Reads on every change of the Space in use or of the displays, for the app's whole run; the first after launch.
     pub fn install() {
-        // SAFETY: the name is AppKit's constant; the block runs on the main queue, as the check needs.
-        let name = unsafe { NSWorkspaceActiveSpaceDidChangeNotification };
-        let block = block2::RcBlock::new(|_: NonNull<NSNotification>| {
-            check();
-            later(SETTLED);
-        });
-        let centre = NSWorkspace::sharedWorkspace().notificationCenter();
-        // SAFETY: no object filter; the main queue; the block lives as long as the observation, which is the app's run.
-        let observing = unsafe { centre.addObserverForName_object_queue_usingBlock(Some(name), None, Some(&NSOperationQueue::mainQueue()), &block) };
-        std::mem::forget(observing);
+        // SAFETY: the names are AppKit's constants.
+        let (space, screens) = unsafe { (NSWorkspaceActiveSpaceDidChangeNotification, NSApplicationDidChangeScreenParametersNotification) };
+        observe(&NSWorkspace::sharedWorkspace().notificationCenter(), space);
+        observe(&NSNotificationCenter::defaultCenter(), screens);
         later(AFTER_LAUNCH);
     }
 
-    fn later(after: Duration) {
+    fn observe(centre: &NSNotificationCenter, name: &NSNotificationName) {
+        let block = block2::RcBlock::new(|_: NonNull<NSNotification>| {
+            *LAST_READ.lock().unwrap_or_else(|p| p.into_inner()) = None;
+            check();
+        });
+        // SAFETY: no object filter; the main queue (the check needs it); the block lives as long as the observation, which
+        // is the app's run.
+        let observing = unsafe { centre.addObserverForName_object_queue_usingBlock(Some(name), None, Some(&NSOperationQueue::mainQueue()), &block) };
+        std::mem::forget(observing);
+    }
+
+    fn later(after: std::time::Duration) {
         if let Ok(when) = dispatch2::DispatchTime::try_from(after) {
             let _ = dispatch2::DispatchQueue::main().after(when, check);
         }
     }
 
-    /// Gives EchoLedger its Dock icon or takes it away for what is on screen now (main thread).
+    /// One read (main thread): applied once the read before agrees, else read again [`SETTLED`] later.
     pub fn check() {
         let Some(mtm) = MainThreadMarker::new() else { return };
-        let Some(full) = another_app_full_screen(mtm) else { return };
-        let wanted = match dock_for(full) {
+        let now = dock_for(in_use(mtm));
+        let (apply, again) = {
+            let mut last = LAST_READ.lock().unwrap_or_else(|p| p.into_inner());
+            let answer = settle(*last, now);
+            *last = Some(now);
+            answer
+        };
+        if again {
+            later(SETTLED);
+        }
+        let Some(dock) = apply else { return };
+        let wanted = match dock {
             Dock::Shown => NSApplicationActivationPolicy::Regular,
             Dock::Away => NSApplicationActivationPolicy::Accessory,
         };
@@ -87,78 +139,163 @@ pub mod mac {
         }
     }
 
-    /// Whether another app's full-screen window fills a display now; none when the system did not answer.
-    fn another_app_full_screen(mtm: MainThreadMarker) -> Option<bool> {
-        use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
-        use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowBounds, kCGWindowLayer, kCGWindowOwnerPID};
-
-        // The displays in the window list's terms: AppKit's frames are from the main display's bottom-left corner.
+    /// What the display under the pointer shows now.
+    fn in_use(mtm: MainThreadMarker) -> InUse {
+        let pointer = NSEvent::mouseLocation();
         let screens = NSScreen::screens(mtm);
-        let main_height = screens.iter().next().map(|s| s.frame().size.height)?;
-        let displays: Vec<Frame> = screens
-            .iter()
-            .map(|s| {
-                let f = s.frame();
-                ((f.origin.x, main_height - f.origin.y - f.size.height), (f.size.width, f.size.height))
-            })
-            .collect();
-        let own = std::process::id() as i64;
-        let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements, 0)?;
-        // SAFETY: the window-list keys are constants of CoreGraphics.
-        let (bounds_key, layer_key, pid_key) = unsafe { (kCGWindowBounds, kCGWindowLayer, kCGWindowOwnerPID) };
-        for i in 0..list.count() {
-            // SAFETY: the index is in range; each value of this array is a CFDictionary the array keeps alive.
-            let item = unsafe { list.value_at_index(i) } as *const CFType;
-            let Some(dict) = (unsafe { item.as_ref() }).and_then(|t| t.downcast_ref::<CFDictionary>()) else { continue };
-            let get = |dict: &CFDictionary, key: &CFString| -> Option<&CFType> {
-                // SAFETY: the key is a CFString; the value, when present, is a CF object owned by the dictionary.
-                let value = unsafe { dict.value((key as *const CFString).cast()) } as *const CFType;
-                unsafe { value.as_ref() }
-            };
-            let number = |dict: &CFDictionary, key: &CFString| get(dict, key).and_then(|v| v.downcast_ref::<CFNumber>()).and_then(|n| n.as_f64());
-            let Some(bounds) = get(dict, bounds_key).and_then(|v| v.downcast_ref::<CFDictionary>()) else { continue };
-            let field = |name: &'static str| number(bounds, &CFString::from_static_str(name));
-            let (Some(x), Some(y), Some(w), Some(h)) = (field("X"), field("Y"), field("Width"), field("Height")) else { continue };
-            let ours = number(dict, pid_key).map(|p| p as i64) == Some(own);
-            let layer = number(dict, layer_key).map(|l| l as i64).unwrap_or(-1);
-            if fills_a_display(ours, layer, ((x, y), (w, h)), &displays) {
-                return Some(true);
-            }
-        }
-        Some(false)
+        let screen = screens.iter().find(|s| {
+            let f = s.frame();
+            pointer.x >= f.origin.x && pointer.x < f.origin.x + f.size.width && pointer.y >= f.origin.y && pointer.y < f.origin.y + f.size.height
+        });
+        let Some(screen) = screen.or_else(|| NSScreen::mainScreen(mtm)) else { return InUse { space_type: None, ours_full_screen: false } };
+        let frame = screen.frame();
+        let ours_full_screen = NSApplication::sharedApplication(mtm).windows().iter().any(|w| {
+            let f = w.frame();
+            let centre = (f.origin.x + f.size.width / 2.0, f.origin.y + f.size.height / 2.0);
+            w.isVisible()
+                && w.styleMask().contains(NSWindowStyleMask::FullScreen)
+                && centre.0 >= frame.origin.x && centre.0 < frame.origin.x + frame.size.width
+                && centre.1 >= frame.origin.y && centre.1 < frame.origin.y + frame.size.height
+        });
+        let space_type = display_uuid(&screen).and_then(|uuid| current_spaces().and_then(|list| space_type_of(&uuid, &list)));
+        InUse { space_type, ours_full_screen }
     }
 
-    /// The main window comes to the Space in use when it is opened, instead of taking the person to the Space it was on
-    /// (main thread).
-    pub fn follow_active_space(window: &NSWindow) {
-        window.setCollectionBehavior(window.collectionBehavior() | NSWindowCollectionBehavior::MoveToActiveSpace);
+    // ---- The window server's list of Spaces (no public call; looked up at run time) ------------------------------------
+
+    unsafe extern "C" {
+        fn dlsym(handle: *mut c_void, symbol: *const c_char) -> *mut c_void;
     }
+    /// `RTLD_DEFAULT` on macOS: every image loaded in the process.
+    const RTLD_DEFAULT: *mut c_void = -2isize as *mut c_void;
+
+    type MainConnection = unsafe extern "C" fn() -> i32;
+    type CopySpaces = unsafe extern "C" fn(i32) -> *const CFArray;
+    type DisplayUuid = unsafe extern "C" fn(u32) -> *const CFType;
+    type UuidString = unsafe extern "C" fn(*const c_void, *const CFType) -> *const CFString;
+
+    fn symbol(name: &std::ffi::CStr) -> Option<NonNull<c_void>> {
+        // SAFETY: a plain lookup by name.
+        NonNull::new(unsafe { dlsym(RTLD_DEFAULT, name.as_ptr()) })
+    }
+
+    /// The display's UUID (as the list of Spaces names it).
+    fn display_uuid(screen: &NSScreen) -> Option<String> {
+        let key = NSString::from_str("NSScreenNumber");
+        let number: Option<Retained<AnyObject>> = screen.deviceDescription().objectForKey(&key);
+        let id = number?.downcast::<NSNumber>().ok()?.unsignedIntValue();
+        let create = symbol(c"CGDisplayCreateUUIDFromDisplayID")?;
+        let string = symbol(c"CFUUIDCreateString")?;
+        // SAFETY: the two CoreGraphics / CoreFoundation functions by their documented signatures; both results are
+        // owned (+1) and released by CFRetained.
+        unsafe {
+            let create: DisplayUuid = std::mem::transmute(create.as_ptr());
+            let string: UuidString = std::mem::transmute(string.as_ptr());
+            let uuid = CFRetained::from_raw(NonNull::new(create(id).cast_mut())?);
+            let text = CFRetained::from_raw(NonNull::new(string(std::ptr::null(), &*uuid).cast_mut())?);
+            Some(text.to_string())
+        }
+    }
+
+    /// Each display's UUID and its current Space's type; none when the system does not have the list.
+    fn current_spaces() -> Option<Vec<(String, i64)>> {
+        let main = symbol(c"CGSMainConnectionID")?;
+        let copy = symbol(c"CGSCopyManagedDisplaySpaces")?;
+        // SAFETY: the window server's own functions by the signatures every user of them relies on; the array is owned
+        // (+1) and released by CFRetained; its values are read with type checks only.
+        let list = unsafe {
+            let main: MainConnection = std::mem::transmute(main.as_ptr());
+            let copy: CopySpaces = std::mem::transmute(copy.as_ptr());
+            CFRetained::from_raw(NonNull::new(copy(main()).cast_mut())?)
+        };
+        let get = |dict: &CFDictionary, key: &str| -> Option<CFRetained<CFType>> {
+            let key = CFString::from_str(key);
+            // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
+            let value = unsafe { dict.value((&*key as *const CFString).cast()) } as *const CFType;
+            // SAFETY: retained here, so it outlives the dictionary's borrow.
+            NonNull::new(value.cast_mut()).map(|v| unsafe { CFRetained::retain(v) })
+        };
+        let mut out = Vec::new();
+        for i in 0..list.count() {
+            // SAFETY: the index is in range; each value is a CF object the array keeps alive.
+            let item = unsafe { list.value_at_index(i) } as *const CFType;
+            let Some(display) = (unsafe { item.as_ref() }).and_then(|t| t.downcast_ref::<CFDictionary>()) else { continue };
+            let Some(id) = get(display, "Display Identifier").and_then(|v| v.downcast_ref::<CFString>().map(|s| s.to_string())) else { continue };
+            let Some(current) = get(display, "Current Space") else { continue };
+            let Some(current) = current.downcast_ref::<CFDictionary>() else { continue };
+            let Some(kind) = get(current, "type").and_then(|v| v.downcast_ref::<CFNumber>().and_then(|n| n.as_i64())) else { continue };
+            out.push((id, kind));
+        }
+        Some(out)
+    }
+
+    // ---- "Open EchoLedger" from the menu -------------------------------------------------------------------------------
+
+    /// Brings an open main window to the Space in use while it opens from the menu ("Open EchoLedger"), then gives it its
+    /// own behaviour back, so a Dock click or ⌘Tab later still goes to it where it is (main thread).
+    pub fn bring_here_while_opening(window: &NSWindow) {
+        let before = window.collectionBehavior();
+        if before.contains(NSWindowCollectionBehavior::MoveToActiveSpace) {
+            return;
+        }
+        window.setCollectionBehavior(before | NSWindowCollectionBehavior::MoveToActiveSpace);
+        let Ok(when) = dispatch2::DispatchTime::try_from(BRING_HERE_FOR) else { return };
+        let window = window.retain();
+        let restore = move || {
+            let now = window.collectionBehavior();
+            window.setCollectionBehavior(now & !NSWindowCollectionBehavior::MoveToActiveSpace | (before & NSWindowCollectionBehavior::MoveToActiveSpace));
+        };
+        let restore = SendOnMain(restore);
+        let _ = dispatch2::DispatchQueue::main().after(when, move || restore.run());
+    }
+
+    /// A closure run only on the main queue (the window it holds is used there only).
+    struct SendOnMain<F>(F);
+
+    impl<F: FnOnce()> SendOnMain<F> {
+        /// Taken whole (a closure naming only `.0` would capture the bare field).
+        fn run(self) {
+            (self.0)()
+        }
+    }
+    // SAFETY: built on the main thread and run by the main dispatch queue, which is the main thread.
+    unsafe impl<F> Send for SendOnMain<F> {}
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    const MAIN: Frame = ((0.0, 0.0), (1512.0, 982.0));
-    const SIDE: Frame = ((1512.0, -200.0), (1920.0, 1080.0));
+    const A: &str = "37D8832A-2D66-02CA-B9F7-8F30A301B230";
+    const B: &str = "11111111-2222-3333-4444-555555555555";
 
     #[test]
-    fn the_dock_icon_goes_only_while_another_app_is_full_screen() {
-        assert_eq!(dock_for(false), Dock::Shown, "a normal Mac app everywhere else");
-        assert_eq!(dock_for(true), Dock::Away, "its menu then opens over the full-screen window");
+    fn the_dock_icon_goes_only_for_another_app_full_screen_on_the_display_in_use() {
+        let full = |ours| InUse { space_type: Some(FULL_SCREEN_SPACE), ours_full_screen: ours };
+        assert_eq!(dock_for(full(false)), Dock::Away, "VS Code full screen where the person works: the menu opens over it");
+        assert_eq!(dock_for(full(true)), Dock::Shown, "EchoLedger's own window full screen");
+        assert_eq!(dock_for(InUse { space_type: Some(0), ours_full_screen: false }), Dock::Shown, "a desktop, a window zoomed under an auto-hiding menu bar included");
+        assert_eq!(dock_for(InUse { space_type: None, ours_full_screen: false }), Dock::Shown, "the system did not say: a normal Mac app");
     }
 
     #[test]
-    fn a_full_screen_window_is_another_app_s_window_filling_a_display() {
-        let displays = [MAIN, SIDE];
-        assert!(fills_a_display(false, 0, MAIN, &displays), "VS Code full screen on the built-in display");
-        assert!(fills_a_display(false, 0, SIDE, &displays), "on the second display");
-        assert!(fills_a_display(false, 0, ((0.5, 0.0), (1511.5, 982.0)), &displays), "within a point");
-        assert!(!fills_a_display(true, 0, MAIN, &displays), "EchoLedger's own window full screen: it keeps its Dock icon");
-        assert!(!fills_a_display(false, 0, ((0.0, 33.0), (1512.0, 949.0)), &displays), "a zoomed window leaves the menu bar");
-        assert!(!fills_a_display(false, 25, MAIN, &displays), "the menu bar, the Dock and other system layers");
-        assert!(!fills_a_display(false, 0, ((100.0, 100.0), (800.0, 600.0)), &displays));
-        assert!(!fills_a_display(false, 0, MAIN, &[]), "no display known: nothing fills one");
+    fn a_full_screen_app_on_another_display_never_counts() {
+        // Zoom full screen on the second display; the person works on the first.
+        let displays = [(A.to_string(), 0), (B.to_string(), FULL_SCREEN_SPACE)];
+        let in_use = InUse { space_type: space_type_of(A, &displays), ours_full_screen: false };
+        assert_eq!(dock_for(in_use), Dock::Shown);
+        assert_eq!(dock_for(InUse { space_type: space_type_of(B, &displays), ours_full_screen: false }), Dock::Away, "the pointer moves to it");
+        assert_eq!(space_type_of(&A.to_lowercase(), &displays), Some(0));
+        assert_eq!(space_type_of("unknown", &displays), None, "a display the list does not know: nothing decided");
+        // "Displays have separate Spaces" off: one list for all displays.
+        assert_eq!(space_type_of(A, &[("Main".to_string(), FULL_SCREEN_SPACE)]), Some(FULL_SCREEN_SPACE));
+    }
+
+    #[test]
+    fn the_dock_icon_changes_only_when_two_reads_agree() {
+        assert_eq!(settle(None, Dock::Away), (None, true), "the first read only asks for another");
+        assert_eq!(settle(Some(Dock::Shown), Dock::Away), (None, true), "mid-slide: read again");
+        assert_eq!(settle(Some(Dock::Away), Dock::Away), (Some(Dock::Away), false), "settled: applied");
     }
 
     fn code(file: &str) -> String {
@@ -168,7 +305,7 @@ mod tests {
 
     fn body(code: &str, start: &str) -> String {
         let from = &code[code.find(start).unwrap_or_else(|| panic!("{start}"))..];
-        from[..from.find("\n}\n").unwrap()].to_string()
+        from[..from.find("\n    }\n").map(|i| i + 6).or_else(|| from.find("\n}\n")).unwrap()].to_string()
     }
 
     #[test]
@@ -185,26 +322,30 @@ mod tests {
         assert!(crate::tray::left_click_opens_menu(true));
         // Opening the menu wakes nothing: only its entries act, and only "Open EchoLedger" shows the main window.
         let menu = &tray[tray.find(".on_menu_event(").unwrap()..tray.find(".on_tray_icon_event(").unwrap()];
-        assert_eq!(menu.matches("show_main(").count(), 1);
-        assert!(menu.contains("\"open\" => {\n                        show_main(&app);"));
+        assert_eq!(menu.matches("show_main(").count() + menu.matches("open_here(").count(), 1);
+        assert!(menu.contains("\"open\" => {\n                        open_here(&app);"));
     }
 
     #[test]
-    fn the_dock_icon_follows_the_space_in_use_and_the_main_window_comes_to_it() {
+    fn the_dock_icon_follows_the_display_in_use_and_the_main_window_comes_only_from_the_menu() {
         let spaces = code("spaces.rs");
-        // Checked on every Space change, again once it settled, and once after launch; the switch only when it changes.
         let install = body(&spaces, "    pub fn install() {");
-        assert!(install.contains("NSWorkspaceActiveSpaceDidChangeNotification") && install.contains("later(SETTLED)") && install.contains("later(AFTER_LAUNCH)"));
+        for watched in ["NSWorkspaceActiveSpaceDidChangeNotification", "NSApplicationDidChangeScreenParametersNotification", "later(AFTER_LAUNCH)"] {
+            assert!(install.contains(watched), "{watched}");
+        }
         let check = body(&spaces, "    pub fn check() {");
-        assert!(check.contains("if app.activationPolicy() != wanted {"));
+        assert!(check.contains("settle(*last, now)") && check.contains("later(SETTLED)") && check.contains("if app.activationPolicy() != wanted {"));
         // The switch never activates EchoLedger or shows a window.
         let mac = &spaces[spaces.find("pub mod mac {").unwrap()..];
         for wakes in ["activate", "makeKeyAndOrderFront", "orderFront", "set_focus"] {
             assert!(!mac.contains(wakes), "{wakes}");
         }
-        let lib = code("lib.rs");
-        assert!(lib.contains("spaces::mac::install();"), "installed for the run");
-        let lifecycle = code("lifecycle.rs");
-        assert!(body(&lifecycle, "fn build_main(").contains("crate::spaces::mac::follow_active_space("), "the main window opens on the Space in use");
+        assert!(code("lib.rs").contains("spaces::mac::install();"), "installed for the run");
+        // MoveToActiveSpace only while "Open EchoLedger" opens it from the menu, never on the window for good.
+        assert!(!code("lifecycle.rs").contains("MoveToActiveSpace") && !code("lifecycle.rs").contains("spaces::"));
+        let tray = code("tray.rs");
+        assert!(body(&tray, "fn open_here(").contains("crate::spaces::mac::bring_here_while_opening("));
+        let bring = body(&spaces, "    pub fn bring_here_while_opening(");
+        assert!(bring.contains("BRING_HERE_FOR") && bring.contains("before & NSWindowCollectionBehavior::MoveToActiveSpace"), "its own behaviour back");
     }
 }

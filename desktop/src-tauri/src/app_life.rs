@@ -323,9 +323,11 @@ mod tests {
 
     #[test]
     fn echoledger_is_a_normal_mac_app() {
-        // Never the Dock-less modes, in any run: not in the code, not in Info.plist. The one exception is spaces.rs: while
-        // another app's full-screen window fills a display (the Dock hidden there anyway) EchoLedger's menu bar menu
-        // opens over it only without the Dock icon, which comes back as soon as no such window is on screen.
+        // Never the Dock-less modes, in any run: not in the code, not in Info.plist. The one exception is spaces.rs (the
+        // lead's decision): while the display in use shows another app in a real full-screen Space, EchoLedger's menu
+        // bar menu opens over it only without the Dock icon, which comes back as soon as it does not. No other code
+        // changes the activation policy at all: lib.rs sets Regular for the run and the smoke test, spaces.rs's check
+        // switches between Regular and Accessory, and nothing else calls either setter.
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
         let mut files = Vec::new();
         fn walk(dir: &std::path::Path, out: &mut Vec<std::path::PathBuf>) {
@@ -339,22 +341,32 @@ mod tests {
             }
         }
         walk(&root.join("src"), &mut files);
+        let mut setters = 0;
         for file in &files {
             let text = std::fs::read_to_string(file).unwrap();
             let app_code = text.split("\n#[cfg(test)]\nmod tests").next().unwrap();
-            if file.ends_with("spaces.rs") {
-                assert_eq!(app_code.matches("ActivationPolicy::Accessory").count(), 1, "only the full-screen switch");
-                assert!(app_code.contains("Dock::Away => NSApplicationActivationPolicy::Accessory,"));
-                assert!(app_code.contains("if another_app_full_screen { Dock::Away } else { Dock::Shown }"));
-                for dockless in ["ActivationPolicy::Prohibited", "set_dock_visibility(false)"] {
-                    assert!(!app_code.contains(dockless), "{}: {dockless}", file.display());
+            let calls = app_code.matches("setActivationPolicy(").count() + app_code.matches("set_activation_policy(").count();
+            setters += calls;
+            let name = file.file_name().unwrap().to_string_lossy();
+            match name.as_ref() {
+                "spaces.rs" => {
+                    assert_eq!(calls, 1, "spaces.rs: one switch");
+                    assert_eq!(app_code.matches("ActivationPolicy::Accessory").count(), 1, "only the full-screen switch");
+                    let check = &app_code[app_code.find("    pub fn check() {").unwrap()..];
+                    let check = &check[..check.find("\n    }\n").unwrap()];
+                    assert!(check.contains("app.setActivationPolicy(wanted);") && check.contains("Dock::Away => NSApplicationActivationPolicy::Accessory,"), "the switch lives in check()");
                 }
-                continue;
+                "lib.rs" => assert_eq!(calls, 2, "lib.rs: Regular for the run and the smoke test"),
+                _ => assert_eq!(calls, 0, "{}: changes the activation policy", file.display()),
             }
-            for dockless in ["ActivationPolicy::Accessory", "ActivationPolicy::Prohibited", "set_dock_visibility(false)"] {
+            for dockless in ["ActivationPolicy::Prohibited", "set_dock_visibility(false)"] {
                 assert!(!app_code.contains(dockless), "{}: {dockless}", file.display());
             }
+            if name != "spaces.rs" {
+                assert!(!app_code.contains("ActivationPolicy::Accessory"), "{}: ActivationPolicy::Accessory", file.display());
+            }
         }
+        assert_eq!(setters, 3);
         let plist = std::fs::read_to_string(root.join("Info.plist")).unwrap();
         assert!(!plist.contains("LSUIElement") && !plist.contains("LSBackgroundOnly"), "an agent app has no Dock icon, no ⌘Tab and no Force Quit");
         // Regular for the whole run (the smoke test too), and a start at login leaves the focus where it was.
