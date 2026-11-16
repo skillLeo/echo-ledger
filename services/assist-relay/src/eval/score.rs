@@ -66,10 +66,24 @@ pub fn base_sources(case: &Case) -> Sources {
     sources
 }
 
-/// Numbers written with digits: `450,000`, `4.6`, `18%`, `£1,200`, `$16,500`, `4.5 lakh`, `35 thousand`, `1.5 million`,
-/// `450k`; Indian grouping (`15,00,000`) too.
+/// Arabic-Indic (`٠`-`٩`, Arabic) and Extended Arabic-Indic (`۰`-`۹`, Urdu and Persian) digits, and the Arabic decimal
+/// and thousands marks, as ASCII.
+pub fn ascii_digits(text: &str) -> String {
+    text.chars()
+        .map(|c| match c {
+            '\u{0660}'..='\u{0669}' => char::from(b'0' + (c as u32 - 0x0660) as u8),
+            '\u{06F0}'..='\u{06F9}' => char::from(b'0' + (c as u32 - 0x06F0) as u8),
+            '\u{066B}' => '.',
+            '\u{066C}' => ',',
+            other => other,
+        })
+        .collect()
+}
+
+/// Numbers written with digits in any of those scripts: `450,000`, `4.6`, `18%`, `£1,200`, `$16,500`, `4.5 lakh`,
+/// `35 thousand`, `1.5 million`, `450k`, `٢٤`, `۵`; Indian grouping (`15,00,000`) too.
 pub fn numbers(text: &str) -> Vec<f64> {
-    let chars: Vec<char> = text.chars().collect();
+    let chars: Vec<char> = ascii_digits(text).chars().collect();
     let mut found = Vec::new();
     let mut i = 0;
     while i < chars.len() {
@@ -103,46 +117,112 @@ pub fn numbers(text: &str) -> Vec<f64> {
     found
 }
 
-/// English number words, and Roman Urdu ones that are not also common English words ("do", "teen" and "char" would
-/// make 2, 3 and 4 known in almost any sentence).
-const WORDS: [(&str, f64); 23] = [
+/// English number words.
+const WORDS: [(&str, f64); 26] = [
     ("one", 1.0), ("two", 2.0), ("three", 3.0), ("four", 4.0), ("five", 5.0), ("six", 6.0), ("seven", 7.0),
     ("eight", 8.0), ("nine", 9.0), ("ten", 10.0), ("eleven", 11.0), ("twelve", 12.0), ("fifteen", 15.0),
     ("sixteen", 16.0), ("eighteen", 18.0), ("twenty", 20.0), ("thirty", 30.0), ("forty", 40.0), ("fifty", 50.0),
-    ("sixty", 60.0), ("seventy", 70.0), ("hundred", 100.0), ("pandrah", 15.0),
+    ("sixty", 60.0), ("seventy", 70.0), ("eighty", 80.0), ("ninety", 90.0), ("hundred", 100.0), ("dozen", 12.0), ("half", 0.5),
 ];
 
-/// Numbers written as words, alone or before thousand / lakh / million.
+/// Roman Urdu number words. Several are also English words ("do", "teen", "char"), so they count only before a unit.
+const URDU_WORDS: [(&str, f64); 14] = [
+    ("ek", 1.0), ("do", 2.0), ("teen", 3.0), ("char", 4.0), ("chaar", 4.0), ("paanch", 5.0), ("chhe", 6.0),
+    ("saat", 7.0), ("aath", 8.0), ("nau", 9.0), ("das", 10.0), ("pandrah", 15.0), ("bees", 20.0), ("pachas", 50.0),
+];
+
+/// Words after a number that make it a quantity: a time, a count of people or things, money, a share.
+const UNITS: [&str; 64] = [
+    "year", "years", "month", "months", "week", "weeks", "day", "days", "hour", "hours", "minute", "minutes",
+    "saal", "mahine", "mahina", "hafte", "hafta", "din", "ghante",
+    "people", "person", "developers", "developer", "engineers", "designers", "testers", "members", "staff", "employees",
+    "projects", "apps", "clients", "customers", "users", "downloads", "managers", "branches", "mills", "warehouses",
+    "godam", "dealers", "orders", "payouts", "visits", "cases", "stores", "restaurants", "countries", "cities",
+    "percent", "thousand", "hazar", "lakh", "million", "crore", "dollars", "pounds", "rupees", "rupay", "riyals",
+    "riyal", "dirhams", "dirham", "times",
+];
+
+fn word_value(word: &str, next: Option<&str>, urdu: bool) -> Option<f64> {
+    let english = WORDS.iter().find(|(name, _)| *name == word).map(|(_, v)| *v);
+    let roman = URDU_WORDS.iter().find(|(name, _)| *name == word).map(|(_, v)| *v);
+    english.or(if urdu && next.is_some_and(|n| UNITS.contains(&n)) { roman } else { None })
+}
+
+fn scaled(value: f64, next: Option<&str>) -> Option<f64> {
+    match next {
+        Some("thousand" | "hazar") => Some(value * 1_000.0),
+        Some("lakh") => Some(value * 100_000.0),
+        Some("million") => Some(value * 1_000_000.0),
+        Some("crore") => Some(value * 10_000_000.0),
+        _ => None,
+    }
+}
+
+fn lower_words(text: &str) -> Vec<String> {
+    text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect()
+}
+
+/// Numbers written as words in what is known: every English number word, and Roman Urdu ones before a unit; with
+/// thousand / lakh / million after them too.
 fn word_numbers(text: &str) -> Vec<f64> {
-    let words: Vec<String> = text.split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).map(str::to_lowercase).collect();
+    let words = lower_words(text);
     let mut found = Vec::new();
     for (index, word) in words.iter().enumerate() {
-        if let Some((_, value)) = WORDS.iter().find(|(name, _)| name == word) {
-            found.push(*value);
-            match words.get(index + 1).map(String::as_str) {
-                Some("thousand" | "hazar") => found.push(value * 1_000.0),
-                Some("lakh") => found.push(value * 100_000.0),
-                Some("million") => found.push(value * 1_000_000.0),
-                _ => {}
-            }
+        let next = words.get(index + 1).map(String::as_str);
+        if let Some(value) = word_value(word, next, true) {
+            found.push(value);
+            found.extend(scaled(value, next));
         }
     }
     found
 }
 
-/// The questions an answer suggests asking: sentences that end in `?`.
-pub fn questions(text: &str) -> Vec<String> {
+/// Numbers written as words in an answer that state a quantity: a number word (English, or Roman Urdu) right before
+/// a unit ("three years", "do hafte", "twelve developers", "fifty thousand"). Counts of the answer's own points ("two
+/// quick ones", "one question") are not claims.
+pub fn quantity_words(text: &str) -> Vec<f64> {
+    let words = lower_words(text);
+    let mut found = Vec::new();
+    for (index, word) in words.iter().enumerate() {
+        let next = words.get(index + 1).map(String::as_str);
+        if !next.is_some_and(|n| UNITS.contains(&n)) {
+            continue;
+        }
+        if let Some(value) = word_value(word, next, true) {
+            found.push(scaled(value, next).unwrap_or(value));
+        }
+    }
+    found
+}
+
+/// Words that make a sentence a request to Them: asking, confirming, checking (English and Roman Urdu).
+const REQUEST_WORDS: [&str; 22] = [
+    "ask", "asking", "confirm", "reconfirm", "check", "double-check", "clarify", "verify", "find out", "request",
+    "remind me", "tell me", "let me know", "pooch", "poochain", "poochein", "poochiye", "poochna", "puchain", "puchiye",
+    "bata dein", "batayein",
+];
+
+/// What an answer asks of Them: every sentence that ends in `?`, and every sentence with a request word ("Ask them
+/// their budget again.", "Confirm the salary figure with them."). Sentences end at `.`, `!`, `?`, a line break or a
+/// colon, so "Say next: …" is its own sentence.
+pub fn requests(text: &str) -> Vec<String> {
     let mut found = Vec::new();
     let mut current = String::new();
+    let mut push = |sentence: &mut String, asked: bool| {
+        let lower = sentence.trim().to_lowercase();
+        if !lower.is_empty() && (asked || REQUEST_WORDS.iter().any(|word| contains_word(&lower, word))) {
+            found.push(lower);
+        }
+        sentence.clear();
+    };
     for c in text.chars() {
         match c {
-            '?' | '؟' => {
-                found.push(std::mem::take(&mut current).trim().to_lowercase());
-            }
-            '.' | '!' | '\n' => current.clear(),
+            '?' | '\u{061F}' => push(&mut current, true),
+            '.' | '!' | '\n' | ':' | '\u{06D4}' => push(&mut current, false),
             _ => current.push(c),
         }
     }
+    push(&mut current, false);
     found
 }
 
@@ -179,7 +259,12 @@ pub fn score_turn(case: &Case, turn: &Turn, output: &Output, sources: &Sources) 
     let words = first_line(answer).split_whitespace().count();
     results.push(result(Category::FirstLine, words <= 25, format!("first line has {words} words")));
 
-    let unknown: Vec<String> = numbers(answer).into_iter().filter(|n| !sources.knows(*n)).map(|n| n.to_string()).collect();
+    let unknown: Vec<String> = numbers(answer)
+        .into_iter()
+        .chain(quantity_words(answer))
+        .filter(|n| !sources.knows(*n))
+        .map(|n| n.to_string())
+        .collect();
     let claims: Vec<&String> = case.invented.iter().filter(|claim| lower.contains(&claim.to_lowercase())).collect();
     let mut invented = Vec::new();
     if !unknown.is_empty() {
@@ -204,9 +289,9 @@ pub fn score_turn(case: &Case, turn: &Turn, output: &Output, sources: &Sources) 
         results.push(result(Category::Consistency, detail.is_empty(), detail.join("; ")));
     }
     if !turn.check.no_ask.is_empty() {
-        let repeated: Vec<String> = questions(answer)
+        let repeated: Vec<String> = requests(answer)
             .into_iter()
-            .filter(|question| turn.check.no_ask.iter().any(|term| contains_word(question, &term.to_lowercase())))
+            .filter(|request| turn.check.no_ask.iter().any(|term| contains_word(request, &term.to_lowercase())))
             .collect();
         results.push(result(Category::AntiRepeat, repeated.is_empty(), format!("asks again: {repeated:?}")));
     }
@@ -324,8 +409,22 @@ mod tests {
     }
 
     #[test]
-    fn questions_are_the_sentences_that_ask() {
+    fn requests_are_questions_and_sentences_that_ask_for_something() {
         let text = "Yes, two quick ones.\n- **Team**: who would I work with?\nSay next: How does on-call work here?";
-        assert_eq!(questions(text), vec!["- **team**: who would i work with", "say next: how does on-call work here"]);
+        assert_eq!(requests(text), vec!["who would i work with", "how does on-call work here"]);
+        assert_eq!(requests("Sure.\nSay next: Ask them their budget again."), vec!["ask them their budget again"]);
+        assert_eq!(requests("Confirm the salary figure with them."), vec!["confirm the salary figure with them"]);
+        assert_eq!(requests("Un se budget dobara poochain"), vec!["un se budget dobara poochain"]);
+        assert!(requests("I mentioned 450,000 rupees a month.\n- **Open**: happy to discuss").is_empty());
+    }
+
+    #[test]
+    fn digits_in_arabic_and_urdu_scripts_and_quantities_in_words_are_read() {
+        assert_eq!(numbers("قبل ٢٤ ساعة"), vec![24.0]);
+        assert_eq!(numbers("۵ لاکھ کا آرڈر"), vec![5.0]);
+        assert_eq!(numbers("١٢٬٥٠٠ ريال و ٤٫٥"), vec![12_500.0, 4.5]);
+        assert_eq!(quantity_words("I have three years of Kotlin and do hafte notice."), vec![3.0, 2.0]);
+        assert_eq!(quantity_words("Fifty thousand riyals, with twelve developers."), vec![50_000.0, 12.0]);
+        assert!(quantity_words("Yes, two quick ones. One question: do you test?").is_empty());
     }
 }

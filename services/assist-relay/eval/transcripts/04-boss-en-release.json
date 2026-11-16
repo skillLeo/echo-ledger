@@ -50,7 +50,8 @@
     {"id": "o-9", "channel": "other", "at": "12:00", "text": "Anything else you need from me before I run to my call?", "trap": "budget_again",
      "check": {"include_any": ["60", "40"], "exclude": ["80 hours", "100 hours"], "no_ask": ["overtime budget", "how much overtime", "how many hours"]},
      "reference": "Yes, two things.\n- **Overtime**: approval to use 40 of the 60 hours\n- **Date**: your answer on the two extra days",
-     "bad": {"answer": "How much overtime budget do we have this month?", "fails": ["anti_repeat", "consistency"]}},
+     "bad": [{"answer": "How much overtime budget do we have this month?", "fails": ["anti_repeat", "consistency"]},
+             {"answer": "Two things.\nSay next: Please check the overtime budget for this month with me again.", "fails": ["anti_repeat", "consistency"]}]},
     {"id": "m-7", "channel": "me", "at": "12:40", "text": "Just the overtime approval and the date."},
     {"id": "o-10", "channel": "other", "at": "13:10", "text": "Send me the updated test report by Friday.", "expect": "any"}
   ]

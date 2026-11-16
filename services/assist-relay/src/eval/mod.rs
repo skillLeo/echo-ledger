@@ -157,8 +157,22 @@ pub struct Turn {
     pub check: Check,
     #[serde(default)]
     pub reference: Option<String>,
-    #[serde(default)]
-    pub bad: Option<Bad>,
+    /// One bad answer, or several: CI scripts each in turn and checks it fails exactly what it names.
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub bad: Vec<Bad>,
+}
+
+fn one_or_many<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Vec<Bad>, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(Bad),
+        Many(Vec<Bad>),
+    }
+    Ok(match OneOrMany::deserialize(deserializer)? {
+        OneOrMany::One(bad) => vec![bad],
+        OneOrMany::Many(bads) => bads,
+    })
 }
 
 impl Turn {
@@ -260,15 +274,13 @@ fn validate_case(case: &Case) -> Vec<String> {
             problems.push(format!("{}: `none` exactly for backchannels", turn.id));
         }
         let checked = !turn.check.include_any.is_empty() || !turn.check.exclude.is_empty() || !turn.check.no_ask.is_empty();
-        if (checked || turn.trap.is_some() || turn.bad.is_some()) && turn.reference.is_none() {
+        if (checked || turn.trap.is_some() || !turn.bad.is_empty()) && turn.reference.is_none() {
             problems.push(format!("{}: a checked turn needs a reference answer", turn.id));
         }
         if let Some(trap) = turn.trap {
             traps.push((trap, at_ms(&turn.at).unwrap_or(0), turn));
         }
-        if let Some(bad) = &turn.bad
-            && bad.fails.is_empty()
-        {
+        if turn.bad.iter().any(|bad| bad.fails.is_empty()) {
             problems.push(format!("{}: a bad answer must name what it fails", turn.id));
         }
     }

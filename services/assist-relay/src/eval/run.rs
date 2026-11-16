@@ -35,7 +35,8 @@ pub const GENERIC_ANSWER: &str = "Sure, happy to answer that.\n- **Point**: from
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Script {
     References,
-    BadAnswers,
+    /// Each turn's bad answer number `n` (turns with fewer get their reference).
+    BadAnswers(usize),
 }
 
 /// How a run talks to the models.
@@ -129,8 +130,8 @@ impl Runner {
 
     /// The scripted answer for a turn (CI only).
     fn scripted_answer(script: Script, turn: &super::Turn) -> String {
-        if script == Script::BadAnswers
-            && let Some(bad) = &turn.bad
+        if let Script::BadAnswers(n) = script
+            && let Some(bad) = turn.bad.get(n)
         {
             return bad.answer.clone();
         }
@@ -327,21 +328,32 @@ pub async fn ci_check(cases: &[Case]) -> Vec<String> {
     if (totals.overall() - 1.0).abs() > f64::EPSILON {
         problems.push(format!("references score {:.3}, not 1.0", totals.overall()));
     }
-    let (scores, _, harness) = run_all(&Runner::scripted(Script::BadAnswers), cases).await;
-    problems.extend(harness);
-    for (score, case) in scores.iter().zip(cases) {
-        for (turn_id, _, results) in &score.turns {
-            let failed: BTreeSet<Category> = results.iter().filter(|r| !r.passed).map(|r| r.category).collect();
-            let declared: BTreeSet<Category> = case
-                .events
-                .iter()
-                .find_map(|e| match e {
-                    Event::Turn(t) if &t.id == turn_id => t.bad.as_ref().map(|b| b.fails.iter().copied().collect()),
-                    _ => None,
-                })
-                .unwrap_or_default();
-            if failed != declared {
-                problems.push(format!("{}/{turn_id}: the bad answer fails {failed:?}, declared {declared:?}", score.id));
+    let rounds = cases
+        .iter()
+        .flat_map(|case| &case.events)
+        .filter_map(|event| match event {
+            Event::Turn(turn) => Some(turn.bad.len()),
+            Event::Facts(_) => None,
+        })
+        .max()
+        .unwrap_or(0);
+    for round in 0..rounds {
+        let (scores, _, harness) = run_all(&Runner::scripted(Script::BadAnswers(round)), cases).await;
+        problems.extend(harness);
+        for (score, case) in scores.iter().zip(cases) {
+            for (turn_id, _, results) in &score.turns {
+                let failed: BTreeSet<Category> = results.iter().filter(|r| !r.passed).map(|r| r.category).collect();
+                let declared: BTreeSet<Category> = case
+                    .events
+                    .iter()
+                    .find_map(|e| match e {
+                        Event::Turn(t) if &t.id == turn_id => t.bad.get(round).map(|b| b.fails.iter().copied().collect()),
+                        _ => None,
+                    })
+                    .unwrap_or_default();
+                if failed != declared {
+                    problems.push(format!("{}/{turn_id}: bad answer {} fails {failed:?}, declared {declared:?}", score.id, round + 1));
+                }
             }
         }
     }
