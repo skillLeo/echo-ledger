@@ -307,6 +307,33 @@ describe("MainApp sidebar and keys", () => {
     }
   });
 
+  it("shows the sidebar's rail in a window too narrow for it (200 % text), without changing what was chosen", async () => {
+    const width = window.innerWidth;
+    try {
+      window.localStorage.setItem("echoledger-sidebar", "expanded");
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 430 });
+      const view = await renderPaired();
+      const app = () => document.querySelector(".app")!;
+      expect(app()).toHaveClass("collapsed");
+      // Opened there for the moment; what was chosen stays.
+      fireEvent.click(screen.getByRole("button", { name: "Expand the sidebar" }));
+      expect(app()).not.toHaveClass("collapsed");
+      expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
+      fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+      expect(app()).toHaveClass("collapsed");
+      // A wide window again: the sidebar as chosen.
+      act(() => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1100 });
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(app()).not.toHaveClass("collapsed");
+      expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
+      view.unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
+  });
+
   it("keeps Help, Account and Collapse out of the sidebar's scrolling part, and the top bar draggable on a Mac (MANUAL_QA 16-P4, 16-P5)", async () => {
     await renderPaired();
     const footer = sidebar().querySelector(".sidebar-footer")!;

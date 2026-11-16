@@ -345,7 +345,11 @@ mod tests {
         for file in &files {
             let text = std::fs::read_to_string(file).unwrap();
             let app_code = text.split("\n#[cfg(test)]\nmod tests").next().unwrap();
-            let calls = app_code.matches("setActivationPolicy(").count() + app_code.matches("set_activation_policy(").count();
+            // Every way to call it: AppKit's method, its selector (msg_send!, sel!), Tauri's two setters.
+            let calls = ["setActivationPolicy(", "setActivationPolicy:", "set_activation_policy(", "set_activation_policy_at_runtime("]
+                .iter()
+                .map(|form| app_code.matches(form).count())
+                .sum::<usize>();
             setters += calls;
             let name = file.file_name().unwrap().to_string_lossy();
             match name.as_ref() {

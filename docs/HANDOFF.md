@@ -189,6 +189,12 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   software. The reviewer checks for a public alternative; if one works, switch to it. Private macOS calls in use:
   _setPreventsActivation: (floating panels) and CGSCopyManagedDisplaySpaces (Spaces) — no others without a decision here.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-17 · desktop S0/S1 round (D-105 S0 after-call Discard with Undo and delayed delete; D-072 S1 Revoke asks;
+    the app's own accessible confirm dialog replacing all window.confirm: D-045, D-085, D-093, D-101, D-122) +
+    Spaces minors · `2df848fd`, `25a2639a` · approve ×2 · merged tree: vitest 2,243, tsc clean · minors next: throttle
+    the mouse-moved display check (C9 idle budget), discard due items one by one, write the .leaving marker before
+    saving pending.json, ignore ⌘K while a question is open, red for "Write the brief again?" and "Close without
+    sending?". Device: the D-105 steps and the Spaces steps in the next Mac slot.
   - 2026-11-16 late · v1.8.1 desktop review batch (661df909 menu bar menu over full-screen apps via spaces.rs; c2cd2044
     Settings column, one search, closest matches, one banner, no empty bar, Recovered chip; c02683ef banners per
     occurrence; 75820dfc Spaces on the display in use, private Space-type read; 4b9ba2dc palette, Learn more, review
