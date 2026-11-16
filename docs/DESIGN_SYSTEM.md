@@ -116,9 +116,10 @@ People do not know our internal words ("pill", "card", "chip", "overlay"); Hassa
 | The check page | **Check screen-share privacy** | Share Check, Open Share Check |
 | The protection when a window is left out | **Private**; when it shows black: **Black box**; when it shows: **Visible in screen share** | invisible, undetectable, stealth |
 
-Phone, Settings → Privacy & data → **During screen sharing**: **Private (black box)** (the default: people watching a
-screen share or recording see a black box where the floating windows are; you see them as usual) and **Show** (everyone
-watching can read them). Android does not tell apps when a floating window is in a screen share (measured on the S25,
+Phone, Settings → Privacy & data → **During screen sharing**: **Private (black box)** (the default: a screen share, a
+recording or a screenshot shows a black box where the floating windows are, your own screenshots too; you see them as
+usual) and **Show** (everyone watching can read them). "Hide EchoLedger windows" lasts until you show them again or the
+app restarts (the black box keeps protecting either way). Android does not tell apps when a floating window is in a screen share (measured on the S25,
 Android 17), so the black box is always on unless Show is chosen. A stored `hide` or `black_box` means Private.
 
 ## Controls
