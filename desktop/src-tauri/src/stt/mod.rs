@@ -267,11 +267,19 @@ fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turn
         app.state::<crate::AppState>().screens.heard(text);
     }
     match event {
-        SttEvent::Partial { text } => hub.send(targets, CaptionEvent::Partial { speaker, channel: index, text }),
+        SttEvent::Partial { text } => {
+            // Live Assist (1.9.0-e): the other person's words as they come; never the microphone's.
+            if record_turns {
+                app.state::<crate::AppState>().assist.heard_partial(channel, &text);
+            }
+            hub.send(targets, CaptionEvent::Partial { speaker, channel: index, text })
+        }
         SttEvent::Final { text, start_ms, end_ms } => {
             let arrived_ms = stream.1.elapsed().as_millis() as u64;
             let (start, end) = captions::turn_times(stream.0, start_ms, end_ms, arrived_ms);
             if record_turns {
+                // Live Assist: every finished turn, the microphone's as context.
+                app.state::<crate::AppState>().assist.heard_final(channel, &text, start, end);
                 let state = app.state::<crate::AppState>();
                 state.captions.lock().unwrap().push(FinalTurn { wall_ms: now_ms(), channel, text: text.clone(), start_ms: start, end_ms: end });
             } else {

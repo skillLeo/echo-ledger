@@ -554,3 +554,52 @@ async fn a_running_session_stops_when_live_assist_turns_off() {
     events.wait_for("the end", |e| *e == AssistEvent::Ended(EndReason::Closed)).await;
     assert!(registry.current().is_none());
 }
+
+#[tokio::test]
+async fn the_captions_turns_reach_the_relay_the_microphone_s_as_context_only() {
+    use desktop_lib::audio::types::Channel as Audio;
+    let got: Arc<Mutex<Vec<Value>>> = Arc::default();
+    let log = got.clone();
+    let relay = Relay::start(never, move |_, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            let _ = ws.send(ready_at(1000, false)).await;
+            loop {
+                match ws.next().await {
+                    Some(Ok(Message::Text(text))) => log.lock().unwrap().push(serde_json::from_str(text.as_str()).unwrap()),
+                    Some(Ok(_)) => {}
+                    _ => break,
+                }
+            }
+        }
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let registry = desktop_lib::assist::Registry::default();
+    assert!(!registry.heard_partial(Audio::System, "nothing runs"), "no session: nothing to send");
+    registry.set("01JS".into(), client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink()));
+    events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { .. })).await;
+    assert!(!registry.heard_partial(Audio::Mic, "my notice is"), "never a partial of mine");
+    assert!(registry.heard_partial(Audio::System, "so what is your notice"));
+    assert!(registry.heard_final(Audio::System, "So what is your notice period?", 81_200, 86_400));
+    assert!(registry.heard_final(Audio::Mic, "One month.", 87_000, 88_000));
+    for _ in 0..100 {
+        if got.lock().unwrap().len() >= 3 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let got: Vec<(String, String, String)> = got
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|v| (v["type"].as_str().unwrap().into(), v["channel"].as_str().unwrap().into(), v["turn_id"].as_str().unwrap().into()))
+        .collect();
+    assert_eq!(got, [
+        ("turn_partial".to_string(), "other".to_string(), "o-1".to_string()),
+        ("turn_final".into(), "other".into(), "o-1".into()),
+        ("turn_final".into(), "me".into(), "m-1".into()),
+    ]);
+    registry.stop();
+}
