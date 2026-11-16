@@ -61,10 +61,43 @@ class CallJournalTest {
         assertEquals("failed", call.result)
         assertEquals(CallJournal.Failure("started", "mic_busy", "Another app was using the microphone."), call.failure)
         assertNull("the call goes on after a failure at its start", call.endedAtMs)
-        // Nothing changes a finished call.
-        b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 900)
-        b = CallJournal.finish(b, "c1", Result.KEPT, t0 + 1_000)
-        assertEquals(call, b.call("c1"))
+        // A result is final, except a failure at the start: a later start of the same call opens it again (see below).
+        val discarded = CallJournal.finish(b, "c1", Result.NOT_WANTED, t0 + 1_000)
+        assertEquals("not wanted is no rescue", call, discarded.call("c1"))
+        assertEquals("a second failure is no rescue", call, CallJournal.fail(b, "c1", "unknown", "x", t0 + 1_100).call("c1"))
+    }
+
+    @Test
+    fun `a backup start that works replaces the start's failure, which stays as a note`() {
+        var b = CallJournal.seen(Book(), "c1", "whatsapp", Seen.HELPER, t0)
+        b = CallJournal.stage(b, "c1", Stage.ARMED, t0 + 100, "helper ready")
+        b = CallJournal.fail(b, "c1", "helper_not_armed", "The helper was not connected when the call started.", t0 + 200)
+        b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 5_200, "backup start")
+        b = CallJournal.stage(b, "c1", Stage.BOTH_AUDIO, t0 + 7_000)
+        b = CallJournal.ended(b, "c1", t0 + 312_000)
+        b = CallJournal.finish(b, "c1", Result.KEPT, t0 + 315_000, keptMs = 304_000)
+        val call = b.call("c1")!!
+        assertEquals("kept", call.result)
+        assertNull(call.failure)
+        assertEquals(listOf("detected", "armed", "started", "both_audio", "saved"), stagesOf(b))
+        val line = CallJournal.describe(b, ZoneOffset.UTC).single()
+        assertFalse(line, line.contains("stopped at"))
+        assertTrue(line, line.contains("first start failed: helper_not_armed") && line.endsWith("· kept (5:04)"))
+    }
+
+    @Test
+    fun `a crash, a silent recording or a later failure stays final`() {
+        var b = CallJournal.seen(Book(), "c1", "whatsapp", Seen.HELPER, t0)
+        b = CallJournal.stage(b, "c1", Stage.STARTED, t0 + 400)
+        b = CallJournal.fail(b, "c1", "unknown", "No sound was captured, so the recording was not kept.", t0 + 300_000)
+        b = CallJournal.stage(b, "c1", Stage.BOTH_AUDIO, t0 + 301_000)
+        b = CallJournal.finish(b, "c1", Result.KEPT, t0 + 302_000)
+        assertEquals("a failure after the start is final", "failed", b.call("c1")!!.result)
+
+        var c = CallJournal.seen(Book(), "c2", "zoom", Seen.HELPER, t0)
+        c = CallJournal.processStarted(c, t0 + 60_000)
+        c = CallJournal.stage(c, "c2", Stage.STARTED, t0 + 61_000)
+        assertEquals("a crash is final", "crash", c.call("c2")!!.failure?.reason)
     }
 
     @Test

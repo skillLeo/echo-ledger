@@ -57,8 +57,12 @@ object SamsungCallImport {
             )
     }
 
-    /** Looks for the Phone app's recording of the call a little after it ended (it is saved when the call ends). */
+    /**
+     * Looks for the Phone app's recording of the call a little after it ended (it is saved when the call ends); until it
+     * is found or the tries are over, the missed-recording detector leaves the call alone ([PendingImports]).
+     */
     fun schedule(context: Context, startMs: Long, endMs: Long) {
+        PendingImports.add(context, startMs, endMs)
         val request = OneTimeWorkRequestBuilder<Worker>()
             .setInitialDelay(20, TimeUnit.SECONDS)
             .setInputData(workDataOf(KEY_START to startMs, KEY_END to endMs))
@@ -92,6 +96,7 @@ object SamsungCallImport {
             val end = inputData.getLong(KEY_END, 0)
             if (!allowed(applicationContext)) {
                 CaptureLog.add(applicationContext, "phone call", "Phone app recording not imported: no permission to read audio files")
+                gaveUp(start)
                 return@withContext Result.success()
             }
             val caller = PhoneCallLog.find(applicationContext, start, end)
@@ -99,6 +104,7 @@ object SamsungCallImport {
             if (file == null) {
                 if (runAttemptCount + 1 < TRIES) return@withContext Result.retry()
                 CaptureLog.add(applicationContext, "phone call", "no Phone app recording found (is Auto record calls on?)")
+                gaveUp(start)
                 return@withContext Result.success()
             }
             val copy = File(applicationContext.cacheDir, "import-${UUID.randomUUID()}.m4a")
@@ -109,7 +115,9 @@ object SamsungCallImport {
             }.getOrDefault(false)
             if (!copied) {
                 copy.delete()
-                return@withContext if (runAttemptCount + 1 < TRIES) Result.retry() else Result.success()
+                if (runAttemptCount + 1 < TRIES) return@withContext Result.retry()
+                gaveUp(start)
+                return@withContext Result.success()
             }
             val graph = (applicationContext as EchoLedgerApp).graph
             val settings = graph.settings.current()
@@ -168,8 +176,17 @@ object SamsungCallImport {
                 withContext(Dispatchers.Main) {
                     PostCallPrompt.show(applicationContext, stored, settings.afterCall, settings.themeMode)
                 }
+                PendingImports.done(applicationContext, start)
+            } else {
+                gaveUp(start)
             }
             Result.success()
+        }
+
+        /** No recording came from the Phone app: the detector may judge the call now (a little later, once more). */
+        private fun gaveUp(start: Long) {
+            PendingImports.done(applicationContext, start)
+            MissedRecordingWorker.soon(applicationContext)
         }
 
         private fun files(sinceMs: Long): List<MediaFile> = runCatching {

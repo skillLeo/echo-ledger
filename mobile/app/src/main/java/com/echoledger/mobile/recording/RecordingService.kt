@@ -108,10 +108,17 @@ class RecordingService : LifecycleService() {
         private const val INCOMING_LOOKBACK_MS = 60_000L
         private const val WATCHDOG_MS = 5_000L
 
+        /** How long a refused start waits for the helper's words, which come from its process a moment after its answer. */
+        private const val PROBLEM_WAIT_MS = 500L
+
         /** A recorder that fails this many reads in a row has stopped for good (about half a second of failures). */
         private const val MAX_FAILED_MIC_READS = 50
 
         @Volatile var isRecording = false
+            private set
+
+        /** A recording just stopped is still being saved (the missed-recording detector waits for it, since v1.8). */
+        @Volatile var isSaving = false
             private set
 
         /** Auto-record is armed in this process (the app re-arms it on opening when the setting is on but this is not). */
@@ -149,6 +156,10 @@ class RecordingService : LifecycleService() {
     private var armed = false
     private var inForeground = false
     private var finalizing = 0
+        set(value) {
+            field = value
+            isSaving = value > 0
+        }
     private var destroyed = false
     private var capture: Capture? = null
     private var pill: ControlPill? = null
@@ -469,11 +480,8 @@ class RecordingService : LifecycleService() {
         val app = if (mode == AudioManager.MODE_IN_CALL) {
             SourceApp.PHONE_CALL
         } else {
-            CallTargets.KNOWN.keys.firstNotNullOfOrNull { pkg ->
-                CallNotices.latest(pkg, sim = false, sinceMs = System.currentTimeMillis() - CallNotices.KEEP_MS)?.let {
-                    SourceApp.fromPackage(it.pkg)
-                }
-            } ?: return
+            // The newest call notice that says a call is on (answered or ringing out), whichever app it came from.
+            CallNotices.callOn(System.currentTimeMillis() - CallNotices.KEEP_MS)?.let { SourceApp.fromPackage(it.pkg) } ?: return
         }
         val id = UUID.randomUUID().toString()
         audioCallId = id
@@ -724,6 +732,8 @@ class RecordingService : LifecycleService() {
         }
         val pipe = ParcelFileDescriptor.createPipe()
         val micSource = if (settings.micSource == "mic") MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        // Only what the helper says about this start counts (an older problem is from another capture).
+        val askedAt = System.currentTimeMillis()
         val started = runCatching {
             if (phone) {
                 helper.startPhoneCapture(
@@ -740,19 +750,25 @@ class RecordingService : LifecycleService() {
         CaptureLog.add(
             this,
             "capture start",
-            if (started) "helper recording" else "helper refused: ${CaptureProblems.recent(this) ?: "no reason given"}"
+            if (started) "helper recording" else "helper refused: ${CaptureProblems.since(this, askedAt) ?: "no reason given yet"}"
         )
         pipe[1].close()
         if (!started) {
             pipe[0].close()
             session.cancel()
             capture = null
-            journalFailed(id, MissedReason.fromProblem(CaptureProblems.recent(this)))
-            // A call that could not be recorded is said so at once (the helper's reason), never silently skipped.
             if (fromCall) {
-                Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = true)
+                // A call that could not be recorded is said so at once, with the helper's reason (its words come a
+                // moment after its answer from the other process), never silently skipped.
+                whenProblemSince(askedAt) { problem ->
+                    val (reason, detail) = MissedReason.ofProblem(problem)
+                    journalFailed(id, reason, detail)
+                    Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
+                }
                 settle()
             } else {
+                val (reason, detail) = MissedReason.ofProblem(CaptureProblems.since(this, askedAt))
+                journalFailed(id, reason, detail)
                 startMicCapture(id)
             }
             return
@@ -934,6 +950,16 @@ class RecordingService : LifecycleService() {
         capture = null
         Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
         settle()
+    }
+
+    /**
+     * What the helper said about the capture asked for at [askedAt], to [then]: at once when its words are here, else a
+     * moment later (they come from its own process after its answer); never a problem from an earlier capture.
+     */
+    private fun whenProblemSince(askedAt: Long, then: (String?) -> Unit) {
+        CaptureProblems.since(this, askedAt)?.let { return then(it) }
+        val app = applicationContext
+        main.postDelayed({ then(CaptureProblems.since(app, askedAt)) }, PROBLEM_WAIT_MS)
     }
 
     /**
@@ -1331,10 +1357,11 @@ class RecordingService : LifecycleService() {
             when {
                 stored == null -> journalFailed(session.id, MissedReason.UNKNOWN, "Saving the recording failed.")
 
-                // No sound on any side: a microphone Android gave to another app, or a cause not known.
+                // No sound on any side: a microphone Android gave to another app during this capture, or a cause not known.
                 silent -> journalFailed(
                     session.id,
-                    MissedReason.fromProblem(CaptureProblems.recent(this)).takeIf { it == MissedReason.MIC_BUSY } ?: MissedReason.UNKNOWN,
+                    MissedReason.fromProblem(CaptureProblems.since(this, session.startedAt.toEpochMilli()))
+                        .takeIf { it == MissedReason.MIC_BUSY } ?: MissedReason.UNKNOWN,
                     "No sound was captured, so the recording was not kept."
                 )
 

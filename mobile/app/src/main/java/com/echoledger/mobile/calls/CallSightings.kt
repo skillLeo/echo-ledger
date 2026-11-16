@@ -70,6 +70,9 @@ object CallSightings {
         }
     }
 
+    /** What is older than [KEEP_DAYS] goes when the detector reads them, not only when a new call is seen. */
+    fun trim(context: Context, nowMs: Long = System.currentTimeMillis()) = update(context) { rotate(it, nowMs) }
+
     fun clear(context: Context) {
         val app = context.applicationContext ?: context
         JournalIo.read { synchronized(this) { file(app).delete() } }

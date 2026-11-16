@@ -206,10 +206,101 @@ class MissedRecordingUploadTest : AppTest() {
 
         runBlocking { app.pairLocally(server) }
         MissedRecordingStore.clear(app)
-        MissedRecordingStore.add(app, listOf(MissedRecordings.Found("zoom", now - 29L * 24 * 3_600_000, 90, MissedReason.CRASH, "")))
-        MissedRecordingStore.change(app, MissedRecordingStore.all(app).single().ref) { it.copy(startedAtMs = now - 31L * 24 * 3_600_000) }
+        // 30 and a half days old: still on the phone (31 days are kept), too old for the server, so the uploader refuses it.
+        MissedRecordingStore.add(
+            app,
+            listOf(MissedRecordings.Found("zoom", now - 30L * 24 * 3_600_000 - 12 * 3_600_000, 90, MissedReason.CRASH, ""))
+        )
+        assertTrue(MissedRecordingStore.all(app).single().waiting)
         upload()
         assertEquals(emptyList<Any>(), sentBodies())
+        assertTrue("refused by the uploader's own age check", MissedRecordingStore.all(app).single().refused)
         assertNull(MissedRecordingStore.all(app).singleOrNull { it.waiting })
+    }
+
+    @Test
+    fun `a report whose call turned out recorded after all is withdrawn, never sent`() {
+        runBlocking { app.pairLocally(server) }
+        server.on("POST", "/api/devices/missed-recordings", FakeServer.json(201, """{"data":{"id":"01JMISSED0000000000000000C"}}"""))
+        val start = now - 3_600_000
+        MissedRecordingStore.add(app, listOf(MissedRecordings.Found("phone_call", start, 120, MissedReason.UNKNOWN, "")))
+        // The Phone app's own recording of the call came in late.
+        com.echoledger.mobile.recording.CallJournal.update(app) { b ->
+            val seen = com.echoledger.mobile.recording.CallJournal.seen(
+                b,
+                "p1",
+                "phone_call",
+                com.echoledger.mobile.recording.CallJournal.Seen.PHONE_APP,
+                start + 20_000
+            )
+            com.echoledger.mobile.recording.CallJournal.finish(
+                seen,
+                "p1",
+                com.echoledger.mobile.recording.CallJournal.Result.KEPT,
+                start + 140_000
+            )
+        }
+
+        assertEquals(ListenableWorker.Result.success(), upload())
+        assertEquals(emptyList<Any>(), sentBodies())
+        val item = MissedRecordingStore.all(app).single()
+        assertTrue(item.withdrawn && item.dismissed && !item.waiting)
+    }
+
+    @Test
+    fun `a report read on the phone before it went has its server copy read too`() {
+        runBlocking { app.pairLocally(server) }
+        server.on("POST", "/api/devices/missed-recordings", FakeServer.json(201, """{"data":{"id":"01JMISSED0000000000000000D"}}"""))
+        server.on(
+            "GET",
+            "/api/activity",
+            FakeServer.json(
+                200,
+                listOf(
+                    """{"data":[{"id":"act-1","kind":"missed_recording","title":"Missed recording","body":"Zoom call",""",
+                    """"read":false,"missed_recording_id":"01JMISSED0000000000000000D"},""",
+                    """{"id":"act-2","kind":"transcript_ready","read":false}],"unread_count":2}"""
+                ).joinToString("")
+            )
+        )
+        server.on("POST", "/api/activity/read", FakeServer.json(200, """{"unread_count":1}"""))
+        MissedRecordingStore.add(app, listOf(MissedRecordings.Found("zoom", now - 60_000, 90, MissedReason.DETECTION, "")))
+        MissedRecordingStore.markRead(app, MissedRecordingStore.all(app).single().ref)
+
+        assertEquals(ListenableWorker.Result.success(), upload())
+        val read = server.requestsTo("POST", "/api/activity/read").map {
+            ApiJson.parseToJsonElement(it.bodyText()).jsonObject.toString()
+        }
+        assertEquals(listOf("""{"ids":["act-1"]}"""), read)
+    }
+
+    @Test
+    fun `only the signed-in account's reports go, and a second request while one waits makes no second run`() {
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(account = com.echoledger.mobile.core.Owner.of(server.baseUrl, "omar@example.com")) }
+        }
+        server.on("POST", "/api/devices/missed-recordings", FakeServer.json(201, """{"data":{"id":"01JMISSED0000000000000000E"}}"""))
+        val sara = com.echoledger.mobile.core.Owner.of(server.baseUrl, "sara@example.com")
+        MissedRecordingStore.add(app, listOf(MissedRecordings.Found("zoom", now - 60_000, 90, MissedReason.CRASH, "")), owner = sara)
+        upload()
+        assertEquals("another account's report waits for it", emptyList<Any>(), sentBodies())
+        assertTrue(MissedRecordingStore.all(app).single().waiting)
+
+        val omar = com.echoledger.mobile.core.Owner.of(server.baseUrl, "omar@example.com")
+        MissedRecordingStore.add(
+            app,
+            listOf(MissedRecordings.Found("whatsapp", now - 10 * 60_000, 90, MissedReason.CRASH, "")),
+            owner = omar
+        )
+        upload()
+        assertEquals(listOf("whatsapp"), sentBodies().map { it.string("source_app") })
+
+        MissedUploadWorker.enqueue(app)
+        MissedUploadWorker.enqueue(app)
+        val runs = androidx.work.WorkManager.getInstance(
+            app
+        ).getWorkInfosForUniqueWork("missed-upload").get(10, java.util.concurrent.TimeUnit.SECONDS)
+        assertEquals(1, runs.size)
     }
 }

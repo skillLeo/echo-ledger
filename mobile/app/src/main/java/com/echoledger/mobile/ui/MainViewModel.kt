@@ -74,8 +74,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private val _pending = MutableStateFlow<List<LocalRecording>>(emptyList())
     val pending: StateFlow<List<LocalRecording>> = _pending.asStateFlow()
 
-    /** This phone's missed recordings (since v1.8): Activity's items with their fix button. */
-    val missed: StateFlow<List<com.echoledger.mobile.calls.MissedItem>> = com.echoledger.mobile.calls.MissedRecordingStore.items
+    /**
+     * This phone's missed recordings (since v1.8): Activity's items with their fix button, only the signed-in account's
+     * (as recordings made under another account wait for it).
+     */
+    val missed: StateFlow<List<com.echoledger.mobile.calls.MissedItem>> =
+        combine(com.echoledger.mobile.calls.MissedRecordingStore.items, settings) { items, s ->
+            com.echoledger.mobile.calls.MissedRecordingStore.forAccount(items, s.account)
+        }.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
 
     private val _clients = MutableStateFlow<List<ClientDto>>(emptyList())
     val clients: StateFlow<List<ClientDto>> = _clients.asStateFlow()
@@ -204,6 +210,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val next = Owner.of(serverUrl, known)
         withContext(Dispatchers.IO) {
             Owner.stamp(graph.recordings.all(), previous, next).forEach { graph.recordings.save(it) }
+            // Missed recordings found under the other account stay with it too (since v1.8).
+            com.echoledger.mobile.calls.MissedRecordingStore.stamp(getApplication(), previous, next)
         }
         graph.settings.update { it.copy(account = next) }
         retryPending()
@@ -548,7 +556,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 graph.library.refresh()
             }
             com.echoledger.mobile.notify.ActivityWorker.schedule(getApplication())
-            com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication())
+            com.echoledger.mobile.calls.MissedRecordingWorker.schedule(getApplication(), graph.settings.current())
             SelfUpdate.schedule(getApplication())
             _clients.value = withContext(Dispatchers.IO) { graph.api()?.clients()?.data.orEmpty() }
             WidgetStateStore.refresh(getApplication())
@@ -981,13 +989,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Looks for missed recordings now (since v1.8; the app opened): new ones join Activity at once, and their reports go
-     * out when online.
+     * Looks for missed recordings now (since v1.8; the app opened, at most every 10 minutes and only where something can
+     * be missed): new ones join Activity at once, and their reports go out when online.
      */
     fun detectMissed() = viewModelScope.launch(Dispatchers.IO) {
         val app = getApplication<EchoLedgerApp>()
-        runCatching { com.echoledger.mobile.calls.MissedRecordingWorker.detect(app) }
-        if (com.echoledger.mobile.calls.MissedRecordingStore.all(app).any { it.waiting }) {
+        // The items kept so far show at once, whether or not it looks again now (the store reads its file on first use).
+        val store = com.echoledger.mobile.calls.MissedRecordingStore
+        store.all(app)
+        runCatching { com.echoledger.mobile.calls.MissedRecordingWorker.onOpen(app) }
+        if (store.forAccount(store.all(app), graph.settings.current().account).any { it.waiting }) {
             com.echoledger.mobile.calls.MissedUploadWorker.enqueue(app)
         }
     }

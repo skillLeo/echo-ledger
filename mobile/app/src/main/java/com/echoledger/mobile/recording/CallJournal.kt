@@ -99,9 +99,18 @@ object CallJournal {
         val note: String? = null,
         val failure: Failure? = null,
         /** The length of what was kept. */
-        val keptMs: Long? = null
+        val keptMs: Long? = null,
+        /**
+         * A start that failed before a later start of the same call worked (the backup start): kept for diagnostics only,
+         * the call's result is what that later recording became.
+         */
+        val firstFailure: Failure? = null
     ) {
         val finished: Boolean get() = result != null
+
+        /** It failed before its recording started (the helper missing or refusing), so a later start may still save it. */
+        fun startFailed(): Boolean =
+            Result.of(result) == Result.FAILED && failure != null && failure.reason != CRASH && !reached(Stage.STARTED)
 
         fun reached(stage: Stage): Boolean = stages.any { it.stage == stage.wire }
 
@@ -198,10 +207,19 @@ object CallJournal {
 
     /**
      * [stage] reached at [atMs]: each stage once, kept in the order of [Stage] whatever order the threads report them in,
-     * and nothing after the call has its result.
+     * and nothing after the call has its result. A start that failed and then worked (the backup start records the same
+     * call under the same id) opens the call again: the first failure stays as a note.
      */
-    fun stage(book: Book, id: String, stage: Stage, atMs: Long, note: String? = null): Book =
-        change(book, id) { call -> if (call.finished) call else withStage(call, stage, atMs, note) }
+    fun stage(book: Book, id: String, stage: Stage, atMs: Long, note: String? = null): Book = change(book, id) { call ->
+        when {
+            !call.finished -> withStage(call, stage, atMs, note)
+            stage >= Stage.STARTED && call.startFailed() -> withStage(reopened(call), stage, atMs, note)
+            else -> call
+        }
+    }
+
+    /** A call whose start failed, open again because a later start of it worked. */
+    private fun reopened(call: Call): Call = call.copy(result = null, failure = null, firstFailure = call.failure)
 
     private fun withStage(call: Call, stage: Stage, atMs: Long, note: String?): Call = if (call.reached(stage)) {
         call
@@ -219,18 +237,24 @@ object CallJournal {
         }
     }
 
-    /** What became of the call ([Result.FAILED] goes through [fail]); a result is final. */
+    /**
+     * What became of the call ([Result.FAILED] goes through [fail]); a result is final, except a start's failure: a later
+     * recording of the same call that was saved or thrown away (the backup start's) is what became of it.
+     */
     fun finish(book: Book, id: String, result: Result, atMs: Long, note: String? = null, keptMs: Long? = null): Book =
         change(book, id) { call ->
-            if (call.finished) {
-                call
-            } else {
-                val saved = if (result == Result.KEPT || result == Result.SKIPPED) withStage(call, Stage.SAVED, atMs, null) else call
-                // A recording that ended without the call's own end (one by hand) ends with it; a call not recorded goes on.
-                val end = call.endedAtMs ?: atMs.takeIf { result != Result.NOT_WANTED }
-                saved.copy(result = result.wire, note = note?.take(NOTE), keptMs = keptMs, endedAtMs = end)
+            val open = when {
+                !call.finished -> call
+                result in RESCUES && call.startFailed() -> reopened(call)
+                else -> return@change call
             }
+            val saved = if (result == Result.KEPT || result == Result.SKIPPED) withStage(open, Stage.SAVED, atMs, null) else open
+            // A recording that ended without the call's own end (one by hand) ends with it; a call not recorded goes on.
+            val end = open.endedAtMs ?: atMs.takeIf { result != Result.NOT_WANTED }
+            saved.copy(result = result.wire, note = note?.take(NOTE), keptMs = keptMs, endedAtMs = end)
         }
+
+    private val RESCUES = setOf(Result.KEPT, Result.SKIPPED, Result.DISCARDED)
 
     /** The call itself ended at [atMs] (the recording may still be saving). */
     fun ended(book: Book, id: String, atMs: Long): Book = change(book, id) { if (it.endedAtMs == null) it.copy(endedAtMs = atMs) else it }
@@ -306,6 +330,7 @@ object CallJournal {
                 val after = (s.atMs - call.atMs).takeIf { it > 0 && Stage.of(s.stage) != Stage.SAVED }?.let { " ${seconds(it)}" }.orEmpty()
                 label + after + s.note?.let { " ($it)" }.orEmpty()
             }
+            val first = call.firstFailure?.let { " (first start failed: ${it.reason})" }.orEmpty()
             val end = when (Result.of(call.result)) {
                 Result.FAILED -> call.failure?.let {
                     " · stopped at ${Stage.of(it.stage)?.label ?: it.stage}: ${it.reason}, ${it.detail}"
@@ -317,7 +342,7 @@ object CallJournal {
 
                 else -> " · ${call.result}" + call.note?.let { ": $it" }.orEmpty() + call.keptMs?.let { " (${clockText(it)})" }.orEmpty()
             }
-            "${clock.format(Instant.ofEpochMilli(call.atMs))} $app$length · ${call.seenBy} · $stages$end"
+            "${clock.format(Instant.ofEpochMilli(call.atMs))} $app$length · ${call.seenBy} · $stages$first$end"
         }
     }
 

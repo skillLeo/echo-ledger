@@ -226,15 +226,18 @@ class RecordingServiceTest : AppTest() {
         assertTrue(call.endedAtMs != null)
     }
 
-    /** A helper that refuses to record, the way it does when another app holds the microphone. */
-    private class RefusingHelper : ICaptureHelper.Stub() {
+    /**
+     * A helper that refuses to record, the way it does when another app holds the microphone ([words] what it says, null
+     * for nothing).
+     */
+    private class RefusingHelper(private val words: String? = "Call capture could not start: mic: did not start") : ICaptureHelper.Stub() {
         var listener: ICallListener? = null
 
         override fun version() = 1
         override fun uid() = 2000
         override fun capabilities() = ""
         override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
-            listener?.onError("Call capture could not start: mic: did not start")
+            words?.let { listener?.onError(it) }
             return false
         }
         override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
@@ -269,6 +272,41 @@ class RecordingServiceTest : AppTest() {
         assertEquals(listOf("detected", "armed"), call.stages.map { it.stage })
         assertEquals(CallJournal.Failure("started", "mic_busy", com.echoledger.mobile.calls.MissedReason.MIC_BUSY.detail), call.failure)
         assertFalse(RecordingService.isRecording)
+    }
+
+    @Test
+    fun `a refused start is never blamed on a problem from an earlier capture`() {
+        // An hour ago another app held the microphone; this time the helper gives no reason.
+        CaptureProblems.record(app, "Call capture could not start: mic: did not start")
+        val helper = RefusingHelper(words = null)
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the start to be refused") { CallJournal.book(app).calls.isNotEmpty() && !RecordingService.isRecording }
+        // The helper's words may still be on their way from its process: it waits a moment for them.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val failure = CallJournal.book(app).calls.single().failure
+        assertEquals(CallJournal.Failure("started", "unknown", com.echoledger.mobile.calls.MissedReason.UNKNOWN.detail), failure)
+    }
+
+    @Test
+    fun `a phone line that would not open is said so, not blamed on the microphone`() {
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: phone line (both directions): did not start; phone line: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("phone_call", call.app)
+        assertEquals(CallJournal.Failure("started", "unknown", com.echoledger.mobile.calls.MissedReason.PHONE_LINE), call.failure)
     }
 
     @Test

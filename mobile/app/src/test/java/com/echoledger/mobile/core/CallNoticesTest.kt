@@ -28,6 +28,27 @@ class CallNoticesTest {
     }
 
     @Test
+    fun `a call seen only in the audio mode is named after the newest call that is on, from any app, or not at all`() {
+        CallNotices.record(CallNotices.Notice("com.whatsapp", CallNotices.Kind.ANSWERED, now, answeredAtMs = now))
+        CallNotices.record(CallNotices.Notice("org.telegram.messenger", CallNotices.Kind.RINGING_OUT, now + 1_000))
+        CallNotices.record(CallNotices.Notice("us.zoom.videomeetings", CallNotices.Kind.INCOMING, now + 2_000))
+        CallNotices.record(
+            CallNotices.Notice(
+                "com.samsung.android.incallui",
+                CallNotices.Kind.ANSWERED,
+                now + 3_000,
+                answeredAtMs =
+                    now + 3_000
+            )
+        )
+        assertEquals("the newest that is on, not the first app in the list", "org.telegram.messenger", CallNotices.callOn(now - 1)?.pkg)
+        assertNull("nothing since then", CallNotices.callOn(now + 10_000))
+        CallNotices.clearForTest()
+        CallNotices.record(CallNotices.Notice("com.whatsapp", CallNotices.Kind.INCOMING, now))
+        assertNull("only ringing in: no call is on", CallNotices.callOn(now - 1))
+    }
+
+    @Test
     fun `other notifications and timers far in the future say nothing`() {
         assertNull(CallNotices.classify("com.whatsapp", false, 0, false, now, "Hi there", now))
         assertNull(CallNotices.classify("com.whatsapp", true, 0, true, now + 60_000, "Voice call", now))
