@@ -170,8 +170,8 @@ fn to_segment(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
 }
 
 /// Paints the recording badge over the whole picture (pure): the brand's small mark, a rounded `badge` of 14 of the 18
-/// points, centred with a clear margin, its mark in `ink` inset as the brand draws it. Drawn from the mark's own curves at
-/// this size, so its edges stay sharp on Retina menu bars.
+/// points, centred with a clear margin, edged with a 1 px rim of its own colour 20 % darker, its mark in `ink` inset as the
+/// brand draws it. Drawn from the mark's own curves at this size, so its edges stay sharp on Retina menu bars.
 pub fn paint_badge(rgba: &mut [u8], width: u32, height: u32, badge: [u8; 4], ink: [u8; 4]) {
     let size = width.min(height) as f32 * BADGE_OF_ICON;
     let (left, top) = ((width as f32 - size) / 2.0, (height as f32 - size) / 2.0);
@@ -179,6 +179,8 @@ pub fn paint_badge(rgba: &mut [u8], width: u32, height: u32, badge: [u8; 4], ink
     let radius = MARK_RADIUS * unit;
     let half_stroke = MARK_STROKE * unit / 2.0;
     let strokes = mark_strokes();
+    let rim = rim_of(badge);
+    let (centre, inner) = ((left + size / 2.0, top + size / 2.0), size / 2.0 - radius);
     for y in 0..height {
         for x in 0..width {
             let at = ((y * width + x) * 4) as usize;
@@ -186,18 +188,33 @@ pub fn paint_badge(rgba: &mut [u8], width: u32, height: u32, badge: [u8; 4], ink
                 continue;
             }
             let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
-            let (dx, dy) = ((left + radius - fx).max(fx - (left + size - radius)).max(0.0), (top + radius - fy).max(fy - (top + size - radius)).max(0.0));
-            let coverage = (radius + 0.5 - (dx * dx + dy * dy).sqrt()).clamp(0.0, 1.0);
+            // How far outside the rounded badge this pixel is (negative inside): its edge, smoothed over one pixel, and
+            // the rim along it.
+            let (qx, qy) = ((fx - centre.0).abs() - inner, (fy - centre.1).abs() - inner);
+            let outside = qx.max(0.0).hypot(qy.max(0.0)) + qx.max(qy).min(0.0) - radius;
+            let coverage = (0.5 - outside).clamp(0.0, 1.0);
+            let on_rim = (outside + BADGE_RIM + 0.5).clamp(0.0, 1.0);
             // The mark, in the badge's own units.
             let p = ((fx - left) / unit, (fy - top) / unit);
             let distance = strokes.iter().flat_map(|s| s.windows(2)).map(|pair| to_segment(p, pair[0], pair[1])).fold(f32::MAX, f32::min) * unit;
             let mark = (half_stroke + 0.5 - distance).clamp(0.0, 1.0);
             for channel in 0..3 {
-                rgba[at + channel] = (badge[channel] as f32 * (1.0 - mark) + ink[channel] as f32 * mark).round() as u8;
+                let fill = badge[channel] as f32 * (1.0 - on_rim) + rim[channel] as f32 * on_rim;
+                rgba[at + channel] = (fill * (1.0 - mark) + ink[channel] as f32 * mark).round() as u8;
             }
             rgba[at + 3] = (coverage * 255.0).round() as u8;
         }
     }
+}
+
+/// The badge's rim, in pixels of the 2x picture: one, so the edge reads on a light menu bar too (amber alone is 1.5:1 on
+/// it).
+pub const BADGE_RIM: f32 = 1.0;
+
+/// The rim's colour (pure): the badge's own, 20 % darker.
+pub fn rim_of(badge: [u8; 4]) -> [u8; 4] {
+    let darker = |c: u8| (f32::from(c) * 0.8).round() as u8;
+    [darker(badge[0]), darker(badge[1]), darker(badge[2]), badge[3]]
 }
 
 /// The tray's own picture (v1.5): the small mark of docs/design/brand (the brand's choice below 24 px), drawn for the
@@ -724,7 +741,15 @@ mod tests {
         let first = next_generation();
         let other = std::thread::spawn(next_generation).join().unwrap();
         assert!(other > first && next_generation() > other);
-        assert!(include_str!("commands.rs").contains("pub fn status(app: &AppHandle) -> AppStatus {\n    // Taken before anything is read: the tray drawing from a later read always wins over an earlier one queued behind it.\n    let generation = crate::tray::next_generation();\n    let state = app.state::<AppState>();"), "taken first in commands::status");
+        // commands::status takes its number before it reads anything, and draws with it.
+        let commands = include_str!("commands.rs");
+        let status = &commands[commands.find("pub fn status(app: &AppHandle) -> AppStatus {").unwrap()..];
+        let status = &status[..status.find("\n}\n").unwrap()];
+        let taken = status.find("crate::tray::next_generation()").expect("a number is taken");
+        for read in ["app.state::<", ".lock()", "UploadQueue::load(", "DecisionFiles::", "capture.", "settings"] {
+            assert!(status.find(read).is_none_or(|first| taken < first), "the number is taken before `{read}`");
+        }
+        assert!(status.contains("crate::tray::update(app, generation,"), "the tray is drawn with it");
 
         // Structurally: the update any thread calls takes no lock and posts the drawing to the main thread, and no lock
         // is held across a call that waits for the main thread (main_thread.rs holds the whole crate to that).
@@ -850,11 +875,17 @@ mod tests {
             for (x, y) in (0..36).flat_map(|y| (0..36).map(move |x| (x, y))).filter(|&(x, y)| !(4..=31).contains(&x) || !(4..=31).contains(&y)) {
                 assert_eq!(pixel(&painted, x, y)[3], 0, "{state:?}: the margin at {x},{y} is clear");
             }
-            // Rounded in the brand's proportion: the corner pixel is cut, the edges are solid badge colour.
+            // Rounded in the brand's proportion: the corner pixel is cut, the curve smooth; a 1 px rim of the badge's colour,
+            // 20 % darker, all round, the badge's own colour right inside it.
             assert_eq!(pixel(&painted, 4, 4)[3], 0, "a rounded corner");
             assert!(pixel(&painted, 5, 6)[3] > 0 && pixel(&painted, 5, 6)[3] < 0xFF, "the curve is smooth");
-            assert_eq!(pixel(&painted, 18, 4), badge, "{state:?}: the badge's own colour along its top");
-            assert_eq!(pixel(&painted, 4, 18), badge, "{state:?}: and along its side");
+            let rim = rim_of(badge);
+            for (x, y) in [(18, 4), (4, 18), (18, 31), (31, 18)] {
+                assert_eq!(pixel(&painted, x, y), rim, "{state:?}: the rim at {x},{y}");
+            }
+            for (x, y) in [(18, 5), (5, 18), (18, 30), (30, 18)] {
+                assert_eq!(pixel(&painted, x, y), badge, "{state:?}: the badge's own colour inside the rim at {x},{y}");
+            }
             // The mark in its ink, inset in the badge as the brand draws it, and centred in it.
             let mark = bounds(&painted, |p| p[3] == 0xFF && p[..3] == ink[..3]);
             assert!(mark.0 >= 4 + 4 && mark.2 + 4 <= 31 && mark.1 >= 4 + 7 && mark.3 + 6 <= 31, "{state:?}: the mark at {mark:?}");
@@ -864,6 +895,32 @@ mod tests {
         }
         // Idle stays the template image itself.
         assert_eq!(mac_picture(TrayState::Idle).rgba(), mac_icon().rgba());
+    }
+
+    /// WCAG contrast of two sRGB colours.
+    fn contrast(a: [u8; 4], b: [u8; 4]) -> f64 {
+        let luminance = |c: [u8; 4]| {
+            let linear = |v: u8| {
+                let v = f64::from(v) / 255.0;
+                if v <= 0.040_45 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
+            };
+            0.2126 * linear(c[0]) + 0.7152 * linear(c[1]) + 0.0722 * linear(c[2])
+        };
+        let (x, y) = (luminance(a), luminance(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn the_badges_edge_reads_on_a_light_menu_bar() {
+        let light_bar = [0xF6, 0xF6, 0xF6, 0xFF];
+        let (amber, _) = look(TrayState::Paused, true).badge.unwrap();
+        assert!(contrast(amber, light_bar) < 1.6, "amber alone hardly shows its edge there");
+        assert_eq!(rim_of(amber), [0xCC, 0x9E, 0x31, 0xFF], "20 % darker");
+        assert!(contrast(rim_of(amber), light_bar) > 2.2, "{}", contrast(rim_of(amber), light_bar));
+        let (red, _) = look(TrayState::Recording, true).badge.unwrap();
+        assert_eq!(rim_of(red), [0xB7, 0x3A, 0x3E, 0xFF]);
+        assert!(contrast(rim_of(red), light_bar) > contrast(red, light_bar));
+        assert_eq!(BADGE_RIM, 1.0, "1 px at 2x: a hairline on Retina");
     }
 
     #[test]
