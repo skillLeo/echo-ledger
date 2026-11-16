@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -397,8 +397,11 @@ pub struct Settings {
 }
 
 impl Settings {
+    /// The environment; the secrets may come from systemd's credentials instead (`LoadCredentialEncrypted=`), so
+    /// they are neither in the environment nor in a plain file.
     pub fn from_env() -> Result<Self, ConfigError> {
-        Self::from_lookup(|name| std::env::var(name).ok())
+        let credentials = std::env::var_os("CREDENTIALS_DIRECTORY").map(PathBuf::from);
+        Self::from_lookup(|name| std::env::var(name).ok().or_else(|| credential(credentials.as_deref(), name)))
     }
 
     /// Reads the settings through `lookup` (the environment in the binary, a map in the tests).
@@ -451,10 +454,35 @@ impl Settings {
     }
 }
 
+/// The systemd credential that stands in for a secret missing from the environment.
+const CREDENTIALS: [(&str, &str); 2] = [("RELAY_SECRET", "relay_secret"), ("RELAY_SECRET_PREVIOUS", "relay_secret_previous")];
+
+/// A secret from systemd's credentials folder: `relay_secret` for `RELAY_SECRET`, `relay_secret_previous` for
+/// `RELAY_SECRET_PREVIOUS`. Nothing else is read from there.
+fn credential(dir: Option<&Path>, name: &str) -> Option<String> {
+    let file = CREDENTIALS.iter().find(|(variable, _)| *variable == name)?.1;
+    let text = std::fs::read_to_string(dir?.join(file)).ok()?;
+    Some(text.trim_end_matches(['\r', '\n']).to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
+
+    #[test]
+    fn secrets_can_come_from_systemd_credentials_and_nothing_else_does() {
+        let dir = std::env::temp_dir().join(format!("assist-relay-credentials-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let secret = "k".repeat(40);
+        std::fs::write(dir.join("relay_secret"), format!("{secret}\n")).unwrap();
+        std::fs::write(dir.join("relay_bind"), "0.0.0.0:1").unwrap();
+        assert_eq!(credential(Some(&dir), "RELAY_SECRET").as_deref(), Some(secret.as_str()), "the newline is dropped");
+        assert_eq!(credential(Some(&dir), "RELAY_SECRET_PREVIOUS"), None, "no file, no secret");
+        assert_eq!(credential(Some(&dir), "RELAY_BIND"), None, "only the secrets");
+        assert_eq!(credential(None, "RELAY_SECRET"), None);
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn the_built_in_settings_are_valid_and_map_the_plan_modes() {
