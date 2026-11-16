@@ -39,6 +39,7 @@ import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
 import { confirmAction } from "../../lib/confirm";
+import { useChipKey } from "../../lib/chipSelect";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -1381,11 +1382,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   {!readOnly && <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
-                        <span className="chip-key" aria-hidden="true">Language</span>
-                        <select aria-label="Re-transcribe in" value={retranscribeLanguage} onChange={(e) => setRetranscribeLanguage(e.target.value)}>
+                        <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
                           {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
                           <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
-                        </select>
+                        </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
                         </button>
@@ -1603,5 +1603,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           onClose={() => setMoveFor(null)} onProjectCreated={addClient} />
       )}
     </>
+  );
+}
+
+/** The Language chip's select (D-121): the whole "Language ▾" part opens it, the word included. */
+function LanguageChipSelect({ value, onChange, children }: { value: string; onChange: (value: string) => void; children: React.ReactNode }) {
+  const chip = useChipKey<HTMLLabelElement>();
+  return (
+    <label ref={chip} className="chip-select">
+      <span className="chip-key" aria-hidden="true">Language</span>
+      <select aria-label="Re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
+    </label>
   );
 }

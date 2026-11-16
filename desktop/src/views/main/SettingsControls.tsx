@@ -176,7 +176,8 @@ export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = 
   const disclosure = expanded !== undefined;
   const shown = value !== undefined && value !== null && value !== "";
   return (
-    <button type="button" className="set-row set-link" {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
+    // An action reads as one (D-090): its title in the link colour; a row that opens in place has its chevron instead.
+    <button type="button" className={`set-row set-link ${disclosure ? "" : "set-action"}`.trim()} {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
       <span className="set-title">{title}</span>
       {(shown || disclosure) && (
         <span className="set-end">

@@ -1303,6 +1303,11 @@ describe("LibraryView Re-transcribe as", () => {
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     const select = screen.getByRole("combobox", { name: "Re-transcribe in" });
+    // D-121: the chip's word and its select are one control: the word sits inside the select's own label.
+    expect(select.closest(".chip-select")).toContainElement(select.closest(".chip-select")!.querySelector(".chip-key"));
+    const project = within(detail()).getByRole("combobox", { name: "Project" });
+    expect(project.closest(".chip-select")).not.toBeNull();
+    expect(project.closest(".chip-select")).toHaveTextContent(/^Project/);
     expect([...select.querySelectorAll("option")].map((o) => o.textContent)).toEqual(
       ["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"],
     );

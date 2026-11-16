@@ -407,3 +407,19 @@ describe("Settings' list never scrolls sideways (Hassam's 1000 pt window)", () =
     expect(prop(".settings-columns", "grid-template-columns")).toMatch(/^clamp\(248px, 34%, 320px\)/);
   });
 });
+
+describe("Settings' action rows read as actions (D-090)", () => {
+  it("draws an action row's title in the link colour, greyed when it can't be used", () => {
+    expect(prop(".set-row.set-action .set-title", "color")).toBe("var(--accent-text)");
+    expect(prop(".set-row.set-action:disabled .set-title", "color")).toBe("var(--text-muted)");
+  });
+});
+
+describe("a chip's word and its select are one control (D-121)", () => {
+  it("lets clicks on the word through to the select, which covers the chip and leaves the word its room", () => {
+    expect(prop(".chip-select > .chip-key", "pointer-events")).toBe("none");
+    expect(prop(".chip-select > .chip-key", "position")).toBe("absolute");
+    expect(prop(".head-chip .chip-select > select", "padding-inline-start")).toContain("var(--chip-key-w");
+    expect(prop(".chip-select", "cursor")).toBe("pointer");
+  });
+});

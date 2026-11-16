@@ -155,6 +155,19 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // Batch 3 (D-121, D-007, D-090): whole controls, the workspace switcher, Settings' action rows.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`workspace-menu${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("button", { name: /^Workspace:/ }).click();
+      await page.waitForSelector(".menu-pop");
+    }, viewport],
+    [`settings-share-privacy-actions${size}`, "settings-share", async (page) => {
+      await settingsReady(page);
+      await nav(page, "Screen-share privacy");
+      await page.waitForSelector(".set-action");
+    }, viewport],
+  ]),
   // Batch 1 (D-045 … D-122, D-072): the app's own confirm dialog, at full size and at the smallest window.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`confirm-delete-recording${size}`, "library&plan=free", async (page) => {

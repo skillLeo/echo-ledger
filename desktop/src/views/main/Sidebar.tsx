@@ -68,9 +68,18 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
     return next;
   });
   const pinned = (projects ?? []).filter((p) => p.pinned);
-  const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id) => (
+  // A group's whole row opens it (D-121): its label goes to the page and shows what is under it; the arrow beside it
+  // still shows or hides that alone.
+  const openGroup = (group: SidebarGroup) => setOpen((current) => {
+    if (current.has(group)) return current;
+    const next = new Set(current);
+    next.add(group);
+    saveOpenGroups(next);
+    return next;
+  });
+  const navButton = (id: MainTab, label: string, icon: ReactNode, extra?: ReactNode, current = tab === id, group?: SidebarGroup) => (
     <button type="button" className={`nav-btn ${current ? "active" : ""}`} aria-current={current ? "page" : undefined}
-      title={collapsed ? label : undefined} onClick={() => onGo(id)}>
+      title={collapsed ? label : undefined} onClick={() => { onGo(id); if (group && !collapsed) openGroup(group); }}>
       {icon}<span className="nav-label">{label}</span>{extra}
     </button>
   );
@@ -136,14 +145,14 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("library", "Library", <LibraryIcon size={20} filled={tab === "library"} />)}
+              {navButton("library", "Library", <LibraryIcon size={20} filled={tab === "library"} />, undefined, tab === "library", "library")}
               {expander("library", "Library's smart folders")}
             </div>
             {!collapsed && open.has("library") && <PlaceList places={places} folder={tab === "library" ? folder : null} view={tab === "library" ? view : null} onOpen={onPlace} label="Smart folders in the sidebar" compact />}
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("projects", "Projects", <FolderIcon size={20} filled={tab === "projects"} />)}
+              {navButton("projects", "Projects", <FolderIcon size={20} filled={tab === "projects"} />, undefined, tab === "projects", pinned.length > 0 ? "projects" : undefined)}
               {pinned.length > 0 && expander("projects", "pinned projects")}
             </div>
             {!collapsed && open.has("projects") && pinned.length > 0 && (
@@ -164,7 +173,7 @@ export function Sidebar({ tab, collapsed, onCollapse, width, onWidth, needsYou, 
           </div>
           <div className="nav-group">
             <div className="nav-row">
-              {navButton("shared", "Shared", <ShareIcon size={20} filled={tab === "shared"} />)}
+              {navButton("shared", "Shared", <ShareIcon size={20} filled={tab === "shared"} />, undefined, tab === "shared", "shared")}
               {expander("shared", "what is shared")}
             </div>
             {!collapsed && open.has("shared") && (

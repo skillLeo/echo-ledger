@@ -545,18 +545,20 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]));
   });
 
-  it("lists the person's workspaces when the server sends them, and switches in the console (MANUAL_QA 16-P11)", async () => {
+  it("says the person's other workspaces without offering them, and switches in the browser (D-007, MANUAL_QA 16-P11)", async () => {
     respond("account_get", account({ workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }] }));
     respond("server_page_open", undefined);
     await renderPaired();
-    fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
-    expect(screen.getByRole("menuitemradio", { name: "Acme team" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("menuitemradio", { name: "Personal" })).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Personal" }));
+    // The whole switcher opens it, its name too (D-121).
+    fireEvent.click(within(await screen.findByRole("button", { name: "Workspace: Acme team" })).getByText("Acme team"));
+    const menu = screen.getByRole("menu", { name: "Workspace: Acme team" });
+    expect(menu).toHaveTextContent("This computer works in Acme team.");
+    expect(within(screen.getByRole("list", { name: "Your other workspaces" })).getByText("Personal")).toBeInTheDocument();
+    // Nothing that looks pickable but only opens the browser: no workspace is a menu item.
+    expect(within(menu).queryByRole("menuitemradio")).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Personal|Acme team/ })).not.toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Switch or manage in the browser" }));
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/workspace", serverUrl: null }]));
-    fireEvent.click(screen.getByRole("button", { name: "Workspace: Acme team" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Switch or manage workspaces in the browser" }));
-    await waitFor(() => expect(callsOf("server_page_open")).toHaveLength(2));
   });
 
   it("makes things from +: a voice note, a new project, a request link", async () => {
@@ -730,6 +732,18 @@ describe("MainApp action runner", () => {
     respond("app_status", makeStatus({ captionsLive: true }));
     fireEvent.click(screen.getByRole("switch", { name: "Toggle live captions" }));
     await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
+  });
+
+  it("opens a sidebar group from its whole row, its name included, and the arrow still folds it (D-121)", async () => {
+    window.localStorage.setItem("echoledger-sidebar-open", JSON.stringify([]));
+    await renderPaired();
+    expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+    fireEvent.click(nav("Shared"));
+    expect(within(sidebar()).getByRole("list", { name: "Shared" })).toBeInTheDocument();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: "Hide what is shared" }));
+    expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+    fireEvent.click(nav("Library"));
+    expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
   });
 
   it("leaves Ctrl/Cmd+K alone while a question is on screen: it is answered first", async () => {

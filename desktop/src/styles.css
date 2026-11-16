@@ -1746,3 +1746,21 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
 .notice-details { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .notice-details .learn-more { font-weight: 600; padding: 0; min-height: 0; background: transparent; color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; }
 .banner-details:not([hidden]) { display: block; color: inherit; opacity: 0.9; }
+
+/* A chip's word and its select are one control (D-121, lib/chipSelect.ts): the select covers the whole chip and its word
+   is drawn over the select's start, so a click anywhere on "Project ▾" or "Language ▾" opens it. */
+.chip-select { position: relative; display: inline-flex; align-items: center; min-width: 0; cursor: pointer; }
+.chip-select > .chip-key { position: absolute; inset-inline-start: var(--space-3); top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-faint); font-weight: 500; white-space: nowrap; }
+.head-chip:has(> .chip-select), .head-chip:has(> .organise-field > .chip-select) { padding-inline-start: 0; }
+.head-chip .chip-select > select { cursor: pointer; padding-inline-start: calc(var(--space-3) + var(--chip-key-w, 0px) + 6px); max-width: calc(170px + var(--chip-key-w, 0px)); }
+.head-chip.retranscribe-row .chip-select > select { max-width: calc(240px + var(--chip-key-w, 0px)); }
+.head-chip .chip-select > select:hover:not(:disabled) { background: var(--surface-2); }
+
+/* The workspace switcher's other workspaces: said, not offered (D-007); the browser row switches. */
+.workspace-head { display: grid; gap: var(--space-1); }
+.workspace-others { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; color: var(--text); }
+
+/* A Settings action row ("Show in screen share for 10 min", "Copy diagnostics", "Lock now"…) reads as an action: its
+   title in the link colour (D-090). */
+.set-row.set-action .set-title { color: var(--accent-text); font-weight: 600; }
+.set-row.set-action:disabled .set-title { color: var(--text-muted); }
