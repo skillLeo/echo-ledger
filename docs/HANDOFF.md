@@ -41,6 +41,27 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   set (Flash option); Groq — set (fast-mode fallback; today Urdu transcription); Soniox — set (live STT default,
   translation on); AssemblyAI — set (live STT option); **OpenAI — empty** (optional provider in the relay); **Moonshot
   (Kimi) — no field yet** (added with the L1 server work; behind a flag until measured). None is needed before v1.9.
+- **PAUSED 2026-11-16 ~14:40 PKT (this account at 96% of its weekly usage; resets Thu 19 Nov 08:00 PKT; the first
+  account resets Fri 21 Nov 10:00 PKT). Resume each from here (review notes in the scratchpad may be gone after a
+  reboot; the branches hold the work):**
+  - web b-web @257f27ef (clean): P1 server+console done, review = changes needed (2 major: running transcripts not
+    counted in minutes_left; N+1 on GET /api/library; + minors; contract 1.8.0-f to write: own_key/needs_key, estimate
+    `skipped`, Re-transcribe as on audio_only = Transcribe, bulk rounds once, transcribe while uploading, shared items
+    hide Transcribe, `transcribe_by_default` on finish, two error-table rows + ErrorEnvelopeTest 56). P2 WIP on
+    b-web-p2-wip @019dfec0 (2.2 dedupe done + `transcripts:dedupe-check`; then 2.1 rows + backfill dry run, 2.3 fonts,
+    2.4 snackbar).
+  - desktop-1 b-desktop: 0.1 → signing → key → 0.1c → 0.1b chain in its fix round (0.1b/0.1c blocker: Ctrl+Alt+S =
+    AltGr; detector copies beside a camera panel); P1 WIP on b-desktop-wip. Merge the whole chain after both re-reviews.
+  - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) in review; 0.2b/0.2/0.2d review =
+    changes needed (4 blockers, false missed reports) — fixes D1–D5, D8–D10 on b-desktop-reopen-d-wip @d1bfd347
+    (regression tests pass), D6, D7, D11–D14 still to do.
+  - phone b-phone: 0.2 re-review (3 major) + 0.3 review (6 major incl. spoofed dialer names, Android 14 <queries>) in
+    progress, B1–B4 first; P1 WIP on b-phone-p1-wip (+ "Delete must win over every timer").
+  - relay b-relay @f9e1f4c7: aligned with 1.9.0-b, 57/58 unit tests; next: the token-replay budget fix (decision: cap
+    remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
+    Dockerfile/systemd/README, clippy.
+  - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
+    as mac-backup-160); Hassam is running the Mac batch.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
     jump only without a main window) · waiting: MAC-31.
