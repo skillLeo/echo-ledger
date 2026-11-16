@@ -417,7 +417,7 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
   black box where it is (the text stays private); choose *Show normally* if you prefer, or update Windows. In Remote
   Desktop, EchoLedger is visible to the remote side.
 - **Mac:** each meeting app captures the screen its own way, so test each one once with your phone (*Test with your
-  phone*: join the meeting on the phone, share your whole screen, say whether you see the test window). In **Zoom**, open
+  phone*: join the meeting on the phone, share your whole screen, say whether you see the test card). In **Zoom**, open
   Settings › Share Screen › Advanced and set *Screen capture mode* to *Advanced capture with window filtering*. In Meet,
   share a tab. When you share your whole screen in an app that is not confirmed, EchoLedger's windows step off the screen
   until the screen share ends; turn on *I share one window or a tab* if you always share less.
@@ -439,9 +439,9 @@ EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
 Android doesn't tell apps when a floating window is in a screen share, so the black box is always on unless you choose
 **Show**. To take the floating windows off your own screen too, tap **Hide EchoLedger windows**: it's a button on the
 open recording controls and a Quick Settings tile. They shrink to a grey dot; tap the dot, or the tile again, to show
-them (**Show EchoLedger windows**). EchoLedger remembers this until you show them again, also after a restart. On
-Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating windows also
-shrink to the grey dot until it ends.
+them (**Show EchoLedger windows**). They stay hidden until you show them again or EchoLedger restarts. In Private (black
+box), on Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating
+windows also shrink to the grey dot until it ends.
 
 What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
 
@@ -570,8 +570,8 @@ if it could not be made), even if transcript emails are off in your profile; the
 ### Rename
 
 Give any recording a clear name: select it in the Library and choose **⋮ → Rename**, or tap its title on the
-recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named in its row of
-the **Review** list (the pencil).
+recording page. The new name shows on all your devices. A call waiting for Keep or Discard can be named in the
+**Waiting for you** list (the pencil).
 
 **Automatic titles (since v1.5).** A recording nobody named gets a short title from what was said, for example
 "Laptop — 16 vs 32 GB"; on the computer it is marked **Automatic title**. Type your own and it is never replaced. Empty
@@ -873,9 +873,9 @@ the transcript) know what "this page" or "click here" meant.
   Settings → Privacy & Security → Screen & System Audio Recording**. From macOS 15, macOS asks again about once a month
   whether EchoLedger may still see your screen: choose **Allow**. If you miss it, screen moments pause and the recording
   goes on. On Windows 10 a thin yellow border shows around what is captured; Windows 11 shows none.
-- **On a Mac after an update:** if screen moments stop after an update on a Mac, open System Settings › Privacy &
-  Security › Screen & System Audio Recording and turn EchoLedger off and on again, or remove it with − and add it back.
-  Settings › Screen moments says when this happened.
+- **On a Mac after an update:** if screen moments stop, open System Settings › Privacy & Security › Screen & System
+  Audio Recording and turn EchoLedger off and on again, or remove it with − and add it back. Settings › Screen moments
+  says when this happened.
 - **What is kept:** only during a meeting EchoLedger detected, or a recording you started, and by default only the
   meeting's window (Zoom, Teams, Google Meet in a browser, WhatsApp). A screen is kept when the picture changes and
   settles, or at once when someone says "this page", "click here", "yeh dekhein" and the like. At most about 120 an
