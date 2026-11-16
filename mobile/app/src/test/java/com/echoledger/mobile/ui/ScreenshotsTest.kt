@@ -23,6 +23,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ActivityItemDto
@@ -198,6 +199,64 @@ class ScreenshotsTest : ScreenTest() {
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Hello there.", substring = true).fetchSemanticsNode() }.isSuccess }
         capture("session")
     }
+
+    /** A recording's page with its transcript, as [session] shows it, scrolled to the action row. */
+    private fun sessionActions(name: String, fontScale: Float) {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/transcripts/.+", FakeServer.json(200, ServerFixtures.transcript()))
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null))
+        )
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        val item = LibraryItem(
+            id = ServerFixtures.SESSION_ID,
+            sourceDevice = "phone",
+            sourceApp = "whatsapp",
+            title = "Invoice questions",
+            client = NamedRef("01JCLIENT0000000000000000A", "Aria Studio"),
+            startedAt = "2026-10-24T07:10:00+00:00",
+            durationMs = 742_000,
+            status = "completed",
+            transcript = TranscriptSummary(
+                finalStatus = "completed",
+                finalTranscriptId = ServerFixtures.TRANSCRIPT_ID,
+                liveAvailable = false,
+                preview = "preview"
+            ),
+            updatedAt = "2026-10-24T07:30:00+00:00"
+        )
+        shoot {
+            val density = androidx.compose.ui.platform.LocalDensity.current
+            androidx.compose.runtime.CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density, fontScale = fontScale)
+            ) { SessionScreen(vm, item, onBack = {}) }
+        }
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Hello there.", substring = true).fetchSemanticsNode() }.isSuccess }
+        compose.onNode(androidx.compose.ui.test.hasScrollAction()).performScrollToNode(androidx.compose.ui.test.hasText("Send to WhatsApp"))
+        compose.waitForIdle()
+        listOf("Send to WhatsApp", "In Roman Urdu").forEach { label ->
+            val bounds = compose.onNodeWithText(label).fetchSemanticsNode().boundsInRoot
+            assertTrue("$label: ${bounds.width} wide, ${bounds.height} high", bounds.width > bounds.height)
+        }
+        // A long label is never cut off: it takes a second line.
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText("Copy for AI (marks unsure words)", useUnmergedTree = true).fetchSemanticsNode()
+            .config[androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        // Cut off = lines that did not fit under the label's line limit (its width is measured loosely by the test fonts).
+        assertTrue("Copy for AI is cut off", layouts.isNotEmpty() && !layouts.first().didOverflowHeight)
+        capture(name)
+    }
+
+    /** The action row on a 360 dp phone: Export · Share link · Send, and Send to WhatsApp on the next line. */
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-hdpi")
+    fun sessionActions360() = sessionActions("session-actions-360", 1f)
+
+    /** The action row at twice the text size (Android's largest font). */
+    @Test
+    fun sessionActionsLargeText() = sessionActions("session-actions-text200", 2f)
 
     @Test
     fun record() {
