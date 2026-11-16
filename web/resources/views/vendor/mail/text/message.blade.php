@@ -1,7 +1,7 @@
 {{-- The plain-text part of every email (since v1.5): the same name and footer as the HTML part, never Laravel's stock text. --}}
 <x-mail::layout>
 <x-slot:header>
-EchoLedger
+@brand
 </x-slot:header>
 
 {{ $slot }}
@@ -13,6 +13,6 @@ EchoLedger
 @endisset
 
 <x-slot:footer>
-EchoLedger · Privacy: {{ url('/privacy') }} · Terms: {{ url('/terms') }}
+@brand · Privacy: {{ url('/privacy') }} · Terms: {{ url('/terms') }}
 </x-slot:footer>
 </x-mail::layout>

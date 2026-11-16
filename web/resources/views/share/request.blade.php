@@ -2,7 +2,7 @@
 
 @section('title', $link->title)
 
-@section('footer', 'Sent with EchoLedger')
+@section('footer', 'Sent with '.\App\Support\Brand::name())
 
 @section('content')
     <div class="card" id="request" data-config='@json($config)'>

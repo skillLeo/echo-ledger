@@ -6,6 +6,7 @@ namespace App\Filament\Admin\Pages;
 
 use App\Models\ShareCheckResult;
 use App\Services\Staff\StaffAccess;
+use App\Support\Brand;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
@@ -66,7 +67,7 @@ class ShareChecks extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return 'Whether EchoLedger stayed out of screen shares, counted per system, app version and way of checking. Results arrive only from people who allow diagnostics, and never say who sent them.';
+        return 'Whether '.Brand::name().' stayed out of screen shares, counted per system, app version and way of checking. Results arrive only from people who allow diagnostics, and never say who sent them.';
     }
 
     public function content(Schema $schema): Schema

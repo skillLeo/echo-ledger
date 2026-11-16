@@ -1,17 +1,17 @@
 @extends('site.layout')
 
-@section('title', 'Sign in a device · EchoLedger')
+@section('title', 'Sign in a device · '.\App\Support\Brand::name())
 
 @section('content')
     @include('auth.form-styles')
     <div class="account">
-        <h1>Sign in EchoLedger on {{ $params['name'] }}?</h1>
+        <h1>Sign in @brand on {{ $params['name'] }}?</h1>
         <form method="post" action="{{ route('device.sign-in.approve') }}" class="card">
             @csrf
             @foreach (['code_challenge', 'code_challenge_method', 'state', 'redirect_uri', 'name', 'platform'] as $field)
                 <input type="hidden" name="{{ $field }}" value="{{ $params[$field] }}">
             @endforeach
-            <p style="margin: 0;">The EchoLedger app on <strong>{{ $params['name'] }}</strong> ({{ $platform }}) will sign in as <strong>{{ $email }}</strong>@if ($workspace) and record into <strong>{{ $workspace }}</strong>@endif.</p>
+            <p style="margin: 0;">The @brand app on <strong>{{ $params['name'] }}</strong> ({{ $platform }}) will sign in as <strong>{{ $email }}</strong>@if ($workspace) and record into <strong>{{ $workspace }}</strong>@endif.</p>
             <p class="hint">Approve only if you started this sign-in in the app yourself, just now. You can revoke the device at any time under Account → Devices.</p>
             <div class="actions">
                 <button type="submit" class="button">Sign in</button>

@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
+use App\Support\Brand;
 use Closure;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Validation\ValidationException;
@@ -50,7 +51,7 @@ final class ConnectorCalls
     {
         $person = $request->user();
         if (! $person instanceof User) {
-            return Response::error('This connection has ended. Add EchoLedger again.');
+            return Response::error('This connection has ended. Add '.Brand::name().' again.');
         }
         $token = $person->currentAccessToken();
         $clientId = $token instanceof AccessToken ? $token->oauth_client_id : null;

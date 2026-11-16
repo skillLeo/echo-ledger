@@ -34,6 +34,7 @@ use App\Stt\KeytermPolicy;
 use App\Stt\LanguageChoice;
 use App\Stt\LanguageRouter;
 use App\Stt\ProviderEndpoints;
+use App\Support\Brand;
 use App\Support\UnsureMarkers;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -526,7 +527,7 @@ class Settings extends Page
                                 ->visible(fn (): bool => app(CredentialVault::class)->has(...MailSettings::VAULT)),
                             TextInput::make('mail_from_address')->label('From address')->email()->maxLength(255)->placeholder('echoledger@example.com')
                                 ->helperText('Use an address of a domain whose DNS records allow this server (SPF, DKIM, DMARC).'),
-                            TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder('EchoLedger'),
+                            TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder(Brand::name()),
                             Actions::make([
                                 Action::make('sendTestEmail')->label('Send a test email')->icon(Heroicon::OutlinedPaperAirplane)->color('gray')
                                     ->modalHeading('Send a test email')
@@ -585,7 +586,7 @@ class Settings extends Page
             function () use ($document): void {
                 echo json_encode($document, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE)."\n";
             },
-            'EchoLedger console settings '.now()->format('Y-m-d').'.json',
+            Brand::name().' console settings '.now()->format('Y-m-d').'.json',
             ['Content-Type' => 'application/json'],
         );
     }

@@ -14,6 +14,7 @@ use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
 use App\Models\Recording;
 use App\Services\ChunkedUploadService;
+use App\Support\Brand;
 
 /**
  * "Failed uploads (N)" in plain words (since v1.6, P5.3): for each recording of that smart view, what went wrong, what
@@ -77,7 +78,7 @@ final class FailedUpload
         $device = CaptureSessionsTable::deviceLabel($session);
 
         return ['title' => $damaged ? 'The file arrived damaged' : 'The upload did not finish',
-            'detail' => "{$device} sends it again by itself the next time EchoLedger is open there and online. Nothing to do here unless you want to delete it.",
+            'detail' => "{$device} sends it again by itself the next time ".Brand::name().' is open there and online. Nothing to do here unless you want to delete it.',
             'retry' => null];
     }
 }

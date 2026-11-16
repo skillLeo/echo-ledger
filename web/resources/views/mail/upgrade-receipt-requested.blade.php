@@ -10,6 +10,6 @@ We looked at the receipt for your request {{ $reference }} and need another one 
 Open your request in the app or the console, add the receipt and press Send. Your request stays open in the meantime.
 
 <x-mail::button :url="$url">
-Open EchoLedger
+Open @brand
 </x-mail::button>
 </x-mail::message>

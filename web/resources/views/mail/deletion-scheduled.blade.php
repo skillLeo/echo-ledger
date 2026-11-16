@@ -1,7 +1,7 @@
 <x-mail::message>
 # Your account will be deleted
 
-You asked to delete your EchoLedger account. On **{{ $date }}** we erase it with everything only it owns: recordings, transcripts, screens, files, projects and devices. This cannot be undone.
+You asked to delete your @brand account. On **{{ $date }}** we erase it with everything only it owns: recordings, transcripts, screens, files, projects and devices. This cannot be undone.
 
 Changed your mind? Sign in before then and choose "Keep my account".
 

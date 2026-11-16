@@ -16,6 +16,7 @@ use App\Models\User;
 use App\Services\Callers\CallerMatcher;
 use App\Services\Titles\AutoTitles;
 use App\Services\Workspaces\Workspaces;
+use App\Support\Brand;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -380,7 +381,7 @@ final class LibraryOrganiser
             }
             app(AuditLog::class)->record('sessions_exported', null, null, "{$count} transcripts exported as {$format}", ['format' => $format, 'count' => $count]);
 
-            return ['body' => (string) file_get_contents($path), 'filename' => 'EchoLedger transcripts '.now($this->settings->displayTimezone())->format('Y-m-d').'.zip', 'count' => $count];
+            return ['body' => (string) file_get_contents($path), 'filename' => Brand::name().' transcripts '.now($this->settings->displayTimezone())->format('Y-m-d').'.zip', 'count' => $count];
         } finally {
             @unlink($path);
         }

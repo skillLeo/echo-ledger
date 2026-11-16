@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
@@ -15,7 +16,7 @@ final class TestMail extends Mailable
 
     public function envelope(): Envelope
     {
-        return new Envelope(subject: 'EchoLedger test email');
+        return new Envelope(subject: Brand::name().' test email');
     }
 
     public function content(): Content

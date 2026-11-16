@@ -2,9 +2,9 @@
 # You are invited to {{ $workspace }}
 
 @if ($signUp || $join)
-{{ $inviter }} invited you to the workspace **{{ $workspace }}** on EchoLedger. What you record there stays yours: nobody in it sees it unless you share it.
+{{ $inviter }} invited you to the workspace **{{ $workspace }}** on @brand. What you record there stays yours: nobody in it sees it unless you share it.
 @else
-{{ $inviter }} added you to the workspace **{{ $workspace }}** on EchoLedger.
+{{ $inviter }} added you to the workspace **{{ $workspace }}** on @brand.
 @endif
 
 @if ($join)
@@ -31,7 +31,7 @@ The invitation works until {{ $expires }}.
 Sign in with this email address to open it. If you have no password yet, {{ $inviter }} gives you a one-time one, or use "Forgot password?" on the sign-in page.
 
 <x-mail::button :url="$url">
-Open EchoLedger
+Open @brand
 </x-mail::button>
 @endif
 

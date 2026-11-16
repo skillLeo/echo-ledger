@@ -170,7 +170,7 @@ describe('chunked upload', function () {
         $start = uplStart($this, $content, $name)->assertCreated();
 
         uplChunk($this, $start->json('recording_id'), 0, $content, $start->json('chunk_size'))
-            ->assertStatus(422)->assertJson(['code' => 'not_audio', 'message' => ConsoleUploads::NOT_MEDIA_MESSAGE]);
+            ->assertStatus(422)->assertJson(['code' => 'not_audio', 'message' => ConsoleUploads::notMediaMessage()]);
         expect(CaptureSession::query()->count())->toBe(0)
             ->and(Recording::query()->count())->toBe(0)
             ->and(Storage::disk('recordings')->allFiles())->toBe([]);

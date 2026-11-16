@@ -50,7 +50,7 @@
     >
         <div class="el-sb-inner" x-data="elShellSidebar(@js($config))" x-on:el-place.window="place = $event.detail.place ?? place">
             <header class="el-sb-brand">
-                <a href="{{ filament()->getHomeUrl() }}" class="el-sb-logo" aria-label="{{ $inApp ? 'EchoLedger home' : 'Admin panel home' }}">
+                <a href="{{ filament()->getHomeUrl() }}" class="el-sb-logo" aria-label="{{ $inApp ? \App\Support\Brand::name().' home' : 'Admin panel home' }}">
                     <x-filament-panels::logo />
                 </a>
                 <button type="button" class="el-sb-icon-btn el-sb-close" x-on:click="$store.sidebar.close()" aria-label="Close the menu">

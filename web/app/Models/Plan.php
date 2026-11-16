@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Models;
 
 use App\Services\Entitlements\Features;
+use App\Support\Brand;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
@@ -59,9 +60,9 @@ class Plan extends Model
     /** The four features the v1.5 apps read in `GET /api/config` (`plan.features`). */
     public const V15_FEATURES = ['live_translate', 'screen_moments', 'ai_notes', 'connector'];
 
-    /** What the features are called in messages and on the Plans page. */
+    /** What the features are called in messages and on the Plans page: read through featureLabel() (the product's name). */
     public const FEATURE_LABELS = [
-        'platform_transcription' => 'Transcription on EchoLedger',
+        'platform_transcription' => 'Transcription on '.Brand::TOKEN,
         'views' => 'Roman Urdu, English and Urdu views',
         'double_check' => 'Double-check',
         'screen_moments' => 'Screen moments',
@@ -71,6 +72,12 @@ class Plan extends Model
         'live_translate' => 'Live Translate',
         'ai_notes' => 'AI notes (project notes, memory and Ask)',
     ];
+
+    /** A feature's name in messages and on the Plans page, with the product's name where it has one. */
+    public static function featureLabel(string $feature): string
+    {
+        return Brand::fill(self::FEATURE_LABELS[$feature] ?? $feature);
+    }
 
     /** Personal: every feature and no limits (every workspace made before v1.5 is on it). */
     public const PERSONAL_DEFAULTS = ['name' => 'Personal', 'monthly_minutes' => null, 'storage_bytes' => null, 'max_devices' => null,

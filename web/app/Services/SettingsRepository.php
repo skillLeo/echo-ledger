@@ -12,6 +12,7 @@ use App\Stt\Drivers\GeminiDriver;
 use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
 use App\Stt\LanguageRouter;
+use App\Support\Brand;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
 
@@ -109,7 +110,7 @@ final class SettingsRepository
         'mail.encryption' => 'tls',                  // tls (STARTTLS) | ssl | none
         'mail.username' => null,
         'mail.from_address' => null,
-        'mail.from_name' => 'EchoLedger',
+        'mail.from_name' => null,                    // the product's name until one is saved (brandDefaults)
         // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit
         'budget.monthly_usd' => null,                // decimal >= 0.01, or null = no US$ limit
@@ -156,7 +157,17 @@ final class SettingsRepository
             // During install/migrations the table may not exist yet; defaults apply.
         }
 
-        return $this->cache = array_merge(self::DEFAULTS, $stored);
+        return $this->cache = array_merge(self::DEFAULTS, self::brandDefaults(), $stored);
+    }
+
+    /**
+     * Defaults that name the product (since v1.9, L0), read from its one place rather than written here.
+     *
+     * @return array<string, string>
+     */
+    private static function brandDefaults(): array
+    {
+        return ['mail.from_name' => Brand::name()];
     }
 
     public function set(string $key, mixed $value): void

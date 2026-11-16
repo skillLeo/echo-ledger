@@ -12,6 +12,7 @@ use App\Models\ClientContact;
 use App\Models\FilingRule;
 use App\Models\Scopes\WorkspaceScope;
 use App\Services\Callers\CallerMatcher;
+use App\Support\Brand;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 
@@ -40,7 +41,7 @@ final class FilingRules
             'title' => ['value' => $clean, 'match' => mb_strtolower($clean)],
             'app' => SourceApp::tryFrom($clean) !== null
                 ? ['value' => $clean, 'match' => $clean]
-                : throw $invalid('Choose one of the apps EchoLedger records.'),
+                : throw $invalid('Choose one of the apps '.Brand::name().' records.'),
             'contact' => self::contactMatch($clean) ?? throw $invalid('Give a phone number or an email address.'),
             default => throw $invalid('Unknown kind of rule.'),
         };

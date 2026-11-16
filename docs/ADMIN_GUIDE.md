@@ -31,6 +31,9 @@ never their recordings. A workspace always has one owner, so an owner who wants 
   (**Admin panel**); **Back to the app** returns. It has Plans, Upgrade requests, Server usage, API Credentials,
   Settings (email, sign-up, engines and the rest of the server), Device reports, the Accuracy Lab and Diagnostics
   (screen-share checks and missed recordings).
+- **The product's name** lives in one place, `brand.name` in `web/config/echoledger.php`: the website, the console, the
+  admin panel, emails and the messages the apps show read it there (the email sender's name follows it until one is saved
+  under Settings → Email).
 - Someone who is not staff gets "Forbidden" on every admin page; the bare `/admin` (the console's home before v1.6)
   takes them to `/app`. The app's old addresses under `/admin` (bookmarks, links in emails sent before the update)
   go to the same page under `/app`.

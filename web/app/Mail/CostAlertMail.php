@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** To staff who see usage (since v1.6, P2.6): this month's estimated cost passed a level of the budget alert. */
 final class CostAlertMail extends AccountMail
 {
@@ -16,7 +18,7 @@ final class CostAlertMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return $this->level >= 100 ? 'EchoLedger: the monthly budget is reached' : "EchoLedger: {$this->level}% of the monthly budget";
+        return $this->level >= 100 ? Brand::name().': the monthly budget is reached' : Brand::name().": {$this->level}% of the monthly budget";
     }
 
     protected function template(): string

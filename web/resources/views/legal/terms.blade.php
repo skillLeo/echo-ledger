@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', 'Terms of Service · EchoLedger')
+@section('title', 'Terms of Service · '.\App\Support\Brand::name())
 
 @section('content')
     <div class="legal">
@@ -8,9 +8,9 @@
         <h1>Terms of Service</h1>
         <p class="muted">Last changed {{ \Illuminate\Support\Carbon::parse('2026-11-09')->format('F j, Y') }}</p>
 
-        <h2>What EchoLedger is</h2>
-        <p>EchoLedger keeps a complete record of the conversations that matter in your work: meetings with clients, with your manager or your team, interviews, consultations and voice notes. It records them on your phone or computer, with both sides of the conversation, and turns each one into a written record you can search, share and rely on: a transcript of who said what, readable versions in Roman Urdu, Urdu and English, notes and summaries, next to the recording itself.</p>
-        <p>EchoLedger is provided by SkillLeo SMC Private Limited, Pakistan ("we"). These terms apply to the EchoLedger website, its console and the EchoLedger apps for phone and computer. By making an account or signing in, you agree to them.</p>
+        <h2>What @brand is</h2>
+        <p>@brand keeps a complete record of the conversations that matter in your work: meetings with clients, with your manager or your team, interviews, consultations and voice notes. It records them on your phone or computer, with both sides of the conversation, and turns each one into a written record you can search, share and rely on: a transcript of who said what, readable versions in Roman Urdu, Urdu and English, notes and summaries, next to the recording itself.</p>
+        <p>@brand is provided by SkillLeo SMC Private Limited, Pakistan ("we"). These terms apply to the @brand website, its console and the @brand apps for phone and computer. By making an account or signing in, you agree to them.</p>
 
         <h2>Your account</h2>
         <ul>
@@ -20,7 +20,7 @@
         </ul>
 
         <h2>Recording other people</h2>
-        <p>{{ \App\Support\RecordingConsent::TEXT }} You are responsible for having the right to record the people in your meetings and for telling them, as the laws where you and they are require. EchoLedger always shows when it is recording; it does not ask for anyone's consent on your behalf.</p>
+        <p>{{ \App\Support\RecordingConsent::TEXT }} You are responsible for having the right to record the people in your meetings and for telling them, as the laws where you and they are require. @brand always shows when it is recording; it does not ask for anyone's consent on your behalf.</p>
 
         <h2>Your recordings are yours</h2>
         <ul>
@@ -31,7 +31,7 @@
         </ul>
 
         <h2>Transcripts, translations and notes</h2>
-        <p>Transcripts, translations, readable versions, notes and summaries are produced automatically by speech-recognition and language engines. They are usually accurate but can contain mistakes, especially with unclear audio, strong background noise or several people speaking at once. EchoLedger marks words it is unsure of; check what matters, such as names, figures and decisions, against the recording before you rely on it.</p>
+        <p>Transcripts, translations, readable versions, notes and summaries are produced automatically by speech-recognition and language engines. They are usually accurate but can contain mistakes, especially with unclear audio, strong background noise or several people speaking at once. @brand marks words it is unsure of; check what matters, such as names, figures and decisions, against the recording before you rely on it.</p>
 
         <h2>Plans and payment</h2>
         <ul>
@@ -44,16 +44,16 @@
 
         <h2>Fair use</h2>
         <ul>
-            <li>Do not record people where the law does not allow it, and do not use EchoLedger to harass, deceive or spy on anyone.</li>
+            <li>Do not record people where the law does not allow it, and do not use @brand to harass, deceive or spy on anyone.</li>
             <li>Do not upload anything you have no right to, or anything unlawful.</li>
             <li>Do not try to reach other people's data, break the service's security, or overload it.</li>
         </ul>
 
         <h2>The service</h2>
-        <p>We work to keep EchoLedger available, secure and accurate, but it is provided as it is, without a promise that it is always available or free of mistakes. We may improve, change or stop parts of it; when a change affects your data, we tell you first and give you time to export it. To the extent the law allows, we are not liable for indirect losses arising from the use of transcripts or from the service being unavailable.</p>
+        <p>We work to keep @brand available, secure and accurate, but it is provided as it is, without a promise that it is always available or free of mistakes. We may improve, change or stop parts of it; when a change affects your data, we tell you first and give you time to export it. To the extent the law allows, we are not liable for indirect losses arising from the use of transcripts or from the service being unavailable.</p>
 
         <h2>Ending</h2>
-        <p>You can stop using EchoLedger and delete your account at any time. We may suspend or close an account that breaks these terms, after telling its owner where we can.</p>
+        <p>You can stop using @brand and delete your account at any time. We may suspend or close an account that breaks these terms, after telling its owner where we can.</p>
 
         <h2>Changes and contact</h2>
         <p>When these terms change, the date above changes and signed-in people are told in the app. These terms are governed by the laws of Pakistan. Questions: <a href="mailto:hassam.dev.571@gmail.com">hassam.dev.571@gmail.com</a>.</p>

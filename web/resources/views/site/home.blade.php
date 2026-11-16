@@ -1,12 +1,12 @@
 @extends('site.layout')
 
-@section('title', 'EchoLedger · calls and meetings, written down')
+@section('title', \App\Support\Brand::name().' · calls and meetings, written down')
 
 @section('content')
     <section>
         <h1>Your calls and meetings, written down word for word.</h1>
         <p class="muted" style="max-width: 640px; font-size: 18px;">
-            EchoLedger records calls and meetings on your phone and computer, both sides of the conversation, and turns
+            @brand records calls and meetings on your phone and computer, both sides of the conversation, and turns
             them into accurate transcripts, in English, Urdu and Roman Urdu. Everything is kept in projects you can
             search, share with your team, and open in Claude or ChatGPT.
         </p>
@@ -39,6 +39,6 @@
 
     <section class="card" style="margin-top: 32px;">
         <h2>Ask about a recording, in your own AI</h2>
-        <p class="muted" style="margin: 0;">Connect EchoLedger to Claude or ChatGPT and ask about any call or project, with the transcript and the screens it had.</p>
+        <p class="muted" style="margin: 0;">Connect @brand to Claude or ChatGPT and ask about any call or project, with the transcript and the screens it had.</p>
     </section>
 @endsection

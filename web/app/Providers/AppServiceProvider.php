@@ -42,6 +42,7 @@ use App\Services\Views\ClaudeTranscriptConverter;
 use App\Services\Views\TranscriptConverter;
 use App\Services\Workspaces\Workspaces;
 use App\Stt\SttManager;
+use App\Support\Brand;
 use Filament\Actions\Action;
 use Filament\Notifications\Notification as FilamentNotification;
 use Filament\Support\Facades\FilamentTimezone;
@@ -58,6 +59,7 @@ use Illuminate\Mail\Markdown;
 use Illuminate\Mail\SendQueuedMailable;
 use Illuminate\Notifications\SendQueuedNotifications;
 use Illuminate\Queue\Events\JobProcessing;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
@@ -72,6 +74,9 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        // Since v1.9 (L0) the product's name has one place (config/echoledger.php `brand`): what reads `app.name` (Laravel
+        // and its packages) reads it too. Cookie and cache names come from APP_NAME in the .env file and do not change.
+        config(['app.name' => Brand::name()]);
         // Since v1.6.1 every toast is a Notice: a target to open, Dismiss, the timer bar, swipe (docs/DESIGN_SYSTEM.md
         // "Notices"). Filament makes its notifications through the container, so every Notification::make() is one.
         $this->app->bind(FilamentNotification::class, Notice::class);
@@ -116,6 +121,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         self::useAppUrl($this->app);
+
+        // Pages and emails write the product's name as @brand (since v1.9, L0), read when they are shown.
+        Blade::directive('brand', static fn (): string => '<?php echo e(\App\Support\Brand::name()); ?>');
 
         // RECORDINGS_DRIVER=s3 (config/filesystems.php). Laravel's own s3 driver needs the AWS SDK, which is not installed.
         Storage::extend('s3-compatible', function ($app, array $config): ObjectStorageDisk {

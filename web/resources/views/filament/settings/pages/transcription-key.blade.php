@@ -8,7 +8,7 @@
             <p class="el-set-title" style="font-weight:400">Transcripts on Free use your own free Groq key. It takes about 2 minutes.</p>
             <ol style="margin:12px 0 0;padding-left:20px;list-style:decimal;font-size:14px;line-height:22px;color:var(--text)">
                 <li>Open console.groq.com and sign in. Google is fine.</li>
-                <li>Open API Keys, choose Create API Key, name it EchoLedger and copy the key.</li>
+                <li>Open API Keys, choose Create API Key, name it @brand and copy the key.</li>
                 <li>Paste it here and choose Save.</li>
             </ol>
             <a href="https://console.groq.com/keys" target="_blank" rel="noopener" class="el-btn el-btn-outline" style="margin-top:12px">
