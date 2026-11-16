@@ -230,14 +230,15 @@ html[data-platform="macos"] .sidebar { padding-top: 40px; }
 .nav-expand svg { transition: transform var(--motion-fast) var(--ease-out); }
 .nav-expand.open svg { transform: rotate(90deg); }
 /* The places under a page (smart folders, pinned projects, Shared's tabs) and the nested column's rows. */
-.place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; min-width: 0; }
+.place-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; min-width: 0; align-content: start; }
 .place-list.in-sidebar { margin: 0 0 var(--space-1) 22px; }
 .place-row { min-width: 0; border-radius: var(--radius-sm); transition: background-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out); }
 .place-open { width: 100%; min-width: 0; display: flex; align-items: center; gap: var(--space-2); height: 30px; padding: 0 var(--space-2); border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font: inherit; font-size: var(--text-sm); text-align: left; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), color var(--motion-fast) var(--ease-out); }
 .place-open svg { flex: none; }
 .place-open:hover { background: var(--surface-3); color: var(--text); }
 .place-row.selected .place-open { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
-.place-row.empty .place-open { color: var(--text-faint); }
+/* An empty folder (none in it): faint, and never the app's ".empty" message with its tall padding (D-023). */
+.place-row.is-empty .place-open { color: var(--text-faint); }
 .place-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .place-count { flex: none; font-size: var(--text-xs); color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .place-count.attention { min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-full); background: var(--accent-soft); color: var(--accent-text); font-weight: 600; display: inline-grid; place-items: center; }
@@ -360,7 +361,7 @@ label.field { display: grid; gap: 6px; margin-bottom: var(--space-3); color: var
 
 /* ---------- Library: search pill, filter chips, rows and the list + detail split ---------- */
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin-bottom: var(--space-3); }
-.searchbox { flex: 1; display: flex; align-items: center; gap: var(--space-3); min-width: 220px; height: 44px; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-full); padding: 0 var(--space-2) 0 var(--space-4); color: var(--text-muted); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
+.searchbox { flex: 1; display: flex; align-items: center; gap: var(--space-3); min-width: 0; height: 44px; background: var(--surface-2); border: 1px solid transparent; border-radius: var(--radius-full); padding: 0 var(--space-2) 0 var(--space-4); color: var(--text-muted); transition: border-color var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) var(--ease-out), background-color var(--motion-fast) var(--ease-out); }
 .searchbox:focus-within { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); color: var(--text); }
 .searchbox input { flex: 1; min-width: 0; height: 100%; background: transparent; border: 0; outline: 0; color: var(--text); font: inherit; font-size: 15px; padding: 0; }
 .searchbox .clear { width: 28px; height: 28px; display: grid; place-items: center; flex: none; background: none; border: 0; color: var(--text-muted); cursor: pointer; border-radius: var(--radius-full); }
@@ -687,6 +688,9 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .head-chip select, .head-chip input { height: 28px; border: 0; background: transparent; color: var(--text); font-size: var(--text-sm); font-weight: 600; padding: 0 var(--space-1); max-width: 150px; border-radius: var(--radius-tag); }
 /* The language names are long ("Auto (English / Urdu / Arabic)", "Urdu (with English words)"): 150 px cut them. */
 .head-chip.retranscribe-row select { max-width: 240px; }
+/* The Language chip wraps Re-transcribe under the language in a narrow page (D-046). */
+.head-chip.retranscribe-row { flex-wrap: wrap; height: auto; min-height: 32px; max-width: 100%; white-space: normal; row-gap: 2px; padding-block: 1px; }
+.head-chip.retranscribe-row .chip-select { max-width: 100%; }
 .head-chip select:focus, .head-chip input:focus { outline: 2px solid var(--focus); outline-offset: 0; }
 .head-chip .btn { height: 26px; padding: 0 var(--space-2); font-size: var(--text-xs); }
 .head-chip.labels-chip { padding-right: var(--space-1); gap: var(--space-1); }
@@ -713,7 +717,8 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .select.compact, .input.compact { height: 30px; min-height: 30px; padding: 0 var(--space-2); font-size: var(--text-xs); width: auto; border-radius: var(--radius-sm); }
 /* The docked player: play, ±10 s, the time, the waveform and the speed, pinned to the bottom of the recording. */
 .player-dock { position: sticky; bottom: 0; z-index: 4; display: grid; gap: var(--space-1); padding: var(--space-2) var(--space-4) var(--space-3); background: color-mix(in srgb, var(--surface) 94%, transparent); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-top: 1px solid var(--border); }
-.player-row { display: flex; align-items: center; gap: var(--space-2); min-width: 0; }
+/* A narrow recording page puts the waveform on its own line rather than scrolling sideways (D-046). */
+.player-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-2); min-width: 0; }
 .play-btn { flex: none; width: 40px; height: 40px; border-radius: 50%; border: 0; background: var(--accent-strong); color: var(--on-accent); display: grid; place-items: center; cursor: pointer; transition: background-color var(--motion-fast) var(--ease-out), transform var(--motion-fast) var(--ease-out); }
 .play-btn:hover { background: var(--accent-pressed); }
 .play-btn:active { transform: scale(0.96); }
@@ -722,7 +727,7 @@ html[data-window="dictation"] .overlay-root { justify-content: flex-start; }
 .player-time { flex: none; font-size: var(--text-xs); color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 84px; text-align: center; }
 .player { width: 100%; height: 40px; border-radius: var(--radius-field); }
 audio.player { display: none; }
-.waveform { position: relative; flex: 1; min-width: 80px; height: 36px; cursor: pointer; display: flex; align-items: center; gap: 2px; }
+.waveform { position: relative; flex: 1 1 288px; min-width: 80px; height: 36px; cursor: pointer; display: flex; align-items: center; gap: 2px; }
 .waveform > .wf-bar { flex: 1 1 0; min-width: 1px; border-radius: 2px; background: var(--border-strong); }
 .waveform > .wf-bar.ch-2 { background: color-mix(in srgb, var(--client) 35%, var(--border-strong)); }
 .waveform > .wf-bar.played { background: var(--accent); }
@@ -1293,10 +1298,9 @@ body.dragging-recordings, body.dragging-recordings * { cursor: grabbing !importa
 .page-split { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--space-5); align-items: start; min-width: 0; }
 .page-split:not(:has(> .subnav)) { grid-template-columns: minmax(0, 1fr); }
 .page-main { min-width: 0; }
-.subnav { position: sticky; top: 0; display: grid; gap: var(--space-2); min-width: 0; padding-right: var(--space-1); max-height: 100%; overflow: auto; }
+.subnav { position: sticky; top: 0; display: grid; gap: var(--space-2); min-width: 0; padding-right: var(--space-1); max-height: 100%; overflow: auto; align-content: start; }
 .subnav .place-open { height: 32px; }
 .subnav .project-tree.in-sidebar { margin: 0; }
-.subnav-hint { margin: var(--space-2) var(--space-2) 0; line-height: 1.4; }
 .subnav-add { justify-self: start; margin-left: var(--space-1); }
 /* No room for the column: the sidebar's Library and Projects list the same places. */
 .app.no-column .page-split { grid-template-columns: minmax(0, 1fr); }
@@ -1765,7 +1769,7 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
 .chip-select > .chip-key { position: absolute; inset-inline-start: var(--space-3); top: 50%; transform: translateY(-50%); pointer-events: none; color: var(--text-faint); font-weight: 500; white-space: nowrap; }
 .head-chip:has(> .chip-select), .head-chip:has(> .organise-field > .chip-select) { padding-inline-start: 0; }
 .head-chip .chip-select > select { cursor: pointer; padding-inline-start: calc(var(--space-3) + var(--chip-key-w, 0px) + 6px); max-width: calc(170px + var(--chip-key-w, 0px)); }
-.head-chip.retranscribe-row .chip-select > select { max-width: calc(240px + var(--chip-key-w, 0px)); }
+.head-chip.retranscribe-row .chip-select > select { max-width: min(calc(240px + var(--chip-key-w, 0px)), 100%); }
 .head-chip .chip-select > select:hover:not(:disabled) { background: var(--surface-2); }
 
 /* The workspace switcher's other workspaces: said, not offered (D-007); the browser row switches. */

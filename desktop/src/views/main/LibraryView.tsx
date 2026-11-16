@@ -1112,7 +1112,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       <div className="toolbar library-toolbar" role="toolbar" aria-label="Library tools">
         <label className="searchbox compact library-search">
           <SearchIcon size={16} />
-          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings"
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search recordings"
             onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); } }} />
           {query ? <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button> : <span className="kbd" aria-hidden="true">/</span>}
         </label>
@@ -1278,7 +1278,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {avatar}
                         <div className="item-main">
                           <div className="item-line">
-                            <span className="item-title" data-motion="title">{item.title}</span>
+                            <span className="item-title" data-motion="title">{item.title ?? "Recording"}</span>
                             {recovered.has(item.id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>

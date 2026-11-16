@@ -155,6 +155,12 @@ const SCREENS = [
       await page.waitForSelector("[data-testid=locked-premium_engines]");
     }, viewport],
   ]),
+  // Batch 5 (D-023, D-024, D-029, D-031, D-046, D-003): nothing clipped or pushed sideways in the Library.
+  ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],
+  ...[["-1100", { width: 1100, height: 740 }], ["-1300", { width: 1300, height: 800 }]].map(([size, viewport]) => [`library-long-language${size}`, "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.selectOption("select[aria-label='Re-transcribe in']", "");
+  }, viewport]),
   // Batch 3 (D-121, D-007, D-090): whole controls, the workspace switcher, Settings' action rows.
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`workspace-menu${size}`, "library&plan=free", async (page) => {

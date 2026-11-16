@@ -154,6 +154,13 @@ describe("LibraryView list", () => {
     expect(within(list).getAllByText("Recovered")).toHaveLength(2);
   });
 
+  it("names an untitled recording in the list as the table does, and asks only to Search (D-031, D-029)", async () => {
+    const untitled = makeItem("u", { title: null });
+    await renderLibrary([...ITEMS, untitled]);
+    expect(within(screen.getByTestId("library-list")).getAllByText("Recording")[0].closest(".item-title")).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "Search recordings" })).toHaveAttribute("placeholder", "Search");
+  });
+
   it("says 'recording' for exactly one", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();

@@ -432,3 +432,24 @@ describe("Help fits the window (D-079)", () => {
     expect(prop(".help-sheet", "overflow")).toBe("hidden");
   });
 });
+
+describe("the Library and recording page never clip or scroll sideways (batch 5)", () => {
+  it("lets no search field be wider than its place, with minimums only where they are needed (D-003)", () => {
+    expect(prop(".searchbox", "min-width")).toMatch(/^0(px)?$/);
+    expect(prop(".library-toolbar .library-search", "min-width")).toBe("160px");
+    expect(prop(".project-tools .searchbox", "min-width")).toBe("200px");
+  });
+
+  it("packs the folder column's rows at the top (D-023)", () => {
+    expect(prop(".subnav", "align-content")).toBe("start");
+    expect(prop(".place-list", "align-content")).toBe("start");
+    expect(prop(".place-row.is-empty .place-open", "color")).toBe("var(--text-faint)");
+  });
+
+  it("wraps the player's row and the Language chip rather than pushing the page sideways (D-046)", () => {
+    expect(prop(".player-row", "flex-wrap")).toBe("wrap");
+    expect(prop(".waveform", "flex")).toBe("1 1 288px");
+    expect(prop(".head-chip.retranscribe-row", "flex-wrap")).toBe("wrap");
+    expect(prop(".head-chip.retranscribe-row .chip-select > select", "max-width")).toContain("100%");
+  });
+});
