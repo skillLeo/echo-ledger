@@ -259,6 +259,11 @@ describe.runIf(process.platform !== "win32")("check-mac-archive.sh", () => {
     const byForm = spawnSync("sh", [archiveCheck, join(root, "a.tar.gz"), join(root, "dest")], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
     expect(byForm.status).toBe(1);
     expect(byForm.stderr).toContain("two names for one file (case or Unicode form)");
+    // A full case fold, not lower case only: Straße and STRASSE are one name to it.
+    writeFileSync(join(root, "names"), ["EchoLedger.app/", "EchoLedger.app/Contents/Stra\u00dfe.txt", "EchoLedger.app/Contents/STRASSE.txt", ""].join("\n"));
+    const folded = spawnSync("sh", [archiveCheck, join(root, "a.tar.gz"), join(root, "dest")], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } });
+    expect(folded.status).toBe(1);
+    expect(folded.stderr).toContain("two names for one file (case or Unicode form)");
   });
 });
 

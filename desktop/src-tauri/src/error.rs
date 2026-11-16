@@ -28,8 +28,8 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
     retry_after_secs.map(|n| format!(" Try again in {n} s.")).unwrap_or_default()
 }
 
-/// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
-/// client workspace's AI budget and key, docs/API.md): shown as they are.
+/// Answers whose `message` is written for people and names no vendor or key (plan limits, roles, the client workspace's
+/// AI budget, docs/API.md): shown as they are. Every other code reads in the app's own words (`CODE_TEXT`, `coded_text`).
 const PLAIN_CODES: [&str; 11] = [
     "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "ai_budget_reached", "no_client",
     "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached", "promo_other_plan",
