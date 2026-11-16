@@ -17,6 +17,34 @@ without Phase S.
 | N7 | Review the privacy wording, the interview reminder, the consent line, store and website text; a short legal check on US/EU recording consent | Launch | Before the public launch |
 | N8 | Run the Pakistan latency benchmark | L9 | Run the script from docs/LATENCY_V1_9.md when it's ready |
 
+## v1.8.1 release audit (2026-11-16)
+
+Three passes on the whole release diff (v1.7.0 `a6ac1b9b` → `fd088715`): security (2 major, 5 minor), UX/design (8 major,
+18 minor), reliability/performance (8 major, 20 minor). Every finding is fixed before the v1.8.1 release or written
+down here with the reason. IDs: S = security, U/u = UX, R = reliability.
+
+- [ ] **Phone** (b-phone, with the S5 follow-up): U7 names, u23 the dot's 48 dp target and TalkBack action, R6 the
+  secure flag before the mode loads and on every mode change, R7 "Hide EchoLedger windows" kept across process death,
+  R28 ShareGuard update() thread safety; screenshots (U8, phone part).
+- [ ] **Desktop** (one builder, after 0.4): S1 sharing-bar titles in logs, S4 Share Check commands only from the main
+  window, S5 no silent re-set, U1–U5, U7 names, U8 screenshots, u9–u21, u24–u26, R1–R5, R9–R25, R27, R28-desktop.
+- [ ] **Web and guides** (web builder, after 0.2): S3 Share Check validation, u22 admin empty state, R24 the bare
+  "presenting" pattern in share-bars.json, R26 an index on the matrix columns and pruning (a new migration), U6 and
+  the guide sentences (names, the hidden state, the test-pattern flash, the phone's Private/Show).
+- [x] **Lead:** S6/S7 the words check reads JSX text and one-word labels, with Urdu, Arabic and Roman Urdu forms
+  (`ca870b87`); U7 one set of names in docs/DESIGN_SYSTEM.md (`ece816d7`).
+- **Decided, not changed:** S2/R8 — `getClientUid` (since phase 3) and `getPlayerState` (12 Nov call fix) by reflection
+  in the shell-uid helper stay: the plan's "no hidden or private Android APIs, even through the helper" is an S5 rule
+  (screen-share privacy; L5 follows it), and v1.8 0.3 itself plans VOICE_CALL / uplink / downlink through the helper.
+  No hidden API is used for screen-share privacy or Live Assist.
+- **Decided, changed:** S5 — when something inside the process clears the Windows capture flag (the IOActive case, for
+  example a capture or monitoring tool), EchoLedger no longer sets it again by itself, because the scope rule forbids
+  anything against monitoring tools: it logs the change, shows "Visible in screen share" for the session and offers
+  "Hide again", which re-applies only when the person presses it. EchoLedger's own lifecycle points (window built or
+  shown, display change, wake) still set the flag.
+- Release steps after the fixes: version 1.8.1 on the desktop (tauri.conf.json, Cargo.toml, package.json; all still
+  1.6.0) and the phone (versionName 1.8.1, versionCode 18); the delta of the release diff gets one more audit pass.
+
 ## Step 0
 - [x] PLAN_V1_9.md saved locally and excluded; this checklist committed; docs/research/screen-share-privacy.md
   committed from the FACTS with the source links (2026-11-16).
