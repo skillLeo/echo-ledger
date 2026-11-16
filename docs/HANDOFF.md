@@ -123,6 +123,10 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     full-screen meeting; it hides nothing from other software; we ship outside the Mac App Store (revisit if that
     changes). No other private macOS API without a written decision here. MAC-22 on the device is the release gate.
     After this merges, b-desktop-reopen (0.2 work) must merge v1.1 and resolve the duplicated follow-up commits.
+  - Phone bug for the next phone round (seen in docs/design/screens/phone-session-light.png): on a recording's page
+    the action row Export · Share link · Send squeezes "Send to WhatsApp" into a one-letter-wide column, its text
+    running down the screen letter by letter. The row must wrap or scroll (FlowRow or a horizontal scroll with full
+    labels), with a screenshot test at 360 dp width and at font scale 200 %.
   - GUIDE TEXT QUEUE for the web builder (docs/USER_GUIDE.md), from the builders' reports:
     (1) Phone calls (SIM) bullet, B18: keep "Some phones give both voices on one track…", replace the two sentences
     after it with the "SIM calls through the Phone app's own recordings" block (Galaxy: Phone app → ⋮ → Settings →
