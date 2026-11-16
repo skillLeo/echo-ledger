@@ -11,8 +11,8 @@ app ──wss──▶ nginx :443 (TLS) ──ws──▶ assist-relay 127.0.0.1
 
 **Status.** With `RELAY_PROVIDERS=live` the relay streams from Anthropic, Groq, OpenAI and Gemini, using the keys
 the server sends. A provider without a key in Admin -> API Credentials answers `provider_not_configured` ("Live Assist
-is not set up on the server yet"). The clients are tested against recorded-format stand-ins only: before the first
-real call, run `assist-relay-smoke` once per provider with a key (tools/smoke.rs). The mocked models
+is not set up on the server yet"). The clients are tested only against hand-written stand-ins of the providers' documented
+formats: before the first real call, run `assist-relay-smoke` once per provider with a key (tools/smoke.rs). The mocked models
 (`RELAY_PROVIDERS=mock`) serve canned answers for an end-to-end check without keys.
 
 ## Secrets and keys
