@@ -17,7 +17,7 @@ export type SelectProps = {
 };
 
 /**
- * A select-only combobox: one press anywhere on the control opens the list (not only the arrow). Arrow keys, Home and
+ * A select-only combobox: one press anywhere on the control or on its label opens the list (not only the arrow). Arrow keys, Home and
  * End move, Enter or Space picks, Esc closes without a change, typing a letter jumps to the next match. Focus stays on
  * the control; the highlighted option is its active descendant.
  */
@@ -82,7 +82,9 @@ export function Select({ label, hideLabel, options, value, onChange, disabled, c
 
   return (
     <div className={["el-field", "el-select", className].filter(Boolean).join(" ")} ref={root}>
-      <span id={`${id}-label`} className={hideLabel ? "el-visually-hidden" : "el-field__label"}>{label}</span>
+      {/* Like a native label: a press on it focuses the control, and here opens it too. */}
+      <span id={`${id}-label`} className={hideLabel ? "el-visually-hidden" : "el-field__label el-select__label"}
+        onClick={() => { if (disabled) return; control.current?.focus(); if (!open) show(); }}>{label}</span>
       <button ref={control} type="button" className="el-select__control" role="combobox" disabled={disabled}
         aria-haspopup="listbox" aria-expanded={open} aria-controls={`${id}-list`} aria-labelledby={`${id}-label ${id}-value`}
         aria-activedescendant={open ? `${id}-opt-${active}` : undefined}

@@ -86,6 +86,16 @@ describe("Select", () => {
     expect(screen.getByRole("option", { name: "Urdu" })).toHaveAttribute("aria-selected", "true");
   });
 
+  it("a press on the visible label focuses the control and opens it", () => {
+    render(<Language />);
+    const control = screen.getByRole("combobox");
+    fireEvent.click(screen.getByText("Transcript language"));
+    expect(control).toHaveFocus();
+    expect(control).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(screen.getByText("Transcript language"));
+    expect(control).toHaveAttribute("aria-expanded", "true");
+  });
+
   it("picks with the mouse and returns focus to the control", () => {
     const onChange = vi.fn();
     render(<Language onChange={onChange} />);
