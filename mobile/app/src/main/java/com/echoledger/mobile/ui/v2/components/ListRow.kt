@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui.v2.components
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -35,7 +36,8 @@ import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 /**
  * A list row, 64 dp (one line of meta) or 72 dp ([tall], with an avatar), in the WhatsApp manner: the title and
  * [titleEnd] (a time) on the first line; at most one [status], then [meta] and [metaEnd] (a duration) on the second;
- * [trailing] for a switch or a value. The whole row is one tap target and is read as one item.
+ * [trailing] for a switch or a value. The whole row is one tap target and is read as one item; [onLongClick] (with
+ * its [onLongClickLabel], which screen readers offer as an action) opens the row's actions.
  */
 @Composable
 fun EchoListRow(
@@ -49,6 +51,8 @@ fun EchoListRow(
     trailing: (@Composable () -> Unit)? = null,
     tall: Boolean = false,
     onClickLabel: String? = null,
+    onLongClickLabel: String? = null,
+    onLongClick: (() -> Unit)? = null,
     onClick: (() -> Unit)? = null
 ) {
     val c = EchoV2.colors
@@ -57,7 +61,20 @@ fun EchoListRow(
         modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = if (tall) EchoTokens.Component.listRowHeightMobileTall else EchoTokens.Layout.rowMobile)
-            .then(if (onClick != null) Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick) else Modifier)
+            .then(
+                when {
+                    onLongClick != null -> Modifier.combinedClickable(
+                        onClickLabel = onClickLabel,
+                        onLongClickLabel = onLongClickLabel,
+                        onLongClick = onLongClick,
+                        onClick = onClick ?: {}
+                    )
+
+                    onClick != null -> Modifier.clickable(onClickLabel = onClickLabel, onClick = onClick)
+
+                    else -> Modifier
+                }
+            )
             .semantics(mergeDescendants = true) {}
             .padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
         verticalAlignment = Alignment.CenterVertically,

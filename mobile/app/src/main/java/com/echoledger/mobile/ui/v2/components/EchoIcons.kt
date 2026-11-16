@@ -24,6 +24,7 @@ import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.Replay10
+import androidx.compose.material.icons.outlined.RestoreFromTrash
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
@@ -68,6 +69,7 @@ object EchoIcons {
     val Move: ImageVector get() = Icons.Outlined.DriveFileMove
     val Delete: ImageVector get() = Icons.Outlined.DeleteOutline
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
+    val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 
     // Navigation
     val Home: ImageVector get() = Icons.Outlined.Home
