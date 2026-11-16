@@ -1029,3 +1029,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   a confirmation or Undo; Discard with a delayed delete that survives process death), P-076 and the P-001
   follow-ups. Batch 2 next, with the review minors (Saved · Undo through the delayed delete, an atomic
   finishDiscard).
+- Merged b-web-l1 at the reviewed c2e827f7: the interface flags (Laravel Pennant; everyone / stable percentage /
+  workspace / person; Admin → Interface flags, super admin only), `ui_flags` and `ui_classic` in GET /api/config,
+  PUT /api/account/ui, Switch back to classic in the console; prompt pack 1.0.2; the Usage screenshots retaken.
+  The web deploy for v1.8.1 is now v1.1 at this point (the flags ship off).
