@@ -6,8 +6,12 @@ use App\Enums\DevicePlatform;
 use App\Enums\SourceApp;
 use App\Models\MissedRecording;
 use App\Models\User;
+use App\Models\Workspace;
+use App\Services\Accounts\AccountEraser;
 use App\Services\ActionBadge;
 use App\Services\ActivityFeed;
+use App\Services\Workspaces\WorkspaceEraser;
+use App\Services\Workspaces\Workspaces;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Artisan;
@@ -29,7 +33,7 @@ function missedBody(array $overrides = []): array
 {
     return ['client_ref' => (string) Str::uuid(), 'platform' => 'android', 'app_version' => '1.8.0', 'source_app' => 'whatsapp',
         'call_started_at' => now()->subMinutes(10)->toIso8601String(), 'call_duration_s' => 312,
-        'reason' => 'helper_not_armed', 'detail' => 'The helper was not connected when the call started.', ...$overrides];
+        'reason' => 'helper_not_armed', ...$overrides];
 }
 
 /** @return list<MissedRecording> every row, whatever workspace the last request was in */
@@ -61,23 +65,33 @@ describe('POST /api/devices/missed-recordings', function () {
 
         $row = unscoped(fn () => MissedRecording::query()->findOrFail($id));
         expect($id)->toBeString()->toHaveLength(26)
-            ->and($row->only(['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_duration_s', 'reason', 'detail']))
+            ->and($row->only(['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_duration_s', 'reason']))
             ->toBe(['user_id' => $user->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => 'c1f0e2d3-1111-4a5b-9c8d-0123456789ab',
-                'platform' => 'android', 'app_version' => '1.8.0', 'source_app' => 'whatsapp', 'call_duration_s' => 312, 'reason' => 'helper_not_armed',
-                'detail' => 'The helper was not connected when the call started.'])
+                'platform' => 'android', 'app_version' => '1.8.0', 'source_app' => 'whatsapp', 'call_duration_s' => 312, 'reason' => 'helper_not_armed'])
             ->and($row->call_started_at->toIso8601String())->toBe('2026-11-16T09:12:00+00:00')
             ->and($row->created_at->toIso8601String())->toBe('2026-11-16T12:00:00+00:00');
     });
 
-    it('takes the minimal body: the app version, the length and the detail may be left out', function () {
+    it('takes the minimal body: the app version and the length may be left out', function () {
         $body = missedBody();
-        unset($body['app_version'], $body['call_duration_s'], $body['detail']);
+        unset($body['app_version'], $body['call_duration_s']);
 
         $this->api(Fx::token(Fx::device()))->postJson('/api/devices/missed-recordings', $body)->assertCreated();
-        expect(missedRows()[0]->only(['app_version', 'call_duration_s', 'detail']))->toBe(['app_version' => null, 'call_duration_s' => null, 'detail' => null]);
+        expect(missedRows()[0]->only(['app_version', 'call_duration_s']))->toBe(['app_version' => null, 'call_duration_s' => null]);
 
-        $this->api(Fx::token(Fx::device()))->postJson('/api/devices/missed-recordings', missedBody(['app_version' => null, 'call_duration_s' => null, 'detail' => null]))->assertCreated();
+        $this->api(Fx::token(Fx::device()))->postJson('/api/devices/missed-recordings', missedBody(['app_version' => null, 'call_duration_s' => null]))->assertCreated();
         expect(missedRows())->toHaveCount(2);
+    });
+
+    it('takes an older app\'s detail and keeps none of it (contract 1.8.0-c: no free text)', function () {
+        $user = Fx::user();
+        $this->api(Fx::token(Fx::device($user)))->postJson('/api/devices/missed-recordings', missedBody([
+            'detail' => 'SECRET-DETAIL: the helper was not connected when the call with Omar started. '.str_repeat('x', 500),
+        ]))->assertCreated();
+
+        $stored = json_encode(missedRows()[0]->getAttributes()).json_encode(DB::table('notifications')->pluck('data')->all());
+        expect($stored)->not->toContain('SECRET-DETAIL')->not->toContain('Omar')
+            ->and(DB::getSchemaBuilder()->hasColumn('missed_recordings', 'detail'))->toBeFalse();
     });
 
     it('keeps the instant a start with an offset names, in UTC', function () {
@@ -97,7 +111,7 @@ describe('POST /api/devices/missed-recordings', function () {
     it('answers the same event again with the same id, keeps the first and makes no second item', function () {
         $user = Fx::user();
         $token = Fx::token(Fx::device($user));
-        $body = missedBody(['client_ref' => 'retry-me']);
+        $body = missedBody(['client_ref' => (string) Str::uuid()]);
 
         $first = $this->api($token)->postJson('/api/devices/missed-recordings', $body)->assertCreated()->json('data.id');
         $again = $this->api($token)->postJson('/api/devices/missed-recordings', [...$body, 'reason' => 'crash', 'call_duration_s' => 5])->assertOk()->json('data.id');
@@ -113,8 +127,9 @@ describe('POST /api/devices/missed-recordings', function () {
         $phone = Fx::device($user, ['platform' => 'android']);
         $laptop = Fx::device($user, ['platform' => 'windows']);
 
-        $a = $this->api(Fx::token($phone))->postJson('/api/devices/missed-recordings', missedBody(['client_ref' => 'same-ref']))->assertCreated()->json('data.id');
-        $b = $this->api(Fx::token($laptop))->postJson('/api/devices/missed-recordings', missedBody(['client_ref' => 'same-ref', 'platform' => 'windows', 'source_app' => 'zoom']))
+        $ref = (string) Str::uuid();
+        $a = $this->api(Fx::token($phone))->postJson('/api/devices/missed-recordings', missedBody(['client_ref' => $ref]))->assertCreated()->json('data.id');
+        $b = $this->api(Fx::token($laptop))->postJson('/api/devices/missed-recordings', missedBody(['client_ref' => $ref, 'platform' => 'windows', 'source_app' => 'zoom']))
             ->assertCreated()->json('data.id');
 
         expect($b)->not->toBe($a)
@@ -125,13 +140,14 @@ describe('POST /api/devices/missed-recordings', function () {
     it('answers two copies sent at once with the one row, and only the first makes an item', function () {
         $user = Fx::user();
         $device = Fx::device($user);
-        $body = missedBody(['client_ref' => 'sent-twice-at-once']);
+        $ref = (string) Str::uuid();
+        $body = missedBody(['client_ref' => $ref]);
         $other = strtolower((string) Str::ulid());
         // The other copy lands between this request's look-up and its own insert.
-        MissedRecording::creating(function (MissedRecording $missed) use ($device, $other): void {
-            if ($missed->client_ref === 'sent-twice-at-once' && DB::table('missed_recordings')->where('id', $other)->doesntExist()) {
+        MissedRecording::creating(function (MissedRecording $missed) use ($device, $other, $ref): void {
+            if ($missed->client_ref === $ref && DB::table('missed_recordings')->where('id', $other)->doesntExist()) {
                 DB::table('missed_recordings')->insert(['id' => $other, 'user_id' => $device->user_id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id,
-                    'client_ref' => 'sent-twice-at-once', 'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subMinutes(10),
+                    'client_ref' => $ref, 'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subMinutes(10),
                     'reason' => 'helper_not_armed', 'created_at' => now()]);
             }
         });
@@ -159,6 +175,7 @@ describe('POST /api/devices/missed-recordings', function () {
         $user = Fx::user();
         $this->api(Fx::token(Fx::device($user)))->postJson('/api/devices/missed-recordings', missedBody([
             'contact_name' => 'SECRET-NAME', 'phone_number' => '+923001234567', 'audio' => base64_encode('SECRET-AUDIO'), 'title' => 'SECRET-TITLE',
+            'detail' => 'SECRET-DETAIL',
         ]))->assertCreated();
 
         $stored = json_encode(missedRows()[0]->getAttributes()).json_encode(DB::table('notifications')->pluck('data')->all());
@@ -176,6 +193,13 @@ describe('POST /api/devices/missed-recordings', function () {
         'no client_ref' => [['client_ref' => null]],
         'too long a client_ref' => [['client_ref' => str_repeat('a', 65)]],
         'a number for the client_ref' => [['client_ref' => 12345]],
+        // Contract 1.8.0-c: an opaque id, ^[A-Za-z0-9._:-]{1,64}$ (a UUID fits).
+        'a space in the client_ref' => [['client_ref' => 'c1f0 e2d3']],
+        'a slash in the client_ref' => [['client_ref' => 'calls/2026/11']],
+        'a UUID in braces' => [['client_ref' => '{c1f0e2d3-1111-4a5b-9c8d-0123456789ab}']],
+        'a letter with an accent' => [['client_ref' => 'réf-1']],
+        'a phone number as the client_ref' => [['client_ref' => '+923001234567']],
+        'a line break after the client_ref' => [['client_ref' => "c1f0e2d3\nx"]],
         'no platform' => [['platform' => null]],
         'an unknown platform' => [['platform' => 'symbian']],
         'too long an app version' => [['app_version' => str_repeat('1', 33)]],
@@ -194,8 +218,7 @@ describe('POST /api/devices/missed-recordings', function () {
         'a length with a fraction' => [['call_duration_s' => 1.5]],
         'no reason' => [['reason' => null]],
         'an unknown reason' => [['reason' => 'tired']],
-        'too long a detail' => [['detail' => str_repeat('d', 301)]],
-        'an array for a string' => [['detail' => ['The helper']]],
+        'an array for a string' => [['app_version' => ['1.8.0']]],
     ]);
 
     it('accepts the edges the contract allows', function (array $change) {
@@ -203,10 +226,11 @@ describe('POST /api/devices/missed-recordings', function () {
         $this->api(Fx::token(Fx::device()))->postJson('/api/devices/missed-recordings', missedBody($change))->assertCreated();
     })->with([
         'a 64-character client_ref' => [['client_ref' => str_repeat('a', 64)]],
+        'a UUID' => [['client_ref' => 'C1F0E2D3-1111-4A5B-9C8D-0123456789AB']],
+        'every sign an opaque id may have' => [['client_ref' => 'phone:call.2026-11-16_09:12']],
         'a 32-character app version' => [['app_version' => str_repeat('1', 32)]],
         'a call of no length' => [['call_duration_s' => 0]],
         'a call of a whole day' => [['call_duration_s' => 86400]],
-        'a 300-character detail' => [['detail' => str_repeat('d', 300)]],
         'a start 30 days ago' => [['call_started_at' => '2026-10-17T12:00:00Z']],
         'a start just now' => [['call_started_at' => '2026-11-16T12:00:00Z']],
     ]);
@@ -226,11 +250,13 @@ describe('POST /api/devices/missed-recordings', function () {
     it('takes every source app of the sessions and a browser, kept as sent', function () {
         $device = Fx::device();
         $sent = [...array_map(fn (SourceApp $app): string => $app->value, SourceApp::cases()), 'browser'];
+        $refs = [];
         foreach ($sent as $app) {
-            $this->api(Fx::token($device))->postJson('/api/devices/missed-recordings', missedBody(['source_app' => $app, 'client_ref' => 'ref-'.$app]))->assertCreated();
+            $refs[$app] = (string) Str::uuid();
+            $this->api(Fx::token($device))->postJson('/api/devices/missed-recordings', missedBody(['source_app' => $app, 'client_ref' => $refs[$app]]))->assertCreated();
         }
 
-        $stored = collect(missedRows())->mapWithKeys(fn (MissedRecording $m): array => [substr($m->client_ref, 4) => $m->source_app])->all();
+        $stored = collect(missedRows())->mapWithKeys(fn (MissedRecording $m): array => [array_search($m->client_ref, $refs, true) => $m->source_app])->all();
         expect($stored)->toEqualCanonicalizing(array_combine($sent, $sent))->and(MissedRecording::sourceApps())->toEqualCanonicalizing($sent);
     });
 
@@ -337,7 +363,8 @@ describe('the Activity item', function () {
         $this->actingAs($user, 'web');
         expect($badge())->toBe(1)->and(ActionBadge::needsAction('missed_recording'))->toBeTrue()
             ->and($needs())->toContain('Missed recording')->toContain('Zoom call · 5:12 · The helper was not connected')
-            ->not->toContain('The helper was not connected when the call started.');
+            // On a phone its line may take two lines, so the reason at its end is never cut off.
+            ->toContain('el-row-meta el-row-meta-wraps');
 
         $user->unreadNotifications()->update(['read_at' => now()]);
         $page = (string) $this->get('/app/activity')->assertOk()->getContent();
@@ -346,21 +373,66 @@ describe('the Activity item', function () {
 });
 
 describe('retention', function () {
-    it('deletes a missed call 90 days after it happened, with the daily model:prune, and keeps newer ones', function () {
+    /** The ids of the missed recordings the person's Activity items are about. */
+    function missedItemIds(User $user): array
+    {
+        return array_column(missedItems($user->fresh()), 'missed_recording_id');
+    }
+
+    it('deletes a missed call and its Activity item 90 days after the call, with the daily model:prune, and keeps newer ones', function () {
         $this->travelTo(Carbon::parse('2026-11-16 12:00:00'));
         $device = Fx::device();
-        $row = fn (string $ref, string $at): MissedRecording => unscoped(fn (): MissedRecording => MissedRecording::query()->create([
-            'user_id' => $device->user_id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => $ref, 'platform' => 'android',
+        $row = fn (string $at): MissedRecording => unscoped(fn (): MissedRecording => MissedRecording::query()->create([
+            'user_id' => $device->user_id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => (string) Str::uuid(), 'platform' => 'android',
             'source_app' => 'whatsapp', 'call_started_at' => Carbon::parse($at), 'reason' => 'crash']));
-        $row('old', '2026-08-18 11:59:59');
-        $row('day-ninety', '2026-08-18 12:00:01');
-        $row('recent', '2026-11-15 09:00:00');
+        $old = $row('2026-08-18 11:59:59');
+        $dayNinety = $row('2026-08-18 12:00:01');
+        $recent = $row('2026-11-15 09:00:00');
+        expect(missedItemIds($device->user))->toEqualCanonicalizing([$old->id, $dayNinety->id, $recent->id]);
 
         // The scheduled command names no model: it finds this one by itself.
         Artisan::call('model:prune', ['--pretend' => true]);
         expect(Artisan::output())->toContain(MissedRecording::class)->and(missedRows())->toHaveCount(3);
 
         Artisan::call('model:prune');
-        expect(collect(missedRows())->pluck('client_ref')->all())->toEqualCanonicalizing(['day-ninety', 'recent']);
+        expect(collect(missedRows())->pluck('id')->all())->toEqualCanonicalizing([$dayNinety->id, $recent->id])
+            ->and(missedItemIds($device->user))->toEqualCanonicalizing([$dayNinety->id, $recent->id]);
+    });
+
+    it('takes the Activity item with a deleted row, and only that one', function () {
+        $user = Fx::user();
+        $token = Fx::token(Fx::device($user));
+        $gone = $this->api($token)->postJson('/api/devices/missed-recordings', missedBody())->assertCreated()->json('data.id');
+        $kept = $this->api($token)->postJson('/api/devices/missed-recordings', missedBody())->assertCreated()->json('data.id');
+
+        unscoped(fn () => MissedRecording::query()->findOrFail($gone)->delete());
+
+        expect(missedItemIds($user))->toBe([$kept])->and($user->fresh()->notifications()->where('data', 'like', '%device_paired%')->count())->toBe(1);
+    });
+
+    it('takes the Activity items with a deleted workspace\'s rows, and keeps the person\'s others', function () {
+        $owner = Fx::user();
+        $team = app(Workspaces::class)->createFor($owner, 'Short-lived team');
+        $inTeam = $this->api(Fx::token(Fx::device($owner, ['workspace_id' => $team->id])))->postJson('/api/devices/missed-recordings', missedBody())->assertCreated()->json('data.id');
+        $personal = $this->api(Fx::token(Fx::device($owner)))->postJson('/api/devices/missed-recordings', missedBody())->assertCreated()->json('data.id');
+        app('auth')->forgetGuards();
+        expect(missedItemIds($owner))->toEqualCanonicalizing([$inTeam, $personal]);
+
+        app(WorkspaceEraser::class)->erase($team->fresh(), $owner->fresh());
+
+        expect(Workspace::query()->find($team->id))->toBeNull()
+            ->and(collect(missedRows())->pluck('id')->all())->toBe([$personal])
+            ->and(missedItemIds($owner))->toBe([$personal]);
+    });
+
+    it('takes the Activity items with an erased account, as all its notifications', function () {
+        $user = Fx::user();
+        $this->api(Fx::token(Fx::device($user)))->postJson('/api/devices/missed-recordings', missedBody())->assertCreated();
+        app('auth')->forgetGuards();
+
+        app(AccountEraser::class)->erase($user->fresh());
+
+        expect(missedRows())->toBe([])
+            ->and(DB::table('notifications')->where('notifiable_id', $user->id)->where('data', 'like', '%missed_recording%')->count())->toBe(0);
     });
 });

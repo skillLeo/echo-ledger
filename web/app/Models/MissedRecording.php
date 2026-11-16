@@ -9,16 +9,17 @@ use App\Models\Concerns\BelongsToWorkspace;
 use App\Services\TranscriptExporter;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Concerns\HasUlids;
-use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Prunable;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
  * A call an app saw but did not record (since v1.8, docs/API.md `POST /api/devices/missed-recordings`): its app, when
- * it started, how long it lasted and why nothing was recorded. Never names, phone numbers or audio. Its person reads it
- * in Activity ("Missed recording"); staff read it only as the counts of Admin → Diagnostics → Missed recordings. Kept 90
- * days from the call (call data), then pruned by `model:prune`; it goes earlier with its person or workspace.
+ * it started, how long it lasted and why nothing was recorded. Never names, phone numbers, audio or free text. Its
+ * person reads it in Activity ("Missed recording"); staff read it only as the counts of Admin → Diagnostics → Missed
+ * recordings. Kept 90 days from the call (call data), then pruned by `model:prune`; it goes earlier with its person or
+ * workspace, and its Activity item always goes with it (contract 1.8.0-c, ActivityFeed::listen).
  *
  * @property string $id
  * @property int $user_id
@@ -30,14 +31,14 @@ use Illuminate\Support\Carbon;
  * @property Carbon $call_started_at
  * @property int|null $call_duration_s
  * @property string $reason
- * @property string|null $detail
  * @property Carbon $created_at
  * @property-read Device|null $device
  * @property-read User $user
  */
 class MissedRecording extends Model
 {
-    use BelongsToWorkspace, HasUlids, MassPrunable;
+    // One by one, not in bulk: each deleted row takes its Activity item with it (ActivityFeed::listen).
+    use BelongsToWorkspace, HasUlids, Prunable;
 
     /** Why nothing was recorded, and how Activity says it to the person. */
     public const REASONS = [
@@ -64,7 +65,10 @@ class MissedRecording extends Model
 
     public const UPDATED_AT = null;
 
-    protected $fillable = ['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason', 'detail'];
+    /** The app's own id for the event (contract 1.8.0-c): opaque, a UUID fits. */
+    public const CLIENT_REF_PATTERN = '/^[A-Za-z0-9._:-]{1,64}$/D';
+
+    protected $fillable = ['user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason'];
 
     /**
      * Every `source_app` an app may send: the sessions' wire values (App\Enums\SourceApp), or `browser`.

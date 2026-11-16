@@ -137,8 +137,8 @@ function isoWorld(bool $sameWorkspace = false): array
     $proof = UpgradeRequestProof::query()->create(['upgrade_request_id' => $upgrade->id, 'user_id' => $bob->id, 'kind' => 'image', 'mime' => 'image/webp', 'name' => 'BOB-SECRET-RECEIPT.png',
         'bytes' => 1, 'sha256' => str_repeat('c', 64), 'path' => 'payment-proofs/bob.elr', 'thumb_path' => 'payment-proofs/bob-thumb.elr']);
     // Since v1.8: a call Bob's phone saw but did not record.
-    $missed = MissedRecording::query()->create(['user_id' => $bob->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => 'bob-missed-call',
-        'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subHour(), 'call_duration_s' => 60, 'reason' => 'permission', 'detail' => 'BOBSECRETNOTE']);
+    $missed = MissedRecording::query()->create(['user_id' => $bob->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => '7d1e0c2a-5b3f-4e8d-9a61-0f2b4c6d8e10',
+        'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subHour(), 'call_duration_s' => 60, 'reason' => 'permission']);
     app('auth')->forgetGuards();
 
     return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed');

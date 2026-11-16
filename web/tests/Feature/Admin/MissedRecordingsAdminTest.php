@@ -16,8 +16,8 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
 | Admin → Diagnostics → Missed recordings (since v1.8, P0 0.2): calls the apps saw but did not record, only as counts per
-| device and reason over the last 7 and 30 days, for staff with the device-reports permission. The API that fills it:
-| Api/MissedRecordingsTest.
+| device, reason, system and the app version that reported them (contract 1.8.0-c) over the last 7 and 30 days, for staff
+| with the device-reports permission. The API that fills it: Api/MissedRecordingsTest.
 */
 
 describe('Admin → Diagnostics → Missed recordings', function () {
@@ -93,7 +93,8 @@ describe('Admin → Diagnostics → Missed recordings', function () {
     it('shows the device, its person and the reason, and nothing of the calls themselves', function () {
         missedWorld();
         $secret = Fx::device(Fx::user(['email' => 'lee@example.test']), ['name' => 'Lee phone', 'name_chosen' => true]);
-        missedCall($secret, 'detection', 4, ['detail' => 'SECRET-DETAIL from the app', 'client_ref' => 'SECRET-REF', 'source_app' => 'microsoft_teams', 'call_duration_s' => 4321]);
+        $ref = (string) Str::uuid();
+        missedCall($secret, 'detection', 4, ['client_ref' => $ref, 'source_app' => 'microsoft_teams', 'call_duration_s' => 4321]);
 
         $this->actingAs(Fx::superAdmin(), 'web');
         Livewire::test(MissedRecordings::class)
@@ -101,7 +102,35 @@ describe('Admin → Diagnostics → Missed recordings', function () {
             ->assertSee('Omar work laptop')->assertSee('Windows · 1.8.0')->assertSee('Microphone busy')
             ->assertSee('A removed device')->assertSee('sara@example.test')->assertSee('App stopped')
             ->assertSee('Lee phone')->assertSee('Call not detected')
-            ->assertDontSee('SECRET-DETAIL')->assertDontSee('SECRET-REF')->assertDontSee('Microsoft Teams')->assertDontSee('1:12:01');
+            ->assertDontSee($ref)->assertDontSee('Microsoft Teams')->assertDontSee('1:12:01');
+    });
+
+    it('counts by the system and app version that reported the calls, not the ones the device signed in with', function () {
+        // Signed in long ago with 0.9.7 on Android; the calls were reported by 1.8.0 and 1.8.1 (and one says Windows).
+        $phone = Fx::device(Fx::user(['email' => 'nadia@example.test']), ['name' => 'Nadia phone', 'name_chosen' => true, 'platform' => 'android', 'app_version' => '0.9.7']);
+        missedCall($phone, 'permission', 1, ['app_version' => '1.8.0']);
+        missedCall($phone, 'permission', 2, ['app_version' => '1.8.0']);
+        missedCall($phone, 'permission', 3, ['app_version' => '1.8.1']);
+        missedCall($phone, 'permission', 4, ['app_version' => '1.8.1', 'platform' => 'windows']);
+        missedCall($phone, 'crash', 5, ['app_version' => null]);
+
+        $rows = MissedRecordings::counts()->get()->map(fn (MissedRecording $r): array => [
+            $r->reason, MissedRecordings::reportedBy($r), (int) $r->getAttribute('last_7_days'),
+        ])->all();
+        expect($rows)->toEqualCanonicalizing([
+            ['permission', 'Android · 1.8.0', 2],
+            ['permission', 'Android · 1.8.1', 1],
+            ['permission', 'Windows · 1.8.1', 1],
+            ['crash', 'Android', 1],
+        ]);
+
+        $this->actingAs(Fx::superAdmin(), 'web');
+        Livewire::test(MissedRecordings::class)
+            ->assertSee('Android · 1.8.0')->assertSee('Android · 1.8.1')->assertSee('Windows · 1.8.1')->assertDontSee('0.9.7')
+            // The System filter matches the system the page shows.
+            ->filterTable('platform', 'windows')->assertSee('Windows · 1.8.1')->assertDontSee('Android · 1.8.0')
+            ->resetTableFilters()
+            ->filterTable('platform', 'android')->assertSee('Android · 1.8.0')->assertDontSee('Windows · 1.8.1');
     });
 
     it('filters by reason and by system', function () {

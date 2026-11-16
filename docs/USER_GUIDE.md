@@ -462,7 +462,7 @@ Review"**, in the Library, in **Calls & meetings** and in Activity. **Review** o
 under **Needs action** and the bell counts it until you open it, with the call's app, its length and why, for example
 **"WhatsApp call · 5:12 · The helper was not connected"**. Open EchoLedger on that phone or computer: it shows how to
 fix it. Only the app, the time, the length and the reason are sent, never names, numbers or audio, and the server
-deletes them 90 days after the call.
+deletes them, with their Activity item, 90 days after the call.
 
 The pill (the small bar at the top of the screen) and the notification on the phone have **Pause** and
 **Stop** buttons. Paused time is not recorded. While an outgoing call rings, the pill says **Waiting for an answer**.

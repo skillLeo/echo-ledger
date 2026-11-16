@@ -19,8 +19,8 @@ use Throwable;
 /**
  * POST /api/devices/missed-recordings (since v1.8, P0 0.2): a call the app saw but did not record. The token decides
  * the device, its person and its workspace; ids in the body are never read, and anything else the body carries (a
- * name, a number) is dropped, never stored. The same `client_ref` from the same device is the same row (200), so a
- * retry never makes a second Activity item.
+ * name, a number, an older app's `detail`) is dropped, never stored. The same `client_ref` from the same device is the
+ * same row (200), so a retry never makes a second Activity item.
  */
 final class MissedRecordingController extends Controller
 {
@@ -29,14 +29,13 @@ final class MissedRecordingController extends Controller
         $device = $request->user();
         abort_unless($device instanceof Device, 401);
         $data = $request->validate([
-            'client_ref' => ['required', 'string', 'max:64'],
+            'client_ref' => ['required', 'string', 'max:64', 'regex:'.MissedRecording::CLIENT_REF_PATTERN],
             'platform' => ['required', Rule::enum(DevicePlatform::class)],
             'app_version' => ['nullable', 'string', 'max:32'],
             'source_app' => ['required', 'string', Rule::in(MissedRecording::sourceApps())],
             'call_started_at' => ['required', ...SessionController::instantRules(), self::recentPast()],
             'call_duration_s' => ['nullable', 'integer', 'min:0', 'max:86400'],
             'reason' => ['required', 'string', Rule::in(array_keys(MissedRecording::REASONS))],
-            'detail' => ['nullable', 'string', 'max:300'],
         ]);
 
         $existing = self::sent($device, $data['client_ref']);
@@ -56,7 +55,6 @@ final class MissedRecordingController extends Controller
                 'call_started_at' => Carbon::parse($data['call_started_at'])->utc()->min(now()),
                 'call_duration_s' => isset($data['call_duration_s']) ? (int) $data['call_duration_s'] : null,
                 'reason' => $data['reason'],
-                'detail' => $data['detail'] ?? null,
             ]);
         } catch (UniqueConstraintViolationException $e) {
             // The same event sent twice at once: the other request stored it a moment ago, and posted its item.

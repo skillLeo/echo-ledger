@@ -22,6 +22,7 @@ use App\Models\Screen;
 use App\Models\Transcript;
 use App\Models\UsageLedgerEntry;
 use App\Models\User;
+use App\Models\Workspace;
 use App\Services\Accounts\EmailPreferences;
 use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Entitlements\UnusualUsage;
@@ -86,6 +87,12 @@ final class ActivityFeed
         UsageLedgerEntry::created(fn () => app(CostAlerts::class)->check());
         // Since v1.8 (P0 0.2): an app found a call it did not record. A repeated event is no new row, so no new item.
         MissedRecording::created(fn (MissedRecording $m) => $feed()->missedRecording($m));
+        // Contract 1.8.0-c: the item goes with its row, whether one row goes (pruned 90 days after the call, or deleted)
+        // or a whole workspace's (its rows go by the foreign key, which tells nobody). An erased account's items go with
+        // all its other notifications (AccountEraser).
+        MissedRecording::deleted(fn (MissedRecording $m) => $feed()->forgetMissedRecordings($m->user_id, [$m->id]));
+        Workspace::deleting(fn (Workspace $w) => MissedRecording::query()->withoutGlobalScopes()->where('workspace_id', $w->id)->get(['id', 'user_id'])
+            ->groupBy('user_id')->each(fn ($rows, $userId) => $feed()->forgetMissedRecordings((int) $userId, $rows->pluck('id')->all())));
     }
 
     public function transcriptChanged(Transcript $transcript, bool $created): void
@@ -146,6 +153,23 @@ final class ActivityFeed
                 $notification = self::make('Missed recording', $missed->activityBody(), 'missed_recording', null,
                     extra: ['reason' => $missed->reason, 'missed_recording_id' => $missed->id])->icon('heroicon-o-phone-x-mark');
                 $user->notifyNow($notification->toDatabase());
+            }
+        } catch (Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * Deletes the "Missed recording" items of these rows of one person, as their rows go (contract 1.8.0-c).
+     *
+     * @param  list<string>  $ids
+     */
+    public function forgetMissedRecordings(int $userId, array $ids): void
+    {
+        try {
+            $user = User::query()->find($userId);
+            foreach ($user instanceof User ? array_chunk($ids, 500) : [] as $chunk) {
+                $user->notifications()->whereIn('data->viewData->missed_recording_id', $chunk)->delete();
             }
         } catch (Throwable $e) {
             report($e);

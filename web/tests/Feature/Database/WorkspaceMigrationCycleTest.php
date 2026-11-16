@@ -1081,7 +1081,9 @@ it('adds the missed recordings, one row per event of a device, kept when the dev
     $devices = $db->table('devices')->count();
 
     cycleArtisan('migrate', ['--step' => 1]);
-    expect($db->getSchemaBuilder()->hasColumns('missed_recordings', ['id', 'user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason', 'detail', 'created_at']))->toBeTrue()
+    expect($db->getSchemaBuilder()->hasColumns('missed_recordings', ['id', 'user_id', 'device_id', 'workspace_id', 'client_ref', 'platform', 'app_version', 'source_app', 'call_started_at', 'call_duration_s', 'reason', 'created_at']))->toBeTrue()
+        // Contract 1.8.0-c: no free text is kept.
+        ->and($db->getSchemaBuilder()->hasColumn('missed_recordings', 'detail'))->toBeFalse()
         ->and($db->getSchemaBuilder()->hasColumn('missed_recordings', 'updated_at'))->toBeFalse();
     $row = fn (string $device, string $ref, array $more = []): array => [
         'id' => strtolower((string) Str::ulid()), 'user_id' => $user, 'device_id' => $device, 'workspace_id' => $workspace, 'client_ref' => $ref, 'platform' => 'android',

@@ -24,8 +24,9 @@ use UnitEnum;
 
 /**
  * Missed recordings (since v1.8, P0 0.2, docs/API.md `POST /api/devices/missed-recordings`): calls the apps saw but
- * did not record, counted per device and reason over the last 7 and 30 days. Only the counts and when the last one
- * was: never a call's length, its app or the app's own words, which stay with their person.
+ * did not record, counted per device, reason, system and the app version that reported them (contract 1.8.0-c) over the
+ * last 7 and 30 days. Only the counts and when the last one was: never a call's length or its app, which stay with
+ * their person.
  */
 class MissedRecordings extends Page implements HasTable
 {
@@ -41,6 +42,9 @@ class MissedRecordings extends Page implements HasTable
         'plan' => 'Plan did not allow it',
         'unknown' => 'Not known',
     ];
+
+    /** What a row of the table is made of (contract 1.8.0-c: the reporting system and app version too). */
+    public const GROUP = ['user_id', 'device_id', 'reason', 'platform', 'app_version'];
 
     /** The longer of the two periods: older calls are not counted. */
     public const DAYS = 30;
@@ -66,7 +70,7 @@ class MissedRecordings extends Page implements HasTable
 
     public function getSubheading(): ?string
     {
-        return 'Calls the phone and computer apps saw but did not record, per device and reason. An app counts one when it finds a call with no recording; the call itself stays with its person.';
+        return 'Calls the phone and computer apps saw but did not record, per device, reason and app version. An app counts one when it finds a call with no recording; the call itself stays with its person.';
     }
 
     public function content(Schema $schema): Schema
@@ -87,8 +91,8 @@ class MissedRecordings extends Page implements HasTable
             ->columns([
                 TextColumn::make('device_id')->label('Device')->placeholder('A removed device')
                     ->formatStateUsing(fn (MissedRecording $record): string => $record->device?->readableName() ?? 'A removed device')
-                    ->description(fn (MissedRecording $record): ?string => $record->device === null ? null
-                        : trim($record->device->platform->getLabel().' · '.$record->device->app_version, ' ·')),
+                    // What reported these calls: the device row's own version is only the one it signed in with.
+                    ->description(fn (MissedRecording $record): string => self::reportedBy($record)),
                 TextColumn::make('user.email')->label('Person'),
                 TextColumn::make('reason')->label('Reason')
                     ->formatStateUsing(fn (string $state): string => self::REASONS[$state] ?? $state),
@@ -108,10 +112,18 @@ class MissedRecordings extends Page implements HasTable
             ]);
     }
 
+    /** "Android · 1.8.0": the system and the app version that reported the row's calls (no version: the system only). */
+    public static function reportedBy(MissedRecording $record): string
+    {
+        $system = DevicePlatform::tryFrom($record->platform)?->getLabel() ?? $record->platform;
+
+        return implode(' · ', array_filter([$system, $record->app_version], fn (?string $part): bool => $part !== null && $part !== ''));
+    }
+
     /**
-     * One row per device (per person, for a removed device) and reason: the calls of the last 7 and of the last 30 days
-     * and the newest one's date, the most recent trouble first. `id` is the group's first row, only so the table has a
-     * key; no row is ever opened.
+     * One row per device (per person, for a removed device), reason, system and the app version that reported the calls:
+     * the calls of the last 7 and of the last 30 days and the newest one's date, the most recent trouble first. `id` is
+     * the group's first row, only so the table has a key; no row is ever opened.
      *
      * @return Builder<MissedRecording>
      */
@@ -122,18 +134,20 @@ class MissedRecordings extends Page implements HasTable
 
         return MissedRecording::query()->withoutGlobalScopes()
             ->with(['device', 'user'])
-            ->select(['user_id', 'device_id', 'reason'])
+            ->select(self::GROUP)
             ->selectRaw('MIN(id) AS id')
             ->selectRaw('SUM(CASE WHEN call_started_at >= ? THEN 1 ELSE 0 END) AS last_7_days', [$recent])
             ->selectRaw('COUNT(*) AS last_30_days')
             ->selectRaw('MAX(call_started_at) AS last_at')
             ->where('call_started_at', '>=', $now->copy()->subDays(self::DAYS))
-            ->groupBy(['user_id', 'device_id', 'reason'])
+            ->groupBy(self::GROUP)
             ->orderByRaw('SUM(CASE WHEN call_started_at >= ? THEN 1 ELSE 0 END) DESC', [$recent])
             ->orderByRaw('COUNT(*) DESC')
             ->orderByRaw('MAX(call_started_at) DESC')
             ->orderBy('user_id')
             ->orderBy('device_id')
-            ->orderBy('reason');
+            ->orderBy('reason')
+            ->orderBy('platform')
+            ->orderBy('app_version');
     }
 }

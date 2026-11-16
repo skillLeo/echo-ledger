@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Since v1.8: calls an app saw but did not record (docs/API.md `POST /api/devices/missed-recordings`), one row per
- * call. Only the call's app, when it started, how long it lasted and why nothing was recorded: no names, numbers or
- * audio. A new table only. A row goes with its person and its workspace, and outlives a removed device (its device
+ * call. Only the call's app, when it started, how long it lasted and why nothing was recorded: no names, numbers, audio
+ * or free text. A new table only. A row goes with its person and its workspace, and outlives a removed device (its device
  * becomes empty) so the admin counts keep it; the same event sent again (the device's own `client_ref`) is the same row.
  */
 return new class extends Migration
@@ -29,7 +29,6 @@ return new class extends Migration
             $table->timestamp('call_started_at')->useCurrent();
             $table->unsignedInteger('call_duration_s')->nullable();
             $table->string('reason', 24);
-            $table->string('detail', 300)->nullable();
             $table->timestamp('created_at')->useCurrent();
             // One row per event of a device, however often it is sent.
             $table->unique(['device_id', 'client_ref']);

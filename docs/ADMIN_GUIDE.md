@@ -372,18 +372,20 @@ people's phones and computers saw but did not record. An app counts one when its
 the person also gets **Missed recording** in Activity, under **Needs action** and counted on the bell, with the reason,
 and the app shows them the fix.
 
-- **One row per device and reason**, over the last 30 days: the device (its name, system and app version), its person,
-  the reason, how many in the **last 7 days** and in the **last 30 days**, and when the last one was. The rows with the
-  most in the last 7 days come first. A device that was removed shows as "A removed device"; its counts stay.
+- **One row per device, reason, system and app version**, over the last 30 days: the device's name with, under it, the
+  system and the app version that reported the calls (not the version it signed in with, so a device that was updated
+  gets a row per version and you see whether the update helped), its person, the reason, how many in the **last 7
+  days** and in the **last 30 days**, and when the last one was. The rows with the most in the last 7 days come first. A
+  device that was removed shows as "A removed device"; its counts stay.
 - **The reasons:** *Helper not connected* (the phone's capture helper was not running when the call started),
   *Permission off* (a permission recording needs was turned off), *Call not detected* (the app did not notice the call
   in time), *Microphone busy* (another app had the microphone), *App stopped* (the app stopped during the call), *Plan
   did not allow it* (the person's plan or one of its limits), *Not known*.
-- **Filters:** the reason and the system.
-- **What it never shows:** names, phone numbers or recordings, nor which app the call was in, how long it lasted or what
-  the app said about it. The page only counts.
-- **How long it is kept:** each missed call is deleted 90 days after the call (the daily `model:prune`), and at once
-  with its person or workspace.
+- **Filters:** the reason and the system (the one shown under the device's name).
+- **What it never shows:** names, phone numbers or recordings, nor which app the call was in or how long it lasted. The
+  apps send no free text, and the page only counts.
+- **How long it is kept:** each missed call is deleted 90 days after the call (the daily `model:prune`), with its
+  Activity item, and at once with its person or workspace.
 - **What to do with it:** many of one reason on one device: help that person with the fix their app shows (turn the
   permission back on, start the capture helper again). One reason growing on many devices after an app update usually
   means a fault in that version: give the developers the system and the app version.
