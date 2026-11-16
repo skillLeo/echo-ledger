@@ -4,6 +4,7 @@ import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage, withEntry } fro
 import { callsOf, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
 import type { Settings, SettingsPatch } from "../../lib/ipc";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -72,7 +73,7 @@ describe("dictation settings (B14)", () => {
 
   it("lists recent dictations, copies one and clears them", async () => {
     respond("dictation_history", [{ at: "2026-10-25T10:00:00Z", text: "Send the invoice." }, { at: "2026-10-25T09:00:00Z", text: "Call Farah." }]);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     renderCard({}, "history");
     const list = await screen.findByRole("list", { name: "Recent dictations" });
     expect(within(list).getAllByRole("listitem")).toHaveLength(2);

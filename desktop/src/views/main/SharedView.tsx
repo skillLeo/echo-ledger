@@ -3,13 +3,14 @@
 // revoked here; a new request link opens the Request files sheet.
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
-import { audienceText, linkState, limitsText, receivedText, requestState, viewsText } from "../../lib/sharing";
+import { audienceText, linkState, limitsText, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
 import { LinkIcon, PlusIcon, RequestFilesIcon, UsersIcon } from "../../components/Icons";
 import { PageHeader, PageTabs } from "../../components/Page";
 import { RequestLinksSheet } from "./RequestLinks";
 import { SHARED_TABS, type SharedTab } from "./Sidebar";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 /** What each tab lists, read when the page opens; null while loading, and on a server without it. */
 interface SharedData {
@@ -53,6 +54,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : "The Inbox");
 
   const revokeLink = async (link: ShareLink) => {
+    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
     try {
       await api.revokeShare(link.id);
       notify("Link revoked: it stops working at once", false, NO_TARGET);
@@ -62,6 +64,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
     }
   };
   const revokeRequest = async (link: RequestLink) => {
+    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
     try {
       await api.revokeRequestLink(link.id);
       notify("Request link revoked", false, NO_TARGET);

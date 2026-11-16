@@ -10,3 +10,7 @@ configure({ asyncUtilTimeout: 3000 });
 import { beforeEach } from "vitest";
 import { resetClosedBanners } from "./src/components/StateBanner";
 beforeEach(() => resetClosedBanners());
+
+// The app's confirm dialog answers nothing unless a test says so (src/test/confirm.ts).
+import { answerConfirmForTests } from "./src/lib/confirm";
+beforeEach(() => answerConfirmForTests(null));

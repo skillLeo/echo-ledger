@@ -5,12 +5,13 @@
 import { useCallback, useEffect, useId, useState } from "react";
 import { api, errorMessage, type SentItem, type ShareAudience, type ShareLink, type TranscriptView } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
-import { audienceText, downloadText, EXPIRY_CHOICES, expiryTime, linkState, MAX_PEOPLE, parseEmails, viewsText, type ExpiryChoice } from "../../lib/sharing";
+import { audienceText, downloadText, EXPIRY_CHOICES, expiryTime, linkState, MAX_PEOPLE, parseEmails, viewsText, type ExpiryChoice, REVOKE_LINK_QUESTION } from "../../lib/sharing";
 import { CopyIcon, SendIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { SharePanel } from "./TranscriptTools";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 export type ShareTarget =
   | { kind: "session"; id: string; title: string | null; hasAudio: boolean }
@@ -144,6 +145,7 @@ function LinkPart({ target, links, view, notify, onMade }: {
     }
   };
   const revoke = async (link: ShareLink) => {
+    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
     try {
       await api.revokeShare(link.id);
       await onMade();

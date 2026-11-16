@@ -13,6 +13,7 @@ import { count, fileSize, formatTime, rowDate, rowDateWithYear, rupees, sentence
 import { fillWidth } from "../../lib/motion";
 import { CheckIcon } from "../../components/ControlIcons";
 import { ActionRow, ConfirmDialog, InfoRow, LinkRow, Section, Tag, rowAttrs } from "./SettingsControls";
+import { confirmAction } from "../../lib/confirm";
 
 export { UpgradeSheet } from "./UpgradeFlow";
 
@@ -522,7 +523,7 @@ export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
     }
   };
   const remove = async () => {
-    if (!window.confirm("Remove your Groq key? New recordings won't be transcribed until you add a key or upgrade.")) return;
+    if (!(await confirmAction({ title: "Remove your Groq key?", body: "New recordings won't be transcribed until you add a key or upgrade.", confirm: "Remove", tone: "danger" }))) return;
     setBusy(true);
     setProblem(null);
     try {

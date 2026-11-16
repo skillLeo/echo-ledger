@@ -4,6 +4,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeSettings } from "../../test/fixtures";
+import { answerConfirm, confirmAsked } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -44,15 +45,15 @@ describe("Calls & meetings", () => {
     expect(onConsent).toHaveBeenCalled();
   });
 
-  it("sends the seconds to skip as a number and resets only this page", () => {
+  it("sends the seconds to skip as a number and resets only this page", async () => {
     const patch = vi.fn(async () => true);
     render(<CallsPage settings={makeSettings()} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Skip calls shorter than"), { target: { value: "30" } });
     expect(patch).toHaveBeenLastCalledWith({ skipCallsShorterThanS: 30 });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
-    expect(window.confirm).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
-    expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "keep", skipCallsShorterThanS: 10 }));
+    expect(confirmAsked).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "keep", skipCallsShorterThanS: 10 })));
   });
 });
 

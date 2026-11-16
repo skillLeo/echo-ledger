@@ -147,6 +147,30 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
+  // Batch 1 (D-045 … D-122, D-072): the app's own confirm dialog, at full size and at the smallest window.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`confirm-delete-recording${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".detail-title");
+      await page.getByRole("button", { name: "Delete", exact: true }).first().click();
+      await page.getByRole("alertdialog", { name: "Delete this recording?" }).waitFor();
+    }, viewport],
+    [`confirm-revoke-link${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Shared", exact: true }).click();
+      await page.getByRole("tab", { name: /My links/ }).click();
+      await page.getByRole("button", { name: "Revoke", exact: true }).first().click();
+      await page.getByRole("alertdialog", { name: "Revoke this link?" }).waitFor();
+    }, viewport],
+  ]),
+  // D-105: the chip's Discard is a labelled trash, and Discard says Discarded with Undo for 6 s.
+  ["controls-discarded", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }],
+  ["controls-discarded-narrow", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }, { width: 860, height: 560 }],
   ["controls-bluetooth", "controls-bluetooth", async (page) => {
     await page.waitForSelector("[data-testid=bluetooth-notice]");
     await page.waitForSelector(".after-pill.chip");

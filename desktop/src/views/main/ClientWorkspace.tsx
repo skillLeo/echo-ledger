@@ -25,6 +25,7 @@ import { BadgeMark, LockedChip, PlanBadge, useLocked } from "./Upgrade";
 import { featureWords, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { ProjectScreens } from "./ScreenMoments";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
 const TABS: readonly [Tab, string][] = [["recordings", "Recordings"], ["files", "Files"], ["notes", "Notes"], ["screens", "Screens"], ["ai_notes", "AI notes"]];
@@ -406,7 +407,7 @@ function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { w
     }
   };
   const makeAgain = async () => {
-    if (brief?.edited && !window.confirm("Write the brief again from the project's files and call notes? Your edits are replaced.")) return;
+    if (brief?.edited && !(await confirmAction({ title: "Write the brief again?", body: "It's written from the project's files and call notes. Your edits are replaced.", confirm: "Write again" }))) return;
     setBusy(true);
     try {
       const { data } = await api.refreshClientBrief(clientId);
@@ -724,7 +725,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     }
   };
   const remove = async (file: ClientFile) => {
-    if (!window.confirm(`Remove ${file.name} from this project?`)) return;
+    if (!(await confirmAction({ title: `Remove ${file.name} from this project?`, confirm: "Remove", tone: "danger" }))) return;
     try {
       await api.deleteClientFile(clientId, file.id);
       onChange({ ...ws, files: ws.files.filter((f) => f.id !== file.id) });

@@ -6,6 +6,7 @@ import { DevicesPage, LockPage, SignInActivityPage, eventLine } from "./Security
 import type { LockStatus } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
+import { answerConfirm, confirmAsked } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -160,13 +161,13 @@ describe("privacy & security settings", () => {
 
   it("lists devices, signs another one out after asking, and shows recent activity", async () => {
     respond("device_revoke", undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     render(<DevicesPage run={run} />);
     const list = await screen.findByRole("list", { name: "Signed-in devices" });
     expect(within(list).getByText("This computer")).toBeInTheDocument();
     expect(within(list).getAllByRole("button", { name: /^Sign out/ })).toHaveLength(1);
     fireEvent.click(within(list).getByRole("button", { name: "Sign out Old phone" }));
-    expect(window.confirm).toHaveBeenCalledWith("Sign out Old phone? It will need to sign in again.");
+    expect(confirmAsked).toHaveBeenCalledWith("Sign out Old phone? It will need to sign in again.");
     await waitFor(() => expect(callsOf("device_revoke")).toEqual([{ id: "d2" }]));
     cleanup();
     render(<SignInActivityPage />);

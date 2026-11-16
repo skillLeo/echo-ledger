@@ -7,6 +7,7 @@ import type { PendingFocus } from "./LibraryQueue";
 import type { PendingItem, UploadItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makePendingItem, makeUploadItem, anyTarget } from "../../test/fixtures";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -129,7 +130,7 @@ describe("Waiting recordings", () => {
   });
 
   it("asks before discarding and discards only when confirmed", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { notify } = await renderLibrary([makePendingItem("p1")]);
     fireEvent.click(within(row("p1")).getByRole("button", { name: "Discard" }));
     expect(confirm).toHaveBeenCalledWith(DISCARD);
@@ -239,7 +240,7 @@ describe("Waiting recordings: slim line", () => {
   });
 
   it("asks once before Discard all and discards every recording", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirm = answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary(items());
     fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
@@ -252,7 +253,7 @@ describe("Waiting recordings: slim line", () => {
   });
 
   it("discards nothing when Discard all is cancelled", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const confirm = answerConfirm().mockReturnValue(false);
     const { notify } = await renderLibrary(items());
     fireEvent.click(screen.getByRole("button", { name: "Discard all" }));
     expect(confirm).toHaveBeenCalledTimes(1);
@@ -527,7 +528,7 @@ describe("Uploads that need you", () => {
   });
 
   it("asks before discarding a failed upload", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     const { notify } = await renderLibrary([], [failed("u1")]);
     fireEvent.click(within(uploadRow("u1")).getByRole("button", { name: "Discard" }));
     expect(confirm).toHaveBeenCalledWith(DISCARD);
@@ -556,7 +557,7 @@ describe("Uploads that need you", () => {
   });
 
   it("discards a failed import without asking (the file is still on the computer)", async () => {
-    const confirm = vi.spyOn(window, "confirm");
+    const confirm = answerConfirm();
     await renderLibrary([], [failed("u1", { imported: true, sourceApp: "voice_note", title: "PTT-20261030-WA0003" })]);
     fireEvent.click(within(uploadRow("u1")).getByRole("button", { name: "Discard" }));
     await flushAsync();
@@ -583,7 +584,7 @@ describe("Waiting for another account (v1.5)", () => {
   });
 
   it("names one recording in the singular and discards it after asking", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirm = answerConfirm().mockReturnValue(true);
     await renderLibrary([], [held("h1", { title: "Board call" })]);
     expect(screen.getByTestId("held-uploads")).toHaveTextContent("1 recording made while signed in as hassam@example.test waits for that account.");
     expect(screen.queryByRole("button", { name: /Discard all/ })).not.toBeInTheDocument();
@@ -594,7 +595,7 @@ describe("Waiting for another account (v1.5)", () => {
   });
 
   it("discards every recording of one account with one question, and keeps the other account's", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const confirm = answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary([], [held("h1"), held("h2"), held("s1", { heldFor: "sara@example.test" })]);
     expect(screen.getAllByTestId("held-uploads")).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Discard all 2" }));
@@ -644,7 +645,7 @@ describe("Importing", () => {
   });
 
   it("cancels one file without asking and leaves the others", async () => {
-    const confirm = vi.spyOn(window, "confirm");
+    const confirm = answerConfirm();
     const { notify } = await renderLibrary([], [imported("i1", { state: "uploading", progress: 20 }), imported("i2")]);
     fireEvent.click(within(uploadRow("i1")).getByRole("button", { name: "Cancel" }));
     await flushAsync();

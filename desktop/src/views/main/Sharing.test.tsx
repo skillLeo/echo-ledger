@@ -11,6 +11,9 @@ import { LibraryView } from "./LibraryView";
 import type { ClientFolder, ShareLink } from "../../lib/ipc";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript, anyTarget } from "../../test/fixtures";
+import { ConfirmHost } from "./ConfirmHost";
+import { SharedView } from "./SharedView";
+import { answerConfirm, confirmAsked } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -46,6 +49,7 @@ async function renderShare(target: Parameters<typeof ShareDialog>[0]["target"] =
 describe("the share dialog", () => {
   it("lists the links with who may open them, their views and Revoke", async () => {
     respond("share_revoke", undefined);
+    answerConfirm().mockReturnValue(true);
     await renderShare();
     expect(screen.getByRole("dialog", { name: "Share Kick-off" })).toBeInTheDocument();
     expect(callsOf("shares_of")).toEqual([{ sessionId: "s1", clientId: null }]);
@@ -58,6 +62,7 @@ describe("the share dialog", () => {
     expect(within(rows[1]).queryByRole("button", { name: "Revoke" })).not.toBeInTheDocument();
     fireEvent.click(within(rows[0]).getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(callsOf("share_revoke")).toEqual([{ id: "sh1" }]));
+    expect(confirmAsked).toHaveBeenCalledWith("Revoke this link? It stops working for everyone who has it.");
     await waitFor(() => expect(callsOf("shares_of")).toHaveLength(2));
   });
 
@@ -234,6 +239,7 @@ describe("request files", () => {
   it("revokes a link", async () => {
     respond("request_links", { data: [REQUEST] });
     respond("request_link_revoke", undefined);
+    answerConfirm().mockReturnValue(true);
     const notify = vi.fn();
     render(<RequestLinksSheet projects={PROJECTS} notify={notify} onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
@@ -295,4 +301,55 @@ describe("sharing from the pages", () => {
     expect(await screen.findByRole("dialog", { name: "Share Kick-off" }, { timeout: 5000 })).toBeInTheDocument();
     expect(callsOf("shares_of")).toEqual([{ sessionId: "s1", clientId: null }]);
   }, 15_000); // The whole main window renders: under a full parallel run it can pass 5 s.
+});
+
+describe("Revoke asks first (D-072): a link stops working for everyone who has it", () => {
+  const REQUEST = { id: "rq1", title: "Send me your voice notes", client_id: "c3", expires_at: null, max_files: 20, max_mb: 100, received: 4, revoked_at: null };
+
+  function renderShared(tab: "links" | "requests") {
+    respond("shared_with_me", { data: [] });
+    respond("shares_of", { data: [LINK] });
+    respond("request_links", { data: [REQUEST] });
+    respond("library_list", []);
+    respond("share_revoke", undefined);
+    respond("request_link_revoke", undefined);
+    render(<><ConfirmHost /><SharedView tab={tab} onTab={vi.fn()} notify={vi.fn()} projects={PROJECTS} onOpenShared={vi.fn()} onOpenRecording={vi.fn()} onOpenProject={vi.fn()} /></>);
+  }
+
+  it("on the Shared page: Cancel keeps the link working, Revoke revokes it", async () => {
+    renderShared("links");
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
+    const question = screen.getByRole("alertdialog", { name: "Revoke this link?" });
+    expect(question).toHaveAccessibleDescription("It stops working for everyone who has it.");
+    expect(within(question).getByRole("button", { name: "Revoke" })).toHaveClass("danger");
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    await flushAsync();
+    expect(callsOf("share_revoke")).toEqual([]);
+    fireEvent.click(screen.getByRole("button", { name: "Revoke" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Revoke this link?" })).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(callsOf("share_revoke")).toEqual([{ id: "sh1" }]));
+  });
+
+  it("a request link on the Shared page and in the Request files sheet", async () => {
+    renderShared("requests");
+    fireEvent.click(await screen.findByRole("button", { name: "Revoke" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Revoke this request link?" })).getByRole("button", { name: "Cancel" }));
+    await flushAsync();
+    expect(callsOf("request_link_revoke")).toEqual([]);
+    const asked = answerConfirm().mockReturnValue(false);
+    render(<RequestLinksSheet projects={PROJECTS} notify={vi.fn()} onClose={vi.fn()} />);
+    fireEvent.click(within(await screen.findByRole("list", { name: "Request links" })).getByRole("button", { name: "Revoke" }));
+    await flushAsync();
+    expect(asked).toHaveBeenCalledWith("Revoke this request link? It stops taking files from everyone who has it.");
+    expect(callsOf("request_link_revoke")).toEqual([]);
+  });
+
+  it("in a recording's Share dialog: no answer, no revoke", async () => {
+    const asked = answerConfirm().mockReturnValue(false);
+    await renderShare();
+    fireEvent.click(within(within(screen.getByRole("list", { name: "Share links" })).getAllByRole("listitem")[0]).getByRole("button", { name: "Revoke" }));
+    await flushAsync();
+    expect(asked).toHaveBeenCalledTimes(1);
+    expect(callsOf("share_revoke")).toEqual([]);
+  });
 });

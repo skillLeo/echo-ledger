@@ -14,6 +14,11 @@ use crate::pending::{PendingDecision, PendingItem};
 
 /// How long "Saved · … · Undo" stays on screen.
 pub const SAVED_SECONDS: u64 = 6;
+/// How long "Discarded · … · Undo" stays on screen after the chip's Discard.
+pub const DISCARDED_SECONDS: u64 = 6;
+/// A discarded recording's files stay this much longer than its toast, so an Undo pressed at the last moment still
+/// finds them.
+pub const DISCARD_SLACK: Duration = Duration::from_secs(2);
 /// How long a recording that finished uploading can still be undone from its toast (the toast and some slack).
 pub const UNDO_UPLOADED_FOR: Duration = Duration::from_secs(60);
 
@@ -34,7 +39,7 @@ pub struct SavedToast {
 }
 
 impl SavedToast {
-    /// The toast of a recording kept at `now`.
+    /// The toast of a recording kept at `now` (or, for "Discarded", discarded then: `until` is the same 6 s later).
     pub fn of(decision: &PendingDecision, now: chrono::DateTime<chrono::Utc>) -> Self {
         Self {
             id: decision.id.clone(),
@@ -53,13 +58,15 @@ impl SavedToast {
 #[serde(rename_all = "camelCase")]
 pub struct AfterCallState {
     pub saved: Option<SavedToast>,
+    /// "Discarded · <title> · Undo" after the chip's Discard, while its files can still come back.
+    pub discarded: Option<SavedToast>,
     /// The newest recording whose chip counts down ("Ask me"); its `deadlineAt` is when it keeps itself.
     pub ask: Option<PendingItem>,
 }
 
 impl AfterCallState {
     pub fn is_empty(&self) -> bool {
-        self.saved.is_none() && self.ask.is_none()
+        self.saved.is_none() && self.discarded.is_none() && self.ask.is_none()
     }
 }
 
@@ -67,6 +74,7 @@ impl AfterCallState {
 #[derive(Debug, Default)]
 pub struct Surfaces {
     saved: Option<(SavedToast, Instant)>,
+    discarded: Option<(SavedToast, Instant)>,
     chip: Option<String>,
     /// Recently kept recordings that finished uploading: their server session, for Undo.
     uploaded: HashMap<String, (String, Instant)>,
@@ -89,6 +97,25 @@ impl Surfaces {
     pub fn clear_saved(&mut self, id: &str) -> bool {
         if self.saved.as_ref().is_some_and(|(t, _)| t.id == id) {
             self.saved = None;
+            return true;
+        }
+        false
+    }
+
+    /// Shows "Discarded · … · Undo" until `now` + 6 s (a newer one replaces an older one).
+    pub fn show_discarded(&mut self, toast: SavedToast, now: Instant) {
+        self.discarded = Some((toast, now + Duration::from_secs(DISCARDED_SECONDS)));
+    }
+
+    /// The Discarded toast while it is on screen.
+    pub fn discarded(&self, now: Instant) -> Option<&SavedToast> {
+        self.discarded.as_ref().filter(|(_, until)| *until > now).map(|(toast, _)| toast)
+    }
+
+    /// Takes the Discarded toast of `id` away (its Undo was pressed); false when another one (or none) is shown.
+    pub fn clear_discarded(&mut self, id: &str) -> bool {
+        if self.discarded.as_ref().is_some_and(|(t, _)| t.id == id) {
+            self.discarded = None;
             return true;
         }
         false
@@ -150,6 +177,34 @@ mod tests {
             duration_ms: 252_000,
             until: "2026-11-04T10:00:06+00:00".into(),
         }
+    }
+
+    #[test]
+    fn the_discarded_toast_stays_six_seconds_and_its_undo_takes_it_away() {
+        let mut s = Surfaces::default();
+        let t0 = Instant::now();
+        s.show_discarded(toast("a"), t0);
+        assert_eq!(s.discarded(t0 + Duration::from_secs(5)).map(|t| t.id.as_str()), Some("a"));
+        assert!(s.discarded(t0 + Duration::from_secs(DISCARDED_SECONDS)).is_none(), "gone after 6 s");
+        assert!(!s.clear_discarded("b"), "another recording's Undo leaves it");
+        assert!(s.clear_discarded("a"));
+        assert!(s.discarded(t0).is_none());
+        assert!(DISCARD_SLACK >= Duration::from_secs(1), "the files outlast the toast");
+    }
+
+    #[test]
+    fn the_chips_discard_is_the_one_with_undo_and_a_restart_finishes_only_what_is_due() {
+        let code = |file: &str| std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src").join(file)).unwrap();
+        let commands = code("commands.rs");
+        let chip = &commands[commands.find("pub fn after_call_discard(").unwrap()..];
+        assert!(chip[..chip.find("\n}\n").unwrap()].contains("crate::actions::discard_from_chip(&app, &id)"), "never the immediate discard");
+        let actions = code("actions.rs");
+        let from_chip = &actions[actions.find("pub fn discard_from_chip(").unwrap()..];
+        let from_chip = &from_chip[..from_chip.find("\n}\n").unwrap()];
+        assert!(from_chip.contains("discard_later(id, at)") && from_chip.contains("show_discarded(") && from_chip.contains("schedule_discard(app, at)"));
+        assert!(!from_chip.contains(".discard(id)") && !from_chip.contains("delete_recording_folder"), "nothing is deleted by the click");
+        let restore = &actions[actions.find("pub fn restore_pending(").unwrap()..];
+        assert!(restore[..restore.find("\n}\n").unwrap()].contains("discard_due(app);"), "a restart finishes what is due and waits for the rest");
     }
 
     #[test]

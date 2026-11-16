@@ -5,6 +5,7 @@ import { StoragePage as StorageCard } from "./SecuritySettings";
 import { fileSize } from "../../lib/format";
 import { callsOf, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem } from "../../test/fixtures";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -50,7 +51,7 @@ describe("keep, the undo bin and storage (B17)", () => {
     respondWith("bin_list", () => ({ data: bin }));
     respondWith("session_restore", ({ id }) => { bin = bin.filter((b) => b.id !== id); return { data: {} }; });
     respondWith("bin_erase", ({ id }) => { bin = bin.filter((b) => b.id !== id); return undefined; });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const notify = vi.fn();
     render(<BinPanel notify={notify} onClose={vi.fn()} />);
     const region = screen.getByRole("region", { name: "Recently deleted" });

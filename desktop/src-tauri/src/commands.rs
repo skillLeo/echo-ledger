@@ -2690,6 +2690,18 @@ pub async fn pending_discard(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::discard_decision(&app, &id)
 }
 
+/// Discard on the after-call chip: one click, so the files stay until its Undo time is over.
+#[tauri::command]
+pub fn after_call_discard(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::discard_from_chip(&app, &id)
+}
+
+/// Undo on "Discarded": the recording is back on its chip.
+#[tauri::command]
+pub fn after_call_discard_undo(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::undo_chip_discard(&app, &id)
+}
+
 #[tauri::command]
 pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<PendingItem> {
     crate::actions::pending_rename(&app, &id, &title)

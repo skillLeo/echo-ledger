@@ -5,6 +5,8 @@ import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makeMicUser, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
+import { answerConfirm } from "../../test/confirm";
+import { ConfirmHost } from "./ConfirmHost";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -413,9 +415,29 @@ describe("RecordView pause, resume and cancel", () => {
     expect(callsOf("pause_recording")).toHaveLength(0);
   });
 
+  it("discards only the recording it asked about: one that ended while the question was open is left alone", async () => {
+    respond("mic_users", []);
+    respond("cancel_recording", makeStatus());
+    const run = makeRun();
+    let view!: ReturnType<typeof render>;
+    await act(async () => {
+      view = render(<><ConfirmHost /><RecordView status={makeStatus({ recording: makeRecording({ clientRef: "ref-1" }) })} run={run} /></>);
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
+    // Meanwhile that call ended and another one started.
+    view.rerender(<><ConfirmHost /><RecordView status={makeStatus({ recording: makeRecording({ clientRef: "ref-2" }) })} run={run} /></>);
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Discard this recording?" })).getByRole("button", { name: "Discard" }));
+    await act(async () => undefined);
+    expect(callsOf("cancel_recording")).toHaveLength(0);
+    // The same recording still running: discarded once confirmed.
+    fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Discard this recording?" })).getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(callsOf("cancel_recording")).toHaveLength(1));
+  });
+
   it("asks before cancelling and discards only when confirmed", async () => {
     respond("cancel_recording", makeStatus());
-    const confirm = vi.spyOn(window, "confirm").mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const confirm = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
     await setup({ recording: makeRecording() });
     fireEvent.click(screen.getByRole("button", { name: "Cancel recording" }));
     expect(confirm).toHaveBeenCalledWith("Discard this recording? It can't be undone.");

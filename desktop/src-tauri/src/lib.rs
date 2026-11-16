@@ -683,6 +683,8 @@ pub fn run() {
             commands::pending_open,
             commands::after_call_state,
             commands::saved_undo,
+            commands::after_call_discard,
+            commands::after_call_discard_undo,
             commands::skipped_list,
             commands::recovered_sessions,
             commands::skipped_restore,
