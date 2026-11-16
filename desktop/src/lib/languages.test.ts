@@ -123,7 +123,8 @@ describe("the recording page's words for a transcript's state (D-052)", () => {
     expect(transcriptStatusLine(null)).toBe("Not transcribed yet.");
     expect(transcriptStatusLine("not_started")).toBe("Not transcribed yet.");
     expect(transcriptStatusLine("awaiting_device")).toBe("Waiting for the recording to finish uploading from the device that made it.");
-    expect(transcriptStatusLine("completed")).toBe("No words were found in this recording.");
+    // A finished recording is never said to be empty here: its transcript is loading, or says it is empty itself.
+    expect(transcriptStatusLine("completed")).not.toMatch(/no words|empty/i);
     expect(transcriptStatusLine("failed")).toBe("Transcription failed.");
     for (const odd of ["some_new_state", "queued_for_retry"]) {
       expect(transcriptStatusLine(odd)).toBe("The transcript isn't ready yet.");

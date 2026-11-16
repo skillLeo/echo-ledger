@@ -475,6 +475,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [rechecks, setRechecks] = useState<{ id: string | null; n: number }>({ id: null, n: 0 });
   const recheck = rechecks.id === transcribingFinalId ? rechecks.n : 0;
   const shownRead = useRef<string | null>(null);
+  // The transcript this page reads (the live captions while the final one is made): while it is on its way the page
+  // says so, never what an empty answer would mean (D-052).
+  const readingTranscript = !transcript && !transcriptError && !!((isTranscribing(finalStatus) && liveId) || finalId || liveId);
   useEffect(() => {
     const token = ++selection.current;
     const latest = () => token === selection.current;
@@ -1569,6 +1572,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       Couldn't load the transcript. Check the connection and try again.{" "}
                       <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
                     </div>
+                  ) : readingTranscript ? (
+                    <div className="empty" role="status" aria-busy="true" data-testid="transcript-loading"><span className="spinner" aria-hidden="true" /> Loading the transcript…</div>
                   ) : (
                     <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : transcriptStatusLine(finalStatus)}</div>
                   )

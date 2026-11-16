@@ -558,6 +558,19 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
   });
 
+  it("says a finished recording's transcript is loading while it is read, never that it is empty (D-052)", async () => {
+    await renderLibrary();
+    let answer: (value: unknown) => void = () => undefined;
+    respondWith("transcript_detail", () => new Promise((resolve) => { answer = resolve; }));
+    fireEvent.click(itemButton("Zoom with Acme"));
+    await flushAsync();
+    expect(within(detail()).getByTestId("transcript-loading")).toHaveTextContent("Loading the transcript…");
+    expect(detail()).not.toHaveTextContent(/No words were found|transcript is empty|not transcribed/i);
+    await act(async () => answer(TRANSCRIPTS["tr-a"]));
+    expect(await within(detail()).findByText("Hello, this is Sam.")).toBeInTheDocument();
+    expect(within(detail()).queryByTestId("transcript-loading")).not.toBeInTheDocument();
+  });
+
   // pending / submitted / processing read "Transcribing…" everywhere (phase 1 contract, section 1 item 11).
   it.each([
     [null, "Not transcribed yet."],

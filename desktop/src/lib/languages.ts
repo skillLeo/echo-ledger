@@ -106,8 +106,10 @@ export function engineLine(transcript: { final_language?: string | null; final_p
   return code ? languageLabel(code) : null;
 }
 
-/** What the recording page says when there is no transcript text (pure, D-052): plain words for every state, never the
- * server's status id. The ones still being transcribed say so elsewhere (`transcribingLine`). */
+/** What the recording page says when it has no transcript to read (pure, D-052): plain words for every state, never
+ * the server's status id. The ones still being transcribed say so elsewhere (`transcribingLine`); a transcript being
+ * read says "Loading the transcript…", and one that came back empty has its own line, so a finished recording never
+ * reads as empty here. */
 export function transcriptStatusLine(status: string | null | undefined): string {
   switch (status) {
     case null:
@@ -117,8 +119,6 @@ export function transcriptStatusLine(status: string | null | undefined): string 
       return "Not transcribed yet.";
     case "awaiting_device":
       return "Waiting for the recording to finish uploading from the device that made it.";
-    case "completed":
-      return "No words were found in this recording.";
     case "failed":
       return "Transcription failed.";
     default:
