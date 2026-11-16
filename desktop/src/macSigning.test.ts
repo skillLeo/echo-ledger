@@ -2,13 +2,14 @@
 // shasum, and the "Desktop (macOS)" workflow's signing steps read as text. The scripts run on a Mac in CI and in the
 // release shell; here only their decisions are checked.
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 const check = resolve(__dirname, "../scripts/check-mac-signature.sh");
 const release = resolve(__dirname, "../scripts/release-mac.sh");
+const archiveCheck = resolve(__dirname, "../scripts/check-mac-archive.sh");
 const PINNED = "e4e522f7ca98ac2aca82590ccb7bdf84fe84b7301e6462dba8dae44643393956";
 const SHA1 = "0123456789abcdef0123456789abcdef01234567";
 let dirs: string[] = [];
@@ -125,15 +126,92 @@ describe.runIf(process.platform !== "win32")("release-mac.sh", () => {
     expect(empty.stderr).toContain("no *.dmg");
   });
 
-  it("checks both apps with the pinned certificate before it signs, binding the version", () => {
+  it("checks both apps with the pinned certificate before it signs a fresh archive of the checked app, binding the version", () => {
     const script = readFileSync(release, "utf8");
+    const unpacked = script.indexOf('check-mac-archive.sh" "$tarball" "$work/package"');
     const checked = script.indexOf('check-mac-signature.sh" "$app" --pinned');
-    const signed = script.indexOf("tauri signer sign --app-version \"$version\"");
-    expect(checked).toBeGreaterThan(-1);
-    expect(signed).toBeGreaterThan(checked);
+    const packed = script.indexOf('-czf "$fresh" -n -T "$work/names"');
+    const rechecked = script.indexOf("the fresh archive holds another build than the checked one");
+    const signed = script.indexOf('tauri signer sign --app-version "$version" "$fresh"');
+    expect(unpacked).toBeGreaterThan(-1);
+    expect(checked).toBeGreaterThan(unpacked);
+    expect(packed).toBeGreaterThan(checked);
+    expect(rechecked).toBeGreaterThan(packed);
+    expect(signed).toBeGreaterThan(rechecked);
+    // The download is unpacked only through the archive check, and never signed.
+    expect(script).not.toMatch(/tar -xzf/);
+    expect(script).not.toMatch(/signer sign[^\n]*"\$tarball"/);
+    expect(script).toContain("--uid 0 --gid 0 --uname root --gname wheel");
+    expect(script).toContain("COPYFILE_DISABLE=1 tar --no-mac-metadata");
     expect(script).toContain('for app in "$packaged" "$installed"');
     expect(script).toContain("hold different builds");
     expect(script).toContain("-readonly");
+  });
+});
+
+describe.runIf(process.platform !== "win32")("check-mac-archive.sh", () => {
+  /** An archive made from a stand-in EchoLedger.app; `extra` changes the folder or the tar command first. */
+  function archive(extra: (root: string) => string[] = () => ["EchoLedger.app"], options: string[] = []) {
+    const root = mkdtempSync(join(tmpdir(), "mac-archive-"));
+    dirs.push(root);
+    mkdirSync(join(root, "EchoLedger.app/Contents/MacOS"), { recursive: true });
+    writeFileSync(join(root, "EchoLedger.app/Contents/MacOS/echoledger-desktop"), "binary");
+    writeFileSync(join(root, "EchoLedger.app/Contents/Info.plist"), "plist");
+    const entries = extra(root);
+    const file = join(root, "EchoLedger.app.tar.gz");
+    const made = spawnSync("tar", [...options, "-czf", file, ...entries], { cwd: root, encoding: "utf8", env: { ...process.env, COPYFILE_DISABLE: "1" } });
+    expect(made.status, made.stderr).toBe(0);
+    const dest = join(root, "unpacked");
+    mkdirSync(dest);
+    return { result: spawnSync("sh", [archiveCheck, file, dest], { encoding: "utf8" }), dest };
+  }
+
+  it("unpacks an archive that holds EchoLedger.app and nothing else, with links inside it", () => {
+    const { result, dest } = archive((root) => {
+      symlinkSync("MacOS/echoledger-desktop", join(root, "EchoLedger.app/Contents/current"));
+      return ["EchoLedger.app"];
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(dest, "EchoLedger.app/Contents/Info.plist"))).toBe(true);
+  });
+
+  it("refuses a .. path, an absolute path, a second top-level entry and a path given twice", () => {
+    const dotdot = archive(() => ["EchoLedger.app"], ["-s", ",^EchoLedger.app/Contents/Info.plist$,../x,"]);
+    expect(dotdot.result.status).toBe(1);
+    expect(dotdot.result.stderr).toContain("../x");
+    const inside = archive(() => ["EchoLedger.app"], ["-s", ",^EchoLedger.app/Contents/Info.plist$,EchoLedger.app/../../x,"]);
+    expect(inside.result.stderr).toContain("a path with ., .. or an empty part");
+    const absolute = archive(() => ["EchoLedger.app"], ["-P", "-s", ",^EchoLedger.app/Contents/Info.plist$,/tmp/x,"]);
+    expect(absolute.result.stderr).toContain("outside EchoLedger.app: /tmp/x");
+    const second = archive((root) => {
+      writeFileSync(join(root, "other.txt"), "x");
+      return ["EchoLedger.app", "other.txt"];
+    });
+    expect(second.result.status).toBe(1);
+    expect(second.result.stderr).toContain("outside EchoLedger.app: other.txt");
+    const twice = archive(() => ["EchoLedger.app", "EchoLedger.app/Contents/Info.plist"]);
+    expect(twice.result.stderr).toContain("twice: EchoLedger.app/Contents/Info.plist");
+    for (const refused of [dotdot, inside, absolute, second, twice]) expect(existsSync(join(refused.dest, "EchoLedger.app"))).toBe(false);
+  });
+
+  it("refuses a symbolic link out of the app and any hard link", () => {
+    const outside = archive((root) => {
+      symlinkSync("../../../etc/passwd", join(root, "EchoLedger.app/Contents/link"));
+      return ["EchoLedger.app"];
+    });
+    expect(outside.result.status).toBe(1);
+    expect(outside.result.stderr).toContain("points outside EchoLedger.app: ../../../etc/passwd");
+    const absolute = archive((root) => {
+      symlinkSync("/etc/passwd", join(root, "EchoLedger.app/Contents/link"));
+      return ["EchoLedger.app"];
+    });
+    expect(absolute.result.stderr).toContain("points outside EchoLedger.app: /etc/passwd");
+    const hard = archive((root) => {
+      linkSync(join(root, "EchoLedger.app/Contents/Info.plist"), join(root, "EchoLedger.app/Contents/copy.plist"));
+      return ["EchoLedger.app"];
+    });
+    expect(hard.result.status).toBe(1);
+    expect(hard.result.stderr).toContain("a hard link");
   });
 });
 

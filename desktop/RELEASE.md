@@ -80,16 +80,21 @@ certificate. A Mac build from a branch other than main or v1.1 is ad hoc and is 
    sh scripts/release-mac.sh ../release/mac-arm 1.8.1
    sh scripts/release-mac.sh ../release/mac-intel 1.8.1
    ```
-   For each, `scripts/release-mac.sh` unpacks `EchoLedger.app.tar.gz` and mounts the `.dmg` read-only, and stops unless
-   both apps are this version, pass `scripts/check-mac-signature.sh --pinned` and are the same build (one CDHash). The
-   check means: valid and strict (`codesign --verify --deep --strict`), the hardened runtime (`codesign -dv`), the
-   microphone and Apple events allowed (`codesign -d --entitlements - --xml`), signed with the certificate whose SHA-256
-   is the one in docs/SIGNING.md, and `codesign -d -r-` reads
-   `designated => identifier "com.echoledger.desktop" and certificate leaf = H"<that certificate's SHA-1>"`. Only then
-   does it run `npx tauri signer sign --app-version 1.8.1 EchoLedger.app.tar.gz` (the version is bound into the
-   signature, as `tauri build` does for `requireSignedVersion`), which writes `EchoLedger.app.tar.gz.sig`.
-4. Copy each folder's `.dmg`, `EchoLedger.app.tar.gz` and `EchoLedger.app.tar.gz.sig` to the server and run the
-   command the script printed, once per chip:
+   For each, `scripts/release-mac.sh` first checks the downloaded `EchoLedger.app.tar.gz` holds `EchoLedger.app` and
+   nothing else (`scripts/check-mac-archive.sh`: every entry under `EchoLedger.app/`, no `..` or absolute path, no path
+   twice, no hard link, no symbolic link out of the app) and only then unpacks it; it mounts the `.dmg` read-only and
+   stops unless both apps are this version, pass `scripts/check-mac-signature.sh --pinned` and are the same build (one
+   CDHash). The check means: valid and strict (`codesign --verify --deep --strict`), the hardened runtime
+   (`codesign -dv`), the microphone and Apple events allowed (`codesign -d --entitlements - --xml`), signed with the
+   certificate whose SHA-256 is the one in docs/SIGNING.md, and `codesign -d -r-` reads
+   `designated => identifier "com.echoledger.desktop" and certificate leaf = H"<that certificate's SHA-1>"`. It then packs
+   a fresh `release/EchoLedger.app.tar.gz` from the checked app (sorted names, owner root, no extended attributes, so the
+   same app gives the same file), checks it the same way and that it unpacks to the same CDHash, and only then runs
+   `npx tauri signer sign --app-version 1.8.1 release/EchoLedger.app.tar.gz` (the version is bound into the signature,
+   as `tauri build` does for `requireSignedVersion`), which writes `release/EchoLedger.app.tar.gz.sig`. The downloaded
+   archive is never signed.
+4. Copy each folder's `.dmg`, `release/EchoLedger.app.tar.gz` and `release/EchoLedger.app.tar.gz.sig` to the server and
+   run the command the script printed, once per chip:
    ```bash
    php artisan echoledger:publish-release EchoLedger_1.8.1_aarch64.dmg --platform=macos-arm --app-version=1.8.1 \
      --updater-file=EchoLedger.app.tar.gz --signature=EchoLedger.app.tar.gz.sig
