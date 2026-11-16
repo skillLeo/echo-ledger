@@ -62,7 +62,8 @@ fn every_pattern_in_the_file_is_exercised_and_runs_in_rust() {
             }
         }
     }
-    for id in ["zoom-share-toolbar-mac", "zoom-share-toolbar-win", "teams-sharing-bar-mac", "chromium-sharing-bar-mac", "slack-share-mac", "whatsapp-share-mac"] {
+    // Every pattern the file has, whatever is added to it later.
+    for id in file["patterns"].as_array().unwrap().iter().map(|p| p["id"].as_str().unwrap()) {
         assert!(matched.contains(id), "{id} has a window list");
     }
     let line = bars::unknown_line(&Listed { owner: "zoom.us".into(), title: "Screen sharing meeting controls".into(), layer: 25 });

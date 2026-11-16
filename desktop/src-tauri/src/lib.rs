@@ -208,6 +208,12 @@ impl AppState {
         self.lock_settings().clone()
     }
 
+    /// A look at a few settings without copying them all (the screen-share safety net reads two of them several times
+    /// a second). `f` must not reach the settings again.
+    pub fn settings_with<T>(&self, f: impl FnOnce(&Settings) -> T) -> T {
+        f(&self.lock_settings())
+    }
+
     /// The language of a recording: its chip when one was chosen on the pill, else the app's transcription language
     /// (none: the server uses the client's or the console default).
     pub fn recording_language(&self, client_ref: &str) -> Option<String> {
@@ -418,14 +424,14 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             privacy::watch::spawn(handle.clone());
             privacy::check::spawn_auto(handle.clone());
+            // Newer sharing-bar patterns, when the server has them: in a task of their own, once a day.
+            privacy::bars::spawn_refresh(handle.clone());
 
             // Fetch server config (caption policy, pins rotation) and the library in the background.
             let startup = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = startup.state::<AppState>();
                 if let Ok(api) = state.api() {
-                    // Newer sharing-bar patterns, when the server has them (the built-in ones otherwise).
-                    let _ = privacy::bars::refresh(&api, &state.data_dir).await;
                     if let Ok(config) = api.config().await {
                         state.apply_config(config);
                         // The tray follows the role too: a viewer's menu has no recording lines.
@@ -451,7 +457,10 @@ pub fn run() {
             // C9: closing the main window destroys it (the app keeps running in the tray, see `ExitRequested`); the
             // next open builds a new one on the same page (main_view_get).
             WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
-            WindowEvent::Destroyed => lifecycle::on_destroyed(window.app_handle(), window.label()),
+            WindowEvent::Destroyed => {
+                privacy::destroyed(window.app_handle(), window.label());
+                lifecycle::on_destroyed(window.app_handle(), window.label());
+            }
             // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
             // language for the batch), so nothing is imported here.
             _ => {}
@@ -466,9 +475,11 @@ pub fn run() {
             commands::privacy_show_in_shares,
             commands::privacy_concealed,
             commands::privacy_hide_all,
+            commands::privacy_hide_again,
+            commands::privacy_set_hidden,
             commands::privacy_open_check,
             commands::privacy_diagnostics,
-            commands::privacy_move_to_display,
+            commands::privacy_move_to_other_display,
             commands::translate_apps,
             commands::translate_status,
             commands::translate_start,
@@ -679,10 +690,12 @@ pub fn run() {
             actions::handle_links(handle, &urls);
         }
         // Opening the app again from Finder, Launchpad, Spotlight or the Dock starts no second copy on a Mac (the
-        // single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the main window.
+        // single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the main window
+        // as a second launch does on Windows. Its `has_visible_windows` counts the overlays (the dictation box is on
+        // screen while its shortcut is bound), so it says nothing about the main window and is not asked.
         #[cfg(target_os = "macos")]
-        if let RunEvent::Reopen { has_visible_windows, .. } = &event {
-            actions::reopen(handle, *has_visible_windows);
+        if let RunEvent::Reopen { .. } = &event {
+            actions::show_main_from_outside(handle, &[]);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
             // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.

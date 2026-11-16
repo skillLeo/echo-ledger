@@ -38,6 +38,7 @@ import type { Account, OneSided } from "../../lib/ipc";
 import { OPEN_SECTION_EVENT, forgetEntitlements, openRequest as openUpgradeRequest, openUpgradeSheet, plansAbove, refreshEntitlements, useEntitlements } from "../../lib/entitlements";
 import { UpgradeSheet } from "./Upgrade";
 import { isHoldMessage, ServerBanners } from "./ServerBanners";
+import { ShareNotice } from "./PrivacySettings";
 import { Notice } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
@@ -681,6 +682,7 @@ export default function MainApp() {
         <main ref={contentRef} className={`content page-${tab}`}>
           <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
           <ServerBanners server={status.server} notify={notify} />
+          <ShareNotice />
           {status.platform === "macos" && <PermissionLossNotice />}
           {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
           {oneSided && (

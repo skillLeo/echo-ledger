@@ -1,9 +1,10 @@
 # Runs the built Windows app's Share Check (src-tauri/src/privacy/check.rs, `--smoke-test --share-check`): a protected
 # magenta window and an unprotected green control open on the primary monitor, the monitor is captured with
-# Windows.Graphics.Capture and DXGI Desktop Duplication, and the colours are counted. Passes when no magenta pixel and
-# the green control are in the captures; fails when a magenta pixel is. When the runner has no capture session (no
-# desktop to duplicate, a service session), nothing can be measured: the step says so as a warning with the reason and
-# is marked skipped, never a silent pass.
+# Windows.Graphics.Capture and DXGI Desktop Duplication, and the colours are counted. Passes when the test window's
+# pattern is not in the captures and the green control is; fails when the pattern is. Only a runner with no capture
+# session (no desktop to duplicate, Windows.Graphics.Capture unsupported or giving no frame, captures that come back
+# blank) is skipped, as a warning with the reason. Anything else that measured nothing (the check's windows did not
+# open, draw or stay uncovered, a real picture without the control) fails the step: a regression is never green.
 #   pwsh -File desktop/scripts/share-check-windows.ps1 path\to\echoledger-desktop.exe [seconds]
 param(
   [Parameter(Mandatory = $true)][string]$Exe,
@@ -39,6 +40,10 @@ switch ($process.ExitCode) {
     $reason = ($log | Select-String -Pattern 'SKIPPED.*').Matches.Value -join ' '
     "::warning title=Share Check skipped::This runner has no capture session, so nothing could be measured. $reason"
     'SKIPPED: no capture session on this runner (see the reason above).'
+  }
+  6 {
+    $reason = ($log | Select-String -Pattern 'FAILED.*').Matches.Value -join ' '
+    throw "Share Check failed: nothing was measured although this runner can capture its screen. $reason"
   }
   default { throw "Share Check failed: the app exited with $($process.ExitCode)." }
 }

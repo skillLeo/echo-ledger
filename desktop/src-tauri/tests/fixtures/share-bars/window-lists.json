@@ -84,6 +84,61 @@
       "expect": "zoom", "mode": "screen", "unknown": []
     },
     {
+      "name": "Teams on Windows",
+      "platform": "windows",
+      "windows": [
+        { "owner": "ms-teams.exe", "title": "Weekly sync | Microsoft Teams", "layer": 0 },
+        { "owner": "ms-teams.exe", "title": "Sharing control bar | Microsoft Teams", "layer": 0 }
+      ],
+      "expect": "teams", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "Meet in Chrome on Windows, whole screen",
+      "platform": "windows",
+      "windows": [
+        { "owner": "chrome.exe", "title": "Meet - abc-defg-hij - Google Chrome", "layer": 0 },
+        { "owner": "chrome.exe", "title": "meet.google.com is sharing your screen.", "layer": 0 }
+      ],
+      "expect": "meet", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "A Slack huddle on Windows",
+      "platform": "windows",
+      "windows": [
+        { "owner": "slack.exe", "title": "Huddle with Sara - Slack", "layer": 0 },
+        { "owner": "slack.exe", "title": "You're sharing your screen", "layer": 0 }
+      ],
+      "expect": "slack", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "WhatsApp on Windows",
+      "platform": "windows",
+      "windows": [
+        { "owner": "WhatsApp.exe", "title": "You're sharing your screen", "layer": 0 }
+      ],
+      "expect": "whatsapp", "mode": "screen", "unknown": []
+    },
+    {
+      "name": "A Teams chat or a Slack channel named with share is the person's content, never logged",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Microsoft Teams", "title": "Shared files - Acme | Microsoft Teams", "layer": 0 },
+        { "owner": "Slack", "title": "share-ideas (Channel) - Acme - Slack", "layer": 0 },
+        { "owner": "Microsoft Teams", "title": "SharePoint", "layer": 3 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
+      "name": "A floating window named after a channel or file with share in it is the person's content, never logged",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Slack", "title": "#share-ideas", "layer": 3 },
+        { "owner": "Slack", "title": "Huddle in #share_notes", "layer": 3 },
+        { "owner": "Microsoft Teams", "title": "share-ideas | Microsoft Teams", "layer": 3 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
       "name": "A Mac pattern never matches on Windows",
       "platform": "windows",
       "windows": [
@@ -99,6 +154,24 @@
         { "owner": "Safari", "title": "Screen sharing tips - Example Blog", "layer": 0 }
       ],
       "expect": null, "unknown": ["Safari is sharing your screen with meet.google.com"]
+    },
+    {
+      "name": "A Teams meeting titled like a presentation is not a share (a bar floats, a meeting window does not)",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Microsoft Teams", "title": "Presenting Q3 | Microsoft Teams", "layer": 0 },
+        { "owner": "Microsoft Teams", "title": "Chat | Microsoft Teams", "layer": 0 }
+      ],
+      "expect": null, "unknown": []
+    },
+    {
+      "name": "A browser tab whose title reads like a sharing bar is not a share",
+      "platform": "macos",
+      "windows": [
+        { "owner": "Google Chrome", "title": "meet.google.com is sharing your screen - how to stop it", "layer": 0 },
+        { "owner": "Safari", "title": "Why Zoom says share toolbar", "layer": 0 }
+      ],
+      "expect": null, "unknown": []
     },
     {
       "name": "An ordinary desktop",

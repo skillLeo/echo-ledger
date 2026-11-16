@@ -3,11 +3,23 @@
 //! any window shows. "Copy diagnostics" on the privacy page copies them; nothing here is uploaded.
 
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 pub const KEEP: usize = 200;
+
+/// Writes a privacy file whole or not at all: a temporary file renamed over the old one, so a reader on another thread
+/// never sees half of it (and never reads a list as empty and saves that).
+pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, bytes)?;
+    std::fs::rename(tmp, path)
+}
+
+/// The log is added to from the safety net's thread, the checks and the commands: one at a time.
+static WRITING: Mutex<()> = Mutex::new(());
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Entry {
@@ -29,6 +41,7 @@ pub fn log(data_dir: &Path, line: &str) {
 }
 
 pub fn log_at(data_dir: &Path, line: &str, at: DateTime<Utc>) {
+    let _one_at_a_time = WRITING.lock().unwrap_or_else(|p| p.into_inner());
     let mut entries = read(data_dir);
     entries.push(Entry { at, line: line.chars().take(300).collect() });
     if entries.len() > KEEP {
@@ -36,7 +49,7 @@ pub fn log_at(data_dir: &Path, line: &str, at: DateTime<Utc>) {
         entries.drain(..extra);
     }
     if let Ok(bytes) = serde_json::to_vec(&entries) {
-        let _ = std::fs::write(path(data_dir), bytes);
+        let _ = write_atomic(&path(data_dir), &bytes);
     }
 }
 
@@ -73,5 +86,23 @@ mod tests {
         let copied = text(&["EchoLedger 1.8.1".into()], &[Entry { at, line: "Share Check: pass (sck)".into() }]);
         assert_eq!(copied, "EchoLedger 1.8.1\n2026-11-16 09:00:00Z Share Check: pass (sck)");
         assert_eq!(text(&[], &[]), "No privacy events yet.");
+    }
+
+    #[test]
+    fn lines_logged_from_several_threads_at_once_are_all_kept() {
+        let dir = tempfile::tempdir().unwrap();
+        let threads: Vec<_> = (0..4)
+            .map(|t| {
+                let dir = dir.path().to_path_buf();
+                std::thread::spawn(move || {
+                    for i in 0..25 {
+                        log(&dir, &format!("thread {t} line {i}"));
+                    }
+                })
+            })
+            .collect();
+        threads.into_iter().for_each(|t| t.join().unwrap());
+        assert_eq!(read(dir.path()).len(), 100, "no read of a half-written file dropped the lines before it");
+        assert!(!path(dir.path()).with_extension("json.tmp").exists());
     }
 }

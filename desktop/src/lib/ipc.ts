@@ -1309,10 +1309,10 @@ export interface NavigatePayload {
 // ---- Screen-share privacy (since v1.8.1) -------------------------------------------------------------------------------
 
 /** The privacy badge on every floating window: from the last real check. */
-export type PrivacyBadge = "private" | "not_checked" | "visible";
+export type PrivacyBadge = "private" | "black_box" | "not_checked" | "visible";
 export type CheckOutcome = "pass" | "fail" | "error";
 /** Why a Share Check ran. */
-export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call";
+export type CheckWhy = "asked" | "onboarding" | "first" | "app_update" | "system_update" | "weekly" | "before_call" | "retry";
 export type MeetingApp = "zoom" | "teams" | "meet" | "slack" | "whatsapp";
 /** What the guided test says of a meeting app on this Mac. */
 export type MeetingAppState = "hidden" | "visible" | "not_checked" | "share_tab";
@@ -1352,6 +1352,8 @@ export interface MeetingAppRow {
 export interface PrivacyLine {
   warning: boolean;
   text: string;
+  /** The one button that fixes it: the system's Screen Recording settings (Mac), or setting the flags again (Windows). */
+  fix: "open_settings" | "hide_again" | null;
 }
 
 export interface LastCheck {
@@ -1378,6 +1380,12 @@ export interface PrivacyStatus {
   demoSecondsLeft: number | null;
   hiddenByShortcut: boolean;
   hiddenForShare: boolean;
+  /** The person opened the main window during a whole-screen share: it says it may be in the screen share. */
+  mainInShare: boolean;
+  /** Which whole-screen share that is, counted in this run: the notice closed in one share shows again in the next. */
+  shareNumber: number;
+  /** The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends). */
+  barOnScreen: boolean;
   share: ShareSeen | null;
   lastCheck: LastCheck | null;
   checkRunning: boolean;
@@ -1385,6 +1393,8 @@ export interface PrivacyStatus {
   apps: MeetingAppRow[];
   zoomInstalled: boolean;
   permission: boolean;
+  /** One of the floating windows is open: "Move to the other display" has something to move. */
+  floatingOpen: boolean;
   displays: number;
 }
 
@@ -1447,9 +1457,14 @@ export const api = {
   privacyShowInShares: (minutes: number) => invoke<void>("privacy_show_in_shares", { minutes }),
   privacyConcealed: () => invoke<boolean>("privacy_concealed"),
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
+  /** Windows: sets every capture flag again after something else on the computer changed one. */
+  privacyHideAgain: () => invoke<void>("privacy_hide_again"),
+  /** "Hide EchoLedger windows" (`hidden`) or "Show EchoLedger windows". */
+  privacySetHidden: (hidden: boolean) => invoke<void>("privacy_set_hidden", { hidden }),
   privacyOpenCheck: () => invoke<void>("privacy_open_check"),
   privacyDiagnostics: () => invoke<string>("privacy_diagnostics"),
-  privacyMoveToDisplay: (index: number) => invoke<void>("privacy_move_to_display", { index }),
+  /** The floating windows to the display that isn't the main one (so the main one can be shared). */
+  privacyMoveToOtherDisplay: () => invoke<void>("privacy_move_to_other_display"),
   windowAppearance: () => invoke<WindowAppearance>("window_appearance"),
   setWindowTheme: (theme: "light" | "dark" | "system") => invoke<void>("set_window_theme", { theme }),
   pair: (serverUrl: string, code: string, deviceName: string) => invoke<AppStatus>("pair_device", { serverUrl, code, deviceName }),

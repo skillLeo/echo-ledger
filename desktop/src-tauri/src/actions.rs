@@ -1595,31 +1595,21 @@ async fn run_upload_cycle(app: &AppHandle) {
 /// How long after an OS notification bringing the app forward opens its recording.
 const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
 
-/// Another start of the app (a second launch, the app opened again on a Mac (`reopen`), an `echoledger://open` link,
-/// or a click on one of our notifications): show the window and open the link it was started with or, when a
-/// notification about a recording went out in the last ten minutes, that recording.
+/// Another start of the app (a second launch, the app opened again on a Mac from Finder, Launchpad, Spotlight or the
+/// Dock, an `echoledger://open` link, or a click on one of our notifications): show the window and open the link it was
+/// started with. With no main window yet it opens on the recording of a notification sent in the last ten minutes; an
+/// existing window only comes to the front and keeps its page (`lifecycle::reopen_action`). The notified recording is
+/// forgotten either way.
 pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
     if handle_links(app, args) {
         return;
     }
+    let notified = app.state::<crate::AppState>().notified.lock().unwrap_or_else(|p| p.into_inner()).take().filter(|(_, at)| at.elapsed() < NOTIFIED_WINDOW);
+    let main_exists = app.get_webview_window(crate::lifecycle::MAIN).is_some();
     crate::tray::show_main(app);
-    let target = app.state::<crate::AppState>().notified.lock().unwrap_or_else(|p| p.into_inner()).take();
-    if let Some((id, at)) = target
-        && at.elapsed() < NOTIFIED_WINDOW
-    {
+    if let (crate::lifecycle::Reopen::OpenNotified, Some((id, _))) = (crate::lifecycle::reopen_action(main_exists, notified.is_some()), notified) {
         let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None, section: None };
         crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
-    }
-}
-
-/// EchoLedger opened again on a Mac while it runs (from Finder, Launchpad, Spotlight or the Dock): the main window opens
-/// as at a second launch, or comes forward when it is on screen already (`lifecycle::reopen_action`).
-#[cfg(target_os = "macos")]
-pub fn reopen(app: &AppHandle, has_visible_windows: bool) {
-    use crate::lifecycle::{Reopen, main_on_screen, reopen_action};
-    match reopen_action(has_visible_windows, main_on_screen(app)) {
-        Reopen::OpenMain => show_main_from_outside(app, &[]),
-        Reopen::BringForward => crate::tray::show_main(app),
     }
 }
 
