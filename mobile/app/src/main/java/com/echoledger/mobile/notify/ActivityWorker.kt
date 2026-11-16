@@ -36,9 +36,12 @@ class ActivityWorker(context: Context, params: WorkerParameters) : CoroutineWork
         val app = applicationContext as EchoLedgerApp
         // A recording someone asked about with "Notify me when ready" was already announced (since v1.6).
         val announced = ReadyWatchWorker.notified(applicationContext).toSet()
+        // This phone's own missed recordings were said on the phone already (since v1.8): not a second time.
+        val mine = com.echoledger.mobile.calls.MissedRecordingStore.all(applicationContext).mapNotNull { it.serverId }.toSet()
         val shown = fresh.filter {
             NotifyGate.allowed(app, NotifyCategory.forActivity(it.kind)) &&
-                !(NotifyCategory.forActivity(it.kind) == NotifyCategory.TRANSCRIPTION && it.sessionId in announced)
+                !(NotifyCategory.forActivity(it.kind) == NotifyCategory.TRANSCRIPTION && it.sessionId in announced) &&
+                it.missedRecordingId !in mine
         }
         val texts = Activity.notificationText(shown)
         if (texts.size == 1 && shown.size > 1) {

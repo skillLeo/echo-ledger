@@ -75,6 +75,14 @@ data class AppSettings(
     val recordingKbps: Int = 32,
     /** SIM phone calls (since v1.2): `off` (default), `ask` (a notification offers to record each call) or `always`. */
     val phoneCalls: String = "off",
+    /**
+     * Since v1.8 (0.3): with phone calls set to Always, the Phone app's own recording of each SIM call is brought in
+     * after the call (Samsung's Auto record calls, other brands' call recorder). On by default; does nothing until the
+     * Phone app records.
+     */
+    val phoneAppImport: Boolean = true,
+    /** Since v1.8 (0.3): after an import, Android asks to delete the Phone app's copy. Off: its copy is never touched. */
+    val deletePhoneAppCopy: Boolean = false,
     /** How the floating caption bubble looks (B4). */
     val captionStyle: CaptionStyle = CaptionStyle(),
     /** Warn when a call has not heard the other side for 30 seconds (B5). */

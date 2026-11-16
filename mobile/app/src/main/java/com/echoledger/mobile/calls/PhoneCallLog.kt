@@ -48,6 +48,39 @@ object PhoneCallLog {
         return null
     }
 
+    /**
+     * Since v1.8: the SIM calls since [sinceMs] for the missed-recording detector, by their time and talk time only (the
+     * number and the name are not read). Answered = an incoming or outgoing call with talk time; none without the
+     * permission (and in the Google Play build).
+     */
+    fun calls(context: Context, sinceMs: Long): List<MissedRecordings.Sighting> {
+        if (!readable(context)) return emptyList()
+        return runCatching {
+            context.contentResolver.query(
+                CallLog.Calls.CONTENT_URI,
+                arrayOf(CallLog.Calls.DATE, CallLog.Calls.DURATION, CallLog.Calls.TYPE),
+                "${CallLog.Calls.DATE} >= ?",
+                arrayOf(sinceMs.toString()),
+                "${CallLog.Calls.DATE} ASC"
+            )?.use { cursor ->
+                buildList {
+                    while (cursor.moveToNext() && size < 500) {
+                        add(sighting(cursor.getLong(0), cursor.getLong(1), cursor.getInt(2)))
+                    }
+                }
+            }.orEmpty()
+        }.getOrDefault(emptyList())
+    }
+
+    /** One call-log row as the detector reads it ([type] is `CallLog.Calls.TYPE`). */
+    fun sighting(dateMs: Long, durationS: Long, type: Int): MissedRecordings.Sighting = MissedRecordings.Sighting(
+        app = com.echoledger.mobile.core.SourceApp.PHONE_CALL.wire,
+        startMs = dateMs,
+        endMs = dateMs + durationS * 1000,
+        answered = durationS > 0 && (type == CallLog.Calls.INCOMING_TYPE || type == CallLog.Calls.OUTGOING_TYPE),
+        by = MissedRecordings.CALL_LOG
+    )
+
     private fun rows(context: Context, sinceMs: Long): List<PhoneCalls.LogEntry> = runCatching {
         context.contentResolver.query(
             CallLog.Calls.CONTENT_URI,
@@ -71,6 +104,9 @@ object PhoneCallLog {
         }.orEmpty()
     }.getOrDefault(emptyList())
 
+    /** The contact's name for [number] (READ_CONTACTS), or null: an unsaved number, or no permission. */
+    fun contactNameOf(context: Context, number: String): String? = contactName(context, number)
+
     private fun contactName(context: Context, number: String): String? {
         if (!granted(context, Manifest.permission.READ_CONTACTS)) return null
         return runCatching {
@@ -91,6 +127,6 @@ object PhoneCallLog {
     fun permissionsToAsk(): Array<String> = listOfNotNull(
         Manifest.permission.READ_CALL_LOG.takeIf { available },
         Manifest.permission.READ_CONTACTS.takeIf { BuildConfig.CAPTURE_HELPER },
-        SamsungCallImport.permission().takeIf { BuildConfig.CAPTURE_HELPER }
+        PhoneAppRecordings.permission().takeIf { BuildConfig.CAPTURE_HELPER }
     ).toTypedArray()
 }

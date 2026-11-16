@@ -30,6 +30,7 @@ import com.echoledger.mobile.net.ApiException
 import com.echoledger.mobile.net.UsageWorker
 import com.echoledger.mobile.overlay.TranslateBoxActions
 import com.echoledger.mobile.overlay.TranslateOverlay
+import com.echoledger.mobile.recording.CaptureLog
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -163,8 +164,24 @@ class LiveTranslateService :
             graph.helper.setGames(prefs.game.games.toSet())
             val picked = intent.getStringExtra(EXTRA_PACKAGE)
             val helper = graph.helper.helper
-            val players = if (helper != null) AudioProbe.parse(runCatching { helper.players() }.getOrNull()) else emptyList()
-            val app = TranslateTargets.choose(mode, picked, if (mode == TranslateMode.GAME) prefs.game.games else prefs.watch.apps, players)
+            val answer = if (helper != null) graph.helper.players() else HelperPlayers(emptyList(), "The capture helper is not running.")
+            val musicActive = runCatching { getSystemService(android.media.AudioManager::class.java).isMusicActive }.getOrDefault(false)
+            val apps = if (mode == TranslateMode.GAME) prefs.game.games else prefs.watch.apps
+            val pick = TranslateTargets.decide(mode, picked, apps, answer, musicActive)
+            // What the helper said and what was chosen, for Copy diagnostics (apps by package, no names or text).
+            if (helper != null) {
+                CaptureLog.add(
+                    this@LiveTranslateService,
+                    "translate",
+                    "${mode.key}: music active $musicActive; " + AudioProbe.lines(answer).joinToString(" | ") + " → " + pickText(pick)
+                )
+            }
+            // Never "nothing is playing" from an answer the helper could not give: Android shares the sound instead.
+            if (projectionData == null && helper != null && mode == TranslateMode.WATCH && pick is TranslateTargets.Pick.CannotTell) {
+                shareSoundInstead(pick.why)
+                return@launch
+            }
+            val app = (pick as? TranslateTargets.Pick.App)?.player
             packageName = app?.packageName ?: picked
             if (mode == TranslateMode.WATCH && app != null && !app.capturable) {
                 problem(AudioProbe.NOT_ALLOWED)
@@ -365,6 +382,47 @@ class LiveTranslateService :
             nm.notify(NOTIFICATION_PROBLEM_ID, simple(text))
             finishAndStop()
         }
+    }
+
+    /**
+     * The capture helper can't tell which app is playing ([why]): Watch translate asks Android to share the sound
+     * instead, as it does without the helper (Android's own question), and a tap on the notice asks again if that
+     * question did not come up. Nothing playing is never assumed from an answer that could not be read.
+     */
+    private fun shareSoundInstead(why: String) {
+        val ask = TranslateToggleActivity.intent(this, mode, startOnly = true, shareSound = true)
+        CaptureLog.add(this, "translate", "${mode.key}: sharing the sound instead ($why)")
+        main.post {
+            val tap = PendingIntent.getActivity(
+                this,
+                NOTIFICATION_PROBLEM_ID,
+                ask,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val text = "EchoLedger couldn't tell which app is playing, so Android asks to share the sound. " +
+                "Tap here if it didn't ask."
+            getSystemService(NotificationManager::class.java).notify(
+                NOTIFICATION_PROBLEM_ID,
+                NotificationCompat.Builder(this, CHANNEL)
+                    .setSmallIcon(R.drawable.ic_stat_rec)
+                    .setContentTitle(mode.label)
+                    .setContentText(text)
+                    .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+                    .setSilent(true)
+                    .setAutoCancel(true)
+                    .setContentIntent(tap)
+                    .build()
+            )
+            finishAndStop()
+            // Started a moment ago from the tile or the app, so Android usually lets its question open now.
+            runCatching { startActivity(ask) }
+        }
+    }
+
+    private fun pickText(pick: TranslateTargets.Pick): String = when (pick) {
+        is TranslateTargets.Pick.App -> "listening to " + (pick.player.packageName ?: "uid ${pick.player.uid}")
+        TranslateTargets.Pick.NothingPlaying -> "nothing playing"
+        is TranslateTargets.Pick.CannotTell -> "can't tell: ${pick.why}"
     }
 
     private fun finishSession() {
@@ -589,7 +647,7 @@ class LiveTranslateService :
         val editing = ::machine.isInitialized && machine.state == BoxState.EDIT
         // Hidden by the box's own Hide, or with every floating window (Hide EchoLedger windows): Show brings both back.
         val hidden = (::machine.isInitialized && machine.state == BoxState.HIDDEN) || ShareGuard.hiddenByUser.value
-        return NotificationCompat.Builder(this, CHANNEL)
+        val builder = NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_rec)
             .setContentTitle(mode.label)
             .setContentText(if (paused) "Paused" else "Translating to ${TranslateLanguages.label(target)}")
@@ -598,7 +656,9 @@ class LiveTranslateService :
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
             .setContentIntent(open(this))
             .addAction(0, if (paused) "Resume" else "Pause", action(if (paused) ACTION_RESUME else ACTION_PAUSE, 1))
-            .addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
+        // Edit and Lock only while the box can be seen: hidden or private, Show comes first.
+        if (ShareGuard.textVisible.value) builder.addAction(0, if (editing) "Lock" else "Edit", action(ACTION_EDIT, 2))
+        return builder
             .addAction(0, if (hidden) "Show" else "Hide", action(if (hidden) ACTION_SHOW else ACTION_HIDE, 3))
             .addAction(0, "Stop", action(ACTION_STOP, 4))
             .build()
@@ -617,6 +677,16 @@ class LiveTranslateService :
     private fun updateNotification() {
         if (running.value == null) return
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification())
+    }
+
+    /** Tests only: a Game or Watch session with its box and notification, without sound or a translator. */
+    internal fun openForTest(mode: TranslateMode = TranslateMode.GAME) {
+        this.mode = mode
+        machine = BoxMachine(elapsed)
+        createChannel(this)
+        startForeground(NOTIFICATION_ID, notification(), ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+        running.value = mode
+        showOverlay()
     }
 
     private fun action(name: String, code: Int): PendingIntent = PendingIntent.getService(
@@ -690,25 +760,50 @@ object TranslateTargets {
      * The app to translate: the one asked for, else a picked app that is playing now (voice chat first for games),
      * else for Watch "whatever is playing" (media first), else the first picked app.
      */
-    fun choose(mode: TranslateMode, asked: String?, picked: List<String>, players: List<ProbePlayer>): ProbePlayer? {
-        val playing = players.filter { it.playing && it.uid > 0 }
+    fun choose(mode: TranslateMode, asked: String?, picked: List<String>, players: List<ProbePlayer>): ProbePlayer? =
+        (decide(mode, asked, picked, HelperPlayers(players), musicActive = false) as? Pick.App)?.player
+
+    /** What Live Translate listens to: an app, nothing (nothing plays), or "can't tell" with why (then Android shares the sound). */
+    sealed interface Pick {
+        data class App(val player: ProbePlayer) : Pick
+
+        data object NothingPlaying : Pick
+
+        data class CannotTell(val why: String) : Pick
+    }
+
+    /**
+     * As [choose], from the helper's whole [answer], and never taking "can't read" for "nothing plays" (since v1.8, the
+     * Android 17 report): for Watch with no app picked, a player whose uid or state the helper could not read, an answer
+     * that failed, or sound playing ([musicActive], Android's public "music is active") with no player the helper can
+     * name is [Pick.CannotTell]; Android's own sharing of the sound then hears whatever plays. A single app whose state
+     * alone is unknown while sound plays is that app. [Pick.NothingPlaying] only when the helper could see everything.
+     */
+    fun decide(mode: TranslateMode, asked: String?, picked: List<String>, answer: HelperPlayers, musicActive: Boolean): Pick {
+        val players = answer.players
+        val playing = players.filter { it.playing && it.placed }
         fun forPackage(pkg: String) = playing.filter { pkg in it.packages }.sortedBy { if (it.voiceChat) 0 else 1 }.firstOrNull()
         asked?.let { pkg ->
-            return forPackage(pkg)
-                ?: ProbePlayer(-1, listOf(pkg), 0, 0, android.media.AudioAttributes.ALLOW_CAPTURE_BY_ALL, -1)
+            return Pick.App(forPackage(pkg) ?: ProbePlayer(-1, listOf(pkg), 0, 0, android.media.AudioAttributes.ALLOW_CAPTURE_BY_ALL, -1))
         }
-        picked.firstNotNullOfOrNull { forPackage(it) }?.let { return it }
+        picked.firstNotNullOfOrNull { forPackage(it) }?.let { return Pick.App(it) }
         if (mode == TranslateMode.WATCH && picked.isEmpty()) {
-            return playing.filter { !it.voiceChat }.sortedBy {
-                if (it.usage ==
-                    android.media.AudioAttributes.USAGE_MEDIA
-                ) {
-                    0
-                } else {
-                    1
-                }
-            }.firstOrNull()
+            playing.filter { !it.voiceChat }.sortedBy { if (it.usage == android.media.AudioAttributes.USAGE_MEDIA) 0 else 1 }
+                .firstOrNull()?.let { return Pick.App(it) }
+            answer.problem?.let { return Pick.CannotTell(it) }
+            val sound = players.filter { !it.voiceChat }
+            // Playing, or maybe playing, in an app the helper cannot name: only Android's sharing can hear it.
+            if (sound.any { !it.placed && (it.playing || !it.stateKnown) }) {
+                return Pick.CannotTell("the capture helper can't tell which app is playing")
+            }
+            val unsure = sound.filter { it.placed && !it.stateKnown }
+            return when {
+                !musicActive -> Pick.NothingPlaying
+                unsure.distinctBy { it.uid }.size == 1 -> Pick.App(unsure.first())
+                else -> Pick.CannotTell("sound is playing, but the capture helper can't tell which app plays it")
+            }
         }
-        return picked.firstOrNull()?.let { ProbePlayer(-1, listOf(it), 0, 0, android.media.AudioAttributes.ALLOW_CAPTURE_BY_ALL, -1) }
+        val first = picked.firstOrNull() ?: return Pick.NothingPlaying
+        return Pick.App(ProbePlayer(-1, listOf(first), 0, 0, android.media.AudioAttributes.ALLOW_CAPTURE_BY_ALL, -1))
     }
 }

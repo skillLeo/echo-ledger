@@ -220,22 +220,23 @@ class ControlPill(
                         dragBy(amount.x, amount.y)
                     }
                 }
+            // The dots take their tap as a button (TalkBack can press it); a drag still moves them.
+            val drags = Modifier.pointerInput(Unit) {
+                detectDragGestures(onDragEnd = { dropped() }) { change, amount ->
+                    change.consume()
+                    dragBy(amount.x, amount.y)
+                }
+            }
             val private = !ShareGuard.textVisible.collectAsState().value
             if (private && s.mode != PillState.Mode.HIDDEN) {
                 // Hidden, or in a screen share Android reports: a plain grey dot, no clock, language or buttons. A tap
                 // shows the windows the person hid; while Android reports a screen share they stay a dot until it ends.
-                val drags = Modifier.pointerInput(Unit) {
-                    detectDragGestures(onDragEnd = { dropped() }) { change, amount ->
-                        change.consume()
-                        dragBy(amount.x, amount.y)
-                    }
-                }
                 PrivateDot(onShow = { ShareGuard.setHidden(false) }, modifier = drags)
                 return
             }
             when (s.mode) {
                 PillState.Mode.HIDDEN -> Unit
-                PillState.Mode.DOT -> PillDot(s, drag)
+                PillState.Mode.DOT -> PillDot(s, drags, onOpen = { onEvent(PillEvent.Tap) })
                 PillState.Mode.PILL -> PillView(s, drag, onEvent)
                 PillState.Mode.MENU -> PillToolbar(s, header = drag, onEvent = onEvent)
             }

@@ -1,10 +1,13 @@
 package com.echoledger.mobile.ui
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
@@ -441,6 +445,79 @@ class ScreenshotsTest : ScreenTest() {
         capture("activity")
     }
 
+    /**
+     * Activity with missed recordings (v1.8 0.2): this phone's own, with why in plain words and the button that fixes it,
+     * above a missed recording the laptop reported.
+     */
+    @Test
+    fun activityMissed() {
+        val now = System.currentTimeMillis()
+        val missed = listOf(
+            com.echoledger.mobile.calls.MissedItem(
+                "r1",
+                "whatsapp",
+                now - 25 * 60_000,
+                312,
+                "helper_not_armed",
+                "Auto-record was not running when the call started.",
+                now
+            ),
+            com.echoledger.mobile.calls.MissedItem(
+                "r2",
+                "phone_call",
+                now - 3 * 60 * 60_000,
+                94,
+                "detection",
+                com.echoledger.mobile.calls.MissedReason.DETECTION.detail,
+                now
+            )
+        )
+        val today = java.time.LocalDate.now().toString()
+        val items = listOf(
+            ActivityItemDto(
+                "a1",
+                "missed_recording",
+                "Missed recording",
+                "Zoom call · 31:02 · The call was not detected",
+                null,
+                false,
+                "${today}T06:40:00+00:00",
+                reason = "detection",
+                missedRecordingId = "from-the-laptop"
+            ),
+            ActivityItemDto(
+                "a2",
+                "transcript_ready",
+                "Transcript ready",
+                "Weekly sync with Northwind",
+                "s2",
+                true,
+                "${today}T05:10:00+00:00"
+            )
+        )
+        shoot { ActivityScreen(load = { ActivityResponse(items, 1) }, markRead = { 0 }, onOpen = {}, onUnread = {}, missed = missed) }
+        pumpUntil("the list to load") { runCatching { compose.onNodeWithText("Needs action").assertExists() }.isSuccess }
+        capture("activity-missed")
+    }
+
+    /** What "Start the helper" opens: the Ready check, with the helper's problem and its one-tap fix. */
+    @Test
+    fun missedFixReadyCheck() {
+        shoot {
+            ReadyCheckSheet(vm, ReadinessFixtures.HELPER_STOPPED, onDismiss = {}, onSetup = {}, onRecheck = {})
+        }
+        compose.waitForIdle()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-activity-missed-fix-light.png"))
+        compose.onNodeWithText("Open Shizuku").assertExists()
+    }
+
     @Test
     fun recordLive() {
         runBlocking { app.pairLocally(server) }
@@ -465,6 +542,140 @@ class ScreenshotsTest : ScreenTest() {
         } finally {
             RecordingService.live.value = LiveRecording()
         }
+    }
+
+    /** Calls & meetings → Auto-record apps → Phone calls: the Phone app's own recordings on a Galaxy (v1.8 0.3). */
+    @Test
+    fun phoneAppRecordings() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(
+            android.Manifest.permission.READ_CALL_LOG,
+            android.Manifest.permission.READ_MEDIA_AUDIO
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "0"
+        )
+        org.robolectric.Shadows.shadowOf(app.packageManager).addResolveInfoForIntent(
+            android.content.Intent(android.telecom.TelecomManager.ACTION_SHOW_CALL_SETTINGS),
+            android.content.pm.ResolveInfo().apply {
+                activityInfo = android.content.pm.ActivityInfo().apply {
+                    packageName = "com.samsung.android.dialer"
+                    name = "CallSettings"
+                }
+            }
+        )
+        val tenFortyTwo = java.time.LocalDate.now().atTime(10, 42).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE).edit()
+            .putString("note", "Imported the Phone app's recording (125 s).")
+            .putLong("note_at", tenFortyTwo)
+            .putString("ask", "41:${tenFortyTwo - 3_600_000}")
+            .commit()
+        shoot {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                PhoneAppRecordingsBlock(
+                    AppSettings(phoneCalls = "always"),
+                    onChange = {},
+                    manufacturer = "samsung",
+                    fileOf = { _, id ->
+                        com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile(
+                            id,
+                            "Call recording Omar Khan_261116_094215.m4a",
+                            "Recordings/Call/",
+                            tenFortyTwo - 3_600_000,
+                            125_000
+                        )
+                    }
+                )
+            }
+        }
+        pumpUntil("the guide") { runCatching { compose.onNodeWithText("Import this recording").assertExists() }.isSuccess }
+        compose.onNodeWithText("Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls.").assertExists()
+        compose.onNodeWithText("Open the Phone app's settings").assertExists()
+        // Each waiting call's buttons say which call they are for (TalkBack).
+        compose.onNodeWithContentDescription("Import the recording of your call at 09:42").assertExists()
+        compose.onNodeWithContentDescription("Not the recording of your call at 09:42").assertExists()
+        capture("settings-phone-app")
+
+        // "Import this recording": the file's name and length, and Play, before anything is taken in (v1.8 0.3 review).
+        compose.onNodeWithText("Import this recording").performClick()
+        pumpUntil("the question with the file") {
+            runCatching { compose.onNodeWithText("Call recording Omar Khan_261116_094215.m4a").assertExists() }.isSuccess
+        }
+        compose.onNodeWithText("2:05").assertExists()
+        compose.onNodeWithContentDescription("Play the recording of your call at 09:42").assertExists()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-settings-phone-app-import-light.png"))
+    }
+
+    /** A capture helper that answers players() with [json] (the Audio probe's screenshots). */
+    private class PlayersHelper(private val json: String) : com.echoledger.mobile.capture.ICaptureHelper.Stub() {
+        override fun version() = com.echoledger.mobile.BuildConfig.HELPER_BUILD
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) = true
+        override fun arm(on: Boolean): String = "armed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = json
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() = Unit
+        override fun setCallListener(listener: com.echoledger.mobile.capture.ICallListener?) = Unit
+        override fun destroy() = Unit
+    }
+
+    /**
+     * Settings → Help & diagnostics → Audio probe (v1.8, the Android 17 report): each player with what the helper read
+     * of it (uid, state, usage), and one whose app the helper could not name listed apart instead of dropped.
+     */
+    @Test
+    fun audioProbe() {
+        app.graph.helper.attach(
+            PlayersHelper(
+                """[{"uid":10133,"uid_from":"text","packages":["com.samsung.android.video"],"usage":1,"content_type":3,
+                    "capture_policy":1,"state":2,"state_from":"text","piid":2215},
+                   {"uid":-1,"uid_from":"none","packages":[],"usage":1,"content_type":2,"capture_policy":1,"state":-1,
+                    "state_from":"none","piid":2216}]"""
+            ),
+            source = "adb"
+        )
+        shoot { AudioProbeSheet(vm, helperReady = true, onDismiss = {}) }
+        pumpUntil("the players") { runCatching { compose.onNodeWithText("An app the helper can't name").assertExists() }.isSuccess }
+        compose.onNodeWithText("Media · film · allows capture · uid 10133 · started").assertExists()
+        compose.onNodeWithText("uid unknown (none) · state unknown (none) · Media · music · allows capture · piid 2216").assertExists()
+        themeMode = "dark"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-dark.png"))
+        themeMode = "light"
+        compose.mainClock.advanceTimeBy(500)
+        compose.waitForIdle()
+        com.github.takahirom.roborazzi.captureScreenRoboImage(File(outDir, "phone-audio-probe-light.png"))
+    }
+
+    /** On a phone with no known call folder (a Pixel: Google's Phone app keeps its recordings), one plain line. */
+    @Test
+    fun phoneAppRecordingsElsewhere() {
+        shoot {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                PhoneAppRecordingsBlock(AppSettings(phoneCalls = "always"), onChange = {}, manufacturer = "Google")
+            }
+        }
+        compose.onNodeWithText(
+            "On this phone the Phone app keeps its call recordings to itself, so EchoLedger can't bring them in."
+        ).assertExists()
+        compose.onNodeWithText("Import the Phone app's recordings").assertDoesNotExist()
+        capture("settings-phone-app-pixel")
     }
 
     @Test

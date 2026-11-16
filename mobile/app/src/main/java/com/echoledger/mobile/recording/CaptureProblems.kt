@@ -35,6 +35,9 @@ object CaptureProblems {
     fun recent(context: Context, withinMs: Long = RECENT_MS): String? =
         load(context)?.takeIf { Instant.now().toEpochMilli() - it.at.toEpochMilli() <= withinMs }?.message
 
+    /** The problem reported at or after [atMs] (during the capture that started then), or null: never an older one. */
+    fun since(context: Context, atMs: Long): String? = load(context)?.takeIf { it.at.toEpochMilli() >= atMs }?.message
+
     fun clear(context: Context) {
         _last.value = null
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().clear().apply()

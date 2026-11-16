@@ -161,25 +161,64 @@ class AppAudioMix(private val audioManager: AudioManager, val uid: Int, val usag
         /** AudioMixingRule.RULE_MATCH_UID (system API). */
         const val RULE_MATCH_UID = 0x4
 
-        /** The players the helper sees, as JSON for the Audio probe: who plays, what kind of sound, and whether apps may capture it. */
+        /**
+         * The players the helper sees, as JSON for Live Translate and the Audio probe: who plays, what kind of sound,
+         * and whether apps may capture it. The uid and the state come from their getters; when a getter gives nothing
+         * (since v1.8: seen on Android 17), from the player's own public description (toString(), the line dumpsys
+         * prints), and "uid_from" / "state_from" say which ("getter", "text" or "none"), so a device run shows it.
+         */
         fun players(audioManager: AudioManager, packagesFor: (Int) -> List<String>): String {
             val out = JSONArray()
             for (config in audioManager.activePlaybackConfigurations) {
-                val uid = config.clientUid()
+                val text = runCatching { config.toString() }.getOrDefault("")
+                val (uid, uidFrom) = PlaybackText.best(config.clientUid(), PlaybackText.uid(text)) { it > 0 }
+                val (state, stateFrom) = PlaybackText.best(config.playerState(), PlaybackText.state(text)) { it >= 0 }
                 val attributes = config.audioAttributes
                 out.put(
                     JSONObject()
                         .put("uid", uid)
-                        .put("packages", JSONArray(packagesFor(uid)))
+                        .put("uid_from", uidFrom)
+                        .put("packages", JSONArray(if (uid > 0) packagesFor(uid) else emptyList()))
                         .put("usage", attributes.usage)
                         .put("content_type", attributes.contentType)
                         .put("capture_policy", if (Build.VERSION.SDK_INT >= 29) attributes.allowedCapturePolicy else 1)
-                        .put("state", config.playerState())
+                        .put("state", state)
+                        .put("state_from", stateFrom)
                         .put("piid", config.playerInterfaceId())
                 )
             }
             return out.toString()
         }
+    }
+}
+
+/**
+ * What a player's public description (AudioPlaybackConfiguration.toString(), as `dumpsys audio` prints it:
+ * "AudioPlaybackConfiguration piid:57 … u/pid:10133/26439 state:started attr:…") says of its uid and state (pure). Read
+ * only when the getters give nothing; no hidden API.
+ */
+object PlaybackText {
+    private val UID = Regex("""u/pid:?\s*(-?\d+)\s*/\s*-?\d+""")
+    private val STATE = Regex("""\bstate:?\s*([a-z]+)""")
+
+    /** The uid in [text]; null when it does not say (or says -1, a copy without it). */
+    fun uid(text: String): Int? = UID.find(text)?.groupValues?.get(1)?.toIntOrNull()?.takeIf { it > 0 }
+
+    /** The state in [text] as the getter gives it (1 idle, 2 started, 3 paused, 4 stopped, 0 released); null when unknown. */
+    fun state(text: String): Int? = when (STATE.find(text)?.groupValues?.get(1)) {
+        "released" -> 0
+        "idle" -> 1
+        "started" -> 2
+        "paused" -> 3
+        "stopped" -> 4
+        else -> null
+    }
+
+    /** The getter's value when [good], else the description's, else -1; with where it came from. */
+    fun best(getter: Int, fromText: Int?, good: (Int) -> Boolean): Pair<Int, String> = when {
+        good(getter) -> getter to "getter"
+        fromText != null -> fromText to "text"
+        else -> -1 to "none"
     }
 }
 

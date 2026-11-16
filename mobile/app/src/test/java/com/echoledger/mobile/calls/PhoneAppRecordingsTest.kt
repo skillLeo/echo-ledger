@@ -1,0 +1,459 @@
+package com.echoledger.mobile.calls
+
+import com.echoledger.mobile.calls.PhoneAppRecordings.LogCall
+import com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile
+import com.echoledger.mobile.calls.PhoneAppRecordings.Own
+import com.echoledger.mobile.calls.PhoneAppRecordings.Trust
+import com.echoledger.mobile.calls.PhoneAppRecordings.Verdict
+import com.echoledger.mobile.recording.CallJournal
+import com.echoledger.mobile.recording.CallJournal.Result
+import com.echoledger.mobile.recording.CallJournal.Seen
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+/**
+ * The Phone app's own call recordings (v1.8 0.3), the pure part: which folders hold them on each brand, which file is
+ * which call's recording, what EchoLedger does with it, and what it never takes.
+ */
+class PhoneAppRecordingsTest {
+    private val zone = ZoneId.of("Asia/Karachi")
+    private val t0 = LocalDateTime.of(2026, 10, 29, 10, 15, 0).atZone(zone).toInstant().toEpochMilli()
+    private val sec = 1_000L
+    private val samsungDialer = "com.samsung.android.dialer"
+
+    private fun call(at: Long = t0, talkS: Long = 125, number: String? = "+923001234567", name: String? = null, incoming: Boolean = true) =
+        LogCall(at, talkS, number, name, incoming)
+
+    /** The file One UI writes for [call]: recording from the answer ([answerS] after it rang), named with that time. */
+    private fun samsung(
+        id: Long,
+        call: LogCall,
+        answerS: Long = 8,
+        durationS: Long = call.talkS,
+        who: String = "Omar",
+        path: String = "Recordings/Call/",
+        owner: String? = samsungDialer
+    ): MediaFile {
+        val start = call.dateMs + answerS * sec
+        val stamp = DateTimeFormatter.ofPattern("yyMMdd_HHmmss").withZone(zone).format(Instant.ofEpochMilli(start))
+        val written = start + durationS * sec + 1_000
+        return MediaFile(id, "Call recording ${who}_$stamp.m4a", path, written, durationS * sec, written, owner, durationS * 16_000)
+    }
+
+    private fun match(calls: List<LogCall>, files: List<MediaFile>, handled: Set<Long> = emptySet()) =
+        PhoneAppRecordings.match(calls, files, handled, zone)
+
+    // ---- the folders --------------------------------------------------------------------------------------------------
+
+    @Test
+    fun `each brand's call-recording folder is known, as the media store gives it`() {
+        val rows = mapOf(
+            "Recordings/Call/" to "Samsung",
+            "recordings/call/" to "Samsung",
+            "Recordings/Call/2026/" to "Samsung",
+            "Call/" to "Samsung",
+            "MIUI/sound_recorder/call_rec/" to "Xiaomi, Redmi, POCO",
+            "Music/Recordings/Call Recordings/" to "Oppo, realme, OnePlus",
+            "Recordings/Call Recordings/" to "Oppo, realme, OnePlus",
+            "Record/PhoneRecord/" to "OnePlus",
+            "Record/Call/" to "vivo",
+            "Sounds/CallRecord/" to "Huawei, Honor"
+        )
+        rows.forEach { (path, brand) -> assertEquals(path, brand, PhoneAppRecordings.folderOf(path)?.brand) }
+    }
+
+    @Test
+    fun `a voice memo folder or any other is never a call folder, nor a path that climbs out of one`() {
+        listOf(
+            "Recordings/Voice Recorder/",
+            "Recordings/",
+            "Music/",
+            "Download/",
+            "WhatsApp/Media/WhatsApp Voice Notes/",
+            "Callbacks/",
+            "MIUI/sound_recorder/",
+            "Android/data/com.google.android.dialer/files/",
+            "Recordings/Call/../Voice Recorder/",
+            "",
+            null
+        ).forEach { assertNull("$it", PhoneAppRecordings.folderOf(it)) }
+        assertTrue(
+            "Google's Phone app keeps its recordings inside the app: no folder for Pixel",
+            PhoneAppRecordings.FOLDERS.none { it.brand.contains("Pixel") || it.brand.contains("Google") }
+        )
+    }
+
+    // ---- which file is which call's -------------------------------------------------------------------------------------
+
+    @Test
+    fun `the start time in a Phone app's file name is read in the phone's time zone, never a number`() {
+        assertEquals(t0, PhoneAppRecordings.stampOf("Call recording Omar_261029_101500.m4a", zone))
+        assertEquals(t0, PhoneAppRecordings.stampOf("Omar(03001234567)_20261029101500.mp3", zone))
+        assertEquals(t0, PhoneAppRecordings.stampOf("Omar 2026-10-29 10-15-00.m4a", zone))
+        assertEquals("a 12-digit number first", t0, PhoneAppRecordings.stampOf("+923001234567_261029101500.m4a", zone))
+        assertNull(PhoneAppRecordings.stampOf("Call recording 03001234567.m4a", zone))
+    }
+
+    @Test
+    fun `incoming and outgoing calls get their recording, from the answer to a moment after the end`() {
+        val incoming = call(incoming = true)
+        val outgoing = call(at = t0 + 30 * 60 * sec, talkS = 61, incoming = false)
+        val files = listOf(samsung(1, incoming, answerS = 20), samsung(2, outgoing, answerS = 6))
+        assertEquals(listOf(incoming to files[0], outgoing to files[1]), match(listOf(incoming, outgoing), files))
+    }
+
+    @Test
+    fun `a 5-second call's recording is found (Skip calls shorter than decides after)`() {
+        val short = call(talkS = 5)
+        val file = samsung(1, short)
+        assertEquals(listOf(short to file), match(listOf(short), listOf(file)))
+        assertEquals(Verdict.SHORT, PhoneAppRecordings.verdict(short, null, null, always(), 10, t0))
+        assertEquals(Verdict.IMPORT, PhoneAppRecordings.verdict(short, null, null, always(), 0, t0))
+        assertEquals("under 3 s is never a call", Verdict.SHORT, PhoneAppRecordings.verdict(call(talkS = 2), null, null, always(), 0, t0))
+    }
+
+    @Test
+    fun `two calls back to back each get their own recording, even when no name is in the files`() {
+        val a = call(talkS = 60)
+        val b = call(at = t0 + 65 * sec, talkS = 30)
+        val fa = samsung(1, a, answerS = 4, who = "")
+        val fb = samsung(2, b, answerS = 4, who = "")
+        assertEquals(listOf(a to fa, b to fb), match(listOf(a, b), listOf(fb, fa)))
+    }
+
+    @Test
+    fun `for an unsaved number the file named with the number wins over one of the same length`() {
+        val c = call(number = "+923001234567", name = null)
+        val other = samsung(1, c, who = "Ali")
+        val named = samsung(2, c, who = "+92 300 1234567")
+        assertEquals(named, match(listOf(c), listOf(other, named)).single().second)
+        val contact = call(number = "+923331112223", name = "Ali")
+        assertEquals("a saved contact: its name", other, match(listOf(contact), listOf(other, named)).single().second)
+    }
+
+    @Test
+    fun `without a name in the file, the length closest to the talk time is taken`() {
+        val c = call(talkS = 123, number = null)
+        val far = samsung(1, c, durationS = 110, who = "")
+        val close = samsung(2, c, durationS = 122, who = "")
+        assertEquals(close, match(listOf(c), listOf(far, close)).single().second)
+    }
+
+    @Test
+    fun `never a file outside the folder, before the call, long after it, too short, of another length or already handled`() {
+        val c = call()
+        val good = samsung(9, c)
+        val outside = samsung(1, c, path = "Recordings/Voice Recorder/")
+        val before = samsung(2, c).let { it.copy(addedMs = c.dateMs - 60_000, modifiedMs = c.dateMs - 60_000) }
+        val late = samsung(3, c).let {
+            val after = PhoneAppRecordings.windowOf(c).last + 1
+            it.copy(addedMs = after, modifiedMs = after)
+        }
+        val empty = samsung(4, c, durationS = 0).copy(durationMs = 400)
+        val otherLength = samsung(5, c, durationS = 30)
+        listOf(outside, before, late, empty, otherLength).forEach {
+            assertEquals("${it.id}", emptyList<Any>(), match(listOf(c), listOf(it)))
+        }
+        assertEquals("already settled", emptyList<Any>(), match(listOf(c), listOf(good), handled = setOf(9)))
+        assertEquals("the call log's unanswered calls have none", emptyList<Any>(), match(listOf(call(talkS = 0)), listOf(good)))
+    }
+
+    @Test
+    fun `a file changed after the call is not that call's recording`() {
+        val c = call()
+        val changed = samsung(1, c).let { it.copy(modifiedMs = PhoneAppRecordings.windowOf(c).last + 1) }
+        assertEquals(emptyList<Any>(), match(listOf(c), listOf(changed)))
+    }
+
+    @Test
+    fun `a recording lasts about as long as its call`() {
+        assertTrue(PhoneAppRecordings.lengthFits(125_000, 125))
+        assertTrue("started as the call was dialled", PhoneAppRecordings.lengthFits(125_000 + 40_000, 125))
+        assertTrue(PhoneAppRecordings.lengthFits(110_000, 125))
+        assertFalse(PhoneAppRecordings.lengthFits(30_000, 125))
+        assertFalse(PhoneAppRecordings.lengthFits(125_000 + 120_000, 125))
+    }
+
+    // ---- what is never taken ----------------------------------------------------------------------------------------------
+
+    /** A Galaxy whose Phone app came with it (system apps), unless said otherwise. */
+    private fun galaxy(dialer: String? = null, system: Set<String> = setOf(samsungDialer, "com.samsung.android.incallui")) =
+        PhoneAppRecordings.ThisPhone("samsung", dialer, isSystemApp = { it in system })
+
+    @Test
+    fun `only the Phone app's own file is taken, an unknown maker waits for the person, an oversize one never`() {
+        val c = call()
+        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c), c, galaxy()))
+        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c, owner = "com.samsung.android.incallui"), c, galaxy()))
+        assertEquals(
+            "another app",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.recorder"), c, galaxy())
+        )
+        assertEquals(
+            "the phone's own default dialer",
+            Trust.OK,
+            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.dialer"), c, galaxy(dialer = "com.example.dialer"))
+        )
+        assertEquals("the phone does not say", Trust.UNKNOWN_MAKER, PhoneAppRecordings.trust(samsung(1, c, owner = null), c, galaxy()))
+        val huge = samsung(1, c).copy(sizeBytes = PhoneAppRecordings.maxBytes(c.talkS) + 1)
+        assertEquals(Trust.TOO_LARGE, PhoneAppRecordings.trust(huge, c, galaxy()))
+        assertTrue("never more than the ceiling", PhoneAppRecordings.maxBytes(100_000) == PhoneAppRecordings.MAX_BYTES)
+    }
+
+    @Test
+    fun `a package name alone is never trusted, only this maker's Phone app as it came with the phone, or the default dialer`() {
+        val c = call()
+        assertEquals(
+            "an app installed later and named like Google's dialer",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.trust(samsung(1, c, owner = PhoneAppRecordings.GOOGLE_DIALER), c, galaxy())
+        )
+        assertEquals(
+            "an app installed later and named like Samsung's Phone app",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.trust(samsung(1, c), c, galaxy(system = emptySet()))
+        )
+        val xiaomi = PhoneAppRecordings.ThisPhone("Xiaomi", null, isSystemApp = { true })
+        assertEquals("Samsung's folder on a Xiaomi phone", Trust.NOT_THE_PHONE_APP, PhoneAppRecordings.trust(samsung(1, c), c, xiaomi))
+        assertEquals(
+            "Google's dialer as the default dialer",
+            Trust.OK,
+            PhoneAppRecordings.trust(
+                samsung(1, c, owner = PhoneAppRecordings.GOOGLE_DIALER),
+                c,
+                galaxy(dialer = PhoneAppRecordings.GOOGLE_DIALER)
+            )
+        )
+        assertTrue(PhoneAppRecordings.supported("samsung") && PhoneAppRecordings.supported("Xiaomi"))
+        assertFalse("Google's Phone app keeps its recordings inside the app", PhoneAppRecordings.supported("Google"))
+    }
+
+    @Test
+    fun `another app's or an oversize file never takes the call's place, and a trusted file comes before an unknown one`() {
+        val c = call()
+        val real = samsung(1, c, durationS = 118)
+        val foreign = samsung(2, c, owner = "com.example.recorder") // the closest length, named after the person
+        val unknown = samsung(3, c, owner = null)
+        val trustOf = { f: MediaFile, l: LogCall -> PhoneAppRecordings.trust(f, l, galaxy()) }
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(foreign, real), zone = zone, trustOf = trustOf).single().second)
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(unknown, real), zone = zone, trustOf = trustOf).single().second)
+        val big = samsung(4, c).copy(sizeBytes = PhoneAppRecordings.maxBytes(c.talkS) + 1)
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(big, real), zone = zone, trustOf = trustOf).single().second)
+        assertEquals(unknown, PhoneAppRecordings.match(listOf(c), listOf(foreign, unknown), zone = zone, trustOf = trustOf).single().second)
+    }
+
+    // ---- what EchoLedger does with it -------------------------------------------------------------------------------------
+
+    private fun always(autoRecord: Boolean = true, viewer: Boolean = false) =
+        CallJournal.Choices(autoRecord = autoRecord, phoneCalls = "always", viewer = viewer)
+
+    private fun entry(result: Result?, note: String? = null, bothSides: Boolean = false): CallJournal.Call {
+        var b = CallJournal.seen(CallJournal.Book(), "e1", "phone_call", Seen.HELPER, t0 + 8_000)
+        if (bothSides) b = CallJournal.stage(b, "e1", CallJournal.Stage.BOTH_AUDIO, t0 + 9_000)
+        if (result == Result.FAILED) b = CallJournal.fail(b, "e1", "unknown", "x", t0 + 9_000)
+        if (result != null && result != Result.FAILED) b = CallJournal.finish(b, "e1", result, t0 + 140_000, note)
+        return b.call("e1")!!
+    }
+
+    @Test
+    fun `what becomes of the Phone app's recording`() {
+        val c = call()
+        val ask = CallJournal.Choices(autoRecord = true, phoneCalls = "ask")
+        assertEquals(
+            "EchoLedger still saving",
+            Verdict.WAIT,
+            PhoneAppRecordings.verdict(c, entry(null), null, always(), 10, t0 + 200_000, busy = true)
+        )
+        assertEquals(
+            "its own with sound",
+            Verdict.OWN,
+            PhoneAppRecordings.verdict(c, entry(Result.FAILED), Own(t0, t0 + 130_000, 2), always(), 10, t0)
+        )
+        assertEquals(
+            "kept, both sides heard",
+            Verdict.OWN,
+            PhoneAppRecordings.verdict(c, entry(Result.KEPT, bothSides = true), null, always(), 10, t0)
+        )
+        assertEquals(
+            "kept with one side only: the Phone app's copy has both",
+            Verdict.IMPORT,
+            PhoneAppRecordings.verdict(c, entry(Result.KEPT), null, always(), 10, t0)
+        )
+        assertEquals(Verdict.DISCARDED, PhoneAppRecordings.verdict(c, entry(Result.DISCARDED), null, always(), 10, t0))
+        assertEquals(
+            "Record not chosen",
+            Verdict.NOT_ASKED,
+            PhoneAppRecordings.verdict(c, entry(Result.NOT_WANTED, "Record was not chosen"), null, ask, 10, t0)
+        )
+        assertEquals("the line gave nothing", Verdict.IMPORT, PhoneAppRecordings.verdict(c, entry(Result.FAILED), null, ask, 10, t0))
+        assertEquals("Always, EchoLedger never saw it", Verdict.IMPORT, PhoneAppRecordings.verdict(c, null, null, always(), 10, t0))
+        assertEquals(Verdict.NOT_ASKED, PhoneAppRecordings.verdict(c, null, null, ask, 10, t0))
+        assertEquals(Verdict.NOT_ASKED, PhoneAppRecordings.verdict(c, null, null, always(autoRecord = false), 10, t0))
+        assertEquals(Verdict.NOT_ASKED, PhoneAppRecordings.verdict(c, null, null, always(viewer = true), 10, t0))
+        assertEquals("no choices known then", Verdict.NOT_ASKED, PhoneAppRecordings.verdict(c, null, null, null, 10, t0))
+    }
+
+    @Test
+    fun `EchoLedger's own entry for each of two calls back to back, never an import's`() {
+        val a = call(talkS = 60)
+        val b = call(at = t0 + 65 * sec, talkS = 30)
+        var j = CallJournal.seen(CallJournal.Book(), "e1", "phone_call", Seen.HELPER, t0 + 3_000)
+        j = CallJournal.seen(j, "e2", "phone_call", Seen.HELPER, t0 + 66_000)
+        j = CallJournal.seen(j, "p1", "phone_call", Seen.PHONE_APP, t0 + 4_000)
+        j = CallJournal.seen(j, "w1", "whatsapp", Seen.HELPER, t0 + 2_000)
+        assertEquals(mapOf(a to "e1", b to "e2"), PhoneAppRecordings.entriesFor(listOf(a, b), j.calls).mapValues { it.value.id })
+    }
+
+    @Test
+    fun `EchoLedger's own recording counts when it covers the call, not when the last seconds of the one before run over`() {
+        val span = (t0 + 8_000)..(t0 + 133_000)
+        val two = Own(t0, t0 + 134_000, 2)
+        assertEquals(two, PhoneAppRecordings.ownFor(span, listOf(two)))
+        val before = Own(t0 - 60_000, t0 + 9_500, 2)
+        assertNull("1.5 s over: the call before", PhoneAppRecordings.ownFor(span, listOf(before)))
+    }
+
+    @Test
+    fun `the notes name no one and no number`() {
+        val c = call(name = "Omar Khan")
+        val file = samsung(1, c)
+        val notes =
+            Verdict.entries.map {
+                PhoneAppRecordings.note(it, c, file, entry(Result.NOT_WANTED, "Record was not chosen"), Own(0, 1, 2), always(), 10)
+            } +
+                Trust.entries.map { PhoneAppRecordings.note(it) }
+        notes.forEach { note ->
+            assertFalse(note, note.contains("Omar") || Regex("\\d{5,}").containsMatchIn(note))
+        }
+        assertEquals(
+            "EchoLedger's own recording kept (both sides apart); the Phone app's copy stays in its folder.",
+            PhoneAppRecordings.note(Verdict.OWN, c, file, null, Own(0, 1, 2), always(), 10)
+        )
+        assertEquals(
+            "not imported, shorter than 10 s (Skip calls shorter than).",
+            PhoneAppRecordings.note(Verdict.SHORT, call(talkS = 5), file, null, null, always(), 10)
+        )
+        assertEquals(
+            "kept, both sides heard, its file already sent",
+            "EchoLedger heard both sides itself; the Phone app's copy stays in its folder.",
+            PhoneAppRecordings.note(Verdict.OWN, c, file, null, null, always(), 10)
+        )
+    }
+
+    // ---- what is read, and when the card shows (review of 0.3) ----------------------------------------------------
+
+    @Test
+    fun `a row read again is the same file, one the Phone app is still saving, one changed for good, or gone`() {
+        val c = call()
+        val file = samsung(1, c)
+        assertEquals(PhoneAppRecordings.Row.SAME, PhoneAppRecordings.rowNow(file, file, c))
+        assertEquals(PhoneAppRecordings.Row.GONE, PhoneAppRecordings.rowNow(file, null, c))
+        val growing = file.copy(
+            sizeBytes = file.sizeBytes + 4_000,
+            modifiedMs = file.modifiedMs + 5 * sec,
+            durationMs =
+                file.durationMs + 1 * sec
+        )
+        assertEquals("still in the call's window", PhoneAppRecordings.Row.SAVING, PhoneAppRecordings.rowNow(file, growing, c))
+        val late = file.copy(sizeBytes = 1, modifiedMs = file.modifiedMs + 60 * 60 * sec)
+        assertEquals("changed an hour later", PhoneAppRecordings.Row.CHANGED, PhoneAppRecordings.rowNow(file, late, c))
+        assertEquals("moved", PhoneAppRecordings.Row.CHANGED, PhoneAppRecordings.rowNow(file, file.copy(path = "Music/"), c))
+        assertEquals(
+            "now another app's",
+            PhoneAppRecordings.Row.CHANGED,
+            PhoneAppRecordings.rowNow(file, file.copy(owner = "com.example.cleaner"), c)
+        )
+        assertEquals(
+            "the same folder, written as the media store does",
+            PhoneAppRecordings.Row.SAME,
+            PhoneAppRecordings.rowNow(file, file.copy(path = "recordings/Call"), c)
+        )
+    }
+
+    @Test
+    fun `each kind of call recording file is sent as the server takes it, and a kind it cannot take is not`() {
+        fun type(mime: String?, name: String = "Call recording.bin") =
+            PhoneAppRecordings.typeOf(MediaFile(1, name, "Call/", 0, 1_000, mime = mime))
+        assertEquals("audio/mp4" to "aac", type("audio/mp4"))
+        assertEquals("audio/mp4" to "aac", type("audio/x-m4a"))
+        assertEquals("audio/mpeg" to "mp3", type("audio/mpeg"))
+        assertEquals("audio/amr" to "amr", type("audio/amr"))
+        assertEquals("audio/aac" to "aac", type("audio/aac"))
+        assertEquals("audio/wav" to "pcm", type("audio/x-wav"))
+        assertEquals("audio/ogg" to "vorbis", type("application/ogg"))
+        assertNull("3GPP is not taken", type("audio/3gpp", "Call.3gp"))
+        assertNull("nor AMR-WB", type("audio/amr-wb", "Call.awb"))
+        assertEquals("no type: the name decides", "audio/mpeg" to "mp3", type(null, "Ali_20261029101500.mp3"))
+        assertEquals("audio/amr" to "amr", type(null, "Ali.AMR"))
+        assertNull(type(null, "Ali.3gp"))
+        assertNull(type(null, "no extension"))
+    }
+
+    @Test
+    fun `only the call folders are asked for, so music and podcasts never push call files out of the newest`() {
+        val (selection, args) = PhoneAppRecordings.selection(t0)
+        assertTrue(selection, selection.startsWith("date_added >= ? AND ("))
+        assertEquals(PhoneAppRecordings.FOLDERS.map { it.path }.distinct().size, Regex("relative_path LIKE \\?").findAll(selection).count())
+        assertEquals(((t0 - 10_000) / 1000).toString(), args.first())
+        assertTrue(args.contains("Recordings/Call/%"))
+        assertTrue(args.contains("MIUI/sound_recorder/call_rec/%"))
+    }
+
+    @Test
+    fun `the after-call card shows right after the call, never during another call or recording, nor long after`() {
+        assertTrue(PhoneAppRecordings.cardNow(t0, t0 + 40 * sec, live = false))
+        assertFalse("a call or a recording is live", PhoneAppRecordings.cardNow(t0, t0 + 40 * sec, live = true))
+        assertFalse("ended 3 minutes ago (the first look after an update)", PhoneAppRecordings.cardNow(t0, t0 + 3 * 60 * sec, live = false))
+    }
+
+    @Test
+    fun `the media store is watched only where the Phone app's recordings can be found`() {
+        val on = com.echoledger.mobile.data.AppSettings(phoneCalls = "always", phoneAppImport = true)
+        assertTrue(PhoneAppRecordings.watching(on, allowed = true, manufacturer = "samsung"))
+        assertFalse(
+            "a Pixel: Google's Phone app keeps its recordings to itself",
+            PhoneAppRecordings.watching(on, allowed = true, manufacturer = "Google")
+        )
+        assertFalse(PhoneAppRecordings.watching(on, allowed = false, manufacturer = "samsung"))
+        assertFalse(PhoneAppRecordings.watching(on.copy(phoneAppImport = false), allowed = true, manufacturer = "samsung"))
+    }
+
+    @Test
+    fun `a pending delete waits for its recording to reach the server, and goes when the recording went first`() {
+        val list = PhoneAppRecordings.parseDeletes("11:rec-a;12:rec-b:u;13:rec-c;14".replace(';', ','))
+        assertEquals(
+            listOf(
+                PhoneAppRecordings.PendingDelete(11, "rec-a"),
+                PhoneAppRecordings.PendingDelete(12, "rec-b", uploaded = true),
+                PhoneAppRecordings.PendingDelete(13, "rec-c"),
+                PhoneAppRecordings.PendingDelete(14, null)
+            ),
+            list
+        )
+        assertEquals(list, PhoneAppRecordings.parseDeletes(PhoneAppRecordings.formatDeletes(list)))
+        // rec-a is still on the phone, rec-c was deleted (Undo), 14 is an older build's (no recording known).
+        val (due, waiting) = PhoneAppRecordings.dueDeletes(list) { it == "rec-a" }
+        assertEquals(listOf(12L), due.map { it.fileId })
+        assertEquals(listOf(11L), waiting.map { it.fileId })
+    }
+
+    @Test
+    fun `the guide names the Phone app's own path on a Galaxy and on Xiaomi phones`() {
+        assertEquals("Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls.", PhoneAppRecordings.guide("samsung"))
+        assertEquals(PhoneAppRecordings.guide("samsung"), PhoneAppRecordings.guide("SAMSUNG"))
+        assertEquals(
+            "Phone app → Settings → Call recording → Record calls automatically → All numbers.",
+            PhoneAppRecordings.guide("Xiaomi")
+        )
+        assertEquals(PhoneAppRecordings.guide("Xiaomi"), PhoneAppRecordings.guide("POCO"))
+        assertTrue(PhoneAppRecordings.guide("Google").startsWith("In your Phone app's settings"))
+    }
+}

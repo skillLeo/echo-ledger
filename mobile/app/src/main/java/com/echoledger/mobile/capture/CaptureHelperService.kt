@@ -514,13 +514,27 @@ class CaptureHelperService(base: Context) : ICaptureHelper.Stub() {
      * one track; 48 kHz first, then the 16 kHz most phone lines run at. Null when nothing works.
      */
     private fun openPhoneLine(rate: Int, problems: MutableList<String>): Side? {
-        for (lineRate in listOf(rate, Pcm.STT_RATE).distinct()) {
-            open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, CHANNEL_IN_UPLINK_DOWNLINK, "phone line (both directions)", problems)
-                ?.let { return Side(it, it.sampleRate, lane = 0, mic = false, channels = 2) }
-            open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, AudioFormat.CHANNEL_IN_MONO, "phone line", problems)
-                ?.let { return Side(it, it.sampleRate, lane = 0, mic = false) }
+        // Each source tried and what came of it, in one line for the app's capture log (v1.8 0.3, read over adb).
+        val tried = mutableListOf<String>()
+        fun attempt(mask: Int, label: String, lineRate: Int, both: Boolean): AudioRecord? {
+            val before = problems.size
+            val record = open(MediaRecorder.AudioSource.VOICE_CALL, lineRate, mask, label, problems)
+            val outcome =
+                record?.let { "opened" } ?: problems.drop(before).joinToString("; ") { it.substringAfter(": ") }.ifEmpty { "failed" }
+            tried += "VOICE_CALL ${if (both) "uplink+downlink" else "mono"} $lineRate Hz: $outcome"
+            return record
         }
-        return null
+        try {
+            for (lineRate in listOf(rate, Pcm.STT_RATE).distinct()) {
+                attempt(CHANNEL_IN_UPLINK_DOWNLINK, "phone line (both directions)", lineRate, both = true)
+                    ?.let { return Side(it, it.sampleRate, lane = 0, mic = false, channels = 2) }
+                attempt(AudioFormat.CHANNEL_IN_MONO, "phone line", lineRate, both = false)
+                    ?.let { return Side(it, it.sampleRate, lane = 0, mic = false) }
+            }
+            return null
+        } finally {
+            state("line ${tried.joinToString(" | ")}")
+        }
     }
 
     /** Opens and starts [source] at [rate], as the shell first and then with the process's own attribution. */

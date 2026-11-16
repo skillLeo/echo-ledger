@@ -35,5 +35,14 @@ object PostCallPrompt {
         }
     }
 
+    /**
+     * The recording follows "After a call" with nothing on the screen (since v1.8 0.3: a call or a recording is live,
+     * or the call ended a while ago): one waiting for Keep or Discard waits in Record, a kept one uploads now (there is
+     * no Undo chip to wait for).
+     */
+    fun quietly(context: Context, rec: LocalRecording) {
+        if (rec.state == "pending_decision") DecisionTimeoutWorker.schedule(context, rec.id) else UploadWorker.enqueue(context, rec.id)
+    }
+
     fun isCall(rec: LocalRecording): Boolean = SourceApp.from(rec.sourceApp) !in setOf(SourceApp.VOICE_NOTE, SourceApp.OTHER)
 }

@@ -113,17 +113,26 @@ internal fun PillView(s: PillState, modifier: Modifier = Modifier, onEvent: (Pil
     }
 }
 
-/** Minimised: a 20 dp dot at the edge (grey while paused). */
+/**
+ * Minimised: a 20 dp dot at the edge (grey while paused) in a 48 dp touch target. A tap, or TalkBack's double-tap, is
+ * [onOpen]: the recording controls open.
+ */
 @Composable
-internal fun PillDot(s: PillState, modifier: Modifier = Modifier) {
+internal fun PillDot(s: PillState, modifier: Modifier = Modifier, onOpen: () -> Unit = {}) {
     Box(
         modifier
-            .size(20.dp)
-            .background(if (s.paused) PILL_MUTED else PILL_REC, CircleShape)
-            .border(2.dp, PILL_BG, CircleShape)
-            .semantics { contentDescription = "Recording. Tap for the controls." }
-    )
+            .size(48.dp)
+            .clip(CircleShape)
+            .clickable(role = Role.Button, onClickLabel = OPEN_CONTROLS, onClick = onOpen)
+            .semantics { contentDescription = if (s.paused) "Recording paused" else "Recording" },
+        contentAlignment = Alignment.Center
+    ) {
+        Box(Modifier.size(20.dp).background(if (s.paused) PILL_MUTED else PILL_REC, CircleShape).border(2.dp, PILL_BG, CircleShape))
+    }
 }
+
+/** What a tap on the minimised dot does. */
+internal const val OPEN_CONTROLS = "Open the recording controls"
 
 /**
  * While EchoLedger's floating windows are hidden (Hide EchoLedger windows, or a screen share Android reports): a plain

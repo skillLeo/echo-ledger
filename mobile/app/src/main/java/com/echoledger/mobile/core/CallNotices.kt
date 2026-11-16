@@ -90,6 +90,15 @@ object CallNotices {
     fun latest(pkg: String?, sim: Boolean, sinceMs: Long): Notice? = recent.lastOrNull { it.atMs >= sinceMs && matches(it, pkg, sim) }
 
     /**
+     * The newest notice since [sinceMs] that says an app call is on (answered, or ringing out), from whichever call app;
+     * null when there is none (a call is then not named after a guess).
+     */
+    @Synchronized
+    fun callOn(sinceMs: Long): Notice? = recent.lastOrNull {
+        it.atMs >= sinceMs && it.kind != Kind.INCOMING && it.pkg !in DIALERS && it.pkg in CallTargets.KNOWN.keys
+    }
+
+    /**
      * Apps installed side by side that are easily mistaken for each other at the start of a call (since v1.7.1: a
      * WhatsApp call right after a WhatsApp Business one was taken for Business, so WhatsApp's own "ongoing call" notice,
      * the answer signal, was ignored and the call was dropped as never answered).

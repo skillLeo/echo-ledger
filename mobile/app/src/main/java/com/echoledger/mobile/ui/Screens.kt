@@ -1085,8 +1085,8 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                 Column(Modifier.weight(1f)) {
                     Text("Hide content in Recents and screenshots")
                     Text(
-                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always left out of " +
-                            "screenshots unless you choose Show in During screen sharing.",
+                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always a black " +
+                            "box in screenshots unless you choose Show in During screen sharing.",
                         color = Brand.Muted,
                         fontSize = 12.sp
                     )

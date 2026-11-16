@@ -182,11 +182,19 @@ private fun pageShown(id: String, s: AppSettings): Boolean = when (id) {
  * open their page and highlight the setting.
  */
 @Composable
-fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0) {
+fun SettingsScreen(vm: MainViewModel, onSetup: () -> Unit, home: Int = 0, openPage: String? = null, onPageOpened: () -> Unit = {}) {
     var page by rememberSaveable { mutableStateOf<String?>(null) }
     var highlight by rememberSaveable { mutableStateOf<String?>(null) }
     var searching by rememberSaveable { mutableStateOf(false) }
     var upgrade by remember { mutableStateOf<FlowStart?>(null) }
+    // Another screen asked for a page (since v1.8: a missed recording's See plans opens Plan & usage).
+    LaunchedEffect(openPage) {
+        if (openPage != null && SettingsIndex.page(openPage) != null) {
+            page = openPage
+            searching = false
+        }
+        if (openPage != null) onPageOpened()
+    }
     // The Settings tab tapped again (since 1.3.2): back to the root.
     LaunchedEffect(home) {
         if (home > 0) {

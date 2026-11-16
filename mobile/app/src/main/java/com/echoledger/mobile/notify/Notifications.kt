@@ -428,6 +428,100 @@ object Notifications {
     }
 
     private const val NO_AUDIO_ID = 7_431
+
+    /**
+     * The Phone app recorded a call, but the phone does not say which app made the file (since v1.8, 0.3): it waits for
+     * the person in Settings, where they import it or not. Quiet; a tap opens that page.
+     */
+    fun phoneAppRecordingToCheck(context: Context, callAtMs: Long) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault())
+            .format(java.time.Instant.ofEpochMilli(callAtMs))
+        val text = "Your call at $time: the phone doesn't say which app made its recording file. " +
+            "Open Settings to import it if it is that call's."
+        val open = PendingIntent.getActivity(
+            context,
+            TO_CHECK_ID,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETTINGS_PREFIX + "calls"),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Import the Phone app's recording?")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(open)
+        runCatching { NotificationManagerCompat.from(context).notify(TO_CHECK_ID, builder.build()) }
+    }
+
+    private const val TO_CHECK_ID = 7_437
+
+    /**
+     * Call recordings brought in from the Phone app without the after-call card (since v1.8 0.3: a call or recording was
+     * live, or the calls ended a while ago): one quiet notification, adding up while it is still showing.
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun phoneAppImported(context: Context, count: Int, waiting: Boolean) {
+        if (!canPost(context) || count <= 0) return
+        val prefs = context.getSharedPreferences("phone_app_recordings", Context.MODE_PRIVATE)
+        val showing = runCatching {
+            context.getSystemService(android.app.NotificationManager::class.java).activeNotifications.any { it.id == IMPORTED_ID }
+        }.getOrDefault(false)
+        val total = count + if (showing) prefs.getInt(IMPORTED_COUNT, 0) else 0
+        prefs.edit().putInt(IMPORTED_COUNT, total).apply()
+        val title = if (total == 1) "Call recording brought in" else "$total call recordings brought in"
+        val text = if (waiting) "From the Phone app. Keep or discard them in Record." else "From the Phone app. They're in your Library."
+        val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context))
+        runCatching { NotificationManagerCompat.from(context).notify(IMPORTED_ID, builder.build()) }
+    }
+
+    private const val IMPORTED_ID = 7_438
+    private const val IMPORTED_COUNT = "quiet_imports"
+
+    /**
+     * A SIM call EchoLedger could not record (the phone line gave no sound, or would not open), when the Phone app's own
+     * recording is not on its way (since v1.8 0.3): said once, quietly, with what to do; never the helper advice, which
+     * cannot help with a line the phone keeps for its own Phone app.
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun phoneLineNotRecorded(context: Context, text: String) {
+        if (!canPost(context)) return
+        val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Phone call not recorded")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    context,
+                    NO_AUDIO_ID,
+                    Intent(context, MainActivity::class.java)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                        .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETTINGS_PREFIX + "calls"),
+                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+                )
+            )
+        runCatching { NotificationManagerCompat.from(context).notify(NO_AUDIO_ID, builder.build()) }
+    }
     private const val ASK_PHONE_CALL_ID = 7_433
 
     /** "Record phone calls: Ask each time" (since v1.2): a phone call started; offer to record it. Gone when the call ends. */

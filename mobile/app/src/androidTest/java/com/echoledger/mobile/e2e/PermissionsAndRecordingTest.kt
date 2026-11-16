@@ -87,7 +87,7 @@ class PermissionsAndRecordingTest : E2eTest() {
     @Test
     fun theSetupScreenListsTheMissingPermissionsAndAutoRecordIsLockedUntilTheHelperRuns() {
         openSetup()
-        assertTrue(Ui.has("•  Microphone"))
+        assertTrue(Ui.has("Microphone"))
         assertTrue(Ui.hasContaining("Notifications"))
         assertTrue(Ui.hasContaining("Display over other apps"))
         assertTrue(Ui.hasContaining("Not enabled yet.") || Ui.hasContaining("helper"))
@@ -103,7 +103,7 @@ class PermissionsAndRecordingTest : E2eTest() {
     @Test
     fun allowingTheMicrophoneFromSetupShowsTheSystemPromptAndMarksItDone() {
         openSetup()
-        allowFor("•  Microphone").click()
+        allowFor("Microphone").click()
         answerPrompt("While using the app", "Only this time")
         Ui.awaitText("✓  Microphone")
         Ui.snapshot("setup-microphone-granted")
@@ -114,9 +114,9 @@ class PermissionsAndRecordingTest : E2eTest() {
     @Test
     fun denyingTheMicrophonePromptKeepsItListedAsMissing() {
         openSetup()
-        allowFor("•  Microphone").click()
+        allowFor("Microphone").click()
         answerPrompt("Don't allow", "Deny")
-        Ui.awaitText("•  Microphone")
+        Ui.awaitText("Microphone")
         assertFalse(granted(Manifest.permission.RECORD_AUDIO))
     }
 
@@ -124,7 +124,7 @@ class PermissionsAndRecordingTest : E2eTest() {
     @Test
     fun theNotificationPermissionIsRequestedFromSetup() {
         openSetup()
-        allowFor("•  Notifications (Stop / Keep / Discard actions)").click()
+        allowFor("Notifications (Stop / Keep / Discard actions)").click()
         answerPrompt("Allow")
         Ui.awaitText("✓  Notifications (Stop / Keep / Discard actions)")
         assertTrue(granted(Manifest.permission.POST_NOTIFICATIONS))
@@ -133,7 +133,7 @@ class PermissionsAndRecordingTest : E2eTest() {
     @Test
     fun theDisplayOverOtherAppsRowOpensTheSystemOverlaySettings() {
         openSetup()
-        allowFor("•  Display over other apps (optional)").click()
+        allowFor("Display over other apps (optional)").click()
         Ui.awaitCondition("the overlay permission screen", Ui.NORMAL) { Ui.find(By.pkg("com.android.settings")) != null }
         assertFalse(Settings.canDrawOverlays(Ui.context))
         Ui.device.pressBack()

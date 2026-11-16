@@ -442,6 +442,25 @@ class MainActivityTest : AppTest() {
     }
 
     @Test
+    fun `the notice of a Phone app recording that waits for the person opens its Settings page`() {
+        // Only a phone whose maker has a known call folder brings in the Phone app's recordings (a Galaxy here).
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        serve()
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(phoneCalls = "always") }
+        }
+        val intent = Intent(app, MainActivity::class.java)
+            .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETTINGS_PREFIX + "calls")
+        val controller = buildActivity(MainActivity::class.java, intent).create()
+        controller.get().simulateBiometrics(false)
+        controller.start().postCreate(null).resume().visible()
+
+        awaitText("Record phone calls")
+        awaitText("The Phone app's own recordings")
+    }
+
+    @Test
     fun `a shared voice note opens straight on its page once transcribed, with Copy for AI and no tabs`() {
         serve()
         runBlocking {

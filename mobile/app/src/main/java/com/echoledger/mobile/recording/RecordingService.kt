@@ -26,9 +26,9 @@ import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
 import com.echoledger.mobile.calls.CallStateMachine
+import com.echoledger.mobile.calls.MissedReason
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
-import com.echoledger.mobile.calls.SamsungCallImport
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.core.CallNotices
@@ -101,16 +101,26 @@ class RecordingService : LifecycleService() {
         const val EXTRA_TAG = "tag"
         const val EXTRA_LANGUAGE = "language"
         private const val TAG = "EchoLedgerRec"
+
+        /** The logcat tag of the one line per SIM call (v1.8 0.3). */
+        const val SIM_TAG = "EchoLedgerSim"
         private const val TICK_MS = 1_000L
 
         /** An "incoming call" notice this recent means the call that just started is that call, answered. */
         private const val INCOMING_LOOKBACK_MS = 60_000L
         private const val WATCHDOG_MS = 5_000L
 
+        /** How long a refused start waits for the helper's words, which come from its process a moment after its answer. */
+        private const val PROBLEM_WAIT_MS = 500L
+
         /** A recorder that fails this many reads in a row has stopped for good (about half a second of failures). */
         private const val MAX_FAILED_MIC_READS = 50
 
         @Volatile var isRecording = false
+            private set
+
+        /** A recording just stopped is still being saved (the missed-recording detector waits for it, since v1.8). */
+        @Volatile var isSaving = false
             private set
 
         /** Auto-record is armed in this process (the app re-arms it on opening when the setting is on but this is not). */
@@ -148,6 +158,10 @@ class RecordingService : LifecycleService() {
     private var armed = false
     private var inForeground = false
     private var finalizing = 0
+        set(value) {
+            field = value
+            isSaving = value > 0
+        }
     private var destroyed = false
     private var capture: Capture? = null
     private var pill: ControlPill? = null
@@ -188,6 +202,8 @@ class RecordingService : LifecycleService() {
         super.onCreate()
         lifecycleScope.launch {
             graph.settings.settings.collect {
+                // The capture journal keeps what the person chose, so a call found later is judged by the choices of then.
+                CallJournal.choices(this@RecordingService, CallJournal.choicesOf(it))
                 // The call-app list reaches the helper as soon as it is edited.
                 if (it.extraCallApps != settings.extraCallApps) graph.helper.setCallApps(CallTargets.packages(it.extraCallApps))
                 // Picked games: their mixes are armed before the game plays, and they are never call apps.
@@ -202,12 +218,15 @@ class RecordingService : LifecycleService() {
             while (true) {
                 kotlinx.coroutines.delay(com.echoledger.mobile.translate.GameWatch.POLL_MS)
                 val game = settings.liveTranslate.game
-                val helper = graph.helper.helper ?: continue
+                if (graph.helper.helper == null) continue
                 if (game.games.isEmpty()) continue
                 val running =
                     com.echoledger.mobile.translate.LiveTranslateService.running.value == com.echoledger.mobile.translate.TranslateMode.GAME
                 if (!running) startedByUs = false
-                val players = com.echoledger.mobile.translate.AudioProbe.parse(runCatching { helper.players() }.getOrNull())
+                // An answer the helper could not give is not "the game has gone" (since v1.8): this look is skipped.
+                val answer = graph.helper.players()
+                if (answer.problem != null) continue
+                val players = answer.players
                 when (
                     val action = watch.decide(
                         players,
@@ -398,6 +417,7 @@ class RecordingService : LifecycleService() {
         // The Google Play build has no capture helper (since v1.5), so auto-record stays off there; a viewer records nothing.
         if (Build.VERSION.SDK_INT < 34 || !BuildConfig.CAPTURE_HELPER || settings.plan.viewer) {
             Log.w(TAG, "auto-record needs Android 14+ and the capture helper")
+            CallJournal.mark(this, CallJournal.State.REFUSED, if (settings.plan.viewer) "plan" else "android")
             persistArmed(false)
             settle()
             return
@@ -415,12 +435,15 @@ class RecordingService : LifecycleService() {
             graph.helper.setArmed(false)
             graph.helper.setCallListener(null)
             CaptureLog.add(this, "auto-record could not start", "Android did not allow it from the background")
+            CallJournal.mark(this, CallJournal.State.REFUSED, "background")
             Notifications.autoRecordOff(this)
             settle()
             return
         }
         Notifications.cancelAutoRecordOff(this)
-        CaptureLog.add(this, "auto-record on", if (helperAlive()) "helper ready" else "helper not running")
+        val ready = if (helperAlive()) "helper ready" else "helper not running"
+        CaptureLog.add(this, "auto-record on", ready)
+        CallJournal.mark(this, CallJournal.State.ARMED, ready)
         isArmed = true
         AutoRecordKeeper.keepChecking(this)
         persistArmed(true)
@@ -437,6 +460,7 @@ class RecordingService : LifecycleService() {
         persistArmed(false)
         AutoRecordKeeper.stopChecking(this)
         CaptureLog.add(this, "auto-record off")
+        CallJournal.mark(this, CallJournal.State.DISARMED)
         settle()
     }
 
@@ -445,6 +469,30 @@ class RecordingService : LifecycleService() {
 
     private var lastReady: Boolean? = null
     private var warnedThisCall = false
+
+    /** The journal's entry for the call the helper has reported, until it ends. */
+    private var journalCallId: String? = null
+
+    /** The journal's entry for a call seen in the audio mode while the helper was missing. */
+    private var audioCallId: String? = null
+
+    /**
+     * A call going on while the helper is missing (the watchdog's audio mode): into the journal as not recorded, so the
+     * missed-recording detector knows why. Only a call it can name: a SIM call, or an app call whose call notification
+     * just showed (another app's voice chat in that mode is not a call).
+     */
+    private fun journalUnseenCall(mode: Int) {
+        val app = if (mode == AudioManager.MODE_IN_CALL) {
+            SourceApp.PHONE_CALL
+        } else {
+            // The newest call notice that says a call is on (answered or ringing out), whichever app it came from.
+            CallNotices.callOn(System.currentTimeMillis() - CallNotices.KEEP_MS)?.let { SourceApp.fromPackage(it.pkg) } ?: return
+        }
+        val id = UUID.randomUUID().toString()
+        audioCallId = id
+        CallJournal.seen(this, id, app.wire, CallJournal.Seen.AUDIO)
+        CallJournal.fail(this, id, MissedReason.HELPER_NOT_ARMED.wire, MissedReason.HELPER_NOT_ARMED.detail)
+    }
 
     /**
      * While auto-record is on: reconnects a helper that went away (Shizuku), keeps the "ready / not ready" notice
@@ -461,6 +509,7 @@ class RecordingService : LifecycleService() {
             if (ready != lastReady) {
                 lastReady = ready
                 CaptureLog.add(this@RecordingService, "helper", if (ready) "ready" else "not running")
+                CallJournal.mark(this@RecordingService, if (ready) CallJournal.State.HELPER_READY else CallJournal.State.HELPER_LOST)
                 if (capture == null) goForeground(mic = false, title = "", detail = "")
             }
             val mode = (getSystemService(AUDIO_SERVICE) as AudioManager).mode
@@ -469,9 +518,17 @@ class RecordingService : LifecycleService() {
             if (inCall && !ready && !warnedThisCall) {
                 warnedThisCall = true
                 CaptureLog.add(this@RecordingService, "call seen without the helper")
+                journalUnseenCall(mode)
                 Notifications.captureNotReady(this@RecordingService)
             }
-            if (!inCall) warnedThisCall = false
+            if (!inCall) {
+                warnedThisCall = false
+                audioCallId?.let {
+                    CallJournal.ended(this@RecordingService, it)
+                    com.echoledger.mobile.calls.MissedRecordingWorker.soon(this@RecordingService)
+                }
+                audioCallId = null
+            }
             backupIfMissed(ready)
             main.postDelayed(this, WATCHDOG_MS)
         }
@@ -515,7 +572,12 @@ class RecordingService : LifecycleService() {
 
             "self_unmuted" -> refresh(session)
 
-            else -> if (state.startsWith("stats ")) CaptureLog.add(this, "helper", state)
+            // The phone line's sources the helper tried and which opened (since v1.8, 0.3): for the SIM call's summary.
+            else -> if (state.startsWith("line ")) {
+                session.line = state.removePrefix("line ")
+            } else if (state.startsWith("stats ")) {
+                CaptureLog.add(this, "helper", state)
+            }
         }
     }
 
@@ -527,6 +589,9 @@ class RecordingService : LifecycleService() {
 
     /** "Record" was tapped on the ask notification: the call is on, so nothing waits for an answer. */
     private var recordingAskedCall = false
+
+    /** The journal's entry for the phone call the ask notification is about. */
+    private var askedCallId: String? = null
 
     /** The call the backup start already tried, so a helper that refuses is not asked again every 5 s. */
     private var backupTried: String? = null
@@ -547,18 +612,39 @@ class RecordingService : LifecycleService() {
         if (!due) return
         backupTried = call.recordingId
         CaptureLog.add(this, "backup start", "${call.app.wire}: call seen without a recording")
-        startHelperCapture(call.app.wire, call.recordingId, fromCall = true)
+        startHelperCapture(call.app.wire, call.recordingId, fromCall = true, note = "backup start")
         capture?.let { refresh(it, "Recording started (backup)") }
     }
 
     private fun onCallEvent(event: CallEvent) {
+        if (event is CallEvent.CallStarted && callState !is CallState.InCall) {
+            // The capture journal (since v1.8): the helper saw a call while auto-record was armed.
+            journalCallId = event.recordingId
+            CallJournal.seen(this, event.recordingId, event.app.wire, CallJournal.Seen.HELPER)
+            CallJournal.stage(this, event.recordingId, CallJournal.Stage.ARMED, "helper ready")
+        }
+        if (event is CallEvent.CallEnded) {
+            journalCallId?.let { CallJournal.ended(this, it) }
+            // A SIM call EchoLedger never got to record: the Phone app's own recording of it is looked for once it has
+            // been saved (since v1.8, 0.3), and the detector waits for it. One being recorded is decided when it is
+            // saved (a silent, one-sided or lost recording looks for it too).
+            (callState as? CallState.InCall)?.takeIf { it.app == SourceApp.PHONE_CALL && capture?.id != it.recordingId }?.let {
+                com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, it.startedAtMs, System.currentTimeMillis())
+            }
+            // The missed-recording detector looks at this call once its recording is saved.
+            com.echoledger.mobile.calls.MissedRecordingWorker.soon(this)
+        }
         if (event is CallEvent.CallStarted && event.app == SourceApp.PHONE_CALL) {
             // SIM calls follow "Record phone calls" (since v1.2): off, ask each time, or always.
             when (PhoneCalls.mode(settings.phoneCalls)) {
-                PhoneCalls.OFF -> return
+                PhoneCalls.OFF -> {
+                    CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "phone calls are off")
+                    return
+                }
 
                 PhoneCalls.ASK -> {
                     phoneCallAsked = true
+                    askedCallId = event.recordingId
                     CaptureLog.add(this, "phone call", "asked whether to record")
                     Notifications.askRecordPhoneCall(this)
                     return
@@ -566,10 +652,13 @@ class RecordingService : LifecycleService() {
             }
         } else if (event is CallEvent.CallStarted && !AutoRecordRules.records(event.app, settings.autoRecordApps)) {
             // A call in an app whose auto-record switch is off is not recorded (B1); recording by hand still works.
+            CallJournal.finish(this, event.recordingId, CallJournal.Result.NOT_WANTED, "auto-record is off for ${event.app.label}")
             return
         }
         if (event is CallEvent.CallEnded && phoneCallAsked) {
             phoneCallAsked = false
+            askedCallId?.let { CallJournal.finish(this, it, CallJournal.Result.NOT_WANTED, "Record was not chosen") }
+            askedCallId = null
             Notifications.cancelAskRecordPhoneCall(this)
         }
         reduceCall(event)
@@ -582,7 +671,10 @@ class RecordingService : LifecycleService() {
         phoneCallAsked = false
         CaptureLog.add(this, "phone call", "recording (asked)")
         recordingAskedCall = true
-        reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, UUID.randomUUID().toString(), System.currentTimeMillis()))
+        // The journal's entry for this call becomes the recording's.
+        val id = askedCallId ?: UUID.randomUUID().toString()
+        askedCallId = null
+        reduceCall(CallEvent.CallStarted(SourceApp.PHONE_CALL, id, System.currentTimeMillis()))
         recordingAskedCall = false
     }
 
@@ -593,7 +685,7 @@ class RecordingService : LifecycleService() {
             when (effect) {
                 is CallEffect.StartCapture -> startHelperCapture(effect.app.wire, effect.recordingId, fromCall = true)
                 is CallEffect.StopCaptureAndAsk -> stopCapture(fromCall = true, reason = "call ended")
-                is CallEffect.Discard -> discardCapture(effect.recordingId)
+                is CallEffect.Discard -> discardCapture(effect.recordingId, "shorter than 3 s")
                 is CallEffect.Keep -> UploadWorker.enqueue(this, effect.recordingId)
             }
         }
@@ -628,14 +720,20 @@ class RecordingService : LifecycleService() {
             mode == android.media.AudioManager.MODE_IN_COMMUNICATION
     }
 
-    private fun startHelperCapture(sourceApp: String, id: String, fromCall: Boolean) {
+    private fun startHelperCapture(sourceApp: String, id: String, fromCall: Boolean, note: String? = null) {
         if (capture != null) return
         val helper = graph.helper.helper
         if (helper == null) {
             // A call detected without the helper cannot fall back to the mic from the background.
-            if (fromCall) settle() else startMicCapture(id)
+            if (fromCall) {
+                journalFailed(id, MissedReason.HELPER_NOT_ARMED)
+                settle()
+            } else {
+                startMicCapture(id)
+            }
             return
         }
+        if (!fromCall) CallJournal.seen(this, id, sourceApp, CallJournal.Seen.BY_HAND)
         val phone = sourceApp == SourceApp.PHONE_CALL.wire
         val session = Capture(id, sourceApp, channels = 2, fromCall = fromCall, clientId = settings.clientId)
         session.title = if (phone) "Recording phone call" else "Recording call"
@@ -644,11 +742,14 @@ class RecordingService : LifecycleService() {
         if (!goForeground(mic = false, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
+            journalFailed(id, MissedReason.PERMISSION, "Android did not let the recording start in the background.")
             settle()
             return
         }
         val pipe = ParcelFileDescriptor.createPipe()
         val micSource = if (settings.micSource == "mic") MediaRecorder.AudioSource.MIC else MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        // Only what the helper says about this start counts (an older problem is from another capture).
+        val askedAt = System.currentTimeMillis()
         val started = runCatching {
             if (phone) {
                 helper.startPhoneCapture(
@@ -665,18 +766,32 @@ class RecordingService : LifecycleService() {
         CaptureLog.add(
             this,
             "capture start",
-            if (started) "helper recording" else "helper refused: ${CaptureProblems.recent(this) ?: "no reason given"}"
+            if (started) "helper recording" else "helper refused: ${CaptureProblems.since(this, askedAt) ?: "no reason given yet"}"
         )
         pipe[1].close()
         if (!started) {
             pipe[0].close()
             session.cancel()
             capture = null
-            // A call that could not be recorded is said so at once (the helper's reason), never silently skipped.
             if (fromCall) {
-                Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = true)
+                // A call that could not be recorded is said so at once, with the helper's reason (its words come a
+                // moment after its answer from the other process), never silently skipped.
+                whenProblemSince(askedAt) { problem ->
+                    val (reason, detail) = MissedReason.ofProblem(problem)
+                    journalFailed(id, reason, detail)
+                    if (phone) {
+                        simCallSummary("nothing opened: ${problem ?: "no reason given"}")
+                        // The line the phone keeps for its own Phone app: never the helper advice (since v1.8 0.3).
+                        com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(applicationContext, settings)
+                            ?.let { Notifications.phoneLineNotRecorded(applicationContext, it) }
+                    } else {
+                        Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
+                    }
+                }
                 settle()
             } else {
+                val (reason, detail) = MissedReason.ofProblem(CaptureProblems.since(this, askedAt))
+                journalFailed(id, reason, detail)
                 startMicCapture(id)
             }
             return
@@ -700,6 +815,23 @@ class RecordingService : LifecycleService() {
             } else {
                 "your voice only"
             }
+        )
+        CallJournal.stage(
+            this,
+            id,
+            CallJournal.Stage.STARTED,
+            listOfNotNull(
+                note,
+                if (session.channels ==
+                    2
+                ) {
+                    null
+                } else if (phone) {
+                    "one track"
+                } else {
+                    "your voice only"
+                }
+            ).joinToString(", ").ifEmpty { null }
         )
         if (fromCall && !recordingAskedCall) waitForAnswer(session, phone)
         session.readerThread = thread(name = "el-pipe-reader") {
@@ -763,6 +895,7 @@ class RecordingService : LifecycleService() {
             settle()
             return
         }
+        CallJournal.seen(this, id, sourceApp, CallJournal.Seen.BY_HAND)
         val session = Capture(id, sourceApp, channels = 1, fromCall = false, clientId = settings.clientId)
         session.micFgs = true
         session.title = if (sourceApp == SourceApp.VOICE_NOTE.wire) "Voice note" else "Recording"
@@ -771,6 +904,7 @@ class RecordingService : LifecycleService() {
         if (!goForeground(mic = true, title = session.title, detail = session.detail)) {
             session.cancel()
             capture = null
+            journalFailed(id, MissedReason.PERMISSION, "Android did not let the recording start in the background.")
             settle()
             return
         }
@@ -834,10 +968,42 @@ class RecordingService : LifecycleService() {
         val why = failure.message ?: failure.javaClass.simpleName
         CaptureProblems.record(this, "The microphone could not start: $why")
         CaptureLog.add(this, "microphone failed", failure.javaClass.simpleName)
+        journalFailed(session.id, if (failure is SecurityException) MissedReason.PERMISSION else MissedReason.MIC_BUSY)
         session.cancel()
         capture = null
         Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
         settle()
+    }
+
+    /**
+     * One line per SIM call (since v1.8, 0.3) in the capture log and in logcat (`adb logcat -s EchoLedgerSim`): the
+     * phone-line sources the helper tried and which opened, and whether each side had sound. No names or numbers.
+     */
+    private fun simCallSummary(text: String) {
+        CaptureLog.add(this, "sim call", text)
+        Log.i(SIM_TAG, "sim call: $text")
+    }
+
+    /** "heard (peak -12.0 dBFS)", or "silent" below the silence floor. */
+    private fun heard(peakDb: Double): String =
+        if (peakDb > com.echoledger.mobile.core.AfterCallCheck.SILENT_PEAK_DB) "heard (peak ${"%.1f".format(peakDb)} dBFS)" else "silent"
+
+    /**
+     * What the helper said about the capture asked for at [askedAt], to [then]: at once when its words are here, else a
+     * moment later (they come from its own process after its answer); never a problem from an earlier capture.
+     */
+    private fun whenProblemSince(askedAt: Long, then: (String?) -> Unit) {
+        CaptureProblems.since(this, askedAt)?.let { return then(it) }
+        val app = applicationContext
+        main.postDelayed({ then(CaptureProblems.since(app, askedAt)) }, PROBLEM_WAIT_MS)
+    }
+
+    /**
+     * The journal: the recording [id] stopped before it was saved, for [reason] (said to the person in [detail], plain
+     * words; the reason's own sentence by default).
+     */
+    private fun journalFailed(id: String, reason: MissedReason, detail: String = reason.detail) {
+        CallJournal.fail(this, id, reason.wire, detail)
     }
 
     private fun afterStart(session: Capture) {
@@ -943,7 +1109,7 @@ class RecordingService : LifecycleService() {
         if (capture !== session) return
         CaptureLog.add(this, "discarded", "by you during the recording")
         session.serverSessionId?.let { DiscardWorker.enqueue(this, session.id, it) }
-        discardCapture(session.id)
+        discardCapture(session.id, "by you")
     }
 
     private suspend fun startCaptions(session: Capture, clientId: String?) {
@@ -1209,8 +1375,22 @@ class RecordingService : LifecycleService() {
             } else {
                 null
             }
+            // A SIM call whose Phone app recording is on its way (both sides, imported next) is no capture problem to fix:
+            // no "Only your voice" and no helper advice for a line the phone keeps for its own Phone app (since v1.8 0.3).
+            val phoneAppCovers = session.sourceApp == SourceApp.PHONE_CALL.wire &&
+                com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(this, settings) == null
             if (isCall && stored != null && skip == null && !silent) {
-                if (oneSided != null) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
+                if (oneSided != null && !phoneAppCovers) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
+            }
+            if (session.sourceApp == SourceApp.PHONE_CALL.wire) {
+                val sides = if (session.channels == 2) {
+                    "me ${heard(session.levels.peakDb(0))}, other ${heard(session.levels.peakDb(1))}"
+                } else {
+                    "both voices on one track ${heard(session.levels.peakDb(0))}"
+                }
+                simCallSummary(
+                    "${session.line ?: "source not reported"}; $sides; ${if (stored == null) "saving failed" else "${stored.durationMs / 1000} s"}"
+                )
             }
             CaptureLog.add(
                 this,
@@ -1224,6 +1404,27 @@ class RecordingService : LifecycleService() {
                         (skip?.let { ", skipped: ${it.label.lowercase()}" } ?: "")
                 }
             )
+            when {
+                stored == null -> journalFailed(session.id, MissedReason.UNKNOWN, "Saving the recording failed.")
+
+                // No sound on any side: a microphone Android gave to another app during this capture, or a cause not known.
+                silent -> journalFailed(
+                    session.id,
+                    MissedReason.fromProblem(CaptureProblems.since(this, session.startedAt.toEpochMilli()))
+                        .takeIf { it == MissedReason.MIC_BUSY } ?: MissedReason.UNKNOWN,
+                    "No sound was captured, so the recording was not kept."
+                )
+
+                skip != null -> CallJournal.finish(
+                    this,
+                    session.id,
+                    CallJournal.Result.SKIPPED,
+                    skip?.label?.lowercase(),
+                    stored.durationMs
+                )
+
+                else -> CallJournal.finish(this, session.id, CallJournal.Result.KEPT, keptMs = stored.durationMs)
+            }
             if (silent && stored != null) {
                 stored.serverSessionId?.let { DiscardWorker.enqueue(this, stored.id, it) }
                 graph.recordings.delete(stored.id)
@@ -1236,23 +1437,22 @@ class RecordingService : LifecycleService() {
             }
             val themeMode = settings.themeMode
             main.post {
-                if (silent && session.sourceApp == SourceApp.PHONE_CALL.wire) {
-                    // The phone line gave nothing: the Phone app's own recording of this call is imported instead.
-                    SamsungCallImport.schedule(this, session.startedAt.toEpochMilli(), endedMs)
-                    Notifications.noAudio(
-                        this,
-                        if (SamsungCallImport.phoneAppRecords(this)) {
-                            "The phone line gave no sound. EchoLedger will import the Phone app's own recording of this call in a moment."
-                        } else {
-                            "The phone line gave no sound. Turn on Phone, Settings, Record calls, Auto record calls: EchoLedger then imports those recordings."
-                        }
-                    )
+                val sim = session.sourceApp == SourceApp.PHONE_CALL.wire
+                // A SIM call whose own recording was lost, silent or one-sided: the Phone app's copy is looked for.
+                if (sim && (stored == null || silent || oneSided != null)) {
+                    com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, session.startedAt.toEpochMilli(), endedMs)
+                }
+                if (silent && sim) {
+                    // The phone line gave nothing: said quietly, or not at all when the Phone app's recording is coming.
+                    com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(this, settings)?.let {
+                        Notifications.phoneLineNotRecorded(this, it)
+                    }
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {
                     if (isCall) {
                         PostCallPrompt.show(this, stored, afterCall, themeMode)
-                        oneSided?.let { Notifications.onlyYourVoice(this, it) }
+                        oneSided?.takeUnless { phoneAppCovers }?.let { Notifications.onlyYourVoice(this, it) }
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }
@@ -1275,8 +1475,9 @@ class RecordingService : LifecycleService() {
         return (endedMs - talkMs - session.startedAt.toEpochMilli()).coerceAtLeast(0)
     }
 
-    /** Short (missed/rejected) calls are dropped without asking. */
-    private fun discardCapture(recordingId: String) {
+    /** Short (missed/rejected) calls are dropped without asking, and so is a recording the person discards. */
+    private fun discardCapture(recordingId: String, why: String) {
+        CallJournal.finish(this, recordingId, CallJournal.Result.DISCARDED, why)
         CallNotices.onNotice = null
         val session = capture
         if (session?.id == recordingId) {
@@ -1299,6 +1500,7 @@ class RecordingService : LifecycleService() {
     }
 
     override fun onDestroy() {
+        if (armed) CallJournal.mark(this, CallJournal.State.DISARMED, "service stopped")
         armed = false
         isArmed = false
         capture?.let { stopCapture(fromCall = false, reason = "the recording service was closed") }
@@ -1338,6 +1540,9 @@ class RecordingService : LifecycleService() {
 
         /** The call app's package (null for a SIM call or a recording by hand), to match its call notifications. */
         var callPackage: String? = null
+
+        /** A SIM call: the phone-line sources the helper tried and which opened ("VOICE_CALL uplink+downlink 48000 Hz: opened"). */
+        @Volatile var line: String? = null
 
         /** The notification's detail line once the call is answered (it says "Waiting for an answer" until then). */
         var detailAfterAnswer: String? = null
@@ -1437,12 +1642,55 @@ class RecordingService : LifecycleService() {
             }
             val gate = gate
             if (gate != null && gate.waiting) {
+                // Still ringing: a ringback tone and your own voice are not the call's sound yet (since v1.8).
                 val kept = gate.accept(bytes, length) ?: return
                 answered(gate)
+                heard()
                 write(kept, kept.size, Pcm.fromLittleEndianBytes(kept, kept.size))
                 return
             }
+            heard()
             write(bytes, length, samples)
+        }
+
+        private var meHeard = false
+        private var otherHeard = false
+        private var bothHeard = false
+
+        /**
+         * The capture journal's "both channels have audio": each side heard once in what the recording keeps (the one
+         * track, for a one-track call), never while the call still rings in the answer gate.
+         */
+        private fun heard(me: Float = meLevel, other: Float = clientLevel) {
+            if (bothHeard) return
+            if (me >= Levels.HEARD) meHeard = true
+            if (other >= Levels.HEARD) otherHeard = true
+            if (meHeard && (otherHeard || channels == 1)) {
+                bothHeard = true
+                CallJournal.stage(this@RecordingService, id, CallJournal.Stage.BOTH_AUDIO, if (channels == 1) "one track" else null)
+            }
+        }
+
+        /** [heard] over audio let through at once at the end of the capture, 20 ms at a time as the reader gives it. */
+        private fun heardIn(samples: ShortArray) {
+            val frame = Pcm.CAPTURE_RATE / 50 * channels
+            var i = 0
+            while (i < samples.size && !bothHeard) {
+                val block = samples.copyOfRange(i, minOf(samples.size, i + frame))
+                if (channels == 2) {
+                    val (me, other) = Pcm.deinterleave(block)
+                    heard(Levels.rms(me), Levels.rms(other))
+                } else {
+                    heard(Levels.rms(block), 0f)
+                }
+                i += frame
+            }
+        }
+
+        /** The gate saw the call answered: the capture journal keeps when (the proof the detector trusts), since v1.8. */
+        private fun journalAnswer(gate: ConnectGate) {
+            val at = gate.answeredAtMs ?: return
+            CallJournal.answered(this@RecordingService, id, startedAt.toEpochMilli() + at, gate.openedBy)
         }
 
         /** Audio that goes into the recording: the file, the level and speech counts, and (with [stream]) live captions. */
@@ -1465,6 +1713,7 @@ class RecordingService : LifecycleService() {
         /** The gate opened: say so in the capture log and on the pill, notification and Record tab. */
         private fun answered(gate: ConnectGate) {
             CaptureLog.add(this@RecordingService, "answered", "${gate.openedBy}; kept from ${gate.keptFromMs} ms")
+            journalAnswer(gate)
             main.post {
                 CallNotices.onNotice = null
                 detailAfterAnswer?.let { detail = it }
@@ -1486,8 +1735,14 @@ class RecordingService : LifecycleService() {
             gate?.takeIf { it.waiting }?.let { g ->
                 val rest = g.finish(answeredAtMs())
                 CaptureLog.add(this@RecordingService, "call ended unanswered or unseen", "${g.openedBy}; kept from ${g.keptFromMs} ms")
+                val samples = Pcm.fromLittleEndianBytes(rest, rest.size)
+                // Answered after all (a SIM call's talk time): its sound counts from the answer, like a gate that opened.
+                if (g.answeredAtMs != null) {
+                    journalAnswer(g)
+                    heardIn(samples)
+                }
                 // Not to the captions: they have stopped, and a call that only rang has nothing to say.
-                write(rest, rest.size, Pcm.fromLittleEndianBytes(rest, rest.size), stream = false)
+                write(rest, rest.size, samples, stream = false)
             }
             encoder.finish()
             debugWav?.close()

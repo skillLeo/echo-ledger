@@ -187,6 +187,15 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
     suspend fun account(): com.echoledger.mobile.data.AccountDto =
         call(request("account").get().build(), com.echoledger.mobile.data.AccountDto.serializer())!!
 
+    /**
+     * `POST /api/devices/missed-recordings` (since v1.8, contract 1.8.0-c): a call this phone saw but did not record; the
+     * server's id for it ([payload] from [com.echoledger.mobile.calls.MissedRecordings.payload]).
+     */
+    suspend fun reportMissedRecording(payload: kotlinx.serialization.json.JsonObject): String = call(
+        request("devices/missed-recordings").post(payload.toString().toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.MissedRecordingAnswer.serializer()
+    )!!.data.id
+
     /** `POST /api/devices/report` (since v1.5): the device check, only when the person taps Send to my admin. */
     suspend fun reportDevice(facts: com.echoledger.mobile.core.PhoneFacts, rows: List<com.echoledger.mobile.core.CheckRow>) {
         val body = buildJsonObject {

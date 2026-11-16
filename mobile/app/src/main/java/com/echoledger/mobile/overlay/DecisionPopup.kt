@@ -92,9 +92,10 @@ object DecisionPopup {
 
     val isShowing: Boolean get() = view != null
 
-    /** "Call with Omar", else "WhatsApp call" / "Phone call". */
+    /** "Call with Omar", else a phone call's number ("Call with +92 300 1234567"), else "WhatsApp call" / "Phone call". */
     fun title(rec: LocalRecording): String = rec.title?.takeIf { it.isNotBlank() }
         ?: rec.callerName?.takeIf { it.isNotBlank() }?.let { "Call with $it" }
+        ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { "Call with $it" }
         ?: SourceApp.from(rec.sourceApp).let { if (it == SourceApp.PHONE_CALL) "Phone call" else "${it.label} call" }
 
     /** Shows the chip; false when it could not be added (the caller then relies on the notification). */
