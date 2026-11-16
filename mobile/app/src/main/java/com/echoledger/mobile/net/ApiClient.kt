@@ -943,6 +943,12 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         return call(request("activity/read").post(body).build(), UnreadAnswer.serializer())!!.unreadCount
     }
 
+    /** `PUT /api/account/ui` (since 2.0.0-a): "Switch back to classic" ([classic] true) or its undo; the new flags. */
+    suspend fun setClassicUi(classic: Boolean): com.echoledger.mobile.data.UiChoiceDto {
+        val body = buildJsonObject { put("classic", classic) }.toString().toRequestBody(jsonType)
+        return call(request("account/ui").put(body).build(), com.echoledger.mobile.data.UiChoiceDto.serializer())!!
+    }
+
     /** `GET /api/bin` (since v1.1): recordings deleted in the last 48 hours. */
     suspend fun bin(): BinResponse = call(request("bin").get().build(), BinResponse.serializer())!!
 

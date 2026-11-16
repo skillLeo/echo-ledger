@@ -542,7 +542,12 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                                     config.appUpdate,
                                     config.announcement,
                                     config.maintenance
-                                )
+                                ),
+                                // Since 2.0.0-a/b: the redesign's flags and how long Trash keeps a recording.
+                                uiFlags = config.uiFlags,
+                                uiClassic = config.uiClassic,
+                                trashKeepHours = config.trash?.keepHours?.takeIf { hours -> hours > 0 }
+                                    ?: com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
                             )
                         }
                     }
@@ -1039,8 +1044,14 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     // ---- Undo bin and storage (B17) --------------------------------------------------------------------------------
 
     /** Recordings deleted in the last 48 hours; empty when offline. */
-    suspend fun bin(): List<BinItemDto> = withContext(Dispatchers.IO) {
-        runCatching { graph.api()?.bin()?.data.orEmpty() }.getOrDefault(emptyList())
+    suspend fun bin(): List<BinItemDto> = binOrError().getOrDefault(emptyList())
+
+    /**
+     * Trash's list (since 2.0.0): the recordings, or a failure when the server could not be read, so the v2 Trash can
+     * tell an empty Trash from one it could not load. The classic Library uses [bin].
+     */
+    suspend fun binOrError(): Result<List<BinItemDto>> = withContext(Dispatchers.IO) {
+        runCatching { (graph.api() ?: throw NotPairedException()).bin().data }
     }
 
     /** Restores a recording from the bin and syncs it back into the library. */
@@ -1089,6 +1100,15 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             .onSuccess { _message.value = "Device revoked" }
             .onFailure { _message.value = it.message ?: "The device could not be revoked." }.isSuccess
     }
+
+    /**
+     * Deletes a recording and waits for the server's answer (since 2.0.0): the v2 toast says "Moved to Trash · Undo"
+     * only after the server accepted it. The classic UI keeps [delete].
+     */
+    suspend fun deleteAwait(id: String): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching { (graph.api() ?: throw NotPairedException()).deleteSession(id) }
+    }.onSuccess { refresh() }
+
     fun delete(item: LibraryItem) = viewModelScope.launch {
         runCatching { withContext(Dispatchers.IO) { graph.api()?.deleteSession(item.id) } }
             .onSuccess { refresh() }
@@ -1132,6 +1152,26 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun dismissLocal(id: String) = viewModelScope.launch(Dispatchers.IO) {
         graph.recordings.delete(id)
         reloadLocal()
+    }
+
+    /**
+     * "Switch back to classic" or "Try the new design" (since 2.0.0-a): the server keeps the choice, its answer is stored
+     * and the config is read again; the screens follow on the next one opened.
+     */
+    fun setClassicUi(classic: Boolean) {
+        viewModelScope.launch { applyClassicUi(classic) }
+    }
+
+    /** [setClassicUi]'s work: true once the server took the choice. */
+    suspend fun applyClassicUi(classic: Boolean): Boolean {
+        val answer = withContext(Dispatchers.IO) { runCatching { graph.api()?.setClassicUi(classic) }.getOrNull() }
+        if (answer == null) {
+            _message.value = "Can't reach the server. Try again."
+            return false
+        }
+        graph.settings.update { it.copy(uiFlags = answer.uiFlags, uiClassic = answer.uiClassic) }
+        refresh().join()
+        return true
     }
 
     /** Retries one recording the server refused (e.g. after fixing the cause). */
