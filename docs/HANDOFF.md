@@ -182,6 +182,12 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   research/, bugbash/, reviews/). To verify for v1.8.1 (research report): Apple documents NSWindow sharingType .none as
   a legacy constant and says no public API prevents capture; our tests show it working on macOS 27 (Meet, screenshots,
   Share Check), so the Mac UI must claim "hidden" only after a passing Share Check — check the wording before release.
+- DECIDED (lead, 2026-11-16 late): the Mac Dock-icon switch (spaces.rs, 75820dfc) may read the Space type through
+  CoreGraphics' private CGSCopyManagedDisplaySpaces, looked up at run time, read-only; if it is missing or its shape
+  changes, EchoLedger keeps its Dock icon. Why: there is no documented public way to ask whether the display in use
+  shows a full-screen Space, and the menu bar menu must open over full-screen apps; it hides nothing from any other
+  software. The reviewer checks for a public alternative; if one works, switch to it. Private macOS calls in use:
+  _setPreventsActivation: (floating panels) and CGSCopyManagedDisplaySpaces (Spaces) — no others without a decision here.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 late · phone re-review rounds 2-4 (13 minors, the squeezed buttons, held one-sided SIM recording released, notices vs reported calls, wait before hold) · `fb5fb2c7`, `f0aabc0f`, this merge · approve each · open for later: MissedRecordings.kt:105-106 a second same-app call answered within 10 s of a reported one loses its notice (exclude only notices that started before the reported call began); contract 1.8.0-f mark-read by missed_recording_id.
   - 2026-11-16 · v1.8 phone 0.2b capture journal + 0.2 missed recordings + 0.3 Phone app recordings (SIM calls) + the
