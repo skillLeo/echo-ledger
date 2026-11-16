@@ -85,7 +85,7 @@ impl Registry {
     ) -> Result<u64, AuthError> {
         let id = self.connections.fetch_add(1, Ordering::Relaxed);
         let session_id = claims.sid.clone();
-        let mut connection = Connection { id, claims, out, inbound };
+        let mut connection = Box::new(Connection { id, claims, out, inbound });
         let mut sessions = lock(&self.sessions);
         if let Some(entry) = sessions.get(&session_id) {
             if entry.user != connection.claims.sub {

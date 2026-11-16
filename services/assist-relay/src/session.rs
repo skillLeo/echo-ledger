@@ -83,7 +83,8 @@ pub struct Connection {
 
 #[derive(Debug)]
 pub(crate) enum Control {
-    Attach(Connection),
+    // Boxed: a connection is large and the other variant carries nothing.
+    Attach(Box<Connection>),
     Shutdown,
 }
 
@@ -400,7 +401,7 @@ impl Engine {
             tokio::select! {
                 biased;
                 message = control.recv() => match message {
-                    Some(Control::Attach(connection)) => self.attach(connection),
+                    Some(Control::Attach(connection)) => self.attach(*connection),
                     Some(Control::Shutdown) | None => {
                         self.shutdown();
                         break;
@@ -415,7 +416,7 @@ impl Engine {
                 () = sleep_until(assist_deadline) => self.on_assist_time_up(),
                 () = sleep_until(grace_deadline) => {
                     match self.registry.finish(&self.session_id, self.generation, &mut control) {
-                        Some(Control::Attach(connection)) => self.attach(connection),
+                        Some(Control::Attach(connection)) => self.attach(*connection),
                         Some(Control::Shutdown) => {
                             self.shutdown();
                             break;
