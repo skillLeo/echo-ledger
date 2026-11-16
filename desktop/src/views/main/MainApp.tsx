@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { announceReady, api, errorMessage, listenForFileDrops, listenTo, type AppStatus, type ClientFolder, type LibraryItem, type LibraryViews, type LockStatus, type SmartFolder } from "../../lib/ipc";
 import { loadMainView, rememberMainView, restoreScroll, trackScroll, type MainTab, type MainView } from "../../lib/mainView";
@@ -46,6 +46,15 @@ import { BannerSlot, useBannerTurn } from "../../components/BannerSlot";
 import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
+import { anyV2, useUiFlags } from "../../v2/flags";
+import { shellStatus as shellStatusOf } from "../../v2/shell/status";
+
+// The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
+const v2 = () => import("../../v2/app");
+const ShellV2 = lazy(() => v2().then((m) => ({ default: m.Shell })));
+const LibraryV2 = lazy(() => v2().then((m) => ({ default: m.LibraryV2 })));
+const AccountCardV2 = lazy(() => v2().then((m) => ({ default: m.AccountCard })));
+const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -78,6 +87,8 @@ export function typingIn(target: EventTarget | null): boolean {
 export default function MainApp() {
   const [status, setStatus] = useState<AppStatus | null>(null);
   const [tab, setTab] = useState<Tab>("library");
+  // Interface flags: read at start and on each page change, never while recording (v2/flags.ts).
+  const [ui, setUi] = useUiFlags(!!status?.paired, tab, !!status?.recording);
   // The sidebar (v1.6, P4.1): 200–320 px wide or a 64 px icon rail, kept on this computer like the theme.
   const [chosenCollapsed, setCollapsed] = useState(loadCollapsed);
   const [sidebarWidth, setSidebarWidth] = useState(loadSidebarWidth);
@@ -684,70 +695,73 @@ export default function MainApp() {
       : status.pendingUploads === 1 ? "Uploading 1 recording…" : `Uploading ${status.pendingUploads} recordings…`;
   const libraryCrumb = libraryView ? LIBRARY_VIEWS.find(([v]) => v === libraryView)?.[1] ?? null : libraryFolder ? folderLabel(libraryFolder) : null;
 
-  return (
-    <div className={`app ${collapsed ? "collapsed" : ""} ${pageWidth < NARROW_CONTENT ? "narrow" : ""} ${pageWidth < COLUMN_CONTENT ? "no-column" : ""}`}
-      style={{ ["--sidebar-w" as string]: `${collapsed ? SIDEBAR_RAIL : sidebarWidth}px` }}>
-      {/* macOS: the title bar is inset (traffic lights over the sidebar); this strip keeps the window draggable. */}
-      <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
-      <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
-        recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
-        projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
-        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord}
-        libraryColumn={pageWidth >= COLUMN_CONTENT} />
-      <div className="main-col">
-        <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
-          onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
-          onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
-          onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
-          onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
-          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
-        <main ref={contentRef} className={`content page-${tab}`}>
-          {/* One banner at a time, the most important first (BannerSlot); the next one shows once it goes. */}
-          <BannerSlot>
-          <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
-          <ServerBanners server={status.server} notify={notify} />
-          <ShareNotice />
-          {status.platform === "macos" && <PermissionLossNotice />}
-          {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
-          <OneSidedBanner said={oneSided} onDismiss={() => setOneSided(null)} onReady={() => { setOneSided(null); goTo("record"); }} onOpen={() => goTo("record")} />
-          {/* The month's limit (a state): goes to Plan & usage; closed until it changes (warning, then reached). */}
-          {status.budget !== "ok" && (status.budget === "reached" || status.budget === "warn") && (
-            <StateBanner id="budget" slot="budget" state={budgetState(status.budget, entitlements?.limits.monthly_minutes?.resets_at)} remember={!!entitlements?.limits.monthly_minutes?.resets_at} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
-              onOpen={() => openAccount("plan")} openLabel={`${status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN} Open Plan & usage`}>
-              <span>{status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN}</span>
-            </StateBanner>
-          )}
-          </BannerSlot>
-          {tab === "library" && (
-            <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
-              initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={canRecord ? () => void pickImport() : undefined} onOpenClient={(id) => openProject(id)}
-              smartFolder={libraryFolder} onSmartFolder={openFolder} smartView={libraryView} crumb={libraryCrumb} sharedFocus={sharedFocus} projects={projects}
-              aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
-                onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
-          )}
-          {tab === "projects" && (
-            <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
-              projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
-              requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
-              aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
-          )}
-          {tab === "record" && (
-            <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
-              onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
-              onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />
-          )}
-          {tab === "activity" && (
-            <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
-              onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
-          )}
-          {tab === "shared" && (
-            <SharedView tab={sharedTab} onTab={setSharedTab} notify={notify} projects={projects} onOpenShared={(id) => { openFolder("shared"); setSharedFocus(id); }}
-              onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)} />
-          )}
-          {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
-        </main>
-      </div>
-      {palette && (
+  const banners = (
+    <>
+      {/* One banner at a time, the most important first (BannerSlot); the next one shows once it goes. */}
+      <BannerSlot>
+      <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
+      <ServerBanners server={status.server} notify={notify} />
+      <ShareNotice />
+      {status.platform === "macos" && <PermissionLossNotice />}
+      {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
+      <OneSidedBanner said={oneSided} onDismiss={() => setOneSided(null)} onReady={() => { setOneSided(null); goTo("record"); }} onOpen={() => goTo("record")} />
+      {/* The month's limit (a state): goes to Plan & usage; closed until it changes (warning, then reached). */}
+      {status.budget !== "ok" && (status.budget === "reached" || status.budget === "warn") && (
+        <StateBanner id="budget" slot="budget" state={budgetState(status.budget, entitlements?.limits.monthly_minutes?.resets_at)} remember={!!entitlements?.limits.monthly_minutes?.resets_at} tone={status.budget === "reached" ? "danger" : "warn"} testId="budget-banner" icon={<AlertIcon size={16} />}
+          onOpen={() => openAccount("plan")} openLabel={`${status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN} Open Plan & usage`}>
+          <span>{status.budget === "reached" ? BUDGET_REACHED : BUDGET_WARN}</span>
+        </StateBanner>
+      )}
+      </BannerSlot>
+    </>
+  );
+  const page = (
+    <>
+      {tab === "library" && ui.flags["ui_v2.library"] && (
+        <Suspense fallback={null}>
+          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} />
+        </Suspense>
+      )}
+      {tab === "library" && !ui.flags["ui_v2.library"] && (
+        <LibraryView notify={notify} focus={focus} onFocusHandled={clearFocus} openRequest={openRequest}
+          initialSelected={restoredRecording} onSelectedChange={rememberRecording} onImport={canRecord ? () => void pickImport() : undefined} onOpenClient={(id) => openProject(id)}
+          smartFolder={libraryFolder} onSmartFolder={openFolder} smartView={libraryView} crumb={libraryCrumb} sharedFocus={sharedFocus} projects={projects}
+          aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
+            onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
+      )}
+      {tab === "projects" && (
+        <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
+          projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
+          requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
+          aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
+      )}
+      {tab === "record" && (
+        <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
+          onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
+          onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />
+      )}
+      {tab === "activity" && (
+        <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
+          onReview={(id) => { openFolder(null); if (id) setFocus({ id, rename: false, seq: ++navigations.current }); }} />
+      )}
+      {tab === "shared" && (
+        <SharedView tab={sharedTab} onTab={setSharedTab} notify={notify} projects={projects} onOpenShared={(id) => { openFolder("shared"); setSharedFocus(id); }}
+          onOpenRecording={(id) => openRecording(id)} onOpenProject={(id) => openProject(id)} />
+      )}
+      {tab === "settings" && (anyV2(ui) || ui.classic) && (
+        <Suspense fallback={null}>
+          <div className="el-root el-settings-top" data-v2="settings-top">
+            {ui.flags["ui_v2.shell"] && <AccountCardV2 />}
+            <ClassicSwitchV2 state={ui} onState={setUi} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "settings" && <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={settingsSection} />}
+    </>
+  );
+  const overlays = (
+    <>
+    {palette && (
         <CommandPalette status={status} onClose={() => setPalette(false)} onGo={goTo}
           folders={shownFolders(views?.folders, tab === "library" ? libraryFolder : null)} onFolder={openFolder}
           run={(fn, ok, target) => void run(fn, ok, target)} pages={pages}
@@ -766,6 +780,48 @@ export default function MainApp() {
       <UpgradeSheet />
       <ConfirmHost />
       {toastView}
+    </>
+  );
+
+  // The new app shell (ui_v2.shell): the five modules around today's pages, without the classic sidebar and top bar.
+  if (ui.flags["ui_v2.shell"]) {
+    return (
+      <>
+        <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
+        <Suspense fallback={null}>
+          <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
+            banners={<div className="shell-banners">{banners}</div>}>
+            <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
+          </ShellV2>
+        </Suspense>
+        {overlays}
+      </>
+    );
+  }
+
+  return (
+    <div className={`app ${collapsed ? "collapsed" : ""} ${pageWidth < NARROW_CONTENT ? "narrow" : ""} ${pageWidth < COLUMN_CONTENT ? "no-column" : ""}`}
+      style={{ ["--sidebar-w" as string]: `${collapsed ? SIDEBAR_RAIL : sidebarWidth}px` }}>
+      {/* macOS: the title bar is inset (traffic lights over the sidebar); this strip keeps the window draggable. */}
+      <div className="titlebar-drag" data-tauri-drag-region aria-hidden="true" />
+      <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
+        recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
+        projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord}
+        libraryColumn={pageWidth >= COLUMN_CONTENT} />
+      <div className="main-col">
+        <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
+          onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
+          onAdmin={() => void api.openServerPage("admin").catch((e) => notify(errorMessage(e), true))}
+          onWorkspaces={() => void api.openServerPage("app/workspace").catch((e) => notify(errorMessage(e), true))}
+          onReady={() => goTo("record")} onRecord={record} onVoiceNote={voiceNote} onUpload={() => void pickImport()} onNewProject={newProject}
+          onRequestLink={() => setRequestSheet(true)} onHelp={() => setHelp(true)} onSignOut={() => void signOut()} canRecord={canRecord} />
+        <main ref={contentRef} className={`content page-${tab}`}>
+          {banners}
+          {page}
+        </main>
+      </div>
+      {overlays}
     </div>
   );
 }
