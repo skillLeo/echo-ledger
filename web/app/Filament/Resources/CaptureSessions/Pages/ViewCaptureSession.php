@@ -412,7 +412,7 @@ class ViewCaptureSession extends ViewRecord
         MakeCallNotesJob::dispatch($session->id);
     }
 
-    public function callNote(): ?CallNote
+    protected function callNote(): ?CallNote
     {
         $note = CallNote::query()->where('capture_session_id', $this->session()->id)->first();
 

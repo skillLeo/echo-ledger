@@ -37,10 +37,13 @@ const FAILURE_VENDORS = ['Gemini', 'AssemblyAI', 'Groq', 'ElevenLabs', 'OpenAI',
 const FAILURE_RAW = 'The speech provider could not transcribe this recording: Gemini could not read the audio. AssemblyAI returned no transcript id. '
     .'(Tried: AssemblyAI, Groq Whisper large-v3, ElevenLabs Scribe, Soniox, Azure Speech; OpenAI, Anthropic Claude; universal-2.)';
 
-/** The vendor names in [$text]; with [$freeKey], the Free plan's own Groq key, the one name people act on, is let be. */
+/**
+ * The vendor names in [$text]; with [$freeKey], the Free plan's own Groq key, the one name people act on, is let be (in
+ * "Add your free Groq key" and, since v1.8.1, "Groq did not accept your key").
+ */
 function failureVendorsIn(string $text, bool $freeKey = false): array
 {
-    $text = $freeKey ? str_replace('free Groq key', '', $text) : $text;
+    $text = $freeKey ? str_replace(['free Groq key', 'Groq did not accept your key'], '', $text) : $text;
 
     // Whole words, in any case: "Scribe" is a name, "transcribe" is not.
     return array_values(array_filter(FAILURE_VENDORS, fn (string $name): bool => preg_match('/\b'.preg_quote($name, '/').'\b/i', $text) === 1));
@@ -96,7 +99,7 @@ it('never names an engine or a vendor in the Activity item or the API error, wha
     $transcript = failingFinal($this->device);
     // Made with the person's own key, so no other engine takes it over: the failure is told at once.
     $transcript->update(['status' => TranscriptStatus::Failed, 'error' => FAILURE_RAW, 'error_code' => $code, 'meta' => ['own_key' => true]]);
-    $freeKey = $code === TranscriptErrorCode::NeedsTranscriptionKey->value;
+    $freeKey = in_array($code, [TranscriptErrorCode::NeedsTranscriptionKey->value, TranscriptErrorCode::OwnKeyRejected->value], true);
 
     $item = collect($this->asToken($this->token)->getJson('/api/activity')->assertOk()->json('data'))->firstWhere('kind', 'transcript_failed');
     $api = (string) $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()->json('error');
@@ -147,6 +150,18 @@ it('writes the "Transcription failed" items already sent in plain words, from th
     foreach ([$withSession, $older, $gone] as $id) {
         expect(failureVendorsIn((string) DB::table('notifications')->where('id', $id)->value('data')))->toBe([]);
     }
+
+    // After queue:restart: a worker still on the old code wrote one more meanwhile, and the new code wrote one about a
+    // later failure. The command rewrites only the first, and a second run changes nothing.
+    $late = $old('Call with Omar: '.FAILURE_RAW, $session->id, true);
+    $newer = $old(ActivityFeed::failedBody('Call with Omar', 'no_audio'), $session->id, true);
+    $this->artisan('echoledger:plain-failure-notifications', ['--dry-run' => true])->expectsOutput('Would rewrite 1 notification.')->assertSuccessful();
+    expect($payload($late)['body'])->toContain('could not read the audio');
+    $this->artisan('echoledger:plain-failure-notifications')->expectsOutput('Rewrote 1 notification.')->assertSuccessful();
+    expect($payload($late)['body'])->toBe($plain)
+        ->and($payload($newer)['body'])->toBe('Call with Omar: '.TranscriptErrorCode::plainWords(TranscriptErrorCode::NoAudio))
+        ->and($payload($withSession)['body'])->toBe($plain);
+    $this->artisan('echoledger:plain-failure-notifications')->expectsOutput('Rewrote 0 notifications.')->assertSuccessful();
 });
 
 it('says why a second version or an engine run failed in plain words, and the engine\'s own words to the operator only', function () {

@@ -409,6 +409,11 @@ can name the provider ("Gemini could not read the audio."), stay with the transc
 see them on the recording page under **Details** (**Error**, next to **Transcribed by**), and under the plain words in
 **Engine results** and **Compare versions**.
 
+When you update to v1.8.1, the update rewrites the "Transcription failed" notifications already sent in plain words.
+After `php artisan queue:restart`, run `php artisan echoledger:plain-failure-notifications` once more: it also
+rewrites any notification a worker still running the old code sent in between. It leaves alone the ones already in
+plain words, so running it again is safe (`--dry-run` only counts them).
+
 ## 10. Security at a glance
 
 - Sign-in attempts are limited (5 a minute per address, 5 failures per 15 minutes per email, on the console's sign-in

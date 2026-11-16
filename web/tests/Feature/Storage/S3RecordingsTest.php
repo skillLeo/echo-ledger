@@ -1244,14 +1244,32 @@ it('gives the device the documented text when a final transcript fails on the bu
 
     $answer = $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
         ->assertJsonPath('status', 'failed')
-        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::Interrupted))
-        ->assertJsonPath('error_code', 'interrupted');
+        // Since v1.8.1 the audio is missing, not the run interrupted: "Transcribe again" would only fail the same way.
+        ->assertJsonPath('error', TranscriptErrorCode::plainWords(TranscriptErrorCode::RecordingMissing))
+        ->assertJsonPath('error_code', 'recording_missing');
     expect($answer->getContent())->not->toContain(FakeS3Server::HOST)->not->toContain(FakeS3Server::BUCKET)->not->toContain((string) $recording->stored_path);
 
     // What is no storage trouble keeps its own text, as before.
     $other = $session->transcripts()->create(['kind' => TranscriptKind::Alternate, 'provider' => 'groq', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
     (new TranscribeFinalJob($other->id))->failed(new RuntimeException('Something else'));
     expect($other->refresh()->error)->toBe('Something else');
+});
+
+it('fails a final transcript whose stored audio cannot be read as missing audio, without sending anything to an engine', function () {
+    $session = $this->makeReadySession($this->device, Fixtures::audio(3000), ['status' => SessionStatus::Processing]);
+    $transcript = $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Pending, 'language' => 'en']);
+    app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_test_key_1234567890');
+    // The stored object is gone from the bucket.
+    $this->bucket->objects = [];
+    Http::fake(['api.assemblyai.com/*' => Http::response([], 500)]);
+
+    dispatch_sync(new TranscribeFinalJob($transcript->id));
+
+    expect($transcript->refresh()->status)->toBe(TranscriptStatus::Failed)->and($transcript->error_code)->toBe('recording_missing')
+        ->and($transcript->error)->not->toContain(FakeS3Server::BUCKET);
+    Http::assertNotSent(fn ($r) => str_contains($r->url(), 'assemblyai.com'));
+    $this->getJson("/api/transcripts/{$transcript->id}")->assertOk()
+        ->assertJsonPath('error', 'The audio did not fully reach the server, or it is no longer stored.');
 });
 
 it('reports no disk numbers for a bucket, as the API allows', function () {

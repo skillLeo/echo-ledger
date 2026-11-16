@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use App\Enums\TranscriptErrorCode;
 use App\Services\ClientAi\ClaudeClientAi;
+use App\Services\ClientAi\ClientWorkspace;
 use Illuminate\Database\Connection;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Artisan;
@@ -1242,7 +1243,8 @@ it('says the AI\'s stored reasons that name a provider in plain words, leaves pl
     $db->table('client_briefs')->insert(['id' => $brief = (string) Str::ulid(), 'workspace_id' => $workspace, 'client_id' => $client, 'sections' => '{}',
         'status' => 'failed', 'error' => 'Missing credential anthropic.api_key. Add it on Admin → API Credentials.', 'created_at' => $now, 'updated_at' => $now]);
     $db->table('client_files')->insert(['id' => $file = (string) Str::ulid(), 'workspace_id' => $workspace, 'user_id' => $user, 'client_id' => $client, 'name' => 'Scope.pdf',
-        'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => '{"type":"error","error":{"type":"overloaded_error"}} claude-haiku-5-5',
+        // The SDK's JSON for a 529, with no model name in it.
+        'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => "{\n    \"status\": 529,\n    \"body\": {\n        \"type\": \"error\",\n        \"error\": {\n            \"type\": \"overloaded_error\",\n            \"message\": \"Overloaded\"\n        }\n    }\n}",
         'created_at' => $now, 'updated_at' => $now]);
     $views = fn (string $error): string => (string) json_encode(['views' => ['status' => 'failed', 'error' => $error, 'fingerprint' => 'f'], 'model' => 'x']);
     $db->table('transcripts')->insert(['id' => $declined = (string) Str::ulid(), 'capture_session_id' => $session, 'kind' => 'final', 'provider' => 'groq',
@@ -1256,7 +1258,7 @@ it('says the AI\'s stored reasons that name a provider in plain words, leaves pl
     $unavailable = ClaudeClientAi::UNAVAILABLE;
     expect($error('call_notes', $named))->toBe($unavailable)
         ->and($error('call_notes', $plain))->toBe('The transcript is not ready yet.')
-        ->and($error('client_briefs', $brief))->toBe($unavailable)
+        ->and($error('client_briefs', $brief))->toBe(ClientWorkspace::NOT_SET_UP)
         ->and($error('client_files', $file))->toBe($unavailable)
         ->and($viewsError($declined))->toBe($unavailable)
         ->and($viewsError($kept))->toBe('The views could not be made.')

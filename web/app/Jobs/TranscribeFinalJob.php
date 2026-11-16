@@ -35,7 +35,9 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\RequestException;
+use Illuminate\Support\Facades\Log;
 use League\Flysystem\FilesystemException;
+use RuntimeException;
 use Throwable;
 
 /**
@@ -127,13 +129,22 @@ final class TranscribeFinalJob implements ShouldQueue
         }
         $temps = [];
         try {
-            $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
             $channel1 = $recordings->get(RecordingRole::Channel1->value);
             $channel2 = $recordings->get(RecordingRole::Channel2->value);
             $caps = $driver->capabilities();
             $useChannels = $channel1?->isReady() && $channel2?->isReady() && ($caps->needsChannelArtifacts || $caps->usesChannelArtifacts);
-            $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
-            $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
+            // Since v1.8.1: a stored file that is gone or cannot be read or decrypted is missing audio, not an interrupted
+            // run, so "Transcribe again" does not loop on it. Which file and why go to the log only.
+            try {
+                $primaryPath = $temps[] = $uploads->decryptToTemp($primary);
+                $channel1Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel1)) : null;
+                $channel2Path = $useChannels ? ($temps[] = $uploads->decryptToTemp($channel2)) : null;
+            } catch (FilesystemException|RuntimeException $e) {
+                Log::warning('Final transcript: the stored audio could not be read', ['transcript' => $transcript->id, 'error' => mb_substr($e->getMessage(), 0, 300)]);
+                $store->failWith($transcript, TranscriptErrorCode::RecordingMissing);
+
+                return;
+            }
 
             $request = new FinalJobRequest(
                 transcript: $transcript,
@@ -232,6 +243,13 @@ final class TranscribeFinalJob implements ShouldQueue
         } catch (ProviderJobFailed $e) {
             $store->fail($transcript, TranscriptErrorCode::rejectedMessage($e->getMessage()), TranscriptErrorCode::ProviderRejected);
         } catch (RequestException $e) {
+            // Since v1.8.1: Groq refusing the person's own key is theirs to fix in Account → Transcription key; another
+            // try with the same key, or another engine, cannot help.
+            if ((bool) (($transcript->meta ?? [])['own_key'] ?? false) && in_array($e->response->status(), [401, 403], true)) {
+                $store->fail($transcript, TranscriptErrorCode::OwnKeyRejected->message().' '.TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::OwnKeyRejected);
+
+                return null;
+            }
             $store->fail($transcript, TranscriptErrorCode::rejectedMessage(self::providerReason($e)), TranscriptErrorCode::ProviderRejected, $e->response);
         } catch (ConnectionException) {
             $store->failWith($transcript, TranscriptErrorCode::ProviderUnreachable);
@@ -281,10 +299,14 @@ final class TranscribeFinalJob implements ShouldQueue
     {
         $transcript = Transcript::query()->find($this->transcriptId);
         if ($transcript !== null && ! $transcript->status->isTerminal()) {
-            // A storage error names the file: the device gets the documented text, the log the rest.
-            $error = $exception instanceof FilesystemException
-                ? TranscriptErrorCode::Interrupted->message()
-                : mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
+            // A storage error names the file, and the audio is not there to transcribe (since v1.8.1: recording_missing,
+            // not interrupted, so "Transcribe again" does not loop); the log keeps the rest.
+            if ($exception instanceof FilesystemException) {
+                app(TranscriptStore::class)->failWith($transcript, TranscriptErrorCode::RecordingMissing);
+
+                return;
+            }
+            $error = mb_substr($exception?->getMessage() ?? 'Transcription failed.', 0, 2000);
             // Since v1.5 a crashed run of an Urdu or Auto recording is an interrupted one: it waits and its engine is tried
             // again (EngineWait), and once the wait is over the next engine takes it as a backup (EngineFallbackJob).
             if ($transcript->kind === TranscriptKind::Final && EngineWait::forUrdu($transcript)) {

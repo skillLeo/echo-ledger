@@ -6,7 +6,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\SessionStatus;
 use App\Enums\SttUseCase;
-use App\Enums\TranscriptErrorCode;
 use App\Exceptions\ApiError;
 use App\Http\Controllers\Controller;
 use App\Models\CaptureSession;
@@ -36,6 +35,12 @@ final class SttTokenController extends Controller
 {
     /** Live captions are refused for a session this old or older (docs/API.md `session_not_recording`). */
     public const MAX_SESSION_HOURS = 4;
+
+    /** What the apps show when no streaming engine is set up (code `provider_not_configured`, since v1.8.1). */
+    public const NOT_SET_UP = 'Live captions are not set up on the server yet. Ask your admin.';
+
+    /** The same for dictation. */
+    public const DICTATION_NOT_SET_UP = 'Dictation is not set up on the server yet. Ask your admin.';
 
     public function __invoke(Request $request, SttManager $stt, SettingsRepository $settings, BudgetGuard $budget, PlanLimits $limits, LanguageRouter $router, StreamingGrants $grants): JsonResponse
     {
@@ -94,11 +99,11 @@ final class SttTokenController extends Controller
                 keyterms: $stt->keytermsFor($client),
             ));
         } catch (ProviderNotConfigured $e) {
-            // The apps get the documented plain message; which credential is missing (it names the provider) is for the
+            // The apps get a plain sentence for people; which credential is missing (it names the provider) is for the
             // operator, in the server log (since v1.8.1, W-003).
             Log::warning('Streaming token refused: the speech provider is not configured', ['use_case' => $useCase->value, 'detail' => $e->getMessage()]);
 
-            throw new ApiError(503, 'provider_not_configured', TranscriptErrorCode::ProviderNotConfigured->message());
+            throw new ApiError(503, 'provider_not_configured', $useCase === SttUseCase::Dictation ? self::DICTATION_NOT_SET_UP : self::NOT_SET_UP);
         } catch (RequestException $e) {
             report($e);
 

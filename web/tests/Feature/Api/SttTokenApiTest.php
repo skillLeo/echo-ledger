@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Http\Controllers\Api\SttTokenController;
 use App\Models\Client;
 use App\Models\ClientKeyterm;
 use App\Services\CredentialVault;
@@ -313,9 +314,9 @@ describe('Azure', function () {
         Log::spy();
         app(SettingsRepository::class)->set('azure.region', null);
 
-        // Since v1.8.1 (W-003) the apps get the documented message; what to configure is for the operator, in the log.
+        // Since v1.8.1 (W-003) the apps get a plain sentence for people; what to configure is for the operator, in the log.
         $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503)
-            ->assertJsonPath('code', 'provider_not_configured')->assertJsonPath('message', 'The speech provider is not configured.');
+            ->assertJsonPath('code', 'provider_not_configured')->assertJsonPath('message', SttTokenController::NOT_SET_UP);
         Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context): bool => str_contains((string) $context['detail'], 'region'));
     });
 });
@@ -338,8 +339,8 @@ describe('provider failures', function () {
 
         $response = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->assertStatus(503);
 
-        // Since v1.8.1 (W-003) the apps get the documented message, never a credential's or a provider's name.
-        expect($response->json('message'))->toBe('The speech provider is not configured.')
+        // Since v1.8.1 (W-003) the apps get a plain sentence for people, never a credential's or a provider's name.
+        expect($response->json('message'))->toBe(SttTokenController::NOT_SET_UP)
             ->and((string) $response->getContent())->not->toContain('assemblyai')->not->toContain('api_key');
         Log::shouldHaveReceived('warning')->withArgs(fn (string $message, array $context): bool => str_contains((string) $context['detail'], 'assemblyai.api_key'));
         Http::assertNothingSent();

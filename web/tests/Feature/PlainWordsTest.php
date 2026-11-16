@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Anthropic\Client;
+use Anthropic\Core\Exceptions\APIStatusException;
 use App\Enums\TranscriptErrorCode;
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
@@ -24,8 +25,11 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\CredentialVault;
 use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
+use App\Services\TranscriptExporter;
 use App\Services\Views\TranscriptViews;
+use App\Support\ProviderText;
 use Filament\Facades\Filament;
+use GuzzleHttp\Psr7\Request as Psr7Request;
 use GuzzleHttp\Psr7\Response;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\Log;
@@ -95,6 +99,9 @@ const VENDOR_NAMES_ALLOWED = [
 const VENDOR_STRINGS_ALLOWED = [
     // The phone tells "no key" apart by "Soniox key" (TranslateBudget.kt); only the person who runs the server adds it.
     'app/Http/Controllers/Api/LiveTranslateTokenController.php' => ['Live Translate needs a Soniox key. Add it in API Credentials, then try again.'],
+    // The person's own Groq key, refused by Groq (own_key_rejected): they fix it by name in Account → Transcription key.
+    'app/Enums/TranscriptErrorCode.php' => ['Groq did not accept the person\'s own key.', 'Groq did not accept your key. Check it in Account → Transcription key, then try again.'],
+    'app/Filament/Support/FailedUpload.php' => ['Groq did not accept your key'],
 ];
 
 /** Every string of the code and the views that names a provider, outside VENDOR_NAMES_ALLOWED: "path:line: text". */
@@ -243,8 +250,11 @@ it('never sends or shows a reason the AI\'s work failed for that names a provide
     // What v1.8.0 and older kept: the AI's maker, its model, a credential's name.
     CallNote::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'capture_session_id' => $session->id,
         'status' => 'failed', 'error' => 'Claude did not return the notes in the expected form.']);
+    // The SDK's own words for a 529, as it writes them into the exception message (no model name in them).
+    $overloaded = APIStatusException::from(new Psr7Request('POST', 'https://example.test/v1/messages'),
+        new Response(529, [], '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'))->getMessage();
     ClientBrief::query()->create(['workspace_id' => $session->workspace_id, 'client_id' => $project->id, 'sections' => ClientBrief::emptySections(),
-        'status' => 'failed', 'error' => '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}} claude-sonnet-5-5']);
+        'status' => 'failed', 'error' => $overloaded]);
     ClientFile::query()->create(['workspace_id' => $session->workspace_id, 'user_id' => $owner->id, 'client_id' => $project->id, 'name' => 'Scope.pdf',
         'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'failed', 'error' => 'Missing credential anthropic.api_key. Add it on Admin → API Credentials.']);
     $transcript->update(['meta' => ['views' => ['status' => 'failed', 'fingerprint' => TranscriptViews::fingerprint($transcript), 'error' => 'Claude declined to convert this transcript.']]]);
@@ -253,7 +263,8 @@ it('never sends or shows a reason the AI\'s work failed for that names a provide
 
     $workspace = $api->getJson("/api/clients/{$project->id}/workspace")->assertOk();
     expect($workspace->json('data.brief.error'))->toBe($unavailable)
-        ->and($workspace->json('data.files.0.error'))->toBe($unavailable)
+        // A missing credential is not a passing fault: trying again does not help until the server is set up.
+        ->and($workspace->json('data.files.0.error'))->toBe(ClientWorkspace::NOT_SET_UP)
         ->and($workspace->json('data.notes.0.error'))->toBe($unavailable)
         ->and(vendorNamesIn((string) $workspace->getContent()))->toBe([]);
     expect($api->getJson("/api/sessions/{$session->id}/notes")->assertOk()->json('data.error'))->toBe($unavailable)
@@ -268,8 +279,25 @@ it('never sends or shows a reason the AI\'s work failed for that names a provide
     $this->actingAs($owner, 'web');
     $html = (string) $this->get('/app/clients/'.$project->id)->assertOk()->getContent()
         .(string) $this->get('/app/clients/'.$project->id.'?tab=files')->assertOk()->getContent();
-    expect($html)->toContain(e($unavailable))->not->toContain('overloaded_error')->not->toContain('Missing credential')
+    expect($html)->toContain(e($unavailable))->toContain(e(ClientWorkspace::NOT_SET_UP))->not->toContain('overloaded_error')->not->toContain('Missing credential')
         ->and(vendorNamesIn($html))->toBe([]);
+});
+
+it('reads the provider\'s own error JSON and a credential\'s words as not for people, and leaves plain words alone', function () {
+    $overloaded = APIStatusException::from(new Psr7Request('POST', 'https://example.test/v1/messages'),
+        new Response(529, [], '{"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}'))->getMessage();
+    // Only the JSON, without the SDK's first line: still the provider's own words.
+    $json = mb_substr($overloaded, (int) mb_strpos($overloaded, '{'));
+    expect($json)->toStartWith('{')
+        ->and(ProviderText::forPeople($overloaded))->toBe(ClaudeClientAi::UNAVAILABLE)
+        ->and(ProviderText::forPeople($json))->toBe(ClaudeClientAi::UNAVAILABLE)
+        ->and(ProviderText::forPeople('{"type":"error","error":{"type":"rate_limit_error","message":"slow down"}}'))->toBe(ClaudeClientAi::UNAVAILABLE)
+        ->and(ProviderText::forPeople('Missing credential anthropic.api_key. Add it on Admin → API Credentials.'))->toBe(ClientWorkspace::NOT_SET_UP)
+        ->and(ProviderText::forPeople('{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}'))->toBe(ClientWorkspace::NOT_SET_UP)
+        ->and(ProviderText::forPeople(ClientWorkspace::NOT_SET_UP))->toBe(ClientWorkspace::NOT_SET_UP)
+        ->and(ProviderText::forPeople(ClaudeClientAi::UNAVAILABLE))->toBe(ClaudeClientAi::UNAVAILABLE)
+        ->and(ProviderText::forPeople('The transcript is not ready yet.'))->toBe('The transcript is not ready yet.')
+        ->and(ProviderText::forPeople(null))->toBeNull();
 });
 
 /** A recording of [$owner] with a ready recording and a final transcript holding [$transcript]. */
@@ -396,8 +424,32 @@ describe('the console\'s Library side panel', function () {
 
 it('says why a transcript failed in plain words for every error code, and the Free plan\'s key by name', function () {
     foreach (TranscriptErrorCode::cases() as $code) {
-        expect(vendorNamesIn(TranscriptErrorCode::plainWords($code)))->toBe([], $code->value);
+        // The person's own Groq key, refused by Groq: they fix it by name.
+        expect(vendorNamesIn(TranscriptErrorCode::plainWords($code)))->toBe($code === TranscriptErrorCode::OwnKeyRejected ? ['Groq'] : [], $code->value);
     }
     expect(TranscriptErrorCode::plainWords(null))->toBe(TranscriptErrorCode::plainWords(TranscriptErrorCode::ProviderRejected))
         ->and(TranscriptErrorCode::plainWords(TranscriptErrorCode::NeedsTranscriptionKey))->toContain('Groq key');
+});
+
+it('leaves which engine wrote a transcript out of its JSON export, except for the server\'s operator', function () {
+    $device = Fx::device();
+    $owner = $device->user;
+    $session = Fx::session($owner, $device, ['status' => 'completed']);
+    $transcript = Fx::transcript($session, 'Send the invoice.');
+
+    // The apps, a share link's download and an account export: never.
+    $api = $this->api(Fx::token($device))->get("/api/transcripts/{$transcript->id}/export?format=json")->assertOk();
+    $file = json_decode((string) $api->getContent(), true);
+    expect($file['transcript'])->not->toHaveKey('provider')->and($file['transcript']['segments'][0]['text'])->toBe('Send the invoice.');
+    expect(json_decode(app(TranscriptExporter::class)->export($transcript, 'json')['body'], true)['transcript'])->not->toHaveKey('provider');
+
+    // The console: the owner does not see it; the super admin, who picks the engines, does.
+    Filament::setCurrentPanel('app');
+    $this->actingAs($owner, 'web');
+    expect(json_decode((string) $this->get(route('admin.transcripts.export', ['transcript' => $transcript->id, 'format' => 'json']))->assertOk()->getContent(), true)['transcript'])
+        ->not->toHaveKey('provider');
+    $owner->forceFill(['is_super_admin' => true])->save();
+    $this->actingAs($owner->fresh(), 'web');
+    expect(json_decode((string) $this->get(route('admin.transcripts.export', ['transcript' => $transcript->id, 'format' => 'json']))->assertOk()->getContent(), true)['transcript']['provider'])
+        ->toBe('assemblyai');
 });

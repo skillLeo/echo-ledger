@@ -88,6 +88,30 @@ it('shows a workspace\'s owner the totals, and no provider or model, on the Usag
     expect(usageProvidersIn($html))->toBe([]);
 });
 
+it('shows one cost on the Usage page, and names the Double-check part only when it is at least a cent', function () {
+    $owner = Fx::user();
+    usageMonth($owner);
+    // A use that does not count against the plan still cost something: the tile and Totals say the same.
+    providerlessUsageRow($owner, ['provider' => 'groq', 'billable' => false, 'duration_ms' => 600_000, 'billed_ms' => 600_000, 'cost_usd' => 0.5]);
+    $this->actingAs($owner, 'web');
+    $costs = function (): array {
+        $html = (string) $this->get('/app/usage')->assertOk()->getContent();
+        preg_match('/Estimated cost<\/div>\s*<div[^>]*>\s*(\$[\d.,]+)/', $html, $tile);
+        preg_match('/>Cost<\/td><td[^>]*>\s*(\$[\d.,]+)/', $html, $totals);
+
+        return [$tile[1] ?? null, $totals[1] ?? null, $html];
+    };
+
+    [$tile, $totals, $html] = $costs();
+    expect($tile)->toBe('$0.86')->and($totals)->toBe($tile)
+        // $0.001 of Double-check shows as $0.00: not named.
+        ->and($html)->not->toContain('Double-check');
+
+    providerlessUsageRow($owner, ['provider' => 'groq', 'report_id' => 'check/'.Str::ulid().'/2', 'model' => 'double-check', 'duration_ms' => 30_000, 'billed_ms' => 30_000, 'cost_usd' => 0.01]);
+    [$tile, $totals, $html] = $costs();
+    expect($tile)->toBe('$0.87')->and($totals)->toBe($tile)->and($html)->toContain('incl. $0.01 Double-check');
+});
+
 it('downloads the owner\'s month one line per use, never per provider', function () {
     $owner = Fx::user();
     usageMonth($owner);

@@ -64,7 +64,8 @@ final class LiveTranslateTokenController extends Controller
         if ($key === null || $key === '') {
             // Kept as it is: the phone tells this case apart by "Soniox key" (TranslateBudget.kt), and only the person who
             // runs the server can add it. The other answers below say the service in plain words (since v1.8.1, W-003);
-            // the phone reads "did not accept the key" and "credit" in them.
+            // the phone reads "did not accept the key" and "credit" in them (v1.8.0), or the code with "credit" and "key"
+            // (v1.8.1, TranslateBudget.tokenProblem).
             throw new ApiError(503, 'provider_not_configured', self::NEEDS_KEY);
         }
         try {
@@ -83,7 +84,8 @@ final class LiveTranslateTokenController extends Controller
         }
         $temporary = is_array($answer) ? ($answer['api_key'] ?? null) : null;
         if (! is_string($temporary) || $temporary === '') {
-            throw new ApiError(502, 'provider_error', 'The Live Translate service answered without a key. Try again in a minute.');
+            // A passing fault: no "key" in these words, which the phone (v1.8.1) reads as "not set up on the server".
+            throw new ApiError(502, 'provider_error', 'The Live Translate service did not answer as expected. Try again in a minute.');
         }
 
         // What this device reports with POST /api/usage counts from here on.

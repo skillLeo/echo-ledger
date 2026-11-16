@@ -20,6 +20,8 @@ enum TranscriptErrorCode: string
     case RecordingMissing = 'recording_missing';
     /** Since v1.6: the plan leaves transcription on EchoLedger out and the person has no key of their own. */
     case NeedsTranscriptionKey = 'needs_transcription_key';
+    /** Since v1.8.1: Groq refused the person's own key (401/403); another try with the same key cannot work. */
+    case OwnKeyRejected = 'own_key_rejected';
 
     /** Longest provider reason quoted in a `provider_rejected` message. */
     public const MAX_REASON_CHARS = 200;
@@ -40,6 +42,7 @@ enum TranscriptErrorCode: string
             self::Interrupted => 'Transcription was interrupted. Retry it from the console.',
             self::RecordingMissing => 'The recording is missing or not ready.',
             self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key',
+            self::OwnKeyRejected => "Groq did not accept the person's own key.",
         };
     }
 
@@ -55,9 +58,10 @@ enum TranscriptErrorCode: string
         return match ($code) {
             self::NoAudio => 'Nothing could be heard in this recording.',
             self::BudgetExceeded => 'The monthly transcription limit was reached.',
-            self::RecordingMissing => 'The audio did not fully reach the server.',
+            self::RecordingMissing => 'The audio did not fully reach the server, or it is no longer stored.',
             self::ProviderNotConfigured => 'No speech engine is set up for this language yet.',
             self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key.',
+            self::OwnKeyRejected => 'Groq did not accept your key. Check it in Account → Transcription key, then try again.',
             self::Interrupted => 'Transcription was interrupted. Your audio is safe: try again.',
             default => 'The speech engines could not transcribe it this time. Your audio is safe: try again.',
         };
