@@ -28,8 +28,8 @@ pub const ASK_SECONDS: u64 = 8;
 /// Shown for a process whose identity cannot be read.
 pub const PROTECTED: &str = "a protected process";
 
-/// One line of the Record screen's explainer: an application holding the microphone and what auto mode does
-/// with it ("Holds mic ✓ · Playing audio ✓ · Identified as Google Meet · Decision: auto-record").
+/// One line of "Why a call wasn't recorded" (Settings › Calls & meetings): an application holding the microphone and
+/// what auto mode does with it, which the app says in plain words ("Google Meet: Will be recorded").
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MicUser {
