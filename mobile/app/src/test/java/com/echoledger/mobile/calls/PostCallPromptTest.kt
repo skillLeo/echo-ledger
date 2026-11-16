@@ -73,17 +73,61 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `Undo deletes the call and calls off its upload`() {
+    fun `Undo on Saved calls off the upload and discards the call only after its own Undo time`() {
         overlayAllowed(true)
-        PostCallPrompt.show(app, call(), PostCallPrompt.KEEP, "dark")
+        val rec = call()
+        PostCallPrompt.show(app, rec, PostCallPrompt.KEEP, "dark")
 
-        runBlocking { Decisions.undoKeep(app, "call-1") }
-        ShadowLooper.idleMainLooper()
-
-        assertNull(app.graph.recordings.get("call-1"))
-        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+        // The chip's Undo on "Saved" (since v1.8.1 a Discard: "Discarded · Undo" first).
+        DecisionPopup.discard(app, rec, "dark")
+        assertEquals(DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
         assertTrue(uploadWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
-        assertFalse(DecisionPopup.isShowing)
+        assertTrue("nothing deleted yet", app.graph.recordings.encryptedFile("call-1").exists())
+
+        WorkManagerTestInitHelper.getTestDriver(app)!!.setInitialDelayMet(discardWork("call-1").single().id)
+        pumpUntil("the call to be deleted") { app.graph.recordings.get("call-1") == null }
+        assertFalse(app.graph.recordings.encryptedFile("call-1").exists())
+    }
+
+    @Test
+    fun `Undo on Discarded after Saved keeps the call again and shows Saved`() {
+        overlayAllowed(true)
+        val rec = call()
+        PostCallPrompt.show(app, rec, PostCallPrompt.KEEP, "dark")
+        DecisionPopup.discard(app, rec, "dark")
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+
+        DecisionPopup.undoDiscard(app, "call-1", "dark")
+        pumpUntil("Saved again") { DecisionPopup.showingMode == DecisionPopup.Mode.SAVED }
+        assertEquals("queued", app.peekRecording("call-1")?.state)
+        assertTrue(uploadWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
+        assertTrue(discardWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+    }
+
+    @Test
+    fun `the final delete and an Undo never interleave`() {
+        call(state = "pending_decision")
+        runBlocking { Decisions.discardLater(app, "call-1") }
+        val inUndo = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        // An Undo that has read the call and is about to save it back...
+        val undo = Thread {
+            app.graph.recordings.update("call-1") {
+                inUndo.countDown()
+                release.await()
+                it.copy(state = "pending_decision", discardAt = null, discardedFrom = null)
+            }
+        }.apply { start() }
+        inUndo.await()
+        // ...while the delete runs: it waits for the Undo and then finds the call back, so it keeps it.
+        val finish = Thread { runBlocking { Decisions.finishDiscard(app, "call-1") } }.apply { start() }
+        Thread.sleep(200)
+        release.countDown()
+        undo.join()
+        finish.join()
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue(app.graph.recordings.encryptedFile("call-1").exists())
     }
 
     @Test
@@ -262,15 +306,15 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
-    fun `a call decided elsewhere meanwhile is not shown as discarded`() {
+    fun `a call already sent meanwhile is not shown as discarded`() {
         overlayAllowed(true)
         val rec = call(state = "pending_decision")
         PostCallPrompt.show(app, rec, PostCallPrompt.ASK, "dark")
-        runBlocking { Decisions.apply(app, "call-1", keep = true) }
+        app.graph.recordings.update("call-1") { it.copy(state = "uploaded") }
 
         DecisionPopup.discard(app, rec, "dark")
         pumpUntil("the chip to go") { !DecisionPopup.isShowing }
-        assertEquals("queued", app.peekRecording("call-1")?.state)
+        assertEquals("uploaded", app.peekRecording("call-1")?.state)
         assertTrue(discardWork("call-1").isEmpty())
     }
 }

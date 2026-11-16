@@ -11,7 +11,7 @@ import com.echoledger.mobile.overlay.DecisionPopup
 /**
  * What happens when a call recording ends (since v1.5, "After a call" in Calls & meetings):
  * - "keep" (default): the call is kept; the small "Saved · … · Undo" chip shows for 6 s and the upload waits until it
- *   is gone, so Undo deletes everything. Without the overlay permission a quiet notification with Undo does the same.
+ *   is gone, so nothing has left the phone; Undo discards it with its own "Discarded · Undo" (since v1.8.1). Without the overlay permission a quiet notification with Undo does the same.
  * - "ask": the chip with ✓ and ✕ (or the Keep / Discard notification); nobody choosing keeps the call after 10 s.
  * Skipped calls (unanswered, short, silent) never reach this.
  */
@@ -34,6 +34,20 @@ object PostCallPrompt {
             if (!shown) Notifications.savedWithUndo(context, rec, DecisionPopup.title(rec))
         }
     }
+
+    /** A call back from "Discarded · Undo" (since v1.8.1): asked again if it waited, "Saved" again if it was kept. */
+    fun again(context: Context, rec: LocalRecording, themeMode: String) = show(
+        context,
+        rec,
+        if (rec.state ==
+            "pending_decision"
+        ) {
+            ASK
+        } else {
+            KEEP
+        },
+        themeMode
+    )
 
     /**
      * The recording follows "After a call" with nothing on the screen (since v1.8 0.3: a call or a recording is live,

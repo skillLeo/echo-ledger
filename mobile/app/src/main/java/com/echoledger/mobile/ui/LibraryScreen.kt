@@ -317,6 +317,24 @@ fun LibraryScreen(
             }
             PullToRefreshBox(isRefreshing = syncing && vm.hasSynced(), onRefresh = { vm.refresh() }, modifier = Modifier.weight(1f)) {
                 LazyColumn(Modifier.fillMaxSize(), state = list, contentPadding = ListPadding) {
+                    // What is on its way to the server, also above an empty Library (since v1.8.1, bug P-077): a waiting
+                    // or failed upload is this phone's only copy and must always be seen.
+                    fun androidx.compose.foundation.lazy.LazyListScope.uploadRows() {
+                        if (uploading.isEmpty() || filters.count > 0) return
+                        item(key = "h-uploading") { SectionHeader("Uploading") }
+                        itemsIndexed(uploading, key = { _, it -> "u-${it.id}" }) { i, rec ->
+                            UploadingRow(
+                                rec = rec,
+                                title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
+                                time = rowTime(rec.startedAt, today),
+                                meta = UploadRow.meta(rec.state, sending[rec.id]),
+                                divider = i < uploading.lastIndex,
+                                onRetry = { vm.retryUpload(rec.id) },
+                                onDismiss = { vm.dismissLocal(rec.id) },
+                                onDelete = { deletingUpload = rec.id }
+                            )
+                        }
+                    }
                     if (offline) {
                         item(key = "offline") {
                             InlineBanner(
@@ -387,23 +405,9 @@ fun LibraryScreen(
                             "skeleton-$it"
                         }) { SkeletonRow() }
 
-                        visible.isEmpty() -> item(key = "empty") {
-                            val narrowed = filters.count > 0
-                            if (narrowed) {
-                                EchoEmptyState(
-                                    Icons.Rounded.SearchOff,
-                                    "Nothing matches",
-                                    body = "Try a different search or filter.",
-                                    action = "Clear filters",
-                                    onAction = { filters = LibraryFilters() }
-                                )
-                            } else {
-                                EchoEmptyState(
-                                    Icons.Rounded.VideoLibrary,
-                                    "No recordings yet",
-                                    body = "Calls, meetings and voice notes you capture will appear here."
-                                )
-                            }
+                        visible.isEmpty() -> {
+                            uploadRows()
+                            item(key = "empty") { EmptyLibrary(filters.count > 0, onClear = { filters = LibraryFilters() }) }
                         }
 
                         else -> {
@@ -412,21 +416,7 @@ fun LibraryScreen(
                             if (waiting.isNotEmpty() && filters.count == 0) {
                                 item(key = "waiting") { WaitingSummaryCard(waiting, onReview = onOpenWaiting) }
                             }
-                            if (uploading.isNotEmpty() && filters.count == 0) {
-                                item(key = "h-uploading") { SectionHeader("Uploading") }
-                                itemsIndexed(uploading, key = { _, it -> "u-${it.id}" }) { i, rec ->
-                                    UploadingRow(
-                                        rec = rec,
-                                        title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
-                                        time = rowTime(rec.startedAt, today),
-                                        meta = UploadRow.meta(rec.state, sending[rec.id]),
-                                        divider = i < uploading.lastIndex,
-                                        onRetry = { vm.retryUpload(rec.id) },
-                                        onDismiss = { vm.dismissLocal(rec.id) },
-                                        onDelete = { deletingUpload = rec.id }
-                                    )
-                                }
-                            }
+                            uploadRows()
                             grouped.forEach { g ->
                                 // Since v1.6 (P5.1): the box only selects the group (in selection, or a long press);
                                 // the name and the arrow only fold it. Group by None has no header.
@@ -628,6 +618,26 @@ private fun SwipeRow(item: LibraryItem, enabled: Boolean, onPin: () -> Unit, onD
             }
         }
     ) { Box(Modifier.background(Brand.Background)) { content() } }
+}
+
+/** The Library with nothing to list: no recordings yet, or nothing that matches the filters. */
+@Composable
+private fun EmptyLibrary(narrowed: Boolean, onClear: () -> Unit) {
+    if (narrowed) {
+        EchoEmptyState(
+            Icons.Rounded.SearchOff,
+            "Nothing matches",
+            body = "Try a different search or filter.",
+            action = "Clear filters",
+            onAction = onClear
+        )
+    } else {
+        EchoEmptyState(
+            Icons.Rounded.VideoLibrary,
+            "No recordings yet",
+            body = "Calls, meetings and voice notes you capture will appear here."
+        )
+    }
 }
 
 /** Local recordings on their way to the server, shown in the Library until the server has them. */

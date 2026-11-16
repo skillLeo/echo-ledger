@@ -67,7 +67,7 @@ import kotlinx.coroutines.launch
  * The small chip after a call (since v1.5, replaces the v1.3 card), at the bottom of the screen over whatever app is
  * open (SYSTEM_ALERT_WINDOW). It never takes focus and leaves the screen around it alone.
  * - [Mode.SAVED] ("After a call: Keep automatically"): "Saved · Call with Omar · 4:12 · Undo" for [SAVED_MS]; the
- *   upload waits that long, so Undo still deletes everything.
+ *   upload waits that long, so nothing has left the phone; since v1.8.1 its Undo is a Discard ("Discarded · Undo").
  * - [Mode.ASK] ("Ask me"): the title with ✓ Keep and a labelled Discard (a trash, never an "×" that reads as close);
  *   the title opens the app to rename it or pick a client; after [ASK_KEEP_MS] without a tap the call is kept.
  * - [Mode.DISCARDED] (since v1.8.1, bug P-003): after Discard, "Discarded · Call with Omar · 4:12 · Undo" for
@@ -131,7 +131,8 @@ object DecisionPopup {
                         visibleMs = visibleMs,
                         onKeep = { decide(app, rec.id, keep = true) },
                         onDiscard = { discard(app, rec, themeMode) },
-                        onUndo = { if (mode == Mode.DISCARDED) undoDiscard(app, rec.id, themeMode) else undo(app, rec.id) },
+                        // Undo on "Saved" is a Discard too (since v1.8.1): "Discarded · Undo" first, the file after it.
+                        onUndo = { if (mode == Mode.DISCARDED) undoDiscard(app, rec.id, themeMode) else discard(app, rec, themeMode) },
                         onTitle = {
                             hide()
                             app.startActivity(
@@ -198,11 +199,6 @@ object DecisionPopup {
         CoroutineScope(Dispatchers.IO).launch { Decisions.apply(context, id, keep) }
     }
 
-    private fun undo(context: Context, id: String) {
-        hide()
-        CoroutineScope(Dispatchers.IO).launch { Decisions.undoKeep(context, id) }
-    }
-
     /** The chip's Discard: "Discarded · … · Undo" at once; the file goes only when that is over. */
     internal fun discard(context: Context, rec: LocalRecording, themeMode: String) {
         show(context, rec, themeMode, Mode.DISCARDED)
@@ -214,14 +210,15 @@ object DecisionPopup {
         }
     }
 
-    /** Undo on "Discarded": the call is back on its chip, counting again from the start (kept by itself after 10 s). */
+    /**
+     * Undo on "Discarded": the call is back on its chip as after the call: asked again (kept by itself after 10 s), or
+     * "Saved" again for a call that was kept.
+     */
     internal fun undoDiscard(context: Context, id: String, themeMode: String) {
         hide()
         CoroutineScope(Dispatchers.IO).launch {
             val back = Decisions.undoDiscard(context, id) ?: return@launch
-            handler.post {
-                com.echoledger.mobile.calls.PostCallPrompt.show(context, back, com.echoledger.mobile.calls.PostCallPrompt.ASK, themeMode)
-            }
+            handler.post { com.echoledger.mobile.calls.PostCallPrompt.again(context, back, themeMode) }
         }
     }
 

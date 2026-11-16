@@ -625,6 +625,19 @@ class LibraryScreenTest : ScreenTest() {
         assertNotNull("the other upload stays", app.graph.recordings.get("q1"))
     }
 
+    @Test
+    fun `an empty Library still shows what is uploading above its empty state (P-077)`() {
+        seed()
+        app.storeRecording(id = "f1", state = "failed", lastError = "x")
+        app.graph.recordings.update("f1") { it.copy(title = "Only copy") }
+        showLibrary()
+
+        pumpUntil("the upload") { exists("Only copy") }
+        compose.onNodeWithText("Upload failed · Tap to retry").assertIsDisplayed()
+        compose.onNodeWithText("No recordings yet").assertIsDisplayed()
+        compose.onNodeWithContentDescription("More for Only copy").assertIsDisplayed()
+    }
+
     private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
 
     private fun inDialog(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(isDialog()))

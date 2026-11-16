@@ -60,7 +60,9 @@ data class LocalRecording(
     /** Since v1.5: the account it was made under, once someone else signed in here ([com.echoledger.mobile.core.Owner]); null = this phone's account. */
     val owner: com.echoledger.mobile.core.Owner? = null,
     /** Since v1.8.1, for state "discarding": when the after-call chip's Undo time is over and the file goes (an instant). */
-    val discardAt: String? = null
+    val discardAt: String? = null,
+    /** Since v1.8.1, for state "discarding": the state Undo brings back ("pending_decision", or "queued" for a kept call). */
+    val discardedFrom: String? = null
 )
 
 /**
@@ -166,7 +168,17 @@ class RecordingStore(context: Context, private val cipher: RecordingCipher) {
 
     fun pendingDecisions(): List<LocalRecording> = all().filter { it.state == "pending_decision" }
 
-    fun update(id: String, transform: (LocalRecording) -> LocalRecording): LocalRecording? = get(id)?.let(transform)?.also(::save)
+    /** Reads, changes and saves one recording as one step against [deleteIf] (since v1.8.1). */
+    fun update(id: String, transform: (LocalRecording) -> LocalRecording): LocalRecording? =
+        synchronized(this) { get(id)?.let(transform)?.also(::save) }
+
+    /**
+     * Deletes the recording only while [still] holds, in the same step as the check (since v1.8.1): an [update] made
+     * meanwhile (an Undo) either comes first and keeps it, or finds it gone. The deleted recording, or null.
+     */
+    fun deleteIf(id: String, still: (LocalRecording) -> Boolean): LocalRecording? = synchronized(this) {
+        get(id)?.takeIf(still)?.also { delete(id) }
+    }
 
     fun delete(id: String) {
         encryptedFile(id).delete()

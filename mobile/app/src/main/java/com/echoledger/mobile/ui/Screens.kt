@@ -461,12 +461,8 @@ fun SessionScreen(
                         )
                         Row(horizontalArrangement = Arrangement.spacedBy(Space.s2)) {
                             EchoButton("Run capture test", onCaptureTest)
-                            EchoButton("Delete", {
-                                scope.launch {
-                                    vm.delete(item)
-                                    onBack()
-                                }
-                            }, kind = ButtonKind.Secondary)
+                            // Since v1.8.1 (bug P-007): the same question as the ⋮ menu's Delete.
+                            EchoButton("Delete", { confirmDelete = true }, kind = ButtonKind.Secondary)
                         }
                     }
                 }
@@ -517,18 +513,22 @@ fun SessionScreen(
                 t.status == "failed" -> item(key = "failed") {
                     val retryScope = rememberCoroutineScope()
                     var retrying by remember { mutableStateOf(false) }
+                    // A refused own key (1.8.1-b): first "Check your key"; once a key was saved after the failure,
+                    // Retry, so "then try again" can be done right here.
+                    val keySaved by vm.settings.collectAsState()
+                    val checkKey = t.errorCode == "own_key_rejected" && !KeyRetry.newerKey(keySaved.ownKeySavedAt, item.updatedAt)
                     InlineBanner(
                         "Transcription failed. ${failureText(t)}",
                         Modifier.padding(horizontal = Space.screen),
                         kind = BannerKind.Error,
                         action = when {
-                            t.errorCode == "own_key_rejected" -> "Check your key"
+                            checkKey -> "Check your key"
                             t.errorCode in NO_RETRY -> null
                             retrying -> "Retrying…"
                             else -> "Retry"
                         },
                         onAction = {
-                            if (t.errorCode == "own_key_rejected") {
+                            if (checkKey) {
                                 onOpenSettings(TRANSCRIPTION_KEY_PAGE)
                             } else if (!retrying) {
                                 retrying = true
@@ -1171,6 +1171,16 @@ internal fun failureText(t: TranscriptDto): String = when (t.errorCode) {
 
 /** Failed transcripts a Retry cannot help (since 1.8.1-b): nothing was heard, or the audio is not on the server. */
 internal val NO_RETRY = setOf("no_audio", "recording_missing")
+
+/** When a refused own key's banner offers Retry (since 1.8.1-b): a key saved on this phone after the failure. */
+internal object KeyRetry {
+    /** Whether [keySavedAt] is after [failedAt] (the recording's last change, when its transcript failed). */
+    fun newerKey(keySavedAt: String?, failedAt: String?): Boolean {
+        val saved = keySavedAt?.let { runCatching { java.time.Instant.parse(it) }.getOrNull() } ?: return false
+        val failed = failedAt?.let { runCatching { java.time.OffsetDateTime.parse(it).toInstant() }.getOrNull() } ?: return true
+        return saved.isAfter(failed)
+    }
+}
 
 /** The Settings page of the Free plan's own key ([SettingsIndex] id), opened by "Check your key". */
 internal const val TRANSCRIPTION_KEY_PAGE = "key"

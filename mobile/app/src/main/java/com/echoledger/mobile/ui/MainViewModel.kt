@@ -1499,7 +1499,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _message.value = "Can't reach the server. Try again."
             null
         } ?: return false
-        graph.settings.update { it.copy(plan = it.plan.copy(transcriptionKey = saved)) }
+        graph.settings.update { it.copy(plan = it.plan.copy(transcriptionKey = saved), ownKeySavedAt = java.time.Instant.now().toString()) }
         _message.value = "Key saved. New recordings are transcribed with it."
         return true
     }

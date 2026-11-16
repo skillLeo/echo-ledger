@@ -202,7 +202,7 @@ class ScreenshotsTest : ScreenTest() {
     }
 
     /** A recording's page with [transcript] (the server's answer), for the transcript's states (P-001: plain words). */
-    private fun sessionState(name: String, transcript: String, wait: String) {
+    private fun sessionState(name: String, transcript: String, wait: String, then: (() -> Unit)? = null) {
         runBlocking { app.pairLocally(server) }
         server.on("GET", "/api/transcripts/.+", FakeServer.json(200, transcript))
         server.on(
@@ -225,7 +225,7 @@ class ScreenshotsTest : ScreenTest() {
         )
         shoot { SessionScreen(vm, item, onBack = {}) }
         compose.waitUntil(10_000) { runCatching { compose.onNodeWithText(wait, substring = true).fetchSemanticsNode() }.isSuccess }
-        capture(name)
+        if (then == null) capture(name) else then().also { captureWindows(name) }
     }
 
     /** A failed transcript: why, in the phone's own words for its error (never the engine's). */
@@ -907,6 +907,51 @@ class ScreenshotsTest : ScreenTest() {
     }
 
     private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    /** Nothing heard: its Delete asks the same question as the ⋮ menu's (P-007). */
+    @Test
+    fun sessionNoAudioDelete() = sessionState(
+        "session-no-audio-delete",
+        ServerFixtures.transcript(status = "failed", errorCode = "no_audio", error = "x", segments = "[]", text = null),
+        "Nothing was heard"
+    ) { compose.onNodeWithText("Delete").performClick() }
+
+    /** An empty Library still shows what is uploading (P-077): the upload is the phone's only copy. */
+    @Test
+    fun libraryEmptyUploads() {
+        runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        runBlocking { app.graph.library.refresh() }
+        app.storeRecording(id = "f1", state = "failed", sourceApp = "phone_call", startedAt = "2026-10-24T10:05:00Z")
+        app.graph.recordings.update("f1") { it.copy(title = "Call with Sara") }
+        shoot { LibraryScreen(vm, readiness = ReadinessFixtures.READY, onReady = {}, onOpen = {}) }
+        pumpUntil("the upload") { exists("Call with Sara") }
+        capture("library-empty-uploads")
+    }
+
+    /** Clear history asks first: the dictations are kept on this phone only (P-008). */
+    @Test
+    fun dictationClearHistory() {
+        val history = com.echoledger.mobile.dictation.DictationHistory(File(app.noBackupFilesDir, "dictation_history.json"))
+        history.add("2026-10-24T09:00:00Z", "Send the second invoice to Aria Studio today.")
+        shoot { HistorySection(history) }
+        compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText(CLEAR_HISTORY_QUESTION).assertExists()
+        captureWindows("dictation-clear-history")
+    }
+
+    /** Remove key asks first: on the Free plan nothing new is transcribed without it (P-009). */
+    @Test
+    fun transcriptionKeyRemove() {
+        val plan = com.echoledger.mobile.core.PlanState(
+            transcriptionKey = com.echoledger.mobile.data.TranscriptionKeyDto(set = true, last4 = "3f9a")
+        )
+        shoot { TranscriptionKeySection(vm, plan) }
+        compose.onNodeWithText("Remove key").performClick()
+        compose.onNodeWithText(REMOVE_KEY_QUESTION).assertExists()
+        captureWindows("transcription-key-remove")
+    }
 
     /** Two recordings on their way to the server: one waiting, one whose upload failed. */
     private fun seedUploads() {
