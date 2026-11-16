@@ -16,7 +16,6 @@ export function mountGallery(root: HTMLElement, search = location.search) {
   html.dataset.theme = params.theme;
   html.style.colorScheme = params.theme;
   html.lang = params.lang;
-  html.style.setProperty("zoom", String(params.text / 100));
   document.body.classList.add("g-body");
   document.title = `EchoLedger v2: ${params.screen}`;
   createRoot(root).render(

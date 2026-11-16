@@ -1,5 +1,6 @@
 // Echo DS rule: v2 components and screens use only the --el-* variables from tokens.css. No hex or rgb/hsl colour,
-// no raw px value, no gradient, anywhere in desktop/src/v2 outside the tests.
+// no raw px value, no gradient, anywhere in desktop/src/v2 outside the tests. One exception: a media query cannot read
+// a variable, so an @media line may name a window breakpoint's width, and only one that tokens.css defines.
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
@@ -18,11 +19,17 @@ const RULES: [string, RegExp][] = [
   ["gradient", /gradient\(/i],
 ];
 
+/** The window breakpoints tokens.css defines (--el-breakpoint-*), as written there ("720px"). */
+export const BREAKPOINTS: ReadonlySet<string> = new Set(
+  [...readFileSync(join(here, "..", "tokens.css"), "utf8").matchAll(/--el-breakpoint-[a-z]+:\s*(\d+px)\s*;/g)].map((m) => m[1]),
+);
+
 /** The rules a source file breaks, as "rule (line n)". Comments count too: a value in a comment gets copied. */
-export function violations(text: string): string[] {
+export function violations(text: string, breakpoints: ReadonlySet<string> = BREAKPOINTS): string[] {
   const found: string[] = [];
   text.split("\n").forEach((line, i) => {
-    for (const [name, re] of RULES) if (re.test(line)) found.push(`${name} (line ${i + 1})`);
+    const checked = /^\s*@media\b/.test(line) ? line.replace(/\d+px\b/g, (px) => (breakpoints.has(px) ? "" : px)) : line;
+    for (const [name, re] of RULES) if (re.test(checked)) found.push(`${name} (line ${i + 1})`);
   });
   return found;
 }
@@ -60,5 +67,16 @@ describe("v2 uses tokens only", () => {
     expect(violations("padding: var(--el-space-12); color: var(--el-role-text-primary);")).toEqual([]);
     expect(violations("background: color-mix(in srgb, var(--el-role-text-primary) 40%, transparent);")).toEqual([]);
     expect(violations('<div id="root" className="el-row" />')).toEqual([]);
+  });
+
+  it("lets a media query name a breakpoint from tokens.css, and no other width", () => {
+    expect([...BREAKPOINTS].sort()).toEqual(["1024px", "1440px", "720px"]);
+    expect(violations("@media (width < 720px) {")).toEqual([]);
+    expect(violations("@media (width >= 1024px) and (width < 1440px) {")).toEqual([]);
+    expect(violations("@media (width < 700px) {")).not.toEqual([]);
+    expect(violations("  .x { inline-size: 720px; }")).not.toEqual([]);
+    const media = sources.flatMap(([, text]) => [...text.matchAll(/@media[^{]*/g)].flatMap((m) => m[0].match(/\d+px/g) ?? []));
+    expect(media.length).toBeGreaterThan(0);
+    for (const px of media) expect(BREAKPOINTS).toContain(px);
   });
 });

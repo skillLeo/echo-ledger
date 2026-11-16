@@ -10,19 +10,15 @@ export type GalleryParams = {
   screen: "library" | "recording" | "settings";
   theme: "light" | "dark";
   lang: "en" | "ur";
-  /** Text size in percent (100, 130, 200): the page is zoomed, as the app is when the system text grows. */
-  text: number;
 };
 
-/** ?v2gallery&screen=library|recording|settings&theme=light|dark&lang=en|ur&text=100|130|200 */
+/** ?v2gallery&screen=library|recording|settings&theme=light|dark&lang=en|ur (text size: the browser's zoom). */
 export function galleryParams(search: string): GalleryParams {
   const p = new URLSearchParams(search);
   const screen = p.get("screen");
-  const text = Number(p.get("text"));
   return {
     screen: screen === "recording" || screen === "settings" ? screen : "library",
     theme: p.get("theme") === "dark" ? "dark" : "light",
     lang: p.get("lang") === "ur" ? "ur" : "en",
-    text: [130, 200].includes(text) ? text : 100,
   };
 }

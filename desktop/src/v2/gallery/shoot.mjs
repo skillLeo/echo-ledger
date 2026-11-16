@@ -2,7 +2,8 @@
 // at 1280 x 800, into docs/v2/gate3/desktop/ (library-light-en.png …). Runs the Vite dev server (the gallery exists
 // only there) and the repo's Playwright Chromium, with reduced motion.
 //   node src/v2/gallery/shoot.mjs                      the 12 pictures
-//   node src/v2/gallery/shoot.mjs --text=200 --out=DIR  the same at 200 % text, into DIR (for checking, not committed)
+//   node src/v2/gallery/shoot.mjs --text=200 --out=DIR  the same at 200 % text, into DIR (for checking, not committed):
+//   the window keeps its 1280 x 800 pixels at twice the scale, as when the system text size grows.
 import { createServer } from "vite";
 import { chromium } from "playwright";
 import { mkdir } from "node:fs/promises";
@@ -25,8 +26,9 @@ try {
     if (only && screen !== only) continue;
     for (const theme of ["light", "dark"]) {
       for (const lang of ["en", "ur"]) {
-        const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
-        await page.goto(`${base}?v2gallery&screen=${screen}&theme=${theme}&lang=${lang}&text=${text}`);
+        const scale = Number(text) / 100;
+        const page = await browser.newPage({ viewport: { width: Math.round(1280 / scale), height: Math.round(800 / scale) }, deviceScaleFactor: scale, colorScheme: theme, reducedMotion: "reduce" });
+        await page.goto(`${base}?v2gallery&screen=${screen}&theme=${theme}&lang=${lang}`);
         await page.waitForSelector("[data-gallery-ready]");
         await page.evaluate(() => document.fonts.ready);
         await page.waitForTimeout(150);

@@ -4,7 +4,7 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 
 .g-app {
   display: grid;
-  grid-template-columns: calc(var(--el-space-64) * 3.5) minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr);
   block-size: 100%;
   overflow: hidden;
 }

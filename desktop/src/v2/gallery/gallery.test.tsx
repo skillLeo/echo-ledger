@@ -17,10 +17,10 @@ describe("the gallery guard", () => {
     expect(wantsV2Gallery("?v2galleryx")).toBe(false);
   });
 
-  it("reads the screen, theme, language and text size, with safe defaults", () => {
-    expect(galleryParams("?v2gallery")).toEqual({ screen: "library", theme: "light", lang: "en", text: 100 });
-    expect(galleryParams("?v2gallery&screen=settings&theme=dark&lang=ur&text=200")).toEqual({ screen: "settings", theme: "dark", lang: "ur", text: 200 });
-    expect(galleryParams("?screen=<x>&text=999")).toEqual({ screen: "library", theme: "light", lang: "en", text: 100 });
+  it("reads the screen, theme and language, with safe defaults", () => {
+    expect(galleryParams("?v2gallery")).toEqual({ screen: "library", theme: "light", lang: "en" });
+    expect(galleryParams("?v2gallery&screen=settings&theme=dark&lang=ur")).toEqual({ screen: "settings", theme: "dark", lang: "ur" });
+    expect(galleryParams("?screen=<x>&lang=fr")).toEqual({ screen: "library", theme: "light", lang: "en" });
   });
 
   it("main.tsx reaches the gallery only behind an inline development-build check, which a release build removes", () => {
@@ -53,7 +53,6 @@ describe("the entry point", () => {
     vi.doUnmock("@tauri-apps/api/webviewWindow");
     vi.doUnmock("../../views/main/MainApp");
     window.history.replaceState(null, "", "/");
-    document.documentElement.style.removeProperty("zoom");
     (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
   });
 

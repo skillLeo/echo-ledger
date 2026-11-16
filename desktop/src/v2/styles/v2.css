@@ -1,5 +1,5 @@
 /* Echo DS v2: the base and every core component. Only --el-* values from tokens.css; logical properties only, so
-   right-to-left works by setting dir on any ancestor. Hairlines use the CSS keyword `thin`. */
+   right-to-left works by setting dir on any ancestor. Hairlines, focus rings, icons and the scrim have their own tokens. */
 
 @font-face {
   font-family: "Noto Nastaliq Urdu";
@@ -26,22 +26,21 @@
 .el-root :where(button, input, select, textarea) { font: inherit; color: inherit; }
 
 /* Urdu: Nastaliq at the urdu.body size, with room above and below; titles keep their size and gain line height.
-   Latin words and digits inside Urdu fall back to the sans face: the urdu.body token ends in `serif`, so the family
-   is written here until the token carries the sans fallback itself. */
+   Latin words and digits inside Urdu use the sans face the token family ends in. */
 .el-root:lang(ur),
 .el-root [lang="ur"] {
-  font-family: "Noto Nastaliq Urdu", var(--el-font-family-sans);
+  font-family: var(--el-text-urdu-body-font);
   font-size: var(--el-text-urdu-body-size);
   line-height: var(--el-text-urdu-body-line);
 }
-.el-root [lang="en"] { font-family: var(--el-font-family-sans); }
+.el-root [lang="en"] { font-family: var(--el-text-body-font); }
 :lang(ur) .el-num { font-family: var(--el-text-mono-font); }
 
 /* Keyboard focus: always visible, the accent ring outside the control. */
 .el-root :focus { outline: none; }
 .el-root :focus-visible {
-  outline: var(--el-space-2) solid var(--el-role-accent-focus);
-  outline-offset: var(--el-space-2);
+  outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+  outline-offset: var(--el-focus-offset);
 }
 
 /* Type roles */
@@ -65,7 +64,7 @@
 }
 .el-visually-hidden {
   position: absolute !important;
-  inline-size: var(--el-space-2); block-size: var(--el-space-2);
+  inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
@@ -73,9 +72,9 @@
 
 /* Icons: one size per role, from the spacing scale. Directional glyphs mirror in right-to-left. */
 .el-icon { display: inline-flex; flex: none; align-items: center; justify-content: center; }
-.el-icon > svg { inline-size: var(--el-space-16); block-size: var(--el-space-16); }
-.el-icon--md > svg { inline-size: var(--el-space-20); block-size: var(--el-space-20); }
-.el-icon--lg > svg { inline-size: var(--el-space-24); block-size: var(--el-space-24); }
+.el-icon > svg { inline-size: var(--el-icon-sm); block-size: var(--el-icon-sm); }
+.el-icon--md > svg { inline-size: var(--el-icon-md); block-size: var(--el-icon-md); }
+.el-icon--lg > svg { inline-size: var(--el-icon-lg); block-size: var(--el-icon-lg); }
 [dir="rtl"] .el-icon--directional > svg { transform: scaleX(-1); }
 
 /* ---- Button ------------------------------------------------------------------------------------------------- */
@@ -84,7 +83,7 @@
   min-block-size: var(--el-component-button-height);
   padding-block: var(--el-space-4);
   padding-inline: var(--el-component-button-padding-x);
-  border: thin solid transparent;
+  border: var(--el-border-hairline) solid transparent;
   border-radius: var(--el-component-button-radius);
   font-weight: var(--el-text-body-strong-weight);
   white-space: nowrap;
@@ -117,12 +116,12 @@
   min-block-size: var(--el-component-field-height);
   padding-inline: var(--el-space-12);
   background: var(--el-role-bg-surface);
-  border: thin solid var(--el-role-border-strong);
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
   border-radius: var(--el-component-field-radius);
   color: var(--el-role-text-secondary);
 }
 .el-input:focus-within { border-color: var(--el-role-accent-default); }
-.el-input:has(:focus-visible) { outline: var(--el-space-2) solid var(--el-role-accent-focus); outline-offset: var(--el-space-2); }
+.el-input:has(:focus-visible) { outline: var(--el-focus-width) solid var(--el-role-accent-focus); outline-offset: var(--el-focus-offset); }
 .el-input[data-invalid="true"] { border-color: var(--el-role-danger-default); }
 .el-input > input {
   flex: 1; min-inline-size: 0; block-size: 100%;
@@ -142,7 +141,7 @@
   min-block-size: var(--el-component-field-height);
   padding-inline: var(--el-space-12) var(--el-space-8);
   background: var(--el-role-bg-surface);
-  border: thin solid var(--el-role-border-strong);
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
   border-radius: var(--el-component-field-radius);
   text-align: start;
   cursor: pointer;
@@ -159,7 +158,7 @@
   overflow-y: auto;
   padding: var(--el-space-4);
   background: var(--el-role-bg-overlay);
-  border: thin solid var(--el-role-border-default);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
   border-radius: var(--el-component-menu-radius);
   box-shadow: var(--el-shadow-1);
 }
@@ -189,7 +188,7 @@
 .el-row--compact { min-block-size: var(--el-component-list-row-height-compact); padding-block: var(--el-space-4); }
 .el-row--interactive:hover { background: var(--el-role-bg-subtle); }
 .el-row[aria-current="true"], .el-row--selected { background: var(--el-role-accent-soft); }
-.el-row__hit:focus-visible { outline-offset: calc(var(--el-space-2) * -1); }
+.el-row__hit:focus-visible { outline-offset: calc(var(--el-focus-offset) * -1); }
 .el-row__hit {
   position: absolute; inset: 0;
   border: 0; padding: 0; background: transparent;
@@ -227,7 +226,7 @@
   display: inline-flex; align-items: center; gap: var(--el-space-4);
   min-block-size: calc(var(--el-space-24) + var(--el-space-4));
   padding-inline: var(--el-space-12);
-  border: thin solid var(--el-role-border-strong);
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
   border-radius: var(--el-component-chip-radius);
   background: var(--el-role-bg-surface);
   color: var(--el-role-text-primary);
@@ -286,7 +285,7 @@
   position: fixed; inset: 0; z-index: 30;
   display: flex; align-items: center; justify-content: center;
   padding: var(--el-space-24);
-  background: color-mix(in srgb, var(--el-role-text-primary) 40%, transparent);
+  background: var(--el-role-scrim-default);
 }
 .el-scrim--sheet { justify-content: flex-end; align-items: stretch; padding: 0; }
 .el-dialog {
@@ -303,7 +302,7 @@
   inline-size: min(100%, calc(var(--el-space-64) * 6.5));
   block-size: 100%;
   background: var(--el-role-bg-overlay);
-  border-inline-start: thin solid var(--el-role-border-default);
+  border-inline-start: var(--el-border-hairline) solid var(--el-role-border-default);
   box-shadow: var(--el-shadow-3);
 }
 .el-dialog__head { display: flex; align-items: flex-start; gap: var(--el-space-12); padding: var(--el-space-24) var(--el-space-24) var(--el-space-8); }
@@ -376,7 +375,7 @@
   display: inline-grid; place-content: center;
   inline-size: var(--el-space-16); block-size: var(--el-space-16);
   margin-block: var(--el-space-2);
-  border: thin solid var(--el-role-border-strong);
+  border: var(--el-border-hairline) solid var(--el-role-border-strong);
   border-radius: var(--el-radius-sm);
   background: var(--el-role-bg-surface);
   cursor: pointer;
@@ -398,7 +397,7 @@
 .el-empty__action { margin-block-start: var(--el-space-8); }
 
 /* ---- Tabs and Segmented ------------------------------------------------------------------------------------- */
-.el-tabs__list { display: flex; gap: var(--el-space-4); border-block-end: thin solid var(--el-role-border-default); overflow-x: auto; }
+.el-tabs__list { display: flex; gap: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); overflow-x: auto; }
 .el-tab {
   position: relative;
   min-block-size: var(--el-component-button-height);
@@ -417,7 +416,7 @@
   background: var(--el-role-accent-default);
   border-radius: var(--el-radius-full);
 }
-.el-tab:focus-visible { outline-offset: calc(var(--el-space-2) * -1); }
+.el-tab:focus-visible { outline-offset: calc(var(--el-focus-offset) * -1); }
 .el-tabs__panel { padding-block-start: var(--el-space-16); }
 .el-segmented {
   display: inline-flex; gap: var(--el-space-2);
@@ -436,13 +435,13 @@
   background: var(--el-role-bg-surface);
   color: var(--el-role-text-primary);
   font-weight: var(--el-text-body-strong-weight);
-  box-shadow: 0 0 0 thin var(--el-role-border-default);
+  box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-default);
 }
 
 /* ---- Card, Avatar, Sidebar, Player, Transcript -------------------------------------------------------------- */
 .el-card {
   background: var(--el-role-bg-surface);
-  border: thin solid var(--el-role-border-default);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
   border-radius: var(--el-component-card-radius);
 }
 .el-avatar {
@@ -459,9 +458,11 @@
 
 .el-sidebar {
   display: flex; flex-direction: column; gap: var(--el-space-2);
+  inline-size: calc(var(--el-space-64) * 3.5);
+  flex: none;
   padding: var(--el-space-16) var(--el-space-8);
   background: var(--el-role-bg-subtle);
-  border-inline-end: thin solid var(--el-role-border-default);
+  border-inline-end: var(--el-border-hairline) solid var(--el-role-border-default);
 }
 .el-sidebar__brand { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-4) var(--el-space-8) var(--el-space-16); font-weight: var(--el-text-body-strong-weight); }
 .el-nav-item {
@@ -473,7 +474,7 @@
   text-align: start; cursor: pointer;
 }
 .el-nav-item:hover { background: var(--el-role-border-default); color: var(--el-role-text-primary); }
-.el-nav-item[aria-current="page"] { background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); box-shadow: 0 0 0 thin var(--el-role-border-default); }
+.el-nav-item[aria-current="page"] { background: var(--el-role-bg-surface); color: var(--el-role-text-primary); font-weight: var(--el-text-body-strong-weight); box-shadow: 0 0 0 var(--el-border-hairline) var(--el-role-border-default); }
 .el-nav-item__count { margin-inline-start: auto; }
 
 .el-player { display: flex; align-items: center; gap: var(--el-space-12); padding: var(--el-space-12) var(--el-space-16); }
@@ -489,7 +490,7 @@
 .el-player__time { color: var(--el-role-text-secondary); white-space: nowrap; }
 
 .el-transcript { display: flex; flex-direction: column; }
-.el-segment { display: grid; grid-template-columns: calc(var(--el-space-64) * 2) 1fr; gap: var(--el-space-16); padding-block: var(--el-space-12); border-block-end: thin solid var(--el-role-border-default); }
+.el-segment { display: grid; grid-template-columns: calc(var(--el-space-64) * 2) 1fr; gap: var(--el-space-16); padding-block: var(--el-space-12); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-segment:last-child { border-block-end: 0; }
 .el-segment__who { display: flex; flex-direction: column; align-items: flex-start; min-inline-size: 0; }
 .el-segment__speaker { font-weight: var(--el-text-body-strong-weight); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -498,3 +499,15 @@
 .el-segment--active { background: var(--el-role-accent-soft); margin-inline: calc(var(--el-space-12) * -1); padding-inline: var(--el-space-12); border-radius: var(--el-radius-sm); border-block-end-color: transparent; }
 .el-segment__text { min-inline-size: 0; overflow-wrap: anywhere; }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
+
+/* Below the compact breakpoint the sidebar keeps its icons only; the names stay for assistive tools and as tooltips.
+   Media queries cannot read variables: the width mirrors --el-breakpoint-compact (tokensOnly.test.ts checks it). */
+@media (width < 720px) {
+  .el-sidebar { inline-size: calc(var(--el-space-48) + var(--el-space-16)); padding-inline: var(--el-space-8); align-items: center; }
+  .el-sidebar__brand { display: none; }
+  .el-nav-item { justify-content: center; padding-inline: 0; inline-size: var(--el-space-40); }
+  .el-nav-item__label, .el-nav-item__count, .el-sidebar .el-status > span:last-child {
+    position: absolute; inline-size: var(--el-border-hairline); block-size: var(--el-border-hairline);
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+  }
+}

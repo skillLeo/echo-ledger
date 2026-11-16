@@ -11,7 +11,7 @@ export function Avatar({ initials, size = "md" }: { initials: string; size?: "sm
   return <span className={`el-avatar${size === "sm" ? " el-avatar--sm" : ""}`} aria-hidden="true">{initials}</span>;
 }
 
-/** The app's primary navigation. */
+/** The app's primary navigation; below the compact breakpoint it keeps its icons only. */
 export function Sidebar({ label, brand, children, footer }: { label: string; brand?: ReactNode; children: ReactNode; footer?: ReactNode }) {
   return (
     <nav className="el-sidebar" aria-label={label}>
@@ -25,9 +25,9 @@ export function Sidebar({ label, brand, children, footer }: { label: string; bra
 /** One place in the sidebar; the current page is marked for assistive tools too. */
 export function NavItem({ icon, label, current, count, onClick }: { icon: IconType; label: string; current?: boolean; count?: number; onClick?: () => void }) {
   return (
-    <button type="button" className="el-nav-item" aria-current={current ? "page" : undefined} onClick={onClick}>
+    <button type="button" className="el-nav-item" aria-current={current ? "page" : undefined} onClick={onClick} title={label}>
       <Icon icon={icon} size="md" />
-      <span>{label}</span>
+      <span className="el-nav-item__label">{label}</span>
       {count !== undefined && <span className="el-nav-item__count el-caption el-num">{count}</span>}
     </button>
   );
