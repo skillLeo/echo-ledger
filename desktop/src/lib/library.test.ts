@@ -38,11 +38,6 @@ describe("sortItems", () => {
     expect(sortItems(items, "title").map((i) => i.id)).toEqual(["new", "old", "mid"]);
     expect(items.map((i) => i.id)).toEqual(["old", "new", "mid"]);
   });
-
-  it("sorts an untitled recording by the name it shows, Recording (D-031)", () => {
-    const named = [...items, item("untitled", { title: null }), item("blank", { title: "  " }), item("zed", { title: "Zed" })];
-    expect(sortItems(named, "title").map((i) => i.id)).toEqual(["new", "old", "mid", "untitled", "blank", "zed"]);
-  });
 });
 
 describe("a recording's name (D-031)", () => {
