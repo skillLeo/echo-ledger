@@ -45,7 +45,7 @@ object SettingsCatalogue {
             "screen-share",
             SettingsGroup.General,
             "During screen sharing",
-            "screen share sharing recording cast meeting cards dot black box hide private"
+            "screen share sharing recording cast meeting floating windows private black box show hide dot"
         ),
         SettingsEntry("devices", SettingsGroup.General, "Devices", "revoke paired activity audit security"),
         SettingsEntry("storage", SettingsGroup.General, "Storage and retention", "storage disk space retention deleted bin days"),

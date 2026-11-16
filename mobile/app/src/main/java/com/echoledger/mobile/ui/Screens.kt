@@ -958,7 +958,7 @@ internal fun DecisionTimeoutSection(vm: MainViewModel, settings: AppSettings) {
         Text("After a call", fontWeight = FontWeight.SemiBold)
         listOf(
             PostCallPrompt.KEEP to "Keep automatically (default) — a small \"Saved · Undo\" shows for 6 s",
-            PostCallPrompt.ASK to "Ask me — a small chip to keep or discard it; kept after 10 s"
+            PostCallPrompt.ASK to "Ask me — a small after-call card to keep or discard it; kept after 10 s"
         ).forEach { (value, label) ->
             Row(
                 Modifier.fillMaxWidth()

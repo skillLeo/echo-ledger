@@ -12,9 +12,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
@@ -26,6 +30,7 @@ import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.overlay.PillDot
 import com.echoledger.mobile.overlay.PillToolbar
 import com.echoledger.mobile.overlay.PillView
+import com.echoledger.mobile.overlay.PrivateDot
 import com.echoledger.mobile.privilege.Capabilities
 import com.echoledger.mobile.recording.LiveRecording
 import com.echoledger.mobile.recording.PillState
@@ -232,6 +237,26 @@ class ScreenshotsTest : ScreenTest() {
         capture("settings-general")
     }
 
+    /** Settings → Privacy & data, with During screen sharing: Private (black box) or Show (since v1.8.1). */
+    @Test
+    fun settingsPrivacy() {
+        runBlocking { app.pairLocally(server) }
+        shoot { SettingsScreen(vm, onSetup = {}) }
+        compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
+        compose.onNodeWithText("Private (black box)").assertExists()
+        capture("settings-privacy")
+    }
+
+    /** Settings → Captions: live captions are a floating window over the call. */
+    @Test
+    fun settingsCaptions() {
+        runBlocking { app.pairLocally(server) }
+        shoot { SettingsScreen(vm, onSetup = {}) }
+        compose.onNodeWithText("Captions").performScrollTo().performClick()
+        compose.onNodeWithText("A floating window over the call; needs Display over other apps", useUnmergedTree = true).assertExists()
+        capture("settings-captions")
+    }
+
     @Test
     fun gameTranslate() {
         runBlocking { app.pairLocally(server) }
@@ -396,6 +421,23 @@ class ScreenshotsTest : ScreenTest() {
         pumpUntil("the sheet") { runCatching { compose.onNodeWithText("New").assertExists() }.isSuccess }
         compose.mainClock.advanceTimeBy(1_000)
         capture("new-sheet")
+    }
+
+    /** The open recording controls with Hide EchoLedger windows named (a long-press), and the grey dot it leaves. */
+    @Test
+    fun floatingWindowsHidden() {
+        shoot {
+            androidx.compose.foundation.layout.Column(
+                Modifier.padding(16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp)
+            ) {
+                PillToolbar(PillState(mode = PillState.Mode.MENU, elapsedMs = 134_000, language = "UR"))
+                PrivateDot(onShow = {})
+            }
+        }
+        compose.onNodeWithContentDescription("Hide EchoLedger windows").performTouchInput { longClick() }
+        compose.onNodeWithText("Hide EchoLedger windows").assertExists()
+        capture("floating-hidden")
     }
 
     @Test

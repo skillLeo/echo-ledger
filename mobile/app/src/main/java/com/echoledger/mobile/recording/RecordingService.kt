@@ -896,7 +896,7 @@ class RecordingService : LifecycleService() {
                 PillEffect.ShowCaptions -> showCaptions(session)
                 PillEffect.HideCaptions -> closeCaptionPanel()
                 PillEffect.NextLanguage -> session?.let { setLanguage(it, Languages.next(it.language)) }
-                PillEffect.Stop -> if (session != null) stopCapture(fromCall = false, reason = "Stop on the control pill (tapped twice)")
+                PillEffect.Stop -> session?.let { stopCapture(fromCall = false, reason = "Stop on the recording controls (tapped twice)") }
                 PillEffect.Discard -> session?.let { discardNow(it) }
             }
         }

@@ -106,7 +106,7 @@ object SettingsIndex {
             "privacy",
             "screen-share",
             "During screen sharing",
-            "screen share recording cast meeting cards dot black box hide"
+            "screen share recording cast meeting floating windows private black box show hide dot"
         ),
         item("storage.space", "storage", "storage", "Space used", "storage disk space full free up delete"),
         item("storage.kept", "storage", "storage", "How long recordings are kept", "retention deleted bin days"),
