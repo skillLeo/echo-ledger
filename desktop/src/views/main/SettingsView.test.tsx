@@ -295,7 +295,7 @@ describe("every row comes from the registry, and every entry has its row", () =>
     expect(missing, "entries with no row").toEqual([]);
     const rootPages = SETTINGS.filter((e) => e.page === null && e.kind === "page" && available(e)).map((e) => e.id);
     for (const p of rootPages) expect(seen.has(p), `${p} is in the list`).toBe(true);
-  });
+  }, 20_000); // it opens every Settings page in turn: seconds on a loaded machine, never a hang
 
   async function openPage(id: string): Promise<void> {
     const parent = setting(id).page;

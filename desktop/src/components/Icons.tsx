@@ -349,6 +349,15 @@ export const LucideMonitorSmartphoneIcon = (p: IconProps) => (
 export const LucideDatabaseIcon = (p: IconProps) => (
   <Svg {...p}><ellipse cx="12" cy="5" rx="9" ry="3" /><path d="M3 5V19A9 3 0 0 0 21 19V5" /><path d="M3 12A9 3 0 0 0 21 12" /></Svg>
 );
+/** A dashed circle: not measured yet (Lucide circle-dashed). */
+export const LucideCircleDashedIcon = L([
+  "M10.1 2.182a10 10 0 0 1 3.8 0", "M13.9 21.818a10 10 0 0 1-3.8 0", "M17.609 3.721a10 10 0 0 1 2.69 2.7", "M2.182 13.9a10 10 0 0 1 0-3.8",
+  "M20.279 17.609a10 10 0 0 1-2.7 2.69", "M21.818 10.1a10 10 0 0 1 0 3.8", "M3.721 6.391a10 10 0 0 1 2.7-2.69", "M6.391 20.279a10 10 0 0 1-2.69-2.7",
+]);
+/** A filled square in a frame: the black box older Windows shows where EchoLedger is. */
+export const LucideSquareFilledIcon = (p: IconProps) => (
+  <Svg {...p}><rect width="18" height="18" x="3" y="3" rx="2" /><rect width="10" height="10" x="7" y="7" rx="1" fill="currentColor" stroke="none" /></Svg>
+);
 export const LucideCircleHelpIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" /><path d="M12 17h.01" /></Svg>
 );
@@ -366,7 +375,7 @@ export const LucideCopyIcon = (p: IconProps) => (
   <Svg {...p}><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></Svg>
 );
 export const LucideCheckIcon = L(["M20 6 9 17l-5-5"]);
-/** Screen-share privacy, "Visible in shares": an open eye. */
+/** Screen-share privacy, "Visible in screen share": an open eye. */
 export const LucideEyeIcon = L(["M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"], () => <circle cx="12" cy="12" r="3" />);
 /** Screen-share privacy: an eye crossed out (EchoLedger is left out of what others see). */
 export const LucideEyeOffIcon = L([

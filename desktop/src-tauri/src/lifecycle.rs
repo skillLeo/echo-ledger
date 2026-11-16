@@ -190,6 +190,9 @@ impl Slots {
 pub struct WindowLifecycle {
     slots: Mutex<Slots>,
     main_view: Mutex<Option<String>>,
+    /// The main window being built was asked for quietly (`show_main_quietly`) and by nobody else since: when its page
+    /// is ready it is revealed only if nothing keeps it off, whatever the person opened before.
+    main_quiet: std::sync::atomic::AtomicBool,
 }
 
 impl WindowLifecycle {
@@ -262,7 +265,7 @@ pub fn ready(app: &AppHandle, label: &str) {
         eprintln!("[echoledger] {label} window ready {} ms after it was asked for", latency.as_millis());
     }
     if label == MAIN && phase == Phase::Ready {
-        reveal_main(app);
+        reveal_main(app, quiet_open(app));
     }
     if let Some(generation) = ready.expire {
         schedule_expiry(app, label, generation);
@@ -279,26 +282,80 @@ pub fn keep_dictation_warm(app: &AppHandle, bound: bool) {
     if bound { show(app, DICTATION, WARM) } else { hide(app, DICTATION, WARM) }
 }
 
-/// Opens the main window: shown at once when it exists, else built (and shown when its page is ready).
+/// Opens the main window for the person: shown at once when it exists, else built (and shown when its page is ready).
+/// Every open they ask for comes here (the tray's Open, the app opened again from the Dock, Finder, Launchpad or
+/// Spotlight, a second launch, a clicked notification, a tray or toast action), so here "Hide EchoLedger windows" ends,
+/// and during a whole-screen share the main window is shown anyway while the floating windows stay off
+/// (`privacy::opened_by_person`).
 pub fn show_main(app: &AppHandle) {
+    crate::privacy::opened_by_person(app);
+    open_main(app, false);
+}
+
+/// Opens the main window for something the person did not ask to see it for (a refused start that could not be said in
+/// a notification): while a reason keeps the main window off it stays off (even when the person opened it earlier in
+/// the share), and what it was opened for waits in its page.
+pub fn show_main_quietly(app: &AppHandle) {
+    open_main(app, true);
+}
+
+fn quiet_open(app: &AppHandle) -> bool {
+    app.state::<WindowLifecycle>().main_quiet.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Whether the main window built now is revealed as a quiet open (pure): a quiet open that builds it is quiet; any open
+/// by the person since makes it theirs; a quiet open of a window already being built leaves it as it was.
+pub fn quiet_after(was_quiet: bool, builds: bool, quiet: bool) -> bool {
+    if !quiet { false } else if builds { true } else { was_quiet }
+}
+
+fn open_main(app: &AppHandle, quiet: bool) {
     let (build, phase) = {
         let mut slots = slots(app);
         (slots.show(MAIN, "open", Instant::now()), slots.phase(MAIN))
     };
+    let flag = &app.state::<WindowLifecycle>().main_quiet;
+    flag.store(quiet_after(flag.load(std::sync::atomic::Ordering::SeqCst), build, quiet), std::sync::atomic::Ordering::SeqCst);
     if build {
         spawn_build(app, MAIN);
     } else if phase == Phase::Ready {
-        reveal_main(app);
+        reveal_main(app, quiet);
     }
 }
 
-fn reveal_main(app: &AppHandle) {
+/// Puts the main window on screen and in front: after an open by the person, when a freshly built window's page has
+/// drawn, or by the fallback. While windows are kept off (a whole-screen share the person did not open it during, "Hide
+/// EchoLedger windows") a reveal brings nothing back, and a quiet one never does while a reason keeps it off.
+fn reveal_main(app: &AppHandle, quiet: bool) {
+    if !crate::privacy::may_show_main(app, quiet) {
+        return;
+    }
     if let Some(window) = app.get_webview_window(MAIN) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
         let _ = window.emit("main:visibility", true);
     }
+}
+
+/// What opening EchoLedger from outside does while it runs (`actions::show_main_from_outside`): a second launch on
+/// Windows (handed over by the single-instance plugin), the app opened again from Finder, Launchpad, Spotlight or the
+/// Dock on a Mac (no second copy starts: macOS sends the running copy a reopen), or a clicked notification. The main
+/// window always comes to the front (built when there is none, else shown, unminimised and focused).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reopen {
+    /// No main window yet and a notification about a recording went out in the last ten minutes: it opens on that
+    /// recording.
+    OpenNotified,
+    /// Shown where the person was: an existing window (on screen, minimised or put away) keeps its page.
+    Show,
+}
+
+/// The answer to an open from outside (pure, the same on Windows and the Mac). AppKit's `has_visible_windows` is not
+/// asked: it counts the overlays too (the dictation box is on screen, drawing nothing, while its shortcut is bound, as
+/// it is by default), so it says nothing about the main window.
+pub fn reopen_action(main_exists: bool, notified_lately: bool) -> Reopen {
+    if !main_exists && notified_lately { Reopen::OpenNotified } else { Reopen::Show }
 }
 
 /// The user closes the main window: it is destroyed (not hidden), so no web view stays alive in the tray.
@@ -360,17 +417,16 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
     // Its capture flag comes from "Hide EchoLedger from screen sharing" (`privacy`), set before it first shows (once
     // its page is ready); while screen moments capture a whole screen (Windows) it is hidden from captures whatever the
     // setting says (`screens::hide_own_windows`).
-    let builder = crate::privacy::prepare(app, crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?), MAIN, crate::privacy::Kind::Main);
-    let builder = if app.state::<crate::AppState>().screens.own_hidden() { builder.content_protected(true) } else { builder };
-    let window = builder.build()?;
+    let shielded = app.state::<crate::AppState>().screens.own_hidden();
+    let builder = crate::smoke::isolate(WebviewWindowBuilder::from_config(app, &config)?);
+    let window = crate::privacy::window(app, builder, MAIN, crate::privacy::Kind::Main, |b| if shielded { b.content_protected(true) } else { b })?;
     crate::material::apply(&window);
-    crate::privacy::built(app, &window);
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         tokio::time::sleep(MAIN_SHOW_FALLBACK).await;
         let shown = app.get_webview_window(MAIN).and_then(|w| w.is_visible().ok());
         if shown == Some(false) && slots(&app).in_use(MAIN) {
-            reveal_main(&app);
+            reveal_main(&app, quiet_open(&app));
         }
     });
     Ok(())
@@ -499,6 +555,52 @@ mod tests {
         assert_eq!(s.event(MAIN, "main:navigate", json!({})), Delivery::Dropped);
         assert!(!s.destroyed(MAIN, now));
         assert!(s.show(MAIN, "open", now));
+    }
+
+    #[test]
+    fn only_opens_the_person_asked_for_end_a_hide() {
+        // A refused start that could not be said in a notification opens the main window, but nobody asked to see it:
+        // it never brings EchoLedger back while windows are kept off (a whole-screen share, Hide EchoLedger windows).
+        let refusal = include_str!("refusal.rs");
+        assert!(refusal.contains("crate::lifecycle::show_main_quietly(app);") && !refusal.contains("tray::show_main("));
+        let lifecycle = include_str!("lifecycle.rs");
+        let quiet = &lifecycle[lifecycle.find("pub fn show_main_quietly(").unwrap()..];
+        assert!(!quiet[..quiet.find("\n}\n").unwrap()].contains("opened_by_person"));
+        assert!(quiet[..quiet.find("\n}\n").unwrap()].contains("open_main(app, true)"), "it reveals as a quiet open");
+    }
+
+    #[test]
+    fn a_main_window_built_for_a_quiet_open_stays_quiet_until_the_person_opens_it() {
+        assert!(quiet_after(false, true, true), "a quiet open that builds the window: revealed only if nothing keeps it off");
+        assert!(!quiet_after(true, false, false), "the person opens it meanwhile: it is theirs");
+        assert!(!quiet_after(false, false, true), "a quiet open while the person's build runs leaves it theirs");
+        assert!(quiet_after(true, false, true));
+        assert!(!quiet_after(true, true, false), "the person's open builds it");
+        // Every reveal says which it is: the page drawing and the fallback use what the open was.
+        let code = include_str!("lifecycle.rs").split("#[cfg(test)]").next().unwrap();
+        assert_eq!(code.matches("reveal_main(app, quiet_open(app))").count() + code.matches("reveal_main(&app, quiet_open(&app))").count(), 2);
+    }
+
+    #[test]
+    fn opening_the_app_again_jumps_to_a_notified_recording_only_without_a_main_window() {
+        assert_eq!(reopen_action(false, true), Reopen::OpenNotified, "closed to the tray or menu bar: built on the recording");
+        assert_eq!(reopen_action(false, false), Reopen::Show, "nothing notified lately: built where the person was");
+        assert_eq!(reopen_action(true, true), Reopen::Show, "an existing window, on screen, minimised or put away, keeps its page");
+        assert_eq!(reopen_action(true, false), Reopen::Show);
+    }
+
+    #[test]
+    fn opening_the_app_again_never_builds_a_second_main_window() {
+        let mut s = Slots::default();
+        let now = t0();
+        assert!(s.show(MAIN, "open", now), "closed to the menu bar: built");
+        assert!(!s.show(MAIN, "open", now), "opened again while it is being built: the same window, shown when its page is ready");
+        s.ready(MAIN, now);
+        assert!(!s.show(MAIN, "open", now), "opened again once it is up: shown and focused, not built");
+        s.closing(MAIN);
+        assert!(!s.show(MAIN, "open", now), "opened again while it closes: never a second one beside it");
+        assert!(s.destroyed(MAIN, now), "built again once the old one is gone");
+        assert_eq!(s.phase(MAIN), Phase::Creating);
     }
 
     #[test]

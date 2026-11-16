@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 1.8.0-a (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
+**Contract revision: 1.8.0-e (2026-11-16)** — bumped whenever a section below changes; briefs name the revision they build on.
 
 **What changed in v1.1** (everything else is unchanged from v1 and stays valid):
 
@@ -108,7 +108,7 @@ Every addition below is marked **(since v1.1)**.
 | `platform` | `android`, `ios`, `windows`, `macos`, `linux` |
 | `source_device` (derived by server: android/ios→`phone`, windows/macos/linux→`desktop`, admin upload→`web`) | `phone` "Phone" icon `device-phone-mobile` · `desktop` "Desktop" icon `computer-desktop` · `web` "Web" icon `globe-alt` |
 | `source_app` | `whatsapp` "WhatsApp" · `whatsapp_business` "WhatsApp Business" · `whatsapp_web` "WhatsApp Web" (since v1.1) · `google_meet` "Google Meet" · `zoom` "Zoom" · `microsoft_teams` "Microsoft Teams" (since v1.1) · `telegram` "Telegram" · `signal` "Signal" · `messenger` "Messenger" · `instagram` "Instagram" · `skype` "Skype" · `slack` "Slack" · `discord` "Discord" (these seven since v1.3, calls recorded on the phone) · `phone_call` "Phone call" (since v1.2, a SIM call recorded on the phone) · `voice_note` "Voice note" · `other` "Other" |
-| session `status` | `recording`, `uploading`, `processing`, `completed`, `failed` |
+| session `status` | `recording`, `uploading`, `processing`, `completed`, `failed`, `audio_only` (since v1.8: uploaded, not transcribed; apps that don't know it show it like a completed recording without a transcript) |
 | recording `role` | `primary` (stereo or mono file used for playback + multichannel providers), `channel_1` (mono "Me"), `channel_2` (mono "Client") |
 | upload `status` | `pending`, `uploading`, `assembling`, `ready`, `failed` |
 | transcript `kind` / `status` | `live`, `final`, `alternate` (since v1.1), `trial` (since v1.1.2: a Compare engines run, never in the library or search) / `pending`, `submitted`, `processing`, `awaiting_device`, `completed`, `failed` |
@@ -184,29 +184,39 @@ a new one replaces the last. Any role may send one, a viewer too.
 `429 rate_limited`. The console shows them under System → Device reports: the super admin every device's, owners and
 admins those of their workspace.
 
-### `POST /api/devices/missed-recordings` — `config:read`, throttled (60/hour/device) (since v1.8, contract 1.8.0-a)
+### `POST /api/devices/missed-recordings` — `config:read`, throttled (60/hour/device) (since v1.8, contract 1.8.0-c)
 A call the app saw but did not record (v1.8 P0 0.2). The app sends one when its missed-recording detector compares a
 call event with its recordings and finds none. It never sends names, phone numbers or audio; the call is described only
 by its app, its time and how long it lasted.
 ```json
 {"client_ref": "c1f0…", "platform": "android", "app_version": "1.8.0", "source_app": "whatsapp",
  "call_started_at": "2026-11-16T09:12:00Z", "call_duration_s": 312,
- "reason": "helper_not_armed", "detail": "The helper was not connected when the call started."}
+ "reason": "helper_not_armed"}
 ```
-- `client_ref`: the app's own id for the event (UUID, at most 64), so a retry never makes a second item (same device +
-  `client_ref` → `200` with the existing id).
-- `platform` as elsewhere; `source_app` the session `source_app` wire values (`phone`, `whatsapp`, `whatsapp_business`,
-  `meet`, `zoom`, `teams`, `slack`, `browser`, `other`); `call_started_at` ISO-8601, not in the future, at most 30 days
-  old; `call_duration_s` 0–86400 or null.
+- Required: `client_ref`, `platform`, `source_app`, `call_started_at`, `reason`. Optional: `app_version` (at most 32),
+  `call_duration_s` (0–86400 or null). Any other key (an older app's `detail`) is ignored and never stored.
+- `client_ref`: the app's own opaque id for the event (`^[A-Za-z0-9._:-]{1,64}$`; a UUID fits), so a retry never makes
+  a second item: the same device + `client_ref` → `200` with the existing id (also when two copies arrive at once).
+- `platform` as elsewhere; `source_app`: a session `source_app` wire value (the table under Sessions: `whatsapp`,
+  `whatsapp_business`, `whatsapp_web`, `google_meet`, `zoom`, `microsoft_teams`, `telegram`, `signal`, `messenger`,
+  `instagram`, `skype`, `slack`, `discord`, `phone_call`, `voice_note`, `other`), or `browser` for a meeting in a browser
+  that no known app was recognised in.
+- `call_started_at`: ISO-8601, at most 30 days old; a device clock up to 5 minutes ahead is accepted and stored as the
+  server's time.
 - `reason`: `helper_not_armed` | `permission` | `detection` | `mic_busy` | `crash` | `plan` | `unknown`.
-- `detail`: at most 300 characters or null, plain words for the person (no user content).
+- The app shows its own words and fix button for the reason; the server keeps no free text.
 - `201 {"data": {"id": "…"}}` (or `200` for a repeated `client_ref`); `422 validation_failed`; `429 rate_limited`.
 - The server adds an activity item `kind: "missed_recording"` for the device's person: title "Missed recording", body
-  e.g. "WhatsApp call · 5:12 · The helper was not connected", with `reason` and `missed_recording_id` in the item.
-  `GET /api/activity` returns them like other items. The fix button is the app's own (it knows the reason).
-- Admin: Diagnostics → Missed recordings counts per device and reason (last 7 and 30 days); staff with the
-  device-reports permission; owners and admins see their workspace's devices. No call details beyond the fields above.
-- Isolation: a device only ever writes its own events; another workspace's ids are `404`.
+  "<app> call · <length> · <reason phrase>" (reason phrases: helper_not_armed "The helper was not connected", permission
+  "A permission was off", detection "The call was not detected", mic_busy "Another app was using the microphone", crash
+  "The app stopped during the call", plan "Your plan did not allow the recording", unknown "The reason is not known");
+  the item also carries `reason` and `missed_recording_id`; its `at` is when the server received it. It **needs
+  action**: every app counts it in the unread badge and shows it in its "Needs action" group, like failed transcripts.
+- Admin: Diagnostics → Missed recordings (staff with the device-reports permission; there is no owner/admin view since
+  v1.6): counts per device, reason, system and the app version that reported it, over the last 7 and 30 days. No call
+  details beyond the stored fields.
+- Rows are deleted 90 days after the call, and with the person or the workspace; the activity item goes with its row.
+- Isolation: a device only ever writes its own events; body ids are ignored.
 
 ### Signing in with an account (since v1.5)
 People have their own accounts (email and password, or Google), and a phone or computer signs in to its owner's
@@ -493,7 +503,9 @@ computer (docs/research/screen-share-privacy.md, docs/SCREEN_SHARE_MATRIX.md). T
   window titles or window contents are ever sent. The server keeps the result with the device and its person; staff
   with the device-reports permission see them only as a matrix in Admin → Diagnostics → Screen-share checks (platform ×
   OS build × app version × method or meeting app → pass / fail / error counts and the last date). Nobody else can read
-  them, and a person's own results are not listed back to any app.
+  them, and a person's own results are not listed back to any app. Since contract 1.8.0-d: `platform` must be the
+  sending device's own platform (`422` otherwise); `os_build`, `app_version` and `meeting_app_version` hold only
+  letters, digits, spaces and `. ( ) _ + -`; results are deleted 180 days after they arrive, and with their person.
 - `GET /api/config/share-bars` — `config:read`: the window patterns that mean "a screen share is running" (Zoom's
   share toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bars, Slack and WhatsApp), so they can
   change without an app release → `200 {"version": 1, "updated_at": "…", "patterns": [{"id":
@@ -1331,6 +1343,38 @@ ready (`kind` `alternate`); then the new one becomes the `final` transcript and 
 going. A failed or unfinished transcript is simply run again in the new language (`kind` `final`).
 `409 cannot_retranscribe` when the recording's audio is not on the server (not uploaded yet, or erased).
 
+### Audio only and "Transcribe later" (since v1.8, contract 1.8.0-e)
+v1.8 P1: when Ready, a call is always recorded as audio, but transcribed only with the person's permission (the
+after-call card: Transcribe · Save audio · Delete; no answer within 12 s = Save audio).
+- `POST /api/sessions` (one-shot create) and `POST /api/sessions/{id}/finish` take `"transcribe": true | false`.
+  Absent = `true`, so older apps keep today's behaviour. With `false` the recording and its screens upload as usual,
+  no transcript is started, and when the upload completes the session's status is `audio_only`. A repeated create or
+  finish (idempotency) never changes the stored choice.
+- Audio-only recordings count for storage, never for minutes; minutes are counted only when a transcript runs.
+- Every Library item carries `transcribe_estimate`: `null` unless the status is `audio_only`, then
+  `{"minutes": 5, "minutes_left": 120}` — the minutes a transcript would use (the recording's length rounded up, times
+  the billed channels of the engine the routing would pick) and the minutes left this month for this workspace
+  (`null` = no limit).
+- `GET /api/library?status=audio_only` lists them (the apps' "Not transcribed" smart folder and filter).
+- `POST /api/sessions/{id}/transcribe` — `sessions:write`, throttled (30/min/device): starts the transcript of an
+  `audio_only` session with the usual routing → `202 {"session": { …status "processing"… }, "transcript": {"id",
+  "kind", "provider", "status", "language"}}`. `409 not_audio_only` when the session is not `audio_only` (already
+  transcribed or still uploading); `403 budget_exceeded` (`minutes_needed`, `minutes_left`) when the month's limit
+  can't cover it, and nothing starts; `403 needs_transcription_key` as for any transcript on Free.
+- `POST /api/sessions/transcribe` — `sessions:write`: bulk "Transcribe selected", `{"ids": ["…"]}` (1–50) →
+  `202 {"started": ["…"], "skipped": [{"id": "…", "code": "not_audio_only"}], "minutes": 42}`. All or nothing for the
+  budget: when the total exceeds what's left, `403 budget_exceeded` with `minutes_needed` and `minutes_left`, and
+  nothing starts. Ids of another workspace are skipped as `not_found`.
+- `POST /api/sessions/transcribe-estimate` — `library:read`: `{"ids": ["…"]}` (1–50) → `200 {"minutes": 42,
+  "minutes_left": 120, "items": [{"id": "…", "minutes": 5}]}` (no side effects).
+- Projects: `transcribe_calls` = `"ask"` (default) | `"always"` on the project (`GET /api/clients`, `PATCH
+  /api/clients/{id}`): "Always transcribe calls in this project". An app that files a call into such a project sends
+  `"transcribe": true` without asking.
+- App rules, the same on every app (not server data): the "After a call" setting is `ask` (default) |
+  `always_transcribe` | `always_audio`; v1.5's "Keep automatically" and "Ask me" both migrate to `ask` (the new rule
+  is permission first), and a person who wants the old behaviour picks Always transcribe. "Always transcribe calls with
+  this contact" is kept on the phone only and never sent.
+
 ### `GET /api/transcripts/{id}/views` — `library:read` (since v1.2)
 "Show as": reading views of a finished transcript, made with the Claude API (text only, no audio) and kept with
 the transcript: `roman` (Roman Urdu), `english` and `urdu` (translations).
@@ -1525,10 +1569,11 @@ Revokes another paired device of the owner: its tokens stop working at once; its
 
 The console bell and the device apps share one list of notifications: `transcript_ready`, `transcript_failed`,
 `upload_failed` (a recording did not finish uploading; its device can send it again), `device_paired`, `budget_warn`
-(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, and since v1.5
-`shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"). Recordings in the
-undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show new ones as OS
-notifications that open `session_id`, outside the quiet hours the person chose on that device.
+(the monthly limit's warning threshold) and `budget_reached`, each budget notice once per month, since v1.5
+`shared_with_you` (a teammate sent a recording or a project; see "Sending to a teammate"), and since v1.8
+`missed_recording` (a call an app saw but did not record; it needs action, see `POST /api/devices/missed-recordings`).
+Recordings in the undo bin make none. Read notifications are kept 90 days, unread ones 180. Device apps poll and show
+new ones as OS notifications that open `session_id`, outside the quiet hours the person chose on that device.
 
 ### `GET /api/activity?limit=` — `library:read` (since v1.1)
 `limit` 1-100 (default 30), newest first:

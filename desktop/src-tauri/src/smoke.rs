@@ -136,22 +136,47 @@ pub fn drive(app: tauri::AppHandle) {
 
 /// `--smoke-test --share-check`: the real Share Check in the smoke test's isolation (its own folder, no account, a
 /// running EchoLedger left alone). Prints each method's counts; exits 0 on Pass, [`EXIT_CHECK_FAILED`] when the test
-/// window showed in a capture, [`EXIT_CHECK_SKIPPED`] when nothing could be captured (no capture session on a CI
-/// runner, no Screen Recording permission), with the reason printed: never a silent pass.
+/// window showed in a capture, [`EXIT_CHECK_SKIPPED`] only when the machine has no capture session (no screen to
+/// duplicate, Windows.Graphics.Capture unsupported or giving no frame, a blank capture, no Screen Recording permission),
+/// and [`EXIT_CHECK_BROKEN`] for anything else that measured nothing (the windows did not open, draw or stay
+/// uncovered, a real picture without the control): a regression fails CI, never a silent pass.
 pub const SHARE_CHECK_ARG: &str = "--share-check";
 pub const EXIT_CHECK_FAILED: i32 = 4;
 pub const EXIT_CHECK_SKIPPED: i32 = 5;
+pub const EXIT_CHECK_BROKEN: i32 = 6;
+
+/// What the captures say when the machine has no screen session (`privacy::capture`, `screens::platform::windows`).
+const NO_SESSION: [&str; 5] = [
+    "No screen to duplicate",
+    "Desktop Duplication could not start",
+    "Desktop Duplication gave no",
+    "Windows.Graphics.Capture is not supported",
+    "The screen capture gave no frame",
+];
+
+/// Whether every capture failed for want of a capture session, which is not the check's fault (pure).
+pub fn no_capture_session(methods: &[crate::privacy::check::MethodResult]) -> bool {
+    let session_missing = |m: &crate::privacy::check::MethodResult| match m.reason.as_deref() {
+        _ if m.method == "none" => false, // the check's own windows did not draw, or something covered them
+        Some("permission_missing") => true,
+        Some("capture_failed") => m.detail.as_deref().is_some_and(|d| NO_SESSION.iter().any(|s| d.contains(s))),
+        Some("control_missing") => m.blank,
+        _ => false,
+    };
+    !methods.is_empty() && methods.iter().all(|m| m.result == crate::privacy::pixels::Outcome::Error && session_missing(m))
+}
 
 pub fn share_check_requested(args: impl IntoIterator<Item = String>) -> bool {
     args.into_iter().any(|a| a == SHARE_CHECK_ARG)
 }
 
 /// The exit code of a Share Check run (pure).
-pub fn share_check_exit(result: crate::privacy::pixels::Outcome) -> i32 {
+pub fn share_check_exit(result: crate::privacy::pixels::Outcome, methods: &[crate::privacy::check::MethodResult]) -> i32 {
     match result {
         crate::privacy::pixels::Outcome::Pass => 0,
         crate::privacy::pixels::Outcome::Fail => EXIT_CHECK_FAILED,
-        crate::privacy::pixels::Outcome::Error => EXIT_CHECK_SKIPPED,
+        crate::privacy::pixels::Outcome::Error if no_capture_session(methods) => EXIT_CHECK_SKIPPED,
+        crate::privacy::pixels::Outcome::Error => EXIT_CHECK_BROKEN,
     }
 }
 
@@ -173,19 +198,20 @@ pub fn drive_share_check(app: tauri::AppHandle) {
                     let why = [m.reason.clone(), m.detail.clone()].into_iter().flatten().collect::<Vec<_>>().join(": ");
                     say(&format!("  {} {}: {counts}{}", m.method, crate::privacy::check::wire(m.result), if why.is_empty() { String::new() } else { format!(" ({why})") }));
                 }
-                let code = share_check_exit(view.result);
+                let code = share_check_exit(view.result, &view.methods);
                 match code {
                     0 => say("share check: pass"),
                     EXIT_CHECK_FAILED => say("share check: FAIL, the protected window was in the capture"),
-                    _ => say(&format!("share check: SKIPPED, nothing could be measured ({})", view.reason.unwrap_or_default())),
+                    EXIT_CHECK_SKIPPED => say(&format!("share check: SKIPPED, this machine has no capture session ({})", view.reason.unwrap_or_default())),
+                    _ => say(&format!("share check: FAILED, nothing was measured on a working capture ({})", view.reason.unwrap_or_default())),
                 }
                 let _ = std::fs::remove_dir_all(&dir);
                 app.exit(code);
             }
             Err(e) => {
-                say(&format!("share check: SKIPPED, the check could not run: {e}"));
+                say(&format!("share check: FAILED, the check could not run: {e}"));
                 let _ = std::fs::remove_dir_all(&dir);
-                app.exit(EXIT_CHECK_SKIPPED);
+                app.exit(EXIT_CHECK_BROKEN);
             }
         }
     });
@@ -243,15 +269,47 @@ mod tests {
         assert_ne!(EXIT_TIMED_OUT, 0);
     }
 
+    fn method(method: &str, reason: &str, detail: Option<&str>, blank: bool) -> crate::privacy::check::MethodResult {
+        crate::privacy::check::MethodResult {
+            method: method.into(),
+            result: crate::privacy::pixels::Outcome::Error,
+            reason: Some(reason.into()),
+            counts: None,
+            detail: detail.map(str::to_string),
+            blank,
+        }
+    }
+
     #[test]
     fn the_share_check_mode_never_passes_without_a_measurement() {
         use crate::privacy::pixels::Outcome;
         assert!(share_check_requested(args(&["EchoLedger", "--smoke-test", "--share-check"])));
         assert!(!share_check_requested(args(&["EchoLedger", "--smoke-test"])));
-        assert_eq!(share_check_exit(Outcome::Pass), 0);
-        assert_eq!(share_check_exit(Outcome::Fail), EXIT_CHECK_FAILED);
-        assert_eq!(share_check_exit(Outcome::Error), EXIT_CHECK_SKIPPED, "nothing measured is never a pass");
+        assert_eq!(share_check_exit(Outcome::Pass, &[]), 0);
+        assert_eq!(share_check_exit(Outcome::Fail, &[]), EXIT_CHECK_FAILED);
         assert_ne!(EXIT_CHECK_SKIPPED, 0);
+        assert_ne!(EXIT_CHECK_BROKEN, EXIT_CHECK_SKIPPED);
+    }
+
+    #[test]
+    fn only_a_machine_without_a_capture_session_is_skipped() {
+        use crate::privacy::pixels::Outcome::Error;
+        let no_session = [
+            method("wgc", "capture_failed", Some("Windows.Graphics.Capture is not supported here."), false),
+            method("dxgi", "capture_failed", Some("No screen to duplicate (no desktop session)."), false),
+        ];
+        assert_eq!(share_check_exit(Error, &no_session), EXIT_CHECK_SKIPPED);
+        let blank = [method("wgc", "control_missing", None, true), method("dxgi", "control_missing", None, true)];
+        assert_eq!(share_check_exit(Error, &blank), EXIT_CHECK_SKIPPED, "both captures came back black");
+        assert_eq!(share_check_exit(Error, &[method("sck", "permission_missing", None, false)]), EXIT_CHECK_SKIPPED);
+        // Everything else that measured nothing is the check's own failure.
+        assert_eq!(share_check_exit(Error, &[method("none", "capture_failed", Some("the check's windows did not draw"), false)]), EXIT_CHECK_BROKEN);
+        assert_eq!(share_check_exit(Error, &[method("none", "covered", Some("another window covered the test window"), false)]), EXIT_CHECK_BROKEN);
+        let missing = [method("wgc", "control_missing", None, false), method("dxgi", "control_missing", None, false)];
+        assert_eq!(share_check_exit(Error, &missing), EXIT_CHECK_BROKEN, "a real picture without the control");
+        let mixed = [method("wgc", "control_missing", None, false), method("dxgi", "capture_failed", Some("No screen to duplicate (no desktop session)."), false)];
+        assert_eq!(share_check_exit(Error, &mixed), EXIT_CHECK_BROKEN, "one capture worked");
+        assert_eq!(share_check_exit(Error, &[]), EXIT_CHECK_BROKEN);
     }
 
     #[test]

@@ -123,7 +123,7 @@ pub trait MacProbe {
     /// and the tone early: a recording that starts now must not get the tone in it.
     fn tap_while_tone_plays(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<Vec<f32>, String>;
     fn is_installed(&self, bundle_id: &str) -> bool;
-    /// Opens the captions and the pill (their content stays hidden) and says how they stand.
+    /// Opens the captions and the recording controls (their content stays hidden) and says how they stand.
     fn overlay_windows(&self) -> Vec<WindowFacts>;
     /// Takes one frame of the screen and throws it away.
     fn capture_one_frame(&self) -> Result<(), FrameProblem>;
@@ -275,10 +275,10 @@ pub fn check_meeting_apps(installed: impl Fn(&str) -> bool) -> CheckItem {
 
 pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
     const KEY: &str = "overlay_windows";
-    const TITLE: &str = "Captions and pill on screen";
-    let name = |label: &str| if label == crate::overlay::PILL { "The recording pill" } else { "The captions" };
+    const TITLE: &str = "Captions and recording controls on screen";
+    let name = |label: &str| if label == crate::overlay::PILL { "The recording controls" } else { "The captions" };
     if windows.is_empty() {
-        return item(KEY, TITLE, CheckState::Failed, "The captions and the pill could not be opened.", None);
+        return item(KEY, TITLE, CheckState::Failed, "The captions and the recording controls could not be opened.", None);
     }
     for window in windows {
         let who = name(window.label);
@@ -287,11 +287,11 @@ pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
         } else if !window.visible {
             Some(format!("{who} did not show."))
         } else if !window.on_screen {
-            Some(format!("{who} is off screen."))
+            Some(format!("{who} are off screen."))
         } else if !window.level_ok {
-            Some(format!("{who} is not above other windows."))
+            Some(format!("{who} are not above other windows."))
         } else if !window.spaces_ok {
-            Some(format!("{who} does not follow you across Spaces and over full-screen windows."))
+            Some(format!("{who} do not follow you across Spaces and over full-screen windows."))
         } else {
             None
         };
@@ -299,7 +299,7 @@ pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
             return item(KEY, TITLE, CheckState::Failed, problem, None);
         }
     }
-    item(KEY, TITLE, CheckState::Ok, "The captions and the pill are on screen, above other windows, in every Space and over full-screen meetings.", None)
+    item(KEY, TITLE, CheckState::Ok, "The captions and the recording controls are on screen, above other windows, in every Space and over full-screen meetings.", None)
 }
 
 pub fn check_screen_capture(access: Access, frame: impl FnOnce() -> Result<(), FrameProblem>) -> CheckItem {
@@ -325,7 +325,7 @@ pub const STEPS: [(&str, &str); 9] = [
     ("microphone_test", "Listening to the microphone for 5 seconds: say something…"),
     ("system_audio_test", "Playing a soft tone for the system-audio tap, 5 seconds…"),
     ("meeting_apps", "Looking for meeting apps…"),
-    ("overlay_windows", "Opening the captions and the pill…"),
+    ("overlay_windows", "Opening the captions and the recording controls…"),
     ("screen_capture_test", "Capturing one frame of the screen…"),
 ];
 
@@ -795,7 +795,7 @@ mod tests {
             change(&mut windows[1]);
             let check = check_overlay_windows(&windows);
             assert_eq!(check.state, CheckState::Failed, "{says}");
-            assert!(check.detail.contains(says) && check.detail.contains("pill"), "{}", check.detail);
+            assert!(check.detail.contains(says) && check.detail.contains("recording controls"), "{}", check.detail);
         }
         assert_eq!(check_overlay_windows(&[]).state, CheckState::Failed);
     }

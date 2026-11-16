@@ -182,7 +182,37 @@ struct MenuShape {
     /// Screen-share privacy (v1.8.1): the demo is on (`Some(true)`), off (`Some(false)`), or EchoLedger is not hidden
     /// from shares at all (none: no line).
     share_demo: Option<bool>,
+    /// EchoLedger's windows are off the screen, and why.
+    hidden: Option<Hidden>,
 }
+
+/// Why EchoLedger's windows are off the screen, as the tray says it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Hidden {
+    /// "Hide EchoLedger windows" (the shortcut, the tray, Settings).
+    Person,
+    /// The Mac safety net, during a whole-screen share whose sharing bar is not on screen now (Zoom hid its controls,
+    /// the browser's bar was hidden): "Show EchoLedger windows" brings them back.
+    Share,
+    /// The same with the sharing bar on screen: showing them would last until the next look, so the tray says when
+    /// they come back instead.
+    ShareBar,
+}
+
+/// The tray's line for the privacy service's reasons now (pure): the person's hide first, then a share.
+pub fn hidden_line(privacy: &crate::privacy::Privacy) -> Option<Hidden> {
+    use crate::privacy::HideReason;
+    if privacy.hidden_for(HideReason::Person) {
+        Some(Hidden::Person)
+    } else if privacy.bar_holds() {
+        Some(Hidden::ShareBar)
+    } else {
+        privacy.hidden_for(HideReason::Share).then_some(Hidden::Share)
+    }
+}
+
+/// While a sharing bar keeps the windows off: when they come back, and what keeps them on screen next time.
+pub const BACK_AFTER_SHARE: &str = "They come back when the screen share ends";
 
 #[derive(Default)]
 pub struct TrayCache {
@@ -205,7 +235,21 @@ fn item(id: &'static str, label: impl Into<String>) -> Entry {
 /// has the viewer sentence (greyed out) where recording, captions and automatic recording were; a recording that was
 /// already running when the role changed can still be stopped.
 fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
-    let mut entries = vec![item("open", "Open EchoLedger"), Entry::Separator];
+    let mut entries = vec![item("open", "Open EchoLedger")];
+    // "Hide EchoLedger windows", and while they are off what took them off and how to bring them back.
+    match shape.hidden {
+        None => entries.push(item("hide_windows", "Hide EchoLedger windows")),
+        Some(Hidden::Person) => entries.push(item("show_windows", "Show EchoLedger windows")),
+        Some(Hidden::Share) => {
+            entries.push(Entry::Item { id: "hidden_share", label: "Hidden while you share your screen".into(), enabled: false, checked: None });
+            entries.push(item("show_windows", "Show EchoLedger windows"));
+        }
+        Some(Hidden::ShareBar) => {
+            entries.push(Entry::Item { id: "hidden_share", label: "Hidden while you share your screen".into(), enabled: false, checked: None });
+            entries.push(Entry::Item { id: "back_after_share", label: BACK_AFTER_SHARE.into(), enabled: false, checked: None });
+        }
+    }
+    entries.push(Entry::Separator);
     if let Some(sentence) = shape.viewer.as_ref().filter(|_| !shape.recording) {
         entries.push(Entry::Item { id: "viewer", label: sentence.clone(), enabled: false, checked: None });
         if shape.review > 0 {
@@ -322,6 +366,14 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::actions::review_waiting(&app);
                         Ok(())
                     }
+                    "hide_windows" => {
+                        crate::privacy::set_hidden(&app, crate::privacy::HideReason::Person, true);
+                        Ok(())
+                    }
+                    "show_windows" => {
+                        crate::privacy::show_windows(&app);
+                        Ok(())
+                    }
                     "share_demo" => {
                         if app.state::<crate::privacy::Privacy>().demo_active(std::time::Instant::now()) {
                             crate::privacy::end_demo(&app);
@@ -377,6 +429,8 @@ pub struct Switches {
     pub calls_ready: Option<bool>,
     /// The screen-share demo is on; none while EchoLedger is not hidden from shares.
     pub share_demo: Option<bool>,
+    /// EchoLedger's windows are off the screen, and why.
+    pub hidden: Option<Hidden>,
 }
 
 /// Applies a new state to the tray: icon, tooltip and menu, each only when it changed. `mic_note`: the recording is a
@@ -420,6 +474,7 @@ pub fn update(app: &AppHandle, state: TrayState, paused: bool, mic_note: bool, p
         calls_ready: switches.calls_ready,
         viewer,
         share_demo: switches.share_demo,
+        hidden: switches.hidden,
     };
     let mut current = cache.shape.lock().unwrap_or_else(|p| p.into_inner());
     if current.as_ref() != Some(&shape) {
@@ -451,7 +506,7 @@ mod tests {
         let shape = MenuShape { auto: true, ..MenuShape::default() };
         assert_eq!(
             labels(&shape),
-            ["Open EchoLedger", "---", "Record now", "Pause recording", "Capture voice note playing now", "Record a voice note", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
+            ["Open EchoLedger", "Hide EchoLedger windows", "---", "Record now", "Pause recording", "Capture voice note playing now", "Record a voice note", "---", "[ ] Live captions", "[x] Record calls automatically", "---", "Quit EchoLedger"]
         );
         let pause = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "pause", .. })).unwrap();
         assert!(matches!(pause, Entry::Item { enabled: false, .. }), "pause needs a recording");
@@ -459,7 +514,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false) };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false), hidden: None };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -468,7 +523,7 @@ mod tests {
         assert!(labels.contains(&"[ ] Record calls automatically".to_string()));
         assert!(labels.contains(&"Review recordings (2)".to_string()));
         assert_eq!(labels.iter().filter(|l| *l == "---").count(), 3);
-        assert!(labels.len() <= 14, "the tray menu stays short");
+        assert!(labels.len() <= 15, "the tray menu stays short (with Hide EchoLedger windows since v1.8.1)");
     }
 
     #[test]
@@ -492,14 +547,14 @@ mod tests {
     #[test]
     fn the_tray_says_whether_calls_will_be_recorded() {
         let ready = labels(&MenuShape { calls_ready: Some(true), ..MenuShape::default() });
-        assert_eq!(&ready[2..4], ["Calls: Ready", "Record now"]);
+        assert_eq!(&ready[3..5], ["Calls: Ready", "Record now"]);
         let broken = labels(&MenuShape { calls_ready: Some(false), ..MenuShape::default() });
-        assert_eq!(broken[2], "Calls: Not ready — Fix");
+        assert_eq!(broken[3], "Calls: Not ready — Fix");
         let ids: Vec<&str> = menu_entries(&MenuShape { calls_ready: Some(false), ..MenuShape::default() })
             .into_iter()
             .filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None })
             .collect();
-        assert_eq!(ids[1], "ready", "the line opens the Ready check");
+        assert_eq!(ids[2], "ready", "the line opens the Ready check");
         assert!(!labels(&MenuShape::default()).iter().any(|l| l.starts_with("Calls:")), "nothing before the first check");
     }
 
@@ -521,14 +576,29 @@ mod tests {
     fn menu_ids_keep_their_actions() {
         let shape = MenuShape { recording: true, show_controls: true, review: 1, share_demo: Some(false), ..MenuShape::default() };
         let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
-        assert_eq!(ids, ["open", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "share_demo", "review", "quit"]);
+        assert_eq!(ids, ["open", "hide_windows", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "share_demo", "review", "quit"]);
+    }
+
+    #[test]
+    fn the_tray_says_when_the_windows_are_hidden_and_brings_them_back() {
+        let person = labels(&MenuShape { hidden: Some(Hidden::Person), ..MenuShape::default() });
+        assert_eq!(&person[..3], ["Open EchoLedger", "Show EchoLedger windows", "---"]);
+        assert!(!person.contains(&"Hide EchoLedger windows".to_string()));
+        let share = MenuShape { hidden: Some(Hidden::Share), ..MenuShape::default() };
+        assert_eq!(&labels(&share)[..4], ["Open EchoLedger", "Hidden while you share your screen", "Show EchoLedger windows", "---"]);
+        let line = menu_entries(&share).into_iter().find(|e| matches!(e, Entry::Item { id: "hidden_share", .. })).unwrap();
+        assert!(matches!(line, Entry::Item { enabled: false, .. }), "the reason is not an action");
+        // With the sharing bar on screen "Show" would last until the next look: the tray says when they come back.
+        let bar = MenuShape { hidden: Some(Hidden::ShareBar), ..MenuShape::default() };
+        assert_eq!(&labels(&bar)[..4], ["Open EchoLedger", "Hidden while you share your screen", "They come back when the screen share ends", "---"]);
+        assert!(menu_entries(&bar).iter().all(|e| !matches!(e, Entry::Item { id: "show_windows", .. }) && !matches!(e, Entry::Item { id: "back_after_share", enabled: true, .. })));
     }
 
     #[test]
     fn a_viewer_s_menu_offers_no_recording_and_says_why() {
         let sentence = "You are a viewer in Acme team: you can open what is shared with you, not record.";
         let shape = MenuShape { auto: true, review: 1, viewer: Some(sentence.into()), ..MenuShape::default() };
-        assert_eq!(labels(&shape), ["Open EchoLedger", "---", sentence, "Review recordings (1)", "---", "Quit EchoLedger"]);
+        assert_eq!(labels(&shape), ["Open EchoLedger", "Hide EchoLedger windows", "---", sentence, "Review recordings (1)", "---", "Quit EchoLedger"]);
         let line = menu_entries(&shape).into_iter().find(|e| matches!(e, Entry::Item { id: "viewer", .. })).unwrap();
         assert!(matches!(line, Entry::Item { enabled: false, .. }), "the sentence is not an action");
 

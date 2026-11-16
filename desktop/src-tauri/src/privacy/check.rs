@@ -36,6 +36,8 @@ pub enum Why {
     SystemUpdate,
     Weekly,
     BeforeCall,
+    /// The last automatic run measured nothing (an Error): tried again at the next tick, a few times.
+    Retry,
 }
 
 /// One capture method's result in a run.
@@ -52,6 +54,9 @@ pub struct MethodResult {
     /// Why the capture failed, in the system's words (for the diagnostics; never a picture or a title).
     #[serde(default)]
     pub detail: Option<String>,
+    /// The capture came back one colour all over (no screen session): the smoke test skips rather than fails then.
+    #[serde(default)]
+    pub blank: bool,
 }
 
 /// One run, as kept.
@@ -78,6 +83,8 @@ pub struct Store {
 const KEEP_CHECKS: usize = 30;
 /// A week: the automatic check runs again after this long.
 pub const WEEKLY: chrono::TimeDelta = chrono::TimeDelta::days(7);
+/// How many automatic runs in a row may measure nothing on one system and app version before the check waits a week.
+pub const RETRIES: usize = 3;
 
 pub fn store_path(data_dir: &Path) -> PathBuf {
     data_dir.join("share-check.json")
@@ -90,8 +97,19 @@ impl Store {
 
     pub fn save(&self, data_dir: &Path) {
         if let Ok(bytes) = serde_json::to_vec_pretty(self) {
-            let _ = std::fs::write(store_path(data_dir), bytes);
+            let _ = diag::write_atomic(&store_path(data_dir), &bytes);
         }
+    }
+
+    /// Changes the kept store under one lock: the checks, the guided answers and the commands all write it, and each
+    /// change starts from the last one (a written file is replaced whole, never read half-written).
+    pub fn update(data_dir: &Path, change: impl FnOnce(&mut Store)) -> Store {
+        static WRITING: std::sync::Mutex<()> = std::sync::Mutex::new(());
+        let _one_at_a_time = WRITING.lock().unwrap_or_else(|p| p.into_inner());
+        let mut store = Store::load(data_dir);
+        change(&mut store);
+        store.save(data_dir);
+        store
     }
 
     pub fn add(&mut self, record: Record) {
@@ -110,16 +128,19 @@ impl Store {
     }
 }
 
-/// Whether the automatic check is due, and why (pure): never run, the app or the system changed since the last run,
-/// or a week went by.
+/// Whether the automatic check is due, and why (pure): never run, the app or the system changed since the last run, a
+/// week went by, or the last run measured nothing (tried again at the next tick, [`RETRIES`] times in a row at most).
 pub fn due(store: &Store, os_build: &str, app_version: &str, now: DateTime<Utc>) -> Option<Why> {
     let Some(last) = store.checks.last() else { return Some(Why::First) };
+    let errors_in_a_row = store.checks.iter().rev().take_while(|r| r.os_build == os_build && r.app_version == app_version && r.result == Outcome::Error).count();
     if last.app_version != app_version {
         Some(Why::AppUpdate)
     } else if last.os_build != os_build {
         Some(Why::SystemUpdate)
     } else if now - last.at >= WEEKLY {
         Some(Why::Weekly)
+    } else if last.result == Outcome::Error && errors_in_a_row < RETRIES {
+        Some(Why::Retry)
     } else {
         None
     }
@@ -225,7 +246,7 @@ const PREVIEW_LONG: u32 = 960;
 
 fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
-        .title(if kind == Kind::Test { "EchoLedger Share Check test" } else { "EchoLedger Share Check control" })
+        .title(if kind == Kind::Test { "EchoLedger screen-share privacy test" } else { "EchoLedger screen-share privacy control" })
         .inner_size(PATCH.0, PATCH.1)
         .position(at.0, at.1)
         .decorations(false)
@@ -236,8 +257,7 @@ fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> taur
         .focused(false)
         .focusable(false)
         .visible(true);
-    let window = super::prepare(app, crate::smoke::isolate(builder), label, kind).build()?;
-    super::built(app, &window);
+    let window = super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)?;
     #[cfg(target_os = "macos")]
     crate::overlay::macos::keep_above_everything(&window);
     Ok(window)
@@ -260,7 +280,7 @@ fn places(app: &AppHandle) -> ((f64, f64), (f64, f64)) {
 }
 
 /// A window's frame in the units [`capture::Shot`] uses (points on a Mac, physical pixels on Windows).
-fn frame_units(window: &tauri::WebviewWindow) -> Option<((f64, f64), (f64, f64))> {
+fn frame_units(window: &tauri::WebviewWindow) -> Option<Frame> {
     let (position, size) = (window.inner_position().ok()?, window.inner_size().ok()?);
     let scale = if cfg!(target_os = "macos") { window.scale_factor().ok()? } else { 1.0 };
     Some(((f64::from(position.x) / scale, f64::from(position.y) / scale), (f64::from(size.width) / scale, f64::from(size.height) / scale)))
@@ -284,10 +304,92 @@ fn preview(frame: &crate::screens::platform::Frame) -> Option<(String, u32, u32)
     Some((format!("data:image/webp;base64,{}", base64::engine::general_purpose::STANDARD.encode(&encoded.webp)), encoded.width, encoded.height))
 }
 
-/// Runs the Share Check now. One at a time; the windows close whatever happens.
+/// A window's frame: its top-left corner and its size.
+pub type Frame = ((f64, f64), (f64, f64));
+
+/// Whether something lies over the test window (pure): a window in front of it whose frame overlaps its frame. A covered
+/// test window could read as hidden while it is not, so the check measures nothing then.
+pub fn covered(test: Frame, in_front: &[Frame]) -> bool {
+    let ((x, y), (w, h)) = test;
+    in_front.iter().any(|((fx, fy), (fw, fh))| *fx < x + w && x < fx + fw && *fy < y + h && y < fy + fh)
+}
+
+/// The frames (points, the main display's top-left corner at 0, 0) of every visible window in front of window
+/// `number`, from the system's window list (front to back); none when it is not in the list.
+#[cfg(target_os = "macos")]
+fn windows_in_front_of(number: i64) -> Option<Vec<Frame>> {
+    use objc2_core_foundation::{CFDictionary, CFNumber, CFString, CFType};
+    use objc2_core_graphics::{CGWindowListCopyWindowInfo, CGWindowListOption, kCGWindowAlpha, kCGWindowBounds, kCGWindowNumber};
+
+    fn value<'a>(dict: &'a CFDictionary, key: &CFString) -> Option<&'a CFType> {
+        // SAFETY: the key is a CFString; the value, when present, is a CF object the dictionary keeps alive.
+        let value = unsafe { dict.value((key as *const CFString).cast()) } as *const CFType;
+        unsafe { value.as_ref() }
+    }
+    fn number_of<'a>(dict: &'a CFDictionary, key: &CFString) -> Option<&'a CFNumber> {
+        value(dict, key).and_then(|v| v.downcast_ref::<CFNumber>())
+    }
+    let list = CGWindowListCopyWindowInfo(CGWindowListOption::OptionOnScreenOnly | CGWindowListOption::ExcludeDesktopElements, 0)?;
+    // SAFETY: the window-list keys are constants of CoreGraphics.
+    let (number_key, bounds_key, alpha_key) = unsafe { (kCGWindowNumber, kCGWindowBounds, kCGWindowAlpha) };
+    let mut front = Vec::new();
+    for i in 0..list.count() {
+        // SAFETY: the index is in range; each value of this array is a CFDictionary the array keeps alive.
+        let item = unsafe { list.value_at_index(i) } as *const CFType;
+        let Some(dict) = (unsafe { item.as_ref() }).and_then(|t| t.downcast_ref::<CFDictionary>()) else { continue };
+        if number_of(dict, number_key).and_then(|n| n.as_i64()) == Some(number) {
+            return Some(front);
+        }
+        if number_of(dict, alpha_key).and_then(|a| a.as_f64()).is_some_and(|a| a <= 0.01) {
+            continue;
+        }
+        let Some(bounds) = value(dict, bounds_key).and_then(|v| v.downcast_ref::<CFDictionary>()) else { continue };
+        let field = |name: &'static str| number_of(bounds, &CFString::from_static_str(name)).and_then(|n| n.as_f64());
+        if let (Some(x), Some(y), Some(w), Some(h)) = (field("X"), field("Y"), field("Width"), field("Height")) {
+            front.push(((x, y), (w, h)));
+        }
+    }
+    None
+}
+
+/// Whether the test window is covered now (none when the system could not say): on a Mac the windows in front of it in
+/// the window list; on Windows the window hit at its four corners and its middle.
+fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        let pointer = window.ns_window().ok()?;
+        // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is; the number is a plain read.
+        let number = unsafe { &*(pointer as *const objc2_app_kit::NSWindow) }.windowNumber() as i64;
+        windows_in_front_of(number).map(|front| covered(frame, &front))
+    }
+    #[cfg(windows)]
+    {
+        use windows::Win32::Foundation::POINT;
+        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+        let own = window.hwnd().ok()?.0 as isize;
+        let ((x, y), (w, h)) = frame;
+        let points = [(x + 8.0, y + 8.0), (x + w - 8.0, y + 8.0), (x + 8.0, y + h - 8.0), (x + w - 8.0, y + h - 8.0), (x + w / 2.0, y + h / 2.0)];
+        Some(points.iter().any(|(px, py)| {
+            // SAFETY: plain queries of the window under a screen point and its top-level window.
+            let hit = unsafe { GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT) };
+            hit.0 as isize != own
+        }))
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = (window, frame);
+        None
+    }
+}
+
+/// Runs the Share Check now. One at a time, never while the guided test's card is open; the windows close whatever
+/// happens.
 pub async fn run(app: &AppHandle, why: Why) -> AppResult<View> {
+    if app.get_webview_window(GUIDED_CARD).is_some() {
+        return Err(AppError::msg("The test with your phone is still open. Finish it first."));
+    }
     if RUNNING.swap(true, Ordering::SeqCst) {
-        return Err(AppError::msg("A Share Check is already running."));
+        return Err(AppError::msg("EchoLedger is already checking screen-share privacy."));
     }
     let result = run_inner(app, why).await;
     for label in [CHECK_TEST, CHECK_CONTROL] {
@@ -315,27 +417,37 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
     let mut methods: Vec<MethodResult> = Vec::new();
     let mut best: Option<(capture::Shot, Rect, Rect, Outcome)> = None;
     if !allowed {
-        methods.push(MethodResult { method: "sck".into(), result: Outcome::Error, reason: Some("permission_missing".into()), counts: None, detail: None });
+        methods.push(MethodResult { method: "sck".into(), result: Outcome::Error, reason: Some("permission_missing".into()), counts: None, detail: None, blank: false });
     } else {
         privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).clear();
         let (test_at, control_at) = places(app);
         let test = build_patch(app, CHECK_TEST, Kind::Test, test_at).map_err(|e| AppError::msg(format!("The test window could not open: {e}")))?;
         let control = build_patch(app, CHECK_CONTROL, Kind::Control, control_at).map_err(|e| AppError::msg(format!("The control window could not open: {e}")))?;
+        // Both of the check's own windows by name: the guided card's page says it drew too, and must not count.
+        let both_drawn = || {
+            let drawn = privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner());
+            drawn.contains(CHECK_TEST) && drawn.contains(CHECK_CONTROL)
+        };
         let deadline = tokio::time::Instant::now() + DRAW_WAIT;
-        while privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).len() < 2 && tokio::time::Instant::now() < deadline {
+        while !both_drawn() && tokio::time::Instant::now() < deadline {
             let _ = tokio::time::timeout(Duration::from_millis(200), privacy.drawn.notified()).await;
         }
         tokio::time::sleep(SETTLE).await;
         let (Some(test_frame), Some(control_frame)) = (frame_units(&test), frame_units(&control)) else {
             return Err(AppError::msg("The check's windows did not open."));
         };
-        // A window that never drew shows no colour at all: measuring it would pass for nothing.
-        let drawn = privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).len();
-        if drawn < 2 {
-            diag::log(&state.data_dir, "Share Check: the check's windows did not draw.");
-            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()) });
+        // A window that never drew shows no colour at all, and one something covers shows what covers it: measuring
+        // either would pass for nothing.
+        let drawn = both_drawn();
+        let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
+        if !drawn {
+            diag::log(&state.data_dir, "Privacy check: the check's windows did not draw.");
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()), blank: false });
+        } else if is_covered {
+            diag::log(&state.data_dir, "Privacy check: another window covered the test window.");
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()), blank: false });
         }
-        let shots = if drawn < 2 { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
+        let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
         for (method, shot) in shots {
             match shot {
                 Ok(shot) => {
@@ -345,12 +457,13 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                     let counts = pixels::measure(&picture, test_rect, control_rect);
                     let result = pixels::verdict(counts);
                     let reason = (result == Outcome::Error).then(|| "control_missing".to_string());
-                    diag::log(&state.data_dir, &format!("Share Check {method}: {result:?} (test {} px, control {} of {} px).", counts.test, counts.control, counts.control_area));
+                    diag::log(&state.data_dir, &format!("Privacy check {method}: {result:?} (test {} of {} px, control {} of {} px).", counts.test, counts.test_area, counts.control, counts.control_area));
                     let detail = (result != Outcome::Pass).then(|| {
                         let rgb = |r: Option<[u8; 3]>| r.map_or_else(|| "nothing".to_string(), |c| format!("rgb({}, {}, {})", c[0], c[1], c[2]));
                         format!("the control area averages {}, the test area {}, picture {}x{}", rgb(pixels::average(&picture, control_rect)), rgb(pixels::average(&picture, test_rect)), shot.frame.width, shot.frame.height)
                     });
-                    methods.push(MethodResult { method: method.into(), result, reason, counts: Some(counts), detail });
+                    let blank = result == Outcome::Error && pixels::uniform(&picture);
+                    methods.push(MethodResult { method: method.into(), result, reason, counts: Some(counts), detail, blank });
                     // "What others see": a picture that shows the test window first, else the first that showed the screen.
                     let rank = |o: Outcome| match o {
                         Outcome::Fail => 2,
@@ -364,24 +477,34 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
                 Err(failure) => {
                     let detail = match &failure {
                         Failure::Capture(message) => {
-                            diag::log(&state.data_dir, &format!("Share Check {method}: the capture failed ({message})."));
+                            diag::log(&state.data_dir, &format!("Privacy check {method}: the capture failed ({message})."));
                             Some(message.clone())
                         }
                         Failure::Permission => None,
                     };
-                    methods.push(MethodResult { method: method.into(), result: Outcome::Error, reason: Some(reason_of(&failure).into()), counts: None, detail });
+                    methods.push(MethodResult { method: method.into(), result: Outcome::Error, reason: Some(reason_of(&failure).into()), counts: None, detail, blank: false });
                 }
             }
         }
     }
     let outcomes: Vec<Outcome> = methods.iter().map(|m| m.result).collect();
     let result = pixels::combined(&outcomes);
-    let reason = if result == Outcome::Error { methods.iter().find_map(|m| m.reason.clone()) } else { None };
+    // Windows before 19041 with "Black box": hidden as a black box, which the result says (and the server hears).
+    let black_box = result == Outcome::Pass && black_box_here(state.settings().old_windows_sharing);
+    if black_box {
+        methods.iter_mut().filter(|m| m.result == Outcome::Pass).for_each(|m| m.reason = Some("old_windows".into()));
+    }
+    let reason = if result == Outcome::Error { methods.iter().find_map(|m| m.reason.clone()) } else if black_box { Some("old_windows".into()) } else { None };
     let at = Utc::now();
     let record = Record { at, os_build: os_build(), app_version: app_version().into(), result, reason: reason.clone(), methods: methods.clone(), why };
-    let mut store = Store::load(&state.data_dir);
-    store.add(record);
-    store.save(&state.data_dir);
+    let before = Store::update(&state.data_dir, |store| store.add(record)).checks.iter().rev().skip(1).find(|r| r.os_build == os_build() && r.app_version == app_version() && r.result != Outcome::Error).map(|r| r.result);
+    if let Some((title, body)) = change_notice(before, result, why) {
+        use crate::notifications::{Category, allowed, local_minutes, show};
+        let settings = state.settings();
+        if allowed(&settings, Category::Account, local_minutes()) {
+            show(app, &settings, Category::Account, title, body);
+        }
+    }
     for m in methods.iter().filter(|m| m.method != "none") {
         report(app, ShareCheckReport {
             platform: platform_wire().into(),
@@ -400,6 +523,27 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         None => (None, 0, 0, None, None),
     };
     Ok(View { result, reason, methods, system, at, picture, width, height, test_area, control_area })
+}
+
+/// What to tell the person when a run they did not start changed the result on this system and app version (pure),
+/// above all that EchoLedger became visible in screen share. A run that measured nothing says nothing.
+pub fn change_notice(before: Option<Outcome>, after: Outcome, why: Why) -> Option<(&'static str, &'static str)> {
+    if matches!(why, Why::Asked | Why::Onboarding) || after == Outcome::Error || before == Some(after) {
+        return None;
+    }
+    match after {
+        Outcome::Fail => Some((
+            "EchoLedger may be visible in screen share",
+            "The automatic check found EchoLedger in a screen capture on this computer. Open Check screen-share privacy to see what others see.",
+        )),
+        Outcome::Pass if before == Some(Outcome::Fail) => Some(("EchoLedger is hidden from screen share again", "The automatic check no longer finds it in a screen capture.")),
+        _ => None,
+    }
+}
+
+/// Windows before build 19041 gives a black box instead of leaving the window out (with the setting "Black box").
+fn black_box_here(old: crate::settings::OldWindowsSharing) -> bool {
+    Platform::here() == Platform::Windows && super::win::wanted(true, windows_build(), old) == super::win::WDA_MONITOR
 }
 
 pub fn wire(outcome: Outcome) -> &'static str {
@@ -453,7 +597,7 @@ pub async fn before_call(app: &AppHandle, meeting: Option<MeetingApp>) -> (Optio
     let store = Store::load(&state.data_dir);
     let view = if due(&store, &os_build(), app_version(), Utc::now()).is_some() { run(app, Why::BeforeCall).await.ok() } else { None };
     let warning = meeting.filter(|_| cfg!(target_os = "macos")).and_then(|m| {
-        let state_now = apps::state_of(m, apps::installed_version(m).as_deref(), &os_version(), &Store::load(&state.data_dir).guided);
+        let state_now = apps::state_of(m, apps::version(m).as_deref(), &os_version(), &Store::load(&state.data_dir).guided);
         apps::warning_before_call(m, state_now)
     });
     (view, warning)
@@ -484,27 +628,104 @@ pub fn spawn_auto(app: AppHandle) {
 
 // ---- The guided test (Mac) ---------------------------------------------------------------------------------------------
 
-/// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app.
+/// A window's bounds in logical points: x, y, width, height.
+pub type Bounds = (f64, f64, f64, f64);
+
+/// The test card's size: big enough to read on a phone in a screen share, and the smallest it is made to fit beside
+/// the main window (16:9 both).
+pub const CARD_SIZE: (f64, f64) = (640.0, 360.0);
+pub const CARD_SMALLEST: (f64, f64) = (480.0, 270.0);
+const CARD_MARGIN: f64 = 16.0;
+
+fn overlap(a: Bounds, b: Bounds) -> f64 {
+    let w = (a.0 + a.2).min(b.0 + b.2) - a.0.max(b.0);
+    let h = (a.1 + a.3).min(b.1 + b.3) - a.1.max(b.1);
+    if w > 0.0 && h > 0.0 { w * h } else { 0.0 }
+}
+
+/// Where the phone-test card goes on `screen` (pure): beside the main window where it fits, right, left, below or above
+/// it (made smaller down to [`CARD_SMALLEST`] to fit), so it never covers the question and its answer buttons; with no
+/// room beside it, the smallest card in a top corner of the screen (the one that covers less of the window, the left
+/// one on a tie): there it covers the window's title and the top of its page, while the question is the page's last
+/// section. Centred only when there is no main window.
+pub fn card_frame(screen: Bounds, main: Option<Bounds>) -> Bounds {
+    let (sx, sy, sw, sh) = screen;
+    let Some(m) = main else {
+        let (w, h) = CARD_SIZE;
+        return (sx + (sw - w) / 2.0, sy + (sh - h) / 2.0, w, h);
+    };
+    let fit = |room_w: f64, room_h: f64| -> Option<(f64, f64)> {
+        let w = CARD_SIZE.0.min(room_w).min(room_h * 16.0 / 9.0);
+        (w >= CARD_SMALLEST.0).then_some((w, w * 9.0 / 16.0))
+    };
+    let clamp_y = |h: f64| (m.1 + (m.3 - h) / 2.0).clamp(sy + CARD_MARGIN, sy + sh - h - CARD_MARGIN);
+    let clamp_x = |w: f64| (m.0 + (m.2 - w) / 2.0).clamp(sx + CARD_MARGIN, sx + sw - w - CARD_MARGIN);
+    let full_h = sh - 2.0 * CARD_MARGIN;
+    let full_w = sw - 2.0 * CARD_MARGIN;
+    let right = sx + sw - (m.0 + m.2) - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(right, full_h) {
+        return (m.0 + m.2 + CARD_MARGIN, clamp_y(h), w, h);
+    }
+    let left = m.0 - sx - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(left, full_h) {
+        return (m.0 - CARD_MARGIN - w, clamp_y(h), w, h);
+    }
+    let below = sy + sh - (m.1 + m.3) - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(full_w, below) {
+        return (clamp_x(w), m.1 + m.3 + CARD_MARGIN, w, h);
+    }
+    let above = m.1 - sy - 2.0 * CARD_MARGIN;
+    if let Some((w, h)) = fit(full_w, above) {
+        return (clamp_x(w), m.1 - CARD_MARGIN - h, w, h);
+    }
+    let (w, h) = CARD_SMALLEST;
+    let top_left = (sx + CARD_MARGIN, sy + CARD_MARGIN, w, h);
+    let top_right = (sx + sw - w - CARD_MARGIN, sy + CARD_MARGIN, w, h);
+    if overlap(top_right, m) < overlap(top_left, m) { top_right } else { top_left }
+}
+
+/// The main window's frame in logical points and the display it is on, when it is on screen.
+fn main_frame(app: &AppHandle) -> Option<(Bounds, Option<tauri::Monitor>)> {
+    let window = app.get_webview_window(crate::lifecycle::MAIN)?;
+    if !window.is_visible().unwrap_or(false) || window.is_minimized().unwrap_or(false) {
+        return None;
+    }
+    let scale = window.scale_factor().ok()?;
+    let (at, size) = (window.outer_position().ok()?, window.outer_size().ok()?);
+    let frame = (f64::from(at.x) / scale, f64::from(at.y) / scale, f64::from(size.width) / scale, f64::from(size.height) / scale);
+    Some((frame, window.current_monitor().ok().flatten()))
+}
+
+/// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app. It never
+/// takes the focus (the keyboard and VoiceOver stay on the question in the main window) and sits clear of the main
+/// window, so it never covers the answer buttons.
 pub fn guided_open(app: &AppHandle) -> AppResult<()> {
     if app.get_webview_window(GUIDED_CARD).is_some() {
         return Ok(());
     }
-    let (origin, size) = app.primary_monitor().ok().flatten().map_or(((0.0, 0.0), (1280.0, 800.0)), |m| {
+    if RUNNING.load(Ordering::SeqCst) {
+        return Err(AppError::msg("Wait for the check to finish, then test with your phone."));
+    }
+    let (main, shown_on) = main_frame(app).map_or((None, None), |(frame, monitor)| (Some(frame), monitor));
+    // The display the main window is on (the primary one without it).
+    let monitor = shown_on.or_else(|| app.primary_monitor().ok().flatten());
+    let screen = monitor.map_or((0.0, 0.0, 1280.0, 800.0), |m| {
         let s = m.scale_factor();
-        ((f64::from(m.position().x) / s, f64::from(m.position().y) / s), (f64::from(m.size().width) / s, f64::from(m.size().height) / s))
+        (f64::from(m.position().x) / s, f64::from(m.position().y) / s, f64::from(m.size().width) / s, f64::from(m.size().height) / s)
     });
-    let (w, h) = (640.0, 360.0);
+    let (x, y, w, h) = card_frame(screen, main);
     let builder = WebviewWindowBuilder::new(app, GUIDED_CARD, WebviewUrl::App("index.html".into()))
         .title("EchoLedger test card")
         .inner_size(w, h)
-        .position(origin.0 + (size.0 - w) / 2.0, origin.1 + (size.1 - h) / 2.0)
+        .position(x, y)
         .decorations(false)
         .resizable(false)
         .always_on_top(true)
         .skip_taskbar(true)
+        .focused(false)
+        .focusable(false)
         .visible(true);
-    let window = super::prepare(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test).build().map_err(|e| AppError::msg(e.to_string()))?;
-    super::built(app, &window);
+    super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b).map_err(|e| AppError::msg(e.to_string()))?;
     Ok(())
 }
 
@@ -519,9 +740,8 @@ pub fn guided_close(app: &AppHandle) {
 pub fn guided_answer(app: &AppHandle, meeting: MeetingApp, visible: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let version = apps::installed_version(meeting).unwrap_or_else(|| "unknown".into());
-    let mut store = Store::load(&state.data_dir);
-    store.guided.push(Guided { app: meeting, app_version: version.clone(), os_version: os_version(), visible, at: Utc::now() });
-    store.save(&state.data_dir);
+    Store::update(&state.data_dir, |store| store.guided.push(Guided { app: meeting, app_version: version.clone(), os_version: os_version(), visible, at: Utc::now() }));
+    app.state::<Privacy>().note_guided_answer();
     diag::log(&state.data_dir, &format!("Guided test, {} {version}: {}.", meeting.name(), if visible { "visible" } else { "hidden" }));
     report(app, ShareCheckReport {
         platform: platform_wire().into(),
@@ -580,6 +800,12 @@ pub struct PrivacyStatus {
     pub hidden_by_shortcut: bool,
     /// The safety net took EchoLedger off the screen for a share (macOS).
     pub hidden_for_share: bool,
+    /// The person opened the main window during that share: it says it may be in the screen share.
+    pub main_in_share: bool,
+    /// Which share that is, counted in this run: the notice closed in one share shows again in the next.
+    pub share_number: u64,
+    /// The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends).
+    pub bar_on_screen: bool,
     pub share: Option<super::watch::Seen>,
     pub last_check: Option<LastCheck>,
     pub check_running: bool,
@@ -589,6 +815,8 @@ pub struct PrivacyStatus {
     pub zoom_installed: bool,
     /// macOS Screen Recording is allowed (always true elsewhere).
     pub permission: bool,
+    /// One of the floating windows is open: "Move to the other display" has something to move.
+    pub floating_open: bool,
     pub displays: usize,
 }
 
@@ -603,18 +831,27 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let build = windows_build();
     let remote = remote_session();
     let watch = privacy.watch.lock().unwrap_or_else(|p| p.into_inner());
-    let (mismatch, held) = (watch.any_mismatch(), watch.any_held());
+    let (mismatch, held, changed_outside) = (watch.any_mismatch(), watch.any_held(), watch.changed_outside());
     drop(watch);
     let now = std::time::Instant::now();
-    let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result) };
+    let black_box = platform == Platform::Windows && build.is_none_or(|b| b < super::win::EXCLUDE_BUILD) && settings.old_windows_sharing == crate::settings::OldWindowsSharing::BlackBox;
+    let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result), black_box };
     let badge = status::badge(&facts);
-    let lines = if platform == Platform::Windows { super::win::lines(build, remote, settings.old_windows_sharing, mismatch) } else { Vec::new() };
+    #[cfg(target_os = "macos")]
+    let permission = crate::screens::platform::macos::permission();
+    #[cfg(not(target_os = "macos"))]
+    let permission = true;
+    let lines = match platform {
+        Platform::Windows => super::win::lines(build, remote, settings.old_windows_sharing, mismatch, changed_outside),
+        Platform::Mac => mac_lines(permission, super::watch::allowed(settings.hide_from_sharing, settings.share_one_window, false, false)),
+        Platform::Other => Vec::new(),
+    };
     let mac_version = os_version();
     let apps: Vec<AppRow> = if platform == Platform::Mac {
         MeetingApp::ALL
             .into_iter()
             .map(|app| {
-                let version = apps::installed_version(app);
+                let version = apps::version(app);
                 let state = apps::state_of(app, version.as_deref(), &mac_version, &store.guided);
                 AppRow { app, name: app.name(), needs_test: apps::needs_test(version.as_deref(), state), line: apps::line(app, state), version, state }
             })
@@ -622,10 +859,6 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     } else {
         Vec::new()
     };
-    #[cfg(target_os = "macos")]
-    let permission = crate::screens::platform::macos::permission();
-    #[cfg(not(target_os = "macos"))]
-    let permission = true;
     PrivacyStatus {
         platform: platform_wire(),
         badge,
@@ -637,6 +870,9 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         demo_seconds_left: privacy.demo_left(now).map(|d| d.as_secs().max(1)),
         hidden_by_shortcut: privacy.hidden_for(super::HideReason::Person),
         hidden_for_share: privacy.hidden_for(super::HideReason::Share),
+        main_in_share: privacy.main_in_share(settings.hide_from_sharing),
+        share_number: privacy.share_number(),
+        bar_on_screen: privacy.bar_holds(),
         share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),
@@ -644,8 +880,20 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         zoom_installed: apps.iter().any(|a| a.app == MeetingApp::Zoom && a.version.is_some()),
         apps,
         permission,
+        floating_open: crate::overlay::floating_open(app),
         displays: app.available_monitors().map(|m| m.len()).unwrap_or(1),
     }
+}
+
+/// Without the Screen Recording permission other apps' window titles read empty, so the safety net can't see a share.
+pub const NO_PERMISSION_LINE: &str = "EchoLedger needs the Screen Recording permission to notice when you share your whole screen and hide its windows. Allow it in System Settings.";
+
+/// The Mac's amber lines (pure): the safety net can't work without the permission (said only while it is meant to).
+pub fn mac_lines(permission: bool, safety_net_on: bool) -> Vec<super::win::Line> {
+    if permission || !safety_net_on {
+        return Vec::new();
+    }
+    vec![super::win::Line { fix: Some(super::win::Fix::OpenSettings), ..super::win::Line::warning(NO_PERMISSION_LINE) }]
 }
 
 /// "Copy diagnostics": the system, the setting, the last checks and the log lines.
@@ -658,7 +906,7 @@ pub fn diagnostics_text(app: &AppHandle) -> String {
     ];
     if let Some(last) = &s.last_check {
         let methods: Vec<String> = last.methods.iter().map(|m| format!("{} {}", m.method, wire(m.result))).collect();
-        header.push(format!("Last Share Check: {} on {} ({})", wire(last.result), last.at.format("%Y-%m-%d %H:%M"), methods.join(", ")));
+        header.push(format!("Last privacy check: {} on {} ({})", wire(last.result), last.at.format("%Y-%m-%d %H:%M"), methods.join(", ")));
     }
     for row in &s.apps {
         header.push(format!("{} ({})", row.line, row.version.as_deref().unwrap_or("not installed")));
@@ -695,6 +943,60 @@ mod tests {
     }
 
     #[test]
+    fn an_automatic_run_that_measured_nothing_is_tried_again_a_few_times() {
+        let mut store = Store::default();
+        let now = at("2026-11-16T18:00:00Z");
+        store.add(record("2026-11-16T09:00:00Z", "27.3", "1.8.1", Outcome::Pass));
+        store.add(record("2026-11-16T10:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), Some(Why::Retry), "not counted as done for a week");
+        store.add(record("2026-11-16T16:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), Some(Why::Retry));
+        store.add(record("2026-11-16T22:00:00Z", "27.3", "1.8.1", Outcome::Error));
+        assert_eq!(due(&store, "27.3", "1.8.1", now), None, "three in a row: it waits a week, not every 6 h for ever");
+        store.add(record("2026-11-17T04:00:00Z", "27.3", "1.8.1", Outcome::Pass));
+        assert_eq!(due(&store, "27.3", "1.8.1", at("2026-11-17T05:00:00Z")), None, "measured again");
+    }
+
+    #[test]
+    fn the_store_written_from_several_threads_keeps_every_answer() {
+        let dir = tempfile::tempdir().unwrap();
+        let threads: Vec<_> = (0..8)
+            .map(|t| {
+                let dir = dir.path().to_path_buf();
+                std::thread::spawn(move || {
+                    for i in 0..10 {
+                        Store::update(&dir, |s| s.guided.push(Guided { app: MeetingApp::Zoom, app_version: format!("{t}.{i}"), os_version: "27.3".into(), visible: false, at: Utc::now() }));
+                    }
+                })
+            })
+            .collect();
+        threads.into_iter().for_each(|t| t.join().unwrap());
+        assert_eq!(Store::load(dir.path()).guided.len(), 80, "no change was lost and no torn read emptied the file");
+    }
+
+    #[test]
+    fn an_automatic_run_says_when_the_result_changed_above_all_to_visible() {
+        let visible = change_notice(Some(Outcome::Pass), Outcome::Fail, Why::Weekly).unwrap();
+        assert_eq!(visible.0, "EchoLedger may be visible in screen share");
+        assert!(change_notice(None, Outcome::Fail, Why::AppUpdate).is_some(), "the first measure after an update");
+        assert_eq!(change_notice(Some(Outcome::Fail), Outcome::Pass, Why::SystemUpdate).map(|n| n.0), Some("EchoLedger is hidden from screen share again"));
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Pass, Why::Weekly), None, "nothing changed");
+        assert_eq!(change_notice(None, Outcome::Pass, Why::First), None, "hidden from the start needs no news");
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Error, Why::Retry), None, "nothing was measured");
+        assert_eq!(change_notice(Some(Outcome::Pass), Outcome::Fail, Why::Asked), None, "the person sees the result on the page");
+    }
+
+    #[test]
+    fn a_covered_test_window_is_told_apart() {
+        let test = ((540.0, 400.0), (220.0, 150.0));
+        assert!(!covered(test, &[]));
+        assert!(!covered(test, &[((0.0, 0.0), (1312.0, 25.0)), ((784.0, 400.0), (220.0, 150.0))]), "the menu bar and the control beside it");
+        assert!(covered(test, &[((600.0, 440.0), (40.0, 30.0))]), "a small window over the patch");
+        assert!(covered(test, &[((0.0, 0.0), (1312.0, 848.0))]), "a full-screen window in front");
+        assert!(!covered(test, &[((760.0, 400.0), (24.0, 150.0))]), "touching its edge is not over it");
+    }
+
+    #[test]
     fn the_badge_reads_the_last_measured_check_of_this_version() {
         let mut store = Store::default();
         store.add(record("2026-11-10T09:00:00Z", "27.2", "1.8.1", Outcome::Fail));
@@ -722,6 +1024,65 @@ mod tests {
         // What is kept: results only, no picture.
         let text = std::fs::read_to_string(store_path(dir.path())).unwrap();
         assert!(!text.contains("data:image") && !text.contains("picture"));
+    }
+
+    #[test]
+    fn the_phone_test_card_sits_clear_of_the_main_window() {
+        let laptop = (0.0, 0.0, 1512.0, 982.0);
+        // The main window on the left half: the card beside it, full size, level with it.
+        let left_half = (0.0, 38.0, 756.0, 900.0);
+        let card = card_frame(laptop, Some(left_half));
+        assert_eq!((card.2, card.3), CARD_SIZE);
+        assert_eq!(card.0, 756.0 + 16.0);
+        assert_eq!(overlap(card, left_half), 0.0);
+        // Settings' usual size in the middle of a laptop: no room beside it, so the smallest card in the top left
+        // corner, over the window's title and the top of the page, well above the question at the page's end.
+        let middle = (256.0, 120.0, 1000.0, 740.0);
+        let card = card_frame(laptop, Some(middle));
+        assert_eq!(card, (16.0, 16.0, CARD_SMALLEST.0, CARD_SMALLEST.1));
+        assert!(card.1 + card.3 <= middle.1 + middle.3 / 2.0, "it covers at most the window's top part");
+        // On a wider screen the same window has room to its right, at a smaller size.
+        let wide = card_frame((0.0, 0.0, 1920.0, 1080.0), Some((300.0, 120.0, 1000.0, 740.0)));
+        assert_eq!(overlap(wide, (300.0, 120.0, 1000.0, 740.0)), 0.0, "{wide:?}");
+        assert!(wide.2 >= CARD_SMALLEST.0 && (wide.2 / wide.3 - 16.0 / 9.0).abs() < 1e-9);
+        // A wide window high up: below it.
+        let top = (100.0, 40.0, 1300.0, 520.0);
+        let card = card_frame(laptop, Some(top));
+        assert!(card.1 >= 40.0 + 520.0 && overlap(card, top) == 0.0, "{card:?}");
+        // Full screen: the smallest card in the top left corner, never centred over the question.
+        let full = (0.0, 0.0, 1512.0, 982.0);
+        let card = card_frame(laptop, Some(full));
+        assert_eq!(card, (16.0, 16.0, CARD_SMALLEST.0, CARD_SMALLEST.1));
+        assert!(card.1 + card.3 < 982.0 / 2.0, "the top half only");
+        // The main window kept to the left: the top right corner covers less of it.
+        let narrow_left = (0.0, 0.0, 1300.0, 982.0);
+        assert_eq!(card_frame(laptop, Some(narrow_left)).0, 1512.0 - 480.0 - 16.0);
+        // A main window pushed to the top right: the corner that covers the least of it.
+        let top_right = (900.0, 0.0, 612.0, 600.0);
+        let card = card_frame((0.0, 0.0, 1100.0, 650.0), Some(top_right));
+        assert_eq!(overlap(card, top_right), 0.0, "{card:?}");
+        // No main window on screen: centred.
+        assert_eq!(card_frame(laptop, None), ((1512.0 - 640.0) / 2.0, (982.0 - 360.0) / 2.0, 640.0, 360.0));
+    }
+
+    #[test]
+    fn the_phone_test_card_never_takes_the_focus() {
+        let source = include_str!("check.rs");
+        let open = &source[source.find("pub fn guided_open(").unwrap()..];
+        let open = &open[..open.find("\n}\n").unwrap()];
+        assert!(open.contains(".focused(false)") && open.contains(".focusable(false)"), "the keyboard and VoiceOver stay on the question");
+        assert!(open.contains("card_frame(screen, main)"), "placed clear of the main window");
+    }
+
+    #[test]
+    fn a_mac_without_screen_recording_is_told_the_safety_net_cannot_work() {
+        let lines = mac_lines(false, true);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].text, NO_PERMISSION_LINE);
+        assert_eq!(lines[0].fix, Some(super::super::win::Fix::OpenSettings), "with the button to System Settings");
+        assert!(lines[0].warning);
+        assert!(mac_lines(true, true).is_empty());
+        assert!(mac_lines(false, false).is_empty(), "the safety net is off anyway (Off, one window)");
     }
 
     #[test]

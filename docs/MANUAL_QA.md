@@ -598,6 +598,7 @@ versions. Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
 | MAC-28 | Close the main window and turn off the microphone and system audio. Press the record shortcut; click **Record** in the menu-bar icon; close the window again and join a meeting with auto-record on; press the dictation shortcut in a text field. | The shortcut and the menu open the window with the reason in it and the banner. The meeting gets a system notification saying why, and no window jumps in front of it (this is also the first proof that an unsigned build's notifications arrive). Dictation's box says the microphone is off and that dictation did not start, then hides. |
 | MAC-29 | First recording after setup was skipped (or after an update made macOS forget): press **Don't Allow** at the microphone prompt, then at system audio. Then, during a recording, turn the microphone off and on again in System Settings. | Within a few seconds of each answer the pill, the captions and the Record page say what the recording holds; both refused: "Nothing is being recorded". Turned back on: the line goes; check the microphone is really back in the file. |
 | MAC-30 | **Run Mac check**; during its tone test press the record shortcut. Run it again and press the dictation shortcut during the microphone test. On a Mac that never asked for Screen Recording, run it once more. | The tone stops at once and the check says a recording (or dictation) started, with no failed result for the test it cut short; the recording has no tone in it, and a meeting recorded this way still gets screen moments. Never asked: both Screen Recording rows say **Limited** and point to Settings → Screen moments, not "off". |
+| MAC-31 | v1.8 0.4: with the main window closed (⌘W), open EchoLedger from Applications, Launchpad, Spotlight and a Dock icon kept in the Dock; once during a recording and once with the window minimised (⌘M); once while the window is open behind another app. | Each time the main window opens in front; when it is already open it only comes forward; never a second window. |
 
 ### Windows v1.5, what only a real PC can prove (Phase 1B; CI ran the smoke test on Server 2022, Server 2025 and Windows 11 on Arm)
 
@@ -669,7 +670,7 @@ second person or device to share a screen, and a slide deck with a few slides.
 | # | Check | Expected |
 |---|---|---|
 | SM-M1 | Mac: Settings → Screen moments on → **Allow Screen Recording**, approve in System Settings → Privacy & Security → Screen & System Audio Recording. | The app sees the permission without a restart; Settings explains that macOS asks again about once a month. |
-| SM-M2 | A Zoom call, then a Meet call in Chrome and in Safari, with the deck shared. | The pill's monitor chip says **Screens on**; "Screens on for this meeting" appears once. |
+| SM-M2 | A Zoom call, then a Meet call in Chrome and in Safari, with the deck shared. | The pill's monitor chip says **Screens on**; "Screens on for this meeting" appears once. (until v1.8 0.2d, Meet in Safari may not be matched to its window: its sound runs in com.apple.WebKit.GPU; the controls then say "Can't find the meeting window" with Capture the whole screen) |
 | SM-M3 | Change slides and wait about 2 s; on a new slide say "look at this page". | A screen is kept after each change, and at once after the words. |
 | SM-M4 | Minimise the meeting window, then Cmd-H. | The chip says screens are paused while the window is minimised or hidden; they resume when it is back. |
 | SM-M5 | Whole screen; open 1Password on the meeting's display, then move it to another display. | Screens pause, then resume. |
@@ -822,6 +823,9 @@ pressing **Sync** in the Library.
 | S-8 | Tray / menu bar: Show EchoLedger in screen share for 10 minutes. | The phone shows EchoLedger; after 10 minutes it is hidden again without touching anything. |
 | S-9 | Press Ctrl+Alt+Shift+P (⌘⌥⇧P), then again. | Every EchoLedger window goes and comes back; the app stays in the Dock, the menu bar, the tray and Alt+Tab / ⌘Tab. |
 | S-10 | Settings → Screen-share privacy → Copy diagnostics. | The text names the system, the setting, the last checks and the meeting apps; no window contents. |
+| S-11 | Mac: share the whole screen in Zoom or Teams (not confirmed yet); then hide Chrome's sharing bar in a Meet share; end the meeting. | The floating windows leave within about 0.3 s; with the bar hidden they stay off; about 3 s after the meeting ends they are back. |
+| S-12 | During that share, open EchoLedger from the menu bar or the Dock. | The main window opens with the line that it may be in the screen share; the floating windows stay off. |
+| S-13 | Windows: minimise the main window, press Hide EchoLedger windows, then Show EchoLedger windows. | Every window goes and comes back; the main window stays minimised. |
 
 ## Appendix C — Release day
 

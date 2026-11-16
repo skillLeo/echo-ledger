@@ -25,6 +25,7 @@ and its text show · **—** = not tested yet.
 | 2026-11-16 | macOS 27.3 (26C5035r) | v1.8.1 desktop (debug build, `--smoke-test --share-check`, the privacy service's own Share Check) | ScreenCaptureKit `SCScreenshotManager`, display filter, nothing excluded, sRGB | **Pass** (twice) | Protected magenta test window 0 px; green control 64,480 of 64,480 px (its whole area at the 1920 px capture size) |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build with the test window built unprotected (a check that the check can fail) | the same | **Fail**, as it should | Magenta 28,620 px (the check pattern's magenta half); green 64,480 px |
 | 2026-11-16 | macOS 27.3 (26C5035r) | the same build before the capture asked for sRGB | the same, in the display's colour space | Error (control missing) | The green control (sRGB 0, 200, 0) came back as about (90, 197, 58) in Display P3, outside the tolerance of 25: the check now captures in sRGB |
+| 2026-11-16 | macOS 27.3 (26C5035r) | v1.8.1 desktop, the CI build (commit 23e58956, ad-hoc signed, run beside the installed v1.6.0 with `--smoke-test --share-check`) | ScreenCaptureKit, nothing excluded, sRGB | **Pass** | Magenta 0 px; green 64,480 of 64,480 px; 8.9 s |
 | 2026-11-16 | Windows 11 24H2 (10.0.26100, Server 2025 CI runner) | v1.8.1 desktop (commit 23e58956, `--smoke-test --share-check`) | WGC and DXGI | **Pass** | Protected magenta test window 0 px with both; green control 28,704 of 28,704 px (CI run 43783710402) |
 | 2026-11-16 | Windows 10 22H2 kernel (10.0.20348, Server 2022 CI runner) | the same | WGC and DXGI | **Pass** | Magenta 0 px; green 28,704 of 28,704 px |
 | 2026-11-16 | Windows 11 25H2 on Arm (x64 app under emulation, CI runner) | the same | WGC and DXGI | Skipped | The runner has no capture session (`control_missing`): nothing could be measured; needs a real Arm PC |
@@ -73,5 +74,9 @@ exists).
 
 From v1.8.1 every one of these windows registers with the privacy service and is built with the capture flag set
 (`desktop/src-tauri/src/privacy`): with the default "All EchoLedger windows" the main window and Live Translate are
-protected too. To fill: the same `CGWindowListCopyWindowInfo` read on the installed v1.8.1 build (sharing state 0 for
-every EchoLedger window).
+protected too. Read on 2026-11-16 from the v1.8.1 CI build (run beside the installed v1.6.0 with `--smoke-test`, sampled every 0.1 s
+while its windows were open): "EchoLedger recording controls", "EchoLedger captions", "EchoLedger dictation",
+"EchoLedger after a call" and the main window "EchoLedger" all report sharing state 0 (left out of captures; the main
+window was 1 in v1.6.0). One untitled 500 × 500 window reports 1 but is never on screen (onscreen false; also present in
+v1.6.0; no EchoLedger code makes a window of that size), most likely a framework helper window: to identify. Live
+Translate is not opened by the smoke test and still needs its read.

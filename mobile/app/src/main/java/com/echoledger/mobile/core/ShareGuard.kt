@@ -1,90 +1,172 @@
 package com.echoledger.mobile.core
 
+import android.view.WindowManager
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Private cards during screen sharing (since v1.8.1, docs/research/screen-share-privacy.md): EchoLedger's floating
- * windows (the recording pill, captions, the after-call card, Live Translate, later the Assist card) collapse to a dot
- * without text while Android says they are visible in a screen share or recording, or while the person hid them (the
- * Hide button on a card or the Quick Settings tile). "Black box" marks the windows secure instead (FLAG_SECURE), and
- * "Show" leaves them as they are. Public APIs only; nothing here hides EchoLedger from other software.
+ * EchoLedger's floating windows during a screen share (since v1.8.1, docs/research/screen-share-privacy.md; names in
+ * docs/DESIGN_SYSTEM.md "Screen-share privacy names").
+ *
+ * The floating windows (the recording controls, captions, the after-call card, Live Translate's box, grip and toolbar,
+ * later the Assist card) carry FLAG_SECURE in "Private (black box)", the default, so a screen share or recording shows
+ * a black box where they are while the person sees them as usual; only "Show" leaves them readable. The flag never
+ * waits for a signal: Android tells an app about a recording only while one of its own screens is in front, never for
+ * a floating window over another app (measured on the S25, docs/SCREEN_SHARE_MATRIX.md).
+ *
+ * On top of the flag the windows shrink to a grey dot without text while the person hid them (Hide EchoLedger windows
+ * on the recording controls or the Quick Settings tile), and in Private also while Android reports them in a screen
+ * share or recording. Public APIs only; nothing here hides EchoLedger from other software.
+ *
+ * The setting survives the process ([Memory], restored by EchoLedgerApp before any window or the tile can ask), so a
+ * window opened before the settings store has loaded already has the right flag. The person's Hide lasts the session
+ * only: every window is a black box in a screen share anyway, and a Hide kept across restarts left a window with no
+ * way back.
+ *
+ * Safe from any thread: changes are made under one lock and listeners are told in order, on the thread that made the
+ * change.
  */
 object ShareGuard {
     /** Settings → Privacy & data → "During screen sharing". */
     enum class Mode(val wire: String) {
-        HIDE("hide"),
-        BLACK_BOX("black_box"),
+        /** "Private (black box)", the default. Stored as "hide", the value every build since v1.8.1 knows. */
+        PRIVATE("hide"),
+
+        /** Everyone watching a screen share can read the floating windows. */
         SHOW("show");
 
         companion object {
-            fun of(wire: String?): Mode = entries.firstOrNull { it.wire == wire } ?: HIDE
+            /** "show" is Show; anything else ("hide", the v1.8.1 "black_box", missing or unknown) is Private. */
+            fun of(wire: String?): Mode = if (wire == SHOW.wire) SHOW else PRIVATE
         }
     }
 
-    /** Whether the cards show their text: never while the person hid them, nor while shared in "Hide cards" mode. */
-    fun showsText(mode: Mode, shared: Boolean, hiddenByUser: Boolean): Boolean = !hiddenByUser && !(shared && mode == Mode.HIDE)
+    /** Whether the windows show their text: never while the person hid them, nor while shared in Private. */
+    fun showsText(mode: Mode, shared: Boolean, hiddenByUser: Boolean): Boolean = !hiddenByUser && !(shared && mode == Mode.PRIVATE)
 
-    /** Whether the windows are marked secure, so shares and recordings show a black box where they are. */
-    fun secure(mode: Mode): Boolean = mode == Mode.BLACK_BOX
+    /** Whether the windows carry FLAG_SECURE, so a screen share or recording shows a black box where they are. */
+    fun secure(mode: Mode): Boolean = mode == Mode.PRIVATE
 
-    private val _mode = MutableStateFlow(Mode.HIDE)
+    /** A floating window's [flags] with FLAG_SECURE set or cleared for [mode]; every other flag stays as it is. */
+    fun windowFlags(flags: Int, mode: Mode): Int = if (secure(mode)) {
+        flags or WindowManager.LayoutParams.FLAG_SECURE
+    } else {
+        flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
+    }
+
+    /** Where the setting is kept between processes (a small preference file in the app). */
+    interface Memory {
+        fun read(): Saved?
+
+        fun write(saved: Saved)
+    }
+
+    data class Saved(val mode: Mode)
+
+    private val lock = Any()
+    private var memory: Memory? = null
+    private val _mode = MutableStateFlow(Mode.PRIVATE)
     private val _shared = MutableStateFlow(false)
     private val _hiddenByUser = MutableStateFlow(false)
     private val _textVisible = MutableStateFlow(true)
     private val listeners = CopyOnWriteArrayList<(Boolean) -> Unit>()
+    private val modeListeners = CopyOnWriteArrayList<(Mode) -> Unit>()
 
+    /** The setting; Private until it has been read, so a window that opens first is never readable in a screen share. */
     val mode: StateFlow<Mode> = _mode.asStateFlow()
 
-    /** Android reported our windows visible in a screen share or recording (Android 15+). */
+    /** Android reported our windows visible in a screen share or recording (Android 15+, our own screens only). */
     val shared: StateFlow<Boolean> = _shared.asStateFlow()
 
-    /** The person hid the cards (until they show them again or the app restarts). */
+    /** The person hid the floating windows, until they show them again or the app restarts. */
     val hiddenByUser: StateFlow<Boolean> = _hiddenByUser.asStateFlow()
 
     /** [showsText] for the current state. */
     val textVisible: StateFlow<Boolean> = _textVisible.asStateFlow()
 
-    fun setMode(mode: Mode) {
-        _mode.value = mode
-        update()
+    fun setMode(mode: Mode) = change { _mode.value = mode }
+
+    fun setShared(shared: Boolean) = change { _shared.value = shared }
+
+    fun setHidden(hidden: Boolean) = change { _hiddenByUser.value = hidden }
+
+    /** Hides the windows, or shows them again (the tile); returns whether they are hidden now. One step, so taps never mix. */
+    fun toggleHidden(): Boolean {
+        var hidden = false
+        change {
+            hidden = !_hiddenByUser.value
+            _hiddenByUser.value = hidden
+        }
+        return hidden
     }
 
-    fun setShared(shared: Boolean) {
-        _shared.value = shared
-        update()
-    }
-
-    fun setHidden(hidden: Boolean) {
-        _hiddenByUser.value = hidden
-        update()
-    }
-
-    fun toggleHidden() = setHidden(!_hiddenByUser.value)
-
-    /** Calls [listener] with [textVisible] now and on every change; returns how to stop. For windows that are not Compose. */
-    fun observe(listener: (Boolean) -> Unit): () -> Unit {
-        listeners += listener
-        listener(_textVisible.value)
-        return { listeners -= listener }
-    }
-
-    private fun update() {
-        val visible = showsText(_mode.value, _shared.value, _hiddenByUser.value)
-        if (visible != _textVisible.value) {
-            _textVisible.value = visible
-            listeners.forEach { it(visible) }
+    /**
+     * At process start: the last saved setting (Private when nothing was saved), the floating windows shown and nothing
+     * in a screen share; every later change of the setting is saved to [memory].
+     */
+    fun restore(memory: Memory) {
+        val saved = runCatching { memory.read() }.getOrNull()
+        synchronized(lock) {
+            this.memory = null
+            change {
+                _mode.value = saved?.mode ?: Mode.PRIVATE
+                _hiddenByUser.value = false
+                _shared.value = false
+            }
+            this.memory = memory
         }
     }
 
-    /** Back to the defaults (tests). */
+    /** Calls [listener] with [textVisible] now and on every change; returns how to stop. For views that are not Compose. */
+    fun observe(listener: (Boolean) -> Unit): () -> Unit {
+        synchronized(lock) {
+            listeners += listener
+            listener(_textVisible.value)
+        }
+        return { listeners -= listener }
+    }
+
+    /** Calls [listener] with [mode] now and on every change; returns how to stop (the floating windows' secure flag). */
+    fun observeMode(listener: (Mode) -> Unit): () -> Unit {
+        synchronized(lock) {
+            modeListeners += listener
+            listener(_mode.value)
+        }
+        return { modeListeners -= listener }
+    }
+
+    /** Applies [block] and tells the listeners what changed, all under the lock, so no thread sees a stale result. */
+    private inline fun change(block: () -> Unit) {
+        synchronized(lock) {
+            val before = _mode.value
+            block()
+            val mode = _mode.value
+            if (mode != before) {
+                memory?.let { m -> runCatching { m.write(Saved(mode)) } }
+                modeListeners.forEach { it(mode) }
+            }
+            val visible = showsText(mode, _shared.value, _hiddenByUser.value)
+            if (visible != _textVisible.value) {
+                _textVisible.value = visible
+                listeners.forEach { it(visible) }
+            }
+        }
+    }
+
+    /**
+     * Back to the defaults (tests). Mode listeners stay: the floating windows' own one is registered once per process
+     * (PrivateWindows), and a test stops the ones it added.
+     */
     internal fun resetForTest() {
-        listeners.clear()
-        _mode.value = Mode.HIDE
-        _shared.value = false
-        _hiddenByUser.value = false
-        _textVisible.value = true
+        synchronized(lock) {
+            memory = null
+            listeners.clear()
+            _shared.value = false
+            _hiddenByUser.value = false
+            _textVisible.value = true
+        }
+        setMode(Mode.PRIVATE)
     }
 }

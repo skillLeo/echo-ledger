@@ -88,7 +88,8 @@ pub fn say(app: &AppHandle, message: &str, asked: Asked) {
 
 /// `lifecycle::emit` keeps the event until the page of a window still being built listens.
 fn open_main_with(app: &AppHandle, message: &str) {
-    crate::tray::show_main(app);
+    // Not an open the person asked for: "Hide EchoLedger windows" and a whole-screen share keep it off.
+    crate::lifecycle::show_main_quietly(app);
     crate::lifecycle::emit(app, MAIN, "app:error", message);
 }
 

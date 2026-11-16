@@ -100,6 +100,28 @@ alert — behaves the same way:
 Operating-system notifications (Android's shade, Windows and macOS notification centres) already behave this way and
 are not changed.
 
+## Screen-share privacy names (since v1.8.1, the same on desktop, phone, tray, website and guides)
+
+People do not know our internal words ("pill", "card", "chip", "overlay"); Hassam did not. Use these, and only these:
+
+| Thing | Name people see | Never |
+|---|---|---|
+| The small bubble with the red dot and the timer while recording (desktop and phone) | **recording controls** | pill, bubble, card |
+| The box with live captions | **captions** | caption panel, overlay |
+| The small box after a call (Transcribe / Save audio / Delete) | **after-call card** | chip, popup, toast |
+| The Live Translate box | **Live Translate** | translate overlay |
+| All of the above together | **EchoLedger's floating windows** (short: **floating windows**) | cards, overlays |
+| The action that takes them all off the screen at once (phone tile, phone button on the recording controls, desktop shortcut and tray) | **Hide EchoLedger windows**; to undo: **Show EchoLedger windows** | Hide cards, Hide all |
+| What other people see in a share or recording | **screen share** (never bare "share" or "shares", which are the Shared pages): "Visible in screen share", "Show in screen share for 10 minutes", "Hide from screen share again" | shares, Share Check |
+| The check page | **Check screen-share privacy** | Share Check, Open Share Check |
+| The protection when a window is left out | **Private**; when it shows black: **Black box**; when it shows: **Visible in screen share** | invisible, undetectable, stealth |
+
+Phone, Settings → Privacy & data → **During screen sharing**: **Private (black box)** (the default: a screen share, a
+recording or a screenshot shows a black box where the floating windows are, your own screenshots too; you see them as
+usual) and **Show** (everyone watching can read them). "Hide EchoLedger windows" lasts until you show them again or the
+app restarts (the black box keeps protecting either way). Android does not tell apps when a floating window is in a screen share (measured on the S25,
+Android 17), so the black box is always on unless Show is chosen. A stored `hide` or `black_box` means Private.
+
 ## Controls
 Switches for on/off; segmented controls for 2-4 choices; bottom sheets for long lists.
 

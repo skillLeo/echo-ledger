@@ -29,12 +29,12 @@ enum class PhoneBrand(val label: String) {
             XIAOMI -> listOf(
                 "Settings → Apps → Manage apps → EchoLedger → Autostart: on.",
                 "On the same page: Battery saver → No restrictions.",
-                "Open Recents, hold EchoLedger's card and tap the lock, so clearing Recents leaves it running."
+                "Open Recents, hold EchoLedger's preview and tap the lock, so clearing Recents leaves it running."
             )
 
             OPPO -> listOf(
                 "Settings → Apps → App management → EchoLedger → Battery usage → Allow background activity and Allow auto launch.",
-                "Open Recents, tap the menu on EchoLedger's card and choose Lock."
+                "Open Recents, tap the menu on EchoLedger's preview and choose Lock."
             )
 
             ONEPLUS -> listOf(

@@ -343,6 +343,7 @@ fn the_smoke_test_returns_before_anything_that_records_uploads_or_polls_starts()
         "commands::spawn_idle_lock",
         "actions::spawn_activity_poll",
         "updates::spawn_quiet_checks",
+        "privacy::bars::spawn_refresh",
         "state.api()",
         "actions::handle_links",
     ] {
@@ -359,4 +360,56 @@ fn the_smoke_test_does_not_hand_itself_over_to_a_running_app_or_touch_the_keycha
     assert!(plugin > guarded && plugin < guarded + 200, "the single-instance plugin stays out of a smoke test");
     assert!(source.contains("if smoke { Box::new(MemoryStore::default()) } else { Box::new(KeyringStore) }"));
     assert!(source.contains("if smoke { Box::new(smoke::NoKeys) } else { Box::new(screens::store::KeychainKeys) }"));
+}
+
+// ---- Opening the app again (v1.8, 0.4) -------------------------------------------------------------------------
+
+#[test]
+fn opening_the_app_again_goes_where_a_second_launch_goes() {
+    // A Mac starts no second copy when EchoLedger is opened from Finder, Launchpad, Spotlight or the Dock: the running
+    // copy gets a reopen, which the installed v1.6.0 did not answer. Windows starts a second copy, which the
+    // single-instance plugin hands to the running one. Both open the main window through `show_main_from_outside`.
+    let lib = std::fs::read_to_string(manifest_dir().join("src/lib.rs")).unwrap();
+    assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"), "a second launch opens the main window");
+    let run = &lib[lib.find("app.run(|handle, event|").expect("the run loop")..];
+    let reopen = run.find("if let RunEvent::Reopen { .. } = &event {").expect("the run loop answers a reopen");
+    assert!(run[..reopen].trim_end().ends_with("#[cfg(target_os = \"macos\")]"), "the reopen arm is the Mac's");
+    assert!(run[reopen..].trim_start_matches("if let RunEvent::Reopen { .. } = &event {").trim_start().starts_with("actions::show_main_from_outside(handle, &[]);"), "a reopen goes where a second launch goes");
+    let actions = std::fs::read_to_string(manifest_dir().join("src/actions.rs")).unwrap();
+    let body = &actions[actions.find("pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {").expect("show_main_from_outside")..];
+    let body = &body[..body.find("\n}\n").expect("the end of show_main_from_outside")];
+    // The notified recording is taken (so forgotten) every time, and whether a main window existed is read before the
+    // open builds one: only then does the decision open the recording.
+    let (taken, exists, shown) = (body.find(".notified.lock()").expect("the notified recording"), body.find("get_webview_window(crate::lifecycle::MAIN).is_some()").expect("a main window exists"), body.find("crate::tray::show_main(app);").expect("shown"));
+    assert!(body[taken..].starts_with(".notified.lock().unwrap_or_else(|p| p.into_inner()).take()"), "never kept for a later open");
+    assert!(taken < shown && exists < shown, "read before the open");
+    assert!(body.contains("crate::lifecycle::reopen_action(main_exists, notified.is_some())"), "the pure decision says whether the page changes");
+}
+
+// ---- Screen-share privacy commands (v1.8.1 audit, S4) ------------------------------------------------------------
+
+#[test]
+fn privacy_commands_that_change_or_reveal_answer_the_main_window_only() {
+    // A floating window's page has no business with a picture of the screen, the log, or what is hidden.
+    let commands = std::fs::read_to_string(manifest_dir().join("src/commands.rs")).unwrap();
+    for name in ["share_check_run", "share_check_card", "share_check_answer", "privacy_show_in_shares", "privacy_hide_all", "privacy_hide_again", "privacy_set_hidden", "privacy_diagnostics", "privacy_move_to_other_display"] {
+        let start = commands.find(&format!("fn {name}(")).unwrap_or_else(|| panic!("{name} is gone"));
+        let body = &commands[start..];
+        let body = &body[..body.find("\n}\n").unwrap()];
+        assert!(body.lines().next().unwrap().contains("window: WebviewWindow"), "{name} knows which window asked");
+        assert_eq!(body.lines().nth(1).unwrap().trim(), "crate::privacy::from_main_window(window.label())?;", "{name} refuses other windows first");
+    }
+    let drawn = &commands[commands.find("fn share_check_drawn(").unwrap()..];
+    assert!(drawn[..drawn.find("\n}\n").unwrap()].contains("[crate::privacy::CHECK_TEST, crate::privacy::CHECK_CONTROL].contains(&window.label())"), "only the check's own windows count as drawn");
+    assert!(commands.contains("pub async fn privacy_status(app: AppHandle)"), "the status every badge reads stays off the main thread");
+}
+
+#[test]
+fn the_sharing_bar_patterns_never_wait_ahead_of_the_config_and_the_uploads() {
+    // R21: the ask for newer patterns was awaited before the config, the library and the queue (up to 120 s offline).
+    let setup = setup_source();
+    let startup = &setup[setup.find("let startup = handle.clone();").expect("the startup task")..];
+    let startup = &startup[..startup.find("});").unwrap()];
+    assert!(!startup.contains("bars::refresh"), "not in the startup task");
+    assert!(setup.contains("privacy::bars::spawn_refresh(handle.clone());"), "a task of its own, once a day");
 }

@@ -89,7 +89,7 @@ class PermissionsAndRecordingTest : E2eTest() {
         openSetup()
         assertTrue(Ui.has("•  Microphone"))
         assertTrue(Ui.hasContaining("Notifications"))
-        assertTrue(Ui.hasContaining("Caption bubble"))
+        assertTrue(Ui.hasContaining("Display over other apps"))
         assertTrue(Ui.hasContaining("Not enabled yet.") || Ui.hasContaining("helper"))
         Ui.clickDescription("Back")
         Ui.openTab("Record")
@@ -131,9 +131,9 @@ class PermissionsAndRecordingTest : E2eTest() {
     }
 
     @Test
-    fun theCaptionBubbleRowOpensTheSystemOverlaySettings() {
+    fun theDisplayOverOtherAppsRowOpensTheSystemOverlaySettings() {
         openSetup()
-        allowFor("•  Caption bubble (optional)").click()
+        allowFor("•  Display over other apps (optional)").click()
         Ui.awaitCondition("the overlay permission screen", Ui.NORMAL) { Ui.find(By.pkg("com.android.settings")) != null }
         assertFalse(Settings.canDrawOverlays(Ui.context))
         Ui.device.pressBack()

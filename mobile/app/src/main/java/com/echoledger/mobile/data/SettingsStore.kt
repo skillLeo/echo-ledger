@@ -37,7 +37,11 @@ data class AppSettings(
     val closedAnnouncements: List<String> = emptyList(),
     /** The home-screen widget shows "WhatsApp call" instead of each recording's title (since v1.6). */
     val widgetHideTitles: Boolean = false,
-    /** Since v1.8.1, while EchoLedger's cards are seen in a screen share: "hide" (a dot), "black_box" (FLAG_SECURE) or "show". */
+    /**
+     * Since v1.8.1, Settings → Privacy & data → During screen sharing ([com.echoledger.mobile.core.ShareGuard.Mode.of]):
+     * "hide" = Private, the default (FLAG_SECURE on every floating window); "show" = Show; "black_box" (the first v1.8.1
+     * builds) and any unknown value read as Private.
+     */
     val screenShareMode: String = "hide",
     /** Absent in settings stored before v1.1.1, which also reset the old default "hide content" (on) to off. */
     val settingsVersion: Int = 2,
@@ -183,8 +187,11 @@ data class CaptionStyle(
     }
 }
 
-/** Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset. */
-class SettingsStore(private val context: Context, private val cipher: SecretCipher) {
+/**
+ * Non-secret settings in DataStore; the device token is stored separately, encrypted with the Keystore keyset.
+ * [onSaved] hears every settings change [update] saved (the app graph passes it to screen-share privacy).
+ */
+class SettingsStore(private val context: Context, private val cipher: SecretCipher, private val onSaved: (AppSettings) -> Unit = {}) {
     private object Keys {
         val SETTINGS = stringPreferencesKey("settings_json")
         val TOKEN = stringPreferencesKey("device_token_enc")
@@ -196,9 +203,13 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     suspend fun current(): AppSettings = settings.first()
 
     suspend fun update(transform: (AppSettings) -> AppSettings) {
+        var saved: AppSettings? = null
         context.dataStore.edit { prefs ->
-            prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), transform(prefs.toSettings()))
+            val next = transform(prefs.toSettings())
+            prefs[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), next)
+            saved = next
         }
+        saved?.let(onSaved)
     }
 
     suspend fun saveToken(token: String) {
