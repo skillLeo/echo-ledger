@@ -162,6 +162,7 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
     and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-16 late · phone re-review rounds 2-4 (13 minors, the squeezed buttons, held one-sided SIM recording released, notices vs reported calls, wait before hold) · `fb5fb2c7`, `f0aabc0f`, this merge · approve each · open for later: MissedRecordings.kt:105-106 a second same-app call answered within 10 s of a reported one loses its notice (exclude only notices that started before the reported call began); contract 1.8.0-f mark-read by missed_recording_id.
   - 2026-11-16 · v1.8 phone 0.2b capture journal + 0.2 missed recordings + 0.3 Phone app recordings (SIM calls) + the
     Watch translate fix (phone batch A6) · `9fa6be6a` (b-phone) · changes needed → majors fixed → minors fixed →
     re-review approve (13 minor follow for the next phone round: package names of other apps in the capture log and
