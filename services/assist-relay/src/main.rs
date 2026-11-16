@@ -58,7 +58,7 @@ async fn run(settings: Settings) -> ExitCode {
     let keys = Arc::new(ProviderKeys::default());
     let reports: Arc<dyn ReportSink> = match &settings.server_url {
         None => Arc::new(NoReports),
-        Some(url) => match InternalApi::new(url, settings.secrets[0].clone()) {
+        Some(url) => match InternalApi::new(url, settings.secrets.clone()) {
             Ok(api) => {
                 let api = Arc::new(api);
                 spawn_provider_refresh(api.clone(), file.clone(), config.clone(), keys.clone());

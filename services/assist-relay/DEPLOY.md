@@ -52,10 +52,26 @@ read -rs RELAY_SECRET_INPUT && printf '%s' "$RELAY_SECRET_INPUT" \
 The file is encrypted with this machine's credential key (`/var/lib/systemd/credential.secret`, or the TPM if the
 VPS has one). A copy of it is useless on another machine. A new VPS gets the secret from the console again.
 
-**Rotating the secret:** generate the new one in the console, then encrypt the *old* one as
-`/etc/credstore.encrypted/relay_secret_previous` (`--name=relay_secret_previous`) and the new one as `relay_secret`.
-Add the second `LoadCredentialEncrypted=` line from the unit below and restart. Tokens signed with either are accepted.
-After 15 minutes (the longest a token lives), remove the previous one and its line, and restart again.
+**Rotating the secret** (in a quiet hour: each relay restart reconnects the live calls). The relay goes first, the
+server second:
+
+1. In the console, make the new `assist_relay` secret **without switching the server to it yet**: the server keeps
+   signing tokens and checking internal requests with the old one.
+2. On the relay, encrypt the new secret as `relay_secret` and the old one as `relay_secret_previous`
+   (`--name=relay_secret_previous`, file `/etc/credstore.encrypted/relay_secret_previous`), uncomment the second
+   `LoadCredentialEncrypted=` line in the unit, `systemctl daemon-reload` and restart. The relay now accepts tokens
+   signed with either secret.
+3. Switch the server to the new secret in the console. New tokens are signed with it from now on.
+4. Wait 15 minutes, the longest a token lives: tokens signed with the old secret before the switch stay valid until
+   they expire, and the relay accepts them until step 5.
+5. On the relay, delete `relay_secret_previous`, comment its line out again, reload and restart.
+
+**Which secret signs the relay's internal requests during the overlap:** the one the server accepts. After step 2
+the relay first signs with the new secret, gets `401` (the server still checks the old one), signs the same request
+again with the old one and keeps using it. After step 3 the old one gets `401` once, and the relay moves to the new
+one. Each move costs one refused request and nothing is lost; the journal shows `internal_secret_switched` with
+`secret: previous`, then `secret: current`. The relay accepts tokens signed with either secret for as long as both are
+installed, which is why step 5 must not be skipped.
 
 ## 3. Environment variables
 
@@ -112,7 +128,7 @@ User=assist-relay
 Group=assist-relay
 EnvironmentFile=/etc/assist-relay/relay.env
 LoadCredentialEncrypted=relay_secret:/etc/credstore.encrypted/relay_secret
-# Only during a secret rotation (step 2):
+# Only during a secret rotation (section 2, steps 2 to 5):
 # LoadCredentialEncrypted=relay_secret_previous:/etc/credstore.encrypted/relay_secret_previous
 ExecStart=/opt/assist-relay/current/assist-relay
 Restart=on-failure

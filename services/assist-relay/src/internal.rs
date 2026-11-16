@@ -14,6 +14,7 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
@@ -127,33 +128,59 @@ impl ProviderKeys {
 }
 
 /// Signed requests to the server.
+///
+/// During a secret rotation the relay holds two secrets and the server checks one of them, whichever the console has
+/// switched to. Requests are signed with the secret the server last accepted (the current one at start); on a `401` the
+/// same request is signed once with the other secret, and the one that works is kept for the next requests.
 pub struct InternalApi {
     base: String,
-    secret: Secret,
+    secrets: Vec<Secret>,
+    /// Index in `secrets` of the one the server last accepted.
+    signing: AtomicUsize,
     http: reqwest::Client,
 }
 
 impl fmt::Debug for InternalApi {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("InternalApi").field("base", &self.base).finish()
+        f.debug_struct("InternalApi").field("base", &self.base).field("secrets", &self.secrets.len()).finish()
     }
 }
 
 impl InternalApi {
-    pub fn new(base: &str, secret: Secret) -> Result<Self, InternalError> {
+    /// `secrets`: the current one first, then the previous one during a rotation.
+    pub fn new(base: &str, secrets: Vec<Secret>) -> Result<Self, InternalError> {
+        if secrets.is_empty() {
+            return Err(InternalError::Network);
+        }
         let _ = rustls::crypto::ring::default_provider().install_default();
         let http = reqwest::Client::builder()
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .build()
             .map_err(|_| InternalError::Network)?;
-        Ok(InternalApi { base: base.trim_end_matches('/').to_owned(), secret, http })
+        Ok(InternalApi { base: base.trim_end_matches('/').to_owned(), secrets, signing: AtomicUsize::new(0), http })
     }
 
     async fn send(&self, method: reqwest::Method, path: &str, body: Vec<u8>) -> Result<Vec<u8>, InternalError> {
+        let first = self.signing.load(Ordering::Relaxed) % self.secrets.len();
+        match self.send_signed(&self.secrets[first], method.clone(), path, &body).await {
+            Err(InternalError::Status(401)) if self.secrets.len() > 1 => {
+                let other = (first + 1) % self.secrets.len();
+                let answer = self.send_signed(&self.secrets[other], method, path, &body).await;
+                if answer.is_ok() {
+                    self.signing.store(other, Ordering::Relaxed);
+                    tracing::info!(event = "internal_secret_switched", secret = if other == 0 { "current" } else { "previous" });
+                }
+                answer
+            }
+            answer => answer,
+        }
+    }
+
+    async fn send_signed(&self, secret: &Secret, method: reqwest::Method, path: &str, body: &[u8]) -> Result<Vec<u8>, InternalError> {
         let url = reqwest::Url::parse(&format!("{}{path}", self.base)).map_err(|_| InternalError::Network)?;
         let timestamp = unix_now();
-        let signature = sign(&self.secret, timestamp, method.as_str(), url.path(), &body);
+        let signature = sign(secret, timestamp, method.as_str(), url.path(), body);
         let response = self
             .http
             .request(method, url)
@@ -161,7 +188,7 @@ impl InternalApi {
             .header(SIGNATURE_HEADER, signature)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header(reqwest::header::ACCEPT, "application/json")
-            .body(body)
+            .body(body.to_vec())
             .send()
             .await
             .map_err(|_| InternalError::Network)?;
@@ -411,6 +438,41 @@ mod tests {
         assert!(!verify(&secret, 1_800_000_000, 1_800_000_000, "POST", USAGE_PATH, b"{}", &signature));
         assert!(!verify(&secret, 1_800_000_000, 1_800_000_000, "GET", USAGE_PATH, body, &signature));
         assert!(!verify(&secret, 1_800_000_000, 1_800_000_000, "POST", USAGE_PATH, body, "zz"));
+    }
+
+    /// A server that checks one secret, as the server does during a rotation.
+    async fn server_checking(secret: &'static str) -> String {
+        use axum::http::{HeaderMap, StatusCode};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = axum::Router::new().route(
+            PROVIDERS_PATH,
+            axum::routing::get(move |headers: HeaderMap| async move {
+                let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok()).unwrap_or_default().to_owned();
+                let timestamp = header(TIMESTAMP_HEADER).parse().unwrap_or(0);
+                let ok = verify(&Secret::new(secret), timestamp, unix_now(), "GET", PROVIDERS_PATH, b"", &header(SIGNATURE_HEADER));
+                if ok { (StatusCode::OK, r#"{"keys":{}}"#) } else { (StatusCode::UNAUTHORIZED, "{}") }
+            }),
+        );
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        format!("http://{addr}")
+    }
+
+    #[tokio::test]
+    async fn during_a_rotation_requests_follow_the_secret_the_server_checks() {
+        const NEW: &str = "new-relay-secret-for-tests-0123456789-abc";
+        const OLD: &str = "old-relay-secret-for-tests-0123456789-abc";
+        // The relay already has both (the new one current); the server still checks the old one.
+        let api = InternalApi::new(&server_checking(OLD).await, vec![Secret::new(NEW), Secret::new(OLD)]).unwrap();
+        assert!(api.providers().await.is_ok(), "the old secret is tried after a 401");
+        assert_eq!(api.signing.load(Ordering::Relaxed), 1, "and kept");
+        // The server switches: the relay follows on the next request.
+        let api = InternalApi { base: server_checking(NEW).await, ..api };
+        assert!(api.providers().await.is_ok());
+        assert_eq!(api.signing.load(Ordering::Relaxed), 0);
+        // One secret only, and the wrong one: refused.
+        let api = InternalApi::new(&server_checking(OLD).await, vec![Secret::new(NEW)]).unwrap();
+        assert!(matches!(api.providers().await, Err(InternalError::Status(401))));
     }
 
     #[test]
