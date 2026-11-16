@@ -6,32 +6,37 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
-## Phone (S25, Android 17) — v1.8.1 S5, about 30 minutes
+## Phone (S25, Android 17) — v1.8.1 S5 retest + v1.8 0.3, about 35 minutes
 
-Before: the charger plugged in (a screen recording drains the battery); not on a call; the new build installed.
+Before: the charger plugged in; not on a call; the new build installed (`pm install -r`). Measured on 2026-11-16 with
+the first S5 build: Android never reports a floating window in a screen share, so the phone now keeps every floating
+window secure (a black box for viewers) unless Settings → Privacy & data → During screen sharing is **Show**.
 
 **Part A — from the Mac over adb (you keep the phone unlocked; tap only when a system prompt appears):**
 
 | # | Step | Pass when |
 |---|---|---|
-| A1 | Read the permissions | DETECT_SCREEN_RECORDING granted; "Display over other apps" on |
-| A2 | Start a test voice note | The recording pill shows (screenshot) |
-| A3 | Samsung screen recorder on (its Quick Settings tile; you may tap **Start recording**), then off | Within about a second the pill is a plain grey dot with no clock or text, and it comes back when the recorder stops; the recorded video shows only the dot |
-| A4 | A shell recording (`adb shell screenrecord`) | Note whether Android reports it (documents the best public signal) |
-| A5 | Tap the pill → **Hide EchoLedger cards**, then tap the dot | The dot, then the pill again |
-| A6 | The **Hide EchoLedger cards** tile (added for the test, removed after) | First tap: dot; second tap: the pill |
-| A7 | Settings → Privacy & data → During screen sharing → **Black box**, record; then **Show**, record; then back to **Hide cards** | Black box: the video shows black where the pill is, the phone shows the pill. Show: the video shows the pill |
-| A8 | Live Translate → Watch translate on a video (you tap **Start now**) with no share running | The box stays visible: our own sound capture is not a screen share |
-| A9 | Discard the test voice note; delete the test videos made in this batch | Nothing left behind |
+| A1 | `dumpsys window windows`: every "EchoLedger …" window | SECURE next to each while the setting is Private |
+| A2 | Start a test voice note; Samsung's screen recorder (full screen) on, then off | The video shows a black box where the recording controls are; the phone shows them normally |
+| A3 | Setting → **Show**, record again; then back to **Private (black box)** | Show: the video shows the recording controls with the clock; back to Private: black again, also for windows already open |
+| A4 | The recording controls → **Hide EchoLedger windows**, tap the grey dot; then the tile twice (`cmd statusbar expand-settings` first, then `click-tile`) | Grey dot, then back; the tile hides and shows |
+| A5 | Hide, then force a new process (the app updated or stopped by Android), start a voice note | Still hidden after the restart; the dot shows them |
+| A6 | Live Translate → Watch translate on a video (you tap **Start now**), record the screen | Box and toolbar are black in the video |
+| A7 | Discard the test voice note; delete the test videos | Nothing left behind |
 
 **Part B — with you and a second screen as the viewer (the Mac or the laptop):**
 
 | # | Step | What you watch on the viewer |
 |---|---|---|
-| B1 | Google Meet: the phone and the viewer join one meeting; the phone shares its whole screen with the test voice note running | A grey dot, never the clock or text |
+| B1 | Google Meet: the phone shares its whole screen with the test voice note running | A black box, never the clock or text |
 | B2 | Meet again, sharing a single app if Android offers it | EchoLedger not shown at all |
 | B3 | Zoom: the phone shares its screen | As B1 |
 | B4 | WhatsApp video call with a second device or person, share the phone screen | As B1 |
+
+**Part C — v1.8 0.3, SIM calls (you make the calls):** with the helper connected, one incoming and one outgoing SIM
+call, an unsaved number, a 5-second call and two calls back to back. EchoLedger reads its capture log over adb after
+each: which audio source (VOICE_CALL, uplink, downlink) opened and whether both sides had sound. If One UI blocks them,
+the next build imports Samsung's own call recordings instead (Phone app → Settings → Record calls → Auto record).
 
 ## Windows laptop — v1.8.1 S0/S6/S7, about 45 minutes
 
