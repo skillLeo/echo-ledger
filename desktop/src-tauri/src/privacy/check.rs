@@ -244,7 +244,22 @@ const SETTLE: Duration = Duration::from_millis(450);
 /// The preview's long side.
 const PREVIEW_LONG: u32 = 960;
 
+/// One of the check's two windows. On a Mac a non-activating panel from the start, built on the main thread, like the
+/// floating windows it stands in for (`overlay::macos::build_on_main_as_panel`).
 fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
+    #[cfg(target_os = "macos")]
+    let window = {
+        let (handle, label) = (app.clone(), label.to_string());
+        crate::overlay::macos::build_on_main_as_panel(app, move || build_patch_window(&handle, &label, kind, at)).unwrap_or(Err(tauri::Error::FailedToReceiveMessage))?
+    };
+    #[cfg(not(target_os = "macos"))]
+    let window = build_patch_window(app, label, kind, at)?;
+    #[cfg(target_os = "macos")]
+    crate::overlay::macos::keep_above_everything(&window);
+    Ok(window)
+}
+
+fn build_patch_window(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title(if kind == Kind::Test { "EchoLedger screen-share privacy test" } else { "EchoLedger screen-share privacy control" })
         .inner_size(PATCH.0, PATCH.1)
@@ -257,10 +272,7 @@ fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> taur
         .focused(false)
         .focusable(false)
         .visible(true);
-    let window = super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)?;
-    #[cfg(target_os = "macos")]
-    crate::overlay::macos::keep_above_everything(&window);
-    Ok(window)
+    super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)
 }
 
 /// Where the two windows go: side by side in the middle of the main screen (logical units from its corner).
@@ -744,7 +756,20 @@ pub fn guided_open(app: &AppHandle) -> AppResult<()> {
         .focused(false)
         .focusable(false)
         .visible(true);
-    super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b).map_err(|e| AppError::msg(e.to_string()))?;
+    // A sync command: already on the main thread, where it is built as a panel from the start (it never takes the focus).
+    #[cfg(target_os = "macos")]
+    let window = crate::overlay::macos::build_as_panel(|| super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b));
+    #[cfg(not(target_os = "macos"))]
+    let window = super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b);
+    let window = window.map_err(|e| AppError::msg(e.to_string()))?;
+    // Its panel style, and it stays on screen while the meeting app is in front (a panel would hide then).
+    #[cfg(target_os = "macos")]
+    if let Ok(pointer) = window.ns_window() {
+        // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is, on the main thread here.
+        let _ = crate::overlay::macos::make_panel(unsafe { &*(pointer as *const objc2_app_kit::NSWindow) });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
     Ok(())
 }
 
