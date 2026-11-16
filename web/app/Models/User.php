@@ -57,6 +57,7 @@ use Laravel\Passport\HasApiTokens;
  * @property Carbon|null $suspended_at since v1.6: the super admin's suspend switch (signs in nowhere, devices refused)
  * @property string|null $suspended_reason
  * @property Carbon|null $terms_accepted_at when the Terms and the Privacy Policy were accepted at sign-up (since v1.6)
+ * @property bool $ui_classic the person's "Switch back to classic" (since 2.0.0-a: every ui_v2.* interface flag off)
  * @property int|null $staff_role_id since v1.6 (P2.5): the person's staff role on the admin panel; null = not staff (the super admin needs none)
  * @property Carbon|null $support_access_until since v1.6 (P2.2): until then the person lets support open their recordings (Profile → Support access)
  * @property Carbon|null $created_at
@@ -183,6 +184,7 @@ class User extends Authenticatable implements FilamentUser, HasAppAuthentication
             'terms_accepted_at' => 'datetime',
             'support_access_until' => 'datetime',
             'staff_role_id' => 'integer',
+            'ui_classic' => 'boolean',
         ];
     }
 }
