@@ -11,6 +11,12 @@
 //! build of 2026-11-16 during a whole-screen share: tray drawing held the tray's lock while it waited, and a command
 //! on the main thread waited for that lock. The rule: read what is needed under the lock, let the guard go, then wait.
 //!
+//! macOS can make the main thread wait too: asked whether EchoLedger may quit (the Dock's Quit, logging out), it is told
+//! to wait while a running recording is kept (`app_life`), and AppKit keeps the main thread in a modal loop until the
+//! answer. EchoLedger's own tasks still run there, the keeping never needs the main thread to end, and a timer on the
+//! main queue answers after a time limit whatever happens. A `exec_sync` on the main queue waits for the main thread
+//! like any of the calls below.
+//!
 //! The tests below hold the whole crate to it. They read every source file, find every lock guard (`lock()`, `read()`,
 //! `write()`, or a function that returns one; kept in a binding, or as a temporary of a statement, an `if let`, a
 //! `match` or a `for`, by Rust's own scope rules) and fail when a call that may wait for the main thread runs while one
@@ -878,6 +884,9 @@ mod tests {
             if matches!(name.as_str(), "move_window" | "move_window_constrained") {
                 return Some("the positioner reads the window's monitor from the main thread".into());
             }
+            if name == "exec_sync" {
+                return Some("a GCD `exec_sync` waits for its queue (the main queue: the main thread)".into());
+            }
             if self.posts && ((name == "recv" && n == 0) || (name == "recv_timeout" && n == 1)) {
                 return Some("it waits for the task it posted to the main thread".into());
             }
@@ -1283,9 +1292,10 @@ mod tests {
             fn tray_title(m: &Mutex<u32>, tray: &TrayIcon) { let g = m.lock().unwrap(); let _ = tray.set_title(Some("1")); }
             fn tray_rect(m: &Mutex<u32>, tray: &TrayIcon) { let g = m.lock().unwrap(); let _ = tray.rect(); }
             fn item_enabled(m: &Mutex<u32>, item: &MenuItem) { let g = m.lock().unwrap(); let _ = item.set_enabled(false); }
+            fn main_queue(m: &Mutex<u32>) { let g = m.lock().unwrap(); DispatchQueue::main().exec_sync(|| ()); }
         "#;
         let found = where_found(&findings_in(source));
-        let expected: BTreeSet<String> = ["binding", "temporary", "literal", "if_let", "matched", "looped", "through_helper", "closure_under_lock", "asks_under_lock", "window_scale", "shortcut_under_lock", "never", "match_binding", "via_alias", "tray_visible", "tray_title", "tray_rect", "item_enabled"].into_iter().map(String::from).collect();
+        let expected: BTreeSet<String> = ["binding", "temporary", "literal", "if_let", "matched", "looped", "through_helper", "closure_under_lock", "asks_under_lock", "window_scale", "shortcut_under_lock", "never", "match_binding", "via_alias", "tray_visible", "tray_title", "tray_rect", "item_enabled", "main_queue"].into_iter().map(String::from).collect();
         assert_eq!(found, expected, "{:#?}", findings_in(source));
     }
 }
