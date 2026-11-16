@@ -130,6 +130,8 @@ const pages = {
     'admin-usage': { path: '/admin/server-usage' },
     'admin-sign-up': { path: '/admin/sign-up' },
     'admin-staff': { path: '/admin/staff' },
+    // Diagnostics (since v1.8): the calls the apps saw but did not record (php artisan db:seed --class=ConsoleTourSeeder).
+    'admin-missed-recordings': { path: '/admin/missed-recordings' },
     'api-credentials': { path: '/admin/api-credentials' },
     settings: { path: '/admin/settings' },
     // The Recording tab holds "Always double-check recordings filed under a project" and the AI budget for projects.

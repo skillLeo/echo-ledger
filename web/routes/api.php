@@ -16,6 +16,7 @@ use App\Http\Controllers\Api\FilingRuleController;
 use App\Http\Controllers\Api\LibraryController;
 use App\Http\Controllers\Api\LinkController;
 use App\Http\Controllers\Api\LiveTranslateTokenController;
+use App\Http\Controllers\Api\MissedRecordingController;
 use App\Http\Controllers\Api\OrganiseController;
 use App\Http\Controllers\Api\PackController;
 use App\Http\Controllers\Api\PromoCodeController;
@@ -80,6 +81,8 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
     Route::middleware('throttle:device')->group(function (): void {
         Route::post('devices/rotate-token', [DeviceController::class, 'rotateToken'])->name('api.devices.rotate');
         Route::post('devices/report', DeviceReportController::class)->middleware(['abilities:config:read', 'throttle:device-report'])->name('api.devices.report');
+        // Missed recordings (v1.8): a call this device saw but did not record; the token decides the device and its person.
+        Route::post('devices/missed-recordings', MissedRecordingController::class)->middleware(['abilities:config:read', 'throttle:missed-recording'])->name('api.devices.missed-recordings');
 
         Route::get('config', [ConfigController::class, 'show'])->middleware('abilities:config:read')->name('api.config');
         // Screen-share privacy (v1.8.1): a Share Check result about this device only, and the sharing-bar patterns.

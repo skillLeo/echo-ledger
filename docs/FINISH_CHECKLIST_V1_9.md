@@ -37,6 +37,14 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
   in the shell-uid helper stay: the plan's "no hidden or private Android APIs, even through the helper" is an S5 rule
   (screen-share privacy; L5 follows it), and v1.8 0.3 itself plans VOICE_CALL / uplink / downlink through the helper.
   No hidden API is used for screen-share privacy or Live Assist.
+- **Decided, changed from the plan's wording:** R1 — the Mac safety net keeps the floating windows off until the meeting
+  seen with the whole-screen share has ended (3 s without it and no sharing bar over 3 successful reads), not "when the
+  share ends": Chrome's Hide button and Zoom's hidden controls remove the bar while the share goes on, so a missing bar
+  proves nothing. "Show EchoLedger windows" brings them back sooner; failed or empty window reads change nothing.
+- **Decided, superseded:** R7 asked for "Hide EchoLedger windows" to survive process death because Hide was then the
+  only protection on Android. With every floating window always secure (black box unless Show), keeping Hide across
+  restarts only created a dead end (the S5 review: Live Translate had no way back), so Hide now lasts until shown again
+  or the app restarts; the mode itself is kept (R6).
 - **Decided, changed:** S5 — when something inside the process clears the Windows capture flag (the IOActive case, for
   example a capture or monitoring tool), EchoLedger no longer sets it again by itself, because the scope rule forbids
   anything against monitoring tools: it logs the change, shows "Visible in screen share" for the session and offers

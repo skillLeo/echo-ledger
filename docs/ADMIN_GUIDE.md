@@ -29,7 +29,8 @@ never their recordings. A workspace always has one owner, so an owner who wants 
 - **The admin panel** is at `/admin`, for the platform's staff only. It is orange with an **ADMIN** label next to the
   name, so it is never mistaken for your own app. Staff sign in to the app as usual and open it from the avatar menu
   (**Admin panel**); **Back to the app** returns. It has Plans, Upgrade requests, Server usage, API Credentials,
-  Settings (email, sign-up, engines and the rest of the server), Device reports and the Accuracy Lab.
+  Settings (email, sign-up, engines and the rest of the server), Device reports, the Accuracy Lab and Diagnostics
+  (screen-share checks and missed recordings).
 - Someone who is not staff gets "Forbidden" on every admin page; the bare `/admin` (the console's home before v1.6)
   takes them to `/app`. The app's old addresses under `/admin` (bookmarks, links in emails sent before the update)
   go to the same page under `/app`.
@@ -136,7 +137,7 @@ ready:
 | Role | May |
 |---|---|
 | Super admin | everything (the server's operator; needs no role) |
-| Admin | customers (see, change plans and limits, notes, support actions, delete), plans, upgrade requests, usage, the activity log, device reports; not API keys, Settings or Staff |
+| Admin | customers (see, change plans and limits, notes, support actions, delete), plans, upgrade requests, usage, the activity log, device reports (with screen-share checks and missed recordings); not API keys, Settings or Staff |
 | Support | see customers and their usage; the support actions (resend emails, reset two-step sign-in, sign out devices) |
 | Billing | plans and upgrade requests; see customers and usage |
 | Read-only | see customers, plans, usage and the activity log |
@@ -363,6 +364,31 @@ toolbar, Teams' sharing bar, the browsers' "is sharing your screen" bar, Slack, 
 3. Run the web tests (`ScreenSharePrivacyTest` checks the file's shape and that every pattern compiles), commit and
    deploy. The apps pick it up on their next look (the answer can be kept for 5 minutes); no app release is needed.
    The desktop app's fallback is this same file, so the next desktop release carries the new version too.
+
+## 9c. Missed recordings (since v1.8)
+
+**Admin panel → Diagnostics → Missed recordings** (staff with the device-reports permission) counts the calls that
+people's phones and computers saw but did not record. An app counts one when its check finds a call with no recording;
+the person also gets **Missed recording** in Activity, under **Needs action** and counted on the bell, with the reason,
+and the app shows them the fix.
+
+- **One row per device, reason, system and app version**, over the last 30 days: the device's name with, under it, the
+  system and the app version that reported the calls (not the version it signed in with, so a device that was updated
+  gets a row per version and you see whether the update helped), its person, the reason, how many in the **last 7
+  days** and in the **last 30 days**, and when the last one was. The rows with the most in the last 7 days come first. A
+  device that was removed shows as "A removed device"; its counts stay.
+- **The reasons:** *Helper not connected* (the phone's capture helper was not running when the call started),
+  *Permission off* (a permission recording needs was turned off), *Call not detected* (the app did not notice the call
+  in time), *Microphone busy* (another app had the microphone), *App stopped* (the app stopped during the call), *Plan
+  did not allow it* (the person's plan or one of its limits), *Not known*.
+- **Filters:** the reason and the system (the one shown under the device's name).
+- **What it never shows:** names, phone numbers or recordings, nor which app the call was in or how long it lasted. The
+  apps send no free text, and the page only counts.
+- **How long it is kept:** each missed call is deleted 90 days after the call (the daily `model:prune`), with its
+  Activity item, and at once with its person or workspace.
+- **What to do with it:** many of one reason on one device: help that person with the fix their app shows (turn the
+  permission back on, start the capture helper again). One reason growing on many devices after an app update usually
+  means a fault in that version: give the developers the system and the app version.
 
 ## 10. Security at a glance
 

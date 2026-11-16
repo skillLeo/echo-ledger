@@ -20,7 +20,7 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 | A2 | Start a test voice note; Samsung's screen recorder (full screen) on, then off | The video shows a black box where the recording controls are; the phone shows them normally |
 | A3 | Setting → **Show**, record again; then back to **Private (black box)** | Show: the video shows the recording controls with the clock; back to Private: black again, also for windows already open |
 | A4 | The recording controls → **Hide EchoLedger windows**, tap the grey dot; then the tile twice (`cmd statusbar expand-settings` first, then `click-tile`) | Grey dot, then back; the tile hides and shows |
-| A5 | Hide, then force a new process (the app updated or stopped by Android), start a voice note | Still hidden after the restart; the dot shows them |
+| A5 | Hide, then force a new process (the app updated or stopped by Android), start a voice note | Shown again after the restart (Hide lasts until shown or a restart), and still a black box in a screen recording |
 | A6 | Live Translate → Watch translate on a video (you tap **Start now**), record the screen | Box and toolbar are black in the video |
 | A7 | Discard the test voice note; delete the test videos | Nothing left behind |
 
@@ -37,6 +37,20 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 call, an unsaved number, a 5-second call and two calls back to back. EchoLedger reads its capture log over adb after
 each: which audio source (VOICE_CALL, uplink, downlink) opened and whether both sides had sound. If One UI blocks them,
 the next build imports Samsung's own call recordings instead (Phone app → Settings → Record calls → Auto record).
+
+**Part D — v1.8 0.2 missed recordings (after the build with the detector is installed):**
+
+| # | Step | Pass when |
+|---|---|---|
+| D1 | A WhatsApp call with the helper stopped | About 2.5 minutes later: Activity → Needs action "Missed recording" with **Start the helper**, and one notification |
+| D2 | A SIM call (phone calls set to Always) with the helper stopped | An item, found through the call log |
+| D3 | A call in an app switched off for auto-record; a call shorter than *Skip calls shorter than* | No item |
+| D4 | A normally recorded call | No item; Copy diagnostics shows all five stages for it |
+| D5 | The console | The server copy appears; no second phone notification |
+| D6 | Live Translate (Game and Watch) while hidden; its notification's **Show** | The grey dot where the grip was; Show brings everything back |
+| D7 | Hide, then restart the app | Shown again |
+| D8 | TalkBack double-tap on the minimised red dot | The recording controls open |
+| D9 | 0.2c, after a few days of use: Copy diagnostics → "Calls, last 7 days" and "Auto-record" | The real causes of any missed calls, each then fixed with a test |
 
 ## Windows laptop — v1.8.1 S0/S6/S7, about 45 minutes
 

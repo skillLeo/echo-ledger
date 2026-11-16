@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Models\MissedRecording;
 use App\Models\Screen;
 use App\Models\SentItem;
 use App\Models\SessionLabel;
@@ -135,15 +136,18 @@ function isoWorld(bool $sameWorkspace = false): array
     $upgrade = UpgradeRequest::query()->create(['user_id' => $bob->id, 'workspace_id' => $bob->current_workspace_id, 'plan' => 'pro', 'status' => UpgradeRequest::PENDING]);
     $proof = UpgradeRequestProof::query()->create(['upgrade_request_id' => $upgrade->id, 'user_id' => $bob->id, 'kind' => 'image', 'mime' => 'image/webp', 'name' => 'BOB-SECRET-RECEIPT.png',
         'bytes' => 1, 'sha256' => str_repeat('c', 64), 'path' => 'payment-proofs/bob.elr', 'thumb_path' => 'payment-proofs/bob-thumb.elr']);
+    // Since v1.8: a call Bob's phone saw but did not record.
+    $missed = MissedRecording::query()->create(['user_id' => $bob->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => '7d1e0c2a-5b3f-4e8d-9a61-0f2b4c6d8e10',
+        'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subHour(), 'call_duration_s' => 60, 'reason' => 'permission']);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
 function isoIds(array $b): array
 {
-    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id];
+    return [$b['device']->id, $b['client']->id, $b['session']->id, $b['recording']->id, $b['transcript']->id, $b['marker']->id, $b['share']->id, $b['binned']->id, $b['upload']->id, $b['requestLink']->id, $b['screen']->id, $b['sent']->id, $b['upgrade']->id, $b['proof']->id, $b['missed']->id];
 }
 
 /**
@@ -167,6 +171,14 @@ function isoApiCases(array $b): array
         'api.diagnostics.share-checks' => ['POST', '/api/diagnostics/share-checks', ['platform' => 'windows', 'os_build' => '10.0.26100', 'app_version' => '1.8.1', 'method' => 'wgc', 'result' => 'pass', 'device_id' => $b['device']->id, 'user_id' => $b['bob']->id],
             fn (TestResponse $r): bool => $r->status() === 201 && ShareCheckResult::query()->where('device_id', $b['device']->id)->doesntExist()],
         'api.config.share-bars' => ['GET', '/api/config/share-bars', [], 'list'],
+        // Since v1.8: a call the calling device saw but did not record. Ids in the body are never read, and B's own
+        // client_ref is a new event of A's device: never B's row, nor its id.
+        'api.devices.missed-recordings' => ['POST', '/api/devices/missed-recordings', ['client_ref' => $b['missed']->client_ref, 'platform' => 'android', 'source_app' => 'whatsapp',
+            'call_started_at' => now()->subMinutes(10)->toIso8601String(), 'call_duration_s' => 30, 'reason' => 'helper_not_armed',
+            'id' => $b['missed']->id, 'device_id' => $b['device']->id, 'user_id' => $b['bob']->id, 'workspace_id' => $b['device']->workspace_id],
+            fn (TestResponse $r): bool => $r->status() === 201 && $r->json('data.id') !== $b['missed']->id && unscoped(fn (): bool => MissedRecording::query()->where('device_id', $b['device']->id)->count() === 1
+                && MissedRecording::query()->whereKey($b['missed']->id)->value('reason') === 'permission'
+                && MissedRecording::query()->where('device_id', $b['aliceDevice']->id)->where('client_ref', $b['missed']->client_ref)->exists())],
         'api.security' => ['GET', '/api/security', [], 'list'],
         'api.clients' => ['GET', '/api/clients', [], 'list'],
         'api.stt.token' => ['POST', '/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $s], 404],
