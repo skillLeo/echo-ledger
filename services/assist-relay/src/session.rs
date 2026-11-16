@@ -1005,13 +1005,20 @@ impl Engine {
         }
     }
 
+    /// Whether a model's words wait for the end of its answer before any is shown (`hold_until_complete`): a model
+    /// with safety classifiers can end in a refusal after streaming words, and a refusal is never shown.
+    fn holds_text(&self, model: &str) -> bool {
+        self.config().model(model).is_some_and(|spec| spec.hold_until_complete)
+    }
+
     fn on_text(&mut self, id: &str, at: Instant, text: &str) {
+        let holds = self.active.get(id).is_some_and(|active| self.holds_text(&active.model));
         let Some(active) = self.active.get_mut(id) else {
             return;
         };
         active.provider_first_token_at.get_or_insert(at);
         active.text.push_str(text);
-        if active.visibility == Visibility::Upgrade {
+        if active.visibility == Visibility::Upgrade || holds {
             return;
         }
         let Some(release) = active.gate.feed(text) else {
@@ -1118,6 +1125,20 @@ impl Engine {
             self.finish_upgrade(id, None);
             return;
         }
+        let model = active.model.clone();
+        if self.holds_text(&model) {
+            // The whole answer arrived without a refusal: now it may be shown.
+            let Some(active) = self.active.get_mut(id) else {
+                return;
+            };
+            let text = active.text.clone();
+            if let Some(release) = active.gate.feed(&text) {
+                self.send_text(id, release);
+            }
+        }
+        let Some(active) = self.active.get_mut(id) else {
+            return;
+        };
         match active.gate.finish() {
             GateEnd::Skip => self.finish_shown(id, Finish::Skip),
             GateEnd::Flush(rest) => {

@@ -116,6 +116,9 @@ mock = { first_token_ms = 350, token_ms = 12 }
 # effort high or below, with no other field in the thinking object.
 [models."claude-sonnet-5-5"]
 provider = "anthropic"
+# Safety classifiers can refuse after words have streamed; a refusal is never shown, so the answer is held until it
+# is complete [Handling stop reasons]. Balanced upgrades are held whole anyway.
+hold_until_complete = true
 first_token_timeout_ms = 4000
 price = { input = 2.00, cache_write = 2.50, cache_read = 0.10, output = 10.00 }
 options = { effort = "low", thinking = "between_tools" }
@@ -125,6 +128,9 @@ mock = { first_token_ms = 700, token_ms = 18 }
 # no thinking option: effort alone controls it.
 [models."claude-opus-5-5"]
 provider = "anthropic"
+# Safety classifiers can refuse after words have streamed; a refusal is never shown, so the answer is held until it
+# is complete [Handling stop reasons]. Balanced upgrades are held whole anyway.
+hold_until_complete = true
 first_token_timeout_ms = 6000
 price = { input = 4.00, cache_write = 5.00, cache_read = 0.20, output = 20.00 }
 options = { effort = "low" }

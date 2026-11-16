@@ -206,6 +206,10 @@ pub struct ModelSpec {
     pub options: toml::Table,
     #[serde(default)]
     pub mock: MockLatency,
+    /// Show none of the answer until it is complete, so that a refusal at the end of the stream is never shown (models
+    /// with safety classifiers). Costs the streaming: the first word comes with the last.
+    #[serde(default)]
+    pub hold_until_complete: bool,
 }
 
 fn enabled_by_default() -> bool {

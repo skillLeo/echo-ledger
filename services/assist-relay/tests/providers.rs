@@ -288,3 +288,28 @@ async fn gemini_dropped_before_its_finish_reason_is_a_broken_connection() {
     let (text, _, error) = collect(&live(&server), ProviderKind::Gemini, "gemini-3.8-flash").await;
     assert_eq!((text.as_str(), error), ("One month,", Some(ProviderError::Unavailable)));
 }
+
+#[tokio::test]
+async fn a_refusal_after_streamed_words_is_never_shown_and_the_fallback_answers() {
+    let server = MockHttp::start().await;
+    // Deep: Sonnet (held until complete), falling back to Haiku.
+    server.push(ANTHROPIC, Reply::sse("anthropic_refusal_midstream.sse"));
+    server.push(ANTHROPIC, Reply::sse("anthropic_answer.sse"));
+    let h = harness_on(RelayConfig::built_in(), live(&server));
+    let mut s = h.connect(claims("s-refusal"));
+    assert_eq!(s.next().await["type"], "ready");
+    s.send(json!({"type": "context_update", "settings": {"mode": "deep"}})).await;
+    s.drain(Duration::from_millis(50)).await;
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let seen = s.until("suggestion_end").await;
+    let all = seen.iter().map(|m| m.to_string()).collect::<String>();
+    assert!(!all.contains("REFUSED-PARTIAL") && !all.contains("never show"), "refused words reached the app: {all}");
+    assert_eq!(of_type(&seen, "suggestion_start").len(), 1, "one suggestion: nothing was shown, so no replacement");
+    let end = seen.last().unwrap();
+    assert_eq!((end["status"].as_str(), end["model"].as_str()), (Some("done"), Some("claude-haiku-5-5")));
+    assert_eq!(text_of(&seen, end["suggestion_id"].as_str().unwrap()), "One month, and I can start in March.\n- **Notice**: one month");
+    let sent = server.requests(ANTHROPIC);
+    assert_eq!((sent[0].body["model"].as_str(), sent[1].body["model"].as_str()), (Some("claude-sonnet-5-5"), Some("claude-haiku-5-5")));
+    // The refused answer is not reported as shown text.
+    assert!(h.reports.reports().iter().all(|r| !format!("{r:?}").contains("REFUSED")));
+}
