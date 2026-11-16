@@ -443,6 +443,8 @@ class MainActivityTest : AppTest() {
 
     @Test
     fun `the notice of a Phone app recording that waits for the person opens its Settings page`() {
+        // Only a phone whose maker has a known call folder brings in the Phone app's recordings (a Galaxy here).
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
         serve()
         runBlocking {
             app.pairLocally(server)

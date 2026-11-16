@@ -467,6 +467,7 @@ object Notifications {
      * Call recordings brought in from the Phone app without the after-call card (since v1.8 0.3: a call or recording was
      * live, or the calls ended a while ago): one quiet notification, adding up while it is still showing.
      */
+    @SuppressLint("MissingPermission") // checked by canPost() first
     fun phoneAppImported(context: Context, count: Int, waiting: Boolean) {
         if (!canPost(context) || count <= 0) return
         val prefs = context.getSharedPreferences("phone_app_recordings", Context.MODE_PRIVATE)
@@ -498,6 +499,7 @@ object Notifications {
      * recording is not on its way (since v1.8 0.3): said once, quietly, with what to do; never the helper advice, which
      * cannot help with a line the phone keeps for its own Phone app.
      */
+    @SuppressLint("MissingPermission") // checked by canPost() first
     fun phoneLineNotRecorded(context: Context, text: String) {
         if (!canPost(context)) return
         val builder = NotificationCompat.Builder(context, NotifyCategory.RECORDING.channelId)
