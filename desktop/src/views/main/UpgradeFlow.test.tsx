@@ -9,6 +9,7 @@ import { makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, openUpgradeSheet, resetEntitlementsForTests } from "../../lib/entitlements";
 import { fileDropClaim } from "../../lib/dropTarget";
 import type { Entitlements, Proof, UpgradeRequest } from "../../lib/ipc";
+import { ConfirmHost } from "./ConfirmHost";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -75,6 +76,32 @@ describe("step 1: Upgrade", () => {
     fireEvent.click(within(sheet()).getByRole("button", { name: "Request Pro" }));
     await waitFor(() => expect(callsOf("upgrade_request_create")).toEqual([{ plan: "pro", message: "Invoice for Acme", promoCode: null }]));
     expect(await screen.findByRole("dialog", { name: "Pay for Pro" })).toBeInTheDocument();
+  });
+
+  it("asks before closing with something typed, from × and Escape alike; Escape answers the question, not the sheet", async () => {
+    render(<ConfirmHost />);
+    const sheet = open(sampleEntitlements("free"));
+    fireEvent.change(within(sheet()).getByLabelText(/Note for our team/), { target: { value: "Invoice for Acme" } });
+    fireEvent.click(within(sheet()).getByRole("button", { name: "Close" }));
+    expect(await screen.findByRole("alertdialog", { name: "Close without sending?" })).toBeInTheDocument();
+    // What the person typed would be lost: the red button.
+    expect(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Close" })).toHaveClass("danger");
+    // Escape answers "no" once: the sheet stays with what was typed, and nothing asks again.
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+    expect(within(sheet()).getByLabelText(/Note for our team/)).toHaveValue("Invoice for Acme");
+    // Escape on the sheet asks the same question; Close without sending closes it.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(within(await screen.findByRole("alertdialog", { name: "Close without sending?" })).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("names a vendor-named feature in the app's own words in the sheet (D-044; the server's names are D-129)", () => {
+    const sheet = open(sampleEntitlements("free"), {}, "connector");
+    const said = within(sheet()).getByText(/is in Pro\. You're on Free\.$/);
+    expect(said).toHaveTextContent("Ask an AI assistant is in Pro. You're on Free.");
+    expect(said).not.toHaveTextContent(/Claude|ChatGPT|ElevenLabs|Gemini/);
+    // The plans' highlight lines are the server's own text (D-129 on the server), not a feature's name.
   });
 
   it("shows why a request didn't go, inline, and keeps the choices", async () => {
@@ -293,7 +320,7 @@ describe("the request's status", () => {
     fail("upgrade_request_cancel", "This request has already been decided.");
     const sheet = open(withRequest("awaiting_payment"), { step: "status" });
     fireEvent.click(within(sheet()).getAllByRole("button", { name: "Cancel request" })[0]);
-    const dialog = screen.getByRole("dialog", { name: "Cancel this request?" });
+    const dialog = screen.getByRole("alertdialog", { name: "Cancel this request?" });
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel request" }));
     expect(await within(dialog).findByRole("alert")).toHaveTextContent("This request has already been decided.");
     expect(callsOf("upgrade_request_latest").length).toBeGreaterThan(0);

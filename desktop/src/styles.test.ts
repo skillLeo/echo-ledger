@@ -33,9 +33,9 @@ function prop(selector: string, name: string, list: CSSRule[] = rules): string {
   return values[values.length - 1] ?? "";
 }
 
+/** The rules of every block with this media condition, in order (a condition can have more than one block). */
 function media(condition: string): CSSRule[] {
-  const rule = rules.find((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition);
-  return rule ? Array.from(rule.cssRules) : [];
+  return rules.filter((r): r is CSSMediaRule => r instanceof CSSMediaRule && r.media.mediaText === condition).flatMap((r) => Array.from(r.cssRules));
 }
 
 type Theme = "dark" | "light";
@@ -201,7 +201,7 @@ describe("long text never breaks the layout (A6.DU8)", () => {
     expect(prop(".queue-title", "text-overflow")).toBe("ellipsis");
     expect(prop(".queue-actions", "flex-wrap")).toBe("wrap");
     expect(prop(".queue-error", "overflow-wrap")).toBe("anywhere");
-    expect(prop(".mic-user-why", "overflow-wrap")).toBe("anywhere");
+    expect(prop(".why-list li", "overflow-wrap")).toBe("anywhere");
     expect(prop(".site-pattern", "overflow-wrap")).toBe("anywhere");
   });
 
@@ -392,5 +392,83 @@ describe("overlay glass contrast (C7)", () => {
         expect(ratio, `${theme}: ${fg} on glass over ${backdrop.join(",")} is ${ratio.toFixed(2)}:1`).toBeGreaterThanOrEqual(AA);
       }
     }
+  });
+});
+
+describe("Settings' list never scrolls sideways (Hassam's 1000 pt window)", () => {
+  it("keeps one column no field can widen, room for the search's focus ring, and no sideways scroll", () => {
+    // A grid's implicit column grew to the search field's own width (about 20 characters), past the 280 px column:
+    // the switch was cut in half and a scroll bar appeared under the search.
+    expect(prop(".settings-list", "grid-template-columns")).toBe("minmax(0, 1fr)");
+    expect(prop(".settings-root.wide .settings-list", "overflow-x")).toBe("hidden");
+    expect(prop(".settings-root.wide .settings-list", "padding")).toMatch(/^4px /);
+    expect(prop(".set-search input", "width")).toBe("100%");
+    expect(prop(".set-search", "min-width")).toMatch(/^0(px)?$/);
+    expect(prop(".settings-columns", "grid-template-columns")).toMatch(/^clamp\(248px, 34%, 320px\)/);
+  });
+});
+
+describe("Settings' action rows read as actions (D-090)", () => {
+  it("draws an action row's title in the link colour, greyed when it can't be used", () => {
+    expect(prop(".set-row.set-action .set-title", "color")).toBe("var(--accent-text)");
+    expect(prop(".set-row.set-action:disabled .set-title", "color")).toBe("var(--text-muted)");
+  });
+});
+
+describe("a chip's word and its select are one control (D-121)", () => {
+  it("lets clicks on the word through to the select, which covers the chip and leaves the word its room", () => {
+    expect(prop(".chip-select > .chip-key", "pointer-events")).toBe("none");
+    expect(prop(".chip-select > .chip-key", "position")).toBe("absolute");
+    expect(prop(".head-chip .chip-select > select", "padding-inline-start")).toContain("var(--chip-key-w");
+    expect(prop(".chip-select", "cursor")).toBe("pointer");
+  });
+});
+
+describe("the stacked Library at 200 % text (D-137)", () => {
+  it("keeps the player in its place in a narrow, short page, so it never covers the list", () => {
+    expect(prop(".player-dock", "position")).toBe("sticky");
+    expect(prop(".app.narrow .detail .player-dock", "position", media("(max-height: 480px)"))).toBe("static");
+  });
+});
+
+describe("Help fits the window (D-079)", () => {
+  it("is never taller than the room under the backdrop's top gap, and only its lists scroll", () => {
+    expect(prop(".help-sheet", "max-height")).toBe("calc(90vh - var(--space-4))");
+    expect(prop(".sheet-backdrop", "padding")).toMatch(/^10vh /);
+    expect(prop(".help-sheet .help-body", "overflow-y")).toBe("auto");
+    expect(prop(".help-sheet", "overflow")).toBe("hidden");
+  });
+
+  it("keeps its buttons on screen at every text size: stuck to the bottom edge in a short window (D-133)", () => {
+    // A short window (200 % text): the whole sheet scrolls, the title sticks to the top and the buttons to the bottom.
+    const short = media("(max-height: 480px)");
+    expect(prop(".help-sheet", "overflow-y", short)).toBe("auto");
+    expect(prop(".help-sheet .sheet-head", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "position", short)).toBe("sticky");
+    expect(prop(".help-sheet .help-actions", "bottom", short)).toBe("calc(-1 * var(--space-5))");
+    expect(prop(".help-sheet .help-actions", "background", short)).toBe("inherit");
+    // Close stays at the end of its line when the buttons wrap.
+    expect(prop(".help-sheet .help-actions > .btn:last-child", "margin-inline-start")).toBe("auto");
+  });
+});
+
+describe("the Library and recording page never clip or scroll sideways", () => {
+  it("lets no search field be wider than its place, with minimums only where they are needed (D-003)", () => {
+    expect(prop(".searchbox", "min-width")).toMatch(/^0(px)?$/);
+    expect(prop(".library-toolbar .library-search", "min-width")).toBe("160px");
+    expect(prop(".project-tools .searchbox", "min-width")).toBe("200px");
+  });
+
+  it("packs the folder column's rows at the top (D-023)", () => {
+    expect(prop(".subnav", "align-content")).toBe("start");
+    expect(prop(".place-list", "align-content")).toBe("start");
+    expect(prop(".place-row.is-empty .place-open", "color")).toBe("var(--text-faint)");
+  });
+
+  it("wraps the player's row and the Language chip rather than pushing the page sideways (D-046)", () => {
+    expect(prop(".player-row", "flex-wrap")).toBe("wrap");
+    expect(prop(".waveform", "flex")).toBe("1 1 288px");
+    expect(prop(".head-chip.retranscribe-row", "flex-wrap")).toBe("wrap");
+    expect(prop(".head-chip.retranscribe-row .chip-select > select", "max-width")).toContain("100%");
   });
 });

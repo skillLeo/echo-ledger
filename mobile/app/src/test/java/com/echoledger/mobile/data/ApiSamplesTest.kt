@@ -194,7 +194,10 @@ class ApiSamplesTest {
         "client_ask.data.citations[0].file_id",
         "client_ask.data.citations[0].page",
         "session_notes.data.sections[0].items[0].kind",
-        "shared_save.client_id"
+        "shared_save.client_id",
+        // Since v1.8 (contract 1.8.0-b) only a missed_recording item carries its reason and its row's id.
+        "activity.data[0].reason",
+        "activity.data[0].missed_recording_id"
     )
 
     @Test

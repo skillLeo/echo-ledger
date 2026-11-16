@@ -53,15 +53,14 @@ describe("no work behind a hidden main window (C9)", () => {
     expect(callsOf("app_status").length).toBe(hidden + 1);
   });
 
-  it("stops scanning microphone users on the Record page while hidden", async () => {
+  it("never scans microphone users from the Record page, shown or hidden (the list left Home, D-014)", async () => {
     render(<RecordView status={makeStatus()} run={async (fn) => fn()} />);
     await flushAsync();
     await advance(4_000);
-    const shown = callsOf("mic_users").length;
-    expect(shown).toBeGreaterThanOrEqual(2);
+    expect(callsOf("mic_users")).toHaveLength(0);
 
     await emitEvent("main:visibility", false);
     await advance(10_000);
-    expect(callsOf("mic_users").length).toBe(shown);
+    expect(callsOf("mic_users")).toHaveLength(0);
   });
 });

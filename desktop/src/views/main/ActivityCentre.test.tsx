@@ -24,6 +24,15 @@ describe("activity page (B18)", () => {
   }
   beforeEach(() => respond("pending_list", []));
 
+  it("marks a recovered recording's notification Recovered", async () => {
+    respond("activity_list", { data: ITEMS, unread_count: 1 });
+    respond("recovered_sessions", ["s1"]);
+    renderPage();
+    expect(await screen.findByText("Acme kickoff")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("Transcript ready").closest("button")).toHaveTextContent("Recovered"));
+    expect(screen.getByText("Pixel 9 paired").closest("button")).not.toHaveTextContent("Recovered");
+  });
+
   it("lists the notifications with the unread one marked, and hands the list to the badge", async () => {
     respond("activity_list", { data: ITEMS, unread_count: 1 });
     const { onItems } = renderPage();
@@ -338,5 +347,11 @@ describe("In progress (Phase 1C)", () => {
       { id: "upload-u1", title: "Imported memo", line: "Uploading… 42%", recordingId: null },
       { id: "s1", title: "Acme call", line: "Transcribing… about 20 s left", recordingId: "s1" },
     ]);
+    // Untitled (D-031): an upload is named as the Library's upload list names it, a recording as the Library does.
+    const untitled = inProgressRows(
+      [{ id: "u3", sourceApp: "zoom", title: null, startedAt: "", durationMs: 0, state: "uploading", lastError: null, attempts: 0, imported: false, progress: 10 }],
+      [makeItem("s3", { title: null, status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } })],
+    );
+    expect(untitled.map((r) => r.title)).toEqual(["Zoom call", "Recording"]);
   });
 });

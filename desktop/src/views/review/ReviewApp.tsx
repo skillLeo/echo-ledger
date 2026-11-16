@@ -4,7 +4,7 @@ import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 import { afterCallTitle, alwaysIgnoreLabel, askSeconds, askSubject, reviewDuration, secondsLeft } from "../../lib/controls";
-import { CloseIcon, MicIcon, SourceAppIcon } from "../../components/Icons";
+import { MicIcon, SourceAppIcon, TrashIcon } from "../../components/Icons";
 import { CheckIcon } from "../../components/ControlIcons";
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { usePresence } from "../../lib/motion";
@@ -17,13 +17,15 @@ export const CHIP_SECONDS = 10;
 /** How long a kept chip shows its check before it leaves (since v1.5). */
 export const KEPT_MS = 900;
 
-const EMPTY: AfterCallState = { saved: null, ask: null };
+const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 
 /**
  * The `review` window (360 x 168, bottom-right, near the tray): what shows after a call (v1.5) and the ask chip for an
  * unrecognised app. "Keep automatically" shows a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
- * me" shows a pill-size chip with the title, ✓ and ✕ that keeps the recording by itself after 10 s (a thin line counts
- * down), and its title opens the recording in the main window to rename it or pick a project. The core decides what is
+ * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that keeps the
+ * recording by itself after 10 s (a thin line counts down), and its title opens the recording in the main window to
+ * rename it or pick a project. Discard deletes nothing at once: "Discarded · … · Undo" shows for 6 s and Undo puts
+ * the chip back; the core deletes the files only once that time is over. The core decides what is
  * shown (`aftercall:state`); the window never takes focus, so everything works on click and only what is visible is
  * reported as a hit region. The ask chip is time-critical (a call is starting), so it shows in front of the others.
  * Since v1.5 the toast and chip rise in (300 ms) and leave (150 ms), and a kept chip shows a check that pops in before it
@@ -56,6 +58,7 @@ export default function ReviewApp() {
 
   const closeAsk = useCallback((id: string) => setAsk((current) => (current?.id === id ? null : current)), []);
   const dropSaved = useCallback((id: string) => setState((s) => (s.saved?.id === id ? { ...s, saved: null } : s)), []);
+  const dropDiscarded = useCallback((id: string) => setState((s) => (s.discarded?.id === id ? { ...s, discarded: null } : s)), []);
   const dropChip = useCallback((id: string) => setState((s) => (s.ask?.id === id ? { ...s, ask: null } : s)), []);
   // The chip the person answered (✓, ✕ or its title), from the click on: the core takes that one away because of their
   // answer. ✓ also holds it on screen, because the core's empty state comes before the command returns.
@@ -91,11 +94,12 @@ export default function ReviewApp() {
     }
   }
   const saved = usePresence(state.saved);
+  const discarded = usePresence(state.discarded ?? null);
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
 
   const concealed = useConcealed();
-  useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.ask?.id ?? null, chipKept, concealed]);
+  useHitRegions([ask?.id ?? null, state.saved?.id ?? null, state.discarded?.id ?? null, state.ask?.id ?? null, chipKept, concealed]);
 
   if (concealed) return <div className="review-root" />;
   return (
@@ -104,8 +108,9 @@ export default function ReviewApp() {
         <AskChip key={ask.id} ask={ask} onClose={closeAsk} />
       ) : (
         <div className="after-stack">
-          {(saved.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}
+          {(saved.item || discarded.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}
           {saved.item && <SavedPill key={saved.item.id} saved={saved.item} leaving={saved.leaving} onGone={dropSaved} />}
+          {discarded.item && <DiscardedPill key={discarded.item.id} discarded={discarded.item} leaving={discarded.leaving} onGone={dropDiscarded} />}
           {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={setKeptId} />}
         </div>
       )}
@@ -171,8 +176,56 @@ function SavedPill({ saved, leaving, onGone }: { saved: SavedToast; leaving: boo
   );
 }
 
-/** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and ✕ Discard; kept by the core at
- * `deadlineAt` when nobody answers. */
+/** "Discarded · <title> · 4:12 · Undo" after the chip's Discard: gone at `until`; Undo puts the chip back (its files
+ * were never deleted meanwhile). */
+function DiscardedPill({ discarded, leaving, onGone }: { discarded: SavedToast; leaving: boolean; onGone: (id: string) => void }) {
+  const [error, setError] = useError();
+  const busy = useRef(false);
+
+  useEffect(() => {
+    const left = secondsLeft(discarded.until, Date.now());
+    if (left === null) return;
+    const timer = window.setTimeout(() => onGone(discarded.id), left * 1000);
+    return () => window.clearTimeout(timer);
+  }, [discarded.id, discarded.until, onGone]);
+
+  const undo = async () => {
+    if (busy.current) return;
+    busy.current = true;
+    setError(null);
+    try {
+      await api.afterCallDiscardUndo(discarded.id);
+      onGone(discarded.id);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      busy.current = false;
+    }
+  };
+
+  const title = afterCallTitle(discarded);
+  return (
+    <section className={`after-pill discarded ${leaving ? "leaving" : ""}`} data-hit={leaving ? undefined : true} data-testid="discarded-toast" role="status"
+      aria-label={`Discarded: ${title}`} aria-hidden={leaving || undefined}>
+      <span className="after-icon" aria-hidden="true"><TrashIcon size={14} /></span>
+      {error ? (
+        <span className="after-text error" role="alert" title={error}>{error}</span>
+      ) : (
+        <span className="after-text">
+          <b className="after-word">Discarded</b>
+          <span className="after-sep" aria-hidden="true">·</span>
+          <span className="after-title" dir="auto" title={title}>{title}</span>
+          <span className="after-sep" aria-hidden="true">·</span>
+          <span className="after-duration">{reviewDuration(discarded.durationMs)}</span>
+        </span>
+      )}
+      <button type="button" className="rec-text-btn after-undo" onClick={() => void undo()}>Undo</button>
+    </section>
+  );
+}
+
+/** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and a labelled Discard; kept by the
+ * core at `deadlineAt` when nobody answers. */
 function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
   item: PendingItem;
   /** Kept: the check pops in where the app's icon was and the chip says so, then it leaves. */
@@ -235,7 +288,9 @@ function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKep
       )}
       <span className="after-actions">
         <button type="button" className="rec-btn after-keep" aria-label="Keep" title="Keep" onClick={() => void act(() => api.pendingKeep(item.id), true)}><CheckIcon size={15} /></button>
-        <button type="button" className="rec-btn after-discard" aria-label="Discard" title="Discard" onClick={() => void act(() => api.pendingDiscard(item.id))}><CloseIcon size={14} /></button>
+        <button type="button" className="rec-text-btn after-discard" title="Discard (Undo for 6 s)" onClick={() => void act(() => api.afterCallDiscard(item.id))}>
+          <TrashIcon size={13} /><span>Discard</span>
+        </button>
       </span>
       <span className="after-progress" aria-hidden="true">
         <span style={{ animationDuration: `${left}s`, "--from": String(Math.min(1, left / CHIP_SECONDS)) } as CSSProperties} />

@@ -7,8 +7,11 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -213,6 +216,10 @@ class MainActivity : FragmentActivity() {
         var activityUnread by rememberSaveable { mutableIntStateOf(0) }
         val live by RecordingService.live.collectAsState()
         val pending by vm.pending.collectAsState()
+        val missed by vm.missed.collectAsState()
+
+        /** A Settings page to open (since v1.8: a missed recording's "See plans"). */
+        var settingsPage by remember { mutableStateOf<String?>(null) }
         var openItemId by rememberSaveable { mutableStateOf<String?>(null) }
         var openItemCache by remember { mutableStateOf<LibraryItem?>(null) }
         var openAtMs by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -312,6 +319,10 @@ class MainActivity : FragmentActivity() {
             if (machine.state == LockState.Locked && !unlockInFlight) requestUnlock()
         }
 
+        // Since v1.8 (0.3): the Phone app's copies of imported calls, only with "Delete the Phone app's copy after import"
+        // on; Android itself asks the person before anything is deleted.
+        val deleteCopies = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { }
+
         // ---- on open: sync and restart waiting uploads once the settings are known, and on every later resume ----
         var resumed by remember { mutableStateOf(false) }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -324,6 +335,19 @@ class MainActivity : FragmentActivity() {
                 if (currentSettings.paired) {
                     vm.refresh()
                     vm.retryPending() // an upload waiting out a back-off restarts as soon as the app is opened
+                }
+                // Since v1.8: calls that were not recorded show in Activity as soon as the app opens.
+                vm.detectMissed()
+                if (android.os.Build.VERSION.SDK_INT >= 30 && lockState != LockState.Locked) {
+                    // Read off the main thread: it checks each recording on the disk.
+                    val copies = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                        com.echoledger.mobile.calls.PhoneAppRecordings.takeDeletes(context, currentSettings)
+                    }
+                    if (copies.isNotEmpty()) {
+                        runCatching { android.provider.MediaStore.createDeleteRequest(contentResolver, copies).intentSender }
+                            .getOrNull()
+                            ?.let { deleteCopies.launch(IntentSenderRequest.Builder(it).build()) }
+                    }
                 }
             }
         }
@@ -346,6 +370,18 @@ class MainActivity : FragmentActivity() {
             if (open == OPEN_SETUP) {
                 showItem(null)
                 showSetup = true
+            }
+            if (open == OPEN_ACTIVITY) {
+                showItem(null)
+                showSetup = false
+                tab = TAB_ACTIVITY
+            }
+            // Since v1.8 (0.3): a settings page (the Phone app's recordings waiting for the person).
+            open?.takeIf { it.startsWith(OPEN_SETTINGS_PREFIX) }?.let {
+                showItem(null)
+                showSetup = false
+                settingsPage = it.removePrefix(OPEN_SETTINGS_PREFIX)
+                tab = TAB_YOU
             }
             if (open == OPEN_READY) {
                 showReady = true
@@ -419,7 +455,7 @@ class MainActivity : FragmentActivity() {
         val unlocked = loaded && lockState == LockState.Unlocked
         // The Activity badge: only what needs me, unread problems (once unlocked and paired) plus calls waiting for a decision.
         LaunchedEffect(unlocked, settings.paired) {
-            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.needs(it.data) }
+            if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.server(it.data, missed) }
         }
         BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
             showItem(null)
@@ -515,7 +551,10 @@ class MainActivity : FragmentActivity() {
                                     if (it.key ==
                                         TAB_ACTIVITY
                                     ) {
-                                        it.copy(badge = activityUnread + pending.count { p -> p.state == "pending_decision" })
+                                        it.copy(
+                                            badge = activityUnread + ActivityBadge.local(missed) +
+                                                pending.count { p -> p.state == "pending_decision" }
+                                        )
                                     } else {
                                         it
                                     }
@@ -650,10 +689,40 @@ class MainActivity : FragmentActivity() {
                                                     onOpenWaiting = { showWaiting = true },
                                                     scrollToTop = reselected,
                                                     skipped = pending.filter { it.state == com.echoledger.mobile.calls.SkippedCalls.STATE },
-                                                    onRestore = { vm.restoreSkipped(it) }
+                                                    onRestore = { vm.restoreSkipped(it) },
+                                                    missed = missed,
+                                                    onFix = { fix ->
+                                                        when (fix) {
+                                                            com.echoledger.mobile.calls.MissedFix.TEST -> {
+                                                                showItem(null)
+                                                                showSetup = true
+                                                            }
+
+                                                            com.echoledger.mobile.calls.MissedFix.PLANS -> {
+                                                                settingsPage = "plan"
+                                                                tab = TAB_YOU
+                                                            }
+
+                                                            // Auto-record was not running: the Ready check turns it on.
+                                                            com.echoledger.mobile.calls.MissedFix.TURN_ON -> {
+                                                                readyFix = ReadyFix.TURN_ON
+                                                                showReady = true
+                                                            }
+
+                                                            else -> showReady = true
+                                                        }
+                                                    },
+                                                    onMissedRead = { vm.readMissed(it) },
+                                                    onMissedDismiss = { vm.dismissMissed(it) }
                                                 )
 
-                                                TAB_YOU -> SettingsScreen(vm, onSetup = { showSetup = true }, home = reselected)
+                                                TAB_YOU -> SettingsScreen(
+                                                    vm,
+                                                    onSetup = { showSetup = true },
+                                                    home = reselected,
+                                                    openPage = settingsPage,
+                                                    onPageOpened = { settingsPage = null }
+                                                )
 
                                                 else -> LibraryScreen(
                                                     vm,
@@ -700,6 +769,12 @@ class MainActivity : FragmentActivity() {
 
         /** Setup (call capture): from "Call capture isn't ready" and "Run capture test". */
         const val OPEN_SETUP = "setup"
+
+        /** The Activity tab (since v1.8): from the missed-recording notice. */
+        const val OPEN_ACTIVITY = "activity"
+
+        /** Since v1.8 (0.3): "settings:<page>" opens that Settings page. */
+        const val OPEN_SETTINGS_PREFIX = "settings:"
 
         /** The package of the app a voice note was shared from (since v1.5): "Back to WhatsApp" on its page. */
         const val EXTRA_SOURCE_APP = "source_app"

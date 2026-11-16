@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ExportMenu, HistoryPanel, PlayerControls, PlayerDock, ReplaceBar, SharePanel, SpeakersPanel, VocabularyHint, WAVE_BARS, Waveform } from "./TranscriptTools";
 import { callsOf, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -54,6 +55,9 @@ describe("player controls and timeline (B6)", () => {
     const { rerender } = render(<PlayerDock playing={false} nowMs={12_000} durationMs={125_000} onToggle={onToggle} onSkip={onSkip}><span /></PlayerDock>);
     expect(screen.getByText("0:12 / 2:05")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Play" }));
+    // D-047: the tooltips name the keys that do it.
+    expect(screen.getByRole("button", { name: "Back 10 seconds" })).toHaveAttribute("title", "Back 10 s (Shift+←)");
+    expect(screen.getByRole("button", { name: "Forward 10 seconds" })).toHaveAttribute("title", "Forward 10 s (Shift+→)");
     fireEvent.click(screen.getByRole("button", { name: "Back 10 seconds" }));
     fireEvent.click(screen.getByRole("button", { name: "Forward 10 seconds" }));
     expect(onToggle).toHaveBeenCalledTimes(1);
@@ -100,12 +104,12 @@ describe("editing tools (B7)", () => {
       { id: "r1", source: "original", author: null, created_at: "2026-10-25T09:00:00Z" },
     ] });
     const onRestore = vi.fn(async () => undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     render(<HistoryPanel transcriptId="t1" edited onRestore={onRestore} onClose={vi.fn()} />);
     expect(await screen.findByText("Original from the engine")).toBeInTheDocument();
     expect(screen.getByText("by Work laptop")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Restore original" }));
-    expect(onRestore).toHaveBeenCalled();
+    await waitFor(() => expect(onRestore).toHaveBeenCalled());
   });
 
   it("offers no restore for a transcript that was never edited", async () => {
@@ -165,6 +169,11 @@ describe("export and share (B10)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/abc"));
 
+    // Revoke asks first: no answer, nothing revoked; then yes.
+    const asked = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(within(screen.getByRole("list", { name: "Share links" })).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith("Revoke this link? It stops working for everyone who has it."));
+    expect(callsOf("share_revoke")).toEqual([]);
     fireEvent.click(within(screen.getByRole("list", { name: "Share links" })).getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(screen.getByText("Revoked")).toBeInTheDocument());
   });

@@ -30,16 +30,16 @@ class RecordingServiceTest : AppTest() {
             // A real helper gets its own copy of the pipe through Binder; the service closes its end at once.
             val mine = sink!!.dup()
             this.sink = mine
-            Thread {
-                val out = java.io.FileOutputStream(mine.fileDescriptor)
-                val second = ByteArray(Pcm.CAPTURE_RATE * 4)
-                for (i in second.indices step 4) {
-                    val v = ((i / 4) % 200 - 100) * 100 // a sawtooth on the left, silence on the right
-                    second[i] = (v and 0xff).toByte()
-                    second[i + 1] = (v shr 8 and 0xff).toByte()
-                }
-                runCatching { repeat(seconds) { out.write(second) } }
-            }.start()
+            // Robolectric's pipe is a file: written before the capture's reader starts, else a reader that comes first
+            // finds it empty and stops, as at the end of a real pipe (a busy machine lost that race).
+            val out = java.io.FileOutputStream(mine.fileDescriptor)
+            val second = ByteArray(Pcm.CAPTURE_RATE * 4)
+            for (i in second.indices step 4) {
+                val v = ((i / 4) % 200 - 100) * 100 // a sawtooth on the left, silence on the right
+                second[i] = (v and 0xff).toByte()
+                second[i + 1] = (v shr 8 and 0xff).toByte()
+            }
+            runCatching { repeat(seconds) { out.write(second) } }
             return true
         }
         override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
@@ -199,6 +199,402 @@ class RecordingServiceTest : AppTest() {
             "4 s of audio is about 4 s long, not half: ${saved.durationMs} ms\n" + java.io.File(app.filesDir, "capture-log.txt").readText(),
             saved.durationMs in 3_500L..4_500L
         )
+    }
+
+    /** The capture journal (v1.8 0.2b) from the service: the stages a call reached, and why it stopped. */
+    @Test
+    fun `a call the helper reports goes into the capture journal stage by stage, with why it stopped`() {
+        val helper = RecordingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        assertTrue(CallJournal.book(app).marks.any { it.kind == CallJournal.State.ARMED && it.value == "helper ready" })
+
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one, dropped without a word
+        helper.listener!!.onCallEnded()
+        pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("whatsapp", call.app)
+        assertEquals(CallJournal.Seen.HELPER, call.seenBy)
+        // Nothing said the call was answered, so it was saved and skipped (it can be restored for a day).
+        assertEquals(listOf("detected", "armed", "started", "saved"), call.stages.map { it.stage })
+        assertEquals("skipped", call.result)
+        assertEquals("not answered", call.note)
+        assertTrue(call.endedAtMs != null)
+    }
+
+    /**
+     * A helper that plays [pcm] (48 kHz stereo, left = this side, right = the other side) into the call's pipe. Robolectric's
+     * pipe is a file, so it is all written before the capture's reader starts (a reader that came first would find the
+     * file empty and stop, as at the end of a real pipe).
+     */
+    private class ScriptedHelper(private val pcm: ShortArray) : ICaptureHelper.Stub() {
+        var listener: ICallListener? = null
+
+        @Volatile private var sink: android.os.ParcelFileDescriptor? = null
+
+        override fun version() = 1
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
+            val mine = sink!!.dup()
+            this.sink = mine
+            java.io.FileOutputStream(mine.fileDescriptor).write(Pcm.toLittleEndianBytes(pcm))
+            return true
+        }
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
+            startCapture(sink, sampleRate, micSource)
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = "[]"
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() {
+            runCatching { sink?.close() }
+        }
+        override fun setCallListener(listener: ICallListener?) {
+            this.listener = listener
+        }
+        override fun destroy() = Unit
+    }
+
+    private val rate = Pcm.CAPTURE_RATE
+
+    private fun tone(ms: Long): ShortArray = ShortArray((rate * ms / 1000).toInt()) { i ->
+        (kotlin.math.sin(2 * Math.PI * 425 * i / rate) * 0.2 * 32767).toInt().toShort()
+    }
+
+    private fun quiet(ms: Long): ShortArray = ShortArray((rate * ms / 1000).toInt())
+
+    /** Voiced speech stand-in: many harmonics of a gliding pitch with syllable-like loudness (as ConnectGateTest's). */
+    private fun speech(ms: Long): ShortArray {
+        val random = kotlin.random.Random(1)
+        var phase = 0.0
+        return ShortArray((rate * ms / 1000).toInt()) { i ->
+            val t = i.toDouble() / rate
+            phase += 2 * Math.PI * (130 + 40 * kotlin.math.sin(2 * Math.PI * 1.7 * t)) / rate
+            var v = 0.0
+            for (h in 1..24) v += kotlin.math.sin(phase * h) / 24
+            val syllable = 0.6 + 0.4 * kotlin.math.abs(kotlin.math.sin(2 * Math.PI * 3 * t))
+            ((v * syllable * 0.5 + random.nextDouble(-0.02, 0.02)) * 32767).toInt().toShort()
+        }
+    }
+
+    private fun join(vararg parts: ShortArray): ShortArray = parts.fold(ShortArray(0)) { a, b -> a + b }
+
+    private fun stereo(near: ShortArray, far: ShortArray): ShortArray =
+        ShortArray(minOf(near.size, far.size) * 2) { i -> if (i % 2 == 0) near[i / 2] else far[i / 2] }
+
+    /** A call ([pkg]: WhatsApp) through [helper] that lasts a little over 3 s; its journal entry once it is finished. */
+    private fun callThrough(helper: ScriptedHelper, pkg: String = "com.whatsapp"): CallJournal.Call {
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted(pkg)
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one
+        helper.listener!!.onCallEnded()
+        pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        return CallJournal.book(app).calls.single()
+    }
+
+    /**
+     * v1.8 0.2 review: while an outgoing call rings, the ringback tone and your own voice fill both channels. That is
+     * neither "both channels have audio" nor an answer: the journal keeps the answer the recording's gate saw.
+     */
+    @Test
+    fun `a call that only rang has no answer and no both-channels stage in the journal, however loud the ringback`() {
+        val far = join(tone(1_000), quiet(2_000), tone(1_000), quiet(2_000))
+        val call = callThrough(ScriptedHelper(stereo(speech(6_000), far)))
+        assertEquals(null, call.answeredAtMs)
+        assertFalse(call.stages.map { it.stage }.toString(), call.reached(CallJournal.Stage.BOTH_AUDIO))
+        assertEquals("skipped", call.result)
+    }
+
+    @Test
+    fun `the answer the gate saw goes into the journal, and both channels count from it`() {
+        val far = join(tone(1_000), quiet(2_000), speech(4_000))
+        val call = callThrough(ScriptedHelper(stereo(join(quiet(3_000), speech(4_000)), far)))
+        assertEquals("the other side spoke", call.answeredBy)
+        val answeredAfterMs = call.answeredAtMs!! - call.atMs
+        assertTrue("answered $answeredAfterMs ms after the call was seen", answeredAfterMs in 2_500L..4_500L)
+        assertTrue(call.reached(CallJournal.Stage.BOTH_AUDIO))
+    }
+
+    /**
+     * A helper that refuses to record, the way it does when another app holds the microphone ([words] what it says, null
+     * for nothing).
+     */
+    private class RefusingHelper(private val words: String? = "Call capture could not start: mic: did not start") : ICaptureHelper.Stub() {
+        var listener: ICallListener? = null
+
+        override fun version() = 1
+        override fun uid() = 2000
+        override fun capabilities() = ""
+        override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
+            words?.let { listener?.onError(it) }
+            return false
+        }
+        override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
+            startCapture(sink, sampleRate, micSource)
+        override fun arm(on: Boolean): String = if (on) "armed" else "disarmed"
+        override fun setCallApps(packages: Array<out String>?) = Unit
+        override fun selfTest(): String = "ok"
+        override fun captureChannels(): Int = 2
+        override fun players(): String = "[]"
+        override fun armApps(uids: IntArray?, voiceChat: Boolean): String = "armed"
+        override fun startAppCapture(sink: android.os.ParcelFileDescriptor?, uid: Int, usage: Int, voiceChat: Boolean): Boolean = false
+        override fun stopAppCapture() = Unit
+        override fun stopCapture() = Unit
+        override fun setCallListener(listener: ICallListener?) {
+            this.listener = listener
+        }
+        override fun destroy() = Unit
+    }
+
+    @Test
+    fun `a call the helper cannot record is journaled where it stopped, with the reason from the helper's words`() {
+        val helper = RefusingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("zoom", call.app)
+        assertEquals(listOf("detected", "armed"), call.stages.map { it.stage })
+        assertEquals(CallJournal.Failure("started", "mic_busy", com.echoledger.mobile.calls.MissedReason.MIC_BUSY.detail), call.failure)
+        assertFalse(RecordingService.isRecording)
+    }
+
+    @Test
+    fun `a refused start is never blamed on a problem from an earlier capture`() {
+        // An hour ago another app held the microphone; this time the helper gives no reason.
+        CaptureProblems.record(app, "Call capture could not start: mic: did not start")
+        val helper = RefusingHelper(words = null)
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted("us.zoom.videomeetings")
+        pumpUntil("the start to be refused") { CallJournal.book(app).calls.isNotEmpty() && !RecordingService.isRecording }
+        // The helper's words may still be on their way from its process: it waits a moment for them.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val failure = CallJournal.book(app).calls.single().failure
+        assertEquals(CallJournal.Failure("started", "unknown", com.echoledger.mobile.calls.MissedReason.UNKNOWN.detail), failure)
+    }
+
+    @Test
+    fun `a phone line that would not open is said so, not blamed on the microphone`() {
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: phone line (both directions): did not start; phone line: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("phone_call", call.app)
+        assertEquals(CallJournal.Failure("started", "unknown", com.echoledger.mobile.calls.MissedReason.PHONE_LINE), call.failure)
+    }
+
+    /** v1.8 0.3 review: a SIM call whose line would not open, said once and quietly; never the helper advice. */
+    @Test
+    fun `a phone line that would not open says nothing when the Phone app's recording is coming, else one quiet line`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_CALL_LOG,
+            com.echoledger.mobile.calls.PhoneAppRecordings.permission()
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: phone line (both directions): did not start; phone line: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        val notifications = shadowOf(app.getSystemService(android.app.NotificationManager::class.java))
+        fun titles() = notifications.allNotifications.map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }
+
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(
+            "the Phone app records every call: its recording comes in, nothing to say: ${titles()}",
+            titles().none {
+                it?.contains("not recorded") ==
+                    true ||
+                    it == "No audio was captured"
+            }
+        )
+        helper.listener!!.onCallEnded()
+
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "0"
+        )
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the second call to be journaled") { CallJournal.book(app).calls.count { it.finished } == 2 }
+        pumpUntil("the line about it") { titles().contains("Phone call not recorded") }
+        val text = notifications.allNotifications.single {
+            it.extras.getString(android.app.Notification.EXTRA_TITLE) ==
+                "Phone call not recorded"
+        }
+            .extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString()
+        assertTrue(text, text.contains(com.echoledger.mobile.calls.PhoneAppRecordings.guide("samsung")))
+        assertFalse(text, text.contains("helper"))
+        assertTrue("never the high-priority helper alert", titles().none { it == "Call not recorded" || it == "No audio was captured" })
+    }
+
+    /**
+     * v1.8 0.3 review: a SIM call that kept your voice only, on a phone whose Phone app records every call: its two-sided
+     * copy is looked for and brought in, so nothing tells the person to restart the helper.
+     */
+    @Test
+    fun `a one-sided phone call whose Phone app recording is coming says nothing, and its copy is looked for`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_CALL_LOG,
+            com.echoledger.mobile.calls.PhoneAppRecordings.permission()
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        // Your voice the whole call; the other side's channel digital silence (the line gave only your side).
+        val call = callThrough(ScriptedHelper(stereo(speech(18_000), quiet(18_000))), com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        assertEquals(call.toString(), "kept", call.result)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        val titles = shadowOf(app.getSystemService(android.app.NotificationManager::class.java)).allNotifications
+            .map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }
+        assertTrue(titles.toString(), titles.none { it == "Only your voice was recorded" })
+        assertEquals("the Phone app's two-sided copy is looked for", 1, com.echoledger.mobile.calls.PendingImports.waiting(app).size)
+        // It waits for that copy undecided, with no card of its own: the copy replaces it, so one call is one card.
+        val own = app.graph.recordings.all().single()
+        assertEquals("pending_decision", own.state)
+        assertEquals(null, com.echoledger.mobile.overlay.DecisionPopup.showingFor)
+        val keptLater = androidx.work.WorkManager.getInstance(app)
+            .getWorkInfosForUniqueWork(
+                com.echoledger.mobile.calls.DecisionTimeoutWorker.workName(own.id)
+            ).get(10, java.util.concurrent.TimeUnit.SECONDS)
+        assertTrue(keptLater.isEmpty())
+    }
+
+    /** v1.8 0.3 re-review: only the phone line's own failure gets the Phone app line; others keep their words and fix. */
+    @Test
+    fun `a phone call that could not start for another reason keeps its own words and the Setup button`() {
+        shadowOf(app).grantPermissions(android.Manifest.permission.POST_NOTIFICATIONS)
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = RefusingHelper("Call capture could not start: mic: did not start")
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+        val notifications = shadowOf(app.getSystemService(android.app.NotificationManager::class.java))
+        pumpUntil("the notice") {
+            notifications.allNotifications.any { it.extras.getString(android.app.Notification.EXTRA_TITLE) == "Call not recorded" }
+        }
+        val text = notifications.allNotifications.single {
+            it.extras.getString(android.app.Notification.EXTRA_TITLE) == "Call not recorded"
+        }
+            .extras.getCharSequence(android.app.Notification.EXTRA_BIG_TEXT).toString()
+        assertTrue(text, text.contains("mic: did not start"))
+        assertTrue(
+            notifications.allNotifications.none {
+                it.extras.getString(android.app.Notification.EXTRA_TITLE) ==
+                    "Phone call not recorded"
+            }
+        )
+    }
+
+    /**
+     * v1.8 0.3 re-review: a one-sided recording is held only once its call waits for the Phone app's copy, so a release
+     * that runs in between (another call's check ending, the app opening) never lets it go before the copy can come.
+     */
+    @Test
+    fun `a one-sided phone call's recording is held only after its wait for the Phone app's copy is there`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(
+            app
+        ).grantPermissions(android.Manifest.permission.READ_CALL_LOG, com.echoledger.mobile.calls.PhoneAppRecordings.permission())
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val helper = ScriptedHelper(stereo(speech(18_000), quiet(18_000)))
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        helper.listener!!.onCallStarted(com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
+        Thread.sleep(3_200)
+        helper.listener!!.onCallEnded()
+        org.robolectric.shadows.ShadowLooper.idleMainLooper()
+        // Held on the saving thread; the main thread has not run since.
+        val prefs = app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE)
+        val until = System.currentTimeMillis() + 20_000
+        while (prefs.getString("held", null).isNullOrEmpty() && System.currentTimeMillis() < until) Thread.sleep(20)
+        val id = prefs.getString("held", null)!!.substringBefore(':')
+        // A release now (another call's check ending) must leave it held: its call already waits for the copy.
+        runBlocking { com.echoledger.mobile.calls.PhoneAppRecordings.releaseHeld(app) }
+        assertEquals("pending_decision", app.graph.recordings.get(id)?.state)
+        assertEquals(1, com.echoledger.mobile.calls.PendingImports.waiting(app).size)
+    }
+
+    /** v1.8 0.3 review: a SIM call EchoLedger recorded itself is not left waiting for the Phone app's copy. */
+    @Test
+    fun `a phone call EchoLedger recorded on both sides is not left waiting for the Phone app's copy`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        val far = join(tone(1_000), quiet(2_000), speech(4_000))
+        val call =
+            callThrough(ScriptedHelper(stereo(join(quiet(3_000), speech(4_000)), far)), com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        assertEquals("phone_call", call.app)
+        assertTrue(call.reached(CallJournal.Stage.BOTH_AUDIO))
+        assertEquals(emptyList<LongRange>(), com.echoledger.mobile.calls.PendingImports.waiting(app))
+    }
+
+    @Test
+    fun `a call in an app whose auto-record is off is journaled as not wanted, and nothing records`() {
+        runBlocking { app.graph.settings.update { it.copy(autoRecordApps = mapOf("whatsapp" to false)) } }
+        val helper = RecordingHelper()
+        app.graph.helper.attach(helper, source = "adb")
+        start(RecordingService.ACTION_ARM)
+        pumpUntil("armed") { settings().autoRecordArmed && helper.listener != null }
+        pumpUntil("the choices to reach the journal") {
+            CallJournal.book(app).settings.lastOrNull()?.choices?.appsOff == listOf("whatsapp")
+        }
+
+        helper.listener!!.onCallStarted("com.whatsapp")
+        pumpUntil("the call to be journaled") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
+
+        val call = CallJournal.book(app).calls.single()
+        assertEquals("not_wanted", call.result)
+        assertEquals("auto-record is off for WhatsApp", call.note)
+        assertFalse(RecordingService.isRecording)
     }
 
     @Test

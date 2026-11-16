@@ -11,7 +11,7 @@ import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { claimFileDrops } from "../../lib/dropTarget";
 import { listenForFileDrops } from "../../lib/ipc";
-import { searchItems, sortItems, type SortKey } from "../../lib/library";
+import { recordingName, searchItems, sortItems, type SortKey } from "../../lib/library";
 import { ancestors, nestedCount, projectRecordings, projectTree } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
@@ -25,6 +25,7 @@ import { BadgeMark, LockedChip, PlanBadge, useLocked } from "./Upgrade";
 import { featureWords, lowestPlan, openUpgradeSheet, useEntitlements } from "../../lib/entitlements";
 import { ProjectScreens } from "./ScreenMoments";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 type Tab = "recordings" | "files" | "notes" | "screens" | "ai_notes";
 const TABS: readonly [Tab, string][] = [["recordings", "Recordings"], ["files", "Files"], ["notes", "Notes"], ["screens", "Screens"], ["ai_notes", "AI notes"]];
@@ -322,13 +323,13 @@ function Notes({ ws, client, notify, onChange, onReload, onOpenRecording, onClie
           <div className="toggle">
             <div>
               <label htmlFor={`ai-notes-${client.id}`}>AI notes</label>
-              <div className="small muted" id={`ai-notes-hint-${client.id}`}>Claude writes call notes after each kept recording of {client.name}.</div>
+              <div className="small muted" id={`ai-notes-hint-${client.id}`}>EchoLedger writes call notes after each kept recording of {client.name}.</div>
             </div>
             <button id={`ai-notes-${client.id}`} type="button" role="switch" aria-checked={ws.client.ai_notes} aria-describedby={`ai-notes-hint-${client.id}`}
               className={`switch ${ws.client.ai_notes ? "on" : ""}`} disabled={busy} onClick={() => void toggleNotes()} />
           </div>
           <div className="budget-line" data-testid="ai-budget" style={{ paddingTop: 10 }}>
-            {ws.ai.configured ? budgetLine(ws.ai) : "AI is not set up on the server yet: notes, the brief and Ask need its Anthropic key."}
+            {ws.ai.configured ? budgetLine(ws.ai) : "AI isn't set up on the server yet: notes, the brief and Ask wait for it. Ask the person who runs the console."}
           </div>
         </div>
       </section>
@@ -406,7 +407,7 @@ function Brief({ ws, clientId, notify, onChange, onReload, canMake = true }: { w
     }
   };
   const makeAgain = async () => {
-    if (brief?.edited && !window.confirm("Write the brief again from the project's files and call notes? Your edits are replaced.")) return;
+    if (brief?.edited && !(await confirmAction({ title: "Write the brief again?", body: "It's written from the project's files and call notes. Your edits are replaced.", confirm: "Write again", tone: "danger" }))) return;
     setBusy(true);
     try {
       const { data } = await api.refreshClientBrief(clientId);
@@ -620,10 +621,10 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
           <div className="group-label">In transcripts</div>
           {found.map((r) => (
             <div key={r.session.id} className="hit-card">
-              <div className="item-title">{r.session.title}</div>
+              <div className="item-title">{recordingName(r.session.title)}</div>
               {r.hits.map((h) => (
                 <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => onOpen(r.session.id, h.start_ms)}
-                  aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                  aria-label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}>
                   <span className="seg-time">{timestamp(h.start_ms)}</span>
                   <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
                 </button>
@@ -648,7 +649,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
                 <div className="row">
                   <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
                   <div className="item-main">
-                    <div className="item-line"><span className="item-title">{item.title}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
+                    <div className="item-line"><span className="item-title">{recordingName(item.title)}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
                     <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null, folderName(item) ? `in ${folderName(item)}` : null].filter(Boolean).join(" · ")}</div>
                   </div>
                 </div>
@@ -724,7 +725,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     }
   };
   const remove = async (file: ClientFile) => {
-    if (!window.confirm(`Remove ${file.name} from this project?`)) return;
+    if (!(await confirmAction({ title: `Remove ${file.name} from this project?`, confirm: "Remove", tone: "danger" }))) return;
     try {
       await api.deleteClientFile(clientId, file.id);
       onChange({ ...ws, files: ws.files.filter((f) => f.id !== file.id) });
@@ -737,7 +738,7 @@ function Files({ ws, clientId, notify, onChange }: { ws: Workspace; clientId: st
     <>
       <div className={`file-drop ${over ? "over" : ""}`} data-testid="file-drop">
         <ImportIcon size={26} />
-        <span>Drop PDF, Word, text or Markdown files here. Claude reads them for the brief and for Ask.</span>
+        <span>Drop PDF, Word, text or Markdown files here. EchoLedger reads them for the brief and for Ask.</span>
         <div className="row">
           <button type="button" className="btn primary" onClick={() => void pick()}><PlusIcon size={16} />Add files</button>
           <button type="button" className="btn" aria-expanded={pasting} onClick={() => setPasting(!pasting)}>Paste instructions</button>
@@ -812,7 +813,7 @@ function Ask({ ws, clientId, onOpenRecording }: { ws: Workspace; clientId: strin
   };
   return (
     <>
-      {!ws.ai.configured && <div className="notice" role="status" style={{ marginBottom: 12 }}>Ask needs the server's Anthropic key. Ask the person who runs the console to add it.</div>}
+      {!ws.ai.configured && <div className="notice" role="status" style={{ marginBottom: 12 }}>Ask needs AI set up on the server. Ask the person who runs the console to set it up.</div>}
       <form className="ask-box" onSubmit={(e) => { e.preventDefault(); void ask(); }}>
         <textarea className="input" aria-label="Question" dir="auto" placeholder={`Ask about ${ws.client.name}: “When do we launch?”`} maxLength={500} value={question}
           onChange={(e) => setQuestion(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); void ask(); } }} />

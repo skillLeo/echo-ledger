@@ -14,6 +14,10 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 
 **Part A — from the Mac over adb (you keep the phone unlocked; tap only when a system prompt appears):**
 
+Run 2026-11-16 16:13–16:24 on the v1.1 build: A1–A5 and A7 pass (SCREEN_SHARE_MATRIX.md, "Retest with the merged S5
+build"); A6 waiting (the phone locked by its power key). Samsung's recorder can't be started over adb, so the captures
+use adb's recorder and screenshots; the overlay buttons are found with `uiautomator dump --windows`.
+
 | # | Step | Pass when |
 |---|---|---|
 | A1 | `dumpsys window windows`: every "EchoLedger …" window | SECURE next to each while the setting is Private |
@@ -34,6 +38,13 @@ window secure (a black box for viewers) unless Settings → Privacy & data → D
 | B4 | WhatsApp video call with a second device or person, share the phone screen | As B1 |
 
 **Part C — v1.8 0.3, SIM calls through the Phone app's own recordings (you make the calls):**
+
+2026-11-16 22:20: A6 PASS on the merged build (13ced291): Live Translate's box SECURE and 100 % black in a screen
+recording (it started through Android's sound sharing while the helper was down). Part C CANNOT run on this S25:
+Samsung hides Record calls in the Phone app for its region (Samsung's own setting for the phone's region), so
+there are no Phone app recordings to import. Part C needs a Galaxy from a region with call recording (Pakistan
+CSC). Part D left for a later slot. After wireless debugging is switched off, Shizuku stops and the helper with it:
+restart Shizuku (its start command over adb, or the Shizuku app), then open EchoLedger.
 
 1. Setup: the full build; auto-record on; Record phone calls → Always; allow Call log, Contacts and Music and audio.
    Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls. Check over adb:
@@ -89,3 +100,12 @@ The phone is the viewer. Rows from [MANUAL_QA.md](MANUAL_QA.md) "Screen-share pr
 5. S-7 a whole-screen share in an app not yet confirmed (the windows leave within 300 ms and come back).
 6. S-8, S-9, S-10.
 7. MAC-31 (v1.8 0.4): opening EchoLedger again from Finder, Launchpad, Spotlight and the Dock opens its window.
+   The Finder path passed on 2026-11-16; Dock, Launchpad, ⌘W and ⌘M are left.
+8. v1.8.1 follow-up build (the freeze fix, the menu on a click, the badge, the Dock app): MAC-22 is a release gate
+   (full-screen Zoom and Meet, a recording running), then MAC-32 (Dock click, Dock Quit / ⌘Q twice / logout while
+   recording, start at login, ⌘H). One list for Hassam, about 20 minutes, all clicks written out in plain words.
+   Run 2026-11-16 ~21:30 on macOS 27.3 with the CI build of 4f8f775d (merged bee66862), Hassam's answers: all yes —
+   Dock icon and dot, ⌘Tab; the menu opens on a click; recording controls over full-screen Zoom and full-screen Meet,
+   Pause leaves the meeting in front; ⌘H hides the window, not the controls; Dock Quit while recording closes within
+   20 s and the recording is kept (not "Recovered"); ⌘Q twice keeps it too. Not run: start at login (MAC-32 e), the
+   phone-as-viewer whole-screen shares for Zoom (both capture modes), MAC-22 on macOS 14.4/15 (no machine).

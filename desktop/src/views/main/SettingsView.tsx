@@ -46,7 +46,7 @@ export interface SettingsContext {
   role: string | null;
 }
 
-/** Whether an entry is offered here and now (the search, the list, the palette and Find a page use the same). */
+/** Whether an entry is offered here and now (Settings' search, the list and the window's search use the same). */
 export function settingsAvailability(ctx: SettingsContext): (entry: SettingEntry) => boolean {
   const e = ctx.entitlements;
   const open = openRequest(e);
@@ -86,7 +86,7 @@ export function settingsAvailability(ctx: SettingsContext): (entry: SettingEntry
   };
 }
 
-/** The pages "Find a page" and the palette offer: every available page of the root, under "Settings › {section}". */
+/** The pages the window's search (the palette) offers: every available page of the root, under "Settings › {section}". */
 export function settingsPages(available: (entry: SettingEntry) => boolean): { id: string; label: string; group: string; keywords: string; page: string }[] {
   return SETTINGS.filter((e) => e.page === null && e.kind === "page" && available(e))
     .map((e) => ({ id: `settings-${e.id}`, label: e.title, group: `Settings › ${e.root ?? ""}`.replace(/ › $/, ""), keywords: ["settings", ...(e.keywords ?? [])].join(" "), page: e.id }));
@@ -98,10 +98,6 @@ export function signOutBody(pending: number): string | null {
   return pending === 1
     ? "1 recording hasn't uploaded yet. It'll stay on this computer, but nobody else can see it until you sign in again."
     : `${pending} recordings haven't uploaded yet. They'll stay on this computer, but nobody else can see them until you sign in again.`;
-}
-/** The question the avatar menu's Sign out asks (window.confirm). */
-export function signOutConfirm(pending: number): string {
-  return ["Sign out of this computer?", signOutBody(pending)].filter(Boolean).join(" ");
 }
 
 /** The width of an element, followed as it changes (wide when it can't be measured). */

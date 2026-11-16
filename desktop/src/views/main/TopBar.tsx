@@ -1,6 +1,7 @@
 // The top bar (v1.6, P4.3): the workspace, search and commands (Ctrl/⌘+K), whether calls will be recorded, "+" to make
 // something, notifications, help and the avatar menu (v1.7: who you are with the plan's chip, Upgrade or Plan & usage,
 // Settings, the admin panel for the super admin, Appearance, Sign out).
+import { useId } from "react";
 import type { Account, AppStatus } from "../../lib/ipc";
 import type { ThemeChoice } from "../../lib/theme";
 import { initials, paletteKeys } from "../../lib/shell";
@@ -61,6 +62,9 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
   const teamLocked = isLocked(entitlements, "team");
   const workspaces = workspacesOf(account, status);
   const here = workspaces.find((w) => w.current) ?? workspaces[0];
+  // The other workspaces: every one but this computer's (also when the server marks none as current).
+  const others = workspaces.filter((w) => w !== here);
+  const othersId = useId();
   // The account's name, never this computer's (a person glyph until it is known).
   const accountName = account ? account.name?.trim() || account.email.split("@")[0] : null;
   const name = accountName || "You";
@@ -76,18 +80,32 @@ export function TopBar({ status, account, needsYou, theme, onTheme, onPalette, o
           <span className="workspace-text"><span className="workspace-name">{here.name}</span>{roleText(here.role) && <span className="workspace-role">{roleText(here.role)}</span>}</span>
           <ChevronDownIcon size={14} />
         </>}
-        header={<span className="small muted">This computer works in {here.name}.</span>}
+        // The other workspaces are said, not offered (D-007): this computer can't switch, so the one row that acts opens
+        // the browser, where switching happens.
+        header={
+          <div className="workspace-head" id={othersId}>
+            <span className="small muted">This computer works in {here.name}.</span>
+            {others.length > 0 && (
+              <>
+                <span className="small workspace-others-head">Your other workspaces</span>
+                <ul className="workspace-others" aria-label="Your other workspaces">
+                  {others.map((w) => (
+                    <li key={w.key} className="small"><span dir="auto">{w.name}</span>{roleText(w.role) && <span className="muted"> · {roleText(w.role)}</span>}</li>
+                  ))}
+                </ul>
+              </>
+            )}
+          </div>
+        }
         items={[
-          ...workspaces.map((w) => ({ id: `ws-${w.key}`, label: <>{w.name}{roleText(w.role) && <span className="small muted"> · {roleText(w.role)}</span>}</>, name: w.name, checked: w.current,
-            onPick: () => (w.current ? undefined : onWorkspaces()) })),
-          "separator",
           // Team workspaces (v1.6.2): a plan without them still shows Invite, with its badge, and opens the upgrade sheet.
           (teamLocked || here.role === "owner" || here.role === "admin") && {
             id: "ws-invite", label: <>Invite people<BadgeMark feature="team" /></>, icon: <LucideUserPlusIcon size={16} />,
             name: teamLocked ? `Invite people, ${featureWords(entitlements, "team").name} is in ${lowestPlan(entitlements, "team")?.name ?? "a paid plan"}` : "Invite people",
             onPick: teamLocked ? () => openUpgradeSheet("team") : onWorkspaces,
           },
-          { id: "ws-manage", label: "Switch or manage workspaces in the browser", icon: <ExternalIcon size={16} />, onPick: onWorkspaces },
+          // The header says where this computer works and the other workspaces; screen readers hear it with this row.
+          { id: "ws-manage", label: "Switch or manage in the browser", icon: <ExternalIcon size={16} />, describedBy: othersId, onPick: onWorkspaces },
         ]} />
       <button type="button" className="topbar-search" onClick={onPalette} aria-label={`Search and commands (${paletteKeys(status.platform)})`}>
         <SearchIcon size={16} />

@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Models\Passkey;
 use App\Models\User;
+use App\Support\Brand;
 use Cose\Algorithms;
 use Illuminate\Support\Str;
 use Symfony\Component\Serializer\Encoder\JsonEncode;
@@ -75,7 +76,7 @@ final class Passkeys
         $exclude = Passkey::query()->where('user_id', $user->id)->get()
             ->map(fn (Passkey $p): PublicKeyCredentialDescriptor => PublicKeyCredentialDescriptor::create('public-key', self::decode($p->credential_id)))->all();
         $options = PublicKeyCredentialCreationOptions::create(
-            rp: PublicKeyCredentialRpEntity::create('EchoLedger', self::rpId()),
+            rp: PublicKeyCredentialRpEntity::create(Brand::name(), self::rpId()),
             user: PublicKeyCredentialUserEntity::create($user->email, self::userHandle($user), $user->name),
             challenge: random_bytes(32),
             pubKeyCredParams: [

@@ -70,6 +70,12 @@ export function speakerLabels(segments: Pick<Segment, "speaker">[]): string[] {
 
 export type PlayerKey = "toggle" | "back10" | "forward10" | "back5" | "forward5";
 
+/** The keys `playerKey` answers, as people read them: the player's tooltips, its hint and Help all say these (D-047). */
+export const PLAYER_KEYS: Readonly<Record<PlayerKey, string>> = { toggle: "Space", back5: "←", forward5: "→", back10: "Shift+←", forward10: "Shift+→" };
+
+/** The player's one-line hint, from the same keys. */
+export const PLAYER_HINT = `${PLAYER_KEYS.toggle} plays · ${PLAYER_KEYS.back5} / ${PLAYER_KEYS.forward5} 5 s · ${PLAYER_KEYS.back10} / ${PLAYER_KEYS.forward10} 10 s`;
+
 /**
  * What a key does in the player: Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s. Since v1.6
  * (P4.4) J and K move through the list instead, as in the console. Keys typed into a field are never taken, and Space

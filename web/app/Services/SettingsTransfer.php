@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Brand;
 use InvalidArgumentException;
 
 /**
@@ -115,7 +116,7 @@ final class SettingsTransfer
         }
         $doc = json_decode($json, true);
         if (! is_array($doc) || ($doc['format'] ?? null) !== self::FORMAT) {
-            throw new InvalidArgumentException('That is not an EchoLedger console settings file.');
+            throw new InvalidArgumentException('That is not an '.Brand::name().' console settings file.');
         }
         $settings = $doc['settings'] ?? null;
         if (! is_array($settings)) {

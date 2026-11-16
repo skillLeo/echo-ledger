@@ -217,12 +217,10 @@ pub fn register_hotkeys(app: &AppHandle) -> Vec<String> {
 fn unregister_hotkeys(app: &AppHandle) {
     use crate::shortcuts::{Action, Bindings};
     use tauri_plugin_global_shortcut::GlobalShortcutExt;
-    let state = app.state::<Bindings>();
-    let mut bindings = state.0.lock().unwrap();
-    for action in [Action::TranslateLock, Action::TranslateHide] {
-        if let Some(shortcut) = bindings.remove(&action) {
-            let _ = app.global_shortcut().unregister(shortcut);
-        }
+    // Out of the table first, then unregistered with no lock held: each unregister waits for the main thread, and a key
+    // press there looks the table up.
+    for shortcut in app.state::<Bindings>().take(&[Action::TranslateLock, Action::TranslateHide]) {
+        let _ = app.global_shortcut().unregister(shortcut);
     }
 }
 

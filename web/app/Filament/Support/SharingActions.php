@@ -18,6 +18,7 @@ use App\Services\ShareLinks;
 use App\Services\Sharing\Teammates;
 use App\Services\Views\TranscriptViews;
 use App\Services\Workspaces\CurrentWorkspace;
+use App\Support\Brand;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DateTimePicker;
@@ -66,7 +67,7 @@ final class SharingActions
                     ->required(fn (Get $get): bool => $get('audience') === 'password')
                     ->visible(fn (Get $get): bool => $get('audience') === 'password'),
                 TagsInput::make('people')->label('Their emails')->placeholder('name@example.com')
-                    ->helperText('They open the link signed in to EchoLedger with one of these emails. Up to '.ShareLinks::MAX_PEOPLE.'.')
+                    ->helperText('They open the link signed in to '.Brand::name().' with one of these emails. Up to '.ShareLinks::MAX_PEOPLE.'.')
                     ->nestedRecursiveRules(['email', 'max:190'])->rules(['array', 'max:'.ShareLinks::MAX_PEOPLE])
                     ->required(fn (Get $get): bool => $get('audience') === 'people')
                     ->visible(fn (Get $get): bool => $get('audience') === 'people'),

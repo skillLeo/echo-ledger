@@ -89,6 +89,17 @@ impl MacProbe for NativeProbe {
         crate::permissions::read()
     }
 
+    fn can_tell_not_asked(&self) -> bool {
+        crate::permissions::can_tell_not_asked()
+    }
+
+    fn reopen_did_not_apply(&self) -> bool {
+        let state = self.app.state::<crate::AppState>();
+        // Read through the app's memory, which notes the run in which Screen Recording first waited.
+        let now = state.permissions_now();
+        state.screen_reopen_did_not_apply(&now)
+    }
+
     fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String> {
         listen(Streams { mic: true, system: false }, Channel::Mic, seconds, stop, || {}).map(|samples| peak_level(&samples))
     }
@@ -131,7 +142,7 @@ impl MacProbe for NativeProbe {
             self.app
                 .get_webview_window(label)
                 .and_then(|window| overlay::macos::window_facts(&window, label))
-                .unwrap_or(WindowFacts { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false })
+                .unwrap_or_else(|| WindowFacts::missing(label))
         });
         for label in LABELS {
             lifecycle::hide(&self.app, label, USE);

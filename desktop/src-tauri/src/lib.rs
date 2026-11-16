@@ -4,6 +4,7 @@ pub mod account;
 mod actions;
 pub mod activity;
 pub mod after_call;
+pub mod app_life;
 pub mod app_menu;
 pub mod audio;
 pub mod call_guard;
@@ -17,6 +18,7 @@ pub mod identity;
 pub mod lifecycle;
 pub mod lock;
 pub mod mac_check;
+mod main_thread;
 pub mod material;
 pub mod net;
 pub mod notifications;
@@ -28,6 +30,7 @@ pub mod plan;
 pub mod privacy;
 pub mod projects;
 pub mod readiness;
+pub mod recovered;
 pub mod receipts;
 pub mod recovery;
 pub mod refusal;
@@ -37,6 +40,7 @@ pub mod sharing;
 pub mod shortcuts;
 pub mod skipped;
 pub mod smoke;
+pub mod spaces;
 pub mod stt;
 pub mod translate;
 pub mod tray;
@@ -251,13 +255,26 @@ impl AppState {
         self.token.lock().map(|t| t.is_some()).unwrap_or(false) && self.lock_settings().server_url.is_some()
     }
 
+    /// What this computer allowed before that macOS now calls "not asked" (D-120); nothing off a Mac.
+    pub fn permissions_allowed_before(&self, now: &permissions::Permissions) -> Vec<permissions::Kind> {
+        if !cfg!(target_os = "macos") {
+            return Vec::new();
+        }
+        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).allowed_before(now, permissions::can_tell_not_asked())
+    }
+
+    /// Whether Screen Recording still waits for a reopen although EchoLedger was reopened since it was allowed.
+    pub fn screen_reopen_did_not_apply(&self, now: &permissions::Permissions) -> bool {
+        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).reopen_did_not_apply(now, permissions::this_run())
+    }
+
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
     pub fn permissions_now(&self) -> permissions::Permissions {
         let now = permissions::read();
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
             let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
-            let next = memory.observe(&now, screens_wanted);
+            let next = memory.observe(&now, screens_wanted, permissions::can_tell_not_asked()).note_reopen(&now, permissions::this_run());
             if next != *memory {
                 next.save(&permissions::Memory::path(&self.data_dir));
                 *memory = next;
@@ -342,14 +359,17 @@ pub fn run() {
 
     // The smoke test runs beside a running EchoLedger instead of handing itself over to it.
     let smoke_dir = smoke::requested(std::env::args(), std::env::var(smoke::ENV).ok()).then(smoke::begin);
+    // Started at login (the autostart launch agent): no window, and on a Mac the focus stays with the app in front.
+    let autostart = std::env::args().any(|a| a == "--autostart");
     let mut builder = tauri::Builder::default();
     if smoke_dir.is_none() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))); // must be first
     }
-    // ⌘, ⌘W ⌘Q and the Edit keys of a Mac. Windows has no app menu: its windows would grow a menu bar.
+    // The menu bar of a Mac while EchoLedger is in front: ⌘, ⌘W ⌘Q and the Edit keys. Windows has no app menu: its windows
+    // would grow a menu bar.
     #[cfg(target_os = "macos")]
     {
-        builder = builder.menu(app_menu::build);
+        builder = builder.menu(app_menu::build).activate_ignoring_other_apps(app_life::takes_focus_at_launch(autostart, smoke_dir.is_some()));
     }
     let app = builder
         .plugin(shortcuts::plugin())
@@ -379,8 +399,9 @@ pub fn run() {
             if smoke_test {
                 tray::create(&handle)?;
                 overlay::spawn_clickthrough_poll(handle.clone());
+                // As the app itself runs (`app_life`).
                 #[cfg(target_os = "macos")]
-                app.set_activation_policy(tauri::ActivationPolicy::Accessory);
+                app.set_activation_policy(tauri::ActivationPolicy::Regular);
                 if smoke::share_check_requested(std::env::args()) {
                     smoke::drive_share_check(handle);
                 } else {
@@ -396,7 +417,7 @@ pub fn run() {
 
             tray::create(&handle)?;
             // C9: no window is built here. The main window and the overlays are built when first needed
-            // (lifecycle.rs), so an idle app in the tray runs no web view.
+            // (lifecycle.rs), so an idle app (in the Dock and the menu bar, or the notification area) runs no web view.
             audio::platform::set_preferred_mic(settings.input_device.clone());
             overlay::spawn_clickthrough_poll(handle.clone());
             let errors = shortcuts::register_all(&handle, &settings.shortcuts);
@@ -442,9 +463,11 @@ pub fn run() {
                 }
             });
 
+            // A normal Mac app for the whole run (`app_life`): in the Dock with its dot, ⌘Tab and Force Quit, quit from the
+            // Dock with a running recording kept first.
             #[cfg(target_os = "macos")]
-            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
-            if !std::env::args().any(|a| a == "--autostart") {
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
+            if !autostart {
                 tray::show_main(&handle);
             }
             // Started by an echoledger://open or echoledger://signed-in link (Windows passes it on the command line, since
@@ -454,8 +477,9 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| match event {
-            // C9: closing the main window destroys it (the app keeps running in the tray, see `ExitRequested`); the
-            // next open builds a new one on the same page (main_view_get).
+            // C9: closing the main window destroys it (the app keeps running: in the Dock and the menu bar of a Mac, the
+            // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
+            // (main_view_get).
             WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
             WindowEvent::Destroyed => {
                 privacy::destroyed(window.app_handle(), window.label());
@@ -542,6 +566,8 @@ pub fn run() {
             commands::notify_when_ready,
             commands::hide_captions,
             commands::mic_users,
+            commands::mic_last_not_recorded,
+            commands::quit_and_reopen,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,
@@ -672,7 +698,10 @@ pub fn run() {
             commands::pending_open,
             commands::after_call_state,
             commands::saved_undo,
+            commands::after_call_discard,
+            commands::after_call_discard_undo,
             commands::skipped_list,
+            commands::recovered_sessions,
             commands::skipped_restore,
             commands::window_ready,
             commands::main_view_get,
@@ -680,6 +709,15 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");
+    // The Dock's Quit and the system's keep a running recording first (`app_life`): taught to the application delegate
+    // once it exists and before the app runs, also in the smoke test, which fails without it.
+    #[cfg(target_os = "macos")]
+    if !app_life::mac::answer_quits_from_outside(app.handle()) {
+        eprintln!("[echoledger] a quit from the Dock would not keep a running recording first");
+    }
+    // Its menu bar menu opens over another app's full-screen window (`spaces`).
+    #[cfg(target_os = "macos")]
+    spaces::mac::install();
 
     app.run(|handle, event| {
         // macOS hands an echoledger://open or echoledger://signed-in link to the running app as an opened URL (Info.plist
@@ -689,17 +727,17 @@ pub fn run() {
             let urls: Vec<String> = urls.iter().map(|u| u.to_string()).collect();
             actions::handle_links(handle, &urls);
         }
-        // Opening the app again from Finder, Launchpad, Spotlight or the Dock starts no second copy on a Mac (the
-        // single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the main window
-        // as a second launch does on Windows. Its `has_visible_windows` counts the overlays (the dictation box is on
-        // screen while its shortcut is bound), so it says nothing about the main window and is not asked.
+        // A click on the Dock icon, or opening the app again from Finder, Launchpad or Spotlight, starts no second copy on
+        // a Mac (the single-instance plugin hears nothing): macOS sends this copy a reopen, which opens or focuses the
+        // main window as a second launch does on Windows. Its `has_visible_windows` counts the overlays (the dictation box
+        // is on screen while its shortcut is bound), so it says nothing about the main window and is not asked.
         #[cfg(target_os = "macos")]
         if let RunEvent::Reopen { .. } = &event {
             actions::show_main_from_outside(handle, &[]);
         }
         if let RunEvent::ExitRequested { code, api, .. } = &event {
-            // User-initiated exit (last window closed): stay in the tray. Programmatic exit (Quit) proceeds.
-            if code.is_none() {
+            // The last window closed (no code): EchoLedger keeps running. A Quit (app.exit) or the updater's restart exits.
+            if app_life::keep_running(*code) {
                 api.prevent_exit();
             }
         }

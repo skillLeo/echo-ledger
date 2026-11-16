@@ -20,7 +20,8 @@ export type MicDecision = "auto_record" | "recording" | "ignored" | "ask" | "off
 export type IgnoreReason = "dictation" | "unknown_site" | "unknown_app" | "never_record" | "auto_off" | "app_off";
 export type CaptionSize = "small" | "medium" | "large";
 export type CaptionWidth = "narrow" | "normal" | "wide";
-export type PermissionState = "allowed" | "denied" | "unknown";
+/** `reopen`: Screen Recording allowed in System Settings while EchoLedger ran, used once it is quit and reopened. */
+export type PermissionState = "allowed" | "denied" | "unknown" | "reopen";
 export type UploadState = "queued" | "uploading" | "verifying" | "failed";
 
 export interface RecordingInfo {
@@ -580,6 +581,15 @@ export interface PermissionsStatus {
   missing?: MissingPermission[];
   /** A permission that was granted has gone: one calm sentence, until dismissed or granted again. */
   lost?: string | null;
+  /** macOS: allowed before on this computer, "not asked" now (D-120): another copy of EchoLedger may hold it, or the
+   * privacy settings were reset, so it is said as a possibility. */
+  allowedBefore?: PermissionKind[];
+  /** macOS: Screen Recording still reads `reopen` although EchoLedger was reopened since it was allowed: not Quit &
+   * reopen again, but switch EchoLedger off and on in System Settings. */
+  reopenDidNotApply?: boolean;
+  /** macOS: system audio and Screen Recording are read through the privacy call that tells "not asked" apart; `false`:
+   * their `unknown` says nothing (D-136). Missing (an older core): as if it could. */
+  canTellNotAsked?: boolean;
 }
 
 /** One line about the running recording's devices (since v1.5): one that is gone, or news of a change. */
@@ -595,8 +605,9 @@ export interface CheckItem {
   title: string;
   state: CheckState;
   detail: string;
-  /** A button to the System Settings pane that fixes it. */
-  fix: { label: string; settings: SettingsPane } | null;
+  /** A button to the System Settings pane that fixes it, or, with `reopen`, Quit & reopen (Screen Recording allowed while
+   * EchoLedger ran). */
+  fix: { label: string; settings: SettingsPane; reopen?: boolean } | null;
 }
 export interface CheckProgress {
   index: number;
@@ -621,7 +632,7 @@ export interface FarSidePayload {
 }
 
 /**
- * A process holding the microphone and why EchoLedger does or does not record it (Record view explainer).
+ * A process holding the microphone and why EchoLedger does or does not record it (Settings › Calls & meetings).
  * `app` is the call app it is identified as, `site` the matched browser host or rule id.
  */
 export interface MicUser {
@@ -632,6 +643,13 @@ export interface MicUser {
   site: string | null;
   decision: MicDecision;
   reason: IgnoreReason | null;
+}
+
+/** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
+export interface NotRecordedMic {
+  user: MicUser;
+  /** RFC 3339. */
+  at: string;
 }
 
 export interface LibraryItem {
@@ -1270,6 +1288,8 @@ export interface SavedToast {
 /** What the after-call window shows: the Saved toast and the Ask-me chip (its item's `deadlineAt` is when it keeps). */
 export interface AfterCallState {
   saved: SavedToast | null;
+  /** "Discarded · <title> · Undo" after the chip's Discard, while its files can still come back. */
+  discarded: SavedToast | null;
   ask: PendingItem | null;
 }
 
@@ -1411,6 +1431,8 @@ export interface EventPayloads {
   "pill:visibility": boolean;
   "pending:changed": PendingItem[];
   "skipped:changed": SkippedItem[];
+  /** Another recovered recording reached the server (`recovered_sessions` has it). */
+  "recovered:changed": null;
   "aftercall:state": AfterCallState;
   "ask:show": AskPayload;
   "ask:hide": null;
@@ -1549,6 +1571,8 @@ export const api = {
   notificationSend: (category: NotificationCategory, title: string, body: string) => invoke<boolean>("notification_send", { category, title, body }),
   hideCaptions: () => invoke<AppStatus>("hide_captions"),
   micUsers: () => invoke<MicUser[]>("mic_users"),
+  /** The last app not recorded since EchoLedger started, and when; null when there was none. */
+  micLastNotRecorded: () => invoke<NotRecordedMic | null>("mic_last_not_recorded"),
   /** One recording per file, with one client and language for the batch (null: no client / automatic). */
   importVoiceNotes: (pathsList: string[], clientId: string | null = null, language: TranscriptionLanguage | null = null) =>
     invoke<ImportSummary>("import_voice_notes", { pathsList, clientId, language }),
@@ -1646,8 +1670,14 @@ export const api = {
   afterCallState: () => invoke<AfterCallState>("after_call_state"),
   /** Undo on the Saved toast: the recording goes (to Recently deleted once it is uploaded). */
   savedUndo: (id: string) => invoke<void>("saved_undo", { id }),
+  /** Discard on the after-call chip: the files stay until its Undo time is over. */
+  afterCallDiscard: (id: string) => invoke<void>("after_call_discard", { id }),
+  /** Undo on "Discarded": the recording is back on its chip. */
+  afterCallDiscardUndo: (id: string) => invoke<void>("after_call_discard_undo", { id }),
   /** Short or silent automatic calls skipped in the last 24 h, newest first. */
   skippedList: () => invoke<SkippedItem[]>("skipped_list"),
+  /** The server sessions of recordings recovered after a restart (their "Recovered" chip). */
+  recoveredSessions: () => invoke<string[]>("recovered_sessions"),
   /** Keeps a skipped call like any other (it uploads and is transcribed). */
   skippedRestore: (id: string) => invoke<void>("skipped_restore", { id }),
   uploadList: () => invoke<UploadItem[]>("upload_list"),
@@ -1665,6 +1695,8 @@ export const api = {
   permissionsStatus: () => invoke<PermissionsStatus>("permissions_status"),
   openPrivacySettings: (kind: SettingsPane) => invoke<void>("open_privacy_settings", { kind }),
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
+  /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
+  quitAndReopen: () => invoke<void>("quit_and_reopen"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),

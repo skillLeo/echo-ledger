@@ -1,7 +1,7 @@
 <x-mail::message>
 # New sign-in to your account
 
-**{{ $what }}** signed in to your EchoLedger account on {{ $when }}.
+**{{ $what }}** signed in to your @brand account on {{ $when }}.
 
 <x-mail::table>
 | | |

@@ -350,6 +350,130 @@ fn discard_deletes_the_files_uploads_nothing_and_deletes_the_server_session() {
 }
 
 #[test]
+fn the_chips_discard_deletes_nothing_until_its_undo_time_is_over() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).keeping_at(now + chrono::Duration::seconds(8))).unwrap();
+    let folder = root.path().join("recordings/a");
+    let at = now + chrono::Duration::seconds(8);
+
+    files.discard_later("a", at).unwrap();
+
+    // Gone from every list and count, its chip no longer counting, but every file and the server session still there.
+    let store = files.load();
+    assert!(store.ui_items().is_empty() && store.waiting() == 0, "no list or count shows it");
+    assert!(!store.find("a").unwrap().counting(), "the chip no longer keeps it");
+    assert!(folder.join("recording.flac").exists() && folder.join("mic.wav").exists() && folder.join("system.wav").exists());
+    assert!(DiscardQueue::load(&files.discards).items.is_empty(), "the server session is not deleted yet");
+    assert_eq!(store.next_discard(now), Some(at));
+    // Before its time: nothing happens, also when the app starts again meanwhile.
+    assert!(files.discard_due(now + chrono::Duration::seconds(7)).0.is_empty());
+    assert!(DecisionFiles::in_dir(root.path()).discard_due(now).0.is_empty(), "a restart within the time");
+    assert!(folder.exists());
+    // Once over: the files and the server session go, as with any discard.
+    let (done, failed) = files.discard_due(at);
+    assert!(failed.is_empty());
+    assert_eq!(done.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["a"]);
+    assert!(!folder.exists());
+    assert!(DiscardQueue::load(&files.discards).items.contains(&"01SESSIONAAAAAAAAAAAAAAAAA".to_string()));
+    assert!(files.load().items.is_empty());
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is uploaded");
+}
+
+#[test]
+fn due_discards_go_one_by_one_and_one_that_fails_never_stops_the_others() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    // "b" (first in the file) has a server session to queue, and the queue cannot be written; "a" has none.
+    files.add(decision(root.path(), "b", Some("01SESSIONBBBBBBBBBBBBBBBBB"), now)).unwrap();
+    files.add(decision(root.path(), "a", None, now)).unwrap();
+    for id in ["b", "a"] {
+        files.discard_later(id, now).unwrap();
+    }
+    std::fs::create_dir_all(&files.discards).unwrap();
+
+    let (done, failed) = files.discard_due(now);
+
+    assert_eq!(done.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), ["a"], "the one that could go went");
+    assert_eq!(failed.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>(), ["b"]);
+    assert!(!root.path().join("recordings/a").exists());
+    assert!(root.path().join("recordings/b/recording.flac").exists(), "nothing of the failed one is deleted");
+    assert!(files.load().find("b").is_some_and(|d| d.discarding()), "it stays for the next try");
+    assert!(!root.path().join("recordings/b.leaving").exists(), "and is never marked on its way out");
+}
+
+#[test]
+fn a_discard_that_cannot_finish_takes_its_server_delete_back() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), Utc::now())).unwrap();
+    // Another session already waiting to be deleted stays queued whatever happens.
+    let mut queue = DiscardQueue::load(&files.discards);
+    queue.push("01SESSIONOTHERXXXXXXXXXXXXX".into());
+    queue.save(&files.discards).unwrap();
+    // The folder's mark can't be written (a folder sits where it goes): the discard stops.
+    std::fs::create_dir_all(root.path().join("recordings/a.leaving")).unwrap();
+
+    assert!(files.discard("a").is_err());
+
+    assert_eq!(DiscardQueue::load(&files.discards).items, vec!["01SESSIONOTHERXXXXXXXXXXXXX".to_string()], "its own delete taken back, the other kept");
+    assert!(files.load().find("a").is_some(), "the recording still waits");
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+}
+
+#[test]
+fn a_discarded_folder_is_marked_before_its_entry_leaves_pending_json() {
+    // A crash between the two would otherwise leave a folder no queue knows, offered back as "Recovered recording".
+    let source = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/pending.rs")).unwrap();
+    let discard = &source[source.find("    pub fn discard(&self, id: &str)").unwrap()..];
+    let discard = &discard[..discard.find("\n    }\n").unwrap()];
+    let mark = discard.find("crate::recovery::mark_leaving(&decision.dir)").expect("marked");
+    let save = discard.find("store.save(&self.pending)").expect("saved");
+    assert!(mark < save, "the mark comes first");
+    // And a marked folder no queue knows is deleted at start, not recovered.
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "gone", None, Utc::now())).unwrap();
+    let folder = root.path().join("recordings/gone");
+    desktop_lib::recovery::mark_leaving(&folder).unwrap();
+    // The crash: its entry left pending.json, its folder is still there.
+    let mut store = files.load();
+    store.items.clear();
+    store.save(&files.pending).unwrap();
+    let recovery = desktop_lib::recovery::recover(root.path(), Utc::now());
+    assert!(recovery.recovered.is_empty(), "never offered back");
+    assert!(!folder.exists());
+}
+
+#[test]
+fn undo_after_the_chips_discard_brings_the_recording_back_whole() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", Some("01SESSIONAAAAAAAAAAAAAAAAA"), now).keeping_at(now + chrono::Duration::seconds(4))).unwrap();
+    files.discard_later("a", now + chrono::Duration::seconds(8)).unwrap();
+
+    let again = now + chrono::Duration::seconds(10);
+    let back = files.undo_discard("a", again).unwrap();
+
+    assert!(!back.discarding() && back.counting(), "on its chip again, counting");
+    assert_eq!(back.keep_at(), Some(again));
+    let store = files.load();
+    assert_eq!(store.ui_items().len(), 1, "in the lists again");
+    assert!(store.next_discard(now).is_none(), "nothing left to delete");
+    // Its time passing deletes nothing now; every file and the live transcript are there for Keep.
+    assert!(files.discard_due(now + chrono::Duration::hours(1)).0.is_empty());
+    assert!(root.path().join("recordings/a/recording.flac").exists());
+    let upload = files.keep("a").unwrap();
+    assert_eq!(upload.server_session_id.as_deref(), Some("01SESSIONAAAAAAAAAAAAAAAAA"));
+    assert!(DiscardQueue::load(&files.discards).items.is_empty());
+    // Undo again, or after the time: too late, said as an error.
+    assert_eq!(files.undo_discard("a", again).unwrap_err().to_string(), pending::NOT_WAITING);
+}
+
+#[test]
 fn discarding_a_recording_without_a_server_session_queues_no_server_delete() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());

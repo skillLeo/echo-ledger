@@ -188,6 +188,17 @@ const FULL_SCREEN_AUXILIARY: usize = 1 << 8;
 /// and of ⌘` .
 pub const MAC_OVERLAY_BEHAVIOUR: usize = CAN_JOIN_ALL_SPACES | STATIONARY | IGNORES_CYCLE | FULL_SCREEN_AUXILIARY;
 
+/// `NSWindowStyleMaskNonactivatingPanel`: a click on the window never activates EchoLedger.
+pub const MAC_NONACTIVATING: usize = 1 << 7;
+
+/// An overlay's style on a Mac (pure): its own, plus non-activating. With the panel class (`macos::make_panel`), a click on
+/// the recording controls or the captions never brings EchoLedger (and its main window's Space) in front of the meeting,
+/// and macOS lets the panel float over another app's full-screen window although EchoLedger is a normal app with a Dock
+/// icon: since macOS 10.14 a plain window of a Dock app may not, a non-activating panel may.
+pub fn mac_overlay_style(style: usize) -> usize {
+    style | MAC_NONACTIVATING
+}
+
 /// The window would be seen over full-screen meetings and in every Space.
 pub fn mac_follows_spaces(behaviour: usize) -> bool {
     behaviour & (CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY) == CAN_JOIN_ALL_SPACES | FULL_SCREEN_AUXILIARY

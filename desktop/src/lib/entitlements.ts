@@ -90,11 +90,11 @@ export const PAID_FEATURES: readonly (readonly [string, string, string])[] = [
   ["views", "Roman Urdu, English and Urdu views", "Read any transcript in Roman Urdu, English or Urdu script."],
   ["double_check", "Double-check", "A second engine listens again where the first one was unsure."],
   ["screen_moments", "Screen moments", "What was on the meeting's screen, kept beside the transcript."],
-  ["connector", "Claude and ChatGPT connector", "Ask Claude or ChatGPT about your recordings."],
+  ["connector", "Ask an AI assistant", "Ask your AI assistant about your recordings."],
   ["live_translate", "Live Translate", "Live captions translated while a game or video plays."],
   ["ai_notes", "Call notes, memory and Ask", "Notes after each call and answers about a project."],
   ["team", "Team workspace", "Invite people, with seats and roles."],
-  ["premium_engines", "Premium engines", "ElevenLabs and Gemini for the hardest audio."],
+  ["premium_engines", "Premium engines", "Extra transcription engines for the hardest audio."],
 ];
 
 /** Whether the plan leaves `feature` out. An older server (none) or a feature the answer does not name is not locked. */
@@ -134,9 +134,13 @@ export function lockedBadge(e: Entitlements | null | undefined, feature: string)
 }
 
 /** A feature's name and what it does: the server's words, else the app's. */
+/** Features whose server names still name vendors (D-129, server side): the app says its own words for them on every
+ * chip, badge (tooltip and label) and upgrade sheet until the server's names are plain (D-044). */
+export const OWN_WORDS_ONLY: ReadonlySet<string> = new Set(["connector", "premium_engines"]);
+
 export function featureWords(e: Entitlements | null | undefined, feature: string): { name: string; description: string } {
   const known = PAID_FEATURES.find(([key]) => key === feature);
-  const fromServer = e?.features[feature];
+  const fromServer = OWN_WORDS_ONLY.has(feature) ? undefined : e?.features[feature];
   return {
     name: fromServer?.name?.trim() || known?.[1] || titleCase(feature.replace(/_/g, " ")),
     description: fromServer?.description?.trim() || known?.[2] || "",

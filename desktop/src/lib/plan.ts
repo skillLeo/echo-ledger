@@ -45,6 +45,6 @@ export function planFeatures(plan: PlanInfo): [string, boolean][] {
     ["Live Translate", plan.liveTranslate],
     ["Screen moments", plan.screenMoments],
     ["Call notes, memory and Ask", plan.aiNotes],
-    ["Claude and ChatGPT connector", plan.connector],
+    ["Ask an AI assistant", plan.connector],
   ];
 }

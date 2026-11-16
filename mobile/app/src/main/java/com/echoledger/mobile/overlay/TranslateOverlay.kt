@@ -385,6 +385,8 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             gravity = Gravity.TOP or Gravity.START
             title = FloatingWindow.LIVE_TRANSLATE_GRIP.title
         }
+        // While hidden or private the grip stays out of sight: the grey dot stands where it is.
+        view.visibility = if (state == BoxState.HIDDEN || private) View.GONE else View.VISIBLE
         if (!PrivateWindows.add(wm, view, params)) return
         grip = view
         gripParams = params

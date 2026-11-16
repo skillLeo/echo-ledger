@@ -30,8 +30,9 @@ export const PATTERN_FLASH = "While it checks, a checkered test window and a gre
 /** The main window opened during a whole-screen share that keeps the floating windows off (since v1.8.1). */
 export const SHARE_NOTICE = "You're sharing your whole screen, so this window may be visible in the screen share.";
 
-/** While a sharing bar keeps the windows off, "Show EchoLedger windows" would last until the next look: what happens. */
-export const BACK_AFTER_SHARE = "They come back when the screen share ends. To keep them on screen while you share, share one window or a tab.";
+/** While the sharing bar keeps the windows off, "Show EchoLedger windows" would last until the next look: what happens,
+ * in the tray's words (R1, tray.rs HIDDEN_WHILE_SHARING). */
+export const HIDDEN_WHILE_SHARING = "Hidden while you share your screen. They come back when the meeting ends.";
 
 /** The label of every button that opens the system's settings on this page. */
 export const OPEN_SYSTEM_SETTINGS = "Open System Settings";
@@ -42,7 +43,7 @@ export function ShareNotice() {
   const status = usePrivacyStatus();
   if (!status?.mainInShare) return null;
   return (
-    <StateBanner id="main-in-share" state={`share-${status.shareNumber}`} tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
+    <StateBanner id="main-in-share" slot="main-in-share" state={`share-${status.shareNumber}`} tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
       <span>{SHARE_NOTICE}</span>
     </StateBanner>
   );
@@ -94,11 +95,28 @@ export function useCountdown(seconds: number | null): number | null {
   return left ? left : null;
 }
 
-/** What "Hide EchoLedger windows" says now (pure): hidden, and why; none while the windows are on screen. */
-export function hiddenValue(s: PrivacyStatus | null): string | null {
-  if (s?.hiddenByShortcut) return "Hidden";
-  if (s?.hiddenForShare) return "Hidden while you share your screen";
+/** Why EchoLedger's windows are off the screen, in the tray's order (pure; tray.rs `hidden_line`): the person's "Hide
+ * EchoLedger windows" first (Show brings them back), then a whole-screen share whose sharing bar is on screen (Show would
+ * last until the next look, so the line says when they come back), then a share whose bar went (Show works). */
+export function hiddenReason(s: PrivacyStatus | null): "person" | "share_bar" | "share" | null {
+  if (s?.hiddenByShortcut) return "person";
+  if (s?.barOnScreen) return "share_bar";
+  if (s?.hiddenForShare) return "share";
   return null;
+}
+
+/** What "Hide EchoLedger windows" says now (pure): hidden, and why; none while the windows are on screen. While the
+ * sharing bar holds them, the section's line says why and when they come back, so the row only says Hidden. */
+export function hiddenValue(s: PrivacyStatus | null): string | null {
+  switch (hiddenReason(s)) {
+    case "person":
+    case "share_bar":
+      return "Hidden";
+    case "share":
+      return "Hidden while you share your screen";
+    default:
+      return null;
+  }
 }
 
 /** "Move to the other display": what it says before and after (pure). */
@@ -118,6 +136,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   const windows = status?.platform === "windows";
   const value = status ? statusValue(status, demoSeconds) : null;
   const hidden = hiddenValue(status);
+  const barHolds = hiddenReason(status) === "share_bar";
   const shortcut = settings.shortcuts.hide_all ? <span className="kbd">{prettyShortcut(settings.shortcuts.hide_all, status?.platform ?? "windows")}</span> : "No shortcut";
   const footer = [
     status?.hiding === "floating" ? "The main window is visible in screen share; captions, the recording controls and the other floating windows stay hidden." : null,
@@ -171,28 +190,29 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
         </Section>
       )}
       <Section title="Sharing" footer={<>
-        {status?.barOnScreen && <p className="privacy-line" role="status" data-testid="back-after-share">{BACK_AFTER_SHARE}</p>}
+        {barHolds && <p className="privacy-line" role="status" data-testid="back-after-share">{HIDDEN_WHILE_SHARING}</p>}
         <p>{ONE_WINDOW_TIP}</p><p>{LIMITS}</p>
         {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
       </>}>
-        <ActionRow id="share_privacy.demo" value={demoSeconds ? demoLeft(demoSeconds) : undefined}
+        <ActionRow id="share_privacy.demo" status={demoSeconds ? demoLeft(demoSeconds) : undefined}
           title={demoSeconds ? "Hide from screen share again" : undefined}
           disabled={settings.hideFromSharing === "off"}
           onClick={() => act(api.privacyShowInShares(demoSeconds ? 0 : 10))} />
         <InfoRow id="share_privacy.hide_all" value={hidden ?? shortcut}>
-          {/* While the sharing bar is on screen Show would last until the next look: the footer says when they come back. */}
-          {!status?.barOnScreen && (
+          {/* While the sharing bar alone holds them, Show would last until the next look: the footer says when they come
+              back. After the person's own Hide, Show ends that, as in the tray. */}
+          {!barHolds && (
             <button type="button" className="btn compact" onClick={() => act(api.privacySetHidden(!hidden))}>{hidden ? "Show EchoLedger windows" : "Hide now"}</button>
           )}
         </InfoRow>
         {status && status.displays > 1 && (
-          <ActionRow id="share_privacy.displays" value={displaysValue(status.floatingOpen, moved)} disabled={!status.floatingOpen}
+          <ActionRow id="share_privacy.displays" status={displaysValue(status.floatingOpen, moved)} disabled={!status.floatingOpen}
             onClick={() => act(api.privacyMoveToOtherDisplay(), () => setMoved(true))} />
         )}
       </Section>
       <Section title="Diagnostics" footer={<p>{setting("share_privacy.diagnostics").description}</p>}>
         <SwitchRow id="share_privacy.diagnostics" on={settings.sendDiagnostics} onChange={(v) => void patch({ sendDiagnostics: v })} />
-        <ActionRow id="share_privacy.copy" value={copied === "diag" ? "Copied" : undefined}
+        <ActionRow id="share_privacy.copy" status={copied === "diag" ? "Copied" : undefined}
           onClick={() => act(api.privacyDiagnostics().then((text) => copy("diag", text)))} />
       </Section>
     </div>

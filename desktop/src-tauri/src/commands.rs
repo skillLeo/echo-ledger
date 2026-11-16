@@ -58,6 +58,8 @@ pub struct AppStatus {
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
+    // Taken before anything is read: the tray drawing from a later read always wins over an earlier one queued behind it.
+    let generation = crate::tray::next_generation();
     let state = app.state::<AppState>();
     let settings = state.settings();
     let queue = UploadQueue::load(&paths::uploads(&state.data_dir));
@@ -83,7 +85,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
-    crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
+    crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
     AppStatus {
         paired: state.is_paired(),
         server_url: settings.server_url.clone(),
@@ -1012,11 +1014,18 @@ pub async fn toggle_mic_note(app: AppHandle) -> AppResult<AppStatus> {
     Ok(status(&app))
 }
 
-/// Which applications hold the microphone and what auto mode decided for each (the Record screen explainer).
+/// Which applications hold the microphone and what auto mode decided for each (Settings › Calls & meetings).
 /// Served from the auto-mode loop's last observation (refreshed every second); never polls the system itself.
 #[tauri::command]
 pub async fn mic_users(app: AppHandle) -> Vec<crate::detect::MicUser> {
     app.state::<AppState>().detect.mic_users()
+}
+
+/// The last app that used the microphone without being recorded, and when (Settings › Calls & meetings explains it,
+/// also for a call from before the page was opened); none since EchoLedger started.
+#[tauri::command]
+pub async fn mic_last_not_recorded(app: AppHandle) -> Option<crate::detect::NotRecorded> {
+    app.state::<AppState>().detect.last_not_recorded()
 }
 
 /// Payload of `ask:show`: the unknown-app chip (A1.5).
@@ -2423,7 +2432,8 @@ pub async fn test_capture(app: AppHandle, seconds: Option<u32>) -> AppResult<cra
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionsStatus {
-    /// `allowed` | `denied` | `unknown`.
+    /// `allowed` | `denied` | `unknown` | `reopen` (Screen Recording only: allowed in System Settings, used once EchoLedger
+    /// is quit and reopened).
     pub microphone: &'static str,
     /// The same for this Mac's sound (Phase 1B); always `allowed` on Windows.
     pub system_audio: &'static str,
@@ -2436,6 +2446,14 @@ pub struct PermissionsStatus {
     pub missing: Vec<crate::permissions::Missing>,
     /// A permission that was granted and has gone: the one calm sentence, until the person dismisses it or it returns.
     pub lost: Option<String>,
+    /// macOS: what this computer allowed before but macOS now calls "not asked" (D-120): said as a possibility.
+    pub allowed_before: Vec<crate::permissions::Kind>,
+    /// macOS: Screen Recording still reads `reopen` although EchoLedger was quit and reopened since it was allowed:
+    /// reopening again would not help, switching EchoLedger off and on in System Settings may.
+    pub reopen_did_not_apply: bool,
+    /// macOS: system audio and Screen Recording are read through the privacy call that tells "not asked" apart; without
+    /// it their `unknown` says nothing (D-136).
+    pub can_tell_not_asked: bool,
 }
 
 fn access_word(access: crate::permissions::Access) -> &'static str {
@@ -2443,6 +2461,7 @@ fn access_word(access: crate::permissions::Access) -> &'static str {
         crate::permissions::Access::Allowed => "allowed",
         crate::permissions::Access::Denied => "denied",
         crate::permissions::Access::Unknown => "unknown",
+        crate::permissions::Access::Reopen => "reopen",
     }
 }
 
@@ -2459,7 +2478,10 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         browser_automation: settings.browser_automation,
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
-        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(),
+        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(crate::permissions::can_tell_not_asked()),
+        allowed_before: state.permissions_allowed_before(&now),
+        reopen_did_not_apply: state.screen_reopen_did_not_apply(&now),
+        can_tell_not_asked: crate::permissions::can_tell_not_asked(),
     })
 }
 
@@ -2471,6 +2493,17 @@ pub async fn permission_request(app: AppHandle, kind: crate::permissions::Kind) 
         tauri::async_runtime::spawn_blocking(move || crate::permissions::request(kind)).await.map_err(|e| AppError::msg(e.to_string()))?;
     }
     permissions_status(app).await
+}
+
+/// "Quit & reopen": Screen Recording allowed in System Settings while EchoLedger ran takes effect when it opens again.
+/// Never in the middle of a recording or of dictation.
+#[tauri::command]
+pub async fn quit_and_reopen(app: AppHandle) -> AppResult<()> {
+    let recording = app.state::<AppState>().capture.is_recording();
+    if let Some(sentence) = crate::permissions::reopen_refusal(recording, crate::dictation::is_active(&app)) {
+        return Err(AppError::msg(sentence));
+    }
+    app.restart()
 }
 
 /// "Once per loss": the person has read the sentence.
@@ -2688,6 +2721,18 @@ pub async fn pending_discard(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::discard_decision(&app, &id)
 }
 
+/// Discard on the after-call chip: one click, so the files stay until its Undo time is over.
+#[tauri::command]
+pub fn after_call_discard(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::discard_from_chip(&app, &id)
+}
+
+/// Undo on "Discarded": the recording is back on its chip.
+#[tauri::command]
+pub fn after_call_discard_undo(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::undo_chip_discard(&app, &id)
+}
+
 #[tauri::command]
 pub fn pending_rename(app: AppHandle, id: String, title: String) -> AppResult<PendingItem> {
     crate::actions::pending_rename(&app, &id, &title)
@@ -2733,6 +2778,12 @@ pub async fn saved_undo(app: AppHandle, id: String) -> AppResult<()> {
 #[tauri::command]
 pub fn skipped_list(app: AppHandle) -> Vec<crate::skipped::SkippedItem> {
     crate::actions::skipped_items(&app)
+}
+
+/// The server sessions of recordings recovered after a restart (the Library's and Activity's "Recovered" mark).
+#[tauri::command]
+pub fn recovered_sessions(app: AppHandle) -> Vec<String> {
+    crate::recovered::sessions(&app.state::<crate::AppState>().data_dir)
 }
 
 /// Restore on the skipped line: the call is kept and uploaded like any other.
@@ -2813,11 +2864,17 @@ pub fn share_check_drawn(window: WebviewWindow) {
     privacy.drawn.notify_waiters();
 }
 
-/// The guided test's big card (Mac).
+/// The guided test's big card (Mac). A sync command runs on the main thread, where building a window deadlocks on
+/// Windows (WebView2), so it opens on a Mac only.
 #[tauri::command]
 pub fn share_check_card(app: AppHandle, window: WebviewWindow, open: bool) -> AppResult<()> {
     crate::privacy::from_main_window(window.label())?;
-    if open { crate::privacy::check::guided_open(&app) } else { crate::privacy::check::guided_close(&app); Ok(()) }
+    if !open {
+        crate::privacy::check::guided_close(&app);
+        return Ok(());
+    }
+    crate::privacy::check::guided_here(cfg!(target_os = "macos"))?;
+    crate::privacy::check::guided_open(&app)
 }
 
 /// "I can see it" (`visible`) or "I can't see it" for a meeting app.

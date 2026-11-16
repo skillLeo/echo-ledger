@@ -199,7 +199,7 @@ class TranslateTextView(context: Context, private val subtitles: Boolean) : View
         var top = padV()
         if (showOriginal && original.isNotBlank() && notice == null) {
             val line = TextUtils.ellipsize(original.takeLast(200), small, w - 2 * padH(), TextUtils.TruncateAt.START)
-            val x = if (subtitles) (w - small.measureText(line, 0, line.length)) / 2 else padH()
+            val x = originalX(w, small.measureText(line, 0, line.length), padH(), subtitles, TranslateLanguages.rtl(originalLanguage))
             canvas.drawText(line, 0, line.length, x, top - small.ascent(), small)
             top += ORIGINAL_SP * scaled * 1.4f
         }
@@ -239,5 +239,15 @@ class TranslateTextView(context: Context, private val subtitles: Boolean) : View
     companion object {
         const val ORIGINAL_SP = 12
         private const val DOT_MS = 300L
+
+        /**
+         * Where the original's line starts in a box [width] wide: centred under subtitles, else from the side its
+         * language reads from (an Urdu or Arabic line from the right).
+         */
+        internal fun originalX(width: Float, lineWidth: Float, pad: Float, subtitles: Boolean, rtl: Boolean): Float = when {
+            subtitles -> (width - lineWidth) / 2
+            rtl -> width - pad - lineWidth
+            else -> pad
+        }
     }
 }

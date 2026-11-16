@@ -13,7 +13,7 @@ import ReactDOM from "react-dom/client";
 import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
-import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
+import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
 import { ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
@@ -58,6 +58,8 @@ const plan = makePlan({
   monthlyMinutes: 3000, usedMinutes: 812.5, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.4 * 1024 ** 3, retentionDays: 90, seats: 5,
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
+// `&untitled=1`: the opened recording has no title (D-031: it is called Recording everywhere).
+const LISTED = params.get("untitled") === "1" ? ITEMS.map((i) => (i.id === opened ? { ...i, title: null, title_auto: false } : i)) : ITEMS;
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
 // v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
 // minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).
@@ -166,6 +168,8 @@ function entitlementsHere() {
   if (!free && !ultra && !pro) return null;
   const e = sampleEntitlements(free ? "free" : pro ? "pro" : "ultra");
   if (near && e.limits.monthly_minutes) e.limits.monthly_minutes = { ...e.limits.monthly_minutes, used: 552 };
+  // `&unlimited=1`: minutes without a monthly limit (the Ultra account in Hassam's screenshots).
+  if (params.get("unlimited") === "1") e.limits.monthly_minutes = { limit: null, used: 651, resets_at: "2026-12-01" };
   if (requestStage) {
     const r = makeUpgradeRequest(requestStage, { plan: pro ? "ultra" : "pro", amount_due: pro ? "Rs 12,499" : "Rs 2,999", amount_due_pkr: pro ? 12499 : 2999 });
     if (params.get("round") === "1" && r.payment) {
@@ -194,8 +198,11 @@ const SERVER_FOLDERS: Partial<Record<SmartFolder, string[]>> = { imported: ["r3"
 type Args = Record<string, unknown>;
 let captions: { onmessage: (e: unknown) => void } | null = null;
 
-// Phase 1C: the Ready check, ready or with two things to fix ("record-not-ready").
-const notReady = screen === "record-not-ready";
+// Phase 1C: the Ready check, ready or with two things to fix ("record-not-ready"); "&older=1": the microphone was
+// allowed before on this Mac and macOS calls it "not asked" now (D-120), so calls are not ready.
+const older = params.get("older") === "1";
+const twoToFix = screen === "record-not-ready";
+const notReady = twoToFix || older;
 const check = (id: string, label: string, ok: boolean, detail: string | null = null, fix: { label: string; action: string } | null = null) => ({ id, label, ok, detail, fix });
 const READY_REPORT = {
   ready: !notReady,
@@ -203,11 +210,13 @@ const READY_REPORT = {
   checks: [
     check("account", "Signed in", true),
     check("microphone", "Microphone", true),
-    check("microphone_permission", "Microphone allowed", true),
-    notReady
+    older
+      ? check("microphone_permission", "Microphone allowed", false, "Allowed before on this Mac. If System Settings already lists EchoLedger, remove it there; macOS asks again when a recording starts.", { label: "Open System Settings", action: "allow_microphone" })
+      : check("microphone_permission", "Microphone allowed", true),
+    twoToFix
       ? check("other_side", "The other side of calls", false, "EchoLedger may not record this computer's sound: only your voice would be recorded.", { label: "Open System Settings", action: "allow_system_audio" })
       : check("other_side", "The other side of calls", true),
-    notReady
+    twoToFix
       ? check("detection", "Meetings recorded by themselves", false, "Record calls automatically is off: calls are recorded only when you start them.", { label: "Turn on", action: "turn_on_auto_mode" })
       : check("detection", "Meetings recorded by themselves", true),
   ],
@@ -242,6 +251,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   // v1.6.2: a promo code for Pro, at half price.
   promo_code_check: () => ({ result: "valid", check: { code: "SAVE50", plan: "pro", plan_name: "Pro", percent: 50, price: "Rs 2,999 / month", final_price: "Rs 1,500 / month", free: false, months: 1 } }),
   app_status: () => makeStatus({
+    // "record-recording": Home while a Zoom call records (no capture method, no list of apps; D-013, D-014).
+    recording: screen === "record-recording" ? makeRecording({ sourceApp: "zoom", backend: "core_audio_tap" }) : null,
+    levels: screen === "record-recording" ? [0.42, 0.31] : [0, 0],
     callsReady: !notReady,
     readyProblems: notReady ? 2 : 0,
     deviceName: "Work laptop",
@@ -255,6 +267,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     // v1.6 (P2.7): what the server says to every app.
     pendingUploads: screen === "library-maintenance" ? 2 : screen === "library-refused" ? 1 : 0,
     server: SERVER_NOTICES[screen] ?? { appUpdate: null, announcement: null, maintenance: null, waiting: null },
+    // "library-banners-mac": a forgotten permission and 80 % of the minutes at once; one banner shows.
+    budget: screen === "library-banners-mac" ? "warn" : "ok",
   }),
   account_get: () => (params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
@@ -267,8 +281,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
-  library_list: () => (empty ? [] : ITEMS),
-  library_refresh: () => (empty ? [] : ITEMS),
+  library_list: () => (empty ? [] : LISTED),
+  library_refresh: () => (empty ? [] : LISTED),
   list_clients: () => ({ data: CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),
@@ -277,18 +291,34 @@ const commands: Record<string, (args: Args) => unknown> = {
   shared_with_me: () => ({ data: SHARED }),
   request_links: () => ({ data: REQUESTS }),
   session_detail: ({ id }) => ({ id, playback_url: audioUrl, markers: id === "r5" ? [{ id: "mk1", at_ms: 95_000, tag: "Budget", note: "Phase one estimate" }] : [], speaker_names: { Me: "You", Client: "Sara (Acme)" } }),
-  transcript_detail: ({ id }) => TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null },
+  // `&failure=<error_code>`: the failed call fails for that reason instead (D-130: Try again only where it can help).
+  // `&check=1`: a second transcription disagreed on the "la ravel" line (D-132: said without the engine's name).
+  transcript_detail: ({ id }) => (id === "t-r4" && params.get("failure") ? { ...TRANSCRIPTS["t-r4"], error_code: params.get("failure") }
+    : id === "t-r5" && params.get("check") === "1" ? { ...TRANSCRIPTS["t-r5"], segments: TRANSCRIPTS["t-r5"].segments.map((s, i) => (i === 3
+      ? { ...s, check: { provider: "groq", label: "Groq Whisper large-v3", text: "We will build it on Laravel with a Vue front end." } } : s)) }
+    : TRANSCRIPTS[id as string] ?? { ...TRANSCRIPTS["t-r5"], id, suggestions: [], views: null }),
   transcript_views: () => VIEWS,
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
   skipped_list: () => (empty ? [] : SKIPPED),
+  // "library-recovered": the first recording was recovered after a restart, and its transcript renamed it.
+  recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   upload_list: () => [],
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
-  search_library: () => ({ data: [], next_page: null }),
+  // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
+  search_library: ({ query }) => {
+    const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();
+    const data = params.get("found") === "1" && q ? ITEMS.filter((i) => i.title?.toLowerCase().includes(q)).map((session) => ({ session, hit_count: 1, hits: [] })) : [];
+    return { data, next_page: null };
+  },
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),
-  mic_users: () => [makeMicUser(), makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
+  // A noise filter holds the microphone all the time, beside the Meet tab and an editor (D-014).
+  mic_users: () => [makeMicUser({ name: "Krisp", app: null, playsAudio: false, site: null, decision: "ignored", reason: "unknown_app" }), makeMicUser(),
+    makeMicUser({ name: "Code.exe", app: null, playsAudio: false, site: null, decision: "ignored", reason: "dictation" })],
+  // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
+  mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
   translate_apps: () => [],
   translate_status: () => screen.startsWith("controls-translate") ? {
     mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
@@ -301,13 +331,19 @@ const commands: Record<string, (args: Args) => unknown> = {
   ],
   permissions_status: () => (mac
     ? {
-        microphone: onboarding ? "unknown" : "allowed",
-        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
-        screen: onboarding ? "denied" : "allowed",
+        // "&older=1": the microphone was allowed before on this Mac and reads "not asked" now (D-120); "&reopen=1": Screen
+        // Recording was switched on in System Settings while EchoLedger ran; "&reopen=2": and a reopen did not apply it.
+        microphone: onboarding || older ? "unknown" : "allowed",
+        // "&untold=1": this macOS lacks the privacy call, so system audio and Screen Recording read unknown (D-136).
+        systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : params.get("untold") === "1" ? "unknown" : "allowed",
+        screen: onboarding ? "denied" : params.get("reopen") ? "reopen" : params.get("untold") === "1" ? "unknown" : "allowed",
+        canTellNotAsked: params.get("untold") !== "1",
+        reopenDidNotApply: params.get("reopen") === "2",
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
-        lost: screen === "library-lost-mac" ? "macOS no longer lets EchoLedger use the microphone, which can happen after an update. Setting it up again takes a moment." : null,
+        lost: screen === "library-lost-mac" || screen === "library-banners-mac" ? "macOS no longer lets EchoLedger use the microphone." : null,
+        allowedBefore: older ? ["microphone"] : [],
       }
     : { microphone: "allowed", browserAutomation: false, platform: "windows", missing: [] }),
   mac_check_last: () => screen === "settings-mac-check"
@@ -322,7 +358,10 @@ const commands: Record<string, (args: Args) => unknown> = {
           { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null },
           { key: "microphone_permission", title: "Microphone permission", state: "ok", detail: "Allowed.", fix: null },
           { key: "system_audio_permission", title: "System audio permission", state: "off", detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } },
-          { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
+          // "&reopen=1": Screen Recording allowed while EchoLedger ran, with the step's own Quit & reopen.
+          params.get("reopen") === "1"
+            ? { key: "screen_permission", title: "Screen Recording permission", state: "limited", detail: "Allowed in System Settings. Quit and reopen EchoLedger to finish.", fix: { label: "Quit & reopen", settings: "screen", reopen: true } }
+            : { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
           { key: "microphone_test", title: "Microphone test", state: "ok", detail: "Heard your microphone (loudest about -28 dB).", fix: null },
           { key: "system_audio_test", title: "System audio test", state: "off", detail: "Not tested: system audio is off for EchoLedger.", fix: { label: "Open System Settings", settings: "system_audio" } },
           { key: "meeting_apps", title: "Meeting apps", state: "ok", detail: "Installed: Zoom, Chrome, Safari. Not installed: Teams, WhatsApp, Edge, Arc. EchoLedger recognises all of them.", fix: null },
@@ -346,7 +385,9 @@ const commands: Record<string, (args: Args) => unknown> = {
   // The after-call window: "Saved · … · Undo" over the Ask-me chip (its line at 6 of 10 s); both stay for the picture.
   after_call_state: () =>
     makeAfterCallState({
-      saved: makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+      saved: screen === "controls-discarded" ? null : makeSavedToast({ callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }),
+      // "controls-discarded": the chip's Discard pressed a moment ago, with its Undo.
+      discarded: screen === "controls-discarded" ? makeSavedToast({ id: PENDING[0].id, callerName: "Omar Khan", sourceApp: "whatsapp", durationMs: 252_000, until: new Date(Date.now() + 3_600_000).toISOString() }) : null,
       ask: makeChipItem(PENDING[1].id, { ...PENDING[1], deadlineAt: new Date(Date.now() + 6_000).toISOString() }),
     }),
   privacy_status: () => privacyStatus(),

@@ -2,7 +2,7 @@
 {{-- Header --}}
 <x-slot:header>
 <x-mail::header :url="config('app.url')">
-EchoLedger
+@brand
 </x-mail::header>
 </x-slot:header>
 
@@ -21,7 +21,7 @@ EchoLedger
 {{-- Footer: the legal pages (since v1.5) --}}
 <x-slot:footer>
 <x-mail::footer>
-EchoLedger · [Privacy]({{ url('/privacy') }}) · [Terms]({{ url('/terms') }})
+@brand · [Privacy]({{ url('/privacy') }}) · [Terms]({{ url('/terms') }})
 </x-mail::footer>
 </x-slot:footer>
 </x-mail::layout>

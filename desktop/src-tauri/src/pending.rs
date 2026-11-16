@@ -149,6 +149,13 @@ pub struct PendingDecision {
     /// computer signs in as. Keep passes it on to the upload.
     #[serde(default)]
     pub owner: Option<crate::owner::Owner>,
+    /// Recovered after a restart (since v1.3): it keeps a "Recovered" mark once its transcript renames it (`recovered`).
+    #[serde(default)]
+    recovered: bool,
+    /// Discarded from the after-call chip: its files go only at this time, so its Undo can still bring it back
+    /// (`discard_later`, `undo_discard`, `discard_due`); none otherwise.
+    #[serde(default)]
+    discard_at: Option<DateTime<Utc>>,
 }
 
 impl PendingDecision {
@@ -187,6 +194,8 @@ impl PendingDecision {
             caller: input.caller,
             keep_at: None,
             owner: None,
+            recovered: false,
+            discard_at: None,
         }
     }
 
@@ -201,9 +210,19 @@ impl PendingDecision {
         self.keep_at
     }
 
-    /// Waits for Keep or Discard (no chip counts down for it).
+    /// Waits for Keep or Discard (no chip counts down for it, and it is not on its way out).
     pub fn waits(&self) -> bool {
-        self.keep_at.is_none()
+        self.keep_at.is_none() && self.discard_at.is_none()
+    }
+
+    /// Its chip counts down (it keeps itself at `keep_at`).
+    pub fn counting(&self) -> bool {
+        self.keep_at.is_some()
+    }
+
+    /// Discarded from the chip, its files kept until `discard_at` for Undo: no list or count shows it.
+    pub fn discarding(&self) -> bool {
+        self.discard_at.is_some()
     }
 
     /// The caller's name from the meeting app, when there was one.
@@ -261,7 +280,14 @@ impl PendingDecision {
             caller: None,
             keep_at: None,
             owner: None,
+            recovered: true,
+            discard_at: None,
         }
+    }
+
+    /// Recovered after a restart; an entry saved before the mark existed is known by its title.
+    pub fn is_recovered(&self) -> bool {
+        self.recovered || self.title.as_deref() == Some(RECOVERED_TITLE)
     }
 
     pub fn item(&self) -> PendingItem {
@@ -318,6 +344,7 @@ impl PendingDecision {
             language_marks: self.language_marks.clone(),
             caller: self.caller.clone(),
             owner: self.owner.clone(),
+            recovered: self.is_recovered(),
             ..PendingUpload::default()
         }
     }
@@ -352,9 +379,9 @@ impl PendingStore {
         self.items.iter().find(|d| d.id == id)
     }
 
-    /// The UI list, newest first.
+    /// The UI list, newest first (a recording on its way out is not on it).
     pub fn ui_items(&self) -> Vec<PendingItem> {
-        let mut items: Vec<&PendingDecision> = self.items.iter().collect();
+        let mut items: Vec<&PendingDecision> = self.items.iter().filter(|d| !d.discarding()).collect();
         items.sort_by_key(|d| std::cmp::Reverse(d.created_at));
         items.into_iter().map(PendingDecision::item).collect()
     }
@@ -373,6 +400,11 @@ impl PendingStore {
     /// has already passed (its recording could not be kept just now) is tried again in a minute, not straight away.
     pub fn next_wake(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
         self.next_keep_at().map(|at| if at <= now { now + chrono::Duration::minutes(1) } else { at })
+    }
+
+    /// When the next discarded recording's Undo time is over (the same rule: one already past is tried again later).
+    pub fn next_discard(&self, now: DateTime<Utc>) -> Option<DateTime<Utc>> {
+        self.items.iter().filter_map(|d| d.discard_at).min().map(|at| if at <= now { now + chrono::Duration::minutes(1) } else { at })
     }
 }
 
@@ -422,12 +454,36 @@ impl DecisionFiles {
         let mut store = self.load();
         let at = store.items.iter().position(|d| d.id == id).ok_or_else(|| AppError::msg(NOT_WAITING))?;
         let decision = store.items.remove(at);
+        // The server session queued for deletion by this discard (none when it was queued already).
+        let mut queued = None;
         if let Some(session) = decision.server_session_id.clone() {
             let mut discards = DiscardQueue::load(&self.discards);
+            if !discards.items.contains(&session) {
+                queued = Some(session.clone());
+            }
             discards.push(session);
             discards.save(&self.discards)?;
         }
-        store.save(&self.pending)?;
+        // The recording stays when the discard can't finish: its server session is taken off the queue again (best
+        // effort), like its folder's mark.
+        let undo_queue = |queued: &Option<String>| {
+            if let Some(session) = queued {
+                let mut discards = DiscardQueue::load(&self.discards);
+                discards.items.retain(|s| s != session);
+                let _ = discards.save(&self.discards);
+            }
+        };
+        // Marked before its entry goes: a crash in between deletes the folder at the next start, never offers it back
+        // as "Recovered recording".
+        if let Err(e) = crate::recovery::mark_leaving(&decision.dir) {
+            undo_queue(&queued);
+            return Err(e.into());
+        }
+        if let Err(e) = store.save(&self.pending) {
+            crate::recovery::unmark_leaving(&decision.dir);
+            undo_queue(&queued);
+            return Err(e);
+        }
         crate::recovery::delete_recording_folder(&decision.dir);
         Ok(decision)
     }
@@ -492,6 +548,42 @@ impl DecisionFiles {
             self.keep(id)?;
         }
         Ok(due)
+    }
+
+    /// Discard from the after-call chip: the recording leaves every list and count now, its chip stops counting, and
+    /// its files stay until `at` so Undo can bring it back (`undo_discard`); `discard_due` finishes it then.
+    pub fn discard_later(&self, id: &str, at: DateTime<Utc>) -> AppResult<PendingDecision> {
+        self.update(id, |d| {
+            d.keep_at = None;
+            d.discard_at = Some(at);
+        })
+    }
+
+    /// Undo after a chip's Discard: the recording is back as it was, its chip counting again until `keep_at`. An error
+    /// when it is no longer on its way out (its time was over, or it was already brought back).
+    pub fn undo_discard(&self, id: &str, keep_at: DateTime<Utc>) -> AppResult<PendingDecision> {
+        if !self.load().find(id).is_some_and(PendingDecision::discarding) {
+            return Err(AppError::msg(NOT_WAITING));
+        }
+        self.update(id, |d| {
+            d.discard_at = None;
+            d.keep_at = Some(keep_at);
+        })
+    }
+
+    /// Discards every recording whose Undo time is over at `now` (files, server session), one by one: the ones that went
+    /// are returned (their follow-ups must run), the ones that could not go are returned apart and stay for the next
+    /// try. One whose time is not over yet is left alone, also across a restart.
+    pub fn discard_due(&self, now: DateTime<Utc>) -> (Vec<PendingDecision>, Vec<(String, AppError)>) {
+        let due: Vec<String> = self.load().items.iter().filter(|d| d.discard_at.is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
+        let (mut done, mut failed) = (Vec::new(), Vec::new());
+        for id in due {
+            match self.discard(&id) {
+                Ok(decision) => done.push(decision),
+                Err(e) => failed.push((id, e)),
+            }
+        }
+        (done, failed)
     }
 
     /// The person opened the recording in the main window: no chip keeps it now, it waits for Keep or Discard.

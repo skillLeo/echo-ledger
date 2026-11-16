@@ -11,12 +11,16 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::error::{AppError, AppResult};
-use crate::permissions::{Access, Permissions};
+use crate::permissions::{Access, Kind, Permissions};
 
 /// How often the check runs by itself.
 pub const EVERY: Duration = Duration::from_secs(10);
 /// Meeting detection looks once a second; this long without a look means it stopped.
 pub const DETECTION_STALE: Duration = Duration::from_secs(10);
+
+/// A permission allowed before on this Mac that macOS now calls "not asked" (D-120), said as a possibility: an entry
+/// System Settings still lists (another copy of EchoLedger) can keep macOS from asking.
+pub const ALLOWED_BEFORE: &str = "Allowed before on this Mac. If System Settings already lists EchoLedger, remove it there; macOS asks again when a recording starts.";
 
 /// A one-click fix: what the button says and what it does (`ready_fix`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
@@ -79,6 +83,8 @@ pub struct ReadyInputs {
     /// The microphone chosen in Settings is not connected (the default is used).
     pub chosen_mic_missing: bool,
     pub permissions: Permissions,
+    /// macOS: what was allowed before on this Mac and is "not asked" now ([`crate::permissions::Memory::allowed_before`]).
+    pub allowed_before: Vec<Kind>,
     /// macOS (major, minor) when known.
     pub mac_version: Option<(u32, u32)>,
     /// Windows without per-app capture: the sentence it records with.
@@ -127,7 +133,16 @@ pub fn evaluate(inputs: &ReadyInputs, now: chrono::DateTime<chrono::Utc>) -> Rea
             true,
         ),
         Access::Allowed => ok("microphone_permission", "Microphone allowed", None),
-        Access::Unknown => ok("microphone_permission", "Microphone allowed", inputs.macos.then(|| "macOS asks the first time a recording starts.".to_string())),
+        // Allowed before, "not asked" now: never "Microphone allowed" (D-120).
+        Access::Unknown if inputs.allowed_before.contains(&Kind::Microphone) => problem(
+            "microphone_permission",
+            "Microphone allowed",
+            ALLOWED_BEFORE,
+            Some(Fix { label: "Open System Settings", action: FixAction::AllowMicrophone }),
+            false,
+        ),
+        // Only Screen Recording waits for a reopen; the microphone is read afresh every time.
+        Access::Unknown | Access::Reopen => ok("microphone_permission", "Microphone allowed", inputs.macos.then(|| "macOS asks the first time a recording starts.".to_string())),
     });
 
     let tap_too_old = inputs.macos && inputs.mac_version.is_some_and(|v| v < crate::mac_check::CALL_AUDIO_FROM);
@@ -147,6 +162,8 @@ pub fn evaluate(inputs: &ReadyInputs, now: chrono::DateTime<chrono::Utc>) -> Rea
             Some(Fix { label: "Open System Settings", action: FixAction::AllowSystemAudio }),
             true,
         )
+    } else if inputs.permissions.system_audio == Access::Unknown && inputs.allowed_before.contains(&Kind::SystemAudio) {
+        problem("other_side", "The other side of calls", ALLOWED_BEFORE, Some(Fix { label: "Open System Settings", action: FixAction::AllowSystemAudio }), false)
     } else {
         ok("other_side", "The other side of calls", inputs.whole_system_note.as_ref().map(|n| format!("{n}.")))
     });
@@ -211,13 +228,15 @@ pub fn gather(app: &AppHandle) -> ReadyInputs {
     });
     #[cfg(not(target_os = "macos"))]
     let mac_version = None;
+    let permissions = state.permissions_now();
     ReadyInputs {
         macos: cfg!(target_os = "macos"),
         paired: state.is_paired(),
         viewer: state.viewer_refusal(),
         microphones: devices.len(),
         chosen_mic_missing,
-        permissions: state.permissions_now(),
+        allowed_before: state.permissions_allowed_before(&permissions),
+        permissions,
         mac_version,
         whole_system_note: crate::audio::platform::system_audio_note().map(str::to_string),
         auto_mode: settings.auto_mode,
@@ -284,8 +303,10 @@ pub fn apply_fix(app: &AppHandle, action: FixAction) -> AppResult<()> {
             Ok(())
         }
         FixAction::AllowMicrophone => {
-            if state.permissions_now().microphone == Access::Unknown {
-                crate::permissions::request(crate::permissions::Kind::Microphone);
+            let now = state.permissions_now();
+            // Allowed before on this Mac (D-120): the pane, where an entry System Settings still lists can be removed.
+            if now.microphone == Access::Unknown && !state.permissions_allowed_before(&now).contains(&Kind::Microphone) {
+                crate::permissions::request(Kind::Microphone);
                 Ok(())
             } else {
                 open("microphone")
@@ -341,6 +362,7 @@ mod tests {
             microphones: 1,
             chosen_mic_missing: false,
             permissions: ALLOWED,
+            allowed_before: Vec::new(),
             mac_version: macos.then_some((15, 1)),
             whole_system_note: None,
             auto_mode: true,
@@ -393,6 +415,27 @@ mod tests {
         assert_eq!(some_off.checks[4].detail.as_deref(), Some("Not recorded by themselves: Zoom."));
         let unknown = evaluate(&ReadyInputs { permissions: Permissions { microphone: Access::Unknown, ..ALLOWED }, ..good(true) }, at());
         assert!(unknown.ready, "macOS asks when the first recording starts");
+    }
+
+    #[test]
+    fn a_permission_allowed_before_but_not_asked_now_is_not_ready() {
+        // D-120: never "Microphone allowed" / "Calls: Ready" while macOS calls it "not asked" after allowing it before.
+        let mic = ReadyInputs { permissions: Permissions { microphone: Access::Unknown, ..ALLOWED }, allowed_before: vec![Kind::Microphone], ..good(true) };
+        let report = evaluate(&mic, at());
+        assert!(!report.ready);
+        assert_eq!(problems(&mic), [("microphone_permission", Some(FixAction::AllowMicrophone))]);
+        assert_eq!(report.checks[2].detail.as_deref(), Some(ALLOWED_BEFORE));
+        assert_eq!(report.checks[2].fix.map(|f| f.label), Some("Open System Settings"));
+        let system = ReadyInputs { permissions: Permissions { system_audio: Access::Unknown, ..ALLOWED }, allowed_before: vec![Kind::SystemAudio], ..good(true) };
+        assert_eq!(problems(&system), [("other_side", Some(FixAction::AllowSystemAudio))]);
+        // A possibility, not a breakage seen: no Critical notification.
+        let mut watch = ReadyWatch::default();
+        watch.observe(&evaluate(&good(true), at()));
+        assert_eq!(watch.observe(&report), None);
+        // Never allowed before: still ready, macOS asks at the first recording.
+        assert!(evaluate(&ReadyInputs { allowed_before: Vec::new(), ..mic }, at()).ready);
+        // Screen Recording is not part of the check.
+        assert!(evaluate(&ReadyInputs { permissions: Permissions { screen: Access::Reopen, ..ALLOWED }, allowed_before: vec![Kind::Screen], ..good(true) }, at()).ready);
     }
 
     #[test]

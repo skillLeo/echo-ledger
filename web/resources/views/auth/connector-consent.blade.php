@@ -1,11 +1,11 @@
 @extends('site.layout')
 
-@section('title', 'Connect an app · EchoLedger')
+@section('title', 'Connect an app · '.\App\Support\Brand::name())
 
 @section('content')
     @include('auth.form-styles')
     <div class="account">
-        <h1>Allow {{ $name }} to read your EchoLedger recordings?</h1>
+        <h1>Allow {{ $name }} to read your @brand recordings?</h1>
         <div class="card">
             <p style="margin: 0;"><strong>{{ $name }}</strong> will read as <strong>{{ $email }}</strong>@if ($workspace) in <strong>{{ $workspace }}</strong>@endif:</p>
             <ul style="margin: 0; padding-left: 20px;">
@@ -17,7 +17,7 @@
             @if ($hosts !== [])
                 <p class="hint">After you choose, the browser goes back to <strong>{{ implode(', ', $hosts) }}</strong>.</p>
             @endif
-            <p class="hint">Allow only if you are adding EchoLedger in Claude or ChatGPT yourself, just now. You can disconnect it at any time under Account → Devices → Connected apps.</p>
+            <p class="hint">Allow only if you are adding @brand in Claude or ChatGPT yourself, just now. You can disconnect it at any time under Account → Devices → Connected apps.</p>
             <div class="actions">
                 <form method="post" action="{{ route('passport.authorizations.approve') }}">
                     @csrf

@@ -577,7 +577,7 @@ fun SessionScreen(
                             val retryScope = rememberCoroutineScope()
                             var retrying by remember { mutableStateOf(false) }
                             InlineBanner(
-                                "Backup engine${t.providerLabel?.let { " ($it)" } ?: ""} — Re-transcribe?",
+                                "Backup transcription — Re-transcribe?",
                                 Modifier.padding(horizontal = Space.screen).padding(bottom = Space.s3),
                                 kind = BannerKind.Warning,
                                 action = if (retrying) "Starting…" else "Re-transcribe",
@@ -636,12 +636,12 @@ fun SessionScreen(
                             }
                             EchoButton("Copy for AI (marks unsure words)", {
                                 copy(withTimestamps = false, forAi = true)
-                            }, kind = ButtonKind.Text)
+                            }, kind = ButtonKind.Text, maxLines = 2)
                             Text(
                                 if (t.kind ==
                                     "final"
                                 ) {
-                                    "Final transcript · ${providerName(t.provider)}"
+                                    "Final transcript"
                                 } else {
                                     "Live captions (final pending)"
                                 },
@@ -1085,8 +1085,8 @@ internal fun AppLockSection(vm: MainViewModel, settings: AppSettings) {
                 Column(Modifier.weight(1f)) {
                     Text("Hide content in Recents and screenshots")
                     Text(
-                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always left out of " +
-                            "screenshots unless you choose Show in During screen sharing.",
+                        "Off by default, so you can take screenshots of the app. EchoLedger's floating windows are always a black " +
+                            "box in screenshots unless you choose Show in During screen sharing.",
                         color = Brand.Muted,
                         fontSize = 12.sp
                     )
@@ -1130,34 +1130,37 @@ fun Context.capabilities(helperConnected: Boolean): Capabilities = Capabilities(
     helperInBuild = BuildConfig.CAPTURE_HELPER
 )
 
-/** A speech engine by its product name ("assemblyai" → "AssemblyAI"); unknown ids as sent (C8). */
-fun providerName(id: String?): String = when (id) {
-    null -> ""
-    "assemblyai" -> "AssemblyAI"
-    "elevenlabs" -> "ElevenLabs"
-    "azure_mai" -> "Azure Speech"
-    "whispercpp_local" -> "whisper.cpp"
-    "parakeet_local" -> "Parakeet"
-    else -> id
-}
-
 /** Final transcript states that are still being worked on: never shown as an empty transcript (A6.M5). */
 private const val LIVE_PAGE_REFRESH_MS = 5_000L
 
 private val IN_PROGRESS = setOf("pending", "submitted", "processing", "awaiting_device")
 
-/** The failure reason, plus the phone's own hint when nothing was captured. */
-internal fun failureText(t: TranscriptDto): String {
-    val reason = t.error ?: "The speech provider could not process this recording."
-    return when (t.errorCode) {
-        "no_audio" -> "$reason Check Setup → Call capture (the helper must be running) and record again."
+/**
+ * Why a transcript failed, in the phone's own plain words per `error_code` (contract 1.8.1-a: apps may ignore `error`),
+ * never an engine's or vendor's name; only the Free plan's key step names Groq, which the person must act on.
+ */
+internal fun failureText(t: TranscriptDto): String = when (t.errorCode) {
+    "no_audio" -> "No audio was captured in this recording. Check Setup → Call capture (the helper must be running) and record again."
 
-        // Since v1.6 (the Free plan): transcription uses the person's own free Groq key.
-        "needs_transcription_key" ->
-            "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry."
+    "budget_exceeded" -> "This month's transcription limit is reached."
 
-        else -> reason
-    }
+    "provider_unreachable" -> "The transcription service could not be reached. Tap Retry in a while."
+
+    "provider_rejected" -> "The transcription service could not transcribe this recording. Tap Retry, or choose another language."
+
+    "provider_not_configured" -> "Transcription is not set up on the server yet. Ask your admin."
+
+    "provider_timeout" -> "Transcription took too long and was stopped. Tap Retry."
+
+    "interrupted" -> "Transcription was interrupted. Tap Retry."
+
+    "recording_missing" -> "The recording is missing or not ready."
+
+    // Since v1.6 (the Free plan): transcription uses the person's own free Groq key.
+    "needs_transcription_key" ->
+        "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry."
+
+    else -> "The transcript could not be made. Tap Retry."
 }
 
 /** Setup → Call capture: the guided test and "Copy diagnostics". */

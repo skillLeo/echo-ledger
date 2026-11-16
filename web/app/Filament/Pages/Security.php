@@ -9,6 +9,7 @@ use App\Filament\Concerns\FullConsoleOnly;
 use App\Models\AuditEvent;
 use App\Models\Device;
 use App\Services\AuditLog;
+use App\Support\Brand;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
 use Filament\Panel;
@@ -92,7 +93,7 @@ class Security extends Page implements HasTable
             'web' => 'Console',
             // Since v1.5: the app the connector's call came from ("Claude").
             'connector' => (string) ($event->meta['client'] ?? 'A connected app'),
-            default => 'EchoLedger',
+            default => Brand::name(),
         };
     }
 }

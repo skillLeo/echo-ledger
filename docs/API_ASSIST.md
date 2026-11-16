@@ -1,8 +1,12 @@
-# Live Assist contract — revision 1.9.0-b (draft)
+# Live Assist contract — revision 1.9.0-d (frozen 2026-11-17 for the sprint)
 
-The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is a draft
-until the L1 server work starts (after v1.8.0); then its HTTP part moves into [API.md](API.md) and the API
-documentation test covers it. Everything here is invisible to users until v1.9 ships, and nothing of it ships before
+1.9.0-d: the connection messages (`ready`, `auth`, `token_refresh` / `token_refreshed`), the full `error` shape,
+`seq`, the refusals before the upgrade (incl. `503 relay_busy`), the close codes, the token rules on refresh and
+resume, `relay.url`, and pinning of the relay host.
+
+The contract for Live Assist (v1.9 Phase L): text-only help on screen while the other person talks. It is frozen for
+the sprint: only the lead changes it, always with a bump. Its HTTP part moves into [API.md](API.md) when the L1 server
+work merges, and the API documentation test covers it from then on. Everything here is invisible to users until v1.9 ships, and nothing of it ships before
 Phase S is verified on real devices.
 
 Conventions are those of [API.md](API.md): JSON, a device token with abilities, ids from the token and never from the
@@ -119,6 +123,41 @@ Relay → client: `suggestion_start` (`suggestion_id`, `mode`, `model`, `draft`)
 `suggestion_end` (`suggestion_id`, latency stages, usage) · `skip` (no reply needed) · `mode_changed` (budget
 downgrade: `max → deep → balanced → fast → captions_only`, with `reason`) · `error` (`code`, `message`, `retry`).
 
+### Connecting (since 1.9.0-d)
+
+- `seq` counts per direction and per connection, from 1.
+- The first relay message on every connection is `ready`:
+  `{"type":"ready","seq":1,"protocol":1,"session_id":"…","mode":"fast|balanced|deep|max|captions_only",
+  "requested_mode":"fast|balanced|deep|max","allowed_modes":["balanced","fast"],"expires_at":"…+00:00",
+  "resumed":false,"practice":false,"limits":{"max_message_bytes":2097152,"max_turn_chars":4000,
+  "messages_per_second":40}}`. `allowed_modes` lists the most capable first; `requested_mode` is `balanced` until
+  `context_update.settings.mode` says otherwise.
+- `auth` (client → relay), only when the client can't send the header: `{"type":"auth","seq":1,"token":"…"}` within
+  5 s of connecting. After sign-in it is answered with `error bad_message`.
+- `token_refresh` (client → relay): `{"type":"token_refresh","seq":n,"token":"…"}` before `expires_at`. Success:
+  `{"type":"token_refreshed","seq":m,"expires_at":"…"}`, possibly followed by `mode_changed`. Failure: `error`
+  `token_refresh_rejected` (`retry: false`, `fatal: false`, `in_reply_to: n`); the old token stays valid until it
+  expires. A token older (`iat`) than the newest one this session has used is refused, on refresh and on reconnect;
+  going back to a token seen before continues its spend, never restores it.
+- `error` always carries every field: `code`, `message`, `retry`, `suggestion_id` (or `null`), `in_reply_to` (or
+  `null`), `fatal`. A sign-in failure is an `error` with `fatal: true` (`token_missing`, `token_invalid`,
+  `token_expired`, `wrong_session`), then a close.
+- Refused before the upgrade (HTTP): `401` `token_missing` / `token_invalid` / `token_expired`, `403`
+  `wrong_session`, `400` `websocket_required`, `503 relay_busy` (connection ceiling; retry with backoff), `429` from
+  the per-address limits in front of the relay.
+- Close codes: `1009` a message above `max_message_bytes`; `1012` the relay is restarting (reconnect and resume);
+  `4401` token expired or failed first-message `auth`; `4403` the session belongs to someone else; `4408` nothing
+  received for 60 s; `4409` replaced by a newer connection for the same session (don't reconnect). The relay never
+  sends `1000` itself.
+- Resume: a reconnect with a valid token for the same `sid` gets `ready` with `resumed: true`. A relay restart loses
+  live sessions; the client then sends its `context_update` again.
+- `relay.url` (in the session start answer) is exactly `wss://<relay host>/v1/assist`: from one server setting, never
+  from the request's host; no port, query or trailing slash; the same for the whole session.
+- The apps pin the relay host's public key (plus a backup key) like the server's, delivered in the device security
+  list before the first connection. A pin mismatch refuses the connection with a clear message; recording is
+  unaffected.
+- Clients set `TCP_NODELAY` on the socket.
+
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft
 is replaced by its upgrade only if the person has not started speaking; captions never stop when the budget runs out.
@@ -130,7 +169,7 @@ First line at most 25 words in simple English; at most 3 bullets with the key wo
 an optional Urdu / Roman Urdu line explaining the question; exactly `SKIP` when no reply is needed; never ask for
 something already said; consistent with the facts ledger; never invent experience, numbers or promises.
 
-The pack (web/resources/prompts/assist/, version 1.0.0) fixes two things the apps rely on: the language line starts
+The pack (web/resources/prompts/assist/, version 1.0.1) fixes two things the apps rely on: the language line starts
 with "Urdu:", "Roman Urdu:" or "Arabic:" (apps may style it apart), and the consent line for boss, client and general
 meetings is "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me.
 Is that okay with you?" (the honest version: it also suggests answers; Hassam reviews the wording before launch, N7).

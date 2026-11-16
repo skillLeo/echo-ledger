@@ -88,8 +88,21 @@ fn title(label: &str) -> &'static str {
 /// One builder for every overlay-type window. Flags verified against tauri-2.12.5
 /// `src/webview/webview_window.rs` (`focusable` 927, `content_protected` 952, `skip_taskbar` 641,
 /// `always_on_top` 615, `accept_first_mouse` 962). The capture flag is set by the privacy service before the window is
-/// first shown and checked once it is built (`privacy::window`).
+/// first shown and checked once it is built (`privacy::window`). On a Mac it is built on the main thread as a
+/// non-activating panel from the start (`macos::build_on_main_as_panel`): once its content is in, AppKit and WebKit
+/// observe the window, and its class can no longer change.
 fn build<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -> tauri::Result<WebviewWindow<R>> {
+    #[cfg(target_os = "macos")]
+    {
+        let (app, label) = (app.clone(), label.to_string());
+        let on_main = app.clone();
+        macos::build_on_main_as_panel(&on_main, move || build_window(&app, &label, size)).unwrap_or(Err(tauri::Error::FailedToReceiveMessage))
+    }
+    #[cfg(not(target_os = "macos"))]
+    build_window(app, label, size)
+}
+
+fn build_window<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -> tauri::Result<WebviewWindow<R>> {
     let builder = crate::smoke::isolate(WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into())))
         .title(title(label))
         .inner_size(size.0, size.1)

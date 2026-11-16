@@ -152,7 +152,11 @@ suspend fun printHtml(context: Context, file: File) {
     webView.loadDataWithBaseURL(null, html, "text/html", "UTF-8", null)
 }
 
-/** Export and share buttons of a finished transcript. */
+/**
+ * Export and share buttons of a finished transcript. They wrap onto the next line when the screen is narrow or the
+ * text is large (since v1.8: in one row "Send to WhatsApp" was squeezed to one letter per line), each keeping its label.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, hasAudio: Boolean, view: String? = null) {
     val context = LocalContext.current
@@ -161,7 +165,7 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
     var shareDialog by remember { mutableStateOf(false) }
     var sendSheet by remember { mutableStateOf(false) }
     var whatsApp by remember { mutableStateOf(false) }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         if (transcriptId != null) {
             Column {
                 OutlinedButton(onClick = { menu = true }) { Text("Export") }

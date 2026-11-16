@@ -103,6 +103,20 @@ pub fn duplicates(map: &HashMap<Action, String>) -> Vec<Action> {
 #[derive(Default)]
 pub struct Bindings(pub Mutex<HashMap<Action, Shortcut>>);
 
+impl Bindings {
+    /// Takes these actions' shortcuts out of the table. The lock is let go when this returns: unregistering each one
+    /// waits for the main thread, which looks the table up for every key press (`main_thread`).
+    pub fn take(&self, actions: &[Action]) -> Vec<Shortcut> {
+        let mut table = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        actions.iter().filter_map(|action| table.remove(action)).collect()
+    }
+
+    /// Takes every shortcut out of the table, as [`Bindings::take`].
+    pub fn take_all(&self) -> Vec<Shortcut> {
+        std::mem::take(&mut *self.0.lock().unwrap_or_else(|p| p.into_inner())).into_values().collect()
+    }
+}
+
 pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_global_shortcut::Builder::new()
         .with_handler(|app, shortcut, event| {
@@ -120,7 +134,11 @@ pub fn plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 /// Registers every configured shortcut. Returns (action, error) for shortcuts taken by other apps.
 pub fn register_all(app: &AppHandle, map: &HashMap<Action, String>) -> Vec<(Action, String)> {
     let gs = app.global_shortcut();
-    let _ = gs.unregister_all();
+    // Every shortcut EchoLedger holds goes first, one at a time and with no lock held: the plugin's `unregister_all`
+    // keeps its own table locked while it waits for the main thread, which takes that table for every key press.
+    for shortcut in app.state::<Bindings>().take_all() {
+        let _ = gs.unregister(shortcut);
+    }
     let mut errors = Vec::new();
     let mut bound = HashMap::new();
     for action in Action::ALL {
@@ -189,6 +207,26 @@ mod tests {
         }
         assert_eq!(label(&map[&Action::RecordNow], true), "⌘⌥R");
         assert_eq!(label(&map[&Action::RecordNow], false), "Ctrl + Alt + R");
+    }
+
+    #[test]
+    fn shortcuts_leave_the_table_before_they_are_unregistered() {
+        // Unregistering waits for the main thread, and a key press there reads the table: it must be free by then.
+        let bindings = Bindings::default();
+        let [edit, hide, mark] = ["CommandOrControl+Shift+T", "CommandOrControl+Shift+H", "CommandOrControl+Alt+M"].map(|a| parse(a).unwrap());
+        bindings.0.lock().unwrap().extend([(Action::TranslateLock, edit), (Action::TranslateHide, hide), (Action::Mark, mark)]);
+        let mut taken = bindings.take(&[Action::TranslateLock, Action::TranslateHide, Action::Dictation]);
+        taken.sort_by_key(|s| s.id());
+        let mut wanted = vec![edit, hide];
+        wanted.sort_by_key(|s| s.id());
+        assert_eq!(taken, wanted, "only Live Translate's keys, and nothing for an action that has none");
+        assert!(bindings.0.try_lock().is_ok(), "the table is free while they are unregistered");
+        assert_eq!(bindings.0.lock().unwrap().get(&Action::Mark), Some(&mark), "the others stay");
+        assert_eq!(bindings.take_all(), vec![mark]);
+        assert!(bindings.0.try_lock().is_ok_and(|t| t.is_empty()));
+        // Every unregister goes through `take`: never the plugin's `unregister_all` (it holds its table while it waits).
+        let source = include_str!("shortcuts.rs").split("#[cfg(test)]").next().unwrap().to_string() + include_str!("translate/mod.rs");
+        assert!(!source.contains(".unregister_all("));
     }
 
     #[test]

@@ -9,6 +9,8 @@ import {
   type CaptionStyle,
   type Corner,
   type InputDevice,
+  type MicUser,
+  type NotRecordedMic,
   type PermissionsStatus,
   type Settings,
   type SettingsPatch,
@@ -19,6 +21,8 @@ import { meterLevel } from "../../lib/controls";
 import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
+import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../lib/explainer";
+import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
 import { CALL_APPS, setting } from "../../lib/settingsRegistry";
@@ -72,7 +76,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         {CALL_APPS.map(([app, name]) => (
           <div key={app} className={`set-row ${settings.autoMode ? "" : "disabled"}`.trim()} {...rowAttrs(`calls.app.${app}`)}>
             <label className="set-hit">
-              <span className="set-icon app" aria-hidden="true"><SourceAppIcon app={app} size={18} /></span>
+              <span className="set-icon app-glyph" aria-hidden="true"><SourceAppIcon app={app} size={18} /></span>
               <span className="set-title">{name}</span>
               <button type="button" className={`switch ${appRecords(settings.autoRecordApps, app) ? "on" : ""}`} role="switch" aria-checked={appRecords(settings.autoRecordApps, app)}
                 aria-label={`Auto-record ${name}`} disabled={!settings.autoMode} onClick={() => void patch({ autoRecordApps: { [app]: !appRecords(settings.autoRecordApps, app) } })} />
@@ -90,6 +94,7 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
       <Section title="Websites">
         <LinkRow id="calls.sites" value={sites === 1 ? "1 rule" : `${sites} rules`} onOpen={onSites} chevron />
       </Section>
+      <WhyNotRecorded />
       {!consentRead && (
         <div className="set-reset"><button type="button" className="btn text" onClick={onConsent}>Read the recording consent notice</button></div>
       )}
@@ -98,6 +103,49 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
       })} />
     </>
+  );
+}
+
+/**
+ * "Why a call wasn't recorded" (A1.8; moved here from Home, D-014): each app using the microphone now and what EchoLedger
+ * does with it, in plain words, and the last one that was not recorded, which the core keeps since EchoLedger started
+ * (with its reason and time), so a call from before this page was opened is explained too. The core chooses it among
+ * the apps not using the microphone now, a call first, so an app that always holds it never hides the call that was
+ * missed. Read every 2 s, only while this page is on screen (C9).
+ */
+function WhyNotRecorded() {
+  const [users, setUsers] = useState<MicUser[]>([]);
+  const [last, setLast] = useState<NotRecordedMic | null>(null);
+  const shown = useWindowShown();
+  useEffect(() => {
+    if (!shown) return;
+    let alive = true;
+    const tick = () => {
+      api.micUsers().then((list) => alive && setUsers(Array.isArray(list) ? list : [])).catch(() => undefined);
+      api.micLastNotRecorded().then((kept) => alive && setLast(kept?.user ? kept : null)).catch(() => undefined);
+    };
+    tick();
+    const timer = window.setInterval(tick, 2000);
+    return () => {
+      alive = false;
+      window.clearInterval(timer);
+    };
+  }, [shown]);
+  return (
+    <Section title="Why a call wasn't recorded" footer={<p>EchoLedger records a call when a call app uses your microphone and plays sound.</p>}>
+      <div className="set-row set-block" data-testid="why-not-recorded" aria-live="polite">
+        {users.length === 0 ? <p className="small muted">No app is using the microphone now.</p> : (
+          <ul className="why-list">
+            {users.map((u, i) => (
+              <li key={`${u.name}-${i}`} className="small"><span className={`status-dot ${micTone(u)}`} aria-hidden="true" /> <b dir="auto">{micUserName(u)}</b>: {decisionText(u)}</li>
+            ))}
+          </ul>
+        )}
+        {last && !users.some((u) => sameMicApp(u, last.user)) && (
+          <p className="small muted" data-testid="last-not-recorded" dir="auto">{lastNotRecordedLine(last)}</p>
+        )}
+      </div>
+    </Section>
   );
 }
 
@@ -174,6 +222,8 @@ const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
   allowed: "Allowed",
   denied: "Not allowed",
   unknown: "Asked on first use",
+  // Screen Recording only; never the microphone, kept for completeness.
+  reopen: "Allowed: quit and reopen EchoLedger to finish",
 };
 
 /** Recording › Microphone & audio. */
@@ -259,7 +309,9 @@ export function MicrophonePage({ settings, patch, disabled, systemAudioNote }: {
           )}
         </InfoRow>
         {permissions?.platform === "macos" && (
-          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed" : "Asked on first use"}>
+          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed"
+            // macOS does not say without the privacy call (D-136): Fix opens System Settings, where it shows.
+            : permissions.canTellNotAsked === false ? "Check in System Settings" : "Asked on first use"}>
             {permissions.systemAudio !== "allowed" && (
               <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Fix</button>
             )}

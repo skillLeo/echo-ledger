@@ -15,6 +15,7 @@ use App\Services\Accounts\GoogleSignIn;
 use App\Services\AuditLog;
 use App\Services\Passkeys;
 use App\Services\WebSessions;
+use App\Support\Brand;
 use App\Support\ClientCountry;
 use App\Support\Formats;
 use Filament\Actions\Action;
@@ -94,7 +95,7 @@ trait ManagesSecurityPages
             }
         }
 
-        return AppAuthentication::make()->recoverable()->brandName('EchoLedger');
+        return AppAuthentication::make()->recoverable()->brandName(Brand::name());
     }
 
     /** Two-step sign-in, set up with an authenticator app. */

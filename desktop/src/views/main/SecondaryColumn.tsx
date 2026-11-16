@@ -42,7 +42,7 @@ export function PlaceList({ places, folder, view, onOpen, label, compact = false
         const open = isOpenPlace(place, folder, view);
         const attention = (place.view === "waiting" || place.view === "failed") && place.count > 0;
         return (
-          <li key={place.key} className={`place-row ${open ? "selected" : ""} ${place.count === 0 && !open ? "empty" : ""}`} {...(place.drop ? { [DROP_ATTRIBUTE]: "" } : {})}>
+          <li key={place.key} className={`place-row ${open ? "selected" : ""} ${place.count === 0 && !open ? "is-empty" : ""}`} {...(place.drop ? { [DROP_ATTRIBUTE]: "" } : {})}>
             <button type="button" className="place-open" aria-current={open ? "true" : undefined} onClick={() => onOpen(place)}>
               <PlaceGlyph place={place} />
               <span className="place-name">{place.label}</span>
@@ -71,11 +71,10 @@ export function LibraryColumn({ places, folder, view, onOpen, projects = null, e
       <PlaceList places={places} folder={folder} view={view} onOpen={onOpen} label="Smart folders" />
       {projects && projects.length > 0 && expanded && onToggle && onProject && (
         <>
-          <div className="subnav-head">Projects</div>
+          <div className="subnav-head" title="Drag recordings onto the Inbox or a project to move them.">Projects</div>
           <ProjectTree projects={projects} label="Projects in the column" variant="sidebar" expanded={expanded} onToggle={onToggle} onOpen={onProject} dropTargets />
         </>
       )}
-      <p className="subnav-hint small muted">Drag recordings onto the Inbox or a project to move them.</p>
     </nav>
   );
 }

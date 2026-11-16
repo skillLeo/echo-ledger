@@ -219,11 +219,17 @@ fn macos_declares_the_microphone_and_audio_capture_purposes() {
     for key in [
         "NSMicrophoneUsageDescription",
         "NSAudioCaptureUsageDescription",
+        "NSAppleEventsUsageDescription",
     ] {
         assert!(info.contains(key), "Info.plist lacks {key}");
     }
+    // A signed build has the hardened runtime, which refuses what these do not allow: the microphone, and the Apple events
+    // osascript sends for "Read browser tab addresses" (without it the switch silently reads nothing).
     let entitlements = std::fs::read_to_string(manifest_dir().join("Entitlements.plist")).unwrap();
-    assert!(entitlements.contains("com.apple.security.device.audio-input"));
+    let flat: String = entitlements.split_whitespace().collect();
+    for key in ["com.apple.security.device.audio-input", "com.apple.security.automation.apple-events", "com.apple.security.network.client"] {
+        assert!(flat.contains(&format!("<key>{key}</key><true/>")), "Entitlements.plist does not allow {key}");
+    }
 }
 
 #[test]
@@ -271,7 +277,7 @@ fn this_release_is_version_1_5_0_beta_1() {
 
 #[test]
 fn the_updater_carries_the_release_key_and_refuses_unsigned_releases() {
-    // v1.5: the lead's minisign key (its private half stays outside the repo); the endpoint is the signed-in server's
+    // v1.5: the release signing key (minisign; its private half stays outside the repo); the endpoint is the signed-in server's
     // /downloads/desktop.json, set at run time, so none is configured.
     let conf = tauri_conf();
     let updater = &conf["plugins"]["updater"];

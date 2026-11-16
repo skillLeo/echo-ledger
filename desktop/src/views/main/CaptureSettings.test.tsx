@@ -1,9 +1,10 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
-import { makeSettings } from "../../test/fixtures";
+import { makeMicUser, makeSettings } from "../../test/fixtures";
+import { answerConfirm, confirmAsked } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -44,15 +45,15 @@ describe("Calls & meetings", () => {
     expect(onConsent).toHaveBeenCalled();
   });
 
-  it("sends the seconds to skip as a number and resets only this page", () => {
+  it("sends the seconds to skip as a number and resets only this page", async () => {
     const patch = vi.fn(async () => true);
     render(<CallsPage settings={makeSettings()} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
     fireEvent.change(screen.getByLabelText("Skip calls shorter than"), { target: { value: "30" } });
     expect(patch).toHaveBeenLastCalledWith({ skipCallsShorterThanS: 30 });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
-    expect(window.confirm).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
-    expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "keep", skipCallsShorterThanS: 10 }));
+    expect(confirmAsked).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "keep", skipCallsShorterThanS: 10 })));
   });
 });
 
@@ -179,5 +180,94 @@ describe("Microphone & audio", () => {
       "We didn't hear your microphone. Check the microphone above and its permission.",
       "Sound from this computer was captured.",
     ]);
+  });
+});
+
+describe("an app's icon on a Settings row (D-001)", () => {
+  it("never wears the bare app class, which is the main window's grid", () => {
+    const { container } = render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+    const icons = container.querySelectorAll(".set-icon.app-glyph");
+    expect(icons.length).toBeGreaterThan(0);
+    expect(container.querySelector(".set-icon.app")).toBeNull();
+  });
+
+  it("keeps the bare app class for the main window alone, everywhere in the source", async () => {
+    const { readFileSync, readdirSync, statSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const src = join(dirname(fileURLToPath(import.meta.url)), "../..");
+    const found: string[] = [];
+    const walk = (dir: string) => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) walk(path);
+        else if (/\.tsx$/.test(name) && !/\.test\.tsx$/.test(name)) {
+          for (const m of readFileSync(path, "utf8").matchAll(/className=(?:"([^"]*)"|\{`([^`]*)`\})/g)) {
+            const tokens = (m[1] ?? m[2] ?? "").replace(/\$\{[^}]*\}/g, " ").split(/\s+/);
+            if (tokens.includes("app")) found.push(`${name}: ${m[0]}`);
+          }
+        }
+      }
+    };
+    walk(src);
+    expect(found).toEqual(["MainApp.tsx: className={`app ${collapsed ? \"collapsed\" : \"\"} ${pageWidth < NARROW_CONTENT ? \"narrow\" : \"\"} ${pageWidth < COLUMN_CONTENT ? \"no-column\" : \"\"}`}"]);
+  });
+});
+
+describe("Calls & meetings says why a call wasn't recorded (D-014)", () => {
+  const callsPage = () => render(<CallsPage settings={makeSettings()} patch={vi.fn(async () => true)} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
+  const slack = makeMicUser({ name: "slack.exe", app: null, site: null, decision: "ignored", reason: "unknown_app" });
+  const today = (hours: number, minutes: number) => { const d = new Date(); d.setHours(hours, minutes, 0, 0); return d.toISOString(); };
+
+  it("lists the apps using the microphone in plain words", async () => {
+    respond("mic_users", [makeMicUser({ name: "chrome.exe", app: null, site: "meet.example.com", decision: "ignored", reason: "unknown_site" }), makeMicUser({ decision: "recording" })]);
+    respond("mic_last_not_recorded", null);
+    callsPage();
+    const why = await screen.findByTestId("why-not-recorded");
+    await waitFor(() => expect(why).toHaveTextContent("meet.example.com: Not recorded: this website isn't one of your call sites"));
+    expect(why).toHaveTextContent("Google Meet: Recorded now");
+    expect(why).not.toHaveTextContent(/holds mic|playing audio|loopback|✓|✗/i);
+    expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
+  });
+
+  it("explains a call from before the page was opened, with its reason and time, from what the core kept", async () => {
+    respond("mic_users", []);
+    respond("mic_last_not_recorded", { user: slack, at: today(0, 5) });
+    callsPage();
+    await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("No app is using the microphone now."));
+    expect(await screen.findByTestId("last-not-recorded")).toHaveTextContent(/^Last not recorded: Slack at 12:05 am, because it isn't a call app EchoLedger knows\.$/);
+  });
+
+  it("explains the missed call while another app is listed, and leaves it out while that app is listed (D-014)", async () => {
+    // A noise filter holds the microphone all the time; the core chose the Zoom call that was missed.
+    const krisp = makeMicUser({ name: "Krisp", app: null, site: null, playsAudio: false, decision: "ignored", reason: "unknown_app" });
+    const zoom = makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" });
+    respond("mic_users", [krisp]);
+    respond("mic_last_not_recorded", { user: zoom, at: today(0, 5) });
+    const { unmount } = callsPage();
+    expect(await screen.findByTestId("last-not-recorded")).toHaveTextContent("Last not recorded: Zoom at 12:05 am, because auto-record is off for this app.");
+    unmount();
+    // Zoom is listed again (being recorded now): the list says what happens with it, so the line is left out.
+    respond("mic_users", [krisp, { ...zoom, decision: "recording", reason: null }]);
+    callsPage();
+    await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("Zoom: Recorded now"));
+    expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
+  });
+
+  it("says the last app not recorded once it stops using the microphone, not while it is listed", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      respond("mic_users", [slack]);
+      respond("mic_last_not_recorded", { user: slack, at: today(0, 5) });
+      callsPage();
+      await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("Slack: Not recorded"));
+      expect(screen.queryByTestId("last-not-recorded")).not.toBeInTheDocument();
+      respond("mic_users", []);
+      await act(async () => { vi.advanceTimersByTime(2_000); });
+      await waitFor(() => expect(screen.getByTestId("why-not-recorded")).toHaveTextContent("No app is using the microphone now."));
+      expect(screen.getByTestId("last-not-recorded")).toHaveTextContent("Last not recorded: Slack at 12:05 am, because it isn't a call app EchoLedger knows.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

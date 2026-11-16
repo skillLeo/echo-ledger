@@ -12,6 +12,7 @@ use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\SettingsRepository;
 use App\Services\Storage\RecordingFiles;
+use App\Support\Brand;
 use Filament\Facades\Filament;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\Request;
@@ -81,7 +82,7 @@ final class AccountPageController extends Controller
         $model = AccountExport::query()->find($export);
         abort_unless($model instanceof AccountExport && $model->downloadable() && $model->path !== null && $files->disk()->exists($model->path), 404);
         $path = $model->path;
-        $name = 'EchoLedger export '.$model->created_at->format('Y-m-d').'.zip';
+        $name = Brand::name().' export '.$model->created_at->format('Y-m-d').'.zip';
 
         return response()->streamDownload(function () use ($files, $path, $model): void {
             $out = fopen('php://output', 'wb');

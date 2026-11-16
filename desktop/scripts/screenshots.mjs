@@ -147,6 +147,159 @@ const SCREENS = [
     await page.waitForSelector(".after-pill.chip");
     await page.waitForSelector(".overlay-card .caption-line");
   }],
+  // D-013, D-014, D-040, D-041, D-044, D-052, D-062: no internal, debug or vendor text.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`record-recording${size}`, "record-recording", async (page) => page.waitForSelector(".record-controls"), viewport],
+    [`library-free${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".segments .segment");
+      await page.waitForSelector("[data-testid=locked-premium_engines]");
+    }, viewport],
+  ]),
+  // D-087: in the window's search a name comes before a keyword: "new" offers New project first (also at 200 % text).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }]].map(([size, viewport]) => [`palette-new${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("new");
+    await page.waitForTimeout(600);
+  }, viewport]),
+  // D-087: what is typed is split as names are, so punctuation typed with a name still finds it.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`palette-punctuation${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("calls & meetings");
+    await page.waitForTimeout(600);
+  }, viewport]),
+  // D-087: recordings found later never take the highlight from a row already shown ("call w": the Ready check stays
+  // highlighted when "Call with …" recordings come in, though their names start with what was typed).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`palette-late-recordings${size}`, "library&plan=free&found=1", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("call w");
+    await page.getByRole("group", { name: "Recordings" }).waitFor();
+    await page.waitForTimeout(300);
+  }, viewport]),
+  // D-087: "Go to X" is named by X, so "library" offers Go to Library first (Enter opens it, never Sync).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`palette-library${size}`, "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+k" : "Control+k");
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("library");
+    await page.waitForTimeout(600);
+  }, viewport]),
+  // A Settings row that opens something has a chevron (PIN, Promo code); one that acts reads as an action.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`settings-app-lock${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "App lock"); }, viewport],
+    [`plan-free-rows${size}`, "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); await page.getByRole("button", { name: /^Promo code/ }).scrollIntoViewIfNeeded(); }, viewport],
+  ]),
+  // D-014: why a call wasn't recorded, in plain words, in Calls & meetings.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`settings-calls-why${size}`, "settings", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Calls & meetings");
+    await page.getByTestId("why-not-recorded").waitFor();
+    await page.getByTestId("why-not-recorded").scrollIntoViewIfNeeded();
+    await page.waitForTimeout(2300);
+  }, viewport]),
+  // D-130: a failed transcript says why in the app's own words; this month's limit offers no Try again.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [["", "library"], ["-budget", "library&failure=budget_exceeded"]]
+    .map(([kind, screen]) => [`library-failed${kind}${size}`, screen, async (page) => {
+      await page.waitForSelector(".segments .segment");
+      await page.getByTestId("library-list").getByText(/Call with \+92/).click();
+      await page.waitForSelector(".detail .notice.error");
+    }, viewport])),
+  // D-001, D-120: the Calls page's app icons beside their names; a permission allowed before on this Mac, said as a
+  // possibility with System Settings first, and Screen Recording switched on while EchoLedger ran (Quit & reopen).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
+    // "reopen-did-not-apply": EchoLedger was reopened and macOS still has not applied it: switch it off and on instead.
+    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"], ["reopen-did-not-apply", "reopen=2"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
+      await page.waitForSelector("[data-testid=permission-loss]");
+      await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
+      await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
+      if (state.startsWith("reopen")) await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
+    }, viewport]),
+    // D-136: no privacy call on this macOS: nothing said that cannot be read, System Settings first.
+    [`permissions-untold-mac${size}`, "library-lost-mac&untold=1", async (page) => {
+      await page.waitForSelector("[data-testid=permission-loss]");
+      await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
+      await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
+      await page.getByTestId("permission-system_audio").scrollIntoViewIfNeeded();
+    }, viewport],
+    // The Mac check's Screen Recording step has the same Quit & reopen.
+    [`settings-mac-check-reopen${size}`, "settings-mac-check&reopen=1", async (page) => {
+      await settingsReady(page);
+      await nav(page, "Help");
+      await page.getByRole("button", { name: /^Mac check/ }).click();
+      await page.waitForSelector("[data-testid=check-screen_permission]");
+      await page.getByTestId("check-screen_permission").scrollIntoViewIfNeeded();
+    }, viewport],
+    // The Ready check and the top bar never say "Microphone allowed" or "Calls: Ready" in that state.
+    [`record-allowed-before-mac${size}`, "record&older=1", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row"), viewport],
+  ]),
+  // D-023, D-024, D-029, D-031, D-046, D-003: nothing clipped or pushed sideways in the Library.
+  ["library-empty-narrow", "library-empty", async (page) => page.waitForSelector(".empty-state"), { width: 860, height: 560 }],
+  ...[["-1100", { width: 1100, height: 740 }], ["-1300", { width: 1300, height: 800 }]].map(([size, viewport]) => [`library-long-language${size}`, "library", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
+  }, viewport]),
+  // D-132: what a second transcription heard under a line, in the app's own words, never the engine's name.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].map(([size, viewport]) => [`library-second-check${size}`, "library&check=1", async (page) => {
+    await page.waitForSelector(".segments .seg-check");
+    await page.locator(".segments .seg-check").scrollIntoViewIfNeeded();
+  }, viewport]),
+  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button. In a
+  // narrow window the list and the page are one under the other: the row is scrolled into view, and "-page" shows the
+  // heading (a screen whose untitled recording is not in view is not taken).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].flatMap(([size, viewport]) => [
+    [`library-untitled${size}`, "library&untitled=1", async (page) => showUntitled(page, size ? "row" : "both"), viewport],
+    ...(size ? [[`library-untitled-page${size}`, "library&untitled=1", async (page) => showUntitled(page, "heading"), viewport]] : []),
+  ]),
+  // D-121: the Library's row opened its folders in a narrow window; widened until the page's own column shows, the
+  // sidebar's copy has closed (the full-size window, the column on the page).
+  ["sidebar-library-widened", "library", async (page) => {
+    await page.setViewportSize({ width: 960, height: 700 });
+    await page.waitForSelector(".app");
+    await page.locator(".sidebar").getByRole("button", { name: "Library", exact: true }).click();
+    await page.getByRole("list", { name: "Smart folders in the sidebar" }).waitFor();
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.waitForTimeout(300);
+    if (await page.getByRole("list", { name: "Smart folders in the sidebar" }).count()) throw new Error("the sidebar's copy is still open");
+  }],
+  // D-121, D-007, D-090: whole controls, the workspace switcher, Settings' action rows.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`workspace-menu${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("button", { name: /^Workspace:/ }).click();
+      await page.waitForSelector(".menu-pop");
+    }, viewport],
+    [`settings-share-privacy-actions${size}`, "settings-share", async (page) => {
+      await settingsReady(page);
+      await nav(page, "Screen-share privacy");
+      await page.waitForSelector(".set-action");
+    }, viewport],
+  ]),
+  // D-045 … D-122, D-072: the app's own confirm dialog, at full size and at the smallest window.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
+    [`confirm-delete-recording${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".detail-title");
+      await page.getByRole("button", { name: "Delete", exact: true }).first().click();
+      await page.getByRole("alertdialog", { name: "Delete this recording?" }).waitFor();
+    }, viewport],
+    [`confirm-revoke-link${size}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Shared", exact: true }).click();
+      await page.getByRole("tab", { name: /My links/ }).click();
+      await page.getByRole("button", { name: "Revoke", exact: true }).first().click();
+      await page.getByRole("alertdialog", { name: "Revoke this link?" }).waitFor();
+    }, viewport],
+  ]),
+  // D-105: the chip's Discard is a labelled trash, and Discard says Discarded with Undo for 6 s.
+  ["controls-discarded", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }],
+  ["controls-discarded-narrow", "controls-discarded", async (page) => {
+    await page.waitForSelector(".after-pill.discarded");
+    await page.waitForSelector(".after-pill.chip");
+  }, { width: 860, height: 560 }],
   ["controls-bluetooth", "controls-bluetooth", async (page) => {
     await page.waitForSelector("[data-testid=bluetooth-notice]");
     await page.waitForSelector(".after-pill.chip");
@@ -218,11 +371,10 @@ const SCREENS = [
     await page.getByRole("button", { name: /^Account menu:/ }).click();
     await page.waitForSelector(".shell-pop");
   }],
-  ["help", "library", async (page) => {
-    await page.waitForSelector(".segments .segment");
-    await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
-    await page.waitForSelector(".help-sheet");
-  }],
+  // D-079, D-133: Help fits the window at every size and text size: the lists scroll, the x and the buttons stay on
+  // screen (a screen whose buttons are not inside the sheet is not taken).
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }],
+    ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`help${size}`, "library", openHelp, viewport]),
   ["sidebar-rail", "library", async (page) => {
     await page.waitForSelector(".segments .segment");
     await page.getByRole("button", { name: "Collapse the sidebar" }).click();
@@ -241,6 +393,55 @@ const SCREENS = [
   ["settings-overview-pro-pending", "settings&plan=pro&request=awaiting_payment", settingsReady],
   ["settings-overview-deleting", "settings&plan=free&deleting=1", settingsReady],
   ["settings-narrow", "settings&plan=free", settingsReady, { width: 860, height: 560 }],
+  // The Settings list at Hassam's 1000 pt window, the search focused (its ring and the switches whole), a plan with no
+  // monthly limit (no empty bar), and the same at 200 % text (the page zoomed twice: half the room in points).
+  ["settings-1000", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1000, height: 700 }],
+  ["settings-1100", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1100, height: 740 }],
+  ["settings-text200", "settings&plan=ultra&unlimited=1", settingsReady, { width: 1100, height: 740, scale: 2 }],
+  ["settings-narrow-text200", "settings&plan=ultra&unlimited=1", settingsReady, { width: 860, height: 560, scale: 2 }],
+  ["settings-search-recovered", "settings&plan=free", async (page) => {
+    await settingsReady(page);
+    await page.getByRole("textbox", { name: "Search settings" }).fill("recovered recording");
+    await page.waitForSelector("[data-testid=settings-results]");
+  }],
+  // One search: the sidebar's opens the window's search, which says where it looked.
+  ["search-from-sidebar", "library&plan=free", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().click();
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("recovered recording");
+    await page.waitForTimeout(600);
+  }],
+  ["search-from-sidebar-narrow", "library&plan=free", async (page) => {
+    await page.waitForSelector(".app");
+    await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().click();
+    await page.getByRole("dialog", { name: "Command palette" }).getByRole("combobox").fill("devices");
+    await page.waitForTimeout(600);
+  }, { width: 860, height: 560 }],
+  // Two banners want the place: the more important one shows, in one sentence with its button.
+  ["library-banners-mac", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]")],
+  ["library-banners-mac-narrow", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 860, height: 560 }],
+  ["library-banners-mac-text200", "library-banners-mac", async (page) => page.waitForSelector("[data-testid=permission-loss]"), { width: 1100, height: 740, scale: 2 }],
+  // Settings' list and search, the sidebar's Search button and a banner with Learn more open, at the
+  // smallest window and at 200 % text.
+  ...[["", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }], ["-narrow-text200", { width: 860, height: 560, scale: 2 }]].flatMap(([size, viewport]) => [
+    [`review-settings-list${size || "-narrow"}`, "settings&plan=ultra&unlimited=1", settingsReady, viewport],
+    [`review-settings-search${size || "-narrow"}`, "settings&plan=free", async (page) => {
+      await settingsReady(page);
+      await page.getByRole("textbox", { name: "Search settings" }).fill("lock");
+      await page.waitForSelector("[data-testid=settings-results]");
+    }, viewport],
+    [`review-sidebar-search${size || "-narrow"}`, "library&plan=free", async (page) => {
+      await page.waitForSelector(".app");
+      await page.getByRole("button", { name: /^Search recordings, settings and pages/ }).first().focus();
+    }, viewport],
+    [`review-banner-learn-more${size || "-narrow"}`, "library-maintenance", async (page) => {
+      await page.waitForSelector("[data-testid=maintenance]");
+      await page.getByTestId("maintenance").getByRole("button", { name: "Learn more" }).click();
+    }, viewport],
+  ]),
+  // A recovered recording keeps its chip after its transcript renamed it.
+  ["library-recovered", "library-recovered", async (page) => page.waitForSelector(".recovered-chip")],
+  ["library-recovered-narrow", "library-recovered", async (page) => page.waitForSelector(".recovered-chip"), { width: 860, height: 560 }],
   ["settings-narrow-page", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Notifications"); }, { width: 860, height: 560 }],
   ["plan-free", "settings&plan=free", async (page) => { await settingsReady(page); await nav(page, "Plan & usage"); }],
   ["plan-free-plans", "settings&plan=free", async (page) => {
@@ -537,6 +738,39 @@ async function launch() {
 }
 
 /** Waits for the page's fonts and lets it settle, then takes the picture. */
+/** The untitled recording in view (D-031): its row in the list, its page's heading, or both; throws when it is not. */
+async function showUntitled(page, what) {
+  await page.waitForSelector(".segments .segment");
+  const row = page.getByTestId("library-list").locator(".item-title", { hasText: /^Recording$/ });
+  const heading = page.locator(".detail-title", { hasText: /^Recording/ });
+  if (what === "row") await row.scrollIntoViewIfNeeded();
+  if (what === "heading") await heading.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  const wanted = what === "both" ? [row, heading] : [what === "row" ? row : heading];
+  for (const target of wanted) {
+    const box = await target.boundingBox();
+    const size = page.viewportSize();
+    if (!box || box.y < 0 || box.y + box.height > size.height || box.x < 0 || box.x + box.width > size.width) {
+      throw new Error("the untitled recording is not in view");
+    }
+  }
+}
+
+/** Opens Help & shortcuts from the sidebar and checks its buttons are on screen, inside the sheet (D-133). */
+async function openHelp(page) {
+  await page.waitForSelector(".segments .segment");
+  await page.locator(".sidebar").getByRole("button", { name: /Help & shortcuts/ }).click();
+  await page.waitForSelector(".help-sheet");
+  const outside = await page.evaluate(() => {
+    const sheet = document.querySelector(".help-sheet").getBoundingClientRect();
+    return [...document.querySelectorAll(".help-actions .btn")].filter((b) => {
+      const r = b.getBoundingClientRect();
+      return r.top < sheet.top || r.bottom > sheet.bottom || r.left < sheet.left || r.right > sheet.right;
+    }).map((b) => b.textContent);
+  });
+  if (outside.length) throw new Error(`Help's buttons are not on screen: ${outside.join(", ")}`);
+}
+
 async function shoot(page, file) {
   // No hover state left from the last click (a row's menu button, a tooltip).
   await page.mouse.move(0, 0);
@@ -552,16 +786,26 @@ await server.listen();
 const base = server.resolvedUrls.local[0];
 const browser = await launch();
 await mkdir(out, { recursive: true });
+const failed = [];
 try {
   for (const [name, screen, prepare, viewport] of SCREENS) {
     if (only && !only.some((o) => name.startsWith(o))) continue;
     for (const theme of ["light", "dark"]) {
-      const page = await browser.newPage({ viewport: viewport ?? { width: 1440, height: 900 }, colorScheme: theme, reducedMotion: "reduce" });
+      // `scale`: the text that much larger (the page zoomed: the same window holds 1/scale of the points).
+      const scale = viewport?.scale ?? 1;
+      const size = viewport ? { width: Math.round(viewport.width / scale), height: Math.round(viewport.height / scale) } : { width: 1440, height: 900 };
+      const page = await browser.newPage({ viewport: size, deviceScaleFactor: scale, colorScheme: theme, reducedMotion: "reduce" });
       page.on("pageerror", (e) => console.error(`${name}-${theme}: ${e.message}`));
       const [screenName, ...extra] = screen.split("&");
       await page.goto(`${base}scripts/screens/index.html?screen=${screenName}&theme=${theme}${extra.length ? `&${extra.join("&")}` : ""}`);
-      await prepare(page);
-      await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+      try {
+        await prepare(page);
+        await shoot(page, join(out, `desktop-${name}-${theme}.png`));
+      } catch (e) {
+        // One screen that cannot be reached says so and the rest are still taken; the run fails at the end.
+        failed.push(`${name}-${theme}`);
+        console.error(`${name}-${theme}: ${e.message.split("\n")[0]}`);
+      }
       await page.close();
     }
   }
@@ -580,4 +824,8 @@ try {
 } finally {
   await browser.close();
   await server.close();
+}
+if (failed.length) {
+  console.error(`Not taken: ${failed.join(", ")}`);
+  process.exitCode = 1;
 }

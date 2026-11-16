@@ -23,6 +23,7 @@ use App\Livewire\ActivityBell;
 use App\Livewire\Shell\Sidebar;
 use App\Livewire\Shell\Topbar;
 use App\Services\Staff\StaffAccess;
+use App\Support\Brand;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Enums\ThemeMode;
@@ -107,7 +108,7 @@ class AppPanelProvider extends PanelProvider
             ->default()
             ->id('app')
             ->path('app')
-            ->brandName('EchoLedger')
+            ->brandName(fn (): string => Brand::name())
             // The brand mark (since v1.5, docs/design/brand) next to the name, and as the tab's icon.
             ->brandLogo(fn (): View => view('filament.brand'))
             ->brandLogoHeight('1.5rem')
@@ -157,7 +158,7 @@ class AppPanelProvider extends PanelProvider
             ->emailChangeVerification()
             // Optional TOTP 2FA with one-time recovery codes: offered in the profile, not forced at login.
             ->multiFactorAuthentication([
-                AppAuthentication::make()->recoverable()->brandName('EchoLedger'),
+                AppAuthentication::make()->recoverable()->brandName(Brand::name()),
             ], isRequired: false)
             ->revealablePasswords(true)
             ->defaultThemeMode(ThemeMode::System)

@@ -41,13 +41,208 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   set (Flash option); Groq — set (fast-mode fallback; today Urdu transcription); Soniox — set (live STT default,
   translation on); AssemblyAI — set (live STT option); **OpenAI — empty** (optional provider in the relay); **Moonshot
   (Kimi) — no field yet** (added with the L1 server work; behind a flag until measured). None is needed before v1.9.
+- **PAUSED 2026-11-16 ~14:40 PKT (this account at 96% of its weekly usage; resets Thu 19 Nov 08:00 PKT; the first
+  account resets Fri 21 Nov 10:00 PKT). Resume each from here (review notes in the scratchpad may be gone after a
+  reboot; the branches hold the work):**
+  - web b-web @257f27ef (clean): P1 server+console done, review = changes needed (2 major: running transcripts not
+    counted in minutes_left; N+1 on GET /api/library; + minors; contract 1.8.0-f to write: own_key/needs_key, estimate
+    `skipped`, Re-transcribe as on audio_only = Transcribe, bulk rounds once, transcribe while uploading, shared items
+    hide Transcribe, `transcribe_by_default` on finish, two error-table rows + ErrorEnvelopeTest 56). P2 WIP on
+    b-web-p2-wip @019dfec0 (2.2 dedupe done + `transcripts:dedupe-check`; then 2.1 rows + backfill dry run, 2.3 fonts,
+    2.4 snackbar).
+  - desktop-1 b-desktop @a38e71b3 (round 2 done: f1df7d12…97c387f9, merged v1.1 at 3bebf5ff; cargo 1,408 + the bars test
+    since fixed on v1.1 `852822a5`; vitest 2,232): combined re-review = changes needed: [major] screens/detect.rs:324
+    (+ :52, :322, :12, test :571) moved-then-stopped content (≈6 s scrolling, 6+ quick flips, typing) is held as camera
+    ~30 s, so the page the presenter stops on is kept ~30 s late or never — release a region whose cells all went still
+    for 2–3 s (or don't let jumps / post-motion "busy" renew the hold), keep noise/speaker panels as camera; tests: 8 s
+    of 1-s flips, 8 s scrolling, 3-s sparse scroll, each then a held page, with no panel and beside each panel → kept
+    within ~3 s; one-slide-for-minutes still keeps 1; fix the doc + the :322 comment. Minors: actions.rs:364 clear a
+    stale capture_screen registration error after a successful hold (keep the layout note); shortcuts.rs:284 re-hold
+    Capture screen now after Reset/Import during a Windows call; PillApp.tsx:261 record a say-once reason only when
+    tray === "why"; screensWhy.ts:82 remember "project" per project id. P1 WIP on b-desktop-wip @67e61393. Merge the
+    whole chain (0.1 → signing → key → 0.1c → 0.1b) after this re-review approves.
+  - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) reviewed = changes needed: [major]
+    tray.rs:479 (+:226) a queued older draw can overwrite a newer one → a generation number taken first in
+    commands::status (AtomicU64 SeqCst) passed through update(); TrayCache keeps the newest; changes() ignores older;
+    test changes(gen 2,Y) then (gen 1,X) → Y stays (replace the try_lock asserts at :629/:633); [minor]
+    PrivacySettings.tsx:176/:186 follow hidden_line's order (line only when barOnScreen && !hiddenByShortcut; Show when
+    hiddenByShortcut || !barOnScreen; test); [minor] check.rs:851 a source check that the PrivacyStatus literal in
+    status() holds no .lock(); also PrivacySettings.tsx:45 still says "the pill".
+    NOTE: v1.1 has the merged audit with the tray-lock deadlock risk until this follow-up merges; 0.2b/0.2/0.2d review =
+    changes needed (4 blockers, false missed reports) — fixes D1–D5, D8–D10 on b-desktop-reopen-d-wip @d1bfd347
+    (regression tests pass), D6, D7, D11–D14 still to do.
+  - phone b-phone (clean): all 9 majors of the 0.2 re-review + 0.3 review fixed (`8c22e1bd` trust/security B1–B4,
+    `8398ad2e` A1, A2/B6, A3, B5, B16; each regression test fails on the old code); left: A4–A9 minors, B7–B15, B17, the
+    "heard both sides itself" wording, the full suite + repo-policy, then a re-review; B18 guide text is in its report
+    (ask it again on resume); P1 WIP on b-phone-p1-wip @91141de6 (+ "Delete must win over every timer").
+  - relay b-relay @f9e1f4c7: aligned with 1.9.0-b, 57/58 unit tests; next: the token-replay budget fix (decision: cap
+    remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
+    Dockerfile/systemd/README, clippy.
+  - Phone: the v1.1 build (phone code `5411d52e`) is INSTALLED on the S25 (16:13, `pm install -r`; settings kept).
+    Batch A: A1–A5 and A7 pass. A6 (Live Translate) is blocked by a bug for the phone builder: from the Watch
+    translate tile, with a video playing in Samsung's video player (USAGE_MEDIA, started, uid 10133) and the helper
+    ready, the app says "Nothing is playing yet" (twice, 16:36). LiveTranslateService takes that path only when
+    TranslateTargets finds no playing app with a uid, so look at what helper.players() returns on Android 17 (the
+    hidden getClientUid/getPlayerState getters) and add a test for it.
+  - Mac menu bar, Hassam 2026-11-16: the red recording icon "looks unprofessional, no padding". The red tile fills the
+    whole 18 pt icon edge to edge, so it looks cramped next to other items. Decision for the desktop builder (next
+    round, before v1.8.1): a smaller rounded red badge inside the 18 pt canvas (about 14 pt, centred, transparent
+    margin), the mark inset in it, amber when paused; a screenshot next to other menu bar items for the review.
+  - Mac Meet share (S-5): **Meet in Chrome passes** (17:01, 17:02: EchoLedger's recording controls and dictation box
+    not seen by the phone viewer; SCREEN_SHARE_MATRIX.md). Then the app FROZE (~17:10, installed 5d9f9779): the menu
+    opened on neither click, `sample` showed the main thread in a Tauri IPC command (WebKit URL scheme task) blocked on
+    a mutex while 4 tokio workers, el-share-watch and el-audio-mac waited on the main thread: the tray-lock deadlock
+    the follow-up review named, plus at least the share watcher. Stopped at 17:24:54 (TERM), restarted at 17:26 after
+    the WAVs were over a minute old: the open recording (16:49:58) came back as "Recovered recording", 34 min 54 s,
+    uploading; the zero-space safety copy was deleted after the check. The sample is in the session scratchpad
+    (echoledger-hang.sample.txt). Findings for the desktop builder: on macOS a left click on the menu bar icon opens
+    only the window (show_menu_on_left_click(false)), so Hassam couldn't find the menu → menu on left click on macOS.
+  - Resumed 17:30 (Hassam: "complete the remaining things" while he is away): desktop-2 on b-desktop-reopen (the
+    re-review points, a main-thread-wait audit of every path with a source check, menu on left click on macOS, the
+    recording badge with a margin, PNGs for the review) and phone on b-phone (A4–A9, B7–B15, B17, wording, the A6
+    Watch translate bug). Web, relay and desktop-1 stay paused (usage); the reviewer reviews each when they report.
+  - 18:14 Hassam asked to quit the Mac app: quit with TERM (nothing recording; the recovered recording had left the
+    upload queue). 18:16 his next finding, DECIDED: EchoLedger must be a normal Mac app. Today lib.rs:447 sets
+    ActivationPolicy::Accessory at start, so it has no Dock icon or running dot, isn't in ⌘Tab or Force Quit, and
+    can't be quit from the Dock. Why change: MANUAL_QA S-9 expects it in the Dock and ⌘Tab, and the scope rule says
+    EchoLedger hides its windows from screen sharing only, never itself from the rest of the computer. Brief: Regular
+    for the whole run (also at login), the menu bar icon stays, closing the window keeps it running, the Dock icon
+    reopens the window, Dock Quit / ⌘Q really quit (a running recording is saved as the tray's Quit does).
+  - Phone b-phone @4fde4ba1 (2026-11-16 evening): A4–A9, B7–B15, B17, the wording and the A6 Watch translate bug
+    fixed (three causes: getters giving -1, a failed helper call read as "nothing", a stale helper after pm install -r;
+    "can't read" now falls back to Android's share-the-sound question; the Audio probe shows uid/state/usage and their
+    source); 1,547 unit tests, lint clean. Re-review running (fresh reviewer). Next phone slot: the builder's steps
+    (Copy diagnostics → helper build and "Players the helper sees"; A6 from the tile; Part C and D).
+  - Desktop b-desktop-followup @9b30d7e4: both review verdicts answered (6 commits: the main-thread rule's test filter
+    + more waiting calls, the badge rim, Mac-only test card, people's names in the privacy log, the full app menu,
+    every floating window a real non-activating NSPanel subclass, a 20 s save cap with exactly one reply, one shared
+    quitting state); cargo 1,385 + tests/mac_appkit.rs, clippy 0, vitest 2,204. Re-review running.
+    DECIDED (lead): the floating panels may use AppKit's private _setPreventsActivation: (guarded by
+    respondsToSelector, panels only), as tauri-nspanel does, because after the class switch the window server isn't
+    told they must not activate the app. Why: a click on the recording controls must not pull EchoLedger in front of a
+    full-screen meeting; it hides nothing from other software; we ship outside the Mac App Store (revisit if that
+    changes). No other private macOS API without a written decision here. MAC-22 on the device is the release gate.
+    After this merges, b-desktop-reopen (0.2 work) must merge v1.1 and resolve the duplicated follow-up commits.
+  - Phone bug for the next phone round (seen in docs/design/screens/phone-session-light.png): on a recording's page
+    the action row Export · Share link · Send squeezes "Send to WhatsApp" into a one-letter-wide column, its text
+    running down the screen letter by letter. The row must wrap or scroll (FlowRow or a horizontal scroll with full
+    labels), with a screenshot test at 360 dp width and at font scale 200 %.
+  - UI BUG LIST from Hassam's Mac screenshots (2026-11-16 late), for the desktop builder after the full-screen menu fix:
+    (1) the sidebar's "Find a page" finds only pages: it should also list matching recordings and transcripts (and a
+    "Search recordings for …" row), never just "No page matches"; (2) the sidebar search field is too narrow, typed
+    text clips at the start ("ecovered recording"); (3) Settings search "Closest matches" offers unrelated rows when
+    nothing matches (show none, or only real near-spellings); (4) a recovered recording is renamed by its AI title after
+    upload, so "Recovered recording" can't be found again: keep a "Recovered" marker or show it in Activity; (5) the
+    menu bar menu doesn't open over a full-screen app (builder on it now); (6) people can't screenshot EchoLedger on a
+    Mac (hidden from capture by design): Help should say "Show EchoLedger in screen share for 10 minutes" before
+    screenshots, and Copy diagnostics is the support path. Also run the planned UI sweep of all screens.
+  - GUIDE TEXT QUEUE for the web builder (docs/USER_GUIDE.md), from the builders' reports:
+    (1) Phone calls (SIM) bullet, B18: keep "Some phones give both voices on one track…", replace the two sentences
+    after it with the "SIM calls through the Phone app's own recordings" block (Galaxy: Phone app → ⋮ → Settings →
+    Record calls → Auto record calls → All calls; Xiaomi/Redmi/POCO: Phone app → Settings → Call recording → Record
+    calls automatically → All numbers; Music and audio + Call log; Import the Phone app's recordings on; named after
+    the contact; late or overlapping calls come with one notification; only calls EchoLedger was asked to record;
+    unknown makers wait in Settings → Auto-record apps with Import this recording (name, length, Play) / Not this
+    call; nothing deleted unless Delete the Phone app's copy after import (Android 11+, asked each time, only after
+    the upload); a quiet note after a call EchoLedger couldn't hear; Pixel with Google's Phone app can't record SIM
+    calls). The full wording is in the phone builder's report of 2026-11-16 (session scratchpad review folder).
+    (2) Section 16 Watch translate: "If the capture helper can't tell which app is playing, Watch translate asks
+    Android to share the sound instead (the same question as without the helper): tap Start now. Help & diagnostics
+    → Audio probe shows what the helper sees."
+    (3) Mac install step 3 (after the desktop follow-up merges): "EchoLedger is in the Dock and in the menu bar (top
+    right). Click its Dock icon to open its window; click the menu bar icon for its menu (Open EchoLedger opens the
+    window). ⌘W closes the window and EchoLedger keeps running in the Dock and the menu bar. To quit, press ⌘Q, choose
+    Quit EchoLedger from the menu bar icon, or right-click the Dock icon and choose Quit; a recording that is running
+    is stopped and kept first." and "turns red while recording" → "shows a red badge while recording (amber while
+    paused)". Also docs/research/desktop-tauri.md still recommends Accessory.
+  - The v1.8.1 desktop follow-up moved to b-desktop-followup = v1.1 + 8012890e, 0b6c3314, 800615e8, 0cfef403
+    (clean cherry-picks of b-desktop-reopen's 025cde89, fc1f5cd8, 801c2cf4, e298867f), because b-desktop-reopen
+    also carries the 0.2 work that isn't approved yet. Reviewer on it now; the Dock change comes as one more commit.
+  - Mac meeting shares (S-5/S-6): Meet started 16:44 (Chrome, meeting jdd-cdmz-meb, the phone asked to join from the
+    Meet app over adb), paused before the share because Hassam took a call. Method from now on: the phone is the viewer
+    and `scratchpad/phone/meetmap.py` maps each EchoLedger window into the phone's view of the share and measures its
+    red recording dot, cropping only EchoLedger's small windows. The magenta panels tried first are retired: they
+    showed through EchoLedger's transparent windows on Hassam's screen, and a transparent window would read as a pass.
+    Next: a new Meet, the phone joins, Hassam clicks Join now, Admit, Share screen → Entire screen → Built-in
+    Retina Display → Share; then Zoom in each capture mode.
+  - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
+    as mac-backup-160). Measured: every window state 0 incl. TUINSWindow; the installed app's own Share Check passes as
+    itself (capture allowed through "Device Control and Data Access" on macOS 27). MAC-31's Finder path passed (16:25,
+    `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
+    and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
+- **ROADMAP ADOPTED (2026-11-16, late):** docs/ROADMAP.md (when; local) and docs/PLAN_V2_0.md (what for v2.0; local)
+  now steer with RUN_MODE.md (how). Re-read all three + HANDOFF after every compact or resume. Order: in-flight (Stage A)
+  → v1.8.1 (B) → v1.8.0 (C) → v1.9.0 (D) → v2.0 (E, starts at the v1.9.0 tag) → v2.1 (F: name + public launch).
+  Triage rule from now: every bug gets a severity (S0–S4, PLAN_V2_0); fix now S0/S1 and S2 that break a flow or look
+  broken (clipped/overlapping text, unreachable buttons, unreadable contrast); log S3/S4 on screens v2.0 rebuilds in
+  docs/v2/audit/bugs.csv. Scope moved out of v1.8: P5, P3.3, the look of P6.1/P6.2 → v2.0; P8 iPhone after v2.0 V2;
+  public store launch → v2.1. Groundwork lanes (relay, prompt pack, V0 docs-only inventories) only in idle slots and
+  paused first when usage is short. Hassam is asked only about device slots, accounts/money, legal/store and v2.0's
+  three gates. Created: docs/FINISH_CHECKLIST_V2_0.md, docs/v2/ (IA.md and DESIGN_SYSTEM.md as drafts, audit/, copy/,
+  research/, bugbash/, reviews/). To verify for v1.8.1 (research report): Apple documents NSWindow sharingType .none as
+  a legacy constant and says no public API prevents capture; our tests show it working on macOS 27 (Meet, screenshots,
+  Share Check), so the Mac UI must claim "hidden" only after a passing Share Check — check the wording before release.
+- DECIDED (lead, 2026-11-16 late): the Mac Dock-icon switch (spaces.rs, 75820dfc) may read the Space type through
+  CoreGraphics' private CGSCopyManagedDisplaySpaces, looked up at run time, read-only; if it is missing or its shape
+  changes, EchoLedger keeps its Dock icon. Why: there is no documented public way to ask whether the display in use
+  shows a full-screen Space, and the menu bar menu must open over full-screen apps; it hides nothing from any other
+  software. The reviewer checks for a public alternative; if one works, switch to it. Private macOS calls in use:
+  _setPreventsActivation: (floating panels) and CGSCopyManagedDisplaySpaces (Spaces) — no others without a decision here.
+- v1.8.1 DEPLOY NOTES (from the web review, 2026-11-17): the D-131 migration (2026_12_05_000002, rewrites sent
+  "Transcription failed" items into plain words; down() is a deliberate no-op — the raw text is never restored) must run
+  AFTER `queue:restart` and after the workers have drained (a worker on old code could post a raw item after the
+  rewrite, kept 90–180 days); on shared hosting wait ≥ 60 s, on a VPS until the 900 s job limit passes or the queue is
+  idle. Also check production's Pro plan description on the Plans page (the D-129 migration only rewrites unedited
+  text). Phone bug to log: Revoke on the phone acts at once (TranscriptTools.kt:315-317, Projects.kt:754).
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
+  - 2026-11-17 · desktop S0/S1 round (D-105 S0 after-call Discard with Undo and delayed delete; D-072 S1 Revoke asks;
+    the app's own accessible confirm dialog replacing all window.confirm: D-045, D-085, D-093, D-101, D-122) +
+    Spaces minors · `2df848fd`, `25a2639a` · approve ×2 · merged tree: vitest 2,243, tsc clean · minors next: throttle
+    the mouse-moved display check (C9 idle budget), discard due items one by one, write the .leaving marker before
+    saving pending.json, ignore ⌘K while a question is open, red for "Write the brief again?" and "Close without
+    sending?". Device: the D-105 steps and the Spaces steps in the next Mac slot.
+  - 2026-11-16 late · v1.8.1 desktop review batch (661df909 menu bar menu over full-screen apps via spaces.rs; c2cd2044
+    Settings column, one search, closest matches, one banner, no empty bar, Recovered chip; c02683ef banners per
+    occurrence; 75820dfc Spaces on the display in use, private Space-type read; 4b9ba2dc palette, Learn more, review
+    screenshots) · `fa5f0d44` · changes needed → fixed → approve (minors next round: type-check the Spaces answer and
+    look it up once; re-check when the pointer moves to another display; count raw/tao forms in the policy rule; fold
+    the sidebar to its rail at 200 % in a narrow window) · release gate: the Spaces device steps (DEVICE_BATCHES).
+    The confirm-dialog commit b29b52a9 (b-desktop-followup-wip) = changes needed (focus, Tab trap, alertdialog,
+    Escape order, upgrade sheet) — not merged.
+  - 2026-11-16 late · phone re-review rounds 2-4 (13 minors, the squeezed buttons, held one-sided SIM recording released, notices vs reported calls, wait before hold) · `fb5fb2c7`, `f0aabc0f`, this merge · approve each · open for later: MissedRecordings.kt:105-106 a second same-app call answered within 10 s of a reported one loses its notice (exclude only notices that started before the reported call began); contract 1.8.0-f mark-read by missed_recording_id.
+  - 2026-11-16 · v1.8 phone 0.2b capture journal + 0.2 missed recordings + 0.3 Phone app recordings (SIM calls) + the
+    Watch translate fix (phone batch A6) · `9fa6be6a` (b-phone) · changes needed → majors fixed → minors fixed →
+    re-review approve (13 minor follow for the next phone round: package names of other apps in the capture log and
+    the 300-char cut, missed notice per account, dialer notices vs a quick redial, endLooks on chained checks, two
+    cards for one SIM call after B5, SIM failure wording per reason, the quiet import text vs auto-keep, the share
+    notice left after a start, unlinkToDeath in HelperConnection.lost, isSystemApp cache + failure = unknown,
+    MediaPlayer.prepare and takeDeletes off the main thread, mark-read beyond the newest 100 (needs contract 1.8.0-f:
+    mark read by missed_recording_id), unknown audio types fall back to the extension; plus the squeezed Send to
+    WhatsApp button). Device: phone batch A6 retest, Part C (SIM calls) and Part D (missed recordings; D5 needs the
+    0.2 server deployed). DECIDED: the helper may read a player's uid/state from AudioPlaybackConfiguration's public
+    toString() when the hidden getters give nothing (no reflection, no new hidden API); "can't read" falls back to
+    Android's own share-the-sound question, so a misread never picks the wrong app silently.
+  - 2026-11-16 · v1.8.1 desktop follow-up (the Mac freeze: no lock held across a main-thread wait + a whole-crate
+    source rule; tray generation; the menu on a click and the 14 pt badge with a rim on a Mac; EchoLedger a normal
+    Mac app: Dock, ⌘Tab, Force Quit, floating windows as non-activating panels, every quit keeps a recording, the
+    standard app menu) · `dce18dfe` (b-desktop-followup) · changes needed ×2 → fixed → approve (5 minor follow:
+    log when the activation setter is missing; refuse the panel switch if TaoWindow gains methods or a dealloc;
+    plain words in the Mac check; sharing state in WindowFacts with a smoke assert; MAC-22 also on macOS 14.4 and
+    15/26 if a machine is at hand) · release gate MAC-22 + MAC-32 on the device.
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
-    jump only without a main window) · waiting: MAC-31.
+    jump only without a main window) · MAC-31 Finder path pass (16:25); Dock, Launchpad, ⌘W, ⌘M waiting.
   - 2026-11-16 · v1.8 0.2 server (missed recordings) · `d71195cb` · changes needed → fixed → approve (2 minor follow
     in b-web) · contract 1.8.0-c · not deployed yet (next web deploy batches it with the audit fixes).
   - 2026-11-16 · v1.9 S5 phone (always secure, names, Hide for the session, audit U7/u23/R6/R28) · `406db0de` · changes
     needed → fixed → approve (7 minor follow in b-phone) · waiting: the S25 retest.
+  - 2026-11-16 · v1.8.1 audit, desktop half (S1, S4, S5, U1–U26, R1–R28) · `5d9f9779` · changes needed → fixed →
+    approve (2 minor follow in b-desktop-reopen) · CI building Windows + Mac.
+  - 2026-11-16 · web: v1.8.1 audit half + guide names, 0.2 follow-ups, v1.9 L0 brand constant (`config('echoledger.brand.name')`)
+    and L1.5 prompt pack 1.0.1 · merged up to `04c4376f` · reviewed (each re-reviewed) · full pest 5,774 · not deployed
+    yet (next deploy batches 0.2 server + these + two migrations: 2026_12_03 missed_recordings, 2026_12_04 share-check index).
+  - 2026-11-16 · the session moved to another account after the first one's weekly limit; the role agent types
+    (web-builder, desktop-builder, phone-builder, relay-builder, reviewer) load since then; every interrupted worker was
+    resumed where it stopped; the shared cargo target was cleared while nothing was building (13 GB).
 - **Phone, 2026-11-16 (S25, Android 17):** the screen-recording callback never fires for floating windows (only while
   an EchoLedger screen is in front); FLAG_SECURE gives a black box → the phone moves to "always secure" (b-phone). Mac:
   opening the running app from Finder/Dock shows nothing (no `RunEvent::Reopen` handler) → v1.8 0.4. The installed
@@ -799,3 +994,28 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - P8.2 signed APK: needs the release keystore and its password (never stored in files; pass via environment at build time).
 - P8.3 production deploy: needs SSH access; take a database backup first; never run seeders on production; never rotate `ECHOLEDGER_RECORDINGS_KEY`; server PHP CLI is `/opt/alt/php84/usr/bin/php`; run `composer install` (new dependency web-auth/webauthn-lib) and migrations; APP_URL must be the final HTTPS host (passkeys are tied to it).
 - Clicking a desktop notification to open a recording works only in installed builds (the OS starts the app by its id).
+
+## 2026-11-17 — 5-day sprint adopted (Tue 17 → Sat 21 Nov, Sun 22 buffer)
+- For this week the local sprint file docs/SPRINT_NOV17.md wins over the roadmap's order; the quality rules stay. The
+  design system goes first and in parallel: v1.8.0, v1.9 Live Assist and the v2.0 redesign are built together, behind
+  the `ui_v2.*` and `live_assist` flags. Gate 1 is a 15-line note, Gate 2 is approved as written in the plan, Gate 3
+  (the visual direction) is the only stop, tonight.
+- Day 1 freeze (`68e9bc76`): tokens/ (W3C token JSON, the Style Dictionary build into web/resources/css/tokens.css,
+  desktop/src/tokens.css and EchoTokens.kt, contrast and drift tests), contract 2.0.0-a (interface flags,
+  `PUT /api/account/ui`), 1.8.1-b (`own_key_rejected`, the wider `recording_missing`), API_ASSIST.md 1.9.0-c. After the
+  freeze, only the lead changes them, with a bump.
+- Lanes: web (b-web-181b review fixes, then L1), relay (b-relay: tests, load test, deploy notes), desktop UI
+  (b-desktop-ui: v2 components + Gate 3 screens), desktop core (b-desktop-batches/b-mac-signing: D-133–D-135, signing),
+  phone UI (b-phone-ui: v2 components + Gate 3 screens), phone core (b-phone-sweep: fix-now batches). Two reviewers:
+  A for web/ and services/, B for desktop/ and mobile/.
+- The Apple Silicon CI job was cancelled three times for lack of GitHub capacity; Mac builds are made locally on the
+  owner's Mac (Rust at ~/.rustup/toolchains/stable-aarch64-apple-darwin/bin, not on PATH) until a runner is free.
+- Daily device slot 20:00–21:30 PKT.
+- Merged `773762d3`: b-mac-signing at the reviewed 6699a83c. The self-signed identity is used only on main, v1.1 and v*
+  tags; the release script signs a freshly packed archive of the checked app. Open, logged for later: move the two
+  signing secrets into a GitHub environment that only release refs can use (needs the owner's repo settings).
+- Decided: the pill shape ("full") does not count toward the three corner radii (4/8/12).
+- Merged `132df07c` (b-desktop-batches at the reviewed ec4f6c34): D-133–D-137 and the review minors; every coded
+  error in the app's own words (no vendor names), `own_key_rejected` with "Check my Groq key", `recording_missing`
+  without a retry. Merged `52e49da1` (b-mac-signing-2 at 23e35a08): the archive check follows links on disk and
+  refuses filesystem name twins. The first v1.1 CI run after this proves self-signed signing without trust settings.

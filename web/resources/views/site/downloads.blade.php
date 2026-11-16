@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', 'Downloads · EchoLedger')
+@section('title', 'Downloads · '.\App\Support\Brand::name())
 
 @php
     $size = fn (int $bytes): string => $bytes >= 1048576 ? number_format($bytes / 1048576, 1).' MB' : max(1, intdiv($bytes, 1024)).' KB';
@@ -47,7 +47,7 @@
             <ul class="muted" style="margin: 0; padding-left: 20px;">
                 <li><strong>Android:</strong> open the APK and allow your browser to install apps when Android asks. Play Protect may warn about an unknown developer: choose More details → Install anyway. The app then updates itself from this page.</li>
                 <li><strong>Windows:</strong> run the installer. Until the app is code-signed, SmartScreen may say Windows protected your PC: choose More info → Run anyway.</li>
-                <li><strong>Mac:</strong> open the disk image and drag EchoLedger to Applications. Until the app is notarized, open it the first time with Control-click → Open.</li>
+                <li><strong>Mac:</strong> open the disk image and drag @brand to Applications. Until the app is notarized, open it the first time with Control-click → Open.</li>
             </ul>
         </section>
     @endif

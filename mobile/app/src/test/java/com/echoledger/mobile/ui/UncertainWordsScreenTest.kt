@@ -3,6 +3,7 @@ package com.echoledger.mobile.ui
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import com.echoledger.mobile.data.LibraryItem
@@ -66,7 +67,8 @@ class UncertainWordsScreenTest : ScreenTest() {
         compose.onNodeWithText("Hello Farah").assert(described("Not sure of 1 word"))
         compose.onNodeWithText("I will come tomorrow").assert(described("Not sure of this line"))
         // Double-check: what the second engine heard is shown under the line, the line keeps its words.
-        compose.onNodeWithText("Groq Whisper large-v3 heard: I will come on Monday").assertExists()
+        compose.onNodeWithText("A second transcription heard: I will come on Monday").assertExists()
+        compose.onAllNodesWithText("Whisper", substring = true).assertCountEquals(0)
         val sure = compose.onNodeWithText("Sure, see you").fetchSemanticsNode()
         assertTrue(SemanticsProperties.StateDescription !in sure.config)
     }

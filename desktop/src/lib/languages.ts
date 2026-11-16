@@ -1,4 +1,3 @@
-import { providerName } from "./format";
 import type { TranscriptionLanguage } from "./ipc";
 
 /** A language choice: a code, or null for Auto (the client's or the console default). */
@@ -99,11 +98,32 @@ export function nextLanguage(value: string | null | undefined): LanguageChoice {
   return at < 0 ? null : MAIN_LANGUAGES[(at + 1) % MAIN_LANGUAGES.length].value;
 }
 
-/** "Urdu · Groq Whisper large-v3 (whisper-large-v3)" for the player; null before a final transcript exists. */
-export function engineLine(transcript: { final_language?: string | null; final_provider_label?: string | null; final_model?: string | null } | undefined): string | null {
-  if (!transcript?.final_provider_label) return null;
-  const engine = transcript.final_model ? `${transcript.final_provider_label} (${transcript.final_model})` : transcript.final_provider_label;
-  return `${languageLabel(transcript.final_language)} · ${engine}`;
+/** The language the final transcript is in ("Urdu"), for "Transcribed in Urdu" (D-041): only once it is finished and
+ * its language is known (never "Transcribed in Auto"); which provider or model made it is never shown. */
+export function transcribedIn(transcript: { final_language?: string | null; final_status?: string | null } | undefined): string | null {
+  if (transcript?.final_status !== "completed") return null;
+  const code = normalizeLanguage(transcript.final_language);
+  return code ? languageLabel(code) : null;
+}
+
+/** What the recording page says when it has no transcript to read (pure, D-052): plain words for every state, never
+ * the server's status id. The ones still being transcribed say so elsewhere (`transcribingLine`); a transcript being
+ * read says "Loading the transcript…", and one that came back empty has its own line, so a finished recording never
+ * reads as empty here. */
+export function transcriptStatusLine(status: string | null | undefined): string {
+  switch (status) {
+    case null:
+    case undefined:
+    case "":
+    case "not_started":
+      return "Not transcribed yet.";
+    case "awaiting_device":
+      return "Waiting for the recording to finish uploading from the device that made it.";
+    case "failed":
+      return "Transcription failed.";
+    default:
+      return "The transcript isn't ready yet.";
+  }
 }
 
 /**
@@ -113,29 +133,29 @@ export function engineLine(transcript: { final_language?: string | null; final_p
  */
 export const usedBackupEngine = (transcript: { backup_engine?: boolean | null } | null | undefined): boolean => transcript?.backup_engine === true;
 
-/** Why a transcript waits for its engine, for the line's tooltip. */
-export function retryReason(reason: string | null | undefined, engine: string): string | null {
-  if (reason === "rate_limited") return `${engine} has reached its limit for now. The transcript waits for it instead of using a less accurate engine.`;
-  if (reason === "unavailable") return `${engine} is not answering. The transcript waits for it instead of using a less accurate engine.`;
+/** Why a transcript waits, for the line's tooltip: in plain words, never which provider (D-126). */
+export function retryReason(reason: string | null | undefined): string | null {
+  if (reason === "rate_limited") return "The transcription service has reached its limit for now. The transcript waits for it instead of using a less accurate one.";
+  if (reason === "unavailable") return "The transcription service isn't answering. The transcript waits for it instead of using a less accurate one.";
   return null;
 }
 
 /**
- * "Waiting for Groq — retrying at 2:05 pm" while an Urdu or Auto transcript waits for its preferred engine (v1.5
- * `retry_at`); another day says which. Null when it does not wait, also on an older server (no `retry_at`).
+ * "Waiting to transcribe — retrying at 2:05 pm" while an Urdu or Auto transcript waits for its preferred engine (v1.5
+ * `retry_at`); another day says which; never which provider (D-126). Null when it does not wait, also on an older
+ * server (no `retry_at`).
  */
 export function retryLine(transcript: { provider?: string | null; retry_at?: string | null } | null | undefined, now: Date = new Date()): string | null {
   if (!transcript?.retry_at) return null;
   const at = new Date(transcript.retry_at);
   if (Number.isNaN(at.getTime())) return null;
-  const engine = providerName(transcript.provider) || "the engine";
-  if (at.getTime() <= now.getTime()) return `Waiting for ${engine} — retrying now`;
+  if (at.getTime() <= now.getTime()) return "Waiting to transcribe — retrying now";
   // "2:05 pm"; newer ICU puts a narrow no-break space before the day period.
   const time = at.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }).replace(/\s/g, " ").toLowerCase();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
   const day = at.toDateString() === now.toDateString() ? "" : at.toDateString() === tomorrow.toDateString() ? "tomorrow " : `${at.toLocaleDateString("en-US", { month: "short", day: "numeric" })} `;
-  return `Waiting for ${engine} — retrying ${day}at ${time}`;
+  return `Waiting to transcribe — retrying ${day}at ${time}`;
 }
 
 /** The wrong-script warning: "devanagari" means Hindi letters came back (lines are flagged, never shown as Hindi). */
@@ -151,4 +171,49 @@ export function scriptWarning(code: string | null | undefined): string | null {
 export function learnPrompt(clientName: string | null, clientLanguage: string | null | undefined, chosen: LanguageChoice): string | null {
   if (!clientName || chosen === null || normalizeLanguage(clientLanguage) === chosen) return null;
   return `Use ${languageLabel(chosen)} for ${clientName} from now on?`;
+}
+
+/** Why a transcription failed, in the app's own plain words per `error_code` (pure, D-130): never the server's message,
+ * which can name a provider ("Gemini could not read the audio."); an unknown code gets one generic sentence. */
+export function failureLine(code: string | null | undefined): string {
+  switch (code) {
+    case "no_audio":
+      return "No audio was captured in this recording.";
+    case "budget_exceeded":
+      return "This month's transcription limit was reached.";
+    case "provider_unreachable":
+      return "The transcription service couldn't be reached. Try again later.";
+    case "provider_rejected":
+      return "The transcription service couldn't transcribe this recording.";
+    case "provider_not_configured":
+      return "Transcription isn't set up on the server yet. Ask the person who runs the console.";
+    case "provider_timeout":
+      return "The transcription service didn't finish in time.";
+    case "interrupted":
+      return "Transcription was interrupted.";
+    case "recording_missing":
+      return "The audio did not fully reach the server, or it is no longer stored.";
+    case "needs_transcription_key":
+      return "No transcription key is added yet.";
+    // Contract 1.8.1-b: the provider refused the person's own key (the one vendor name people act on).
+    case "own_key_rejected":
+      return "Groq did not accept your key. Check it in Account → Transcription key, then try again.";
+    default:
+      return "Something went wrong while transcribing this recording.";
+  }
+}
+
+/** Failures that trying again as it was cannot fix (D-130): nothing was heard, no key is added or the key was refused,
+ * this month's limit is reached, the server has no transcription set up, or the audio is not (fully) on the server.
+ * Each needs something else first, so they offer no Try again. */
+const NOT_FIXED_BY_TRYING_AGAIN = ["no_audio", "needs_transcription_key", "own_key_rejected", "budget_exceeded", "provider_not_configured", "recording_missing"];
+
+/** Failures fixed in Account → Transcription key (pure): no key yet, or the key was refused. */
+export function needsKeyAction(code: string | null | undefined): boolean {
+  return code === "needs_transcription_key" || code === "own_key_rejected";
+}
+
+/** Whether a failed transcription offers Try again (pure): yes for anything a second try can fix, an unknown code too. */
+export function canTryAgain(code: string | null | undefined): boolean {
+  return !NOT_FIXED_BY_TRYING_AGAIN.includes(code ?? "");
 }

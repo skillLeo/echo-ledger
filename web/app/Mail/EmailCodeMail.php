@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** The 6-digit code that signs someone in or starts their new account (since v1.6). */
 final class EmailCodeMail extends AccountMail
 {
@@ -15,7 +17,7 @@ final class EmailCodeMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return "Your EchoLedger code: {$this->code}";
+        return 'Your '.Brand::name()." code: {$this->code}";
     }
 
     protected function template(): string

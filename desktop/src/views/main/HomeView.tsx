@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api, listenTo, type ActivityItem, type AppStatus, type LibraryItem } from "../../lib/ipc";
 import { needsAction } from "../../lib/badge";
 import { formatDuration } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { isViewer } from "../../lib/plan";
 import { AlertIcon, AppTileIcon, appKind, BellIcon, HourglassIcon, ImportIcon } from "../../components/Icons";
 import { PageHeader } from "../../components/Page";
@@ -89,7 +90,7 @@ export function HomeView({ status, run, onImport, needsYou, onReview, onFailed, 
               <li key={item.id}>
                 <button type="button" className="recent-row" onClick={() => onOpenRecording(item.id)}>
                   <span className={`avatar small app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
-                  <span className="recent-title" dir="auto">{item.title ?? "Recording"}</span>
+                  <span className="recent-title" dir="auto">{recordingName(item.title)}</span>
                   <span className="recent-meta small muted">{[formatDuration(item.duration_ms), item.client?.name].filter(Boolean).join(" · ")}</span>
                   <span className="item-time">{rowTime(item.started_at)}</span>
                 </button>

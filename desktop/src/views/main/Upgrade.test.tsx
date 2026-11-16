@@ -8,6 +8,7 @@ import { callsOf, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, mergeRequest, plansAbove, priceText, promoPriceLine, requestStage, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import type { Entitlements } from "../../lib/ipc";
+import { answerConfirm, confirmAsked } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -177,6 +178,18 @@ describe("Plan & usage", () => {
     expect(storage).toHaveTextContent("New recordings can't upload until you free up space or upgrade.");
   });
 
+  it("draws no empty bar for minutes without a monthly limit: what was used and that there is no limit", () => {
+    const e = sampleEntitlements("ultra");
+    e.limits.monthly_minutes = { limit: null, used: 651, resets_at: "2026-12-01" };
+    page(e);
+    const minutes = screen.getByTestId("meter-monthly_minutes");
+    expect(minutes).toHaveTextContent("651 min");
+    expect(minutes).toHaveTextContent("No monthly limit");
+    expect(minutes.querySelector(".set-meter")).toBeNull();
+    expect(within(minutes).queryByRole("meter")).toBeNull();
+    expect(minutes).toHaveTextContent("Transcription, 651 minutes used.");
+  });
+
   it("Ultra: no Plans and no button, the top plan's line, and a team's members meter", () => {
     page(sampleEntitlements("ultra"));
     expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
@@ -213,7 +226,7 @@ describe("Plan & usage", () => {
     respond("entitlements_get", sampleEntitlements("free"));
     page({ ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("awaiting_payment") });
     fireEvent.click(screen.getByRole("button", { name: "Cancel request" }));
-    const dialog = screen.getByRole("dialog", { name: "Cancel this request?" });
+    const dialog = screen.getByRole("alertdialog", { name: "Cancel this request?" });
     expect(dialog).toHaveTextContent("If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.");
     expect(within(dialog).getByRole("button", { name: "Keep request" })).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel request" }));
@@ -299,11 +312,11 @@ describe("Transcription key", () => {
   it("shows a saved key by its last four characters and removes it after asking", async () => {
     respond("transcription_key_delete", undefined);
     respond("entitlements_get", e);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     render(<TranscriptionKeyPage e={{ ...e, transcription_key: { provider: "groq", set: true, last4: "3f9a" } }} />);
     expect(document.getElementById("setting-key.saved")).toHaveTextContent("Ending in 3f9a");
     fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
-    expect(window.confirm).toHaveBeenCalledWith("Remove your Groq key? New recordings won't be transcribed until you add a key or upgrade.");
+    expect(confirmAsked).toHaveBeenCalledWith("Remove your Groq key? New recordings won't be transcribed until you add a key or upgrade.");
     await waitFor(() => expect(callsOf("transcription_key_delete")).toHaveLength(1));
   });
 });

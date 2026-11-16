@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="{{ config('echoledger.site_indexable') ? 'index, follow' : 'noindex, nofollow' }}">
     <meta name="referrer" content="strict-origin-when-cross-origin">
-    <meta name="description" content="EchoLedger records calls and meetings on your phone and computer and turns them into accurate transcripts, including Urdu and Roman Urdu.">
-    <title>@yield('title', 'EchoLedger')</title>
+    <meta name="description" content="@brand records calls and meetings on your phone and computer and turns them into accurate transcripts, including Urdu and Roman Urdu.">
+    <title>@yield('title', \App\Support\Brand::name())</title>
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <link rel="alternate icon" href="{{ asset('favicon.ico') }}">
     <style>
@@ -39,7 +39,7 @@
 </head>
 <body>
 <header class="site">
-    <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">EchoLedger</a>
+    <a class="brand" href="{{ route('site.home') }}"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">@brand</a>
     <nav class="site" aria-label="Site">
         <a href="{{ route('downloads') }}">Downloads</a>
         <a href="{{ url('/app') }}">Sign in</a>
@@ -49,7 +49,7 @@
     @yield('content')
 </main>
 <footer class="site">
-    <span>EchoLedger</span>
+    <span>@brand</span>
     @if (\Illuminate\Support\Facades\Route::has('legal.terms'))<a href="{{ route('legal.terms') }}">Terms</a>@endif
     @if (\Illuminate\Support\Facades\Route::has('legal.privacy'))<a href="{{ route('legal.privacy') }}">Privacy</a>@endif
     @if (\Illuminate\Support\Facades\Route::has('account.delete'))<a href="{{ route('account.delete') }}">Delete your account</a>@endif

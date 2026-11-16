@@ -46,9 +46,6 @@ final class PlanLimits
     /** Codes v1.5 apps know for a limit, and the limit each stands for; v1.6 apps get `limit_reached` instead. */
     public const LEGACY_CODES = ['budget_exceeded', 'storage_limit_reached', 'device_limit_reached'];
 
-    /** What `403 feature_not_in_plan` says for each feature. */
-    public const FEATURE_MESSAGES = Entitlements::LOCKED;
-
     public function __construct(private readonly SettingsRepository $settings, private readonly Entitlements $entitlements) {}
 
     /** The plan that applies now (past its end date, the default plan). */

@@ -129,7 +129,7 @@
                 for (const file of Array.from(list || [])) {
                     const extension = file.name.includes('.') ? file.name.split('.').pop().toLowerCase() : '';
                     const known = this.cfg.extensions.includes(extension) || /^audio\//.test(file.type) || /^video\/(mp4|webm)$/.test(file.type);
-                    const problem = !known ? 'Not a sound or video file EchoLedger can read.'
+                    const problem = !known ? @js('Not a sound or video file '.\App\Support\Brand::name().' can read.')
                         : file.size === 0 ? 'This file is empty.'
                         : file.size > this.cfg.maxBytes ? 'This file is larger than the ' + this.size(this.cfg.maxBytes) + ' limit.' : '';
                     this.files.push({

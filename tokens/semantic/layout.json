@@ -1,0 +1,42 @@
+{
+  "layout": {
+    "page-padding": {
+      "desktop": {
+        "$type": "dimension",
+        "$value": "24px"
+      },
+      "mobile": {
+        "$type": "dimension",
+        "$value": "16px"
+      }
+    },
+    "row": {
+      "comfortable": {
+        "$type": "dimension",
+        "$value": "56px"
+      },
+      "compact": {
+        "$type": "dimension",
+        "$value": "44px"
+      },
+      "mobile": {
+        "$type": "dimension",
+        "$value": "64px"
+      }
+    },
+    "control": {
+      "height": {
+        "$type": "dimension",
+        "$value": "36px"
+      },
+      "height-mobile": {
+        "$type": "dimension",
+        "$value": "48px"
+      },
+      "touch-min": {
+        "$type": "dimension",
+        "$value": "48px"
+      }
+    }
+  }
+}

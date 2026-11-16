@@ -11,6 +11,8 @@ import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondW
 import { makeItem, makeScreen, anyTarget, sampleEntitlements } from "../../test/fixtures";
 import { closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { forgetPictures } from "../../lib/screens";
+import { answerConfirm } from "../../test/confirm";
+import { ConfirmHost } from "./ConfirmHost";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -382,6 +384,23 @@ describe("Notes", () => {
     expect(screen.queryByRole("tab", { name: "AI notes" })).not.toBeInTheDocument();
   });
 
+  it("says AI isn't set up on the server in plain words, never which provider's key (D-127)", async () => {
+    await renderProjects({ ws: workspace({ ai: { configured: false, spent_usd: 0, budget_usd: 0, client_spent_usd: 0 } }) });
+    tab("Notes");
+    expect(await screen.findByText(/AI isn't set up on the server yet: notes, the brief and Ask wait for it\./)).toBeInTheDocument();
+    expect(screen.getByText("Ask needs AI set up on the server. Ask the person who runs the console to set it up.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Anthropic/);
+  });
+
+  it("says EchoLedger writes the notes and reads the files, never the vendor (D-062)", async () => {
+    await renderProjects();
+    tab("Notes");
+    expect(screen.getByText(/^EchoLedger writes call notes after each kept recording of /)).toBeInTheDocument();
+    tab("Files");
+    expect(await screen.findByText(/EchoLedger reads them for the brief and for Ask\./)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/Claude (writes|reads)/);
+  });
+
   it("hides the AI notes tab, the switch, Ask and Make again when the plan leaves AI notes out, and keeps the brief and memory", async () => {
     await renderProjects({ aiNotesInPlan: false });
     expect(screen.getAllByRole("tab").map((t) => tabName(t))).toEqual(["Recordings", "Files", "Notes", "Screens"]);
@@ -461,6 +480,19 @@ describe("Notes", () => {
     expect((sent.sections as Record<string, unknown>).goal).toBe("An online shop");
     expect(await screen.findByText("Payments")).toBeInTheDocument();
     expect(screen.getByText("Edited by you")).toBeInTheDocument();
+  });
+
+  it("asks in red before writing an edited brief again: the person's own edits would go", async () => {
+    respond("client_brief_refresh", { data: workspace().brief });
+    render(<ConfirmHost />);
+    await renderProjects({ ws: workspace({ brief: { ...workspace().brief!, edited: true } }) });
+    tab("Notes");
+    fireEvent.click(screen.getByRole("button", { name: "Make again" }));
+    const question = await screen.findByRole("alertdialog", { name: "Write the brief again?" });
+    expect(within(question).getByRole("button", { name: "Write again" })).toHaveClass("danger");
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    await flushAsync();
+    expect(callsOf("client_brief_refresh")).toEqual([]);
   });
 
   it("makes the brief again and asks every 5 s until it is written", async () => {
@@ -590,7 +622,7 @@ describe("Files", () => {
   it("pastes instructions and removes a file", async () => {
     respond("client_instructions_add", { data: { id: "f7", name: "House rules", mime: "text/plain", size_bytes: 30, pages: null, status: "ready", error: null, instructions: true, created_at: null } });
     respond("client_file_delete", undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     await renderProjects();
     tab("Files");
     fireEvent.click(screen.getByRole("button", { name: "Paste instructions" }));
@@ -635,7 +667,7 @@ describe("Ask", () => {
     respond("client_ask", { data: ANSWER });
     await renderProjects();
     tab("Notes");
-    // An Urdu question is typed right to left (v1.5 sweep).
+    // An Urdu question is typed right to left (since v1.5).
     expect(screen.getByRole("textbox", { name: "Question" })).toHaveAttribute("dir", "auto");
     fireEvent.change(screen.getByRole("textbox", { name: "Question" }), { target: { value: "  When do we launch?  " } });
     fireEvent.click(within(screen.getByRole("group", { name: "Answer in" })).getByRole("button", { name: "Roman Urdu" }));

@@ -244,7 +244,22 @@ const SETTLE: Duration = Duration::from_millis(450);
 /// The preview's long side.
 const PREVIEW_LONG: u32 = 960;
 
+/// One of the check's two windows. On a Mac a non-activating panel from the start, built on the main thread, like the
+/// floating windows it stands in for (`overlay::macos::build_on_main_as_panel`).
 fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
+    #[cfg(target_os = "macos")]
+    let window = {
+        let (handle, label) = (app.clone(), label.to_string());
+        crate::overlay::macos::build_on_main_as_panel(app, move || build_patch_window(&handle, &label, kind, at)).unwrap_or(Err(tauri::Error::FailedToReceiveMessage))?
+    };
+    #[cfg(not(target_os = "macos"))]
+    let window = build_patch_window(app, label, kind, at)?;
+    #[cfg(target_os = "macos")]
+    crate::overlay::macos::keep_above_everything(&window);
+    Ok(window)
+}
+
+fn build_patch_window(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title(if kind == Kind::Test { "EchoLedger screen-share privacy test" } else { "EchoLedger screen-share privacy control" })
         .inner_size(PATCH.0, PATCH.1)
@@ -257,10 +272,7 @@ fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> taur
         .focused(false)
         .focusable(false)
         .visible(true);
-    let window = super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)?;
-    #[cfg(target_os = "macos")]
-    crate::overlay::macos::keep_above_everything(&window);
-    Ok(window)
+    super::window(app, crate::smoke::isolate(builder), label, kind, |b| b)
 }
 
 /// Where the two windows go: side by side in the middle of the main screen (logical units from its corner).
@@ -352,27 +364,40 @@ fn windows_in_front_of(number: i64) -> Option<Vec<Frame>> {
     None
 }
 
-/// Whether the test window is covered now (none when the system could not say): on a Mac the windows in front of it in
-/// the window list; on Windows the window hit at its four corners and its middle.
-fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<bool> {
+/// What covers the test window now: none when nothing does, and none of either when the system could not say. On a Mac
+/// the windows in front of it in the window list; on Windows the window hit at its four corners and its middle, named by
+/// its class and whose it is (never its title), with the test window's own frame, so a run can tell a window in front
+/// from a test window the system does not show where it says it is.
+fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<Option<String>> {
     #[cfg(target_os = "macos")]
     {
         let pointer = window.ns_window().ok()?;
         // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is; the number is a plain read.
         let number = unsafe { &*(pointer as *const objc2_app_kit::NSWindow) }.windowNumber() as i64;
-        windows_in_front_of(number).map(|front| covered(frame, &front))
+        windows_in_front_of(number).map(|front| covered(frame, &front).then(|| "a window in front of it".to_string()))
     }
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::POINT;
-        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+        use windows::Win32::System::Threading::GetCurrentProcessId;
+        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, GetClassNameW, GetWindowThreadProcessId, WindowFromPoint};
         let own = window.hwnd().ok()?.0 as isize;
         let ((x, y), (w, h)) = frame;
         let points = [(x + 8.0, y + 8.0), (x + w - 8.0, y + 8.0), (x + 8.0, y + h - 8.0), (x + w - 8.0, y + h - 8.0), (x + w / 2.0, y + h / 2.0)];
-        Some(points.iter().any(|(px, py)| {
-            // SAFETY: plain queries of the window under a screen point and its top-level window.
-            let hit = unsafe { GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT) };
-            hit.0 as isize != own
+        Some(points.iter().find_map(|(px, py)| {
+            // SAFETY: plain queries of the window under a screen point, its top-level window, its class and its process.
+            unsafe {
+                let hit = GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT);
+                if hit.0 as isize == own {
+                    return None;
+                }
+                let mut class = [0u16; 128];
+                let length = GetClassNameW(hit, &mut class).max(0) as usize;
+                let mut pid = 0u32;
+                GetWindowThreadProcessId(hit, Some(&raw mut pid));
+                let whose = if pid == GetCurrentProcessId() { "EchoLedger's" } else { "another process's" };
+                Some(format!("at {px:.0},{py:.0} the screen has {whose} window of class {:?}; the test window is at {x:.0},{y:.0} {w:.0}x{h:.0}", String::from_utf16_lossy(&class[..length.min(class.len())])))
+            }
         }))
     }
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -439,13 +464,14 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         // A window that never drew shows no colour at all, and one something covers shows what covers it: measuring
         // either would pass for nothing.
         let drawn = both_drawn();
-        let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
+        let covering = if drawn { test_window_covered(&test, test_frame).flatten() } else { None };
+        let is_covered = covering.is_some();
         if !drawn {
             diag::log(&state.data_dir, "Privacy check: the check's windows did not draw.");
             methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()), blank: false });
-        } else if is_covered {
+        } else if let Some(what) = covering {
             diag::log(&state.data_dir, "Privacy check: another window covered the test window.");
-            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()), blank: false });
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some(format!("another window covered the test window ({what})")), blank: false });
         }
         let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
         for (method, shot) in shots {
@@ -696,6 +722,11 @@ fn main_frame(app: &AppHandle) -> Option<(Bounds, Option<tauri::Monitor>)> {
     Some((frame, window.current_monitor().ok().flatten()))
 }
 
+/// The test with the phone is the Mac's (pure): its card opens there only.
+pub fn guided_here(macos: bool) -> AppResult<()> {
+    if macos { Ok(()) } else { Err(AppError::msg("The test with your phone is on the Mac. On Windows, Check screen-share privacy shows what others see.")) }
+}
+
 /// Opens the big test card (protected like every EchoLedger window) for the guided test of one meeting app. It never
 /// takes the focus (the keyboard and VoiceOver stay on the question in the main window) and sits clear of the main
 /// window, so it never covers the answer buttons.
@@ -725,7 +756,20 @@ pub fn guided_open(app: &AppHandle) -> AppResult<()> {
         .focused(false)
         .focusable(false)
         .visible(true);
-    super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b).map_err(|e| AppError::msg(e.to_string()))?;
+    // A sync command: already on the main thread, where it is built as a panel from the start (it never takes the focus).
+    #[cfg(target_os = "macos")]
+    let window = crate::overlay::macos::build_as_panel(|| super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b));
+    #[cfg(not(target_os = "macos"))]
+    let window = super::window(app, crate::smoke::isolate(builder), GUIDED_CARD, Kind::Test, |b| b);
+    let window = window.map_err(|e| AppError::msg(e.to_string()))?;
+    // Its panel style, and it stays on screen while the meeting app is in front (a panel would hide then).
+    #[cfg(target_os = "macos")]
+    if let Ok(pointer) = window.ns_window() {
+        // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is, on the main thread here.
+        let _ = crate::overlay::macos::make_panel(unsafe { &*(pointer as *const objc2_app_kit::NSWindow) });
+    }
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
     Ok(())
 }
 
@@ -847,6 +891,8 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         Platform::Other => Vec::new(),
     };
     let mac_version = os_version();
+    // Read before the answer is put together: no lock is held while the displays are asked of the main thread below.
+    let share = privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone();
     let apps: Vec<AppRow> = if platform == Platform::Mac {
         MeetingApp::ALL
             .into_iter()
@@ -873,7 +919,7 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
         main_in_share: privacy.main_in_share(settings.hide_from_sharing),
         share_number: privacy.share_number(),
         bar_on_screen: privacy.bar_holds(),
-        share: privacy.share_seen.lock().unwrap_or_else(|p| p.into_inner()).clone(),
+        share,
         last_check: last.map(|r| LastCheck { at: r.at, result: r.result, reason: r.reason.clone(), methods: r.methods.clone() }),
         check_running: RUNNING.load(Ordering::SeqCst),
         check_due: due(&store, &os, version, Utc::now()),
@@ -913,6 +959,13 @@ pub fn diagnostics_text(app: &AppHandle) -> String {
     }
     for line in &s.lines {
         header.push(line.text.clone());
+    }
+    // A Mac: each open floating window's class and style (a non-activating panel floats over a full-screen meeting).
+    #[cfg(target_os = "macos")]
+    for label in crate::overlay::WINDOWS.into_iter().chain([crate::translate::WINDOW]) {
+        if let Some(facts) = app.get_webview_window(label).and_then(|window| crate::overlay::macos::window_facts(&window, label)) {
+            header.push(format!("The {}: {}", super::window_name(label), facts.line()));
+        }
     }
     diag::text(&header, &diag::read(&state.data_dir))
 }
@@ -1063,6 +1116,33 @@ mod tests {
         assert_eq!(overlap(card, top_right), 0.0, "{card:?}");
         // No main window on screen: centred.
         assert_eq!(card_frame(laptop, None), ((1512.0 - 640.0) / 2.0, (982.0 - 360.0) / 2.0, 640.0, 360.0));
+    }
+
+    #[test]
+    fn the_status_reads_its_locks_before_it_asks_the_main_thread() {
+        // The answer asks the main thread for the displays: a lock read in the same statement would be held across that
+        // wait (the kind of lock that froze the Mac build), so every lock is read before the answer is put together.
+        let source = include_str!("check.rs");
+        let status = &source[source.find("pub fn status(app: &AppHandle) -> PrivacyStatus {").unwrap()..];
+        let status = &status[..status.find("\n}\n").unwrap()];
+        let literal = &status[status.find("\n    PrivacyStatus {").expect("the answer is a PrivacyStatus literal")..];
+        assert!(literal.contains("app.available_monitors()"), "the displays are asked inside the answer");
+        for lock in [".lock()", "lock(&", ".read()", ".write()", ".try_lock()"] {
+            assert!(!literal.contains(lock), "`{lock}` inside the PrivacyStatus literal is held while the main thread is asked");
+        }
+        assert!(status.find("let share = privacy.share_seen.lock()").unwrap() < status.find("\n    PrivacyStatus {").unwrap(), "the share is read first");
+    }
+
+    #[test]
+    fn the_phone_test_card_opens_on_a_mac_only() {
+        assert!(guided_here(true).is_ok());
+        let refused = guided_here(false).unwrap_err().to_string();
+        assert!(refused.contains("on the Mac") && refused.contains("Check screen-share privacy"), "{refused}");
+        // The sync command asks before it builds the card (on Windows a window built there would deadlock).
+        let commands = include_str!("../commands.rs");
+        let card = &commands[commands.find("pub fn share_check_card(").unwrap()..];
+        let card = &card[..card.find("\n}\n").unwrap()];
+        assert!(card.find("guided_here(cfg!(target_os = \"macos\"))?").unwrap() < card.find("guided_open(&app)").unwrap());
     }
 
     #[test]

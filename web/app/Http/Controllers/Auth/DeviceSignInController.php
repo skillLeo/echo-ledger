@@ -11,6 +11,7 @@ use App\Http\Middleware\SecurityHeaders;
 use App\Models\User;
 use App\Services\Accounts\DeviceSignIn;
 use App\Services\Workspaces\Workspaces;
+use App\Support\Brand;
 use Filament\Facades\Filament;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -32,7 +33,7 @@ final class DeviceSignInController extends Controller
     {
         $params = $this->params($request->query());
         if ($params === null) {
-            return $this->message(400, 'This sign-in link is not valid', 'Start the sign-in again from the EchoLedger app.');
+            return $this->message(400, 'This sign-in link is not valid', 'Start the sign-in again from the '.Brand::name().' app.');
         }
         $user = Auth::guard('web')->user();
         if (! $user instanceof User) {
@@ -61,7 +62,7 @@ final class DeviceSignInController extends Controller
     {
         $params = $this->params($request->post());
         if ($params === null) {
-            return $this->message(400, 'This sign-in link is not valid', 'Start the sign-in again from the EchoLedger app.');
+            return $this->message(400, 'This sign-in link is not valid', 'Start the sign-in again from the '.Brand::name().' app.');
         }
         /** @var User $user */
         $user = $request->user('web');

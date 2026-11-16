@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', 'Join '.$workspace.' · EchoLedger')
+@section('title', 'Join '.$workspace.' · '.\App\Support\Brand::name())
 
 @section('content')
     @include('auth.form-styles')

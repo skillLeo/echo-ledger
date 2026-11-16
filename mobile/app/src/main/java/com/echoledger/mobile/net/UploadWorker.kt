@@ -61,6 +61,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             graph.recordings.update(id) { it.copy(state = "uploading", lastError = null) }
             when (upload(api, rec)) {
                 Outcome.READY -> {
+                    // The Phone app's copy of an imported call may now be offered for deletion (when the person chose it).
+                    com.echoledger.mobile.calls.PhoneAppRecordings.uploaded(applicationContext, id)
                     graph.recordings.delete(id) // the server now holds the (encrypted) copy
                     runCatching { graph.library.refresh() }
                     WidgetStateStore.refresh(applicationContext)

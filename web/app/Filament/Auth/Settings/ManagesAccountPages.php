@@ -17,6 +17,7 @@ use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\PairingService;
 use App\Services\SettingsRepository;
+use App\Support\Brand;
 use App\Support\Formats;
 use App\Support\RecordingConsent;
 use chillerlan\QRCode\QRCode;
@@ -109,7 +110,7 @@ trait ManagesAccountPages
     {
         return Action::make('signInDevice')->label('Sign in a device')
             ->modalHeading('Sign in a phone or computer')
-            ->modalDescription('Scan the QR code in the EchoLedger app, or type the code. It works once and expires in 10 minutes.')
+            ->modalDescription('Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.')
             ->fillForm(function (PairingService $pairing): array {
                 try {
                     $code = $pairing->createCode($this->account());
@@ -163,7 +164,7 @@ trait ManagesAccountPages
     {
         return Action::make('signInAgain')
             ->modalHeading(fn (array $arguments): string => 'Sign in '.$this->ownDevice($arguments)->readableName().' again')
-            ->modalDescription('Open the EchoLedger app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
+            ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes. Its recordings and name stay.')
             ->fillForm(function (array $arguments, PairingService $pairing): array {
                 try {
                     $code = $pairing->createBoundCode($this->account(), $this->ownDevice($arguments)->id);
@@ -243,7 +244,7 @@ trait ManagesAccountPages
     {
         return Action::make('consent')->label('Recording consent')
             ->modalHeading('Recording consent')->modalWidth('md')
-            ->schema([Text::make(RecordingConsent::TEXT), Text::make(RecordingConsent::APPS)])
+            ->schema([Text::make(RecordingConsent::TEXT), Text::make(RecordingConsent::apps())])
             ->modalSubmitAction(fn (Action $action) => $this->account()->consent_seen_at === null ? $action->label('I understand') : false)
             ->modalCancelActionLabel(fn (): string => $this->account()->consent_seen_at === null ? 'Cancel' : 'Close')
             ->action(function (): void {

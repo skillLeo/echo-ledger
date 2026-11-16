@@ -14,8 +14,8 @@ import { MoveRecordingsDialog, moveRecordings, movedText } from "./ProjectDialog
 import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasUncertainWords, KEY_SECONDS, markParts, newTerms, playerKey, skipTarget, snippetParts, speakerLabels, speakerName, suggestionSpan, uncertainWord } from "../../lib/player";
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, providerName, timestamp, type UnsureMarkers } from "../../lib/format";
-import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, type UnsureMarkers } from "../../lib/format";
+import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, recordingName, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
@@ -28,7 +28,7 @@ import { BinPanel, BulkBar, OrganisePanel, RowMenu, TitleEditor } from "./Librar
 import { useWindowShown } from "../../lib/visibility";
 import { MotionGroup, openFromRow, snapshotRow, type RowSnapshot } from "../../lib/motion";
 import { activeFilterCount, LibraryFilters, NO_FILTERS, type FilterState, type Source } from "./LibraryFilters";
-import { MAIN_LANGUAGES, MORE_LANGUAGES, engineLine, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, partsText, retryLine, retryReason, scriptWarning, usedBackupEngine } from "../../lib/languages";
+import { MAIN_LANGUAGES, MORE_LANGUAGES, transcribedIn, englishOnlyRisk, languageLabel, menuLabel, normalizeLanguage, failureLine, canTryAgain, needsKeyAction, partsText, retryLine, retryReason, scriptWarning, transcriptStatusLine, usedBackupEngine } from "../../lib/languages";
 import { CallNotesSection } from "./CallNotes";
 import { LineScreens, ScreenGallery, ScreenViewer, useSessionScreens } from "./ScreenMoments";
 import { screenMarker, screensByLine } from "../../lib/screens";
@@ -37,6 +37,9 @@ import { LockedChip, NEEDS_KEY_TEXT } from "./Upgrade";
 import { openSettingsSection } from "../../lib/entitlements";
 import { ImprovingBar, RecordingSteps } from "./RecordingProgress";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { RECOVERED_CHIP, useRecovered } from "../../lib/recovered";
+import { confirmAction } from "../../lib/confirm";
+import { useChipKey } from "../../lib/chipSelect";
 
 type SourceFilter = "all" | "phone" | "desktop" | "web";
 
@@ -54,6 +57,10 @@ export function applyFilters(items: LibraryItem[], f: FilterState): LibraryItem[
 
 /** Status only when it needs the person (DESIGN_SYSTEM.md): a ready recording shows its second line instead. */
 const STATE_LABEL = { ready: "Ready", processing: "Transcribing", failed: "Transcription failed", no_audio: "No audio" } as const;
+
+/** Double-check: what a second transcription heard on a line it disagreed on, in the app's own words. The server's
+ * label names the engine ("Groq Whisper large-v3"), so it is never shown (D-132). */
+const SECOND_HEARD = "A second transcription heard:";
 
 /** Transcript states in which the provider is still working: never shown as an empty transcript (A6.DU3). */
 const IN_FLIGHT = new Set(["pending", "submitted", "processing"]);
@@ -166,6 +173,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const sort = choice.sort;
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [opened, setOpened] = useState<Record<string, number>>(loadOpened);
+  const recovered = useRecovered();
   const [selected, setSelected] = useState<string | null>(initialSelected);
   // The page pattern (v1.6, P4.4): List or Table, the table's columns, the row the keys are on, and the density
   // (Account → Preferences, here too as on the phone's View sheet).
@@ -471,6 +479,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [rechecks, setRechecks] = useState<{ id: string | null; n: number }>({ id: null, n: 0 });
   const recheck = rechecks.id === transcribingFinalId ? rechecks.n : 0;
   const shownRead = useRef<string | null>(null);
+  // The transcript this page reads (the live captions while the final one is made): while it is on its way the page
+  // says so, never what an empty answer would mean (D-052).
+  const readingTranscript = !transcript && !transcriptError && !!((isTranscribing(finalStatus) && liveId) || finalId || liveId);
   useEffect(() => {
     const token = ++selection.current;
     const latest = () => token === selection.current;
@@ -679,7 +690,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const screensAfter = useMemo(() => screensByLine(transcript?.segments ?? [], screens ?? []), [transcript, screens]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
   const deleteScreen = async (screen: ScreenMoment) => {
-    if (!current || !window.confirm(`Delete screen ${screen.index}? The recording and its transcript stay.`)) return;
+    if (!current || !(await confirmAction({ title: `Delete screen ${screen.index}?`, body: "The recording and its transcript stay.", confirm: "Delete", tone: "danger" }))) return;
     try {
       await api.deleteScreen(current.id, screen.id);
       setScreenOpen(null);
@@ -981,7 +992,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   };
 
   const remove = async (id: string) => {
-    if (!window.confirm("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.")) return;
+    if (!(await confirmAction({ title: "Delete this recording?", body: "It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.", confirm: "Delete", tone: "danger" }))) return;
     try {
       await api.deleteSession(id);
       // Deleting another row from its menu leaves the open recording open.
@@ -1108,7 +1119,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
       <div className="toolbar library-toolbar" role="toolbar" aria-label="Library tools">
         <label className="searchbox compact library-search">
           <SearchIcon size={16} />
-          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search recordings and transcripts" aria-label="Search recordings"
+          <input ref={searchRef} value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search" aria-label="Search recordings"
             onKeyDown={(e) => { if (e.key === "Escape" && query) { e.stopPropagation(); setQuery(""); } }} />
           {query ? <button className="clear" onClick={() => setQuery("")} aria-label="Clear search"><CloseIcon size={16} /></button> : <span className="kbd" aria-hidden="true">/</span>}
         </label>
@@ -1168,11 +1179,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <div className="group-label">In transcripts</div>
               {shownHits.map((r) => (
                 <div key={r.session.id} className="hit-card">
-                  <div className="item-title">{r.session.title}</div>
+                  <div className="item-title">{recordingName(r.session.title)}</div>
                   <div className="small muted">{formatWhen(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</div>
                   {r.hits.map((h) => (
                     <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => openHit(r.session.id, h.start_ms)}
-                      aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                      aria-label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}>
                       <span className="seg-time">{timestamp(h.start_ms)}</span>
                       <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
                     </button>
@@ -1215,7 +1226,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               selected={selected} cursor={cursor} onOpen={(item) => { setCursor(item.id); setSelected(item.id); }} onPick={togglePicked}
               onPickGroup={(items) => { setSelecting(true); setPicked((p) => toggleGroup(items, p)); }} onPointerDown={startDrag}
               menu={(item) => (
-                <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                <RowMenu title={recordingName(item.title)} pinned={!!item.pinned}
                   onRename={() => { setSelected(item.id); setRenaming({ id: item.id, where: "detail" }); }}
                   onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                   onPin={() => void togglePin(item)}
@@ -1274,7 +1285,8 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {avatar}
                         <div className="item-main">
                           <div className="item-line">
-                            <span className="item-title" data-motion="title">{item.title}</span>
+                            <span className="item-title" data-motion="title">{recordingName(item.title)}</span>
+                            {recovered.has(item.id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>
                           </div>
@@ -1291,7 +1303,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {(item.labels ?? []).length > 0 && <div className="item-labels">{item.labels!.map((l) => <span key={l} className="label-chip small">{l}</span>)}</div>}
                     </button>
                     {!selecting && (
-                      <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                      <RowMenu title={recordingName(item.title)} pinned={!!item.pinned}
                         onRename={() => setRenaming({ id: item.id, where: "list" })}
                         onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                         onPin={() => void togglePin(item)}
@@ -1306,7 +1318,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         </div>
         {tableView && current && <div className="drawer-scrim" aria-hidden="true" onMouseDown={() => setSelected(null)} />}
         <div className={`detail card ${tableView ? "drawer" : ""}`} ref={detailRef} hidden={tableView && !current} role={tableView ? "dialog" : undefined}
-          aria-label={tableView && current ? current.title ?? "Recording" : undefined}>
+          aria-label={tableView && current ? recordingName(current.title) : undefined}>
           {tableView && current && (
             <button type="button" className="btn ghost icon-only drawer-close" aria-label="Close" title="Close (Esc)" onClick={() => setSelected(null)}><CloseIcon size={18} /></button>
           )}
@@ -1340,12 +1352,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
                   {readOnly ? (
-                    <h2 className="detail-title" data-motion="title">{current.title}</h2>
+                    <h2 className="detail-title" data-motion="title">{recordingName(current.title)}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
                     <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
                     <h2 className="detail-title" data-motion="title">
-                      <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
+                      <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{recordingName(current.title)}</button>
                       {current.title_auto && (
                         <span className="auto-title small muted" data-testid="auto-title" title="EchoLedger named it from what was said. Click the title to give it your own; yours is never replaced.">
                           <SparkleIcon size={12} />Automatic title
@@ -1358,9 +1370,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {current.client ? <> · {onOpenClient && !readOnly ? <button type="button" className="btn text compact" style={{ height: 22, padding: "0 4px" }} onClick={() => onOpenClient(current.client!.id)}>{current.client.name}</button> : current.client.name}</> : null}
                   </div>
                   {!readOnly && <RecordingSteps key={current.id} item={current} improving={barView !== null && transcript?.kind === "final"} notify={notify} />}
-                  {engineLine(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {engineLine(current.transcript)}</div>}
+                  {transcribedIn(current.transcript) && <div className="small muted" data-testid="engine-line">Transcribed in {transcribedIn(current.transcript)}</div>}
                   {retrying && (
-                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason, providerName(waitingFinal?.provider) || "The engine") ?? undefined}>{retrying}</div>
+                    <div className="small muted retry-line" role="status" data-testid="retry-line" title={retryReason(waitingFinal?.retry_reason) ?? undefined}>{retrying}</div>
                   )}
                   {transcript?.kind === "final" && transcript.status === "completed" && usedBackupEngine(transcript) && !isTranscribing(finalStatus) && !readOnly && (
                     <div className="backup-line" role="status" data-testid="backup-engine">
@@ -1377,17 +1389,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   {!readOnly && <OrganisePanel item={current} clients={folders} knownLabels={labels} notify={notify} onClientCreated={addClient}>
                     {current.transcript?.final_error_code !== "no_audio" && current.transcript?.final_status && (
                       <span className="head-chip retranscribe-row">
-                        <span className="chip-key" aria-hidden="true">Language</span>
-                        <select aria-label="Re-transcribe in" value={retranscribeLanguage} onChange={(e) => setRetranscribeLanguage(e.target.value)}>
+                        <LanguageChipSelect value={retranscribeLanguage} onChange={setRetranscribeLanguage}>
                           {MAIN_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}
                           <optgroup label="More languages">{MORE_LANGUAGES.map((o) => <option key={o.chip} value={o.value ?? ""}>{menuLabel(o)}</option>)}</optgroup>
-                        </select>
+                        </LanguageChipSelect>
                         <button type="button" className="btn ghost compact" onClick={() => void retranscribe()}>
                           {englishRisk && englishWarned ? "Re-transcribe anyway" : "Re-transcribe"}
                         </button>
                       </span>
                     )}
-                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="ElevenLabs · Gemini" />}
+                    {current.transcript?.final_status && <LockedChip feature="premium_engines" label="Premium engines" />}
                     {alternateId && (
                       <span className="segmented" role="group" aria-label="Version">
                         <button type="button" aria-pressed={version === "final"} onClick={() => setVersion("final")}>Current</button>
@@ -1423,18 +1434,22 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                 {transcript ? (
                   transcript.status === "failed" ? (
                     <div className="notice error" style={{ marginTop: 12 }}>
-                      <strong>Transcription failed.</strong> {transcript.error ?? "The speech provider could not process this recording."}
-                      {/* The server says what happened; the desktop knows what to check (docs/API.md `error_code`). */}
+                      <strong>Transcription failed.</strong> {failureLine(transcript.error_code)}
+                      {/* What happened in the app's own words per `error_code` (D-130; the server's message can name a provider);
+                          the desktop knows what to check (docs/API.md `error_code`). */}
                       {transcript.error_code === "no_audio" && <div className="notice-hint">{NO_AUDIO_HINT}</div>}
-                      {/* One click to try again (v1.6, P6), in the same language; not when the key is missing or nothing was heard. */}
-                      {!readOnly && transcript.error_code !== "no_audio" && transcript.error_code !== "needs_transcription_key" && (
+                      {/* One click to try again (v1.6, P6), in the same language; not when trying again cannot fix it. */}
+                      {!readOnly && canTryAgain(transcript.error_code) && (
                         <div className="notice-hint"><button type="button" className="btn compact" onClick={() => void retranscribeSame()}>Try again</button></div>
                       )}
-                      {/* The Free plan (v1.6): transcribed with the person's own Groq key, and none is added yet. */}
-                      {transcript.error_code === "needs_transcription_key" && (
+                      {/* The Free plan (v1.6): transcribed with the person's own Groq key, none is added yet or it was
+                          refused (1.8.1-b): the key's page, one click away. */}
+                      {needsKeyAction(transcript.error_code) && (
                         <div className="notice-hint needs-key" data-testid="needs-key">
-                          <span>{NEEDS_KEY_TEXT}</span>
-                          <button type="button" className="btn compact" onClick={() => openSettingsSection("transcription-key")}>Add my Groq key</button>
+                          {transcript.error_code === "needs_transcription_key" && <span>{NEEDS_KEY_TEXT}</span>}
+                          <button type="button" className="btn compact" onClick={() => openSettingsSection("transcription-key")}>
+                            {transcript.error_code === "own_key_rejected" ? "Check my Groq key" : "Add my Groq key"}
+                          </button>
                         </div>
                       )}
                     </div>
@@ -1444,7 +1459,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                   ) : (
                     <>
                       <div className="transcript-bar">
-                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript · ${providerName(transcript.provider)}${transcript.model ? ` · ${transcript.model}` : ""}${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
+                        <span className="small muted engine">{transcript.kind === "final" ? `Final transcript${transcript.edited_at ? " · edited" : ""}` : `Live captions (final transcript pending${partsText(current.transcript?.final_progress) ? ` · ${partsText(current.transcript?.final_progress)}` : ""})`}</span>
                         {(transcript.views?.available.length ?? 0) > 0 && transcript.kind === "final" && transcript.status === "completed" && transcript.segments.length > 0
                           && (!readOnly || transcript.views?.status === "ready") && (
                           <span className="segmented view-switch" role="group" aria-label="Show as">
@@ -1476,13 +1491,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         )}
                         {/* Paid parts of a recording the plan leaves out (v1.6.2): in view with their badge. */}
                         {!readOnly && !screens?.length && <LockedChip feature="screen_moments" label="Screens" />}
-                        {!readOnly && <LockedChip feature="connector" label="Ask Claude or ChatGPT" />}
+                        {!readOnly && <LockedChip feature="connector" label="Ask an AI assistant" />}
                       </div>
                       {galleryOpen && !!screens?.length && <ScreenGallery screens={screens} onOpen={openScreen} onClose={() => setGalleryOpen(false)} />}
                       {showAs !== "original" && (
                         <div className="small muted" role="status" data-testid="view-status" style={{ marginTop: 6 }}>
                           {views?.status === "ready"
-                            ? `${VIEW_LABELS[showAs]} view${views.model ? ` by ${views.model}` : ""}. The transcript itself is unchanged.`
+                            ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
                             : views?.status === "failed"
                               ? `The view could not be made: ${views.error ?? "try again later."}`
                               : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
@@ -1525,7 +1540,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                               <span className={s.uncertain && inView === null ? "seg-text uncertain" : "seg-text"} dir="auto" title={s.uncertain && inView === null ? UNSURE_LINE : undefined}>
                                 {lineContent(i)}
                                 {inView !== null && showAs !== "original" && views?.kept?.[showAs]?.includes(i) && <span className="seg-kept muted" title="This line could not be written in the view, so it shows the words as transcribed."> · original words</span>}
-                                {s.check && inView === null && <span className="seg-check" dir="auto"><b>{s.check.label} heard:</b> {s.check.text}</span>}
+                                {s.check && inView === null && <span className="seg-check" dir="auto"><b>{SECOND_HEARD}</b> {s.check.text}</span>}
                               </span>
                             </>
                           );
@@ -1565,8 +1580,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       Couldn't load the transcript. Check the connection and try again.{" "}
                       <button type="button" className="btn compact" onClick={() => setTranscriptAttempt((n) => n + 1)}>Retry</button>
                     </div>
+                  ) : readingTranscript ? (
+                    <div className="empty" role="status" aria-busy="true" data-testid="transcript-loading"><span className="spinner" aria-hidden="true" /> Loading the transcript…</div>
                   ) : (
-                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : finalStatus ? `Transcript ${finalStatus.replace("_", " ")}` : "Transcript not available yet."}</div>
+                    <div className="empty">{isTranscribing(finalStatus) ? transcribingLine(current.transcript?.final_progress) : transcriptStatusLine(finalStatus)}</div>
                   )
                 )}
                 {current.client && !readOnly && <CallNotesSection key={current.id} sessionId={current.id} clientName={current.client.name} onSeek={seek} notify={notify} />}
@@ -1599,5 +1616,16 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
           onClose={() => setMoveFor(null)} onProjectCreated={addClient} />
       )}
     </>
+  );
+}
+
+/** The Language chip's select (D-121): the whole "Language ▾" part opens it, the word included. */
+function LanguageChipSelect({ value, onChange, children }: { value: string; onChange: (value: string) => void; children: React.ReactNode }) {
+  const chip = useChipKey<HTMLLabelElement>();
+  return (
+    <label ref={chip} className="chip-select">
+      <span className="chip-key" aria-hidden="true">Language</span>
+      <select aria-label="Language to re-transcribe in" value={value} onChange={(e) => onChange(e.target.value)}>{children}</select>
+    </label>
   );
 }

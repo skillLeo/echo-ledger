@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { clampSidebar, findPages, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
+import { clampSidebar, initials, listKey, loadOpenGroups, loadSidebarWidth, paletteKeys, parsePreferences, saveOpenGroups, saveSidebarWidth, savedLine,
   SIDEBAR_DEFAULT, stepIndex } from "./shell";
 import { libraryPlaces } from "./folders";
 import { applyPreferences, DEFAULT_PREFERENCES, savePreferences } from "./shell";
@@ -61,21 +61,6 @@ describe("12- or 24-hour times everywhere (Account → Preferences; MANUAL_QA 16
       applyPreferences(DEFAULT_PREFERENCES);
     }
     expect(formatWhen(at, now)).toBe("Today · 2:05 PM");
-  });
-});
-
-describe("Find a page", () => {
-  const pages = [
-    { id: "home", label: "Home", keywords: "record ready" },
-    { id: "devices", label: "Devices", group: "Account", keywords: "phones computers" },
-    { id: "p1", label: "Acme Holdings", group: "Projects" },
-  ];
-  it("finds a page by its name, its group or its words, every word typed", () => {
-    expect(findPages(pages, "dev").map((p) => p.id)).toEqual(["devices"]);
-    expect(findPages(pages, "account phones").map((p) => p.id)).toEqual(["devices"]);
-    expect(findPages(pages, "ACME").map((p) => p.id)).toEqual(["p1"]);
-    expect(findPages(pages, "  ")).toEqual([]);
-    expect(findPages(pages, "zzz")).toEqual([]);
   });
 });
 
@@ -151,5 +136,16 @@ describe("the workspace switcher (v1.6, P4.3)", () => {
       .map((w) => [w.name, w.current])).toEqual([["Personal", false], ["Acme team", true]]);
     expect(workspacesOf(account, status)).toEqual([{ key: "current", name: "Acme team", role: "member", current: true }]);
     expect(workspacesOf(null, makeStatus({ plan: { ...status.plan, workspace: null } }))[0].name).toBe("Personal");
+  });
+});
+
+describe("the sidebar in a window too narrow for it", () => {
+  it("shows the rail under 640 px unless opened there, and the choice otherwise", async () => {
+    const { AUTO_RAIL_BELOW, sidebarFolded } = await import("./shell");
+    expect(AUTO_RAIL_BELOW).toBe(640);
+    expect(sidebarFolded(false, 430, false)).toBe(true);
+    expect(sidebarFolded(false, 430, true)).toBe(false);
+    expect(sidebarFolded(true, 860, false)).toBe(true);
+    expect(sidebarFolded(false, 860, true)).toBe(false);
   });
 });

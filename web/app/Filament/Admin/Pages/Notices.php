@@ -81,7 +81,7 @@ class Notices extends Page
             Section::make('Maintenance')->description('While it is on, customers see a pause page in the app and the apps wait; staff keep working. Webhooks and share links keep working.')->schema([
                 Toggle::make('maintenance_on')->label('Maintenance is on'),
                 Textarea::make('maintenance_message')->label('Message')->rows(2)->maxLength(300)
-                    ->placeholder('EchoLedger is being updated. Please try again in a few minutes; your recordings are safe.'),
+                    ->placeholder(PlatformNotices::maintenanceMessage()),
                 DateTimePicker::make('maintenance_until')->label('Expected back (optional)')->seconds(false),
             ]),
         ]);

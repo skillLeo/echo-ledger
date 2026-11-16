@@ -6,6 +6,7 @@ import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../t
 import { makeItem, makeSettings, makeStatus, anyTarget } from "../../test/fixtures";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT, type ServerNotices } from "../../lib/ipc";
 import { setClock24 } from "../../lib/format";
+import { restartForTests } from "../../components/StateBanner";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -57,8 +58,24 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     render(<ServerBanners server={{ ...NONE, appUpdate: { ...UPDATE, refused: true }, waiting: "update_required" }} notify={vi.fn()} />);
     const banner = screen.getByTestId("app-update");
     expect(banner).toHaveClass("danger");
-    expect(banner).toHaveTextContent("The server no longer accepts this version: your recordings wait on this computer and upload after the update.");
+    // One short sentence on the banner; the details behind Learn more.
+    const details = within(banner).getByText("The server no longer accepts this version: your recordings wait on this computer and upload after the update.");
+    expect(details).not.toBeVisible();
+    fireEvent.click(within(banner).getByRole("button", { name: "Learn more" }));
+    expect(details).toBeVisible();
     expect(within(banner).queryByRole("button", { name: /Close/ })).not.toBeInTheDocument();
+  });
+
+  it("asks again after a restart while this version is still refused; a dated maintenance stays closed", () => {
+    const until = new Date(Date.now() + 3_600_000).toISOString();
+    const server = { ...NONE, appUpdate: { ...UPDATE, refused: true }, maintenance: { message: "Upgrading the database.", until }, waiting: "update_required" as const };
+    const first = render(<ServerBanners server={server} notify={vi.fn()} />);
+    for (const id of ["app-update", "maintenance"]) fireEvent.click(within(screen.getByTestId(id)).getByRole("button", { name: "Dismiss" }));
+    first.unmount();
+    restartForTests();
+    render(<ServerBanners server={server} notify={vi.fn()} />);
+    expect(screen.getByTestId("app-update")).toBeInTheDocument();
+    expect(screen.queryByTestId("maintenance")).toBeNull();
   });
 
   it("shows maintenance as a quiet line that says when it ends and that uploads wait", () => {
@@ -70,6 +87,7 @@ describe("what the server says to every app (v1.6, P2.7)", () => {
     expect(banner).toHaveTextContent("Upgrading the database.");
     expect(banner).toHaveTextContent("Recordings and uploads wait on this computer and go when it is back.");
     expect(banner).toHaveTextContent(/Back about/);
+    expect(within(banner).getByText(/Recordings and uploads wait/)).not.toBeVisible();
   });
 
   it("closes an announcement for its text, remembers it, and shows the next one", () => {

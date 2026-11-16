@@ -1,5 +1,6 @@
 package com.echoledger.mobile.ui
 
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -80,7 +81,8 @@ class ShowAsScreenTest : ScreenTest() {
 
         compose.onNodeWithText("Roman Urdu").performClick()
         awaitText("aap kaise hain")
-        compose.onNodeWithText("Roman Urdu view by claude-opus-5-5. The transcript itself is unchanged.").assertExists()
+        compose.onNodeWithText("Roman Urdu view. The transcript itself is unchanged.").assertExists()
+        compose.onAllNodesWithText("claude", substring = true, ignoreCase = true).assertCountEquals(0)
 
         compose.onNodeWithText("English").performClick()
         awaitText("I am fine.")
@@ -147,7 +149,7 @@ class ShowAsScreenTest : ScreenTest() {
         show { SessionScreen(vm, item, onBack = {}) }
 
         awaitText("میں invoice بھیج دوں گا")
-        compose.onNodeWithText("اردو view by claude-opus-5-5. The transcript itself is unchanged.").assertExists()
+        compose.onNodeWithText("اردو view. The transcript itself is unchanged.").assertExists()
         assertTrue(compose.onAllNodesWithText("English").fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("Original").performClick()
         awaitText("I will send the invoice")

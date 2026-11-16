@@ -166,9 +166,9 @@ function isoApiCases(array $b): array
         // Writes only about the calling device: no id in the request, the device decides the workspace.
         'api.devices.report' => ['POST', '/api/devices/report', ['platform' => 'android', 'checks' => [['key' => 'voice_notes', 'state' => 'ok']]], 'list'],
         'api.config' => ['GET', '/api/config', [], 'list'],
-        // Since v1.8.1: a Share Check result about the calling device only (ids in the body are never read), and the
-        // server-wide sharing-bar patterns. No route reads results back.
-        'api.diagnostics.share-checks' => ['POST', '/api/diagnostics/share-checks', ['platform' => 'windows', 'os_build' => '10.0.26100', 'app_version' => '1.8.1', 'method' => 'wgc', 'result' => 'pass', 'device_id' => $b['device']->id, 'user_id' => $b['bob']->id],
+        // Since v1.8.1: a Share Check result about the calling device only (ids in the body are never read; since the
+        // audit's S3 its platform is the device's own), and the server-wide sharing-bar patterns. No route reads results back.
+        'api.diagnostics.share-checks' => ['POST', '/api/diagnostics/share-checks', ['platform' => $b['aliceDevice']->platform->value, 'os_build' => '16', 'app_version' => '1.8.1', 'method' => 'recording_callback', 'result' => 'pass', 'device_id' => $b['device']->id, 'user_id' => $b['bob']->id],
             fn (TestResponse $r): bool => $r->status() === 201 && ShareCheckResult::query()->where('device_id', $b['device']->id)->doesntExist()],
         'api.config.share-bars' => ['GET', '/api/config/share-bars', [], 'list'],
         // Since v1.8: a call the calling device saw but did not record. Ids in the body are never read, and B's own

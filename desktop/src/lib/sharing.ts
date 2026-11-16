@@ -6,6 +6,11 @@ import { formatWhen, SOURCE_APP_LABELS } from "./format";
 /** The most people one link or one send may name. */
 export const MAX_PEOPLE = 20;
 
+/** Revoke asks first (D-072): a link stops working for everyone who has it, and it can't be turned back on. */
+export const REVOKE_LINK_QUESTION = { title: "Revoke this link?", body: "It stops working for everyone who has it.", confirm: "Revoke", tone: "danger" } as const;
+/** The same for a request link. */
+export const REVOKE_REQUEST_QUESTION = { title: "Revoke this request link?", body: "It stops taking files from everyone who has it.", confirm: "Revoke", tone: "danger" } as const;
+
 /** An email address the way the core checks it: one `@`, a dotted domain, no spaces. */
 export function looksLikeEmail(text: string): boolean {
   const at = text.indexOf("@");

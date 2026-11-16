@@ -1,0 +1,81 @@
+{
+  "border": {
+    "hairline": {
+      "$type": "dimension",
+      "$value": "1px"
+    },
+    "strong": {
+      "$type": "dimension",
+      "$value": "2px"
+    }
+  },
+  "focus": {
+    "width": {
+      "$type": "dimension",
+      "$value": "2px"
+    },
+    "offset": {
+      "$type": "dimension",
+      "$value": "2px"
+    }
+  },
+  "icon": {
+    "sm": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "md": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "lg": {
+      "$type": "dimension",
+      "$value": "24px"
+    },
+    "xl": {
+      "$type": "dimension",
+      "$value": "40px"
+    }
+  },
+  "breakpoint": {
+    "compact": {
+      "$type": "dimension",
+      "$value": "720px"
+    },
+    "medium": {
+      "$type": "dimension",
+      "$value": "1024px"
+    },
+    "wide": {
+      "$type": "dimension",
+      "$value": "1440px"
+    },
+    "$description": "Window widths: below compact the sidebar collapses to icons; below medium two-pane views stack."
+  },
+  "layer": {
+    "base": {
+      "$type": "number",
+      "$value": 0
+    },
+    "sticky": {
+      "$type": "number",
+      "$value": 10
+    },
+    "menu": {
+      "$type": "number",
+      "$value": 20
+    },
+    "toast": {
+      "$type": "number",
+      "$value": 30
+    },
+    "dialog": {
+      "$type": "number",
+      "$value": 40
+    },
+    "overlay": {
+      "$type": "number",
+      "$value": 50
+    }
+  }
+}

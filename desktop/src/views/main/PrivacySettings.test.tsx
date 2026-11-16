@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { BACK_AFTER_SHARE, GUIDED_ALONE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
-import { resetClosedBanners } from "../../components/StateBanner";
+import { GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, hiddenReason, lastCheckValue } from "./PrivacySettings";
+import { resetClosedBanners, restartForTests } from "../../components/StateBanner";
 import { setting } from "../../lib/settingsRegistry";
 import ShareCheckWindow, { CONTROL_TEXT } from "../sharecheck/ShareCheckWindow";
 import { PrivacyBadge, PrivacyBadgeView } from "../../components/PrivacyBadge";
@@ -123,6 +123,20 @@ describe("Share Check", () => {
 describe("Settings › Screen-share privacy", () => {
   beforeEach(() => resetTauriMock());
 
+  it("shows Show in screen share and Copy diagnostics as actions, not plain text (D-090)", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", zoomInstalled: true }));
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    for (const name of ["Show in screen share for 10 min", "Copy diagnostics"]) {
+      const row = await screen.findByRole("button", { name: new RegExp(`^${name}`) });
+      expect(row).toHaveClass("set-action");
+    }
+    // A row that opens in place keeps its chevron instead: on a Mac with Zoom, the Zoom row is there to check.
+    const zoom = screen.getByRole("button", { name: /^Set up Zoom/ });
+    expect(zoom).toHaveAttribute("aria-expanded", "false");
+    expect(zoom).not.toHaveClass("set-action");
+    expect(zoom.querySelector(".set-trail.disclosure")).not.toBeNull();
+  });
+
   it("shows the status, the last check, the tip and the limits; Windows' amber lines", async () => {
     respond("privacy_status", makePrivacyStatus({ badge: "visible", badgeLabel: "Visible in screen share", oldWindows: true, lines: [{ warning: true, text: "In Remote Desktop, EchoLedger windows are visible to the remote side.", fix: null }] }));
     const patch = vi.fn(async () => true);
@@ -192,17 +206,61 @@ describe("Settings › Screen-share privacy", () => {
     expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: false }]);
   });
 
-  it("does not offer Show while the sharing bar is on screen, and says when they come back", async () => {
+  it("does not offer Show while the sharing bar is on screen, and says when they come back in the tray's words", async () => {
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: true }));
     render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
-    expect(await screen.findByText("Hidden while you share your screen")).toBeInTheDocument();
-    expect(screen.getByTestId("back-after-share")).toHaveTextContent(BACK_AFTER_SHARE);
+    const line = await screen.findByTestId("back-after-share");
+    expect(line).toHaveTextContent(/^Hidden while you share your screen\. They come back when the meeting ends\.$/);
+    expect(HIDDEN_WHILE_SHARING).toBe("Hidden while you share your screen. They come back when the meeting ends.");
+    expect(line).not.toHaveTextContent(/one window/i);
+    expect(screen.getAllByText(ONE_WINDOW_TIP), "the one-window tip once, on the next line").toHaveLength(1);
+    expect(screen.queryByText("Hidden while you share your screen"), "said once, in the line").toBeNull();
     expect(screen.queryByRole("button", { name: "Show EchoLedger windows" }), "it would last until the next look").toBeNull();
     // The bar was hidden (Zoom hid its controls): Show works again.
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: false }));
     await act(async () => emitEvent("privacy:changed", null));
     expect(await screen.findByRole("button", { name: "Show EchoLedger windows" })).toBeInTheDocument();
     expect(screen.queryByTestId("back-after-share")).toBeNull();
+  });
+
+  it("puts the person's Hide before the sharing bar, in the tray's order", async () => {
+    // Hidden by the person while the sharing bar is on screen: the tray offers Show (it ends the person's Hide; the bar
+    // still keeps them off afterwards), so the page does too, without the bar's line.
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenByShortcut: true, hiddenForShare: true, barOnScreen: true }));
+    respond("privacy_set_hidden", null);
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Show EchoLedger windows" }));
+    expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: false }]);
+    expect(screen.queryByTestId("back-after-share")).toBeNull();
+    expect(screen.queryByText(HIDDEN_WHILE_SHARING)).toBeNull();
+    // Their Hide is over and the bar is still there: now the line, and no Show.
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenByShortcut: false, hiddenForShare: true, barOnScreen: true }));
+    await act(async () => emitEvent("privacy:changed", null));
+    expect(await screen.findByTestId("back-after-share")).toHaveTextContent(HIDDEN_WHILE_SHARING);
+    expect(screen.queryByRole("button", { name: "Show EchoLedger windows" })).toBeNull();
+    // The order itself (tray.rs hidden_line): the person, then the bar, then a share without its bar.
+    expect(hiddenReason(makePrivacyStatus({ hiddenByShortcut: true, hiddenForShare: true, barOnScreen: true }))).toBe("person");
+    expect(hiddenReason(makePrivacyStatus({ hiddenForShare: true, barOnScreen: true }))).toBe("share_bar");
+    expect(hiddenReason(makePrivacyStatus({ hiddenForShare: true }))).toBe("share");
+    expect(hiddenReason(makePrivacyStatus())).toBeNull();
+  });
+
+  it("names the floating windows the way people know them", async () => {
+    // docs/DESIGN_SYSTEM.md "Screen-share privacy names": never the internal words.
+    const internal = /\b(pill|bubble|overlay|chip|popup|toast)s?\b|Share Check|Hide all|Hide cards/i;
+    for (const hiding of ["all", "floating", "off"] as const) {
+      cleanup();
+      respond("privacy_status", makePrivacyStatus({ platform: "macos", hiding, hiddenForShare: true }));
+      render(<SharePrivacyPage settings={makeSettings({ hideFromSharing: hiding })} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+      const page = await screen.findByTestId("share-privacy");
+      await screen.findByText("Hidden while you share your screen");
+      expect(page.textContent ?? "", hiding).not.toMatch(internal);
+    }
+    expect(screen.getByTestId("share-privacy").textContent).toBeTruthy();
+    cleanup();
+    respond("privacy_status", makePrivacyStatus({ hiding: "floating" }));
+    render(<SharePrivacyPage settings={makeSettings({ hideFromSharing: "floating" })} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    expect(await screen.findByText(/captions, the recording controls and the other floating windows stay hidden/)).toBeInTheDocument();
   });
 
   it("labels every button to the system's settings the same way", async () => {
@@ -288,6 +346,16 @@ describe("hidden windows and the flags", () => {
     // A later share, with the main window opened during it again.
     respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 2 }));
     await act(async () => emitEvent("privacy:changed", null));
+    expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
+  });
+
+  it("says it again in the first share after a restart (shares are counted from 1 in each run)", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 1 }));
+    const first = render(<ShareNotice />);
+    fireEvent.click(within(await screen.findByTestId("main-in-share")).getByRole("button", { name: /dismiss/i }));
+    first.unmount();
+    restartForTests();
+    render(<ShareNotice />);
     expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
   });
 

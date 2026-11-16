@@ -50,7 +50,7 @@ function useNoticeTimer(ms: number | null, onEnd: () => void): { paused: boolean
   return { paused, pause, resume };
 }
 
-export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, role, className = "", testId, timerKey }: {
+export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLabel, onDismiss, timeoutMs = null, actions, details, role, className = "", testId, timerKey }: {
   kind: "toast" | "banner";
   tone?: "neutral" | "error" | "warn" | "danger" | "info" | "quiet" | "accent";
   icon?: ReactNode;
@@ -65,6 +65,8 @@ export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLab
   timeoutMs?: number | null;
   /** Buttons of its own (Update, Restart); a click on them is theirs. */
   actions?: ReactNode;
+  /** What the one sentence leaves out ("Learn more", components/LearnMore.tsx): beside it, never inside its button. */
+  details?: ReactNode;
   role?: "status" | "alert";
   className?: string;
   testId?: string;
@@ -108,7 +110,7 @@ export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLab
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0 || leaving) return;
     // The × and its own buttons are pressed, never dragged.
-    if ((e.target as HTMLElement).closest(".notice-close, .notice-actions")) return;
+    if ((e.target as HTMLElement).closest(".notice-close, .notice-actions, .notice-details")) return;
     tracker.current = new SwipeTracker(width());
     tracker.current.down(e.clientX, e.clientY, performance.now());
     pointer.current = e.pointerId;
@@ -193,11 +195,14 @@ export function Notice({ kind, tone = "neutral", icon, children, onOpen, openLab
       onKeyDown={(e) => { if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); onDismiss(); } }}
       onClick={onClick} onTransitionEnd={() => setSettling(false)}>
       {icon && <span className="notice-icon" aria-hidden="true">{icon}</span>}
-      {onOpen ? (
-        <button type="button" className="notice-open" onClick={open} aria-label={openLabel}>{children}</button>
-      ) : (
-        <span className="notice-text">{children}</span>
-      )}
+      <span className="notice-main">
+        {onOpen ? (
+          <button type="button" className="notice-open" onClick={open} aria-label={openLabel}>{children}</button>
+        ) : (
+          <span className="notice-text">{children}</span>
+        )}
+        {details && <span className="notice-details">{details}</span>}
+      </span>
       {actions && <span className="notice-actions">{actions}</span>}
       <button type="button" className="notice-close" aria-label="Dismiss" title="Dismiss (Esc)" onClick={(e) => { e.stopPropagation(); onDismiss(); }}>
         <CloseIcon size={14} />

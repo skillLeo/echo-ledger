@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 import { createPortal } from "react-dom";
 import { api, errorMessage, type ClientFolder, type ProjectScreen, type ProjectScreensPage, type ScreenMoment } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { screenAlt, screenLabel, screenPicture, screensBySession } from "../../lib/screens";
 import { ChevronRightIcon, CloseIcon, MonitorIcon, TrashIcon } from "../../components/Icons";
 import { ChevronLeftIcon, PlayIcon } from "../../components/ControlIcons";
@@ -178,7 +179,7 @@ export function ScreenViewer({ screens, index, onIndex, onClose, onPlay, onDelet
 /** "Kick-off · 4 Nov" under a project screen's label. */
 function sessionLine(s: ProjectScreen): string {
   const when = s.session_started_at ? formatWhen(s.session_started_at) : "";
-  return [s.session_title || "Recording", when].filter(Boolean).join(" · ");
+  return [recordingName(s.session_title), when].filter(Boolean).join(" · ");
 }
 
 /**
@@ -275,9 +276,9 @@ export function ProjectScreens({ client, first, notify, onOpenRecording, onClien
       ) : (
         <div className="project-screens" data-testid="project-screens">
           {screensBySession(screens).map((group) => (
-            <section key={group.sessionId} className="ws-section" aria-label={group.title || "Recording"}>
+            <section key={group.sessionId} className="ws-section" aria-label={recordingName(group.title)}>
               <h3>
-                <span className="project-screens-title">{group.title || "Recording"}</span>
+                <span className="project-screens-title">{recordingName(group.title)}</span>
                 {group.startedAt && <span className="small muted">{formatWhen(group.startedAt)}</span>}
               </h3>
               <div className="screen-grid" role="list">

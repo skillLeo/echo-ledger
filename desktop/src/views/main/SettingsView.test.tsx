@@ -8,6 +8,7 @@ import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond,
 import { makePrivacyStatus, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { findSetting, HELP_ARTICLES, SETTINGS, setting } from "../../lib/settingsRegistry";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -389,7 +390,7 @@ describe("rows that save", () => {
       window.dispatchEvent(new KeyboardEvent("keydown", { key: "R", code: "KeyR", ctrlKey: true, shiftKey: true, bubbles: true, cancelable: true }));
     });
     await waitFor(() => expect(callsOf("set_shortcut").at(-1)).toEqual({ action: "record_now", accelerator: "CommandOrControl+Shift+R" }));
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     await waitFor(() => expect(callsOf("reset_shortcuts")).toHaveLength(1));
   });
@@ -427,12 +428,34 @@ describe("Sign out", () => {
     respond("unpair", makeStatus({ paired: false }));
     const { onUnpaired } = await setup({ status: { pendingUploads: 2 } });
     fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
-    const dialog = screen.getByRole("dialog", { name: "Sign out of this computer?" });
+    const dialog = screen.getByRole("alertdialog", { name: "Sign out of this computer?" });
     expect(dialog).toHaveTextContent("2 recordings haven't uploaded yet.");
     fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
     expect(callsOf("unpair")).toHaveLength(0);
     fireEvent.click(within(list()).getByRole("button", { name: "Sign out" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Sign out" }));
     await waitFor(() => expect(onUnpaired).toHaveBeenCalled());
+  });
+});
+
+describe("an action row reads as an action, a row that opens something has a chevron (D-090)", () => {
+  it("draws the link colour only without a value, keeps it while it says what it is doing, and chevrons a value", async () => {
+    const { ActionRow } = await import("./SettingsControls");
+    const { render: draw, screen: page } = await import("@testing-library/react");
+    draw(<>
+      <ActionRow id="lock.now" onClick={() => undefined} />
+      <ActionRow id="share_privacy.copy" status="Copied" onClick={() => undefined} />
+      <ActionRow id="lock.pin" value="Not set" onClick={() => undefined} />
+      <ActionRow id="plan.promo" value="Add" onClick={() => undefined} />
+    </>);
+    const row = (name: RegExp) => page.getByRole("button", { name });
+    expect(row(/^Lock now/)).toHaveClass("set-action");
+    expect(row(/^Copy diagnostics/)).toHaveClass("set-action");
+    expect(row(/^Copy diagnostics/)).toHaveTextContent("Copied");
+    for (const name of [/^PIN|^Change PIN|^Set a PIN/, /^Promo code/]) {
+      const opens = page.getAllByRole("button").find((b) => name.test(b.textContent ?? ""))!;
+      expect(opens).not.toHaveClass("set-action");
+      expect(opens.querySelector(".set-trail")).not.toBeNull();
+    }
   });
 });

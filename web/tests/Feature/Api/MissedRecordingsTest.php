@@ -425,6 +425,22 @@ describe('retention', function () {
             ->and(missedItemIds($owner))->toBe([$personal]);
     });
 
+    it('lets every later listener of a deleted workspace run: taking the items answers nothing, so nothing stops', function () {
+        $owner = Fx::user();
+        $team = app(Workspaces::class)->createFor($owner, 'Short-lived team');
+        $this->api(Fx::token(Fx::device($owner, ['workspace_id' => $team->id])))->postJson('/api/devices/missed-recordings', missedBody())->assertCreated();
+        app('auth')->forgetGuards();
+        // `deleting` stops at the first listener that answers anything; this one comes after the Activity feed's.
+        $heard = new ArrayObject;
+        Workspace::deleting(function (Workspace $workspace) use ($heard): void {
+            $heard[] = $workspace->id;
+        });
+
+        app(WorkspaceEraser::class)->erase($team->fresh(), $owner->fresh());
+
+        expect($heard->getArrayCopy())->toBe([$team->id])->and(missedItemIds($owner))->toBe([]);
+    });
+
     it('takes the Activity items with an erased account, as all its notifications', function () {
         $user = Fx::user();
         $this->api(Fx::token(Fx::device($user)))->postJson('/api/devices/missed-recordings', missedBody())->assertCreated();

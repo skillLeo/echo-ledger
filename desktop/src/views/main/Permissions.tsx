@@ -3,12 +3,13 @@
 // holds without it, and the one calm sentence when macOS has forgotten a permission (an unsigned app can lose them at an
 // update).
 import { useCallback, useEffect, useState } from "react";
-import { api, listenTo, type MissingPermission, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
+import { api, errorMessage, listenTo, type MissingPermission, type PermissionKind, type PermissionState, type PermissionsStatus } from "../../lib/ipc";
 import { useWindowShown } from "../../lib/visibility";
 import { AlertIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { Notice } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
+import { useBannerTurn } from "../../components/BannerSlot";
 
 export interface PermissionStepText {
   title: string;
@@ -45,10 +46,30 @@ export function accessOf(permissions: PermissionsStatus | null, kind: Permission
   return (kind === "system_audio" ? permissions.systemAudio : permissions.screen) ?? "unknown";
 }
 
+/** Allowed before on this Mac, "not asked" now (D-120): maybe another copy of EchoLedger that System Settings still
+ * lists, maybe a reset of the privacy settings. Said as a possibility, with what to do either way. */
+export const ALLOWED_BEFORE = "Allowed before on this Mac. If System Settings already lists EchoLedger, remove it there, then click Allow.";
+
+/** Screen Recording switched on in System Settings while EchoLedger ran: macOS applies it when the app opens again. */
+export const REOPEN = "Allowed in System Settings. Quit and reopen EchoLedger to finish.";
+
+/** System audio or Screen Recording when macOS does not say how it stands (D-136): only where to look. */
+export const CANNOT_TELL = "macOS does not say whether EchoLedger may use this. Check it in System Settings.";
+
+/** Whether macOS can say "not asked yet" for this permission (pure): the microphone always; system audio and Screen
+ * Recording only through the privacy call (D-136). */
+export function canTellNotAsked(permissions: PermissionsStatus | null, kind: PermissionKind): boolean {
+  return kind === "microphone" || permissions?.platform !== "macos" || permissions.canTellNotAsked !== false;
+}
+
+/** The same after EchoLedger was reopened: reopening did not apply it, so it is not offered again (no endless loop). */
+export const SWITCH_OFF_ON = "Allowed in System Settings, but macOS has not applied it, even after EchoLedger reopened. Switch EchoLedger off and on again there.";
+
 const STATE_TEXT: Record<PermissionState, string> = {
   allowed: "Allowed",
   denied: "Off: turn on EchoLedger in System Settings",
   unknown: "Not asked yet",
+  reopen: REOPEN,
 };
 
 /** The permissions as they stand: read when the window shows and again whenever it comes back into focus, which is what
@@ -70,7 +91,8 @@ export function usePermissions(readAgain?: string | null): [PermissionsStatus | 
   return [permissions, setPermissions];
 }
 
-/** One permission: what it is for, how it stands, Allow while macOS has not asked, and the System Settings pane. */
+/** One permission: what it is for, how it stands, Allow while macOS has not asked, the System Settings pane, and Quit &
+ * reopen when Screen Recording was switched on while EchoLedger ran. */
 export function PermissionStep({ kind, permissions, onChange, compact = false }: {
   kind: PermissionKind;
   permissions: PermissionsStatus | null;
@@ -78,8 +100,26 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
   compact?: boolean;
 }) {
   const [asking, setAsking] = useState(false);
+  const [reopenRefused, setReopenRefused] = useState<string | null>(null);
   const text = PERMISSION_STEP[kind];
   const access = accessOf(permissions, kind);
+  // Allowed before on this Mac, "not asked" now (D-120): System Settings first, where an old entry can be removed.
+  const before = access === "unknown" && !!permissions?.allowedBefore?.includes(kind);
+  // Reopened, and macOS still has not applied Screen Recording: switch it off and on there instead.
+  const stuck = access === "reopen" && !!permissions?.reopenDidNotApply;
+  // macOS does not say (no privacy call): no "Not asked yet", System Settings first (D-136).
+  const untold = access === "unknown" && !canTellNotAsked(permissions, kind);
+  const reopen = async () => {
+    setReopenRefused(null);
+    try {
+      await api.quitAndReopen();
+    } catch (e) {
+      setReopenRefused(errorMessage(e));
+    }
+  };
+  const settingsButton = (main: boolean) => (
+    <button type="button" className={`btn ${main ? "primary" : access === "unknown" ? "ghost" : ""}`.trim()} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>
+  );
   const allow = async () => {
     setAsking(true);
     try {
@@ -96,14 +136,17 @@ export function PermissionStep({ kind, permissions, onChange, compact = false }:
       <p className="small">{text.forWhat}</p>
       {text.note && <p className="small muted" data-testid="permission-note">{text.note}</p>}
       <div className="permission-state small" data-testid={`permission-state-${kind}`}>
-        <span className={`status-dot ${access === "allowed" ? "ok" : access === "denied" ? "failed" : ""}`} aria-hidden="true" />
-        {STATE_TEXT[access]}
+        <span className={`status-dot ${access === "allowed" ? "ok" : access === "denied" ? "failed" : access === "reopen" ? "ask" : ""}`} aria-hidden="true" />
+        {before ? ALLOWED_BEFORE : stuck ? SWITCH_OFF_ON : untold ? CANNOT_TELL : STATE_TEXT[access]}
       </div>
       <div className="row permission-actions">
+        {access === "reopen" && !stuck && <button type="button" className="btn primary" onClick={() => void reopen()}>Quit &amp; reopen</button>}
+        {(before || stuck || untold) && settingsButton(true)}
         {access === "unknown" && <button type="button" className="btn" disabled={asking} onClick={() => void allow()}>{asking ? "Asking…" : "Allow"}</button>}
-        {access !== "allowed" && <button type="button" className={`btn ${access === "unknown" ? "ghost" : ""}`} onClick={() => void api.openPrivacySettings(kind).catch(() => undefined)}>Open System Settings</button>}
+        {(access === "denied" || (access === "unknown" && !before && !untold)) && settingsButton(false)}
       </div>
-      {access !== "allowed" && <p className="small muted">{text.where}</p>}
+      {reopenRefused && <p className="small error-text" role="alert">{reopenRefused}</p>}
+      {access !== "allowed" && (access !== "reopen" || stuck) && <p className="small muted">{text.where}</p>}
     </div>
   );
 }
@@ -164,9 +207,10 @@ export function PermissionLossNotice() {
     dismiss();
   }, [dismiss]);
   const lost = permissions?.lost;
+  const shown = useBannerTurn("permission-loss", !!lost && !dismissed);
   return (
     <>
-      {lost && !dismissed && (
+      {shown && (
         <Notice kind="banner" tone="warn" className="banner warn" role="status" testId="permission-loss" icon={<AlertIcon size={16} />} timeoutMs={null}
           onOpen={() => setGuide(true)} onDismiss={dismiss}
           actions={<button type="button" className="btn compact" onClick={() => setGuide(true)}>Set up</button>}>

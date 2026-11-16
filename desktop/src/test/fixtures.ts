@@ -246,7 +246,7 @@ export function makeSkippedItem(id = "skip-1", overrides: Partial<SkippedItem> =
 }
 
 export function makeAfterCallState(overrides: Partial<AfterCallState> = {}): AfterCallState {
-  return { saved: null, ask: null, ...overrides };
+  return { saved: null, discarded: null, ask: null, ...overrides };
 }
 
 export function makeAskPayload(overrides: Partial<AskPayload> = {}): AskPayload {

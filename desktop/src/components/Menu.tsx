@@ -15,6 +15,8 @@ export interface MenuItem {
   disabled?: boolean;
   /** A ticked choice (a menuitemradio). */
   checked?: boolean;
+  /** The id of text in the menu's header that describes this item (screen readers skip non-items in a menu). */
+  describedBy?: string;
   onPick: () => void;
 }
 
@@ -78,7 +80,7 @@ export function Menu({ button, label, items, header, footer, align = "right", cl
           {header && <div className="menu-head" onClick={(e) => { if ((e.target as HTMLElement).closest("[data-menu-close]")) setOpen(false); }}>{header}</div>}
           {shown.map((item, i) => (item === "separator" ? <div key={`sep-${i}`} className="menu-sep" role="separator" /> : (
             <button key={item.id} type="button" role={item.checked === undefined ? "menuitem" : "menuitemradio"} aria-checked={item.checked}
-              aria-label={item.name} className={`btn ghost small menu-item ${item.danger ? "danger" : ""}`} disabled={item.disabled}
+              aria-label={item.name} aria-describedby={item.describedBy} className={`btn ghost small menu-item ${item.danger ? "danger" : ""}`} disabled={item.disabled}
               onClick={() => { setOpen(false); item.onPick(); }}>
               {item.icon && <span className="menu-icon" aria-hidden="true">{item.icon}</span>}
               <span className="menu-label">{item.label}</span>

@@ -12,6 +12,8 @@ import { ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
 import { MoveRecordingsDialog } from "./ProjectDialogs";
 import { FiledByLine } from "./FilingRules";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
+import { useChipKey } from "../../lib/chipSelect";
 
 
 const NEW_CLIENT = "__new__";
@@ -39,6 +41,7 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
 }) {
   const id = useId();
   const nameId = useId();
+  const chip = useChipKey<HTMLLabelElement>();
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const create = async () => {
@@ -54,13 +57,16 @@ export function FolderPicker({ label, value, clients, onPick, onCreated, notify,
   };
   return (
     <div className="row organise-field">
-      <label htmlFor={id} className="small muted">{label}</label>
-      <select id={id} className="select" value={value} disabled={disabled}
-        onChange={(e) => (e.target.value === NEW_CLIENT ? setCreating(true) : onPick(e.target.value || null))}>
-        <option value="">Inbox</option>
-        {visibleRows(projectTree(clients), "all").map(({ project }) => <option key={project.id} value={project.id}>{projectLabel(clients, project.id)}</option>)}
-        <option value={NEW_CLIENT}>New project…</option>
-      </select>
+      {/* The whole "Project ▾" chip is the select (D-121): its word is drawn over the select's start. */}
+      <label ref={chip} className="chip-select" htmlFor={id}>
+        <span className="chip-key" aria-hidden="true">{label}</span>
+        <select id={id} className="select" aria-label={label} value={value} disabled={disabled}
+          onChange={(e) => (e.target.value === NEW_CLIENT ? setCreating(true) : onPick(e.target.value || null))}>
+          <option value="">Inbox</option>
+          {visibleRows(projectTree(clients), "all").map(({ project }) => <option key={project.id} value={project.id}>{projectLabel(clients, project.id)}</option>)}
+          <option value={NEW_CLIENT}>New project…</option>
+        </select>
+      </label>
       {creating && (
         <>
           <label htmlFor={nameId} className="sr-only">New project name</label>
@@ -382,7 +388,7 @@ export function BinPanel({ notify, onClose }: { notify: Notify; onClose: () => v
               </div>
               <button type="button" className="btn small" disabled={busy === b.id} onClick={() => void act(b.id, () => api.restoreSession(b.id), "Restored")}>Restore</button>
               <button type="button" className="btn danger ghost small" disabled={busy === b.id}
-                onClick={() => { if (window.confirm("Erase this recording now? This cannot be undone.")) void act(b.id, () => api.eraseFromBin(b.id), "Erased"); }}>Delete now</button>
+                onClick={() => void confirmAction({ title: "Delete this recording now?", body: "It can't be undone.", confirm: "Delete now", tone: "danger" }).then((yes) => { if (yes) void act(b.id, () => api.eraseFromBin(b.id), "Erased"); })}>Delete now</button>
             </div>
           ))}
         </div>

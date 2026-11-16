@@ -981,13 +981,9 @@ thead .fi-ta-selection-cell {
     font-variant-numeric: tabular-nums;
 }
 
-/* A missed recording's line ends with why it was missed (since v1.8): on a phone it takes a second line rather than
-   lose the reason. */
+/* A missed recording's line ends with why it was missed (since v1.8): on a phone it wraps rather than lose the reason,
+   to a third line if it must. */
 .el-row-sub > .el-row-meta.el-row-meta-wraps {
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
     white-space: normal;
 }
 

@@ -2,11 +2,12 @@
 // (`id="setting-{id}"`, so search can scroll to it and highlight it) and reading its title from the registry, so a title
 // is never written twice. Sections are one container with a sentence-case header and an optional footer; rows show
 // their state at the right; explanations go in the footer, never under a row.
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { titleOf } from "../../lib/settingsRegistry";
 import { reducedMotion } from "../../lib/motion";
 import { LucideChevronRightIcon, LucideExternalLinkIcon } from "../../components/Icons";
-import { Sheet } from "./ProjectDialogs";
+import { confirmAction } from "../../lib/confirm";
 
 /** The attributes that make a row a search target. */
 export function rowAttrs(id: string): { id: string; "data-setting": string; tabIndex: number } {
@@ -161,11 +162,17 @@ export function LinkRow({ id, title = titleOf(id), value, onOpen, external = fal
   );
 }
 
-/** A row that does something at once ("Lock now", "Export my data"): the title in the text colour, never a link colour. */
-export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = false, label, expanded }: {
+/** A row that does something ("Lock now", "Copy diagnostics"): its title in the link colour, so it reads as an action
+ * (D-090), with what it is doing now beside it (`status`: "Copied", the time left). A row with a value ("PIN · Not
+ * set", "Promo code · Add") opens something: the text colour and a chevron. A row that opens in place has a chevron
+ * that turns (`expanded`). */
+export function ActionRow({ id, title = titleOf(id), value, status, onClick, disabled = false, label, expanded }: {
   id: string;
   title?: string;
+  /** What it opens or sets: the row gets a chevron. */
   value?: ReactNode;
+  /** Feedback while it stays an action ("Copied", "9:58 left"). */
+  status?: ReactNode;
   onClick: () => void;
   disabled?: boolean;
   label?: string;
@@ -173,14 +180,17 @@ export function ActionRow({ id, title = titleOf(id), value, onClick, disabled = 
   expanded?: boolean;
 }) {
   const disclosure = expanded !== undefined;
-  const shown = value !== undefined && value !== null && value !== "";
+  const has = (node: ReactNode) => node !== undefined && node !== null && node !== "";
+  const opens = has(value);
+  const end = opens ? value : status;
   return (
-    <button type="button" className="set-row set-link" {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
+    <button type="button" className={`set-row set-link ${disclosure || opens ? "" : "set-action"}`.trim()} {...rowAttrs(id)} onClick={onClick} disabled={disabled} aria-label={label} aria-expanded={disclosure ? expanded : undefined}>
       <span className="set-title">{title}</span>
-      {(shown || disclosure) && (
+      {(has(end) || disclosure || opens) && (
         <span className="set-end">
-          {shown && <span className="set-value">{value}</span>}
+          {has(end) && <span className="set-value">{end}</span>}
           {disclosure && <LucideChevronRightIcon size={16} className={`set-trail disclosure ${expanded ? "open" : ""}`.trim()} />}
+          {opens && !disclosure && <LucideChevronRightIcon size={16} className="set-trail" />}
         </span>
       )}
     </button>
@@ -237,7 +247,7 @@ export function EntityRow({ id, leading, title, sub, children, testId }: {
 export function ResetRow({ page, onReset }: { page: string; onReset: () => void }) {
   return (
     <div className="set-reset">
-      <button type="button" className="btn text" onClick={() => { if (window.confirm(`Reset ${page} to defaults?`)) onReset(); }}>Reset to defaults</button>
+      <button type="button" className="btn text" onClick={() => void confirmAction({ title: `Reset ${page} to defaults?`, confirm: "Reset" }).then((yes) => { if (yes) onReset(); })}>Reset to defaults</button>
     </div>
   );
 }
@@ -290,9 +300,11 @@ export function useCopied(): [string | null, (key: string, text: string) => Prom
   return [copied, copy];
 }
 
-/** A question before something that can't be undone: the title asks, one sentence says what follows, and the red
- * button repeats the verb ("Cancel request"). */
-export function ConfirmDialog({ title, body, cancel = "Cancel", confirm, onConfirm, onClose, busy = false, error = null }: {
+/** A question before an action ("Are you sure?"), as an alert dialog: the title asks, one sentence says what follows,
+ * the button repeats the verb; red only for what deletes, discards or signs out (`tone`). Keyboard and screen readers:
+ * Cancel has the focus when it opens (the safe answer: Enter cancels and never presses the opener again), Tab stays
+ * inside, Escape cancels and no window behind it hears it, and the focus goes back to the opener when it closes. */
+export function ConfirmDialog({ title, body, cancel = "Cancel", confirm, onConfirm, onClose, busy = false, error = null, tone = "danger" }: {
   title: string;
   body?: ReactNode;
   cancel?: string;
@@ -301,16 +313,58 @@ export function ConfirmDialog({ title, body, cancel = "Cancel", confirm, onConfi
   onClose: () => void;
   busy?: boolean;
   error?: string | null;
+  /** "danger": deletes, discards or signs out (red); "primary" otherwise. */
+  tone?: "danger" | "primary";
 }) {
-  return (
-    <Sheet title={title} onClose={onClose} busy={busy} className="confirm-sheet">
-      {body && <p>{body}</p>}
-      {error && <p className="small error-text" role="alert">{error}</p>}
-      <div className="row sheet-actions">
-        <span className="spacer" />
-        <button type="button" className="btn ghost" onClick={onClose} disabled={busy}>{cancel}</button>
-        <button type="button" className="btn danger solid" onClick={onConfirm} disabled={busy}>{confirm}</button>
+  const titleId = useId();
+  const bodyId = useId();
+  const box = useRef<HTMLDivElement | null>(null);
+  const cancelRef = useRef<HTMLButtonElement | null>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  const busyRef = useRef(busy);
+  busyRef.current = busy;
+  // The focus moves in (Cancel) and goes back to what had it once the dialog closes.
+  useLayoutEffect(() => {
+    const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    cancelRef.current?.focus();
+    return () => {
+      if (opener?.isConnected) opener.focus();
+    };
+  }, []);
+  // Escape and Tab are the dialog's: heard first (capture), and stopped there.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (!busyRef.current) closeRef.current();
+      } else if (e.key === "Tab") {
+        const inside = Array.from(box.current?.querySelectorAll<HTMLElement>("button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex='-1'])") ?? []);
+        if (inside.length === 0) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const at = inside.indexOf(document.activeElement as HTMLElement);
+        const next = at === -1 ? 0 : (at + (e.shiftKey ? -1 : 1) + inside.length) % inside.length;
+        inside[next].focus();
+      }
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
+  return createPortal(
+    <div className="sheet-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) onClose(); }}>
+      <div ref={box} className="sheet card confirm-sheet" role="alertdialog" aria-modal="true" aria-labelledby={titleId} aria-describedby={body ? bodyId : undefined}>
+        <h2 id={titleId} className="sheet-title">{title}</h2>
+        {body && <p id={bodyId}>{body}</p>}
+        {error && <p className="small error-text" role="alert">{error}</p>}
+        <div className="row sheet-actions">
+          <span className="spacer" />
+          <button ref={cancelRef} type="button" className="btn ghost" onClick={onClose} disabled={busy}>{cancel}</button>
+          <button type="button" className={`btn ${tone === "danger" ? "danger solid" : "primary"}`} onClick={onConfirm} disabled={busy}>{confirm}</button>
+        </div>
       </div>
-    </Sheet>
+    </div>,
+    document.body,
   );
 }

@@ -15,6 +15,7 @@ import {
 import { formatWhen } from "../../lib/format";
 import { setting } from "../../lib/settingsRegistry";
 import { EntityRow, LinkRow, ResetRow, Section, SelectRow, SwitchRow } from "./SettingsControls";
+import { confirmAction } from "../../lib/confirm";
 
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 
@@ -133,7 +134,7 @@ export function HistoryPage() {
     }
   };
   const clear = async () => {
-    if (!window.confirm("Clear your recent dictations? They're deleted from this computer.")) return;
+    if (!(await confirmAction({ title: "Clear your recent dictations?", body: "They're deleted from this computer.", confirm: "Clear", tone: "danger" }))) return;
     try {
       await api.clearDictationHistory();
       setEntries([]);

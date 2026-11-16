@@ -12,6 +12,7 @@ use App\Services\Accounts\SignInGuard;
 use App\Services\Accounts\SignUp;
 use App\Services\Accounts\TwoFactorCodes;
 use App\Services\AuditLog;
+use App\Support\Brand;
 use Filament\Facades\Filament;
 use Illuminate\Contracts\View\View;
 use Illuminate\Http\RedirectResponse;
@@ -149,7 +150,7 @@ final class GoogleController extends Controller
         $request->session()->forget('google.pending');
         if ($state['link']) {
             if (User::query()->where('google_id', $state['google_id'])->whereKeyNot($user->id)->exists()) {
-                return $this->message('That Google account is linked elsewhere', 'It already signs in to another EchoLedger account.');
+                return $this->message('That Google account is linked elsewhere', 'It already signs in to another '.Brand::name().' account.');
             }
             // Google verified the address and its owner proved the account is theirs: the address is confirmed too.
             $user->forceFill(['google_id' => $state['google_id'], 'email_verified_at' => $user->email_verified_at ?? now()])->save();
@@ -177,7 +178,7 @@ final class GoogleController extends Controller
     {
         $profile = EditProfile::settingsUrl('security');
         if (User::query()->where('google_id', $googleId)->whereKeyNot($user->id)->exists()) {
-            session()->flash('google.status', 'That Google account already signs in to another EchoLedger account.');
+            session()->flash('google.status', 'That Google account already signs in to another '.Brand::name().' account.');
 
             return redirect()->to($profile);
         }

@@ -7,6 +7,7 @@ import type { LibraryItem, ScreenMoment, TranscriptDetail } from "../../lib/ipc"
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeScreen, makeTranscript, anyTarget } from "../../test/fixtures";
 import { forgetPictures } from "../../lib/screens";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -131,7 +132,7 @@ describe("screens on the recording page", () => {
 
   it("deletes a screen after asking, and reads the list again", async () => {
     respond("screen_delete", undefined);
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const notify = await openRecording(withScreens());
     fireEvent.click(screen.getByText("Screen 2 · 14:40").closest("button")!);
     screens = [screens[0]];

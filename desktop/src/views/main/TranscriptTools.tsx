@@ -3,11 +3,13 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { api, errorMessage, type ExportFormat, type LearnOffer, type MeetingPackFormat, type Segment, type ShareLink, type TranscriptRevision, type TranscriptSuggestion } from "../../lib/ipc";
 import { formatWhen, timestamp } from "../../lib/format";
-import { SPEEDS, timelinePercent, waveformBars } from "../../lib/player";
+import { SPEEDS, timelinePercent, waveformBars, PLAYER_HINT, PLAYER_KEYS } from "../../lib/player";
 import type { Bookmark } from "../../lib/library";
 import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../components/Icons";
 import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
+import { REVOKE_LINK_QUESTION } from "../../lib/sharing";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -27,7 +29,7 @@ export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follo
       </select>
       <label className="check"><input type="checkbox" checked={skipSilence} onChange={(e) => onSkipSilence(e.target.checked)} />Skip silence</label>
       <label className="check"><input type="checkbox" checked={follow} onChange={(e) => onFollow(e.target.checked)} />Follow</label>
-      <span className="muted keys-hint">Space or K plays · J / L jump 10 s · ← / → 5 s</span>
+      <span className="muted keys-hint">{PLAYER_HINT}</span>
     </div>
   );
 }
@@ -80,11 +82,11 @@ export function PlayerDock({ playing, nowMs, durationMs, onToggle, onSkip, child
   return (
     <div className="player-dock" role="region" aria-label="Player">
       <div className="player-row">
-        <button type="button" className="skip-btn" aria-label="Back 10 seconds" title="Back 10 s (J)" onClick={() => onSkip(-10)}><SkipIcon back size={22} /></button>
-        <button type="button" className="play-btn" aria-label={playing ? "Pause" : "Play"} title={playing ? "Pause (Space)" : "Play (Space)"} onClick={onToggle}>
+        <button type="button" className="skip-btn" aria-label="Back 10 seconds" title={`Back 10 s (${PLAYER_KEYS.back10})`} onClick={() => onSkip(-10)}><SkipIcon back size={22} /></button>
+        <button type="button" className="play-btn" aria-label={playing ? "Pause" : "Play"} title={`${playing ? "Pause" : "Play"} (${PLAYER_KEYS.toggle})`} onClick={onToggle}>
           {playing ? <PauseIcon size={18} /> : <PlayIcon size={18} />}
         </button>
-        <button type="button" className="skip-btn" aria-label="Forward 10 seconds" title="Forward 10 s (L)" onClick={() => onSkip(10)}><SkipIcon size={22} /></button>
+        <button type="button" className="skip-btn" aria-label="Forward 10 seconds" title={`Forward 10 s (${PLAYER_KEYS.forward10})`} onClick={() => onSkip(10)}><SkipIcon size={22} /></button>
         <span className="player-time">{timestamp(nowMs)} / {timestamp(durationMs)}</span>
         {children}
       </div>
@@ -250,7 +252,7 @@ export function HistoryPanel({ transcriptId, edited, onRestore, onClose }: {
         <div key={r.id} className="row small"><span>{REVISION_LABEL[r.source] ?? r.source}</span><span className="muted">{formatWhen(r.created_at)}</span>{r.author && <span className="muted">by {r.author}</span>}</div>
       ))}
       <div className="row">
-        {edited && <button type="button" className="btn danger ghost" onClick={() => { if (window.confirm("Put the engine’s original text back? Your edits stay in the history.")) void onRestore(); }}>Restore original</button>}
+        {edited && <button type="button" className="btn danger ghost" onClick={() => void confirmAction({ title: "Put the original text back?", body: "Your edits stay in the history.", confirm: "Restore" }).then((yes) => { if (yes) void onRestore(); })}>Restore original</button>}
         <button type="button" className="btn ghost" onClick={onClose}>Close</button>
       </div>
     </div>
@@ -354,6 +356,7 @@ export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
     }
   };
   const revoke = async (id: string) => {
+    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
     try {
       await api.revokeShare(id);
       await load();

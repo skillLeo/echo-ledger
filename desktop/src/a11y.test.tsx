@@ -135,7 +135,7 @@ describe("keyboard (C7)", () => {
       (el) => !el.hasAttribute("disabled") && el.tabIndex >= 0,
     );
     const names = focusable.map((el) => computeAccessibleName(el));
-    for (const wanted of ["Library", "Home", "Account", "Find a page", "Search recordings", "Copy text"]) {
+    for (const wanted of ["Library", "Home", "Account", "Search recordings, settings and pages", "Search recordings", "Copy text"]) {
       expect(names.some((n) => n.includes(wanted)), wanted).toBe(true);
     }
     expect(names.some((n) => n.includes("Weekly sync"))).toBe(true);

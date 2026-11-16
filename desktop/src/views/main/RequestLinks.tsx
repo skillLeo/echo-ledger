@@ -5,10 +5,11 @@ import { useEffect, useId, useState } from "react";
 import { api, errorMessage, type ClientFolder, type RequestLink } from "../../lib/ipc";
 import { formatWhen } from "../../lib/format";
 import { projectLabel, projectTree, visibleRows } from "../../lib/projects";
-import { EXPIRY_CHOICES, expiryTime, limitsText, receivedText, requestState, type ExpiryChoice } from "../../lib/sharing";
+import { EXPIRY_CHOICES, expiryTime, limitsText, receivedText, requestState, type ExpiryChoice, REVOKE_REQUEST_QUESTION } from "../../lib/sharing";
 import { CopyIcon } from "../../components/Icons";
 import { Sheet } from "./ProjectDialogs";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 /** A whole number from a field, or null when it is empty. */
 const count = (text: string): number | null => (text.trim() === "" ? null : Number.parseInt(text, 10));
@@ -72,6 +73,7 @@ export function RequestLinksSheet({ projects, projectId = null, focusId = null, 
     }
   };
   const revoke = async (link: RequestLink) => {
+    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
     try {
       await api.revokeRequestLink(link.id);
       await load();

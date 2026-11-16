@@ -3,13 +3,15 @@
 // revoked here; a new request link opens the Request files sheet.
 import { useEffect, useMemo, useState } from "react";
 import { api, errorMessage, type ClientFolder, type LibraryItem, type RequestLink, type ShareLink, type SharedItem } from "../../lib/ipc";
-import { audienceText, linkState, limitsText, receivedText, requestState, viewsText } from "../../lib/sharing";
+import { audienceText, linkState, limitsText, receivedText, requestState, REVOKE_LINK_QUESTION, REVOKE_REQUEST_QUESTION, viewsText } from "../../lib/sharing";
 import { formatWhen } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { LinkIcon, PlusIcon, RequestFilesIcon, UsersIcon } from "../../components/Icons";
 import { PageHeader, PageTabs } from "../../components/Page";
 import { RequestLinksSheet } from "./RequestLinks";
 import { SHARED_TABS, type SharedTab } from "./Sidebar";
 import { NO_TARGET, type Notify } from "../../lib/notice";
+import { confirmAction } from "../../lib/confirm";
 
 /** What each tab lists, read when the page opens; null while loading, and on a server without it. */
 interface SharedData {
@@ -46,13 +48,14 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
   };
   useEffect(load, []);
   const titleOf = useMemo(() => {
-    const recordings = new Map(library.map((i) => [i.id, i.title ?? "Recording"]));
+    const recordings = new Map(library.map((i) => [i.id, recordingName(i.title)]));
     const names = new Map((projects ?? []).map((p) => [p.id, p.name]));
     return (link: ShareLink) => (link.session_id ? recordings.get(link.session_id) ?? "A recording" : link.client_id ? `Project: ${names.get(link.client_id) ?? "a project"}` : "A link");
   }, [library, projects]);
   const projectName = (id: string | null) => (id ? (projects ?? []).find((p) => p.id === id)?.name ?? "A project" : "The Inbox");
 
   const revokeLink = async (link: ShareLink) => {
+    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
     try {
       await api.revokeShare(link.id);
       notify("Link revoked: it stops working at once", false, NO_TARGET);
@@ -62,6 +65,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
     }
   };
   const revokeRequest = async (link: RequestLink) => {
+    if (!(await confirmAction(REVOKE_REQUEST_QUESTION))) return;
     try {
       await api.revokeRequestLink(link.id);
       notify("Request link revoked", false, NO_TARGET);
@@ -99,7 +103,7 @@ export function SharedView({ tab, onTab, notify, projects, onOpenShared, onOpenR
                 {data.withMe.map((item) => (
                   <li key={item.id} className="data-row">
                     <div className="data-main">
-                      <span className="data-title" dir="auto">{item.title ?? item.session?.title ?? item.client?.name ?? "Shared item"}</span>
+                      <span className="data-title" dir="auto">{item.session ? recordingName(item.title?.trim() || item.session.title) : item.title ?? item.client?.name ?? "Shared item"}</span>
                       <span className="small muted">{item.kind === "project" ? "Project" : "Recording"} from {senderOf(item)}{item.sent_at ? ` · ${formatWhen(item.sent_at)}` : ""}{item.note ? ` · “${item.note}”` : ""}</span>
                     </div>
                     {item.saved_at && <span className="badge">Saved to my library</span>}

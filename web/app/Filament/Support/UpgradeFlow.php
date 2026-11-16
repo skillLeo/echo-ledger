@@ -429,7 +429,7 @@ final class UpgradeFlow
             if (in_array($feature, ['platform_transcription', 'team'], true) || ! $plan->allows($feature) || ($below !== null && $below->allows($feature))) {
                 continue;
             }
-            $lines[] = self::HIGHLIGHTS[$feature] ?? Features::ALL[$feature]['description'];
+            $lines[] = self::HIGHLIGHTS[$feature] ?? Features::all()[$feature]['description'];
         }
 
         return array_slice($lines, 0, 5);

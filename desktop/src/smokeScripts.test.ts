@@ -140,6 +140,17 @@ describe("the workflows run the smoke test", () => {
     const windows = workflow("desktop-windows.yml");
     for (const runner of ["windows-2022", "windows-2025", "windows-11-arm"]) expect(windows).toContain(`runner: ${runner}`);
     expect(windows).toContain("smoke-windows.ps1");
+    // Only the Arm runner's Share Check may fail without failing the run (its image's own window covers the test
+    // window): the step, never the job, so the smoke test and its second run fail the run on Arm too, and the Server
+    // 2022 and 2025 smoke tests and Share Checks must pass.
+    const steps = windows.slice(windows.indexOf("\n  smoke:")).split("\n      - ");
+    const shareCheck = steps.find((step) => step.startsWith("name: Share Check"));
+    expect(shareCheck).toContain("continue-on-error: ${{ matrix.allow_failure }}");
+    expect(windows.match(/continue-on-error/g)).toHaveLength(1);
+    expect(steps.filter((step) => step.includes("smoke-windows.ps1"))).toHaveLength(2);
+    expect(windows.match(/allow_failure: true/g)).toHaveLength(1);
+    expect(windows).toMatch(/runner: windows-11-arm\n\s+label: [^\n]+\n\s+allow_failure: true/);
+    expect(windows.match(/allow_failure: false/g)).toHaveLength(2);
   });
 
   it("the Windows script also works outside a runner, and the workflow proves it", () => {

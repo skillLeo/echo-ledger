@@ -6,6 +6,7 @@ import { makeEntitlements, makeItem, sampleEntitlements, makeNavigate, makePendi
 import { OPEN_SECTION_EVENT, resetEntitlementsForTests } from "../../lib/entitlements";
 import type { AppStatus } from "../../lib/ipc";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -268,7 +269,7 @@ describe("MainApp sidebar and keys", () => {
     expect(document.querySelector(".app")).toHaveClass("collapsed");
     for (const name of ["Home", "Library", "Projects", "Shared", "Upload", "Settings"]) expect(nav(name)).toHaveAttribute("title", expect.stringContaining(name));
     expect(within(nav("Activity, 2 need you")).getByText("2")).toHaveClass("nav-count");
-    expect(screen.getByRole("button", { name: "Find a page" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Search recordings, settings and pages/ })).toBeInTheDocument();
     expect(screen.queryByRole("separator", { name: "Resize the sidebar" })).not.toBeInTheDocument();
   });
 
@@ -306,6 +307,33 @@ describe("MainApp sidebar and keys", () => {
     }
   });
 
+  it("shows the sidebar's rail in a window too narrow for it (200 % text), without changing what was chosen", async () => {
+    const width = window.innerWidth;
+    try {
+      window.localStorage.setItem("echoledger-sidebar", "expanded");
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 430 });
+      const view = await renderPaired();
+      const app = () => document.querySelector(".app")!;
+      expect(app()).toHaveClass("collapsed");
+      // Opened there for the moment; what was chosen stays.
+      fireEvent.click(screen.getByRole("button", { name: "Expand the sidebar" }));
+      expect(app()).not.toHaveClass("collapsed");
+      expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
+      fireEvent.click(screen.getByRole("button", { name: "Collapse the sidebar" }));
+      expect(app()).toHaveClass("collapsed");
+      // A wide window again: the sidebar as chosen.
+      act(() => {
+        Object.defineProperty(window, "innerWidth", { configurable: true, value: 1100 });
+        window.dispatchEvent(new Event("resize"));
+      });
+      expect(app()).not.toHaveClass("collapsed");
+      expect(window.localStorage.getItem("echoledger-sidebar")).toBe("expanded");
+      view.unmount();
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
+  });
+
   it("keeps Help, Account and Collapse out of the sidebar's scrolling part, and the top bar draggable on a Mac (MANUAL_QA 16-P4, 16-P5)", async () => {
     await renderPaired();
     const footer = sidebar().querySelector(".sidebar-footer")!;
@@ -315,14 +343,26 @@ describe("MainApp sidebar and keys", () => {
     expect(document.querySelector("header.topbar")).toHaveAttribute("data-tauri-drag-region");
   });
 
-  it("finds a page by name from the top of the sidebar", async () => {
+  it("has one search: the sidebar's opens the window's search, which finds pages, settings and recordings", async () => {
     await renderPaired();
-    fireEvent.change(screen.getByRole("combobox", { name: "Find a page" }), { target: { value: "devices" } });
-    const pages = screen.getByRole("listbox", { name: "Pages" });
-    expect(within(pages).getByRole("option", { name: /Devices/ })).toBeInTheDocument();
-    fireEvent.keyDown(screen.getByRole("combobox", { name: "Find a page" }), { key: "Enter" });
+    expect(screen.queryByRole("combobox", { name: "Find a page" })).not.toBeInTheDocument();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Search recordings, settings and pages/ }));
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    const field = within(palette).getByRole("combobox");
+    fireEvent.change(field, { target: { value: "devices" } });
+    expect(within(palette).getAllByRole("option", { name: /Devices/ })[0]).toBeInTheDocument();
+    fireEvent.mouseDown(within(palette).getByRole("option", { name: /^Go to Devices/ }));
     expect(await screen.findByRole("heading", { name: "Devices", level: 1 })).toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Find a page" })).toHaveValue("");
+  });
+
+  it("never answers a search with a dead end: recordings are still looked up, then it says where it looked", async () => {
+    await renderPaired();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /^Search recordings, settings and pages/ }));
+    const palette = await screen.findByRole("dialog", { name: "Command palette" });
+    fireEvent.change(within(palette).getByRole("combobox"), { target: { value: "qqzzxx" } });
+    expect(within(palette).getByRole("status")).toHaveTextContent("Searching recordings and transcripts…");
+    await waitFor(() => expect(within(palette).getByRole("status")).toHaveTextContent("Nothing matches “qqzzxx” in recordings, transcripts, settings or pages."), { timeout: 2000 });
+    expect(within(palette).queryByText("No page matches.")).not.toBeInTheDocument();
   });
 
   it("opens Help & shortcuts with ? and from the sidebar", async () => {
@@ -330,8 +370,28 @@ describe("MainApp sidebar and keys", () => {
     fireEvent.keyDown(document.body, { key: "?" });
     const help = await screen.findByRole("dialog", { name: "Help & shortcuts" });
     expect(within(help).getByText("Next / previous recording in the list")).toBeInTheDocument();
-    fireEvent.click(within(help).getByRole("button", { name: "Close" }));
+    // D-079: a x at the top beside the title, and Close at the bottom.
+    const closes = within(help).getAllByRole("button", { name: "Close" });
+    expect(closes).toHaveLength(2);
+    expect(closes[0].closest(".sheet-head")).not.toBeNull();
+    fireEvent.click(closes[0]);
     expect(screen.queryByRole("dialog", { name: "Help & shortcuts" })).not.toBeInTheDocument();
+  });
+
+  it("points Help at places that exist, says how to get a screenshot, and opens them (D-078, D-125)", async () => {
+    await renderPaired();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
+    const help = await screen.findByRole("dialog", { name: "Help & shortcuts" });
+    expect(help).not.toHaveTextContent(/Account → Preferences|console under Help/);
+    expect(help).toHaveTextContent("Change the shortcuts in Settings › Keyboard shortcuts. Answers to common questions are in Settings › Help.");
+    expect(help).not.toHaveTextContent(/user guide/i);
+    expect(within(help).getByTestId("capture-help")).toHaveTextContent(/Show in screen share for 10 min before a screenshot, and send Copy diagnostics for support/);
+    expect(within(help).getByText(/Shift\+← \/ Shift\+→/)).toBeInTheDocument();
+    fireEvent.click(within(help).getByRole("button", { name: "Help articles" }));
+    expect(await screen.findByRole("heading", { name: "Help", level: 1 })).toBeInTheDocument();
+    fireEvent.click(within(sidebar()).getByRole("button", { name: /Help & shortcuts/ }));
+    fireEvent.click(within(await screen.findByRole("dialog", { name: "Help & shortcuts" })).getByRole("button", { name: "Screen-share privacy" }));
+    expect(await screen.findByRole("heading", { name: "Screen-share privacy", level: 1 })).toBeInTheDocument();
   });
 
   it("opens Projects and Activity from the sidebar", async () => {
@@ -505,18 +565,33 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "admin", serverUrl: null }]));
   });
 
-  it("lists the person's workspaces when the server sends them, and switches in the console (MANUAL_QA 16-P11)", async () => {
+  it("says the person's other workspaces without offering them, and switches in the browser (D-007, MANUAL_QA 16-P11)", async () => {
     respond("account_get", account({ workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }] }));
     respond("server_page_open", undefined);
     await renderPaired();
-    fireEvent.click(await screen.findByRole("button", { name: "Workspace: Acme team" }));
-    expect(screen.getByRole("menuitemradio", { name: "Acme team" })).toHaveAttribute("aria-checked", "true");
-    expect(screen.getByRole("menuitemradio", { name: "Personal" })).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(screen.getByRole("menuitemradio", { name: "Personal" }));
+    // The whole switcher opens it, its name too (D-121).
+    fireEvent.click(within(await screen.findByRole("button", { name: "Workspace: Acme team" })).getByText("Acme team"));
+    const menu = screen.getByRole("menu", { name: "Workspace: Acme team" });
+    expect(menu).toHaveTextContent("This computer works in Acme team.");
+    expect(within(screen.getByRole("list", { name: "Your other workspaces" })).getByText("Personal")).toBeInTheDocument();
+    // Nothing that looks pickable but only opens the browser: no workspace is a menu item.
+    expect(within(menu).queryByRole("menuitemradio")).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: /Personal|Acme team/ })).not.toBeInTheDocument();
+    // Visible as a heading, and heard with the one row that acts (screen readers skip what isn't an item in a menu).
+    expect(within(menu).getByText("Your other workspaces")).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Switch or manage in the browser" })).toHaveAccessibleDescription(/This computer works in Acme team\..*Your other workspaces.*Personal/);
+    fireEvent.click(within(menu).getByRole("menuitem", { name: "Switch or manage in the browser" }));
     await waitFor(() => expect(callsOf("server_page_open")).toEqual([{ page: "app/workspace", serverUrl: null }]));
-    fireEvent.click(screen.getByRole("button", { name: "Workspace: Acme team" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Switch or manage workspaces in the browser" }));
-    await waitFor(() => expect(callsOf("server_page_open")).toHaveLength(2));
+  });
+
+  it("lists every other workspace once, also when the server marks none as current (D-007)", async () => {
+    respond("account_get", account({ workspaces: [{ id: 1, name: "Acme team", role: "owner" }, { id: 2, name: "Personal", role: "owner" }] }));
+    await renderPaired();
+    fireEvent.click(await screen.findByRole("button", { name: /^Workspace: / }));
+    const others = within(screen.getByRole("list", { name: "Your other workspaces" })).getAllByRole("listitem").map((li) => li.textContent);
+    const here = screen.getByRole("button", { name: /^Workspace: / }).getAttribute("aria-label")!.replace("Workspace: ", "");
+    expect(others.some((o) => o?.startsWith(here))).toBe(false);
+    expect(others).toHaveLength(1);
   });
 
   it("makes things from +: a voice note, a new project, a request link", async () => {
@@ -533,7 +608,7 @@ describe("MainApp top bar (v1.6, P4.3)", () => {
   });
 
   it("signs out from the avatar menu after the confirmation", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     await renderPaired();
     fireEvent.click(screen.getByRole("button", { name: /^Account menu:/ }));
@@ -692,12 +767,63 @@ describe("MainApp action runner", () => {
     await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
   });
 
+  it("opens a sidebar group from its whole row for now, and only its arrow is remembered (D-121)", async () => {
+    window.localStorage.setItem("echoledger-sidebar-open", JSON.stringify([]));
+    const width = window.innerWidth;
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+      const first = await renderPaired();
+      expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+      fireEvent.click(nav("Shared"));
+      expect(within(sidebar()).getByRole("list", { name: "Shared" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      fireEvent.click(within(sidebar()).getByRole("button", { name: "Hide what is shared" }));
+      expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+      // A window too narrow for the Library's own folder column: its row shows them in the sidebar, for now.
+      fireEvent.click(nav("Library"));
+      expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      // Widened until the column shows: the sidebar's copy closes, and stays closed when the window narrows again.
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+      act(() => void window.dispatchEvent(new Event("resize")));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+      act(() => void window.dispatchEvent(new Event("resize")));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      first.unmount();
+      // Wide enough for the column: the Library's row leaves the sidebar's copy closed; the arrow opens and keeps it.
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+      await renderPaired();
+      fireEvent.click(nav("Library"));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      fireEvent.click(within(sidebar()).getByRole("button", { name: "Show Library's smart folders" }));
+      expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual(["library"]);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
+  });
+
+  it("leaves Ctrl/Cmd+K alone while a question is on screen: it is answered first", async () => {
+    await renderPaired();
+    fireEvent.click(nav("Settings"));
+    fireEvent.click(await within(await screen.findByRole("navigation", { name: "Settings" })).findByRole("button", { name: "Sign out" }));
+    // Settings' own Sign out dialog (not asked through confirmAction): one press, checked right after it.
+    const question = screen.getByRole("alertdialog", { name: "Sign out of this computer?" });
+    fireEvent.keyDown(document.activeElement!, { key: "k", ctrlKey: true });
+    expect(screen.queryByRole("dialog", { name: "Command palette" })).not.toBeInTheDocument();
+    fireEvent.click(within(question).getByRole("button", { name: "Cancel" }));
+    fireEvent.keyDown(document.body, { key: "k", ctrlKey: true });
+    expect(await screen.findByRole("dialog", { name: "Command palette" })).toBeInTheDocument();
+  });
+
   it("signing out from Settings returns to the sign-in form", async () => {
     await renderPaired();
     respond("unpair", makeStatus({ paired: false, serverUrl: null, deviceName: null }));
     fireEvent.click(nav("Settings"));
     fireEvent.click(await within(await screen.findByRole("navigation", { name: "Settings" })).findByRole("button", { name: "Sign out" }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: "Sign out of this computer?" })).getByRole("button", { name: "Sign out" }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: "Sign out of this computer?" })).getByRole("button", { name: "Sign out" }));
     expect(await screen.findByRole("heading", { name: "Sign in to EchoLedger" })).toBeInTheDocument();
   });
 });
@@ -1068,4 +1194,13 @@ describe("MainApp and what the plan allows (v1.6)", () => {
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
     expect(screen.getByText("You're on our top plan.")).toBeInTheDocument();
   })
+});
+
+describe("the budget banner's state", () => {
+  it("names the month it is about, so closing it lasts that month (a new month asks again)", async () => {
+    const { budgetState } = await import("./MainApp");
+    expect(budgetState("warn", "2026-12-01")).toBe("warn|2026-12-01");
+    expect(budgetState("warn", "2027-01-01")).not.toBe(budgetState("warn", "2026-12-01"));
+    expect(budgetState("reached", null)).toBe("reached");
+  });
 });

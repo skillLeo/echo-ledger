@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /**
  * Someone was added to a workspace, invited to make an account and join it, or (since v1.5) an account invited to join
  * by a signed link (`join`). A new account's one-time password is never in the email: the person who added them shares
@@ -22,7 +24,7 @@ final class InvitationMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return "{$this->inviter} invited you to {$this->workspace} on EchoLedger";
+        return "{$this->inviter} invited you to {$this->workspace} on ".Brand::name();
     }
 
     protected function template(): string

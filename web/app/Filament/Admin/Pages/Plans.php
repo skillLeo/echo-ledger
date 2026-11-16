@@ -16,6 +16,7 @@ use App\Services\Entitlements\Features;
 use App\Services\Entitlements\PaymentDetails;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
+use App\Support\Brand;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\CheckboxList;
@@ -92,8 +93,8 @@ class Plans extends Page implements HasTable
     {
         return [
             'plans' => Plan::query()->whereNull('archived_at')->orderBy('sort_order')->orderBy('id')->get()->all(),
-            'features' => array_combine(Plan::FEATURES, array_map(fn (string $f): string => Plan::FEATURE_LABELS[$f], Plan::FEATURES)),
-            'free' => collect(Features::ALL)->filter(fn (array $f): bool => $f['cost'] === Features::FREE)->map(fn (array $f): string => $f['name'])->all(),
+            'features' => array_combine(Plan::FEATURES, array_map(fn (string $f): string => Plan::featureLabel($f), Plan::FEATURES)),
+            'free' => collect(Features::all())->filter(fn (array $f): bool => $f['cost'] === Features::FREE)->map(fn (array $f): string => $f['name'])->all(),
             'canManage' => StaffAccess::can('plans.manage'),
         ];
     }
@@ -108,8 +109,8 @@ class Plans extends Page implements HasTable
         $features[$feature] = ! $features[$feature];
         $record->forceFill(['features' => $features])->save();
         app(Entitlements::class)->forget();
-        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, Plan::FEATURE_LABELS[$feature].($features[$feature] ? ' added to ' : ' taken out of ')."the {$record->name} plan");
-        Notification::make()->title(e(Plan::FEATURE_LABELS[$feature].($features[$feature] ? ' is in ' : ' is not in ').$record->name.' now'))->success()->send();
+        app(AuditLog::class)->record('plan_changed', (int) auth()->id(), $record, Plan::featureLabel($feature).($features[$feature] ? ' added to ' : ' taken out of ')."the {$record->name} plan");
+        Notification::make()->title(e(Plan::featureLabel($feature).($features[$feature] ? ' is in ' : ' is not in ').$record->name.' now'))->success()->send();
     }
 
     public function table(Table $table): Table
@@ -139,7 +140,7 @@ class Plans extends Page implements HasTable
                 TextColumn::make('ai_credits_usd')->label('AI credits')->formatStateUsing(fn ($state): string => '$'.number_format((float) $state, 2))->placeholder('No limit'),
                 TextColumn::make('features')->badge()->separator(',')
                     ->state(fn (Plan $record): array => array_keys(array_filter($record->featureMap())))
-                    ->formatStateUsing(fn (string $state): string => Plan::FEATURE_LABELS[$state] ?? $state)
+                    ->formatStateUsing(fn (string $state): string => Plan::featureLabel($state))
                     ->placeholder('None'),
                 TextColumn::make('workspaces_count')->label('Workspaces')->numeric(),
             ])
@@ -368,7 +369,7 @@ class Plans extends Page implements HasTable
                     ->helperText('What a customer pays for a month, before a promo code. Empty: not sold by bank transfer.'),
                 TextInput::make('sort_order')->label('Order on the comparison')->integer()->minValue(0)->maxValue(1000)->required(),
                 TextInput::make('trial_minutes')->label('Trial minutes')->integer()->minValue(0)->maxValue(100000)->required()
-                    ->helperText('Transcription on EchoLedger a person may try once without that feature.'),
+                    ->helperText('Transcription on '.Brand::name().' a person may try once without that feature.'),
             ]),
             Textarea::make('description')->maxLength(500)->rows(2),
             Grid::make(['default' => 2])->schema([
@@ -389,8 +390,8 @@ class Plans extends Page implements HasTable
             CheckboxList::make('engines')->label('Engines')->columns(2)
                 ->options(self::ENGINE_LABELS)
                 ->helperText('Leave every box ticked for every engine. Premium engines also need the Premium engines feature.'),
-            ...array_map(fn (string $feature): Toggle => Toggle::make("feature_{$feature}")->label(Plan::FEATURE_LABELS[$feature])
-                ->helperText(Features::ALL[$feature]['description']), Plan::FEATURES),
+            ...array_map(fn (string $feature): Toggle => Toggle::make("feature_{$feature}")->label(Plan::featureLabel($feature))
+                ->helperText(Features::all()[$feature]['description']), Plan::FEATURES),
         ];
     }
 

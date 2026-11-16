@@ -324,7 +324,9 @@
 .after-title-btn:hover { background: var(--ctl-hover); }
 .after-actions { display: inline-flex; align-items: center; flex: none; }
 .rec-btn.after-keep { color: var(--after-ok); }
-.rec-btn.after-discard:hover { color: var(--danger); }
+/* Discard on the chip: a trash and its word (never ×, which reads as close): one click, with Undo for 6 s. */
+.rec-text-btn.after-discard { display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 var(--space-2); margin-inline-start: 2px; font-weight: 500; }
+.rec-text-btn.after-discard:hover { color: var(--danger); }
 /* Thin timer line: the chip keeps the recording when it reaches the left. */
 .after-progress { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--ctl-hover); }
 .after-progress > span { display: block; height: 100%; background: var(--accent-text); transform-origin: left center; animation-name: after-countdown; animation-timing-function: linear; animation-fill-mode: forwards; }

@@ -6,6 +6,7 @@ import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, re
 import { makeEntitlements, makeItem, makeTranscript, anyTarget, sampleEntitlements } from "../../test/fixtures";
 import { OPEN_SECTION_EVENT, closeUpgradeSheet, resetEntitlementsForTests, useUpgradeSheet } from "../../lib/entitlements";
 import { fakeAnimations, prefersReducedMotion } from "../../test/motion";
+import { answerConfirm } from "../../test/confirm";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -137,6 +138,36 @@ describe("LibraryView list", () => {
   it("counts recordings with correct pluralisation and ignores tombstones", async () => {
     await renderLibrary(ITEMS);
     expect(screen.getByText("5 recordings from your phone, this computer and the web.")).toBeInTheDocument();
+  });
+
+  it("keeps a Recovered chip on a recovered recording after its transcript renamed it", async () => {
+    respond("recovered_sessions", [ITEMS[0].id]);
+    await renderLibrary(ITEMS);
+    const list = screen.getByTestId("library-list");
+    const row = within(list).getByText("Zoom with Acme").closest(".item-line") as HTMLElement;
+    expect(within(row).getByText("Recovered")).toHaveClass("recovered-chip");
+    expect(within(list).getAllByText("Recovered")).toHaveLength(1);
+    // Another one reaches the server: the list reads the marks again.
+    respond("recovered_sessions", [ITEMS[0].id, ITEMS[1].id]);
+    await emitEvent("recovered:changed", null);
+    await flushAsync();
+    expect(within(list).getAllByText("Recovered")).toHaveLength(2);
+  });
+
+  it("names an untitled recording in the list as the table does, and asks only to Search (D-031, D-029)", async () => {
+    const untitled = makeItem("u", { title: null });
+    await renderLibrary([...ITEMS, untitled]);
+    expect(within(screen.getByTestId("library-list")).getAllByText("Recording")[0].closest(".item-title")).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "Search recordings" })).toHaveAttribute("placeholder", "Search");
+  });
+
+  it("calls an untitled recording Recording in its menu, on its page's heading and its rename button too (D-031)", async () => {
+    await renderLibrary([...ITEMS, makeItem("u", { title: "  " })]);
+    expect(within(list()).getByRole("button", { name: "More for Recording" })).toBeInTheDocument();
+    await selectItem("Recording");
+    const heading = within(detail()).getByRole("heading", { level: 2 });
+    expect(heading).toHaveTextContent(/^Recording/);
+    expect(within(heading).getByRole("button", { name: "Recording" })).toHaveAttribute("title", "Click to rename");
   });
 
   it("says 'recording' for exactly one", async () => {
@@ -503,7 +534,9 @@ describe("LibraryView transcript", () => {
     expect(panel.getByTestId("source-app")).toHaveTextContent("Zoom");
     expect(panel.getByRole("heading", { name: "Zoom with Acme" })).toBeInTheDocument();
     expect(panel.getByText(/Today · 9:30\s?AM · 2:05 · Acme Holdings/)).toBeInTheDocument();
-    expect(panel.getByText("Final transcript · AssemblyAI")).toBeInTheDocument();
+    expect(panel.getByText("Final transcript")).toBeInTheDocument();
+    // D-041: no provider or model anywhere on the page.
+    expect(detail()).not.toHaveTextContent(/AssemblyAI|universal|whisper|Groq Whisper/i);
     // The speaker block's avatar letter is decorative (aria-hidden), so it is left out of the row's cells.
     const rows = [...detail().querySelectorAll(".segment")].map((n) => [...n.children].filter((c) => !c.classList.contains("seg-avatar")).map((c) => c.textContent));
     expect(rows).toEqual([
@@ -534,13 +567,27 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
   });
 
+  it("says a finished recording's transcript is loading while it is read, never that it is empty (D-052)", async () => {
+    await renderLibrary();
+    let answer: (value: unknown) => void = () => undefined;
+    respondWith("transcript_detail", () => new Promise((resolve) => { answer = resolve; }));
+    fireEvent.click(itemButton("Zoom with Acme"));
+    await flushAsync();
+    expect(within(detail()).getByTestId("transcript-loading")).toHaveTextContent("Loading the transcript…");
+    expect(detail()).not.toHaveTextContent(/No words were found|transcript is empty|not transcribed/i);
+    await act(async () => answer(TRANSCRIPTS["tr-a"]));
+    expect(await within(detail()).findByText("Hello, this is Sam.")).toBeInTheDocument();
+    expect(within(detail()).queryByTestId("transcript-loading")).not.toBeInTheDocument();
+  });
+
   // pending / submitted / processing read "Transcribing…" everywhere (phase 1 contract, section 1 item 11).
   it.each([
-    [null, "Transcript not available yet."],
+    [null, "Not transcribed yet."],
     ["processing", "Transcribing…"],
     ["pending", "Transcribing…"],
     ["submitted", "Transcribing…"],
-    ["awaiting_device", "Transcript awaiting device"],
+    ["awaiting_device", "Waiting for the recording to finish uploading from the device that made it."],
+    ["not_started", "Not transcribed yet."],
   ])("explains a recording without a transcript (final status %s)", async (finalStatus, message) => {
     const pending = makeItem("p", { title: "Pending", status: "processing", transcript: { final_status: finalStatus, final_transcript_id: null, live_available: false, preview: null } });
     await renderLibrary([pending]);
@@ -571,12 +618,13 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).getByRole("heading", { name: "Client briefing" })).toBeInTheDocument();
   });
 
-  it("shows the failure reason from the server for a failed transcript, without copy buttons", async () => {
+  it("says why a transcript failed in plain words, without copy buttons", async () => {
     await renderLibrary();
     await selectItem("Google Meet standup");
     const notice = await within(detail()).findByText(/Transcription failed\./);
     expect(notice.closest(".notice")).toHaveClass("error");
-    expect(notice.closest(".notice")).toHaveTextContent("The speech provider rejected the audio (unsupported codec).");
+    // D-130: the server's message ("The speech provider rejected the audio…") is never shown.
+    expect(notice.closest(".notice")).not.toHaveTextContent("The speech provider rejected the audio (unsupported codec).");
     expect(within(detail()).queryByRole("button", { name: /Copy/ })).not.toBeInTheDocument();
     // v1.6 (P6): one click tries again, in the same language.
     respond("session_retranscribe", {});
@@ -584,11 +632,26 @@ describe("LibraryView transcript", () => {
     await waitFor(() => expect(callsOf("session_retranscribe")).toHaveLength(1));
   });
 
-  it("uses a generic failure message when the server gave no reason", async () => {
-    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: null });
+  it("uses one generic plain sentence for an unknown failure (D-130)", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Gemini could not read the audio.", error_code: "something_new" });
     await renderLibrary();
     await selectItem("Google Meet standup");
-    expect(await within(detail()).findByText(/The speech provider could not process this recording\./)).toBeInTheDocument();
+    expect(await within(detail()).findByText(/Something went wrong while transcribing this recording\./)).toBeInTheDocument();
+    expect(detail()).not.toHaveTextContent(/Gemini/);
+  });
+
+  it.each([
+    ["provider_rejected", "AssemblyAI returned no transcript id.", "The transcription service couldn't transcribe this recording.", true],
+    ["provider_not_configured", "AssemblyAI is not configured. Add its API key on API Credentials.", "Transcription isn't set up on the server yet. Ask the person who runs the console.", false],
+    ["budget_exceeded", "Monthly transcription limit reached", "This month's transcription limit was reached.", false],
+  ])("says a %s failure in the app's own words, never the server's, with Try again only if it can help (D-130)", async (code, error, said, tryAgain) => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error, error_code: code });
+    await renderLibrary();
+    await selectItem("Google Meet standup");
+    const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+    expect(notice).toHaveTextContent(said);
+    expect(notice).not.toHaveTextContent(/AssemblyAI|API Credentials|Gemini/);
+    expect(within(notice).queryAllByRole("button", { name: "Try again" })).toHaveLength(tryAgain ? 1 : 0);
   });
 
   // DR18 client (contract 5.3 item 5): the server says no audio was captured; the desktop says what to check.
@@ -620,6 +683,33 @@ describe("LibraryView transcript", () => {
     }
   });
 
+  it("says the own key was refused, opens the key's page and offers no Try again (contract 1.8.1-b)", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Groq did not accept your key.", error_code: "own_key_rejected" });
+    const opened = vi.fn();
+    const listener = (e: Event) => opened((e as CustomEvent<string>).detail);
+    window.addEventListener(OPEN_SECTION_EVENT, listener);
+    try {
+      await renderLibrary();
+      await selectItem("Google Meet standup");
+      const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+      expect(notice).toHaveTextContent("Groq did not accept your key. Check it in Account → Transcription key, then try again.");
+      expect(within(notice).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+      fireEvent.click(within(within(notice).getByTestId("needs-key")).getByRole("button", { name: "Check my Groq key" }));
+      expect(opened).toHaveBeenCalledWith("transcription-key");
+    } finally {
+      window.removeEventListener(OPEN_SECTION_EVENT, listener);
+    }
+  });
+
+  it("offers no Try again once the audio is not on the server (contract 1.8.1-b)", async () => {
+    TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "The audio is no longer stored.", error_code: "recording_missing" });
+    await renderLibrary();
+    await selectItem("Google Meet standup");
+    const notice = (await within(detail()).findByText(/Transcription failed\./)).closest(".notice") as HTMLElement;
+    expect(notice).toHaveTextContent("The audio did not fully reach the server, or it is no longer stored.");
+    expect(within(notice).queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
   it("puts the views' badge where Show as would be when the plan leaves the views out (v1.6)", async () => {
     resetEntitlementsForTests(makeEntitlements());
     try {
@@ -634,7 +724,7 @@ describe("LibraryView transcript", () => {
     expect(within(detail()).queryByTestId("locked-views")).not.toBeInTheDocument();
   });
 
-  it("keeps a recording's paid parts in view with their badges on a Free plan: double-check, screens, Claude and ChatGPT, premium engines (v1.6.2)", async () => {
+  it("keeps a recording's paid parts in view with their badges on a Free plan, named by what they do, never a vendor (v1.6.2, D-044)", async () => {
     resetEntitlementsForTests(sampleEntitlements("free"));
     const sheet = renderHook(() => useUpgradeSheet());
     try {
@@ -644,12 +734,18 @@ describe("LibraryView transcript", () => {
       const chips: [string, string, string][] = [
         ["double_check", "Double-check", "Pro"],
         ["screen_moments", "Screens", "Pro"],
-        ["connector", "Ask Claude or ChatGPT", "Pro"],
-        ["premium_engines", "ElevenLabs · Gemini", "Ultra"],
+        ["connector", "Ask an AI assistant", "Pro"],
+        ["premium_engines", "Premium engines", "Ultra"],
       ];
+      expect(detail()).not.toHaveTextContent(/Claude|ChatGPT|ElevenLabs|Gemini/);
       for (const [feature, label, badge] of chips) {
         const chip = within(detail()).getByTestId(`locked-${feature}`);
         expect(chip).toHaveTextContent(`${label}${badge}`);
+        // The badge's tooltip and name too, although the server still sends vendor names for two of them (D-129).
+        const button = within(chip).getByRole("button");
+        expect(`${button.getAttribute("title")} ${button.getAttribute("aria-label")}`).not.toMatch(/Claude|ChatGPT|ElevenLabs|Gemini/);
+        if (feature === "connector") expect(button).toHaveAttribute("title", "Ask an AI assistant is in Pro");
+        if (feature === "premium_engines") expect(button).toHaveAccessibleName("Premium engines, in Ultra");
         fireEvent.click(within(chip).getByRole("button"));
         expect(sheet.result.current?.feature).toBe(feature);
       }
@@ -670,7 +766,7 @@ describe("LibraryView transcript", () => {
     TRANSCRIPTS["tr-c"] = makeTranscript({ id: "tr-c", status: "failed", segments: [], error: "Monthly transcription limit reached", error_code: code });
     await renderLibrary();
     await selectItem("Google Meet standup");
-    expect(await within(detail()).findByText(/Monthly transcription limit reached/)).toBeInTheDocument();
+    expect(await within(detail()).findByText(/Transcription failed\./)).toBeInTheDocument();
     expect(within(detail()).queryByText(/Check your microphone/)).not.toBeInTheDocument();
   });
 
@@ -723,7 +819,7 @@ describe("LibraryView transcript", () => {
     const both = makeItem("b2", { title: "Both", status: "processing", transcript: { final_status: "submitted", final_transcript_id: "tr-wip", live_available: true, live_transcript_id: "tr-live", preview: null } });
     await renderLibrary([both]);
     await selectItem("Both", "Live words.");
-    // The live captions are shown; the final one is read too, for "Waiting for Groq — retrying at …" (v1.5).
+    // The live captions are shown; the final one is read too, for "Waiting to transcribe — retrying at …" (v1.5).
     expect(callsOf("transcript_detail")).toEqual([{ id: "tr-live" }, { id: "tr-wip" }]);
     expect(within(detail()).getByText("Live captions (final transcript pending)")).toBeInTheDocument();
     expect(within(detail()).queryByTestId("retry-line")).not.toBeInTheDocument();
@@ -1018,17 +1114,17 @@ describe("LibraryView copy", () => {
 
 describe("LibraryView delete", () => {
   it("asks for confirmation and does nothing when declined", async () => {
-    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const confirm = answerConfirm().mockReturnValue(false);
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fireEvent.click(within(detail()).getByRole("button", { name: "Delete" }));
-    expect(confirm).toHaveBeenCalledWith("Delete this recording and transcript on every device? You can restore it from Recently deleted for 48 hours.");
+    expect(confirm).toHaveBeenCalledWith("Delete this recording? It's deleted with its transcript on every device. You can restore it from Recently deleted for 48 hours.");
     expect(callsOf("delete_session")).toHaveLength(0);
     expect(within(detail()).getByText("Hello, this is Sam.")).toBeInTheDocument();
   });
 
   it("deletes the session, reloads the library, clears the selection and confirms", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     respond("library_list", ITEMS.filter((i) => i.id !== "a"));
@@ -1041,7 +1137,7 @@ describe("LibraryView delete", () => {
   });
 
   it("reports a failed delete and keeps the recording", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    answerConfirm().mockReturnValue(true);
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
     fail("delete_session", "Server returned 403: This device may not delete sessions.");
@@ -1270,7 +1366,7 @@ describe("LibraryView Re-transcribe as", () => {
     const { notify } = await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "ur" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "ur" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
 
@@ -1283,7 +1379,14 @@ describe("LibraryView Re-transcribe as", () => {
     respond("session_retranscribe", {});
     await renderLibrary();
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
-    const select = screen.getByRole("combobox", { name: "Re-transcribe in" });
+    const select = screen.getByRole("combobox", { name: "Language to re-transcribe in" });
+    // The select's name holds the word shown on the chip (WCAG: label in name).
+    expect(select).toHaveAccessibleName("Language to re-transcribe in");
+    // D-121: the chip's word and its select are one control: the word sits inside the select's own label.
+    expect(select.closest(".chip-select")).toContainElement(select.closest(".chip-select")!.querySelector(".chip-key"));
+    const project = within(detail()).getByRole("combobox", { name: "Project" });
+    expect(project.closest(".chip-select")).not.toBeNull();
+    expect(project.closest(".chip-select")).toHaveTextContent(/^Project/);
     expect([...select.querySelectorAll("option")].map((o) => o.textContent)).toEqual(
       ["Auto (English / Urdu / Arabic)", "English only", "Urdu (with English words)", "Arabic (with English words)", "French", "German", "Spanish", "Italian", "Portuguese", "Dutch", "Turkish", "Russian"],
     );
@@ -1302,7 +1405,7 @@ describe("LibraryView Re-transcribe as", () => {
       ...ITEMS,
     ]);
     await selectItem("Mixed call", "kya kar rahe ho, meeting kab hai");
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "en" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(callsOf("session_retranscribe")).toEqual([]);
@@ -1312,7 +1415,7 @@ describe("LibraryView Re-transcribe as", () => {
     expect(callsOf("session_retranscribe")).toEqual([{ id: "u", language: "en" }]);
 
     await selectItem("Zoom with Acme", "Hello, this is Sam.");
-    fireEvent.change(screen.getByRole("combobox", { name: "Re-transcribe in" }), { target: { value: "en" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Language to re-transcribe in" }), { target: { value: "en" } });
     fireEvent.click(within(detail()).getByRole("button", { name: "Re-transcribe" }));
     await flushAsync();
     expect(screen.queryByTestId("english-only-warning")).not.toBeInTheDocument();
@@ -1350,7 +1453,7 @@ describe("LibraryView Re-transcribe as", () => {
     await renderLibrary(versions("processing"));
     await selectItem("Urdu call", "Still the current text");
     expect(within(detail()).queryByRole("button", { name: /^Previous/ })).not.toBeInTheDocument();
-    expect(screen.getByRole("combobox", { name: "Re-transcribe in" })).toHaveValue("ur");
+    expect(screen.getByRole("combobox", { name: "Language to re-transcribe in" })).toHaveValue("ur");
   });
 
   it("offers no Re-transcribe for a recording without audio", async () => {
@@ -1399,7 +1502,7 @@ describe("LibraryView uncertain words", () => {
     expect(audio().currentTime).toBe(2);
   });
 
-  it("shows what a second engine heard under a line it disagreed on (Double-check)", async () => {
+  it("shows what a second transcription heard under a line it disagreed on, never the engine's name (Double-check, D-132)", async () => {
     const lines = unsure();
     lines[1] = { ...lines[1], check: { provider: "groq", label: "Groq Whisper large-v3", text: "I will come on Monday" } };
     TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", segments: lines });
@@ -1407,7 +1510,8 @@ describe("LibraryView uncertain words", () => {
     await selectItem("Zoom with Acme", "Farah");
 
     const note = detail().querySelector(".seg-check") as HTMLElement;
-    expect(note).toHaveTextContent("Groq Whisper large-v3 heard: I will come on Monday");
+    expect(note).toHaveTextContent("A second transcription heard: I will come on Monday");
+    expect(detail()).not.toHaveTextContent(/Groq|Whisper/);
     expect(within(detail()).getByText("میں کل آؤں گا", { exact: false })).toBeInTheDocument();
   });
 
@@ -1534,7 +1638,8 @@ describe("LibraryView Show as", () => {
     fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
     await flushAsync();
     expect(within(detail()).getByText("aap kaise hain")).toBeInTheDocument();
-    expect(within(detail()).getByTestId("view-status")).toHaveTextContent("Roman Urdu view by claude-opus-5-5. The transcript itself is unchanged.");
+    // D-040: never the model that wrote it.
+    expect(within(detail()).getByTestId("view-status")).toHaveTextContent(/^Roman Urdu view\. The transcript itself is unchanged\.$/);
     expect(callsOf("transcript_views_make")).toHaveLength(0);
 
     fireEvent.click(within(detail()).getByRole("button", { name: "English" }));
@@ -1639,8 +1744,9 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true }), ...ITEMS]);
     await selectItem("Urdu call", "Assalam o alaikum");
     const line = await within(detail()).findByTestId("retry-line");
-    expect(line).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
-    expect(line).toHaveAttribute("title", "Groq has reached its limit for now. The transcript waits for it instead of using a less accurate engine.");
+    expect(line).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
+    expect(line).toHaveAttribute("title", "The transcription service has reached its limit for now. The transcript waits for it instead of using a less accurate one.");
+    expect(line.textContent + (line.getAttribute("title") ?? "")).not.toMatch(/Groq|Gemini|AssemblyAI|ElevenLabs/);
     expect(within(detail()).queryByTestId("backup-engine")).not.toBeInTheDocument();
   });
 
@@ -1650,7 +1756,7 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w", live_transcript_id: "tr-live", live_available: true });
     await renderLibrary([call, ...ITEMS]);
     await selectItem("Urdu call", "Assalam o alaikum");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
 
     // The try runs: no retry time while it does.
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "processing", retry_at: null, retry_reason: null };
@@ -1662,7 +1768,7 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], status: "pending", retry_at: new Date(2026, 9, 24, 14, 13).toISOString(), retry_reason: "unavailable" };
     respond("library_list", [{ ...call, updated_at: "2026-10-24T13:07:00Z" }, ...ITEMS]);
     await emitEvent("library:updated", 1);
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:13 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:13 pm");
     expect(within(detail()).getByText("Assalam o alaikum")).toBeInTheDocument();
   });
 
@@ -1671,13 +1777,13 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     const call = urduCall({ final_status: "pending", final_transcript_id: "tr-w" });
     await renderLibrary([call, ...ITEMS]);
     await selectItem("Urdu call");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 2:05 pm");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 2:05 pm");
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(1);
 
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 14, 13).toISOString() };
     respond("library_list", [{ ...call, updated_at: "2026-10-24T11:07:00Z" }, ...ITEMS]);
     await emitEvent("library:updated", 1);
-    expect(await within(detail()).findByText("Waiting for Groq — retrying at 2:13 pm")).toBeInTheDocument();
+    expect(await within(detail()).findByText("Waiting to transcribe — retrying at 2:13 pm")).toBeInTheDocument();
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
   });
 
@@ -1686,14 +1792,14 @@ describe("LibraryView backup engine and waiting for the engine (v1.5)", () => {
     TRANSCRIPTS["tr-w"] = makeTranscript({ id: "tr-w", status: "pending", provider: "groq", segments: [], retry_at: new Date(2026, 9, 24, 11, 58).toISOString(), retry_reason: "rate_limited" });
     await renderLibrary([urduCall({ final_status: "pending", final_transcript_id: "tr-w" }), ...ITEMS]);
     await selectItem("Urdu call");
-    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying now");
+    expect(await within(detail()).findByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying now");
     const minute = timeouts.mock.calls.filter(([, ms]) => ms === 60_000).at(-1)?.[0];
     expect(minute).toBeTypeOf("function");
 
     TRANSCRIPTS["tr-w"] = { ...TRANSCRIPTS["tr-w"], retry_at: new Date(2026, 9, 24, 12, 4).toISOString() };
     await act(async () => (minute as () => void)());
     await flushAsync();
-    expect(within(detail()).getByTestId("retry-line")).toHaveTextContent("Waiting for Groq — retrying at 12:04 pm");
+    expect(within(detail()).getByTestId("retry-line")).toHaveTextContent("Waiting to transcribe — retrying at 12:04 pm");
     expect(callsOf("transcript_detail").filter((c) => c.id === "tr-w")).toHaveLength(2);
   });
 

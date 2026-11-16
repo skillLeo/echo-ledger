@@ -1,7 +1,7 @@
 <x-mail::message>
 # Reset your password
 
-Someone (we hope you) asked to reset the password of your EchoLedger account.
+Someone (we hope you) asked to reset the password of your @brand account.
 
 <x-mail::button :url="$url">
 Choose a new password

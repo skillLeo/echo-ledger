@@ -30,7 +30,7 @@ object SettingsCatalogue {
         SettingsEntry("appearance", SettingsGroup.General, "Appearance", "theme dark light system colours wallpaper dynamic font typeface"),
         SettingsEntry("this-phone", SettingsGroup.General, "This phone", "account server unpair name certificate pinned setup guide"),
         SettingsEntry("plan", SettingsGroup.General, "Plan & usage", "plan free pro business upgrade limits minutes devices storage price"),
-        SettingsEntry("transcription-key", SettingsGroup.General, "Transcription key", "groq key free own transcription whisper"),
+        SettingsEntry("transcription-key", SettingsGroup.General, "Transcription key", "groq key free own transcription"),
         SettingsEntry("transcription", SettingsGroup.General, "Transcription", "language english urdu arabic roman view vocabulary terms"),
         SettingsEntry("client", SettingsGroup.General, "Project keyterms", "client names jargon accuracy"),
         SettingsEntry("notifications", SettingsGroup.General, "Notifications", "quiet hours bell activity alerts"),
@@ -63,7 +63,12 @@ object SettingsCatalogue {
             "Dictation",
             "voice keyboard push to talk hold clean up sounds replacements snippets history"
         ),
-        SettingsEntry("auto-apps", SettingsGroup.Calls, "Auto-record apps", "whatsapp zoom teams meet calls apps"),
+        SettingsEntry(
+            "auto-apps",
+            SettingsGroup.Calls,
+            "Auto-record apps",
+            "whatsapp zoom teams meet calls apps phone sim record samsung recordings"
+        ),
         SettingsEntry(
             "after-call",
             SettingsGroup.Calls,
@@ -135,6 +140,8 @@ object SettingsReset {
             "mic" -> s.copy(
                 recordingKbps = d.recordingKbps,
                 phoneCalls = d.phoneCalls,
+                phoneAppImport = d.phoneAppImport,
+                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning
@@ -185,6 +192,8 @@ object SettingsReset {
                 pillDot = d.pillDot,
                 recordingKbps = d.recordingKbps,
                 phoneCalls = d.phoneCalls,
+                phoneAppImport = d.phoneAppImport,
+                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning

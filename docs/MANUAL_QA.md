@@ -67,8 +67,8 @@ show. Follow it from top to bottom. It takes about **1½ to 2 hours**.
 
 | ☐ | # | Do this | You should see | Ref |
 |---|---|---|---|---|
-| ☐ | 25 | Use voice input in ChatGPT, Claude and Gemini for about 30 seconds each. | Nothing is recorded. The Record screen says "Ignored: never record". | V-D1 |
-| ☐ | 26 | Record a 20-second voice message in WhatsApp Desktop. | No recording starts. The Record screen says "Playing audio ✗ · Ignored: dictation". | V-D2 |
+| ☐ | 25 | Use voice input in ChatGPT, Claude and Gemini for about 30 seconds each. | Nothing is recorded. After each one stops using the microphone, Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: <site> at <time>, because it's on your never-record list." for the websites (chatgpt.com, claude.ai, gemini.google.com); the desktop apps read "…, because it isn't a call app EchoLedger knows." (since v1.8.1) | V-D1 |
+| ☐ | 26 | Record a 20-second voice message in WhatsApp Desktop. | No recording starts. After it stops using the microphone, Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: WhatsApp at <time>, because no sound is playing, so it looks like dictation." (since v1.8.1) | V-D2 |
 | ☐ | 27 | Start a Google Meet call in Chrome with your second person. Keep typing in Notepad. | Recording starts within about 3 seconds. The pill appears at the top without taking the focus, and your typing is not interrupted. | V-D3, V-D7 |
 | ☐ | 28 | Click a button on the pill straight away. | It works on the first click. Clicks next to the pill reach the window underneath. | V-D7 |
 | ☐ | 29 | In the Meet call, open a ChatGPT tab for a minute, then come back. | The recording continues, still labelled Google Meet. | V-D4 |
@@ -324,7 +324,7 @@ Run these when the change touches the area, or before a release.
 | W-11 | Each global shortcut, and one that another app already uses. | Each works from any app. The conflict shows a message in Settings. |
 | W-12 | Dictation into Word, a browser field, and an app running as administrator. | Text is typed. For the administrator window it is pasted and the old clipboard comes back. |
 | W-14 | Cut the network during an upload, then quit and restart. | The upload resumes. Local audio is deleted only after the server confirms. |
-| C-D1 | Switch Zoom off in **Auto-record apps**, then join a Zoom call. | No recording. The Record screen says "Ignored: auto-record is off for this app". |
+| C-D1 | Switch Zoom off in **Record automatically**, then join a Zoom call. | No recording. After the call, Settings › Calls & meetings › Why a call wasn't recorded says "Last not recorded: Zoom at <time>, because auto-record is off for this app." (since v1.8.1) |
 | C-D5 | **Caption style**: Large, Wide, 50 % opacity, compact, auto-hide, a custom Client colour. | The captions restyle at once and fade after the set time. |
 | C-D6 | **Microphone**: pick a USB headset, run the 10-second test, unplug it. | Both meters move and the test plays back. Unplugging falls back with a note. |
 | C-D7 | Block microphone access in Windows privacy settings. | **Microphone** says "Blocked" and **Open settings** opens the right page. |
@@ -550,7 +550,7 @@ tests of resources/js/notice-core.cjs); these need a real screen.
 | M-03 | A WhatsApp, Zoom or Meet call with auto-record on. | The far party is captured, but not EchoLedger. No leftover audio device remains. |
 | M-04 | Change the audio devices mid-call (AirPods). | Capture follows with no crash. |
 | M-05 | Overlays and dictation. | Same as steps 30 and 56. Dictation asks for Accessibility once. |
-| M-06 | Menu-bar behaviour. | No Dock icon. Quitting ends all capture. |
+| M-06 | Menu-bar and Dock behaviour (Mac, since v1.8.1). | A Dock icon with its dot and the menu-bar icon, in ⌘Tab and Force Quit Applications. Quitting from either (⌘Q, the Dock's Quit, Quit EchoLedger in the menu) keeps a running recording and ends all capture. |
 | §17 V-D5 | The main window. | Vibrancy behind the sidebar; the traffic lights sit inset; the accent follows the system. |
 | V-D6 | Browser tab detection with automation on, then off. | On: recorded as Google Meet after the prompt. Off: ignored as an unknown site. |
 | V-D25 | The pill and review card on screen recording. | They appear but are hidden from the recording. |
@@ -563,7 +563,7 @@ versions. Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
 
 | # | Check | Expected |
 |---|---|---|
-| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, open it once, close the message, then System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later; right-click → Open no longer works there). | It starts (menu-bar icon, no Dock icon). Later opens ask nothing. |
+| MAC-1 | Open the `.dmg`, drag EchoLedger to Applications, open it once, close the message, then System Settings → Privacy & Security → **Open Anyway** (macOS 15 and later; right-click → Open no longer works there). | It starts (Dock icon with its dot, and the menu-bar icon). Later opens ask nothing. |
 | MAC-2 | Pair with the console (QR or code). | Paired; the Library loads. |
 | MAC-3 | First recording: allow the microphone and **system audio recording**. | Both prompts show EchoLedger's text; denying one says what to do. |
 | MAC-4 | A Google Meet call in Chrome or Safari, 1 minute, both people talk. | Recorded as Google Meet; the transcript has both sides (You and the other person). |
@@ -589,7 +589,8 @@ versions. Get the `.dmg` from the latest **Desktop (macOS)** run on GitHub
 | MAC-19 | A notched MacBook: start a recording, then System Settings → Control Center → Automatically hide and show the menu bar. | The pill sits below the menu bar and the notch, also with the menu bar hidden; captions and the Saved toast clear the Dock. |
 | MAC-20 | MacBook at 2x with a 1x monitor: drag the pill and captions to the monitor; click their buttons there. Restart the recording. | Clicks land where the buttons are; the pill opens where it was left. |
 | MAC-21 | Unplug that monitor with the pill and captions on it. | Within 5 s both are back on the laptop's screen. |
-| MAC-22 | A full-screen Zoom or Meet window, then swipe between Spaces. | Pill and captions stay over the full-screen meeting and follow every Space; ⌥⌘H from another app leaves them. They never take focus from the meeting. |
+| MAC-22 | **Release gate since v1.8.1 (EchoLedger is a Dock app now).** A full-screen Zoom and a full-screen Meet window, a recording running, then swipe between Spaces. | The recording controls and captions stay over the full-screen meeting and follow every Space; ⌥⌘H from another app leaves them. Clicking Pause on the recording controls leaves the meeting in front, and EchoLedger's menus don't take over the menu bar. |
+| MAC-32 | v1.8.1: Dock and quitting. (a) Click the Dock icon with no window open. (b) Recording: right-click the Dock icon → Quit. (c) Recording: press ⌘Q twice quickly. (d) Recording: log out (or restart). (e) Start at login (Settings → start at login on, log out and in). (f) ⌘H, then click the Dock icon. | (a) The main window opens in front. (b)–(d) The recording is stopped and kept (in the library, not "Recovered recording"), and the app quits within 20 s; logout carries on. (e) The Dock icon with its dot, no window, the app in front keeps focus. (f) ⌘H hides the main window but not the recording controls; the Dock click shows it again. |
 | MAC-23 | Settings → General → Start EchoLedger when I sign in: on, log out and in; then off. | Off by default. On: it starts in the menu bar with no window. Off: `~/Library/LaunchAgents/EchoLedger.plist` is gone. |
 | MAC-24 | A signed update: Settings → About → Check for updates, on Apple Silicon and Intel. | Downloads, says restart, the app comes back on the new version. Recordings and settings stay. |
 | MAC-25 | During a recording: connect AirPods; switch input and output in the menu bar; pull a USB headset; turn the AirPods off. | The pill says what changed and goes on; a device gone says what the recording holds until one returns. In the file nothing is at the wrong speed and the gap is silence, not a cut. |

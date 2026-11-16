@@ -26,8 +26,10 @@ class EchoLedgerApp : Application() {
     override fun onCreate() {
         super.onCreate()
         // Screen-share privacy first (a small preference file, not the settings store): a floating window or the Quick
-        // Settings tile that comes up next already knows the setting and whether the person hid the windows.
+        // Settings tile that comes up next already knows the setting (the person's Hide lasts the session only).
         ShareGuard.restore(ShareGuardMemory(this))
+        // The capture journal (since v1.8): a call the last process left open was lost with it.
+        com.echoledger.mobile.recording.CallJournal.processStarted(this)
         graph = AppGraph(this)
         Notifications.createChannels(this)
         graph.helper.autoConnect()
@@ -47,7 +49,11 @@ class AppGraph(val context: Context) {
     val recordingCipher: RecordingCipher by lazy { TinkRecordingCipher(context) }
     val settings: SettingsStore by lazy {
         // Every saved change of During screen sharing reaches the floating windows and ShareGuard's memory at once.
-        SettingsStore(context, secretCipher) { saved -> ShareGuard.setMode(ShareGuard.Mode.of(saved.screenShareMode)) }
+        SettingsStore(context, secretCipher) { saved ->
+            ShareGuard.setMode(ShareGuard.Mode.of(saved.screenShareMode))
+            // The capture journal keeps the choices that decide whether a call should be recorded, as they change.
+            com.echoledger.mobile.recording.CallJournal.choices(context, com.echoledger.mobile.recording.CallJournal.choicesOf(saved))
+        }
     }
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }

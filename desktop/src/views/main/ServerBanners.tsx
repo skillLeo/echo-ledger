@@ -8,6 +8,8 @@ import { clockTime } from "../../lib/format";
 import { AlertIcon, BellIcon, RefreshIcon } from "../../components/Icons";
 import { Notice } from "../../components/Notice";
 import { StateBanner } from "../../components/StateBanner";
+import { LearnMore } from "../../components/LearnMore";
+import { useBannerTurn } from "../../components/BannerSlot";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
 const CLOSED_KEY = "echoledger-announcements-closed";
@@ -84,30 +86,38 @@ export function ServerBanners({ server, notify }: { server: ServerNotices | null
       {/* States (v1.6.1 Notices): no timer; closed until the state changes or the next start. A click on the update
           runs it; maintenance is about nothing to open. */}
       {update && (
-        <StateBanner id="app-update" state={`${update.minimum}|${update.refused}`} tone={update.refused ? "danger" : "warn"} testId="app-update" icon={<AlertIcon size={16} />}
+        <StateBanner id="app-update" slot="app-update" state={`${update.minimum}|${update.refused}`} tone={update.refused ? "danger" : "warn"} testId="app-update" icon={<AlertIcon size={16} />}
           onOpen={() => void runUpdate()}
+          details={update.refused ? <LearnMore>The server no longer accepts this version: your recordings wait on this computer and upload after the update.</LearnMore> : undefined}
           actions={<button type="button" className="btn compact" disabled={checking} onClick={() => void runUpdate()}><RefreshIcon size={14} />{checking ? "Looking…" : "Update"}</button>}>
           <span className="banner-text">
             <b>{update.message || (update.minimum ? `Please update EchoLedger to ${update.minimum} or later.` : "Please update EchoLedger.")}</b>
-            {update.refused && <span className="small"> The server no longer accepts this version: your recordings wait on this computer and upload after the update.</span>}
           </span>
         </StateBanner>
       )}
       {server.maintenance && (
-        <StateBanner id="maintenance" state={`${server.maintenance.message}|${server.maintenance.until ?? ""}`} tone="quiet" testId="maintenance" icon={<RefreshIcon size={16} />}>
+        <StateBanner id="maintenance" slot="maintenance" remember={!!server.maintenance.until} state={`${server.maintenance.message}|${server.maintenance.until ?? ""}`} tone="quiet" testId="maintenance" icon={<RefreshIcon size={16} />}
+          details={<LearnMore>{backAbout(server.maintenance.until)} Recordings and uploads wait on this computer and go when it is back.</LearnMore>}>
           <span className="banner-text">
             <b>{server.maintenance.message && server.maintenance.message !== MAINTENANCE_TEXT ? server.maintenance.message : "The server is in maintenance."}</b>
-            <span className="small"> {backAbout(server.maintenance.until)} Recordings and uploads wait on this computer and go when it is back.</span>
           </span>
         </StateBanner>
       )}
       {/* The announcement is closed per text, for good (it is remembered on this computer). */}
-      {showsAnnouncement(announcement, closed) && (
-        <Notice kind="banner" tone={announcement.level === "warning" ? "warn" : "info"} className={`banner ${announcement.level === "warning" ? "warn" : "info"}`} testId="announcement"
-          icon={<BellIcon size={16} />} timeoutMs={null} onDismiss={() => { rememberClosed(announcement.text); setClosed(closedAnnouncements()); }}>
-          <span className="banner-text" dir="auto">{announcement.text}</span>
-        </Notice>
-      )}
+      <AnnouncementBanner announcement={showsAnnouncement(announcement, closed) ? announcement : null}
+        onDismiss={(text) => { rememberClosed(text); setClosed(closedAnnouncements()); }} />
     </>
+  );
+}
+
+/** The server's announcement: the least important banner, shown only when no other wants the place (BannerSlot). */
+function AnnouncementBanner({ announcement, onDismiss }: { announcement: AnnouncementNotice | null; onDismiss: (text: string) => void }) {
+  const shown = useBannerTurn("announcement", !!announcement);
+  if (!shown || !announcement) return null;
+  return (
+    <Notice kind="banner" tone={announcement.level === "warning" ? "warn" : "info"} className={`banner ${announcement.level === "warning" ? "warn" : "info"}`} testId="announcement"
+      icon={<BellIcon size={16} />} timeoutMs={null} onDismiss={() => onDismiss(announcement.text)}>
+      <span className="banner-text" dir="auto">{announcement.text}</span>
+    </Notice>
   );
 }
