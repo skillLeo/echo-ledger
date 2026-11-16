@@ -12,7 +12,7 @@ app ──wss──▶ nginx :443 (TLS) ──ws──▶ assist-relay 127.0.0.1
 **Status.** With `RELAY_PROVIDERS=live` the relay streams from Anthropic, Groq, OpenAI and Gemini, using the keys
 the server sends. A provider without a key in Admin -> API Credentials answers `provider_not_configured` ("Live Assist
 is not set up on the server yet"). The clients are tested only against hand-written stand-ins of the providers' documented
-formats: before the first real call, run `assist-relay-smoke` once per provider with a key (tools/smoke.rs). The mocked models
+formats, so the release gate below (section 11) must pass before live serves anyone. The mocked models
 (`RELAY_PROVIDERS=mock`) serve canned answers for an end-to-end check without keys.
 
 ## Secrets and keys
@@ -318,10 +318,35 @@ curl -fsS http://127.0.0.1:8787/healthz && journalctl -u assist-relay -n 5 -o ca
 - A release that exits with code 2 (a settings error) is not restarted by systemd: `systemctl status assist-relay`
   and the journal's `startup_failed` line say which setting is wrong.
 
+## 11. Release gate: before `RELAY_PROVIDERS=live` serves anyone
+
+The provider clients have been tested only against hand-written stand-ins of the providers' documented streaming
+formats. Before the relay serves a real person on live providers, once the keys are in Admin -> API Credentials, run
+the smoke binary once for **every enabled model** in the settings (today `claude-haiku-5-5`, `claude-sonnet-5-5`,
+`claude-opus-5-5`, `openai/gpt-oss-120b`; add any model the server's catalog enables), from any machine with the
+release build, with that provider's key set for the one command and never written to a file:
+
+```
+read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
+target/release/assist-relay-smoke --model claude-haiku-5-5 --warm --yes --record tests/fixtures/sse/anthropic_answer.sse
+target/release/assist-relay-smoke --model claude-sonnet-5-5 --yes --record /tmp/sonnet.sse
+target/release/assist-relay-smoke --model claude-opus-5-5 --yes --record /tmp/opus.sse
+unset ANTHROPIC_API_KEY
+read -rs GROQ_API_KEY && export GROQ_API_KEY
+target/release/assist-relay-smoke --model openai/gpt-oss-120b --yes --record tests/fixtures/sse/groq_answer.sse
+unset GROQ_API_KEY
+```
+
+The gate passes when every run prints a first token, a text in the output contract's shape, token counts and a cost,
+and exits 0; with `--warm`, the second request reads most of its input from the cache. Then read each recorded file
+(it holds the model's text and no key), replace the hand-written fixtures with the recordings, run `cargo test`, and
+commit them. If a run fails, the relay stays on `RELAY_PROVIDERS=mock` (or off) until the client is fixed. Repeat the
+gate when a model id, the `anthropic-version`, or a provider's API changes.
+
 ## Checklist for a release
 
 1. `cargo test --locked` and `cargo clippy --locked --all-targets -- -D warnings` green; the load test passes
-   (LOADTEST.md).
+   (LOADTEST.md); for the first live release, and after any provider change, the release gate (section 11).
 2. Build, copy, install into `releases/<commit>`, switch `current`, restart.
 3. `/healthz` answers. The journal shows `listening` and `providers_fetched`, and no `startup_failed`.
 4. A practice session gets a suggestion.

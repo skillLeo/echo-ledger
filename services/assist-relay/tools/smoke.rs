@@ -14,7 +14,7 @@
 //!
 //! `--record PATH` saves the provider's raw streamed answer (no request, no headers, so no key) as an SSE file, to
 //! replace a hand-written test fixture with a recording. Read it before committing: it holds the model's text.
-//! `--warm` sends the cache warm-up first and asks twice, to show the cached second request.
+//! `--warm` sends the cache warm-up first and asks twice, to show the cached second request (`--record` keeps the second).
 
 use std::collections::BTreeMap;
 use std::process::ExitCode;
@@ -163,6 +163,10 @@ async fn run(o: Options, config: RelayConfig, spec: assist_relay::config::ModelS
     }
     let mut failed = false;
     for round in 1..=(if o.warm { 2 } else { 1 }) {
+        // --record keeps the last request's stream only: one answer per fixture.
+        if let Ok(mut bytes) = tap.lock() {
+            bytes.clear();
+        }
         let started = Instant::now();
         let mut first: Option<Duration> = None;
         let (mut text, mut usage) = (String::new(), None);
