@@ -183,26 +183,71 @@ class PhoneAppRecordingsTest {
 
     // ---- what is never taken ----------------------------------------------------------------------------------------------
 
+    /** A Galaxy whose Phone app came with it (system apps), unless said otherwise. */
+    private fun galaxy(dialer: String? = null, system: Set<String> = setOf(samsungDialer, "com.samsung.android.incallui")) =
+        PhoneAppRecordings.ThisPhone("samsung", dialer, isSystemApp = { it in system })
+
     @Test
     fun `only the Phone app's own file is taken, an unknown maker waits for the person, an oversize one never`() {
         val c = call()
-        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c), c, defaultDialer = null))
-        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c, owner = "com.samsung.android.incallui"), c, null))
+        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c), c, galaxy()))
+        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c, owner = "com.samsung.android.incallui"), c, galaxy()))
         assertEquals(
             "another app",
             Trust.NOT_THE_PHONE_APP,
-            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.recorder"), c, null)
+            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.recorder"), c, galaxy())
         )
         assertEquals(
             "the phone's own default dialer",
             Trust.OK,
-            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.dialer"), c, "com.example.dialer")
+            PhoneAppRecordings.trust(samsung(1, c, owner = "com.example.dialer"), c, galaxy(dialer = "com.example.dialer"))
         )
-        assertEquals(Trust.OK, PhoneAppRecordings.trust(samsung(1, c, owner = PhoneAppRecordings.GOOGLE_DIALER), c, null))
-        assertEquals("the phone does not say", Trust.UNKNOWN_MAKER, PhoneAppRecordings.trust(samsung(1, c, owner = null), c, null))
+        assertEquals("the phone does not say", Trust.UNKNOWN_MAKER, PhoneAppRecordings.trust(samsung(1, c, owner = null), c, galaxy()))
         val huge = samsung(1, c).copy(sizeBytes = PhoneAppRecordings.maxBytes(c.talkS) + 1)
-        assertEquals(Trust.TOO_LARGE, PhoneAppRecordings.trust(huge, c, null))
+        assertEquals(Trust.TOO_LARGE, PhoneAppRecordings.trust(huge, c, galaxy()))
         assertTrue("never more than the ceiling", PhoneAppRecordings.maxBytes(100_000) == PhoneAppRecordings.MAX_BYTES)
+    }
+
+    @Test
+    fun `a package name alone is never trusted, only this maker's Phone app as it came with the phone, or the default dialer`() {
+        val c = call()
+        assertEquals(
+            "an app installed later and named like Google's dialer",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.trust(samsung(1, c, owner = PhoneAppRecordings.GOOGLE_DIALER), c, galaxy())
+        )
+        assertEquals(
+            "an app installed later and named like Samsung's Phone app",
+            Trust.NOT_THE_PHONE_APP,
+            PhoneAppRecordings.trust(samsung(1, c), c, galaxy(system = emptySet()))
+        )
+        val xiaomi = PhoneAppRecordings.ThisPhone("Xiaomi", null, isSystemApp = { true })
+        assertEquals("Samsung's folder on a Xiaomi phone", Trust.NOT_THE_PHONE_APP, PhoneAppRecordings.trust(samsung(1, c), c, xiaomi))
+        assertEquals(
+            "Google's dialer as the default dialer",
+            Trust.OK,
+            PhoneAppRecordings.trust(
+                samsung(1, c, owner = PhoneAppRecordings.GOOGLE_DIALER),
+                c,
+                galaxy(dialer = PhoneAppRecordings.GOOGLE_DIALER)
+            )
+        )
+        assertTrue(PhoneAppRecordings.supported("samsung") && PhoneAppRecordings.supported("Xiaomi"))
+        assertFalse("Google's Phone app keeps its recordings inside the app", PhoneAppRecordings.supported("Google"))
+    }
+
+    @Test
+    fun `another app's or an oversize file never takes the call's place, and a trusted file comes before an unknown one`() {
+        val c = call()
+        val real = samsung(1, c, durationS = 118)
+        val foreign = samsung(2, c, owner = "com.example.recorder") // the closest length, named after the person
+        val unknown = samsung(3, c, owner = null)
+        val trustOf = { f: MediaFile, l: LogCall -> PhoneAppRecordings.trust(f, l, galaxy()) }
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(foreign, real), zone = zone, trustOf = trustOf).single().second)
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(unknown, real), zone = zone, trustOf = trustOf).single().second)
+        val big = samsung(4, c).copy(sizeBytes = PhoneAppRecordings.maxBytes(c.talkS) + 1)
+        assertEquals(real, PhoneAppRecordings.match(listOf(c), listOf(big, real), zone = zone, trustOf = trustOf).single().second)
+        assertEquals(unknown, PhoneAppRecordings.match(listOf(c), listOf(foreign, unknown), zone = zone, trustOf = trustOf).single().second)
     }
 
     // ---- what EchoLedger does with it -------------------------------------------------------------------------------------

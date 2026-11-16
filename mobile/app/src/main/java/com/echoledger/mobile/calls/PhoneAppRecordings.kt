@@ -3,6 +3,7 @@ package com.echoledger.mobile.calls
 import android.Manifest
 import android.content.ContentUris
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.net.Uri
 import android.os.Build
 import android.provider.CallLog
@@ -35,6 +36,7 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -58,9 +60,10 @@ import kotlinx.coroutines.withContext
 object PhoneAppRecordings {
     /**
      * A folder where a Phone app keeps its call recordings ([path] as the media store's RELATIVE_PATH, without slashes),
-     * and the apps that write its files there ([owners], the media store's OWNER_PACKAGE_NAME).
+     * the apps that write its files there ([owners], the media store's OWNER_PACKAGE_NAME) and the phone makers whose
+     * Phone app it is ([makers], Build.MANUFACTURER in lower case).
      */
-    data class Folder(val brand: String, val path: String, val owners: Set<String>)
+    data class Folder(val brand: String, val path: String, val owners: Set<String>, val makers: Set<String>)
 
     private val SAMSUNG = setOf("com.samsung.android.dialer", "com.samsung.android.incallui")
     private val XIAOMI = setOf("com.android.incallui", "com.android.soundrecorder")
@@ -75,6 +78,12 @@ object PhoneAppRecordings {
     private val VIVO = setOf("com.android.incallui", "com.vivo.incallui", "com.android.bbksoundrecorder")
     private val HUAWEI = setOf("com.android.incallui", "com.huawei.soundrecorder", "com.hihonor.soundrecorder")
 
+    private val SAMSUNG_MAKERS = setOf("samsung")
+    private val XIAOMI_MAKERS = setOf("xiaomi", "redmi", "poco")
+    private val OPPO_MAKERS = setOf("oppo", "realme", "oneplus")
+    private val VIVO_MAKERS = setOf("vivo", "iqoo")
+    private val HUAWEI_MAKERS = setOf("huawei", "honor")
+
     /** Google's Phone app, the dialer of many phones (its own recordings stay inside it, out of every other app's reach). */
     const val GOOGLE_DIALER = "com.google.android.dialer"
 
@@ -85,15 +94,21 @@ object PhoneAppRecordings {
      * app, where no other app can read them, so there is none for it.
      */
     val FOLDERS: List<Folder> = listOf(
-        Folder("Samsung", "Recordings/Call", SAMSUNG),
-        Folder("Samsung", "Call", SAMSUNG),
-        Folder("Xiaomi, Redmi, POCO", "MIUI/sound_recorder/call_rec", XIAOMI),
-        Folder("Oppo, realme, OnePlus", "Music/Recordings/Call Recordings", OPPO),
-        Folder("Oppo, realme, OnePlus", "Recordings/Call Recordings", OPPO),
-        Folder("OnePlus", "Record/PhoneRecord", OPPO),
-        Folder("vivo", "Record/Call", VIVO),
-        Folder("Huawei, Honor", "Sounds/CallRecord", HUAWEI)
+        Folder("Samsung", "Recordings/Call", SAMSUNG, SAMSUNG_MAKERS),
+        Folder("Samsung", "Call", SAMSUNG, SAMSUNG_MAKERS),
+        Folder("Xiaomi, Redmi, POCO", "MIUI/sound_recorder/call_rec", XIAOMI, XIAOMI_MAKERS),
+        Folder("Oppo, realme, OnePlus", "Music/Recordings/Call Recordings", OPPO, OPPO_MAKERS),
+        Folder("Oppo, realme, OnePlus", "Recordings/Call Recordings", OPPO, OPPO_MAKERS),
+        Folder("OnePlus", "Record/PhoneRecord", OPPO, setOf("oneplus")),
+        Folder("vivo", "Record/Call", VIVO, VIVO_MAKERS),
+        Folder("Huawei, Honor", "Sounds/CallRecord", HUAWEI, HUAWEI_MAKERS)
     )
+
+    /** Every app that may own a call recording in a known folder, for the manifest's package visibility (Android 11+). */
+    val OWNERS: Set<String> get() = FOLDERS.flatMap { it.owners }.toSet() + GOOGLE_DIALER
+
+    /** Whether this phone's maker has a known call-recording folder (else there is nothing to watch or bring in). */
+    fun supported(manufacturer: String): Boolean = FOLDERS.any { manufacturer.trim().lowercase() in it.makers }
 
     /** The known folder [relativePath] is in (a subfolder counts, case and slashes do not), or null; never a path that climbs. */
     fun folderOf(relativePath: String?): Folder? {
@@ -200,11 +215,16 @@ object PhoneAppRecordings {
         calls: List<LogCall>,
         files: List<MediaFile>,
         handled: Set<Long> = emptySet(),
-        zone: ZoneId = ZoneId.systemDefault()
+        zone: ZoneId = ZoneId.systemDefault(),
+        trustOf: ((MediaFile, LogCall) -> Trust)? = null
     ): List<Pair<LogCall, MediaFile>> {
         val usable = files.filter { it.id !in handled && it.durationMs >= 1_000 && folderOf(it.path) != null }
         val pairs = calls.filter { it.talkS > 0 }.flatMap { call ->
             usable.mapNotNull { file ->
+                // Trust comes before the slot: another app's or an oversize file never takes the call's place, and a
+                // file the phone does not name the maker of only when no trusted one fits.
+                val trust = trustOf?.invoke(file, call) ?: Trust.OK
+                if (trust == Trust.NOT_THE_PHONE_APP || trust == Trust.TOO_LARGE) return@mapNotNull null
                 val span = spanOf(file, zone)
                 val talkMs = call.talkS * 1000
                 val window = windowOf(call)
@@ -213,7 +233,7 @@ object PhoneAppRecordings {
                     file.addedMs in window && file.modifiedMs in window &&
                     lengthFits(file.durationMs, call.talkS)
                 if (!fits) return@mapNotNull null
-                val score =
+                val score = (if (trust == Trust.UNKNOWN_MAKER) 10_000_000_000L else 0L) +
                     (if (names(file, call)) 0L else 1_000_000_000L) + abs(file.durationMs - talkMs) + abs(span.first - call.dateMs) / 4
                 Triple(call, file, score)
             }
@@ -240,15 +260,28 @@ object PhoneAppRecordings {
         TOO_LARGE
     }
 
+    /** This phone, as trust needs it: its maker, its default dialer, and whether an app came with the phone. */
+    class ThisPhone(val manufacturer: String, val defaultDialer: String?, val isSystemApp: (String) -> Boolean)
+
     /**
-     * Whether [file], matched to [call], may be brought in (pure): its size fits the call; its maker is the folder's
-     * Phone app, Google's, or the phone's default dialer ([defaultDialer]).
+     * Whether [file], matched to [call], may be brought in (pure): its size fits the call, and [ownerTrust] trusts its
+     * maker.
      */
-    fun trust(file: MediaFile, call: LogCall, defaultDialer: String?): Trust {
+    fun trust(file: MediaFile, call: LogCall, phone: ThisPhone): Trust {
         if (file.sizeBytes > maxBytes(call.talkS)) return Trust.TOO_LARGE
+        return ownerTrust(file, phone)
+    }
+
+    /**
+     * Who made [file] (pure): the phone's default dialer, or this phone maker's own Phone app as a system app (installed
+     * with the phone, or an update of one). A package name alone proves nothing: an app installed later may take any name.
+     */
+    fun ownerTrust(file: MediaFile, phone: ThisPhone): Trust {
         val owner = file.owner?.trim()?.takeIf { it.isNotEmpty() } ?: return Trust.UNKNOWN_MAKER
+        if (phone.defaultDialer != null && owner == phone.defaultDialer) return Trust.OK
         val folder = folderOf(file.path) ?: return Trust.NOT_THE_PHONE_APP
-        return if (owner in folder.owners || owner == GOOGLE_DIALER || owner == defaultDialer) Trust.OK else Trust.NOT_THE_PHONE_APP
+        val thisMaker = phone.manufacturer.trim().lowercase() in folder.makers
+        return if (thisMaker && owner in folder.owners && phone.isSystemApp(owner)) Trust.OK else Trust.NOT_THE_PHONE_APP
     }
 
     /**
@@ -479,8 +512,8 @@ object PhoneAppRecordings {
         /** Its bytes, through the media store only (never a path on the disk). */
         fun open(file: MediaFile): InputStream?
 
-        /** The phone's default dialer, whose recordings are trusted too. */
-        fun defaultDialer(): String?
+        /** This phone: its maker, its default dialer, and which apps came with it (what trust is decided on). */
+        fun thisPhone(): ThisPhone
     }
 
     /** The phone's media store and call log; read only, it never deletes or moves anything. */
@@ -568,9 +601,16 @@ object PhoneAppRecordings {
 
         override fun open(file: MediaFile): InputStream? = context.contentResolver.openInputStream(uris(listOf(file.id)).single())
 
-        override fun defaultDialer(): String? = runCatching {
-            context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage
-        }.getOrNull()
+        override fun thisPhone(): ThisPhone = ThisPhone(
+            manufacturer = Build.MANUFACTURER,
+            defaultDialer = runCatching { context.getSystemService(TelecomManager::class.java)?.defaultDialerPackage }.getOrNull(),
+            isSystemApp = { pkg ->
+                runCatching {
+                    val flags = context.packageManager.getApplicationInfo(pkg, 0).flags
+                    flags and (ApplicationInfo.FLAG_SYSTEM or ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0
+                }.getOrDefault(false)
+            }
+        )
     }
 
     /** What the import remembers between runs (no names or numbers): the files it settled, the last outcome, the deletes. */
@@ -639,21 +679,24 @@ object PhoneAppRecordings {
         val since = maxOf(book.since, nowMs - DAY_MS)
         val p = prefs(context)
         val handled = ids(p.getString(HANDLED, null))
-        val pairs =
-            match(
-                sources.calls(since - RING_MAX_MS).filter {
-                    it.dateMs >= since - RING_MAX_MS
-                },
-                sources.files(since - RING_MAX_MS),
-                handled.toSet()
-            )
+        val phone = sources.thisPhone()
+        val files = sources.files(since - RING_MAX_MS).filter { it.id !in handled }
+        // A file another app made in a call folder is never looked at again (and never takes a call's place).
+        val foreign = files.filter { folderOf(it.path) != null && ownerTrust(it, phone) == Trust.NOT_THE_PHONE_APP }
+        foreign.forEach { log(context, note(Trust.NOT_THE_PHONE_APP, it.owner)) }
+        if (foreign.isNotEmpty()) markHandled(context, foreign.map { it.id })
+        val pairs = match(
+            sources.calls(since - RING_MAX_MS).filter { it.dateMs >= since - RING_MAX_MS },
+            files - foreign.toSet(),
+            handled.toSet(),
+            trustOf = { file, call -> trust(file, call, phone) }
+        )
         if (pairs.isEmpty()) return@withLock Outcome()
         val entries = entriesFor(pairs.map { it.first }, book.calls)
         val own = ownRecordings(book, graph.recordings.all())
         val busy = RecordingService.isRecording || RecordingService.isSaving
-        val dialer = sources.defaultDialer()
         val imported = mutableListOf<String>()
-        val done = handled.toMutableList()
+        val done = (handled + foreign.map { it.id }).toMutableList()
         var settled = 0
         var waiting = 0
         for ((call, file) in pairs) {
@@ -669,7 +712,7 @@ object PhoneAppRecordings {
             var note = note(verdict, call, file, entry, mine, choices, shortest)
             var waitsForPerson = false
             if (verdict == Verdict.IMPORT) {
-                val trust = trust(file, call, dialer)
+                val trust = trust(file, call, phone)
                 if (trust == Trust.OK) {
                     when (val copy = importFile(context, sources, file, call, settings)) {
                         // A file that cannot be read now is looked at again on the next run.
@@ -697,9 +740,22 @@ object PhoneAppRecordings {
                 p.edit().putString(NOTE, note.replaceFirstChar { it.uppercase() }).putLong(NOTE_AT, call.dateMs).apply()
             }
         }
-        p.edit().putString(HANDLED, done.distinct().takeLast(MAX_HANDLED).joinToString(",")).apply()
+        markHandled(context, done)
         Outcome(imported, settled, waiting)
     }
+
+    /**
+     * Files settled for good are added to the handled list at once and written before going on ([commit]), so a run
+     * cancelled after a file was stored never brings it in twice.
+     */
+    private fun markHandled(context: Context, ids: List<Long>) {
+        val p = prefs(context)
+        val now = (ids(p.getString(HANDLED, null)) + ids).distinct().takeLast(MAX_HANDLED)
+        p.edit().putString(HANDLED, now.joinToString(",")).commit()
+    }
+
+    /** Tests only: runs right after a file was stored and marked handled, where a cancellation could come. */
+    internal var afterStoreForTest: (suspend () -> Unit)? = null
 
     /**
      * The person chose "Import this recording" for a file the phone does not say the maker of: it is checked again (the
@@ -722,7 +778,7 @@ object PhoneAppRecordings {
                 it.first.dateMs == candidate.callAtMs
             }?.first
                 ?: return@withLock answered("not imported: the file no longer fits the call.")
-        val trust = trust(file, call, sources.defaultDialer())
+        val trust = trust(file, call, sources.thisPhone())
         if (trust == Trust.TOO_LARGE || trust == Trust.NOT_THE_PHONE_APP) return@withLock answered(note(trust, file.owner))
         when (val copy = importFile(context, sources, file, call, settings)) {
             Copy.Later -> "not imported yet: the file could not be read.".also { log(context, it) }
@@ -832,11 +888,30 @@ object PhoneAppRecordings {
             callerName = name,
             callerSource = if (name != null) "contacts" else "phone",
             callerNumber = call.number?.trim()?.takeIf { it.any(Char::isDigit) }?.take(40),
-            captureWarning = "$IMPORTED (the Phone app recorded this call; its copy stays in its folder)."
+            captureWarning = "$IMPORTED (the Phone app recorded this call; its copy stays in its folder).",
+            // The same file sent twice (an interrupted run) is skipped by the server rather than kept twice.
+            skipDuplicate = true
         )
         val stored = runCatching { graph.recordings.importPlainFile(meta, copy) }.getOrNull()
         copy.delete()
         if (stored == null) return Copy.Later
+        // Stored: settled for good at once, so nothing can bring this file in a second time.
+        markHandled(context, listOf(file.id))
+        afterStoreForTest?.invoke()
+        // The rest happens even when the run is being cancelled now.
+        withContext(NonCancellable) { afterStore(context, stored, file, call, span, settings) }
+        return Copy.Done(stored)
+    }
+
+    /** After a file was stored as a call's recording: the journal, a missed report it covers, the delete, the card. */
+    private suspend fun afterStore(
+        context: Context,
+        stored: LocalRecording,
+        file: MediaFile,
+        call: LogCall,
+        span: LongRange,
+        settings: AppSettings
+    ) {
         // The capture journal: this phone call is recorded, by the Phone app.
         CallJournal.update(context) { book ->
             CallJournal.finish(
@@ -856,7 +931,6 @@ object PhoneAppRecordings {
             prefs(context).edit().putString(DELETE, (pendingDeletes(context) + file.id).distinct().joinToString(",")).apply()
         }
         withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, stored, settings.afterCall, settings.themeMode) }
-        return Copy.Done(stored)
     }
 
     /** The start of the line every imported recording says (also how the import knows its own). */
@@ -906,7 +980,8 @@ object PhoneAppRecordings {
         PendingImports.add(context, startMs, endMs)
         runCatching {
             val request = OneTimeWorkRequestBuilder<Worker>().setInitialDelay(20, TimeUnit.SECONDS).build()
-            WorkManager.getInstance(context).enqueueUniqueWork(SOON, ExistingWorkPolicy.REPLACE, request)
+            // Never REPLACE: that would cancel a look in the middle of storing a file; the new look runs after it.
+            WorkManager.getInstance(context).enqueueUniqueWork(SOON, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
         }
     }
 

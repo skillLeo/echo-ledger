@@ -33,8 +33,12 @@ class PhoneAppRecordingsRunTest : AppTest() {
     private var t = 0L
 
     /** The media store and the call log, as the phone would answer; it can only be read. */
-    private class Store(val files: MutableList<MediaFile>, var calls: List<LogCall>, var dialer: String? = null) :
-        PhoneAppRecordings.Sources {
+    private class Store(
+        val files: MutableList<MediaFile>,
+        var calls: List<LogCall>,
+        var dialer: String? = null,
+        var system: Set<String> = setOf("com.samsung.android.dialer", "com.samsung.android.incallui")
+    ) : PhoneAppRecordings.Sources {
         val opened = mutableListOf<Long>()
         val bytes = mutableMapOf<Long, ByteArray>()
         val changed = mutableMapOf<Long, MediaFile>()
@@ -50,7 +54,7 @@ class PhoneAppRecordingsRunTest : AppTest() {
             return ByteArrayInputStream(bytes[file.id] ?: ByteArray(file.sizeBytes.toInt()) { (it % 251).toByte() })
         }
 
-        override fun defaultDialer() = dialer
+        override fun thisPhone() = PhoneAppRecordings.ThisPhone("samsung", dialer, isSystemApp = { it in system })
     }
 
     @Before
@@ -206,12 +210,51 @@ class PhoneAppRecordingsRunTest : AppTest() {
     }
 
     @Test
-    fun `a file another app put in the call folder is never brought in, nor read`() {
+    fun `a file another app put in the call folder is never brought in, nor read, and never takes the real file's place`() {
         val c = call()
         val store = Store(mutableListOf(recording(1, c, owner = "com.example.recorder")), listOf(c))
         assertEquals(emptyList<String>(), run(store).imported)
         assertEquals(emptyList<Long>(), store.opened)
-        assertEquals("Not imported: another app (com.example.recorder) made the file in the call folder.", note())
+        assertTrue(
+            CaptureLog.lines(app).any {
+                it.contains("not imported: another app (com.example.recorder) made the file in the call folder")
+            }
+        )
+
+        // Both in one window: the other app's file names the person and has the closest length, the Phone app's comes in.
+        val d = call(at = t + 30 * 60 * sec, name = "Sara")
+        val fake = recording(3, d, owner = "com.example.recorder").copy(name = "Call recording Sara.m4a")
+        val real = recording(4, d, durationS = d.talkS - 6)
+        val both = Store(mutableListOf(fake, real), listOf(d))
+        val imported = run(both, atMs = t + 40 * 60 * sec).imported.single()
+        assertEquals(listOf(4L), both.opened)
+        assertEquals((d.talkS - 6) * sec, app.graph.recordings.get(imported)!!.durationMs)
+    }
+
+    @Test
+    fun `an app installed later under the Phone app's name is not trusted`() {
+        val c = call()
+        val store = Store(mutableListOf(recording(1, c, owner = "com.google.android.dialer")), listOf(c))
+        assertEquals(emptyList<String>(), run(store).imported)
+        val spoof = Store(mutableListOf(recording(2, c)), listOf(c), system = emptySet())
+        assertEquals("named like Samsung's Phone app, not installed with the phone", emptyList<String>(), run(spoof).imported)
+        assertEquals(emptyList<Long>(), store.opened + spoof.opened)
+    }
+
+    @Test
+    fun `a look stopped right after a file was stored never brings it in a second time`() {
+        val c = call()
+        val store = Store(mutableListOf(recording(1, c)), listOf(c))
+        PhoneAppRecordings.afterStoreForTest = { throw kotlinx.coroutines.CancellationException("the look was stopped") }
+        try {
+            runCatching { run(store) }
+        } finally {
+            PhoneAppRecordings.afterStoreForTest = null
+        }
+        assertEquals("stored once", 1, app.graph.recordings.all().size)
+        assertEquals("the next look skips it", emptyList<String>(), run(store, atMs = t + 11 * 60 * sec).imported)
+        assertEquals(1, app.graph.recordings.all().size)
+        assertTrue("the server is told to skip a file it has", app.graph.recordings.all().single().skipDuplicate)
     }
 
     @Test

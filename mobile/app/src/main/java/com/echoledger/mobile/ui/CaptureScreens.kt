@@ -497,10 +497,13 @@ internal fun PhoneAppRecordingsBlock(
             confirmButton = {
                 TextButton(onClick = {
                     confirm = null
+                    // The import runs in the app's own scope: leaving this screen never stops it half-way.
+                    val app = context.applicationContext as com.echoledger.mobile.EchoLedgerApp
+                    val job = app.graph.scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                        com.echoledger.mobile.calls.PhoneAppRecordings.importCandidate(app, c.fileId)
+                    }
                     scope.launch {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                            com.echoledger.mobile.calls.PhoneAppRecordings.importCandidate(context, c.fileId)
-                        }
+                        job.join()
                         looked++
                     }
                 }) { Text("Import") }
