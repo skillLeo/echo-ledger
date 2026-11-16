@@ -35,5 +35,15 @@
         </div>
     @endforeach
 </x-el.section>
+@if ($classicOffered || $classic)
+    {{-- Since 2.0.0-a: the redesigned screens off for this person, here and in the apps. --}}
+    <x-el.section footer="Turns the redesigned screens off for you, here and in the apps. Turn it off to see them again.">
+        <button type="button" class="el-set-row" id="setting-appearance.classic" role="switch" aria-checked="{{ $classic ? 'true' : 'false' }}"
+            wire:click="toggleClassic" data-classic-switch>
+            <span class="el-set-text"><span class="el-set-title">Switch back to classic</span></span>
+            <span class="el-toggle" aria-hidden="true"></span>
+        </button>
+    </x-el.section>
+@endif
 <p class="el-set-foot">The theme is kept in this browser. The others follow your account.</p>
 <div class="el-btn-row"><button type="button" class="el-btn el-btn-text" wire:click="mountAction('resetPage')">Reset to defaults</button></div>

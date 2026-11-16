@@ -23,6 +23,7 @@ function abilityRoutes(): array
 
     return [
         'config' => ['GET', '/api/config', 'config:read'],
+        'switch back to classic' => ['PUT', '/api/account/ui', 'config:read'],
         'device report' => ['POST', '/api/devices/report', 'config:read'],
         'missed recording' => ['POST', '/api/devices/missed-recordings', 'config:read'],
         'share check result' => ['POST', '/api/diagnostics/share-checks', 'config:read'],

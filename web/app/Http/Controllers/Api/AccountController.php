@@ -13,6 +13,8 @@ use App\Models\Workspace;
 use App\Services\Accounts\AccountDeletion;
 use App\Services\Accounts\AccountExports;
 use App\Services\Accounts\AccountSessions;
+use App\Services\DeviceConfigPayload;
+use App\Services\InterfaceFlags;
 use App\Services\Staff\StaffAccess;
 use App\Services\Workspaces\Workspaces;
 use Illuminate\Http\JsonResponse;
@@ -53,6 +55,21 @@ final class AccountController extends Controller
                     'current' => $w->id === $workspace?->id,
                 ])->values()->all(),
         ]);
+    }
+
+    /**
+     * PUT /api/account/ui — `config:read` (since 2.0.0-a): the person's "Switch back to classic". Answers the new
+     * `ui_flags` and `ui_classic`, as GET /api/config gives them.
+     */
+    public function ui(Request $request, InterfaceFlags $flags): JsonResponse
+    {
+        $data = $request->validate(['classic' => ['required', 'boolean']]);
+        $device = $this->device($request);
+        // The device's own person (the model the rest of this request reads), so what is answered is what was saved.
+        $user = $device->user;
+        $flags->setClassic($user, (bool) $data['classic']);
+
+        return response()->json(DeviceConfigPayload::uiFlags($user, (int) $device->getAttribute('workspace_id')));
     }
 
     /** POST /api/account/sign-out-everywhere — every device (this one included) and console session of the account. */
