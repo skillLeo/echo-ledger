@@ -170,6 +170,18 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     itself (capture allowed through "Device Control and Data Access" on macOS 27). MAC-31's Finder path passed (16:25,
     `open -a`: the main window opened in the same process). Still to do with Hassam: MAC-31's Dock, Launchpad, ⌘W
     and ⌘M cases, the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
+- **ROADMAP ADOPTED (2026-11-16, late):** docs/ROADMAP.md (when; local) and docs/PLAN_V2_0.md (what for v2.0; local)
+  now steer with RUN_MODE.md (how). Re-read all three + HANDOFF after every compact or resume. Order: in-flight (Stage A)
+  → v1.8.1 (B) → v1.8.0 (C) → v1.9.0 (D) → v2.0 (E, starts at the v1.9.0 tag) → v2.1 (F: name + public launch).
+  Triage rule from now: every bug gets a severity (S0–S4, PLAN_V2_0); fix now S0/S1 and S2 that break a flow or look
+  broken (clipped/overlapping text, unreachable buttons, unreadable contrast); log S3/S4 on screens v2.0 rebuilds in
+  docs/v2/audit/bugs.csv. Scope moved out of v1.8: P5, P3.3, the look of P6.1/P6.2 → v2.0; P8 iPhone after v2.0 V2;
+  public store launch → v2.1. Groundwork lanes (relay, prompt pack, V0 docs-only inventories) only in idle slots and
+  paused first when usage is short. Hassam is asked only about device slots, accounts/money, legal/store and v2.0's
+  three gates. Created: docs/FINISH_CHECKLIST_V2_0.md, docs/v2/ (IA.md and DESIGN_SYSTEM.md as drafts, audit/, copy/,
+  research/, bugbash/, reviews/). To verify for v1.8.1 (research report): Apple documents NSWindow sharingType .none as
+  a legacy constant and says no public API prevents capture; our tests show it working on macOS 27 (Meet, screenshots,
+  Share Check), so the Mac UI must claim "hidden" only after a passing Share Check — check the wording before release.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 late · phone re-review rounds 2-4 (13 minors, the squeezed buttons, held one-sided SIM recording released, notices vs reported calls, wait before hold) · `fb5fb2c7`, `f0aabc0f`, this merge · approve each · open for later: MissedRecordings.kt:105-106 a second same-app call answered within 10 s of a reported one loses its notice (exclude only notices that started before the reported call began); contract 1.8.0-f mark-read by missed_recording_id.
   - 2026-11-16 · v1.8 phone 0.2b capture journal + 0.2 missed recordings + 0.3 Phone app recordings (SIM calls) + the
