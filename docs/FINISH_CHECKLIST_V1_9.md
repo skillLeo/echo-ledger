@@ -8,14 +8,42 @@ without Phase S.
 
 | # | What | Why | What to do |
 |---|---|---|---|
-| N1 | The product name (Baatly recommended, Mukalma backup) | The Android applicationId can never change after the first Play release | Check the domains, the @handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide (same as v1.8 H4) |
-| N2 | A VPS for the assist relay + its region (EU or Gulf, nearest to Pakistan) + its domain and TLS | Live streams need long-lived connections that shared hosting can't hold | Order the VPS and share the region |
-| N3 | Provider keys in Admin → API Credentials: Anthropic, OpenAI, Gemini, Groq, Moonshot, Soniox (translation on), AssemblyAI | The relay calls them | Paste them there yourself (never in chat) |
-| N4 | Assist-hour caps and prices for Pro and Ultra | Plans | Decide the caps (research suggests 10 h Pro, 40 h Ultra) |
+| N1 | The product name (Baatly recommended, Mukalma backup) — D2 (2026-11-16): not final; checks in docs/NAME_CHECK.md (local); brand constants first (L0) | The Android applicationId can never change after the first Play release | Check the domains, the @handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide (same as v1.8 H4) |
+| N2 | A VPS for the assist relay — D3: one VPS, Ubuntu 24.04 LTS, 2 vCPU / 4–8 GB; Hassam runs `services/assist-relay/tools/latency-check` from home and buys the fastest region; until then the relay runs locally and in CI. **Measured 2026-11-16 from the development Mac on Hassam's home internet (TCP connect, median of 5):** AWS UAE me-central-1 52 ms, AWS Mumbai 77 ms, Akamai Singapore 103 ms, Hetzner Singapore 121 ms, Europe 144–176 ms; AWS Bahrain unreachable from this network | Live streams need long-lived connections that shared hosting can't hold | Order the VPS and share the region |
+| N3 | Provider keys in Admin → API Credentials: Anthropic, OpenAI, Gemini, Groq, Moonshot, Soniox (translation on), AssemblyAI — D4: one exact list (provider, key, where, which feature) in HANDOFF; Hassam pastes them; never in chat | The relay calls them | Paste them there yourself (never in chat) |
+| N4 | Assist-hour caps and prices — decided D5: Free = Practice only, 30 min a month; Pro (Rs 2,999) = Fast + Balanced, 10 assist-hours a month; Ultra (Rs 12,499) = all modes, 40 assist-hours a month, fair use; config values, editable in admin; budget guards on every call | Plans | Decide the caps (research suggests 10 h Pro, 40 h Ultra) |
 | N5 | Screen-share test windows on Windows and the Mac with a second device watching; a macOS 15 machine if possible | S0, S3 guided test, S7 matrix | Say "laptop free" / "Mac free" with a phone ready |
 | N6 | Phone windows for S5 and L5 | Device tests | Say "phone free" |
 | N7 | Review the privacy wording, the interview reminder, the consent line, store and website text; a short legal check on US/EU recording consent | Launch | Before the public launch |
 | N8 | Run the Pakistan latency benchmark | L9 | Run the script from docs/LATENCY_V1_9.md when it's ready |
+
+## v1.8.1 release audit (2026-11-16)
+
+Three passes on the whole release diff (v1.7.0 `a6ac1b9b` → `fd088715`): security (2 major, 5 minor), UX/design (8 major,
+18 minor), reliability/performance (8 major, 20 minor). Every finding is fixed before the v1.8.1 release or written
+down here with the reason. IDs: S = security, U/u = UX, R = reliability.
+
+- [ ] **Phone** (b-phone, with the S5 follow-up): U7 names, u23 the dot's 48 dp target and TalkBack action, R6 the
+  secure flag before the mode loads and on every mode change, R7 "Hide EchoLedger windows" kept across process death,
+  R28 ShareGuard update() thread safety; screenshots (U8, phone part).
+- [ ] **Desktop** (one builder, after 0.4): S1 sharing-bar titles in logs, S4 Share Check commands only from the main
+  window, S5 no silent re-set, U1–U5, U7 names, U8 screenshots, u9–u21, u24–u26, R1–R5, R9–R25, R27, R28-desktop.
+- [ ] **Web and guides** (web builder, after 0.2): S3 Share Check validation, u22 admin empty state, R24 the bare
+  "presenting" pattern in share-bars.json, R26 an index on the matrix columns and pruning (a new migration), U6 and
+  the guide sentences (names, the hidden state, the test-pattern flash, the phone's Private/Show).
+- [x] **Lead:** S6/S7 the words check reads JSX text and one-word labels, with Urdu, Arabic and Roman Urdu forms
+  (`ca870b87`); U7 one set of names in docs/DESIGN_SYSTEM.md (`ece816d7`).
+- **Decided, not changed:** S2/R8 — `getClientUid` (since phase 3) and `getPlayerState` (12 Nov call fix) by reflection
+  in the shell-uid helper stay: the plan's "no hidden or private Android APIs, even through the helper" is an S5 rule
+  (screen-share privacy; L5 follows it), and v1.8 0.3 itself plans VOICE_CALL / uplink / downlink through the helper.
+  No hidden API is used for screen-share privacy or Live Assist.
+- **Decided, changed:** S5 — when something inside the process clears the Windows capture flag (the IOActive case, for
+  example a capture or monitoring tool), EchoLedger no longer sets it again by itself, because the scope rule forbids
+  anything against monitoring tools: it logs the change, shows "Visible in screen share" for the session and offers
+  "Hide again", which re-applies only when the person presses it. EchoLedger's own lifecycle points (window built or
+  shown, display change, wake) still set the flag.
+- Release steps after the fixes: version 1.8.1 on the desktop (tauri.conf.json, Cargo.toml, package.json; all still
+  1.6.0) and the phone (versionName 1.8.1, versionCode 18); the delta of the release diff gets one more audit pass.
 
 ## Step 0
 - [x] PLAN_V1_9.md saved locally and excluded; this checklist committed; docs/research/screen-share-privacy.md

@@ -8,12 +8,12 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
 
 | # | What | Why it matters | What to do |
 |---|---|---|---|
-| H1 | **The GitHub repo `skillLeo/echo-ledger` is public** | Anyone can download the whole product without logging in (checked 2026-11-16). No keys are in it, but the code, docs and server layout are | Say "make it private". Cost: private repos get 2,000 free GitHub Actions minutes a month and Mac builds count ×10, so the desktop builds would then run only on tags and on request (or GitHub Pro, $4/month, 3,000 minutes) |
+| H1 | **The GitHub repo `skillLeo/echo-ledger` is public** — decided 2026-11-16 (D1): make it private; Hassam switches it. Checked: the updater, website and apps don't depend on it (updates come from `<server>/downloads/desktop.json`; the only GitHub links are font licences). After the switch, Mac builds run on a self-hosted runner on the development Mac (never on a public repo) | Anyone can download the whole product without logging in (checked 2026-11-16). No keys are in it, but the code, docs and server layout are | Say "make it private". Cost: private repos get 2,000 free GitHub Actions minutes a month and Mac builds count ×10, so the desktop builds would then run only on tags and on request (or GitHub Pro, $4/month, 3,000 minutes) |
 | H2 | Phone windows on the S25 (~30 min each) | 0.2 (read the capture journals), 0.3 (SIM calls), P9 (final check) | Say "phone free" |
 | H3 | Screen-share windows on the Windows laptop and the Mac, with a second device watching | 0.1 SM-W1…W6 and SM-M1…M10; v1.9 S0/S7 | Say "laptop free" / "Mac free" and have a phone ready to join the meeting |
-| H4 | The product name (Baatly recommended, Mukalma backup) and the final domain | P6.1 website, P7 store listings; the Android applicationId can never change after the first Play release | Check baatly.com / .app / .ai, the @baatly handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide |
+| H4 | The product name (Baatly recommended, Mukalma backup) and the final domain — D2: not final; docs/NAME_CHECK.md (local) has the checks; no Play production release before Hassam confirms | P6.1 website, P7 store listings; the Android applicationId can never change after the first Play release | Check baatly.com / .app / .ai, the @baatly handles and trademarks (IPO-Pakistan, WIPO, USPTO, EUIPO), then decide |
 | H5 | Pick 1 of the 3 brand directions | P5.2 | Look at the screenshots in docs/design/brand/ when they are ready |
-| H6 | Google Play company account ($25 once) + a free D-U-N-S number for SkillLeo SMC Pvt Ltd | P7.1 | play.google.com/console → create a developer account as an organization |
+| H6 | Google Play company account ($25 once) + a free D-U-N-S number for SkillLeo SMC Pvt Ltd — D6: organization accounts, Hassam creates them from docs/store/ACCOUNT_SETUP.md | P7.1 | play.google.com/console → create a developer account as an organization |
 | H7 | The Play demo videos (foreground services) and the reviewer test account | P7.1 | The list of videos and the account steps will be in docs/LAUNCH.md |
 | H8 | Microsoft Partner Center account (free for individuals) | P7.3 MSIX in the Microsoft Store | partner.microsoft.com → enroll |
 | H9 | Apple Developer Program as an organization ($99/year) | P7.4 notarization; P8 iPhone ("Apple account ready") | developer.apple.com/programs/enroll as SkillLeo SMC Pvt Ltd |
@@ -64,6 +64,11 @@ docs/FINISH_CHECKLIST_V1_9.md) runs inside v1.8 and ships as a v1.8.x release; P
   16); if blocked, Samsung's own call recording imported right after each call (MediaStore watch), named from the
   contact or number, with the after-call card; nothing in Samsung's folder deleted unless chosen; other brands' folders
   where found. **Acceptance:** incoming, outgoing, an unsaved number, a short call and two calls back to back on the S25.
+
+- [ ] 0.4 Mac: opening EchoLedger from Finder, Launchpad or the Dock while it is already running shows nothing (only the
+  menu bar icon opens it). `lib.rs` handles `RunEvent::Opened` and `ExitRequested` but not `RunEvent::Reopen`, which
+  macOS sends to the running copy (found by Hassam 2026-11-16 on the installed v1.6.0). **Acceptance:** Reopen with no
+  visible window shows and focuses the main window; a test for the handler; checked on the Mac.
 
 ## P1 — Before, during, after a call
 - [ ] 1.1 Calls always recorded as audio when Ready; transcribed only with permission. One after-call card (phone:

@@ -4,7 +4,7 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
 
 ## v1.8 + v1.9 (from 2026-11-16): trust, call flow, launch; private screen share; Live Assist
 - **Plans (local only, in .git/info/exclude):** docs/PLAN_V1_8.md and docs/PLAN_V1_9.md, saved word for word from
-  Hassam's two prompts; his two research reports are docs/research/live-assist-report.md (local) and
+  Hassam's two plans; his two research reports are docs/research/live-assist-report.md (local) and
   docs/research/screen-share-privacy.md (committed, with the source links).
 - **Checklists (committed, single source of truth):** docs/FINISH_CHECKLIST_V1_8.md and docs/FINISH_CHECKLIST_V1_9.md,
   each with its "Needs Hassam" list at the top.
@@ -18,12 +18,33 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
 - **Order of work, as the v1.9 plan says:** v1.8 Step 0 → v1.9 Step 0 → **Phase S (private screen share) → shipped as
   a v1.8.x release** → v1.8 P0 … P9 → tag v1.8.0 → v1.9 Phase L (Live Assist). The Live Assist answer card never ships
   without Phase S.
-- **Rules carried from v1.6:** continuous run; after each item HANDOFF + checklist + commit + push; full suites per
-  phase; at most 2 helpers (desktop/, web/) in their own worktrees, phone and the API contract stay here; the S25 only
-  in phone windows (`pm install -r`, never uninstall or clear data); migrations backed up, rehearsed on a production
-  copy, reversible; no secrets; an isolation test per endpoint; words rule (never "undetectable", "stealth", "invisible
-  to proctors", "cheat", "bypass" in user-facing text); scope limit (hide from screen sharing only, never from other
-  software).
+- **How the work runs (from 2026-11-16, Hassam's answer "A+"; docs/RUN_MODE.md, local only, wins over STEP 0):** one
+  lead + builders per folder (web/, desktop/, mobile/, services/assist-relay/), each in its own worktree
+  (`.claude/worktrees/b-<role>`, branch `b-<role>`, made by hand: the tool's automatic worktrees refuse this checkout
+  because of the git ownership check), plus a read-only reviewer whose "approve" is required before any merge; a
+  release audit (security, UX/design, reliability) before each release. Three tracks: Phase S → v1.8.1; v1.8 P0–P9 →
+  v1.8.0; the invisible Live Assist foundation (relay, prompt pack, eval set, contract). Device batches:
+  docs/DEVICE_BATCHES.md ("phone free" / "laptop free" / "mac free"). The STEP 0 rules still hold (S25 only in phone
+  windows with `pm install -r`; migrations backed up, rehearsed, reversible; no secrets; an isolation test per endpoint;
+  words rule; scope limit).
+- **Decisions 2026-11-16 (D1–D7):** D1 repo → private (Hassam switches it; checked: updates come from
+  `<server>/downloads/desktop.json`, same-origin only; no GitHub links in the apps or website; README badges are static);
+  then Mac builds on a self-hosted runner on this Mac. D2 name: Baatly recommended, Mukalma backup, not final; brand
+  constants first (L0); docs/NAME_CHECK.md (local); no Play production release before the name. D3 relay VPS: Ubuntu
+  24.04, 2 vCPU / 4–8 GB, region from Hassam's run of `services/assist-relay/tools/latency-check`. D4 keys (below). D5
+  Live Assist plans: Free = Practice only 30 min/month; Pro Rs 2,999 = Fast + Balanced, 10 assist-hours; Ultra
+  Rs 12,499 = all modes, 40 assist-hours, fair use; config values; budget guards on every call. D6 store accounts as
+  organizations (SkillLeo SMC Pvt Ltd), Hassam creates them from docs/LAUNCH.md. D7 per-meeting-app Mac checks stay in
+  the Mac batch.
+- **D4 provider keys for Live Assist** (Admin → API Credentials; Hassam pastes them, never in chat; production checked
+  2026-11-16, presence only): Anthropic API key — set (Live Assist fast/balanced/deep/max; today "Show as"); Gemini —
+  set (Flash option); Groq — set (fast-mode fallback; today Urdu transcription); Soniox — set (live STT default,
+  translation on); AssemblyAI — set (live STT option); **OpenAI — empty** (optional provider in the relay); **Moonshot
+  (Kimi) — no field yet** (added with the L1 server work; behind a flag until measured). None is needed before v1.9.
+- **Phone, 2026-11-16 (S25, Android 17):** the screen-recording callback never fires for floating windows (only while
+  an EchoLedger screen is in front); FLAG_SECURE gives a black box → the phone moves to "always secure" (b-phone). Mac:
+  opening the running app from Finder/Dock shows nothing (no `RunEvent::Reopen` handler) → v1.8 0.4. The installed
+  Mac app is v1.6.0; it is not replaced while Hassam is away (permissions would be lost with an unsigned build).
 - **Found 2026-11-16:** the GitHub repo is public (checked without signing in) → v1.8 Needs Hassam H1.
 
 ## v1.6 (2026-11-09): "SAAS DONE RIGHT + PROFESSIONAL APP SHELL"
