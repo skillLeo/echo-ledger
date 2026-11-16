@@ -39,6 +39,13 @@ use adb's recorder and screenshots; the overlay buttons are found with `uiautoma
 
 **Part C — v1.8 0.3, SIM calls through the Phone app's own recordings (you make the calls):**
 
+2026-11-16 22:20: A6 PASS on the merged build (13ced291): Live Translate's box SECURE and 100 % black in a screen
+recording (it started through Android's sound sharing while the helper was down). Part C CANNOT run on this S25:
+Samsung hides Record calls in the Phone app for its region (the system log says "locale is not allowed UAE"), so
+there are no Phone app recordings to import. Part C needs a Galaxy from a region with call recording (Pakistan
+CSC). Part D left for a later slot. After wireless debugging is switched off, Shizuku stops and the helper with it:
+restart Shizuku (its start command over adb, or the Shizuku app), then open EchoLedger.
+
 1. Setup: the full build; auto-record on; Record phone calls → Always; allow Call log, Contacts and Music and audio.
    Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls. Check over adb:
    `settings get system record_calls_automatically_on_off` = 1. Run `adb logcat -s EchoLedgerSim`.
