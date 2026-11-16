@@ -20,6 +20,7 @@ certificate is bought.
 | Desktop (Windows) | `WINDOWS_CERTIFICATE`, `WINDOWS_CERTIFICATE_PASSWORD` | The certificate is imported into the runner's user store for the build; the Tauri bundler signs the app, the installer and the uninstaller with signtool by its thumbprint (SHA-256, timestamped); the step after the build fails unless Windows reports the installer as validly signed |
 | Desktop (macOS) | none | Unsigned `.dmg` for Apple Silicon and Intel, each built, tested and smoke-tested on a real runner of its chip; on a v* tag both are attached to the tag's GitHub Release |
 | Desktop (macOS) | `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` (all five) | Signed with the Developer ID certificate and the hardened runtime, notarized by Apple and stapled; `codesign`, `spctl` and `stapler` check it after the build |
+| Desktop (macOS) | `MACOS_SELF_SIGNED_P12`, `MACOS_SELF_SIGNED_P12_PASSWORD`, and not the five `APPLE_*` secrets (since v1.8.1) | Signed with the self-signed identity "EchoLedger Development Signing" and the hardened runtime, not notarized; the check fails unless the app's designated requirement pins that certificate (`certificate leaf = H"…"`), so macOS keeps Screen Recording and the keychain across updates. With the `APPLE_*` secrets the Developer ID path wins |
 | Both | `TAURI_SIGNING_PRIVATE_KEY` (and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, empty for our key) | Also the updater package and its `.sig` (Windows: the installer; Mac: `EchoLedger.app.tar.gz`), uploaded with the run's artifacts |
 
 Secrets go in GitHub → the repository → Settings → Secrets and variables → Actions. They are never printed, and runs
@@ -59,6 +60,26 @@ own tools. A USB token cannot be used from GitHub's runners: with one, releases 
 - `APPLE_TEAM_ID`: the 10-character team id (developer.apple.com → Account → Membership details).
 - Optional `APPLE_SIGNING_IDENTITY`: the certificate's name, e.g. `Developer ID Application: <Name> (<TEAM ID>)`;
   the bundler reads it from the certificate when it is not set.
+
+### The Mac's self-signed identity (until the Developer ID)
+
+An unsigned (ad hoc) Mac build has a new identity with every build, so macOS forgets its Screen Recording permission
+after each update (v1.8 0.1 found the installed app with Screen Recording off for this reason). Until the Apple
+Developer ID exists (Needs Hassam H9), every Mac build is signed with one self-signed certificate instead:
+
+- Common name **EchoLedger Development Signing**, code-signing purpose only, RSA 2048, valid until 13 Nov 2036, SHA-256
+  fingerprint `E4:E5:22:F7:CA:98:AC:2A:CA:82:59:0C:CB:7B:DF:84:FE:84:B7:30:1E:64:62:DB:A8:DA:E4:46:43:39:39:56`.
+- Made on 2026-11-16 with `/usr/bin/openssl req -x509 -newkey rsa:2048 -nodes -days 3650` (extensions:
+  `basicConstraints = critical, CA:false`, `keyUsage = critical, digitalSignature`, `extendedKeyUsage = critical,
+  codeSigning`) and `/usr/bin/openssl pkcs12 -export` (LibreSSL; with OpenSSL 3 add `-legacy`, or `security import`
+  can't read it). The .p12 (base64) is the secret `MACOS_SELF_SIGNED_P12`, its password `MACOS_SELF_SIGNED_P12_PASSWORD`.
+- It exists only in those two GitHub secrets: no copy is kept anywhere else. Losing or renewing it costs every Mac one
+  more "allow Screen Recording" (the requirement pins this certificate), so keep the secrets; make a new one only when
+  it expires or leaks.
+- Everyone allows Screen Recording once more on the first self-signed build (the requirement changes once, from the
+  build's hash to the certificate); after that it stays allowed across updates.
+- Gatekeeper still treats the app as from an unidentified developer (first open: System Settings → Privacy & Security
+  → Open Anyway) until the Developer ID and notarization replace it.
 
 ### The updater key
 The workflows can make the updater's packages only with the private key in `TAURI_SIGNING_PRIVATE_KEY`. Today the key
