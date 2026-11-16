@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { LibraryItem } from "./ipc";
-import { bookmarksOf, dayGroup, filterByTag, groupItems, itemState, libraryTags, searchItems, sortItems } from "./library";
+import { bookmarksOf, dayGroup, filterByTag, groupItems, itemState, libraryTags, recordingName, searchItems, sortItems } from "./library";
 
 function item(id: string, extra: Partial<LibraryItem> = {}): LibraryItem {
   return { id, deleted: false, updated_at: "2026-10-24T00:00:00Z", ...extra } as LibraryItem;
@@ -37,6 +37,19 @@ describe("sortItems", () => {
     expect(sortItems(items, "longest").map((i) => i.id)).toEqual(["mid", "new", "old"]);
     expect(sortItems(items, "title").map((i) => i.id)).toEqual(["new", "old", "mid"]);
     expect(items.map((i) => i.id)).toEqual(["old", "new", "mid"]);
+  });
+
+  it("sorts an untitled recording by the name it shows, Recording (D-031)", () => {
+    const named = [...items, item("untitled", { title: null }), item("blank", { title: "  " }), item("zed", { title: "Zed" })];
+    expect(sortItems(named, "title").map((i) => i.id)).toEqual(["new", "old", "mid", "untitled", "blank", "zed"]);
+  });
+});
+
+describe("a recording's name (D-031)", () => {
+  it("is its title, or Recording when it has none", () => {
+    expect(recordingName("Kick-off")).toBe("Kick-off");
+    expect(recordingName("  Kick-off ")).toBe("Kick-off");
+    for (const none of [null, undefined, "", "   "]) expect(recordingName(none)).toBe("Recording");
   });
 });
 

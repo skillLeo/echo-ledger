@@ -161,6 +161,15 @@ describe("LibraryView list", () => {
     expect(screen.getByRole("textbox", { name: "Search recordings" })).toHaveAttribute("placeholder", "Search");
   });
 
+  it("calls an untitled recording Recording in its menu, on its page's heading and its rename button too (D-031)", async () => {
+    await renderLibrary([...ITEMS, makeItem("u", { title: "  " })]);
+    expect(within(list()).getByRole("button", { name: "More for Recording" })).toBeInTheDocument();
+    await selectItem("Recording");
+    const heading = within(detail()).getByRole("heading", { level: 2 });
+    expect(heading).toHaveTextContent(/^Recording/);
+    expect(within(heading).getByRole("button", { name: "Recording" })).toHaveAttribute("title", "Click to rename");
+  });
+
   it("says 'recording' for exactly one", async () => {
     await renderLibrary([ITEMS[0]]);
     expect(screen.getByText("1 recording from your phone, this computer and the web.")).toBeInTheDocument();

@@ -13,6 +13,12 @@ export const SORT_LABELS: Record<SortKey, string> = {
   opened: "Recently opened",
 };
 
+/** A recording's name wherever it shows (D-031): its title, or "Recording" when it has none. The Library's list and
+ * table, the recording page's heading and its rename button, menus, search results and Home all read it from here. */
+export function recordingName(title: string | null | undefined): string {
+  return title?.trim() || "Recording";
+}
+
 /** Case-insensitive match against the title, transcript preview, client, device, source labels and bookmark tags. */
 export function searchItems(items: LibraryItem[], query: string): LibraryItem[] {
   const q = query.trim().toLowerCase();
@@ -36,7 +42,7 @@ export function sortItems(items: LibraryItem[], key: SortKey, opened: Record<str
     case "opened":
       return copy.sort((a, b) => (opened[b.id] ?? 0) - (opened[a.id] ?? 0) || time(b) - time(a));
     case "title":
-      return copy.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? "", undefined, { sensitivity: "base" }));
+      return copy.sort((a, b) => recordingName(a.title).localeCompare(recordingName(b.title), undefined, { sensitivity: "base" }));
     default:
       return copy.sort((a, b) => time(b) - time(a));
   }

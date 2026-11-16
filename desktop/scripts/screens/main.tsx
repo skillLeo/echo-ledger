@@ -58,6 +58,8 @@ const plan = makePlan({
   monthlyMinutes: 3000, usedMinutes: 812.5, storageBytes: 10 * 1024 ** 3, usedStorageBytes: 2.4 * 1024 ** 3, retentionDays: 90, seats: 5,
 });
 const opened = screen === "library-backup" ? "r2" : "r5";
+// `&untitled=1`: the opened recording has no title (D-031: it is called Recording everywhere).
+const LISTED = params.get("untitled") === "1" ? ITEMS.map((i) => (i.id === opened ? { ...i, title: null, title_auto: false } : i)) : ITEMS;
 // v1.6: "-free" is an account on the Free plan (badges, Plan & usage, the own Groq key); "sign-in…" a computer signed out.
 // v1.7: or `&plan=free|pro|ultra`, with `&request=<stage>` (an upgrade request at that stage), `&near=1` (Pro near its
 // minutes), `&round=1` (two receipts added and not sent yet) and `&deleting=1` (the account is being deleted).
@@ -274,8 +276,8 @@ const commands: Record<string, (args: Args) => unknown> = {
   get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
-  library_list: () => (empty ? [] : ITEMS),
-  library_refresh: () => (empty ? [] : ITEMS),
+  library_list: () => (empty ? [] : LISTED),
+  library_refresh: () => (empty ? [] : LISTED),
   list_clients: () => ({ data: CLIENTS }),
   library_views: () => (empty ? { views: {}, labels: [], folders: { inbox: 0 } } : LIBRARY_VIEWS),
   library_folder: ({ folder }) => ITEMS.filter((i) => SERVER_FOLDERS[folder as SmartFolder]?.includes(i.id) ?? inFolderHere(i, folder as SmartFolder) === true),

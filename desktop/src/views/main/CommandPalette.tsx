@@ -5,6 +5,7 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { api, type AppStatus, type SearchResult, type SmartFolder } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
+import { recordingName } from "../../lib/library";
 import { snippetParts } from "../../lib/player";
 import type { MainTab } from "../../lib/mainView";
 import type { PageEntry } from "../../lib/shell";
@@ -198,7 +199,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const recordings: PaletteCommand[] = found.map((r) => {
     const hit = r.hits[0];
     const ms = hit?.start_ms ?? 0;
-    return { id: `rec-${r.session.id}`, label: r.session.title ?? "Recording", keywords: hit ? `${timestamp(ms)} ${hit.snippet}` : "", run: () => onOpenRecording(r.session.id, ms) };
+    return { id: `rec-${r.session.id}`, label: recordingName(r.session.title), keywords: hit ? `${timestamp(ms)} ${hit.snippet}` : "", run: () => onOpenRecording(r.session.id, ms) };
   });
   // How well each shown row matches: a setting or recording found by what it says, not its name, counts as a keyword.
   const nameScore = (label: string) => Math.max(1, paletteScore(query, { label }));

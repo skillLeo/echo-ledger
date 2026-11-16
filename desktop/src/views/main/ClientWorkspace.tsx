@@ -11,7 +11,7 @@ import { usePoll } from "../../lib/usePoll";
 import { notifyWhenAway } from "../../lib/notify";
 import { claimFileDrops } from "../../lib/dropTarget";
 import { listenForFileDrops } from "../../lib/ipc";
-import { searchItems, sortItems, type SortKey } from "../../lib/library";
+import { recordingName, searchItems, sortItems, type SortKey } from "../../lib/library";
 import { ancestors, nestedCount, projectRecordings, projectTree } from "../../lib/projects";
 import { beginRecordingDrag, dragJustEnded, dragLabel } from "../../lib/dragMove";
 import { snippetParts } from "../../lib/player";
@@ -621,10 +621,10 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
           <div className="group-label">In transcripts</div>
           {found.map((r) => (
             <div key={r.session.id} className="hit-card">
-              <div className="item-title">{r.session.title}</div>
+              <div className="item-title">{recordingName(r.session.title)}</div>
               {r.hits.map((h) => (
                 <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => onOpen(r.session.id, h.start_ms)}
-                  aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                  aria-label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}>
                   <span className="seg-time">{timestamp(h.start_ms)}</span>
                   <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
                 </button>
@@ -649,7 +649,7 @@ function Recordings({ client, projects, items, hasFolders, onOpen, onMove, rules
                 <div className="row">
                   <span className={`avatar app-${appKind(item.source_app)}`}><AppTileIcon app={item.source_app} /></span>
                   <div className="item-main">
-                    <div className="item-line"><span className="item-title">{item.title}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
+                    <div className="item-line"><span className="item-title">{recordingName(item.title)}</span><span className="item-time">{formatWhen(item.started_at).split(" · ")[0]}</span></div>
                     <div className="item-sub">{[formatDuration(item.duration_ms), item.language_chip && item.language_chip !== "Auto" ? item.language_chip : null, folderName(item) ? `in ${folderName(item)}` : null].filter(Boolean).join(" · ")}</div>
                   </div>
                 </div>

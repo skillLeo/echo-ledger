@@ -197,6 +197,11 @@ const SCREENS = [
     await page.waitForSelector(".segments .segment");
     await page.selectOption("select[aria-label='Language to re-transcribe in']", "");
   }, viewport]),
+  // D-031: an untitled recording is called Recording in the list, on its page's heading and its rename button.
+  ...[["", undefined], ["-narrow", { width: 860, height: 560 }], ["-text200", { width: 1100, height: 740, scale: 2 }]].map(([size, viewport]) => [`library-untitled${size}`, "library&untitled=1", async (page) => {
+    await page.waitForSelector(".segments .segment");
+    await page.locator(".detail-title").waitFor();
+  }, viewport]),
   // D-121: the Library's row opened its folders in a narrow window; widened until the page's own column shows, the
   // sidebar's copy has closed (the full-size window, the column on the page).
   ["sidebar-library-widened", "library", async (page) => {

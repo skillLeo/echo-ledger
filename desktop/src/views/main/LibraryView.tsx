@@ -15,7 +15,7 @@ import { playerLength, activeIndex, activeWord, continuesTurn, findMatches, hasU
 import { ExportMenu, FindBar, HistoryPanel, LearnOfferBar, PlayerControls, PlayerDock, ReplaceBar, SpeakersPanel, SuggestionPop, VocabularyHint, Waveform } from "./TranscriptTools";
 import { ShareDialog } from "./ShareDialog";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, timestamp, type UnsureMarkers } from "../../lib/format";
-import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
+import { bookmarksOf, filterByTag, itemState, LIVE_STATUS_MS, libraryTags, needsLiveStatus, recordingName, searchItems, SORT_LABELS, sortItems, type Bookmark, type SortKey } from "../../lib/library";
 import { GROUP_LABELS, groupBy, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
 import { GroupHeader, ViewMenu } from "./LibraryGrouping";
 import { SourceAppBadge, SourceDeviceBadge } from "../../components/SourceBadge";
@@ -1175,11 +1175,11 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               <div className="group-label">In transcripts</div>
               {shownHits.map((r) => (
                 <div key={r.session.id} className="hit-card">
-                  <div className="item-title">{r.session.title}</div>
+                  <div className="item-title">{recordingName(r.session.title)}</div>
                   <div className="small muted">{formatWhen(r.session.started_at)}{r.hit_count > r.hits.length ? ` · ${r.hit_count} matches` : ""}</div>
                   {r.hits.map((h) => (
                     <button key={`${h.transcript_id}-${h.segment_index}`} type="button" className="hit" onClick={() => openHit(r.session.id, h.start_ms)}
-                      aria-label={`Play ${r.session.title ?? "recording"} from ${timestamp(h.start_ms)}`}>
+                      aria-label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}>
                       <span className="seg-time">{timestamp(h.start_ms)}</span>
                       <span className="hit-snippet" dir="auto"><b>{h.speaker}:</b> {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i}>{p.text}</mark> : <span key={i}>{p.text}</span>))}</span>
                     </button>
@@ -1222,7 +1222,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
               selected={selected} cursor={cursor} onOpen={(item) => { setCursor(item.id); setSelected(item.id); }} onPick={togglePicked}
               onPickGroup={(items) => { setSelecting(true); setPicked((p) => toggleGroup(items, p)); }} onPointerDown={startDrag}
               menu={(item) => (
-                <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                <RowMenu title={recordingName(item.title)} pinned={!!item.pinned}
                   onRename={() => { setSelected(item.id); setRenaming({ id: item.id, where: "detail" }); }}
                   onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                   onPin={() => void togglePin(item)}
@@ -1281,7 +1281,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                         {avatar}
                         <div className="item-main">
                           <div className="item-line">
-                            <span className="item-title" data-motion="title">{item.title ?? "Recording"}</span>
+                            <span className="item-title" data-motion="title">{recordingName(item.title)}</span>
                             {recovered.has(item.id) && <span className="label-chip small recovered-chip">{RECOVERED_CHIP}</span>}
                             {item.pinned && <span className="pin-star" aria-label="Pinned"><PinIcon size={14} /></span>}
                             <span className="item-time">{rowTime(item.started_at)}</span>
@@ -1299,7 +1299,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                       {(item.labels ?? []).length > 0 && <div className="item-labels">{item.labels!.map((l) => <span key={l} className="label-chip small">{l}</span>)}</div>}
                     </button>
                     {!selecting && (
-                      <RowMenu title={item.title ?? "recording"} pinned={!!item.pinned}
+                      <RowMenu title={recordingName(item.title)} pinned={!!item.pinned}
                         onRename={() => setRenaming({ id: item.id, where: "list" })}
                         onMove={() => setMoveFor({ ids: [item.id], title: item.title ?? null, current: item.client?.id ?? null })}
                         onPin={() => void togglePin(item)}
@@ -1314,7 +1314,7 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
         </div>
         {tableView && current && <div className="drawer-scrim" aria-hidden="true" onMouseDown={() => setSelected(null)} />}
         <div className={`detail card ${tableView ? "drawer" : ""}`} ref={detailRef} hidden={tableView && !current} role={tableView ? "dialog" : undefined}
-          aria-label={tableView && current ? current.title ?? "Recording" : undefined}>
+          aria-label={tableView && current ? recordingName(current.title) : undefined}>
           {tableView && current && (
             <button type="button" className="btn ghost icon-only drawer-close" aria-label="Close" title="Close (Esc)" onClick={() => setSelected(null)}><CloseIcon size={18} /></button>
           )}
@@ -1348,12 +1348,12 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
                     {!readOnly && <button className="btn danger ghost icon-only" aria-label="Delete" title="Delete this recording" onClick={() => remove(current.id)}><TrashIcon size={18} /></button>}
                   </div>
                   {readOnly ? (
-                    <h2 className="detail-title" data-motion="title">{current.title}</h2>
+                    <h2 className="detail-title" data-motion="title">{recordingName(current.title)}</h2>
                   ) : renaming?.id === current.id && renaming.where === "detail" ? (
                     <TitleEditor className="detail-title-input" initial={current.title ?? ""} onSave={(t) => void rename(current, t)} onCancel={() => setRenaming(null)} />
                   ) : (
                     <h2 className="detail-title" data-motion="title">
-                      <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{current.title}</button>
+                      <button type="button" className="title-button" title="Click to rename" onClick={() => setRenaming({ id: current.id, where: "detail" })}>{recordingName(current.title)}</button>
                       {current.title_auto && (
                         <span className="auto-title small muted" data-testid="auto-title" title="EchoLedger named it from what was said. Click the title to give it your own; yours is never replaced.">
                           <SparkleIcon size={12} />Automatic title
