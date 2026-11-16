@@ -620,7 +620,7 @@ button.el-step__head { cursor: pointer; }
 }
 .el-assist__bar { display: flex; align-items: center; gap: var(--el-space-4); cursor: grab; }
 .el-assist__budget { flex: 1; min-inline-size: var(--el-space-48); padding-inline: var(--el-space-8); }
-.el-assist__note { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-assist__note { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); border: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-assist__note > span { flex: 1; }
 .el-assist__body { display: flex; flex-direction: column; gap: var(--el-space-8); min-block-size: var(--el-space-48); }
 .el-assist__question { margin: 0; }
