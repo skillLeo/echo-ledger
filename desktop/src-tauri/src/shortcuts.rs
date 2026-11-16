@@ -20,6 +20,8 @@ pub enum Action {
     Mark,
     /// Record now (Phase 1C): the meeting on screen with both sides, else a voice note; again to stop.
     RecordNow,
+    /// "Hide all EchoLedger windows" (v1.8.1, `privacy`): every EchoLedger window off the screen, again to bring them back.
+    HideAll,
     /// Live Translate (v1.3): Edit / Lock the overlay and hide it. Registered only while Live Translate runs (never
     /// in [`Action::ALL`]): a global Ctrl+Shift+T would otherwise take "reopen closed tab" from every browser.
     TranslateLock,
@@ -27,12 +29,15 @@ pub enum Action {
 }
 
 impl Action {
-    pub const ALL: [Action; 7] =
-        [Action::RecordNow, Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote, Action::Mark];
+    pub const ALL: [Action; 8] =
+        [Action::RecordNow, Action::ToggleCaptions, Action::ToggleSaving, Action::CopyLast2Min, Action::Dictation, Action::VoiceNote, Action::Mark, Action::HideAll];
 
     /// Defaults (Cmd on macOS). Copying uses Alt+Shift: Ctrl+Shift+C opens DevTools in every browser (B19). Record now
     /// is Ctrl / ⌘ + Alt + R (Phase 1C, chosen by Hassam over Ctrl+Shift+R, the browsers' hard reload); on a Mac Safari
-    /// uses ⌘⌥R to reload from the server, which Settings says next to it; it can be changed or cleared there.
+    /// uses ⌘⌥R to reload from the server, which Settings says next to it; it can be changed or cleared there. Hide all
+    /// is Ctrl / ⌘ + Alt + Shift + P ("private"): three modifiers like Start / stop saving and Copy, so no browser, Office
+    /// or system key uses it; not ⌘⌥H (Hide Others on a Mac, one slip from hiding every other app) and not Ctrl+Shift+H
+    /// (Live Translate's Hide while it runs).
     pub fn default_accelerator(self) -> Option<&'static str> {
         match self {
             Action::ToggleCaptions => Some("CommandOrControl+Shift+Space"),
@@ -42,6 +47,7 @@ impl Action {
             Action::VoiceNote => None,
             Action::Mark => Some("CommandOrControl+Shift+B"),
             Action::RecordNow => Some("CommandOrControl+Alt+R"),
+            Action::HideAll => Some("CommandOrControl+Alt+Shift+P"),
             Action::TranslateLock => Some("CommandOrControl+Shift+T"),
             Action::TranslateHide => Some("CommandOrControl+Shift+H"),
         }
@@ -54,7 +60,7 @@ pub fn default_map() -> HashMap<Action, String> {
 
 /// Shortcuts added after the first version: a settings file from before one gets its default (a cleared one is kept
 /// as an empty accelerator, so it stays cleared).
-pub const ADDED_LATER: [Action; 1] = [Action::RecordNow];
+pub const ADDED_LATER: [Action; 2] = [Action::RecordNow, Action::HideAll];
 
 /// Parses an accelerator ("Ctrl+Shift+Space"); pure wrapper around the plugin's FromStr.
 pub fn parse(accelerator: &str) -> Result<Shortcut, String> {
@@ -183,5 +189,23 @@ mod tests {
         }
         assert_eq!(label(&map[&Action::RecordNow], true), "⌘⌥R");
         assert_eq!(label(&map[&Action::RecordNow], false), "Ctrl + Alt + R");
+    }
+
+    #[test]
+    fn hide_all_has_a_default_that_clashes_with_nothing() {
+        let map = default_map();
+        let hide = parse(&map[&Action::HideAll]).unwrap();
+        assert!(duplicates(&map).is_empty());
+        // Not Hide Others on a Mac, nor Live Translate's keys, nor any other action.
+        assert_ne!(hide, parse("CommandOrControl+Alt+H").unwrap());
+        for live_only in [Action::TranslateLock, Action::TranslateHide] {
+            assert_ne!(hide, parse(live_only.default_accelerator().unwrap()).unwrap());
+        }
+        assert!(ADDED_LATER.contains(&Action::HideAll), "a settings file from before gets it");
+        assert_eq!(label(&map[&Action::HideAll], true), "⌘⌥⇧P");
+        // The conflict check: the same keys as another action are a duplicate.
+        let mut clash = map.clone();
+        clash.insert(Action::HideAll, map[&Action::Mark].clone());
+        assert_eq!(duplicates(&clash), vec![Action::HideAll]);
     }
 }

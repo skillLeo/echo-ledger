@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { LEGACY_SECTIONS, SettingsView, settingsAvailability, settingsPages, signOutBody } from "./SettingsView";
 import { errorMessage, type Account, type AppStatus, type Entitlements, type Settings } from "../../lib/ipc";
 import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
+import { makePrivacyStatus, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../test/fixtures";
 import { findSetting, HELP_ARTICLES, SETTINGS, setting } from "../../lib/settingsRegistry";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 
@@ -63,6 +63,7 @@ async function setup({ settings = {}, status = {}, account = ACCOUNT, e = null, 
   respond("dictation_history", []);
   respond("upgrade_request_latest", e?.upgrade_request ?? null);
   respond("mac_check_last", null);
+  respond("privacy_status", makePrivacyStatus());
   echoSettings(makeSettings(settings));
   resetEntitlementsForTests(e);
   const helpers = makeRun();
@@ -256,6 +257,7 @@ describe("every row comes from the registry, and every entry has its row", () =>
   // Rows that show only in a state the fixture is not in (a saved key, a team, a request, macOS, a deletion), and the
   // entries made at run time or found only through search (the upgrade flow's own steps).
   const CONDITIONAL = new Set(["calls.browser_tabs", "mic.perm.system_audio", "screen.permission", "help.mac_check", "privacy.cancel_deletion",
+    "share_privacy.old_windows", "share_privacy.displays",
     "profile.workspace", "plan.usage.members", "plan.usage.uploads", "plan.request", "plan.history", "plan.payment_details", "plan.receipt"]);
   const pages = SETTINGS.filter((e) => e.kind === "page").map((e) => e.id);
 
@@ -267,7 +269,7 @@ describe("every row comes from the registry, and every entry has its row", () =>
     const seen = new Set<string>();
     for (const id of ["calls", "calls.sites", "mic", "captions", "captions.style", "screen", "screen.excluded", "voice", "voice.replacements", "voice.snippets", "voice.history",
       "transcription.language", "words", "key", "appearance", "notifications", "lock", "storage", "shortcuts", "profile", "plan", "security", "security.activity", "devices",
-      "privacy", "privacy.consent", "help", "about", "about.technical"]) {
+      "privacy", "privacy.consent", "share_privacy", "share_privacy.check", "help", "about", "about.technical"]) {
       if (id !== "transcription.language") expect(pages, id).toContain(id);
       act(() => {
         window.dispatchEvent(new Event("noop"));
@@ -330,13 +332,17 @@ describe("rows that save", () => {
     expect(live).toHaveAttribute("aria-checked", "false");
   });
 
-  it("shows during screen share as the inverse of the old content protection", async () => {
-    await setup({ settings: { contentProtection: true } });
-    await go("Captions");
-    const share = screen.getByRole("switch", { name: "Show during screen share" });
-    expect(share).toHaveAttribute("aria-checked", "false");
-    fireEvent.click(share);
-    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { contentProtection: false } }));
+  it("chooses which windows are hidden from screen sharing on the Screen-share privacy page", async () => {
+    await setup({ settings: { hideFromSharing: "all" } });
+    await go("Screen-share privacy");
+    const select = await screen.findByLabelText("Hide from screen sharing");
+    expect(select).toHaveValue("all");
+    expect([...(select as HTMLSelectElement).options].map((o) => o.text)).toEqual(["All EchoLedger windows", "Only floating windows", "Off"]);
+    fireEvent.change(select, { target: { value: "floating" } });
+    await waitFor(() => expect(callsOf("update_settings").at(-1)).toEqual({ patch: { hideFromSharing: "floating" } }));
+    expect(screen.queryByRole("switch", { name: "Show during screen share" })).toBeNull();
+    expect(screen.getByText("Share one window or a tab for the strongest privacy.")).toBeInTheDocument();
+    expect(screen.getByText("Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.")).toBeInTheDocument();
   });
 
   it("sends clientId null for None and the project's id otherwise", async () => {

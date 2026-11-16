@@ -78,7 +78,8 @@ pub fn status(app: &AppHandle) -> AppStatus {
         let ready = state.ready.lock().unwrap_or_else(|p| p.into_inner());
         (ready.as_ref().map(|r| r.ready), ready.as_ref().map_or(0, |r| r.problems().count()))
     };
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()) };
+    let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
@@ -701,7 +702,12 @@ pub struct SettingsPatch {
     auto_mode: Option<bool>,
     /// Switches to merge: app wire value → on/off; unknown apps are refused.
     auto_record_apps: Option<HashMap<String, bool>>,
-    content_protection: Option<bool>,
+    /// "Hide EchoLedger from screen sharing": `all` | `floating` | `off`.
+    hide_from_sharing: Option<crate::settings::ShareHiding>,
+    /// Windows before build 19041: `black_box` | `show`.
+    old_windows_sharing: Option<crate::settings::OldWindowsSharing>,
+    share_one_window: Option<bool>,
+    send_diagnostics: Option<bool>,
     autostart: Option<bool>,
     dictation_output: Option<String>,
     /// Missing = keep, `null` = clear ("No client"), a string = set (A6.DU4).
@@ -765,7 +771,10 @@ impl SettingsPatch {
         if let Some(v) = self.captions_on_record { s.captions_on_record = v; }
         if let Some(v) = self.auto_mode { s.auto_mode = v; }
         if let Some(v) = &self.auto_record_apps { s.auto_record_apps.extend(v.iter().map(|(k, on)| (k.clone(), *on))); }
-        if let Some(v) = self.content_protection { s.content_protection = v; }
+        if let Some(v) = self.hide_from_sharing { s.hide_from_sharing = v; }
+        if let Some(v) = self.old_windows_sharing { s.old_windows_sharing = v; }
+        if let Some(v) = self.share_one_window { s.share_one_window = v; }
+        if let Some(v) = self.send_diagnostics { s.send_diagnostics = v; }
         if let Some(v) = self.autostart { s.autostart = v; }
         if let Some(v) = &self.dictation_output && (v == "type" || v == "clipboard") { s.dictation_output = v.clone(); }
         if let Some(v) = &self.client_id { s.client_id = v.clone(); }
@@ -859,8 +868,8 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> AppResult<Settin
     let updated = state.update_settings(|s| patch.apply(s))?;
     let _ = app.emit("settings:changed", &updated);
     crate::readiness::wake(&app);
-    if patch.content_protection.is_some() {
-        crate::overlay::set_content_protection(&app, updated.content_protection);
+    if patch.hide_from_sharing.is_some() || patch.old_windows_sharing.is_some() {
+        crate::privacy::apply_all(&app);
     }
     if let Some(enable) = patch.autostart {
         let manager = app.autolaunch();
@@ -1221,6 +1230,9 @@ pub struct NavigatePayload {
     /// A share, project or request link of the server to open in place (an `echoledger://open` link, since v1.5);
     /// the page resolves it with `links_resolve`.
     pub link: Option<String>,
+    /// A Settings page or setting to open ("share_privacy.check", since v1.8.1: the privacy badge opens Share Check).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
 }
 
 pub fn recording_state_now(app: &AppHandle) -> RecordingState {
@@ -2769,4 +2781,80 @@ pub fn translate_stop(app: AppHandle) {
 #[tauri::command]
 pub fn translate_toggle_lock(app: AppHandle) {
     crate::translate::toggle_lock(&app);
+}
+
+// ---- Screen-share privacy (v1.8.1) -------------------------------------------------------------------------------------
+
+/// The privacy badge and Settings → Screen-share privacy.
+#[tauri::command]
+pub fn privacy_status(app: AppHandle) -> crate::privacy::check::PrivacyStatus {
+    crate::privacy::check::status(&app)
+}
+
+/// Share Check now ("Check screen-share privacy", the badge, onboarding).
+#[tauri::command]
+pub async fn share_check_run(app: AppHandle, why: Option<crate::privacy::check::Why>) -> AppResult<crate::privacy::check::View> {
+    crate::privacy::check::run(&app, why.unwrap_or(crate::privacy::check::Why::Asked)).await
+}
+
+/// The Share Check's windows say they have drawn.
+#[tauri::command]
+pub fn share_check_drawn(window: WebviewWindow) {
+    let app = window.app_handle();
+    let privacy = app.state::<crate::privacy::Privacy>();
+    privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).insert(window.label().to_string());
+    privacy.drawn.notify_waiters();
+}
+
+/// The guided test's big card (Mac).
+#[tauri::command]
+pub fn share_check_card(app: AppHandle, open: bool) -> AppResult<()> {
+    if open { crate::privacy::check::guided_open(&app) } else { crate::privacy::check::guided_close(&app); Ok(()) }
+}
+
+/// "I can see it" (`visible`) or "I can't see it" for a meeting app.
+#[tauri::command]
+pub fn share_check_answer(app: AppHandle, meeting_app: crate::privacy::apps::MeetingApp, visible: bool) -> AppResult<crate::privacy::check::PrivacyStatus> {
+    crate::privacy::check::guided_answer(&app, meeting_app, visible)?;
+    Ok(crate::privacy::check::status(&app))
+}
+
+/// The tray's demo from Settings: `minutes` > 0 starts it, 0 ends it.
+#[tauri::command]
+pub fn privacy_show_in_shares(app: AppHandle, minutes: u64) {
+    if minutes == 0 {
+        crate::privacy::end_demo(&app);
+    } else {
+        crate::privacy::show_in_shares_for(&app, std::time::Duration::from_secs(minutes.min(10) * 60));
+    }
+}
+
+/// Whether EchoLedger's windows are off the screen now (their pages draw nothing then).
+#[tauri::command]
+pub fn privacy_concealed(app: AppHandle) -> bool {
+    app.state::<crate::privacy::Privacy>().concealed()
+}
+
+/// "Hide all EchoLedger windows" from a page.
+#[tauri::command]
+pub fn privacy_hide_all(app: AppHandle) {
+    crate::privacy::toggle_hide_all(&app);
+}
+
+/// A tap on the privacy badge: Share Check in the main window.
+#[tauri::command]
+pub fn privacy_open_check(app: AppHandle) {
+    crate::actions::open_settings(&app, "share_privacy.check");
+}
+
+/// "Copy diagnostics" on the privacy page: the text to copy (nothing is sent).
+#[tauri::command]
+pub fn privacy_diagnostics(app: AppHandle) -> String {
+    crate::privacy::check::diagnostics_text(&app)
+}
+
+/// Moves the floating windows to another display (the one that isn't shared).
+#[tauri::command]
+pub fn privacy_move_to_display(app: AppHandle, index: usize) -> AppResult<()> {
+    crate::overlay::move_to_display(&app, index).map_err(AppError::msg)
 }

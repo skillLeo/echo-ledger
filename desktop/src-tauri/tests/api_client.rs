@@ -1381,3 +1381,56 @@ async fn too_many_reports_surface_the_server_s_answer() {
     let (status, _) = server_error(client(&server).device_report(&device_report()).await);
     assert_eq!(status, 429);
 }
+
+// ---- Screen-share privacy (v1.8.1) -------------------------------------------------------------------------------
+
+#[tokio::test]
+async fn share_bars_are_fetched_with_the_kept_etag_and_a_304_keeps_them() {
+    let body = std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/resources/data/share-bars.json")).unwrap();
+    let served = body.clone();
+    let server = MockServer::start(Router::new().route("GET", "/api/config/share-bars", move |req, _| {
+        if req.header("if-none-match") == Some("\"v1\"") {
+            Action::Reply(Reply::empty(304))
+        } else {
+            Action::Reply(Reply::raw_json(200, &served).header("ETag", "\"v1\""))
+        }
+    }));
+    let (text, etag) = client(&server).share_bars(None).await.unwrap().expect("new patterns");
+    assert_eq!(text, body, "the body is kept as it came");
+    assert_eq!(etag.as_deref(), Some("\"v1\""));
+    assert_eq!(client(&server).share_bars(Some("\"v1\"")).await.unwrap(), None, "304: the kept ones stay");
+    let requests = server.requests_to("GET", "/api/config/share-bars");
+    assert_eq!(requests[1].header("if-none-match"), Some("\"v1\""));
+    assert_eq!(requests[0].header("authorization"), Some(format!("Bearer {TOKEN}").as_str()));
+}
+
+#[tokio::test]
+async fn a_server_without_share_bars_leaves_the_built_in_ones() {
+    let server = MockServer::start(Router::new().fixed("GET", "/api/config/share-bars", Reply::json(404, json!({"message": "Not found", "code": "not_found"}))));
+    assert_eq!(client(&server).share_bars(None).await.unwrap(), None);
+}
+
+#[tokio::test]
+async fn a_share_check_result_is_posted_with_only_the_documented_fields() {
+    let server = MockServer::start(Router::new().fixed("POST", "/api/diagnostics/share-checks", Reply::json(201, json!({"data": {"id": "01JC"}}))));
+    let report = ShareCheckReport {
+        platform: "macos".into(),
+        os_build: "27.3 (26C5035r)".into(),
+        app_version: "1.8.1".into(),
+        method: "sck".into(),
+        result: "pass".into(),
+        reason: None,
+        meeting_app: None,
+        meeting_app_version: None,
+        share_mode: None,
+    };
+    client(&server).share_check_report(&report).await.unwrap();
+    let sent = server.requests_to("POST", "/api/diagnostics/share-checks");
+    assert_eq!(sent.len(), 1);
+    assert_eq!(
+        sent[0].json(),
+        json!({"platform": "macos", "os_build": "27.3 (26C5035r)", "app_version": "1.8.1", "method": "sck", "result": "pass", "reason": null, "meeting_app": null, "meeting_app_version": null, "share_mode": null})
+    );
+    let refused = MockServer::start(Router::new().fixed("POST", "/api/diagnostics/share-checks", Reply::json(422, json!({"message": "The given data was invalid.", "code": "validation_failed"}))));
+    assert_eq!(server_error(client(&refused).share_check_report(&report).await).0, 422);
+}

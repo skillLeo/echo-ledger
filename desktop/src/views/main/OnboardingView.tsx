@@ -6,6 +6,7 @@ import { api, errorMessage, type AppStatus, type PermissionKind, type Permission
 import { SignInView } from "./SignInView";
 import { testVerdict } from "./CaptureSettings";
 import { ConsentNotice } from "./ConsentNotice";
+import { OnboardingShareCheck } from "./PrivacySettings";
 import { Wordmark } from "../../components/BrandMark";
 import { CheckIcon } from "../../components/ControlIcons";
 import { CONSENT_TICK } from "../../lib/consent";
@@ -154,6 +155,7 @@ export function OnboardingView({ status, onStatus, onFinished, notify }: {
             <h2 className="settings-group-title">Recording and consent</h2>
             <ConsentNotice legal={status.plan.known && status.paired} />
             <label className="row small"><input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} /> {CONSENT_TICK}</label>
+            <OnboardingShareCheck platform={status.platform} />
             <div className="row onboarding-actions"><span className="spacer" /><button type="button" className="btn primary" onClick={() => void finish()}>Start using EchoLedger</button></div>
           </section>
         )}

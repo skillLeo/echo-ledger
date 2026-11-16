@@ -179,6 +179,18 @@ describe("caption overlay", () => {
     expect(callsOf("overlay_snap")).toHaveLength(1);
   });
 
+  it("draws nothing while EchoLedger's windows are off the screen, and shows its privacy badge otherwise", async () => {
+    respond("privacy_status", { badge: "private", badgeLabel: "Private", platform: "windows" });
+    const { container } = await renderOverlay();
+    await act(async () => emitEvent("overlay:visibility", true));
+    expect(root(container)).not.toHaveClass("overlay-hidden");
+    expect(await screen.findByRole("button", { name: /Hidden from screen share/ })).toBeInTheDocument();
+    await act(async () => emitEvent("privacy:conceal", true));
+    expect(root(container)).toHaveClass("overlay-hidden");
+    await act(async () => emitEvent("privacy:conceal", false));
+    expect(root(container)).not.toHaveClass("overlay-hidden");
+  });
+
   it("unsubscribes the visibility and settings listeners on unmount", async () => {
     const { unmount } = await renderOverlay();
     await waitFor(() => expect(listenerCount("overlay:visibility")).toBe(1));

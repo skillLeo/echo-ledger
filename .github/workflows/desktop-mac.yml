@@ -16,6 +16,8 @@ on:
     paths:
       - 'desktop/**'
       - 'docs/api-samples/**'
+      # The sharing-bar patterns the app is built with (privacy/bars.rs).
+      - 'web/resources/data/share-bars.json'
       - '.github/workflows/desktop-mac.yml'
   workflow_dispatch:
 

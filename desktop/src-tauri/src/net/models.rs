@@ -1245,3 +1245,24 @@ where
         _ => std::collections::BTreeMap::new(),
     })
 }
+
+/// `POST /api/diagnostics/share-checks` (since v1.8.1): what one Share Check found, and nothing else.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ShareCheckReport {
+    /// `windows` | `macos`.
+    pub platform: String,
+    /// "10.0.26100" or "27.3 (26C5035r)", at most 64 characters.
+    pub os_build: String,
+    pub app_version: String,
+    /// `wgc` | `dxgi` | `sck` | `readback` | `guided`.
+    pub method: String,
+    /// `pass` | `fail` | `error`.
+    pub result: String,
+    /// `permission_missing` | `capture_failed` | `control_missing` | `old_windows` | `remote_desktop` | `flag_mismatch`.
+    pub reason: Option<String>,
+    /// `zoom` | `meet` | `teams` | `slack` | `whatsapp` | `other` (the guided test).
+    pub meeting_app: Option<String>,
+    pub meeting_app_version: Option<String>,
+    /// `screen` | `window` | `tab`.
+    pub share_mode: Option<String>,
+}

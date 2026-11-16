@@ -86,6 +86,7 @@ export const SHORTCUT_ACTIONS: readonly (readonly [string, string])[] = [
   ["dictation", "Dictation"],
   ["voice_note", "Capture a voice note"],
   ["mark", "Bookmark this moment"],
+  ["hide_all", "Hide all EchoLedger windows"],
 ];
 
 /** The questions Help answers (desktop wording). */
@@ -141,9 +142,6 @@ export const SETTINGS: readonly SettingEntry[] = [
 
   { id: "captions", title: "Captions", page: null, root: "Recording", kind: "page", keywords: ["captions", "live text", "overlay", "bubble"], ru: ["caption", "likhai"], ur: ["کیپشن"] },
   { id: "captions.enabled", title: "Live captions while recording", page: "captions", kind: "switch", resettable: true, keywords: ["live captions", "subtitles while recording"] },
-  { id: "captions.screen_share", title: "Show during screen share", page: "captions", kind: "switch", resettable: true,
-    description: "When this is off, you still see your captions, but people watching your shared screen don't.",
-    keywords: ["screen sharing", "presentation", "hide overlays"] },
   { id: "captions.style", title: "Style", page: "captions", kind: "page", keywords: ["caption style", "look"] },
   { id: "captions.size", title: "Text size", page: "captions.style", kind: "segmented", resettable: true,
     options: opts(["small", "Small"], ["medium", "Medium", true], ["large", "Large"]), keywords: ["font size", "bigger text", "smaller"], ru: ["bara", "chhota"], ur: ["سائز"] },
@@ -195,6 +193,29 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "key.saved", title: "Saved key", page: "key", kind: "info", requires: { plans: true }, keywords: ["remove key", "ending in"] },
 
   // ---- App ----------------------------------------------------------------------------------------------------------
+  // Screen-share privacy (since v1.8.1; it replaces Captions › "Show during screen share").
+  { id: "share_privacy", title: "Screen-share privacy", page: null, root: "App", kind: "page",
+    keywords: ["privacy", "screen sharing", "screen share", "hide from screen sharing", "presentation", "private notes", "zoom", "teams", "meet"], ru: ["screen share", "chupao"], ur: ["اسکرین شیئر"] },
+  { id: "share_privacy.hiding", title: "Hide from screen sharing", page: "share_privacy", kind: "choice", resettable: true, aliases: ["Hide EchoLedger from screen sharing"],
+    options: opts(["all", "All EchoLedger windows", true], ["floating", "Only floating windows"], ["off", "Off"]),
+    keywords: ["show during screen share", "hide overlays", "captions in screen share", "main window"] },
+  { id: "share_privacy.status", title: "Status", page: "share_privacy", kind: "info", keywords: ["private", "badge"] },
+  { id: "share_privacy.old_windows", title: "On this Windows version", page: "share_privacy", kind: "choice", requires: { os: "windows" }, resettable: true,
+    options: opts(["black_box", "Black box", true], ["show", "Show normally"]), keywords: ["black box", "older windows", "windows 10"] },
+  { id: "share_privacy.check", title: "Check screen-share privacy", page: "share_privacy", section: "Check", kind: "page", aliases: ["Share Check", "See what others see"],
+    keywords: ["test", "share check", "what others see"] },
+  { id: "share_privacy.last_check", title: "Last check", page: "share_privacy", section: "Check", kind: "info", keywords: ["check now"] },
+  { id: "share_privacy.zoom", title: "Zoom screen capture mode", page: "share_privacy", section: "Meeting apps", kind: "info", requires: { os: "macos" },
+    keywords: ["zoom", "window filtering", "advanced capture"] },
+  { id: "share_privacy.one_window", title: "I share one window or a tab", page: "share_privacy", section: "Meeting apps", kind: "switch", requires: { os: "macos" }, resettable: true,
+    keywords: ["one window", "tab", "whole screen"] },
+  { id: "share_privacy.demo", title: "Show in shares for 10 minutes", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["demo", "show echoledger"] },
+  { id: "share_privacy.hide_all", title: "Hide all EchoLedger windows", page: "share_privacy", section: "Sharing", kind: "info", keywords: ["shortcut", "hide windows"] },
+  { id: "share_privacy.displays", title: "Move to the other display", page: "share_privacy", section: "Sharing", kind: "action", keywords: ["second monitor", "display", "sidecar", "ipad"] },
+  { id: "share_privacy.diagnostics", title: "Send diagnostics", page: "share_privacy", section: "Diagnostics", kind: "switch", resettable: true,
+    description: "Sends each check's system, app version, method and result to your server, never a picture or a window title, so we learn which systems keep EchoLedger hidden.",
+    keywords: ["diagnostics", "report", "share check results"] },
+  { id: "share_privacy.copy", title: "Copy diagnostics", page: "share_privacy", section: "Diagnostics", kind: "action", keywords: ["diagnostics", "copy", "support"] },
   { id: "appearance", title: "Appearance", page: null, root: "App", kind: "page", keywords: ["look", "display", "theme"], ru: ["shakal", "rang"], ur: ["ظاہری شکل"] },
   { id: "appearance.theme", title: "Theme", page: "appearance", kind: "segmented", resettable: true,
     options: opts(["system", "System", true], ["light", "Light"], ["dark", "Dark"]), keywords: ["dark mode", "night mode", "light mode", "black"], ru: ["raat", "andhera", "roshni", "kala"], ur: ["ڈارک", "تھیم"] },

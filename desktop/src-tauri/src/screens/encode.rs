@@ -114,6 +114,17 @@ pub fn encode(pixels: &[u8], width: u32, height: u32, stride: usize) -> Result<E
     Ok(Encoded { webp, width: out_w, height: out_h })
 }
 
+/// A small picture of a frame for a page to show (the Share Check's "What others see"): `max_long` px on the long side
+/// at most, one quality, never stored.
+pub fn preview(pixels: &[u8], width: u32, height: u32, stride: usize, max_long: u32) -> Result<Encoded, String> {
+    if width == 0 || height == 0 || stride < width as usize * 4 || pixels.len() < stride * (height as usize - 1) + width as usize * 4 {
+        return Err("The frame is empty.".into());
+    }
+    let (out_w, out_h) = fit(width, height, max_long);
+    let rgb = bgra_to_rgb(pixels, width, height, stride, out_w, out_h);
+    Ok(Encoded { webp: webp_at(&rgb, out_w, out_h, 75.0)?, width: out_w, height: out_h })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

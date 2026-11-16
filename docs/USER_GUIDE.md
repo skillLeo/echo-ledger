@@ -394,8 +394,37 @@ Captions show what you and the other person say, while you talk.
 - **Phone:** captions appear as a small floating bubble.
 - On the computer, **Account → Calls & meetings → Captions** changes the size, the number of lines, the position, the colours and how fast they
   fade.
-- **Hide from screen sharing** is on by default. The other people on your call cannot see the captions.
+- Captions are hidden from screen sharing with the rest of EchoLedger (see **Private notes** below).
 - Press **Ctrl+Alt+Shift+C** to copy the last 2 minutes of captions.
+
+### Private notes (since v1.8.1)
+
+Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not
+EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
+
+- **Settings → Screen-share privacy → Hide from screen sharing:** *All EchoLedger windows* (the default), *Only floating
+  windows* (captions, the recording pill, dictation, the after-call card, Live Translate; the main window shows), or
+  *Off*. If you had turned on *Show during screen share* before, EchoLedger keeps showing in shares until you change it.
+- **Check screen-share privacy** (also from the small badge on every floating window): EchoLedger opens a test window and
+  a green square for a moment, captures your screen the way meeting apps do, and shows *What you see* next to *What others
+  see* with one plain line. The picture stays on that page and is gone when you close it. The check runs again by itself
+  after an app or system update and once a week.
+- The badge says **Private**, **Not checked** or **Visible in shares** (amber), from the last real check.
+- **Windows 10 version 2004 and later, Windows 11:** people see what is behind EchoLedger. On older Windows they see a
+  black box where it is (the text stays private); choose *Show normally* if you prefer, or update Windows. In Remote
+  Desktop, EchoLedger is visible to the remote side.
+- **Mac:** each meeting app captures the screen its own way, so test each one once with your phone (*Test with your
+  phone*: join the meeting on the phone, share your whole screen, say whether you see the test card). In **Zoom**, open
+  Settings › Share Screen › Advanced and set *Screen capture mode* to *Advanced capture with window filtering*. In Meet,
+  share a tab. When a whole-screen share starts in an app that is not confirmed, EchoLedger's windows step off the screen
+  until the share ends; turn on *I share one window or a tab* if you always share less.
+- **Show in shares for 10 minutes** (the tray or menu bar, or Settings) is for demos; it goes back by itself.
+- **Hide all EchoLedger windows:** Ctrl+Alt+Shift+P on Windows, ⌘⌥⇧P on a Mac (change it in Keyboard shortcuts).
+- **Send diagnostics** (off by default) sends each check's system, app version, method and result, never a picture or a
+  window title.
+- Share one window or a tab for the strongest privacy. EchoLedger is **not** hidden from cameras, projectors, Remote
+  Desktop, or monitoring software on your computer, and it never tries to be: it hides its windows from screen sharing
+  only.
 
 ## 6. After a call
 

@@ -24,7 +24,10 @@ fn customised() -> Settings {
         shortcuts,
         captions_on_record: false,
         auto_mode: false,
-        content_protection: false,
+        hide_from_sharing: ShareHiding::Floating,
+        old_windows_sharing: OldWindowsSharing::Show,
+        share_one_window: true,
+        send_diagnostics: true,
         overlay_corner: Corner::TopLeft,
         autostart: true,
         dictation_output: "clipboard".into(),
@@ -90,16 +93,16 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(s.pins.is_empty());
     assert!(s.captions_on_record, "captions open with a recording");
     assert!(s.auto_mode, "auto mode is on");
-    assert!(
-        s.content_protection,
-        "captions are hidden from screen sharing"
-    );
+    assert_eq!(s.hide_from_sharing, ShareHiding::All, "every window is hidden from screen sharing");
+    assert_eq!(s.old_windows_sharing, OldWindowsSharing::BlackBox);
+    assert!(!s.share_one_window);
+    assert!(!s.send_diagnostics, "diagnostics are sent only once the person turns them on");
     assert!(!s.autostart);
     assert!(!s.consent_acknowledged);
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
-    assert_eq!(s.shortcuts.len(), 6, "voice note has no default shortcut");
+    assert_eq!(s.shortcuts.len(), 7, "voice note has no default shortcut");
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
@@ -163,7 +166,6 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "captionsOnRecord",
             "clientId",
             "consentAcknowledged",
-            "contentProtection",
             "deviceId",
             "deviceName",
             "dictationCleanup",
@@ -173,11 +175,13 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "dictationSnippets",
             "dictationSounds",
             "farSideWarning",
+            "hideFromSharing",
             "inputDevice",
             "installId",
             "lockAfterMinutes",
             "notificationCategories",
             "notificationSounds",
+            "oldWindowsSharing",
             "onboardingDone",
             "overlayCorner",
             "pillPosition",
@@ -188,14 +192,16 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "screenExcludedApps",
             "screenMoments",
             "screenTarget",
+            "sendDiagnostics",
             "serverUrl",
+            "shareOneWindow",
             "shortcuts",
             "siteRules",
             "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 43, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 46, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -349,7 +355,7 @@ fn a_file_with_only_some_fields_keeps_the_defaults_for_the_rest() {
     let s = Settings::load(&path);
     assert!(!s.auto_mode);
     assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
-    assert!(s.captions_on_record && s.content_protection);
+    assert!(s.captions_on_record && s.hide_from_sharing == ShareHiding::All);
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.shortcuts, default_map());
 }
@@ -415,8 +421,9 @@ fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
     let s = Settings::from_value(json!({
         "shortcuts": {"toggle_captions": "Ctrl+Shift+K", "pause_recording": "Ctrl+Shift+P", "voice_note": 42}
     }));
-    assert_eq!(s.shortcuts.len(), 2, "{:?}", s.shortcuts);
+    assert_eq!(s.shortcuts.len(), 3, "{:?}", s.shortcuts);
     assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
+    assert_eq!(s.shortcuts[&Action::HideAll], "CommandOrControl+Alt+Shift+P");
     assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Alt+R", "a shortcut added later gets its default");
 }
 
@@ -433,13 +440,36 @@ fn one_bad_value_costs_only_its_own_key() {
         "autoMode": "sometimes",
         "afterCall": "on_tuesdays",
         "pillPosition": {"x": "left", "y": 3},
-        "contentProtection": false
+        "hideFromSharing": "sometimes"
     }));
     assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
     assert!(s.auto_mode, "an invalid value falls back to the default");
     assert_eq!(s.after_call, AfterCall::Keep);
     assert_eq!(s.pill_position, None);
-    assert!(!s.content_protection);
+    assert_eq!(s.hide_from_sharing, ShareHiding::All, "an unknown choice is the default");
+}
+
+#[test]
+fn show_during_screen_share_from_v1_8_keeps_echoledger_visible_in_shares() {
+    // v1.8 "Show during screen share" on: the floating windows were in shares, and the main window always was.
+    let s = Settings::from_value(json!({"serverUrl": "https://ledger.example.com", "contentProtection": false}));
+    assert_eq!(s.hide_from_sharing, ShareHiding::Off);
+    // The default (hidden captions) moves to the new default: every window hidden.
+    assert_eq!(Settings::from_value(json!({"contentProtection": true})).hide_from_sharing, ShareHiding::All);
+    assert_eq!(Settings::from_value(json!({"autoMode": true})).hide_from_sharing, ShareHiding::All);
+    // Once the new setting is in the file, the old key no longer counts.
+    assert_eq!(Settings::from_value(json!({"contentProtection": false, "hideFromSharing": "floating"})).hide_from_sharing, ShareHiding::Floating);
+    let saved = serde_json::to_value(&s).unwrap();
+    assert!(saved.get("contentProtection").is_none(), "the old key is not written again");
+    assert_eq!(saved["hideFromSharing"], "off");
+}
+
+#[test]
+fn the_hide_all_shortcut_is_added_to_an_older_file() {
+    let s = Settings::from_value(json!({"shortcuts": {"toggle_captions": "CommandOrControl+Shift+Space"}}));
+    assert_eq!(s.shortcuts.get(&Action::HideAll).map(String::as_str), Some("CommandOrControl+Alt+Shift+P"));
+    let cleared = Settings::from_value(json!({"shortcuts": {"hide_all": ""}}));
+    assert_eq!(cleared.shortcuts.get(&Action::HideAll).map(String::as_str), Some(""), "a cleared one stays cleared");
 }
 
 #[test]

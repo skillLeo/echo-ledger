@@ -295,12 +295,11 @@ export function CaptionsPage({ settings, patch, onStyle }: { settings: Settings;
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Section footer={<><p>{setting("captions.screen_share").description}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Section footer={<><p>Captions are hidden from screen sharing with the rest of EchoLedger: Settings › Screen-share privacy.</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchRow id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
-        <SwitchRow id="captions.screen_share" on={!settings.contentProtection} onChange={(v) => void patch({ contentProtection: !v })} />
         <LinkRow id="captions.style" onOpen={onStyle} chevron />
       </Section>
-      <ResetRow page="Captions" onReset={() => void patch({ captionsOnRecord: true, contentProtection: true })} />
+      <ResetRow page="Captions" onReset={() => void patch({ captionsOnRecord: true })} />
     </>
   );
 }

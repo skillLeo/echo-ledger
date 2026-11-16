@@ -134,6 +134,63 @@ pub fn drive(app: tauri::AppHandle) {
     });
 }
 
+/// `--smoke-test --share-check`: the real Share Check in the smoke test's isolation (its own folder, no account, a
+/// running EchoLedger left alone). Prints each method's counts; exits 0 on Pass, [`EXIT_CHECK_FAILED`] when the test
+/// window showed in a capture, [`EXIT_CHECK_SKIPPED`] when nothing could be captured (no capture session on a CI
+/// runner, no Screen Recording permission), with the reason printed: never a silent pass.
+pub const SHARE_CHECK_ARG: &str = "--share-check";
+pub const EXIT_CHECK_FAILED: i32 = 4;
+pub const EXIT_CHECK_SKIPPED: i32 = 5;
+
+pub fn share_check_requested(args: impl IntoIterator<Item = String>) -> bool {
+    args.into_iter().any(|a| a == SHARE_CHECK_ARG)
+}
+
+/// The exit code of a Share Check run (pure).
+pub fn share_check_exit(result: crate::privacy::pixels::Outcome) -> i32 {
+    match result {
+        crate::privacy::pixels::Outcome::Pass => 0,
+        crate::privacy::pixels::Outcome::Fail => EXIT_CHECK_FAILED,
+        crate::privacy::pixels::Outcome::Error => EXIT_CHECK_SKIPPED,
+    }
+}
+
+pub fn drive_share_check(app: tauri::AppHandle) {
+    let Some(dir) = DIR.get().cloned() else { return };
+    let watched = dir.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(TIMEOUT);
+        say("share check failed: no result in time");
+        finish(&watched, EXIT_TIMED_OUT);
+    });
+    tauri::async_runtime::spawn(async move {
+        say("share check: a protected magenta window and an unprotected green control, the screen captured with nothing left out");
+        match crate::privacy::check::run(&app, crate::privacy::check::Why::Asked).await {
+            Ok(view) => {
+                say(&format!("share check on {} ({})", view.system, crate::privacy::check::os_build()));
+                for m in &view.methods {
+                    let counts = m.counts.map(|c| format!("test {} px, control {} of {} px", c.test, c.control, c.control_area)).unwrap_or_else(|| "no picture".into());
+                    let why = [m.reason.clone(), m.detail.clone()].into_iter().flatten().collect::<Vec<_>>().join(": ");
+                    say(&format!("  {} {}: {counts}{}", m.method, crate::privacy::check::wire(m.result), if why.is_empty() { String::new() } else { format!(" ({why})") }));
+                }
+                let code = share_check_exit(view.result);
+                match code {
+                    0 => say("share check: pass"),
+                    EXIT_CHECK_FAILED => say("share check: FAIL, the protected window was in the capture"),
+                    _ => say(&format!("share check: SKIPPED, nothing could be measured ({})", view.reason.unwrap_or_default())),
+                }
+                let _ = std::fs::remove_dir_all(&dir);
+                app.exit(code);
+            }
+            Err(e) => {
+                say(&format!("share check: SKIPPED, the check could not run: {e}"));
+                let _ = std::fs::remove_dir_all(&dir);
+                app.exit(EXIT_CHECK_SKIPPED);
+            }
+        }
+    });
+}
+
 /// The screens key of the test: never asks the keychain, and nothing is sealed with it.
 pub struct NoKeys;
 
@@ -184,6 +241,17 @@ mod tests {
         assert!(TIMEOUT >= Duration::from_secs(60) && TIMEOUT <= Duration::from_secs(180));
         assert_ne!(EXIT_WINDOW_FAILED, 0);
         assert_ne!(EXIT_TIMED_OUT, 0);
+    }
+
+    #[test]
+    fn the_share_check_mode_never_passes_without_a_measurement() {
+        use crate::privacy::pixels::Outcome;
+        assert!(share_check_requested(args(&["EchoLedger", "--smoke-test", "--share-check"])));
+        assert!(!share_check_requested(args(&["EchoLedger", "--smoke-test"])));
+        assert_eq!(share_check_exit(Outcome::Pass), 0);
+        assert_eq!(share_check_exit(Outcome::Fail), EXIT_CHECK_FAILED);
+        assert_eq!(share_check_exit(Outcome::Error), EXIT_CHECK_SKIPPED, "nothing measured is never a pass");
+        assert_ne!(EXIT_CHECK_SKIPPED, 0);
     }
 
     #[test]

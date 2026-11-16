@@ -34,6 +34,10 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
         (Action::CopyLast2Min, true) => copy_last_minutes(&app, 2).map(|_| ()),
         (Action::VoiceNote, true) => toggle_voice_note(&app).await,
         (Action::Mark, true) => mark_moment(&app, None, None).map(|_| ()),
+        (Action::HideAll, true) => {
+            crate::privacy::toggle_hide_all(&app);
+            Ok(())
+        }
         (Action::TranslateLock, true) => {
             crate::translate::toggle_lock(&app);
             Ok(())
@@ -935,7 +939,14 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
 
 /// Shows the main window on a view (tray "Review recordings", the chip's title).
 pub fn navigate(app: &AppHandle, view: &str, pending_id: Option<String>, rename: bool) {
-    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None, link: None };
+    let payload = crate::commands::NavigatePayload { view: view.to_string(), pending_id, rename, recording_id: None, link: None, section: None };
+    crate::tray::show_main(app);
+    crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
+}
+
+/// Opens a Settings page (or a setting on it) in the main window.
+pub fn open_settings(app: &AppHandle, section: &str) {
+    let payload = crate::commands::NavigatePayload { view: "settings".into(), pending_id: None, rename: false, recording_id: None, link: None, section: Some(section.to_string()) };
     crate::tray::show_main(app);
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
@@ -1596,7 +1607,7 @@ pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
     if let Some((id, at)) = target
         && at.elapsed() < NOTIFIED_WINDOW
     {
-        let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None };
+        let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: Some(id), link: None, section: None };
         crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
     }
 }
@@ -1621,7 +1632,7 @@ pub fn handle_links(app: &AppHandle, args: &[String]) -> bool {
 /// is unlocked, and opens the web page instead when it is not this workspace's.
 pub fn open_app_link(app: &AppHandle, link: String) {
     crate::tray::show_main(app);
-    let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: None, link: Some(link) };
+    let payload = crate::commands::NavigatePayload { view: "library".into(), pending_id: None, rename: false, recording_id: None, link: Some(link), section: None };
     crate::lifecycle::emit(app, crate::lifecycle::MAIN, "main:navigate", payload);
 }
 

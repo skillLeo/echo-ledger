@@ -162,3 +162,16 @@ monitoring tools.
   `updateContentFilter` changed its filter mid-capture (magenta 0 px every time; the unprotected green control found
   every time). This matches the macOS 26.6.2 report and not the FB21115847 case, on this macOS 27.3 build; meeting
   apps can still capture differently, so the per-app guided test stays. Details in SCREEN_SHARE_MATRIX.md.
+- 2026-11-16, the same Mac, the app's own Share Check (v1.8.1 build, `--smoke-test --share-check`): pass, magenta 0 px,
+  green 64,480 of 64,480 px; with the test window built unprotected it fails with 28,620 magenta px, so the check can
+  fail. A ScreenCaptureKit screenshot comes back in the display's colour space (Display P3 here): the sRGB green
+  (0, 200, 0) read as about (90, 197, 58), outside a tolerance of 25 per channel, so the check asks ScreenCaptureKit for
+  sRGB (`SCStreamConfiguration.colorSpaceName`).
+- 2026-11-16, Zoom 7.1.9 on this Mac, read only: `~/Library/Preferences/us.zoom.xos.plist` holds no screen capture mode
+  (only `kCaptureWithoutChatWindow` and window and sidebar state); `~/Library/Application Support/zoom.us/data/` keeps
+  the client's settings in `zoomus.enc.db` (encrypted) and server feature flags in
+  `zoomus.zmdb.default.noenc.rlock.db` (`feature_toggle_kvs`, no capture mode either). So the mode cannot be read without
+  decrypting Zoom's database, which EchoLedger will not do (nor write any of it): "Zoom is set up" comes from the guided
+  test only. Zoom's labels (Settings › Share Screen › Advanced › Screen capture mode › "Advanced capture with window
+  filtering" / "without window filtering") are those of Zoom 5.17 to 6.x community threads and vendor guides; Zoom's
+  own current help page could not be fetched, so the label is to be confirmed in Zoom 7 on the Mac window (N5).
