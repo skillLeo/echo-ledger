@@ -206,6 +206,21 @@ class PhoneAppRecordingsRunTest : AppTest() {
     }
 
     @Test
+    fun `a held one-sided recording is released with its card when the Phone app's copy is refused`() {
+        val c = call()
+        ownRecording(c, bothSides = false, state = "pending_decision")
+        // Held at its save, waiting for the Phone app's two-sided copy.
+        app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE).edit()
+            .putString("held", "mine:${c.dateMs + 6 * sec}:${c.dateMs + 134 * sec}").commit()
+        // The copy is a kind the server does not take.
+        val store = Store(mutableListOf(recording(1, c).copy(name = "Call recording 1.3gp", mime = "audio/3gpp")), listOf(c))
+        assertEquals(emptyList<String>(), run(store).imported)
+        val own = app.graph.recordings.get("mine")!!
+        assertEquals("kept as usual (After a call: keep)", "queued", own.state)
+        assertEquals("its card, right after the call", "mine", DecisionPopup.showingFor)
+    }
+
+    @Test
     fun `a call EchoLedger could not hear is brought in`() {
         val c = call()
         CallJournal.update(app) { b ->

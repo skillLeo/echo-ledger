@@ -1388,6 +1388,8 @@ class RecordingService : LifecycleService() {
             val held = stored != null && skip == null && !silent && oneSided != null && phoneAppCovers
             if (held && stored != null) {
                 graph.recordings.update(stored.id) { it.copy(state = "pending_decision") }
+                // Released with its card (or "After a call") if the copy does not come after all.
+                com.echoledger.mobile.calls.PhoneAppRecordings.hold(this, stored.id, session.startedAt.toEpochMilli(), endedMs)
                 CaptureLog.add(this, "recording held", "your voice only: the Phone app's two-sided copy takes its place")
             }
             if (session.sourceApp == SourceApp.PHONE_CALL.wire) {
