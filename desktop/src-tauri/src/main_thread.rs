@@ -15,6 +15,18 @@
 //! `write()`, or a function that returns one; kept in a binding, or as a temporary of a statement, an `if let`, a
 //! `match` or a `for`, by Rust's own scope rules) and fail when a call that may wait for the main thread runs while one
 //! is held: a Tauri call from the lists below, or any EchoLedger function that reaches one.
+//!
+//! What the check cannot see, so code review still must:
+//! - calls through a struct field, a function pointer or a closure kept in a variable (the screens sampler's shield, a
+//!   boxed callback): a closure is read where it is written, not where it is called;
+//! - a name shadowed by a local variable or parameter (a call to a local `f` is taken for the caller's closure);
+//! - `join()` on a thread that itself waits for the main thread (the lock holder waits for the thread, the thread for
+//!   the main thread);
+//! - macro bodies that do not parse as expressions (`tokio::select!`, `json!`, `vec![x; n]`);
+//! - calls that wait but whose names other types share, so they are not listed: a menu's `append`, `insert`, `remove`
+//!   and `items`, a window's `title()`, a webview's `size()`, `position()` and `bounds()`;
+//! - which type a method belongs to: a method call is matched by its name only (`self.x()` is not narrowed to `Self::x`),
+//!   which errs on the side of a finding.
 
 #[cfg(test)]
 mod tests {
@@ -29,8 +41,9 @@ mod tests {
 
     // ---- What waits for the main thread (tauri 2.12.5, tauri-runtime-wry 2.12.3, the plugins as locked) -------------
 
-    /// Tray and menu changes: posted to the main thread and waited for (`run_item_main_thread!`).
-    const TRAY_AND_MENU: [&str; 15] = [
+    /// Tray and menu changes: posted to the main thread and waited for (`run_item_main_thread!`). A window's `set_enabled`
+    /// and `set_title` only post, and a file dialog's `set_title` neither: counting them errs on the side of a finding.
+    const TRAY_AND_MENU: [&str; 18] = [
         "set_icon",
         "set_icon_with_as_template",
         "set_icon_as_template",
@@ -46,11 +59,14 @@ mod tests {
         "set_as_window_menu",
         "popup",
         "popup_at",
+        "set_enabled",
+        "set_visible",
+        "set_title",
     ];
 
     /// A window's or a webview's answers, the displays and the cursor: a message to the event loop and a wait for the
-    /// reply (`window_getter!`, `event_loop_window_getter!`), and the native handles.
-    const GETTERS: [&str; 26] = [
+    /// reply (`window_getter!`, `event_loop_window_getter!`), the native handles, and the tray icon's `rect()`.
+    const GETTERS: [&str; 27] = [
         "is_visible",
         "is_focused",
         "is_minimized",
@@ -77,6 +93,7 @@ mod tests {
         "default_vbox",
         "window_handle",
         "is_devtools_open",
+        "rect",
     ];
 
     /// Getters whose names other types share (a monitor's `scale_factor` is a plain number): a window's comes as a
@@ -160,13 +177,35 @@ mod tests {
         }
     }
 
-    /// `#[cfg(test)]`, `#[test]`, `#[tokio::test]` (not `#[cfg(not(test))]`, which is the app's own code).
+    /// Test code only: `#[test]` and `#[tokio::test]` (an attribute whose path is `test` or ends in `::test`), or a `cfg`
+    /// whose condition cannot hold outside tests (`cfg(test)`, `cfg(all(…, test, …))`). Doc lines are attributes too and
+    /// never count, whatever word they end in; `cfg(any(windows, test))` and `cfg(not(test))` are the app's own code.
     fn is_test(attrs: &[Attribute]) -> bool {
         attrs.iter().any(|a| {
-            let text = a.to_token_stream().to_string();
-            let words: Vec<&str> = text.split(|c: char| !c.is_alphanumeric() && c != '_').filter(|w| !w.is_empty()).collect();
-            (words.first() == Some(&"cfg") && words.contains(&"test") && !words.contains(&"not")) || words.last() == Some(&"test")
+            let path = a.path();
+            if path.is_ident("doc") {
+                return false;
+            }
+            if path.segments.last().is_some_and(|s| s.ident == "test") {
+                return true;
+            }
+            path.is_ident("cfg") && a.parse_args::<syn::Meta>().is_ok_and(|condition| requires_test(&condition))
         })
+    }
+
+    /// Whether a `cfg` condition holds only in tests (pure).
+    fn requires_test(condition: &syn::Meta) -> bool {
+        let parts = |list: &syn::MetaList| list.parse_args_with(Punctuated::<syn::Meta, syn::Token![,]>::parse_terminated).map(|p| p.into_iter().collect::<Vec<_>>()).unwrap_or_default();
+        match condition {
+            syn::Meta::Path(p) => p.is_ident("test"),
+            syn::Meta::List(list) if list.path.is_ident("all") => parts(list).iter().any(requires_test),
+            syn::Meta::List(list) if list.path.is_ident("any") => {
+                let alternatives = parts(list);
+                !alternatives.is_empty() && alternatives.iter().all(requires_test)
+            }
+            // `not(…)`, `target_os = "…"`, `windows` and the rest hold outside tests.
+            _ => false,
+        }
     }
 
     fn type_name(ty: &Type) -> Option<String> {
@@ -945,6 +984,8 @@ mod tests {
         findings: Vec<String>,
         /// The functions that may wait for the main thread, by label, with the road to the wait.
         waiting: BTreeMap<String, String>,
+        /// Every function read, by label.
+        functions: BTreeSet<String>,
     }
 
     fn analyse(sources: &[(String, String)]) -> Analysis {
@@ -1052,7 +1093,8 @@ mod tests {
         findings.sort();
         findings.dedup();
         let waiting = index.funs.iter().enumerate().filter(|(i, _)| why[*i].is_some()).map(|(i, f)| (f.label(), chain(i))).collect();
-        Analysis { files: sources.len(), findings, waiting }
+        let functions = index.funs.iter().map(Fun::label).collect();
+        Analysis { files: sources.len(), findings, waiting, functions }
     }
 
     /// Every source file of the crate (test modules in files of their own left out), as `src/...` paths.
@@ -1088,11 +1130,15 @@ mod tests {
         let sources = crate_sources();
         let analysis = analyse(&sources);
         assert!(analysis.files > 100, "{} files", analysis.files);
-        // `MAIN_THREAD_REPORT=1`: every function that may wait for the main thread, and how.
-        if std::env::var_os("MAIN_THREAD_REPORT").is_some() {
-            for (label, how) in &analysis.waiting {
-                eprintln!("{label}: {how}");
-            }
+        // `MAIN_THREAD_REPORT=1`: every function that may wait for the main thread, and how (`=all`: every function read).
+        match std::env::var("MAIN_THREAD_REPORT").as_deref() {
+            Ok("all") => analysis.functions.iter().for_each(|label| eprintln!("{label}")),
+            Ok(_) => analysis.waiting.iter().for_each(|(label, how)| eprintln!("{label}: {how}")),
+            Err(_) => {}
+        }
+        // App code the test-code filter once took for tests: built for a platform and for tests (`cfg(any(…, test))`).
+        for label in ["screens::sampler::Sampler::with_shield", "app_life::terminate_reply", "app_life::takes_focus_at_launch"] {
+            assert!(analysis.functions.contains(label), "{label} is read");
         }
         // A few that wait, each by another road: a reply posted back, the displays, a window built, the tray drawn, a
         // shortcut registered, the displays through the privacy status.
@@ -1169,6 +1215,35 @@ mod tests {
     }
 
     #[test]
+    fn only_test_code_is_left_out() {
+        // App code whose doc line ends in "test", or that is built for Windows as well as for tests, is still read.
+        let source = r#"
+            fn waits(app: &AppHandle) -> usize { app.available_monitors().map(|m| m.len()).unwrap_or(0) }
+            /// Asked before the guided test
+            fn documented(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[cfg(any(windows, test))]
+            fn windows_and_tests(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            /// Runs the smoke test
+            impl Holder { fn held(&self, app: &AppHandle) { let g = self.m.lock().unwrap(); waits(app); } }
+            #[cfg(not(test))]
+            fn not_in_tests(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[cfg(all(test, windows))]
+            fn tests_on_windows(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[cfg(test)]
+            fn test_only(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[test]
+            fn a_test(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[tokio::test]
+            async fn an_async_test(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+            #[cfg(any(test, all(test, windows)))]
+            fn test_either_way(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); waits(app); }
+        "#;
+        let found = where_found(&findings_in(source));
+        let expected: BTreeSet<String> = ["documented", "windows_and_tests", "Holder::held", "not_in_tests"].into_iter().map(String::from).collect();
+        assert_eq!(found, expected, "{:#?}", findings_in(source));
+    }
+
+    #[test]
     fn guards_live_by_rusts_scope_rules() {
         let source = r#"
             fn waits(app: &AppHandle) -> usize { app.available_monitors().map(|m| m.len()).unwrap_or(0) }
@@ -1204,9 +1279,13 @@ mod tests {
             mod deep { pub fn far(app: &AppHandle) -> usize { app.primary_monitor().map(|m| m.is_some() as usize).unwrap_or(0) } }
             use crate::fixture::deep as elsewhere;
             fn via_alias(m: &Mutex<u32>, app: &AppHandle) { let g = m.lock().unwrap(); elsewhere::far(app); }
+            fn tray_visible(m: &Mutex<u32>, tray: &TrayIcon) { let g = m.lock().unwrap(); let _ = tray.set_visible(true); }
+            fn tray_title(m: &Mutex<u32>, tray: &TrayIcon) { let g = m.lock().unwrap(); let _ = tray.set_title(Some("1")); }
+            fn tray_rect(m: &Mutex<u32>, tray: &TrayIcon) { let g = m.lock().unwrap(); let _ = tray.rect(); }
+            fn item_enabled(m: &Mutex<u32>, item: &MenuItem) { let g = m.lock().unwrap(); let _ = item.set_enabled(false); }
         "#;
         let found = where_found(&findings_in(source));
-        let expected: BTreeSet<String> = ["binding", "temporary", "literal", "if_let", "matched", "looped", "through_helper", "closure_under_lock", "asks_under_lock", "window_scale", "shortcut_under_lock", "never", "match_binding", "via_alias"].into_iter().map(String::from).collect();
+        let expected: BTreeSet<String> = ["binding", "temporary", "literal", "if_let", "matched", "looped", "through_helper", "closure_under_lock", "asks_under_lock", "window_scale", "shortcut_under_lock", "never", "match_binding", "via_alias", "tray_visible", "tray_title", "tray_rect", "item_enabled"].into_iter().map(String::from).collect();
         assert_eq!(found, expected, "{:#?}", findings_in(source));
     }
 }
