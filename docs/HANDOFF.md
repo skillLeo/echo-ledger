@@ -50,6 +50,9 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     needed → fixed → approve (7 minor follow in b-phone) · waiting: the S25 retest.
   - 2026-11-16 · v1.8.1 audit, desktop half (S1, S4, S5, U1–U26, R1–R28) · `5d9f9779` · changes needed → fixed →
     approve (2 minor follow in b-desktop-reopen) · CI building Windows + Mac.
+  - 2026-11-16 · web: v1.8.1 audit half + guide names, 0.2 follow-ups, v1.9 L0 brand constant (`config('echoledger.brand.name')`)
+    and L1.5 prompt pack 1.0.1 · merged up to `04c4376f` · reviewed (each re-reviewed) · full pest 5,774 · not deployed
+    yet (next deploy batches 0.2 server + these + two migrations: 2026_12_03 missed_recordings, 2026_12_04 share-check index).
   - 2026-11-16 · the session moved to another account after the first one's weekly limit; the role agent types
     (web-builder, desktop-builder, phone-builder, relay-builder, reviewer) load since then; every interrupted worker was
     resumed where it stopped; the shared cargo target was cleared while nothing was building (13 GB).

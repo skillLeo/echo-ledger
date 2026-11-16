@@ -28,7 +28,7 @@ down here with the reason. IDs: S = security, U/u = UX, R = reliability.
   R28 ShareGuard update() thread safety; screenshots (U8, phone part).
 - [x] **Desktop** (merged 2026-11-16 `5d9f9779`, reviewed twice; cargo 1,362, vitest 2,202; two minor follow-ups — the tray lock and the bar sentence — in b-desktop-reopen): S1 sharing-bar titles in logs, S4 Share Check commands only from the main
   window, S5 no silent re-set, U1–U5, U7 names, U8 screenshots, u9–u21, u24–u26, R1–R5, R9–R25, R27, R28-desktop.
-- [ ] **Web and guides** (web builder, after 0.2): S3 Share Check validation, u22 admin empty state, R24 the bare
+- [x] **Web and guides** (merged 2026-11-16 with L0/L1.5, reviewed twice; full pest 5,774): S3 Share Check validation, u22 admin empty state, R24 the bare
   "presenting" pattern in share-bars.json, R26 an index on the matrix columns and pruning (a new migration), U6 and
   the guide sentences (names, the hidden state, the test-pattern flash, the phone's Private/Show).
 - [x] **Lead:** S6/S7 the words check reads JSX text and one-word labels, with Urdu, Arabic and Roman Urdu forms
