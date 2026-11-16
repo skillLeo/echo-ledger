@@ -352,27 +352,40 @@ fn windows_in_front_of(number: i64) -> Option<Vec<Frame>> {
     None
 }
 
-/// Whether the test window is covered now (none when the system could not say): on a Mac the windows in front of it in
-/// the window list; on Windows the window hit at its four corners and its middle.
-fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<bool> {
+/// What covers the test window now: none when nothing does, and none of either when the system could not say. On a Mac
+/// the windows in front of it in the window list; on Windows the window hit at its four corners and its middle, named by
+/// its class and whose it is (never its title), with the test window's own frame, so a run can tell a window in front
+/// from a test window the system does not show where it says it is.
+fn test_window_covered(window: &tauri::WebviewWindow, frame: Frame) -> Option<Option<String>> {
     #[cfg(target_os = "macos")]
     {
         let pointer = window.ns_window().ok()?;
         // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is; the number is a plain read.
         let number = unsafe { &*(pointer as *const objc2_app_kit::NSWindow) }.windowNumber() as i64;
-        windows_in_front_of(number).map(|front| covered(frame, &front))
+        windows_in_front_of(number).map(|front| covered(frame, &front).then(|| "a window in front of it".to_string()))
     }
     #[cfg(windows)]
     {
         use windows::Win32::Foundation::POINT;
-        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, WindowFromPoint};
+        use windows::Win32::System::Threading::GetCurrentProcessId;
+        use windows::Win32::UI::WindowsAndMessaging::{GA_ROOT, GetAncestor, GetClassNameW, GetWindowThreadProcessId, WindowFromPoint};
         let own = window.hwnd().ok()?.0 as isize;
         let ((x, y), (w, h)) = frame;
         let points = [(x + 8.0, y + 8.0), (x + w - 8.0, y + 8.0), (x + 8.0, y + h - 8.0), (x + w - 8.0, y + h - 8.0), (x + w / 2.0, y + h / 2.0)];
-        Some(points.iter().any(|(px, py)| {
-            // SAFETY: plain queries of the window under a screen point and its top-level window.
-            let hit = unsafe { GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT) };
-            hit.0 as isize != own
+        Some(points.iter().find_map(|(px, py)| {
+            // SAFETY: plain queries of the window under a screen point, its top-level window, its class and its process.
+            unsafe {
+                let hit = GetAncestor(WindowFromPoint(POINT { x: *px as i32, y: *py as i32 }), GA_ROOT);
+                if hit.0 as isize == own {
+                    return None;
+                }
+                let mut class = [0u16; 128];
+                let length = GetClassNameW(hit, &mut class).max(0) as usize;
+                let mut pid = 0u32;
+                GetWindowThreadProcessId(hit, Some(&raw mut pid));
+                let whose = if pid == GetCurrentProcessId() { "EchoLedger's" } else { "another process's" };
+                Some(format!("at {px:.0},{py:.0} the screen has {whose} window of class {:?}; the test window is at {x:.0},{y:.0} {w:.0}x{h:.0}", String::from_utf16_lossy(&class[..length.min(class.len())])))
+            }
         }))
     }
     #[cfg(not(any(windows, target_os = "macos")))]
@@ -439,13 +452,14 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
         // A window that never drew shows no colour at all, and one something covers shows what covers it: measuring
         // either would pass for nothing.
         let drawn = both_drawn();
-        let is_covered = drawn && test_window_covered(&test, test_frame) == Some(true);
+        let covering = if drawn { test_window_covered(&test, test_frame).flatten() } else { None };
+        let is_covered = covering.is_some();
         if !drawn {
             diag::log(&state.data_dir, "Privacy check: the check's windows did not draw.");
             methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("capture_failed".into()), counts: None, detail: Some("the check's windows did not draw".into()), blank: false });
-        } else if is_covered {
+        } else if let Some(what) = covering {
             diag::log(&state.data_dir, "Privacy check: another window covered the test window.");
-            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some("another window covered the test window".into()), blank: false });
+            methods.push(MethodResult { method: "none".into(), result: Outcome::Error, reason: Some("covered".into()), counts: None, detail: Some(format!("another window covered the test window ({what})")), blank: false });
         }
         let shots = if !drawn || is_covered { Vec::new() } else { tokio::task::spawn_blocking(capture::screen_shots).await.map_err(|e| AppError::msg(e.to_string()))? };
         for (method, shot) in shots {
