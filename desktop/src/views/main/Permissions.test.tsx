@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { ALLOWED_BEFORE, PERMISSION_KINDS, REOPEN, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
+import { ALLOWED_BEFORE, PERMISSION_KINDS, REOPEN, SWITCH_OFF_ON, PERMISSION_STEP, PermissionBanner, PermissionGuide, PermissionLossNotice, PermissionStep, accessOf } from "./Permissions";
 import { MAC_STEPS, OnboardingView, STEPS, stepsFor } from "./OnboardingView";
 import { RecordView } from "./RecordView";
 import { MicrophonePage as MicrophoneCard } from "./CaptureSettings";
@@ -225,6 +225,18 @@ describe("Screen Recording switched on while EchoLedger ran (D-120)", () => {
     expect(within(step).getAllByRole("button").map((b) => b.textContent)).toEqual(["Quit & reopen"]);
     fireEvent.click(within(step).getByRole("button", { name: "Quit & reopen" }));
     await waitFor(() => expect(callsOf("quit_and_reopen")).toHaveLength(1));
+  });
+
+  it("after a reopen that did not apply it, says to switch EchoLedger off and on, never Quit & reopen again", () => {
+    render(<PermissionStep kind="screen" permissions={mac({ screen: "reopen", reopenDidNotApply: true })} onChange={vi.fn()} />);
+    const state = screen.getByTestId("permission-state-screen");
+    expect(state).toHaveTextContent(SWITCH_OFF_ON);
+    expect(state).not.toHaveTextContent("Quit and reopen");
+    const step = screen.getByTestId("permission-screen");
+    const buttons = within(step).getAllByRole("button");
+    expect(buttons.map((b) => b.textContent)).toEqual(["Open System Settings"]);
+    expect(buttons[0]).toHaveClass("primary");
+    expect(step).toHaveTextContent("System Settings → Privacy & Security → Screen & System Audio Recording");
   });
 
   it("says why it does not quit in the middle of a recording", async () => {

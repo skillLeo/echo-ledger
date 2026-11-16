@@ -43,6 +43,26 @@ describe("Run Mac check", () => {
     respondAll({ mac_check_last: null, open_privacy_settings: undefined, mac_check_copy: undefined });
   });
 
+  it("gives Screen Recording allowed while EchoLedger ran the same Quit & reopen as the permission sheet", async () => {
+    const reopen: CheckItem = {
+      key: "screen_permission", title: "Screen Recording permission", state: "limited",
+      detail: "Allowed in System Settings. Quit and reopen EchoLedger to finish.", fix: { label: "Quit & reopen", settings: "screen", reopen: true },
+    };
+    respond("mac_check_last", report({ items: [ok, off, reopen] }));
+    fail("quit_and_reopen", "Stop the recording first: EchoLedger quits and reopens to finish.");
+    await renderCard();
+    const row = screen.getByTestId("check-screen_permission");
+    fireEvent.click(within(row).getByRole("button", { name: "Quit & reopen" }));
+    await waitFor(() => expect(callsOf("quit_and_reopen")).toHaveLength(1));
+    expect(callsOf("open_privacy_settings")).toHaveLength(0);
+    // Refused in the middle of a recording: the row says why.
+    expect(await within(row).findByRole("alert")).toHaveTextContent("Stop the recording first");
+    // A fix without `reopen` still opens its pane, and never quits.
+    fireEvent.click(within(screen.getByTestId("check-system_audio_permission")).getByRole("button", { name: "Open System Settings" }));
+    await waitFor(() => expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]));
+    expect(callsOf("quit_and_reopen")).toHaveLength(1);
+  });
+
   it("runs one check at a time with a progress line, then shows a mark, the sentence and the fix per item", async () => {
     let finish: (r: CheckReport) => void = () => undefined;
     respondWith("mac_check_run", () => new Promise((resolve) => { finish = resolve; }));

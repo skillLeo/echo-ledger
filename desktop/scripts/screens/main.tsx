@@ -332,10 +332,11 @@ const commands: Record<string, (args: Args) => unknown> = {
   permissions_status: () => (mac
     ? {
         // "&older=1": the microphone was allowed before on this Mac and reads "not asked" now (D-120); "&reopen=1": Screen
-        // Recording was switched on in System Settings while EchoLedger ran.
+        // Recording was switched on in System Settings while EchoLedger ran; "&reopen=2": and a reopen did not apply it.
         microphone: onboarding || older ? "unknown" : "allowed",
         systemAudio: screen === "record-permission-mac" || onboarding ? "denied" : "allowed",
-        screen: onboarding ? "denied" : params.get("reopen") === "1" ? "reopen" : "allowed",
+        screen: onboarding ? "denied" : params.get("reopen") ? "reopen" : "allowed",
+        reopenDidNotApply: params.get("reopen") === "2",
         browserAutomation: false,
         platform: "macos",
         missing: screen === "record-permission-mac" ? [NO_SYSTEM_AUDIO] : [],
@@ -355,7 +356,10 @@ const commands: Record<string, (args: Args) => unknown> = {
           { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null },
           { key: "microphone_permission", title: "Microphone permission", state: "ok", detail: "Allowed.", fix: null },
           { key: "system_audio_permission", title: "System audio permission", state: "off", detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } },
-          { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
+          // "&reopen=1": Screen Recording allowed while EchoLedger ran, with the step's own Quit & reopen.
+          params.get("reopen") === "1"
+            ? { key: "screen_permission", title: "Screen Recording permission", state: "limited", detail: "Allowed in System Settings. Quit and reopen EchoLedger to finish.", fix: { label: "Quit & reopen", settings: "screen", reopen: true } }
+            : { key: "screen_permission", title: "Screen Recording permission", state: "ok", detail: "Allowed. macOS asks again about once a month: choose Allow to keep screen moments.", fix: null },
           { key: "microphone_test", title: "Microphone test", state: "ok", detail: "Heard your microphone (loudest about -28 dB).", fix: null },
           { key: "system_audio_test", title: "System audio test", state: "off", detail: "Not tested: system audio is off for EchoLedger.", fix: { label: "Open System Settings", settings: "system_audio" } },
           { key: "meeting_apps", title: "Meeting apps", state: "ok", detail: "Installed: Zoom, Chrome, Safari. Not installed: Teams, WhatsApp, Edge, Arc. EchoLedger recognises all of them.", fix: null },

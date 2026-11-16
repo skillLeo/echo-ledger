@@ -209,12 +209,21 @@ const SCREENS = [
   // possibility with System Settings first, and Screen Recording switched on while EchoLedger ran (Quit & reopen).
   ...[["", undefined], ["-narrow", { width: 860, height: 560 }]].flatMap(([size, viewport]) => [
     [`settings-calls-apps${size}`, "settings", async (page) => { await settingsReady(page); await nav(page, "Calls & meetings"); await page.waitForSelector(".app-glyph"); }, viewport],
-    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
+    // "reopen-did-not-apply": EchoLedger was reopened and macOS still has not applied it: switch it off and on instead.
+    ...[["allowed-before", "older=1"], ["reopen", "reopen=1"], ["reopen-did-not-apply", "reopen=2"]].map(([state, param]) => [`permissions-${state}-mac${size}`, `library-lost-mac&${param}`, async (page) => {
       await page.waitForSelector("[data-testid=permission-loss]");
       await page.getByTestId("permission-loss").getByRole("button", { name: "Set up" }).click();
       await page.getByRole("dialog", { name: "Set up permissions" }).waitFor();
-      if (state === "reopen") await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
+      if (state.startsWith("reopen")) await page.getByTestId("permission-screen").scrollIntoViewIfNeeded();
     }, viewport]),
+    // The Mac check's Screen Recording step has the same Quit & reopen.
+    [`settings-mac-check-reopen${size}`, "settings-mac-check&reopen=1", async (page) => {
+      await settingsReady(page);
+      await nav(page, "Help");
+      await page.getByRole("button", { name: /^Mac check/ }).click();
+      await page.waitForSelector("[data-testid=check-screen_permission]");
+      await page.getByTestId("check-screen_permission").scrollIntoViewIfNeeded();
+    }, viewport],
     // The Ready check and the top bar never say "Microphone allowed" or "Calls: Ready" in that state.
     [`record-allowed-before-mac${size}`, "record&older=1", async (page) => page.waitForSelector("[data-testid=ready-card].not-ready .check-row"), viewport],
   ]),

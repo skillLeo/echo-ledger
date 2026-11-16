@@ -157,6 +157,10 @@ pub struct Memory {
     /// "not asked" was allowed before ([`Memory::allowed_before`]).
     #[serde(default)]
     pub ever: Vec<Kind>,
+    /// The run of EchoLedger ([`this_run`]) in which Screen Recording first read [`Access::Reopen`]: a later run that
+    /// still reads it was reopened and macOS did not apply it, so reopening again would not help either.
+    #[serde(default)]
+    pub reopen_since: Option<u64>,
 }
 
 const KINDS: [Kind; 3] = [Kind::Microphone, Kind::SystemAudio, Kind::Screen];
@@ -209,6 +213,19 @@ impl Memory {
         next
     }
 
+    /// Notes the run in which Screen Recording first waited for a reopen (pure); forgotten as soon as it reads anything
+    /// else (applied, turned off, or switched off and on in System Settings).
+    pub fn note_reopen(&self, now: &Permissions, run: u64) -> Memory {
+        let reopen_since = if now.screen == Access::Reopen { self.reopen_since.or(Some(run)) } else { None };
+        Memory { reopen_since, ..self.clone() }
+    }
+
+    /// Whether Screen Recording still waits although EchoLedger was quit and reopened since it was allowed (pure): then
+    /// "Quit and reopen" is not said again, only to switch EchoLedger off and on in System Settings.
+    pub fn reopen_did_not_apply(&self, now: &Permissions, run: u64) -> bool {
+        now.screen == Access::Reopen && self.reopen_since.is_some_and(|since| since != run)
+    }
+
     /// The permissions this computer allowed before that macOS now calls "not asked" (D-120). Another copy of EchoLedger
     /// (an older build) that System Settings still lists can be why, and so can a reset of the privacy settings or a Mac
     /// set up from another one: it is said as a possibility, never as what happened. System audio and Screen Recording
@@ -257,6 +274,15 @@ pub fn can_tell_not_asked() -> bool {
     {
         false
     }
+}
+
+/// This run of EchoLedger: the same number for as long as it runs, another one when it starts again.
+pub fn this_run() -> u64 {
+    static RUN: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *RUN.get_or_init(|| {
+        let started = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos() as u64).unwrap_or_default();
+        started ^ u64::from(std::process::id()).rotate_left(48)
+    })
 }
 
 /// Why EchoLedger does not quit and reopen now (pure): never in the middle of a recording or of dictation.
@@ -440,6 +466,34 @@ mod tests {
     }
 
     #[test]
+    fn a_reopen_that_did_not_apply_screen_recording_is_not_offered_again() {
+        let reopen = Permissions { screen: Access::Reopen, ..ON };
+        // Allowed in System Settings while run 1 ran: quit and reopen is the advice.
+        let first = Memory::default().observe(&reopen, true, true).note_reopen(&reopen, 1);
+        assert_eq!(first.reopen_since, Some(1));
+        assert!(!first.reopen_did_not_apply(&reopen, 1));
+        // The same run reads it again: still the first run.
+        assert_eq!(first.note_reopen(&reopen, 1).reopen_since, Some(1));
+        // Reopened (run 2) and it still waits: reopening did not apply it.
+        let second = first.note_reopen(&reopen, 2);
+        assert_eq!(second.reopen_since, Some(1));
+        assert!(second.reopen_did_not_apply(&reopen, 2));
+        // Applied, turned off, or switched off and on: forgotten, and the next wait starts afresh.
+        for other in [ON, Permissions { screen: Access::Denied, ..ON }, Permissions { screen: Access::Unknown, ..ON }] {
+            let moved = second.note_reopen(&other, 2);
+            assert_eq!(moved.reopen_since, None);
+            assert!(!moved.reopen_did_not_apply(&reopen, 2));
+            assert!(!moved.note_reopen(&reopen, 2).reopen_did_not_apply(&reopen, 2), "a new wait offers Quit and reopen again");
+        }
+        // Only while it reads Reopen.
+        assert!(!second.reopen_did_not_apply(&ON, 2));
+        // Kept on this computer like the rest; a memory from before this field reads none.
+        let old: Memory = serde_json::from_str(r#"{"granted":["screen"],"notice":[]}"#).unwrap();
+        assert_eq!(old.reopen_since, None);
+        assert_eq!(this_run(), this_run(), "one number per run");
+    }
+
+    #[test]
     fn it_quits_and_reopens_only_between_recordings_and_dictation() {
         assert_eq!(reopen_refusal(false, false), None);
         assert!(reopen_refusal(true, false).unwrap().starts_with("Stop the recording first"));
@@ -471,7 +525,7 @@ mod tests {
 
     #[test]
     fn the_sentence_is_one_calm_line() {
-        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone], ever: Vec::new() };
+        let two = Memory { granted: Vec::new(), notice: vec![Kind::SystemAudio, Kind::Microphone], ..Memory::default() };
         let line = two.sentence(true).unwrap();
         assert!(line.contains("the microphone and system audio"), "{line}");
         // One short sentence on the banner (its Set up button opens the steps).
@@ -484,7 +538,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let path = Memory::path(dir.path());
         assert_eq!(Memory::load(&path), Memory::default());
-        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen], ever: Vec::new() };
+        let memory = Memory { granted: vec![Kind::Microphone], notice: vec![Kind::Screen], reopen_since: Some(7), ..Memory::default() };
         memory.save(&path);
         assert_eq!(Memory::load(&path), memory);
         std::fs::write(&path, "not json").unwrap();

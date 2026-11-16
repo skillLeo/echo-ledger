@@ -89,6 +89,13 @@ impl MacProbe for NativeProbe {
         crate::permissions::read()
     }
 
+    fn reopen_did_not_apply(&self) -> bool {
+        let state = self.app.state::<crate::AppState>();
+        // Read through the app's memory, which notes the run in which Screen Recording first waited.
+        let now = state.permissions_now();
+        state.screen_reopen_did_not_apply(&now)
+    }
+
     fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String> {
         listen(Streams { mic: true, system: false }, Channel::Mic, seconds, stop, || {}).map(|samples| peak_level(&samples))
     }

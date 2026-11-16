@@ -2448,6 +2448,9 @@ pub struct PermissionsStatus {
     pub lost: Option<String>,
     /// macOS: what this computer allowed before but macOS now calls "not asked" (D-120): said as a possibility.
     pub allowed_before: Vec<crate::permissions::Kind>,
+    /// macOS: Screen Recording still reads `reopen` although EchoLedger was quit and reopened since it was allowed:
+    /// reopening again would not help, switching EchoLedger off and on in System Settings may.
+    pub reopen_did_not_apply: bool,
 }
 
 fn access_word(access: crate::permissions::Access) -> &'static str {
@@ -2474,6 +2477,7 @@ pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> 
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
         lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(crate::permissions::can_tell_not_asked()),
         allowed_before: state.permissions_allowed_before(&now),
+        reopen_did_not_apply: state.screen_reopen_did_not_apply(&now),
     })
 }
 
