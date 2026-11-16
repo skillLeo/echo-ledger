@@ -320,7 +320,7 @@ pub async fn ci_check(cases: &[Case]) -> Vec<String> {
     problems.extend(harness);
     for score in &scores {
         for (turn, _, results) in &score.turns {
-            for r in results.iter().filter(|r| !r.passed) {
+            for r in results.iter().filter(|r| !r.passed || r.unchecked) {
                 problems.push(format!("{}/{turn}: the reference fails {}: {}", score.id, r.category.label(), r.detail));
             }
         }
@@ -343,14 +343,23 @@ pub async fn ci_check(cases: &[Case]) -> Vec<String> {
         for (score, case) in scores.iter().zip(cases) {
             for (turn_id, _, results) in &score.turns {
                 let failed: BTreeSet<Category> = results.iter().filter(|r| !r.passed).map(|r| r.category).collect();
-                let declared: BTreeSet<Category> = case
-                    .events
-                    .iter()
-                    .find_map(|e| match e {
-                        Event::Turn(t) if &t.id == turn_id => t.bad.get(round).map(|b| b.fails.iter().copied().collect()),
-                        _ => None,
-                    })
-                    .unwrap_or_default();
+                let bad = case.events.iter().find_map(|e| match e {
+                    Event::Turn(t) if &t.id == turn_id => t.bad.get(round),
+                    _ => None,
+                });
+                if bad.is_some_and(|b| b.judge_only) {
+                    // The rules can't fail it; they must say so rather than pass it silently.
+                    let reported = results.iter().any(|r| r.category == Category::NothingInvented && r.unchecked);
+                    if !failed.is_empty() || !reported {
+                        problems.push(format!(
+                            "{}/{turn_id}: judge-only bad answer {}: rules failed {failed:?}, reported as not checkable: {reported}",
+                            score.id,
+                            round + 1
+                        ));
+                    }
+                    continue;
+                }
+                let declared: BTreeSet<Category> = bad.map(|b| b.fails.iter().copied().collect()).unwrap_or_default();
                 if failed != declared {
                     problems.push(format!("{}/{turn_id}: bad answer {} fails {failed:?}, declared {declared:?}", score.id, round + 1));
                 }

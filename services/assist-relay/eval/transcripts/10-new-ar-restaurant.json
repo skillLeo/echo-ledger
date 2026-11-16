@@ -50,8 +50,9 @@
      "bad": {"answer": "It will be 80,000 with the design.\nArabic: تسأل عن السعر.", "fails": ["consistency", "nothing_invented"]}},
     {"id": "m-7", "channel": "me", "at": "12:30", "text": "Yes, 64,000."},
     {"id": "o-9", "channel": "other", "at": "13:10", "text": "Very good. You have questions for me?",
-     "check": {"no_ask": ["branches", "how many branches"]},
+     "check": {"no_ask": ["branches", "how many branches", "الفروع"]},
      "reference": "Yes, one.\n- **Demo**: can we show you a demo next week?\nArabic: تسأل إذا كان عندك أسئلة.",
-     "bad": {"answer": "How many branches do you have?\nArabic: تسأل إذا كان عندك أسئلة.", "fails": ["anti_repeat"]}}
+     "bad": [{"answer": "How many branches do you have?\nArabic: تسأل إذا كان عندك أسئلة.", "fails": ["anti_repeat"]},
+             {"answer": "Yes, one question.\nArabic: أخبرني كم عدد الفروع عندكم", "fails": ["anti_repeat"]}]}
   ]
 }

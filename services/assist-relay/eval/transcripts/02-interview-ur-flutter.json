@@ -57,6 +57,7 @@
     {"id": "o-10", "channel": "other", "at": "14:20", "text": "Koi sawal hai aap ka hum se?",
      "check": {"no_ask": ["office", "hybrid", "kitne din"]},
      "reference": "Ji, ek sawal.\n- **Team**: Flutter team mein kitne log hain?\nSay next: Mera pehla project kya hoga?\nRoman Urdu: Woh pooch rahe hain ke aap ka koi sawal hai.",
-     "bad": {"answer": "Office kitne din aana hoga?", "fails": ["anti_repeat"]}}
+     "bad": [{"answer": "Office kitne din aana hoga?", "fails": ["anti_repeat"]},
+             {"answer": "Office mein kitna aana hoga, yeh bataiye.", "fails": ["anti_repeat"]}]}
   ]
 }

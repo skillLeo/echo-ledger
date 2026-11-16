@@ -140,6 +140,10 @@ pub struct Check {
 pub struct Bad {
     pub answer: String,
     pub fails: Vec<Category>,
+    /// Only the model judge can catch it (an invented fact with no number and no listed phrase): CI checks that the
+    /// rules report it as not checkable instead of passing it.
+    #[serde(default)]
+    pub judge_only: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -282,6 +286,9 @@ fn validate_case(case: &Case) -> Vec<String> {
         }
         if turn.bad.iter().any(|bad| bad.fails.is_empty()) {
             problems.push(format!("{}: a bad answer must name what it fails", turn.id));
+        }
+        if turn.bad.iter().any(|bad| bad.judge_only && bad.fails != [Category::NothingInvented]) {
+            problems.push(format!("{}: a judge-only bad answer fails \"nothing invented\" only", turn.id));
         }
     }
     for trap in [Trap::BudgetAgain, Trap::RepeatedQuestion, Trap::SkipStatement] {
