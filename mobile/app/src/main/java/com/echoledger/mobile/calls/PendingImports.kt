@@ -45,6 +45,18 @@ object PendingImports {
         prefs(context).edit().putString(KEY, format(kept)).apply()
     }
 
+    /** The import settled the calls overlapping [startMs]..[endMs]: brought in, kept EchoLedger's own, or not wanted. */
+    @Synchronized
+    fun doneOverlapping(context: Context, startMs: Long, endMs: Long) {
+        val all = parse(prefs(context).getString(KEY, null))
+        val kept = all.filter { it.endMs < startMs || it.startMs > endMs }
+        if (kept.size != all.size) prefs(context).edit().putString(KEY, format(kept)).apply()
+    }
+
+    /** The looks after the calls are over: nothing waits any more. */
+    @Synchronized
+    fun clear(context: Context) = prefs(context).edit().remove(KEY).apply()
+
     /** The calls whose import is still going on. */
     @Synchronized
     fun waiting(context: Context, nowMs: Long = System.currentTimeMillis()): List<LongRange> =

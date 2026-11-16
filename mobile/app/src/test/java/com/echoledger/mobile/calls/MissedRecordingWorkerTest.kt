@@ -171,7 +171,7 @@ class MissedRecordingWorkerTest : AppTest() {
 
     @Test
     fun `scheduling the Phone app's import makes the call wait, and a wait ends by itself`() {
-        SamsungCallImport.schedule(app, t, t + 60_000)
+        PhoneAppRecordings.schedule(app, t, t + 60_000)
         assertEquals(listOf(t..t + 60_000), PendingImports.waiting(app, t + 70_000))
         assertTrue(
             "never longer than its limit",

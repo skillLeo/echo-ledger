@@ -104,6 +104,9 @@ object PhoneCallLog {
         }.orEmpty()
     }.getOrDefault(emptyList())
 
+    /** The contact's name for [number] (READ_CONTACTS), or null: an unsaved number, or no permission. */
+    fun contactNameOf(context: Context, number: String): String? = contactName(context, number)
+
     private fun contactName(context: Context, number: String): String? {
         if (!granted(context, Manifest.permission.READ_CONTACTS)) return null
         return runCatching {
@@ -124,6 +127,6 @@ object PhoneCallLog {
     fun permissionsToAsk(): Array<String> = listOfNotNull(
         Manifest.permission.READ_CALL_LOG.takeIf { available },
         Manifest.permission.READ_CONTACTS.takeIf { BuildConfig.CAPTURE_HELPER },
-        SamsungCallImport.permission().takeIf { BuildConfig.CAPTURE_HELPER }
+        PhoneAppRecordings.permission().takeIf { BuildConfig.CAPTURE_HELPER }
     ).toTypedArray()
 }

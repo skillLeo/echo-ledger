@@ -7,8 +7,11 @@ import android.os.Bundle
 import android.os.SystemClock
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -316,6 +319,10 @@ class MainActivity : FragmentActivity() {
             if (machine.state == LockState.Locked && !unlockInFlight) requestUnlock()
         }
 
+        // Since v1.8 (0.3): the Phone app's copies of imported calls, only with "Delete the Phone app's copy after import"
+        // on; Android itself asks the person before anything is deleted.
+        val deleteCopies = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { }
+
         // ---- on open: sync and restart waiting uploads once the settings are known, and on every later resume ----
         var resumed by remember { mutableStateOf(false) }
         LifecycleEventEffect(Lifecycle.Event.ON_RESUME) {
@@ -331,6 +338,14 @@ class MainActivity : FragmentActivity() {
                 }
                 // Since v1.8: calls that were not recorded show in Activity as soon as the app opens.
                 vm.detectMissed()
+                if (android.os.Build.VERSION.SDK_INT >= 30 && lockState != LockState.Locked) {
+                    val copies = com.echoledger.mobile.calls.PhoneAppRecordings.takeDeletes(context, currentSettings)
+                    if (copies.isNotEmpty()) {
+                        runCatching { android.provider.MediaStore.createDeleteRequest(contentResolver, copies).intentSender }
+                            .getOrNull()
+                            ?.let { deleteCopies.launch(IntentSenderRequest.Builder(it).build()) }
+                    }
+                }
             }
         }
 
@@ -357,6 +372,13 @@ class MainActivity : FragmentActivity() {
                 showItem(null)
                 showSetup = false
                 tab = TAB_ACTIVITY
+            }
+            // Since v1.8 (0.3): a settings page (the Phone app's recordings waiting for the person).
+            open?.takeIf { it.startsWith(OPEN_SETTINGS_PREFIX) }?.let {
+                showItem(null)
+                showSetup = false
+                settingsPage = it.removePrefix(OPEN_SETTINGS_PREFIX)
+                tab = TAB_YOU
             }
             if (open == OPEN_READY) {
                 showReady = true
@@ -747,6 +769,9 @@ class MainActivity : FragmentActivity() {
 
         /** The Activity tab (since v1.8): from the missed-recording notice. */
         const val OPEN_ACTIVITY = "activity"
+
+        /** Since v1.8 (0.3): "settings:<page>" opens that Settings page. */
+        const val OPEN_SETTINGS_PREFIX = "settings:"
 
         /** The package of the app a voice note was shared from (since v1.5): "Back to WhatsApp" on its page. */
         const val EXTRA_SOURCE_APP = "source_app"

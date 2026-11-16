@@ -1,10 +1,13 @@
 package com.echoledger.mobile.ui
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
@@ -24,6 +27,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.dp
 import com.echoledger.mobile.data.ActivityItemDto
 import com.echoledger.mobile.data.ActivityResponse
+import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
@@ -538,6 +542,44 @@ class ScreenshotsTest : ScreenTest() {
         } finally {
             RecordingService.live.value = LiveRecording()
         }
+    }
+
+    /** Calls & meetings → Auto-record apps → Phone calls: the Phone app's own recordings on a Galaxy (v1.8 0.3). */
+    @Test
+    fun phoneAppRecordings() {
+        org.robolectric.Shadows.shadowOf(app).grantPermissions(
+            android.Manifest.permission.READ_CALL_LOG,
+            android.Manifest.permission.READ_MEDIA_AUDIO
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "0"
+        )
+        org.robolectric.Shadows.shadowOf(app.packageManager).addResolveInfoForIntent(
+            android.content.Intent(android.telecom.TelecomManager.ACTION_SHOW_CALL_SETTINGS),
+            android.content.pm.ResolveInfo().apply {
+                activityInfo = android.content.pm.ActivityInfo().apply {
+                    packageName = "com.samsung.android.dialer"
+                    name = "CallSettings"
+                }
+            }
+        )
+        val tenFortyTwo = java.time.LocalDate.now().atTime(10, 42).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+        app.getSharedPreferences("phone_app_recordings", android.content.Context.MODE_PRIVATE).edit()
+            .putString("note", "Imported the Phone app's recording (125 s).")
+            .putLong("note_at", tenFortyTwo)
+            .putString("ask", "41:${tenFortyTwo - 3_600_000}")
+            .commit()
+        shoot {
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                PhoneAppRecordingsBlock(AppSettings(phoneCalls = "always"), onChange = {}, manufacturer = "samsung")
+            }
+        }
+        pumpUntil("the guide") { runCatching { compose.onNodeWithText("Import this recording").assertExists() }.isSuccess }
+        compose.onNodeWithText("Phone app → ⋮ → Settings → Record calls → Auto record calls → All calls.").assertExists()
+        compose.onNodeWithText("Open the Phone app's settings").assertExists()
+        capture("settings-phone-app")
     }
 
     @Test

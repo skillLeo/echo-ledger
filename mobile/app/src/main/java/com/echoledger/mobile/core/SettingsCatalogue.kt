@@ -63,7 +63,12 @@ object SettingsCatalogue {
             "Dictation",
             "voice keyboard push to talk hold clean up sounds replacements snippets history"
         ),
-        SettingsEntry("auto-apps", SettingsGroup.Calls, "Auto-record apps", "whatsapp zoom teams meet calls apps"),
+        SettingsEntry(
+            "auto-apps",
+            SettingsGroup.Calls,
+            "Auto-record apps",
+            "whatsapp zoom teams meet calls apps phone sim record samsung recordings"
+        ),
         SettingsEntry(
             "after-call",
             SettingsGroup.Calls,
@@ -135,6 +140,8 @@ object SettingsReset {
             "mic" -> s.copy(
                 recordingKbps = d.recordingKbps,
                 phoneCalls = d.phoneCalls,
+                phoneAppImport = d.phoneAppImport,
+                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning
@@ -185,6 +192,8 @@ object SettingsReset {
                 pillDot = d.pillDot,
                 recordingKbps = d.recordingKbps,
                 phoneCalls = d.phoneCalls,
+                phoneAppImport = d.phoneAppImport,
+                deletePhoneAppCopy = d.deletePhoneAppCopy,
                 micSource = d.micSource,
                 inputDevice = d.inputDevice,
                 farSideWarning = d.farSideWarning

@@ -428,6 +428,40 @@ object Notifications {
     }
 
     private const val NO_AUDIO_ID = 7_431
+
+    /**
+     * The Phone app recorded a call, but the phone does not say which app made the file (since v1.8, 0.3): it waits for
+     * the person in Settings, where they import it or not. Quiet; a tap opens that page.
+     */
+    fun phoneAppRecordingToCheck(context: Context, callAtMs: Long) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val time = java.time.format.DateTimeFormatter.ofPattern("HH:mm").withZone(java.time.ZoneId.systemDefault())
+            .format(java.time.Instant.ofEpochMilli(callAtMs))
+        val text = "Your call at $time: the phone doesn't say which app made its recording file. " +
+            "Open Settings to import it if it is that call's."
+        val open = PendingIntent.getActivity(
+            context,
+            TO_CHECK_ID,
+            Intent(context, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                .putExtra(MainActivity.EXTRA_OPEN, MainActivity.OPEN_SETTINGS_PREFIX + "calls"),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val builder = NotificationCompat.Builder(context, CHANNEL_READINESS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Import the Phone app's recording?")
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setAutoCancel(true)
+            .setContentIntent(open)
+        runCatching { NotificationManagerCompat.from(context).notify(TO_CHECK_ID, builder.build()) }
+    }
+
+    private const val TO_CHECK_ID = 7_437
     private const val ASK_PHONE_CALL_ID = 7_433
 
     /** "Record phone calls: Ask each time" (since v1.2): a phone call started; offer to record it. Gone when the call ends. */

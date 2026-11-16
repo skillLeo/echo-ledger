@@ -64,6 +64,9 @@ object SettingsTransfer {
      */
     val NOT_PORTABLE: Set<String> = setOf(
         "phoneCalls",
+        // The Phone app's own recordings belong to this phone (since v1.8).
+        "phoneAppImport",
+        "deletePhoneAppCopy",
         // Where the control pill sits belongs to this phone's screen.
         "pillEdge",
         "pillY",

@@ -29,7 +29,6 @@ import com.echoledger.mobile.calls.CallStateMachine
 import com.echoledger.mobile.calls.MissedReason
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.calls.PostCallPrompt
-import com.echoledger.mobile.calls.SamsungCallImport
 import com.echoledger.mobile.calls.SkippedCalls
 import com.echoledger.mobile.capture.ICallListener
 import com.echoledger.mobile.core.CallNotices
@@ -102,6 +101,9 @@ class RecordingService : LifecycleService() {
         const val EXTRA_TAG = "tag"
         const val EXTRA_LANGUAGE = "language"
         private const val TAG = "EchoLedgerRec"
+
+        /** The logcat tag of the one line per SIM call (v1.8 0.3). */
+        const val SIM_TAG = "EchoLedgerSim"
         private const val TICK_MS = 1_000L
 
         /** An "incoming call" notice this recent means the call that just started is that call, answered. */
@@ -567,7 +569,12 @@ class RecordingService : LifecycleService() {
 
             "self_unmuted" -> refresh(session)
 
-            else -> if (state.startsWith("stats ")) CaptureLog.add(this, "helper", state)
+            // The phone line's sources the helper tried and which opened (since v1.8, 0.3): for the SIM call's summary.
+            else -> if (state.startsWith("line ")) {
+                session.line = state.removePrefix("line ")
+            } else if (state.startsWith("stats ")) {
+                CaptureLog.add(this, "helper", state)
+            }
         }
     }
 
@@ -615,6 +622,11 @@ class RecordingService : LifecycleService() {
         }
         if (event is CallEvent.CallEnded) {
             journalCallId?.let { CallJournal.ended(this, it) }
+            // A SIM call EchoLedger recorded or tried to: the Phone app's own recording of it is looked for once it has
+            // been saved (since v1.8, 0.3), and kept only when EchoLedger heard nothing itself. The detector waits for it.
+            (callState as? CallState.InCall)?.takeIf { it.app == SourceApp.PHONE_CALL }?.let {
+                com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, it.startedAtMs, System.currentTimeMillis())
+            }
             // The missed-recording detector looks at this call once its recording is saved.
             com.echoledger.mobile.calls.MissedRecordingWorker.soon(this)
         }
@@ -763,6 +775,7 @@ class RecordingService : LifecycleService() {
                 whenProblemSince(askedAt) { problem ->
                     val (reason, detail) = MissedReason.ofProblem(problem)
                     journalFailed(id, reason, detail)
+                    if (phone) simCallSummary("nothing opened: ${problem ?: "no reason given"}")
                     Notifications.noAudio(applicationContext, problem, callNotRecorded = true)
                 }
                 settle()
@@ -951,6 +964,19 @@ class RecordingService : LifecycleService() {
         Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
         settle()
     }
+
+    /**
+     * One line per SIM call (since v1.8, 0.3) in the capture log and in logcat (`adb logcat -s EchoLedgerSim`): the
+     * phone-line sources the helper tried and which opened, and whether each side had sound. No names or numbers.
+     */
+    private fun simCallSummary(text: String) {
+        CaptureLog.add(this, "sim call", text)
+        Log.i(SIM_TAG, "sim call: $text")
+    }
+
+    /** "heard (peak -12.0 dBFS)", or "silent" below the silence floor. */
+    private fun heard(peakDb: Double): String =
+        if (peakDb > com.echoledger.mobile.core.AfterCallCheck.SILENT_PEAK_DB) "heard (peak ${"%.1f".format(peakDb)} dBFS)" else "silent"
 
     /**
      * What the helper said about the capture asked for at [askedAt], to [then]: at once when its words are here, else a
@@ -1342,6 +1368,16 @@ class RecordingService : LifecycleService() {
             if (isCall && stored != null && skip == null && !silent) {
                 if (oneSided != null) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
             }
+            if (session.sourceApp == SourceApp.PHONE_CALL.wire) {
+                val sides = if (session.channels == 2) {
+                    "me ${heard(session.levels.peakDb(0))}, other ${heard(session.levels.peakDb(1))}"
+                } else {
+                    "both voices on one track ${heard(session.levels.peakDb(0))}"
+                }
+                simCallSummary(
+                    "${session.line ?: "source not reported"}; $sides; ${if (stored == null) "saving failed" else "${stored.durationMs / 1000} s"}"
+                )
+            }
             CaptureLog.add(
                 this,
                 "recording saved",
@@ -1388,16 +1424,9 @@ class RecordingService : LifecycleService() {
             val themeMode = settings.themeMode
             main.post {
                 if (silent && session.sourceApp == SourceApp.PHONE_CALL.wire) {
-                    // The phone line gave nothing: the Phone app's own recording of this call is imported instead.
-                    SamsungCallImport.schedule(this, session.startedAt.toEpochMilli(), endedMs)
-                    Notifications.noAudio(
-                        this,
-                        if (SamsungCallImport.phoneAppRecords(this)) {
-                            "The phone line gave no sound. EchoLedger will import the Phone app's own recording of this call in a moment."
-                        } else {
-                            "The phone line gave no sound. Turn on Phone, Settings, Record calls, Auto record calls: EchoLedger then imports those recordings."
-                        }
-                    )
+                    // The phone line gave nothing: the Phone app's own recording of this call is brought in instead.
+                    com.echoledger.mobile.calls.PhoneAppRecordings.schedule(this, session.startedAt.toEpochMilli(), endedMs)
+                    Notifications.noAudio(this, com.echoledger.mobile.calls.PhoneAppRecordings.silentLineNotice(this, settings))
                 } else if (silent) {
                     Notifications.noAudio(this, CaptureProblems.recent(this))
                 } else if (stored != null && skip == null) {
@@ -1491,6 +1520,9 @@ class RecordingService : LifecycleService() {
 
         /** The call app's package (null for a SIM call or a recording by hand), to match its call notifications. */
         var callPackage: String? = null
+
+        /** A SIM call: the phone-line sources the helper tried and which opened ("VOICE_CALL uplink+downlink 48000 Hz: opened"). */
+        @Volatile var line: String? = null
 
         /** The notification's detail line once the call is answered (it says "Waiting for an answer" until then). */
         var detailAfterAnswer: String? = null

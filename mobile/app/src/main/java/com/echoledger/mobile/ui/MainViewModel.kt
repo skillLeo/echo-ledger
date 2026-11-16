@@ -998,6 +998,8 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         val store = com.echoledger.mobile.calls.MissedRecordingStore
         store.all(app)
         runCatching { com.echoledger.mobile.calls.MissedRecordingWorker.onOpen(app) }
+        // Since v1.8 (0.3): the Phone app's own recordings are watched for while their import is wanted and allowed.
+        com.echoledger.mobile.calls.PhoneAppRecordings.sync(app, graph.settings.current())
         if (store.forAccount(store.all(app), graph.settings.current().account).any { it.waiting }) {
             com.echoledger.mobile.calls.MissedUploadWorker.enqueue(app)
         }
