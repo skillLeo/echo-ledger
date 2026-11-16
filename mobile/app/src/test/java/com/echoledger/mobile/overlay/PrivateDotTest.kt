@@ -1,6 +1,8 @@
 package com.echoledger.mobile.overlay
 
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.pointerInput
@@ -78,6 +80,43 @@ class PrivateDotTest : ScreenTest() {
         assertTrue("the drag reached the recording controls", dragged < 0f)
         dot.performClick()
         assertEquals(1, shown)
+    }
+
+    /** The minimised recording dot (v1.8 0.2 brief, like u23): 48 dp, a button TalkBack can press, a drag moves it. */
+    @Test
+    fun `the minimised dot is a 48 dp button that opens the recording controls`() {
+        var opened = 0
+        var dragged = 0f
+        var state by androidx.compose.runtime.mutableStateOf(PillState(mode = PillState.Mode.DOT))
+        show {
+            PillDot(
+                state,
+                modifier = Modifier.pointerInput(Unit) {
+                    detectDragGestures { change, amount ->
+                        change.consume()
+                        dragged += amount.x
+                    }
+                },
+                onOpen = { opened++ }
+            )
+        }
+        val dot = compose.onNodeWithContentDescription("Recording")
+        dot.assertWidthIsEqualTo(48.dp).assertHeightIsEqualTo(48.dp)
+        dot.assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button))
+        dot.assert(
+            SemanticsMatcher("double-tap says Open the recording controls") {
+                it.config.getOrElseNullable(SemanticsActions.OnClick) { null }?.label == "Open the recording controls"
+            }
+        )
+        dot.performSemanticsAction(SemanticsActions.OnClick)
+        dot.performTouchInput { click(Offset(center.x + 18.dp.toPx(), center.y)) } // outside the 20 dp dot, inside 48 dp
+        assertEquals(2, opened)
+        dot.performTouchInput { swipeLeft() }
+        assertEquals("a drag moves it and does not open it", 2, opened)
+        assertTrue(dragged < 0f)
+
+        state = state.copy(paused = true)
+        compose.onNodeWithContentDescription("Recording paused").assertExists()
     }
 
     @Test
