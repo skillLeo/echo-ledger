@@ -87,6 +87,9 @@ fn admit(state: &AppState, token: &str) -> Result<Claims, AuthError> {
     if state.registry.owner(&claims.sid).is_some_and(|owner| owner != claims.sub) {
         return Err(AuthError::WrongSession);
     }
+    if !state.registry.accepts(&claims.sid, claims.iat) {
+        return Err(AuthError::Superseded);
+    }
     Ok(claims)
 }
 

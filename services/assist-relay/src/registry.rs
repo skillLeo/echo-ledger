@@ -4,7 +4,7 @@
 //! and a reconnect within the grace period resumes the session. The ledger (spend, connected time, and both when the
 //! current token arrived) outlives the session for a day, so reconnecting with the same token never resets the count.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
@@ -20,14 +20,49 @@ struct Entry {
     generation: u64,
 }
 
-/// A session's spend and connected time, and both at the moment its current token arrived.
+/// A token as the ledger tells them apart: its issue time and `jti`.
+pub type TokenKey = (i64, Option<String>);
+
+/// Tokens remembered per session; a refresh every 13 minutes makes about 5 an hour.
+const KEPT_TOKENS: usize = 64;
+
+/// A session's spend and connected time, and both at the moment each of its tokens first arrived.
+///
+/// A token's `cents_left` and `seconds_left` count down from its first arrival, so a token seen before continues where
+/// it was: going back and forth between two tokens never restores budget. A token issued before the newest one the
+/// session has used is refused.
 #[derive(Debug, Clone, Default)]
 pub struct Ledger {
     pub spent: u64,
     pub connected: Duration,
-    pub token_key: (i64, Option<String>),
+    pub token_key: TokenKey,
     pub spend_base: u64,
     pub time_base: Duration,
+    /// The newest `iat` this session has accepted.
+    pub newest_iat: i64,
+    /// Spend and connected time when each token first arrived.
+    pub bases: BTreeMap<TokenKey, (u64, Duration)>,
+}
+
+impl Ledger {
+    /// Whether a token with this `iat` may still be used: not older than the newest one accepted.
+    pub fn accepts(&self, iat: i64) -> bool {
+        iat >= self.newest_iat
+    }
+
+    /// Makes `key` the current token, counting from its first arrival (now, at `spent` and `connected`, if new).
+    pub fn switch_to(&mut self, key: TokenKey, spent: u64, connected: Duration) {
+        self.newest_iat = self.newest_iat.max(key.0);
+        let (spend_base, time_base) = *self.bases.entry(key.clone()).or_insert((spent, connected));
+        self.token_key = key;
+        self.spend_base = spend_base;
+        self.time_base = time_base;
+        // Forget the oldest tokens: they can no longer be used (older than the newest).
+        while self.bases.len() > KEPT_TOKENS {
+            let Some(oldest) = self.bases.keys().next().cloned() else { break };
+            self.bases.remove(&oldest);
+        }
+    }
 }
 
 struct Kept {
@@ -153,6 +188,11 @@ impl Registry {
         if sessions.get(session_id).is_some_and(|entry| entry.generation == generation) {
             sessions.remove(session_id);
         }
+    }
+
+    /// Whether a session would take a token issued at `iat` (an older one than it uses is refused).
+    pub fn accepts(&self, session_id: &str, iat: i64) -> bool {
+        lock(&self.ledgers).get(session_id).is_none_or(|kept| kept.ledger.accepts(iat))
     }
 
     /// What a session has spent so far, in micro-dollars.

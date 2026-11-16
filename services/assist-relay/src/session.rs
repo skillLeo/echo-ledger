@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::auth::{Claims, TokenVerifier};
+use crate::auth::{AuthError, Claims, TokenVerifier};
 use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_micros, micros_to_usd};
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
@@ -445,6 +445,15 @@ impl Engine {
     }
 
     fn attach(&mut self, connection: Connection) {
+        if !self.ledger.accepts(connection.claims.iat) {
+            // Checked before the upgrade too; this covers a token that raced a refresh. The current connection stays.
+            let error = AuthError::Superseded;
+            let refused = ServerMessage::Error(ErrorMessage::new(error.code(), error.to_string()).fatal());
+            let _ = connection.out.try_send(Outbound::Message(refused));
+            let _ = connection.out.try_send(Outbound::Close { code: close::TOKEN_EXPIRED, reason: "an older token" });
+            self.deps.telemetry.event(&SessionEvent::AuthRejected { reason: error.reason() });
+            return;
+        }
         let resumed = self.ever_attached;
         if let Some(old) = self.conn.take() {
             let _ = old.out.try_send(Outbound::Close { code: close::REPLACED, reason: "replaced by a newer connection" });
@@ -477,12 +486,12 @@ impl Engine {
         self.deps.telemetry.event(&SessionEvent::Attached { session: self.session_id.clone(), resumed });
     }
 
-    /// Starts counting from a token the session had not seen; the same token again (a reconnect) keeps counting.
+    /// Counts from a token's first arrival: a new token from now, a token seen before (a reconnect, or one used
+    /// earlier) from where it first arrived. The caller has checked that it is not older than the newest one.
     fn take_token(&mut self, claims: Claims) {
         if claims.token_key() != self.ledger.token_key {
-            self.ledger.token_key = claims.token_key();
-            self.ledger.spend_base = self.spent;
-            self.ledger.time_base = self.connected_time();
+            let (spent, connected) = (self.spent, self.connected_time());
+            self.ledger.switch_to(claims.token_key(), spent, connected);
         }
         self.claims = claims;
         self.token_deadline = Some(deadline_for(self.claims.exp));
@@ -569,6 +578,10 @@ impl Engine {
 
     fn on_token_refresh(&mut self, token: &str) {
         match self.deps.verifier.verify_for_session(token, &self.session_id, unix_now()) {
+            Ok(claims) if claims.sub == self.user && !self.ledger.accepts(claims.iat) => {
+                self.deps.telemetry.event(&SessionEvent::AuthRejected { reason: AuthError::Superseded.reason() });
+                self.error(ErrorMessage::new("token_refresh_rejected", AuthError::Superseded.to_string()));
+            }
             Ok(claims) if claims.sub == self.user => {
                 self.take_token(claims);
                 self.emit(ServerMessage::TokenRefreshed(TokenRefreshed { expires_at: iso8601(self.claims.exp) }));

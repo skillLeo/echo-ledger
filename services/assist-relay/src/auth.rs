@@ -97,6 +97,8 @@ pub enum AuthError {
     Claims,
     #[error("the assist token is for another session")]
     WrongSession,
+    #[error("the assist token is older than the one this session already uses")]
+    Superseded,
 }
 
 impl AuthError {
@@ -123,6 +125,7 @@ impl AuthError {
             AuthError::Audience => "audience",
             AuthError::Claims => "claims",
             AuthError::WrongSession => "wrong_session",
+            AuthError::Superseded => "superseded",
         }
     }
 }

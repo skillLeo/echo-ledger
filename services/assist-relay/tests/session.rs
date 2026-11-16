@@ -300,6 +300,77 @@ async fn the_budget_steps_down_one_mode_at_a_time_and_captions_never_stop() {
     assert_eq!((start["type"].as_str(), start["mode"].as_str()), (Some("suggestion_start"), Some("max")));
 }
 
+/// Fast only, with Haiku's output priced so that a few suggestions use up two cents.
+fn pricey_fast(session: &str) -> (RelayConfig, assist_relay::auth::Claims) {
+    let mut config = ladder_config();
+    config.models.get_mut("claude-haiku-5-5").unwrap().price.output = 100.0;
+    let mut token = claims(session);
+    token.modes = vec![Mode::Fast];
+    token.budget = BudgetClaim { seconds_left: 36_000, cents_left: 2 };
+    (config, token)
+}
+
+/// Asks questions until the budget leaves captions only; the number of suggestions it took.
+async fn use_up(s: &mut Driver, tag: &str) -> usize {
+    for turn in 0..60 {
+        s.send(final_turn(&format!("{tag}-{turn}"), "other", QUESTION)).await;
+        let seen = s.drain(Duration::from_secs(3)).await;
+        if seen.iter().any(|m| m["type"] == "mode_changed" && m["to"] == "captions_only") {
+            return turn + 1;
+        }
+    }
+    panic!("the budget never ran out");
+}
+
+#[tokio::test(start_paused = true)]
+async fn going_back_to_an_earlier_token_never_restores_budget() {
+    let (config, x) = pricey_fast("s-alt");
+    let h = harness(config);
+    let mut y = x.clone();
+    y.jti = Some("jti-y".into());
+    let mut s = h.connect(x.clone());
+    ready(&mut s).await;
+    assert!(use_up(&mut s, "x").await >= 2);
+
+    // A new token from the server (the same second, another jti) brings budget, and is used up too.
+    s.send(json!({"type": "token_refresh", "token": sign(&y)})).await;
+    let answers = s.drain(Duration::from_millis(500)).await;
+    assert_eq!(answers[0]["type"], "token_refreshed");
+    assert!(answers.iter().any(|m| m["type"] == "mode_changed" && m["to"] == "fast"), "{answers:?}");
+    use_up(&mut s, "y").await;
+
+    // Back to the first token: it continues where it was, so nothing comes back.
+    s.send(json!({"type": "token_refresh", "token": sign(&x)})).await;
+    let answers = s.drain(Duration::from_millis(500)).await;
+    assert_eq!(answers.len(), 1, "{answers:?}");
+    assert_eq!(answers[0]["type"], "token_refreshed");
+    s.send(json!({"type": "help_now"})).await;
+    assert_eq!(s.next().await["code"], "budget_exhausted");
+
+    // And y again: also where it was.
+    s.send(json!({"type": "token_refresh", "token": sign(&y)})).await;
+    assert_eq!(s.drain(Duration::from_millis(500)).await.len(), 1);
+    s.send(json!({"type": "help_now"})).await;
+    assert_eq!(s.next().await["code"], "budget_exhausted");
+
+    // A token issued before the newest one is refused, by refresh and by reconnect alike.
+    let mut older = x.clone();
+    older.iat -= 60;
+    older.jti = Some("jti-older".into());
+    s.send(json!({"type": "token_refresh", "token": sign(&older)})).await;
+    let refused = s.next().await;
+    assert_eq!(refused["code"], "token_refresh_rejected");
+    assert!(refused["message"].as_str().unwrap().contains("older"), "{refused}");
+    assert!(!h.state.registry.accepts("s-alt", older.iat), "refused before the upgrade too");
+    let mut late = h.connect(older);
+    let error = late.next().await;
+    assert_eq!((error["code"].as_str(), error["fatal"].as_bool()), (Some("token_invalid"), Some(true)));
+    assert_eq!(late.next().await["code"], 4401);
+    // The connection in use was not replaced.
+    s.send(json!({"type": "help_now"})).await;
+    assert_eq!(s.next().await["code"], "budget_exhausted");
+}
+
 #[tokio::test(start_paused = true)]
 async fn assist_time_running_out_leaves_captions_only() {
     let h = harness(RelayConfig::built_in());
