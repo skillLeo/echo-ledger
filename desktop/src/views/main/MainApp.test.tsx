@@ -753,16 +753,34 @@ describe("MainApp action runner", () => {
     await waitFor(() => expect(screen.getByRole("switch", { name: "Toggle live captions" })).toHaveClass("on"));
   });
 
-  it("opens a sidebar group from its whole row, its name included, and the arrow still folds it (D-121)", async () => {
+  it("opens a sidebar group from its whole row for now, and only its arrow is remembered (D-121)", async () => {
     window.localStorage.setItem("echoledger-sidebar-open", JSON.stringify([]));
-    await renderPaired();
-    expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
-    fireEvent.click(nav("Shared"));
-    expect(within(sidebar()).getByRole("list", { name: "Shared" })).toBeInTheDocument();
-    fireEvent.click(within(sidebar()).getByRole("button", { name: "Hide what is shared" }));
-    expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
-    fireEvent.click(nav("Library"));
-    expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
+    const width = window.innerWidth;
+    try {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1000 });
+      const first = await renderPaired();
+      expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+      fireEvent.click(nav("Shared"));
+      expect(within(sidebar()).getByRole("list", { name: "Shared" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      fireEvent.click(within(sidebar()).getByRole("button", { name: "Hide what is shared" }));
+      expect(within(sidebar()).queryByRole("list", { name: "Shared" })).not.toBeInTheDocument();
+      // A window too narrow for the Library's own folder column: its row shows them in the sidebar, for now.
+      fireEvent.click(nav("Library"));
+      expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual([]);
+      first.unmount();
+      // Wide enough for the column: the Library's row leaves the sidebar's copy closed; the arrow opens and keeps it.
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 1440 });
+      await renderPaired();
+      fireEvent.click(nav("Library"));
+      expect(within(sidebar()).queryByRole("list", { name: "Smart folders in the sidebar" })).not.toBeInTheDocument();
+      fireEvent.click(within(sidebar()).getByRole("button", { name: "Show Library's smart folders" }));
+      expect(within(sidebar()).getByRole("list", { name: "Smart folders in the sidebar" })).toBeInTheDocument();
+      expect(JSON.parse(window.localStorage.getItem("echoledger-sidebar-open")!)).toEqual(["library"]);
+    } finally {
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: width });
+    }
   });
 
   it("leaves Ctrl/Cmd+K alone while a question is on screen: it is answered first", async () => {

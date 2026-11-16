@@ -691,7 +691,8 @@ export default function MainApp() {
       <Sidebar tab={tab} collapsed={collapsed} onCollapse={toggleSidebar} width={sidebarWidth} onWidth={resizeSidebar} needsYou={needsYou}
         recording={!!status.recording} places={places} folder={libraryFolder} view={libraryView} onPlace={openPlace}
         projects={projects} projectId={projectId} onProject={openProject} sharedTab={tab === "shared" ? sharedTab : null} onShared={openShared}
-        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord} />
+        onGo={goTo} onUpload={() => void pickImport()} onHelp={() => setHelp(true)} onSearch={() => setPalette(true)} searchKeys={paletteKeys(status.platform)} uploading={uploading} uploadsWait={!!waitingFor} canUpload={canRecord}
+        libraryColumn={pageWidth >= COLUMN_CONTENT} />
       <div className="main-col">
         <TopBar status={status} account={account} needsYou={needsYou} theme={theme} onTheme={chooseTheme} onPalette={() => setPalette(true)}
           onActivity={() => goTo("activity")} onAccount={() => openAccount("overview")} onPlan={() => openAccount("plan")}
