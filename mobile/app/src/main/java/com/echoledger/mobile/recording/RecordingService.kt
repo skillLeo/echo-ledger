@@ -1375,8 +1375,12 @@ class RecordingService : LifecycleService() {
             } else {
                 null
             }
+            // A SIM call whose Phone app recording is on its way (both sides, imported next) is no capture problem to fix:
+            // no "Only your voice" and no helper advice for a line the phone keeps for its own Phone app (since v1.8 0.3).
+            val phoneAppCovers = session.sourceApp == SourceApp.PHONE_CALL.wire &&
+                com.echoledger.mobile.calls.PhoneAppRecordings.lineNotice(this, settings) == null
             if (isCall && stored != null && skip == null && !silent) {
-                if (oneSided != null) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
+                if (oneSided != null && !phoneAppCovers) OneSidedCalls.record(this, oneSided) else OneSidedCalls.clear(this)
             }
             if (session.sourceApp == SourceApp.PHONE_CALL.wire) {
                 val sides = if (session.channels == 2) {
@@ -1448,7 +1452,7 @@ class RecordingService : LifecycleService() {
                 } else if (stored != null && skip == null) {
                     if (isCall) {
                         PostCallPrompt.show(this, stored, afterCall, themeMode)
-                        oneSided?.let { Notifications.onlyYourVoice(this, it) }
+                        oneSided?.takeUnless { phoneAppCovers }?.let { Notifications.onlyYourVoice(this, it) }
                     } else {
                         UploadWorker.enqueue(this, stored.id)
                     }

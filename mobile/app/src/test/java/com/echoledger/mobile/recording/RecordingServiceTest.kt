@@ -30,16 +30,16 @@ class RecordingServiceTest : AppTest() {
             // A real helper gets its own copy of the pipe through Binder; the service closes its end at once.
             val mine = sink!!.dup()
             this.sink = mine
-            Thread {
-                val out = java.io.FileOutputStream(mine.fileDescriptor)
-                val second = ByteArray(Pcm.CAPTURE_RATE * 4)
-                for (i in second.indices step 4) {
-                    val v = ((i / 4) % 200 - 100) * 100 // a sawtooth on the left, silence on the right
-                    second[i] = (v and 0xff).toByte()
-                    second[i + 1] = (v shr 8 and 0xff).toByte()
-                }
-                runCatching { repeat(seconds) { out.write(second) } }
-            }.start()
+            // Robolectric's pipe is a file: written before the capture's reader starts, else a reader that comes first
+            // finds it empty and stops, as at the end of a real pipe (a busy machine lost that race).
+            val out = java.io.FileOutputStream(mine.fileDescriptor)
+            val second = ByteArray(Pcm.CAPTURE_RATE * 4)
+            for (i in second.indices step 4) {
+                val v = ((i / 4) % 200 - 100) * 100 // a sawtooth on the left, silence on the right
+                second[i] = (v and 0xff).toByte()
+                second[i + 1] = (v shr 8 and 0xff).toByte()
+            }
+            runCatching { repeat(seconds) { out.write(second) } }
             return true
         }
         override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
@@ -226,14 +226,15 @@ class RecordingServiceTest : AppTest() {
         assertTrue(call.endedAtMs != null)
     }
 
-    /** A helper that plays [pcm] (48 kHz stereo, left = this side, right = the other side) into the call's pipe at once. */
+    /**
+     * A helper that plays [pcm] (48 kHz stereo, left = this side, right = the other side) into the call's pipe. Robolectric's
+     * pipe is a file, so it is all written before the capture's reader starts (a reader that came first would find the
+     * file empty and stop, as at the end of a real pipe).
+     */
     private class ScriptedHelper(private val pcm: ShortArray) : ICaptureHelper.Stub() {
         var listener: ICallListener? = null
 
         @Volatile private var sink: android.os.ParcelFileDescriptor? = null
-
-        /** Every byte went into the pipe (all but its last 64 KB, about a third of a second, has been read). */
-        @Volatile var written = false
 
         override fun version() = 1
         override fun uid() = 2000
@@ -241,10 +242,7 @@ class RecordingServiceTest : AppTest() {
         override fun startCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int): Boolean {
             val mine = sink!!.dup()
             this.sink = mine
-            Thread {
-                runCatching { java.io.FileOutputStream(mine.fileDescriptor).write(Pcm.toLittleEndianBytes(pcm)) }
-                written = true
-            }.start()
+            java.io.FileOutputStream(mine.fileDescriptor).write(Pcm.toLittleEndianBytes(pcm))
             return true
         }
         override fun startPhoneCapture(sink: android.os.ParcelFileDescriptor?, sampleRate: Int, micSource: Int) =
@@ -301,9 +299,6 @@ class RecordingServiceTest : AppTest() {
         helper.listener!!.onCallStarted(pkg)
         pumpUntil("the call to start recording") { CallJournal.book(app).calls.any { it.reached(CallJournal.Stage.STARTED) } }
         Thread.sleep(3_200) // a call shorter than 3 s is a missed or rejected one
-        // A busy machine reads the pipe slowly: the call ends once its sound has been taken in.
-        pumpUntil("the call's sound to be read") { helper.written }
-        Thread.sleep(300)
         helper.listener!!.onCallEnded()
         pumpUntil("the call to be finished") { CallJournal.book(app).calls.singleOrNull()?.finished == true }
         return CallJournal.book(app).calls.single()
@@ -466,6 +461,34 @@ class RecordingServiceTest : AppTest() {
         assertTrue(text, text.contains(com.echoledger.mobile.calls.PhoneAppRecordings.guide("samsung")))
         assertFalse(text, text.contains("helper"))
         assertTrue("never the high-priority helper alert", titles().none { it == "Call not recorded" || it == "No audio was captured" })
+    }
+
+    /**
+     * v1.8 0.3 review: a SIM call that kept your voice only, on a phone whose Phone app records every call: its two-sided
+     * copy is looked for and brought in, so nothing tells the person to restart the helper.
+     */
+    @Test
+    fun `a one-sided phone call whose Phone app recording is coming says nothing, and its copy is looked for`() {
+        org.robolectric.shadows.ShadowBuild.setManufacturer("samsung")
+        shadowOf(app).grantPermissions(
+            android.Manifest.permission.POST_NOTIFICATIONS,
+            android.Manifest.permission.READ_CALL_LOG,
+            com.echoledger.mobile.calls.PhoneAppRecordings.permission()
+        )
+        android.provider.Settings.System.putString(
+            app.contentResolver,
+            com.echoledger.mobile.calls.PhoneAppRecordings.SAMSUNG_AUTO_RECORD,
+            "1"
+        )
+        runBlocking { app.graph.settings.update { it.copy(phoneCalls = "always") } }
+        // Your voice the whole call; the other side's channel digital silence (the line gave only your side).
+        val call = callThrough(ScriptedHelper(stereo(speech(18_000), quiet(18_000))), com.echoledger.mobile.core.CallTargets.TELEPHONY)
+        assertEquals(call.toString(), "kept", call.result)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1, java.util.concurrent.TimeUnit.SECONDS)
+        val titles = shadowOf(app.getSystemService(android.app.NotificationManager::class.java)).allNotifications
+            .map { it.extras.getString(android.app.Notification.EXTRA_TITLE) }
+        assertTrue(titles.toString(), titles.none { it == "Only your voice was recorded" })
+        assertEquals("the Phone app's two-sided copy is looked for", 1, com.echoledger.mobile.calls.PendingImports.waiting(app).size)
     }
 
     /** v1.8 0.3 review: a SIM call EchoLedger recorded itself is not left waiting for the Phone app's copy. */
