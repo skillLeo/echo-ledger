@@ -12,6 +12,7 @@
 //! the window as it is). tao's window delegate, the capture flag (`sharingType`) and every other window state stay.
 
 use std::sync::OnceLock;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::Duration;
 
@@ -99,9 +100,33 @@ fn panel_class() -> Option<&'static AnyClass> {
     })
 }
 
+/// The methods `TaoWindow` (tao 0.37) has of its own, and the panel class answers alike.
+pub const TAO_WINDOW_METHODS: [&str; 3] = ["canBecomeKeyWindow", "canBecomeMainWindow", "sendEvent:"];
+
+/// Whether a window of `class` may become a panel (pure over the runtime): its own methods are exactly
+/// [`TAO_WINDOW_METHODS`] (so no `dealloc` and nothing else the panel class would skip), and its own state needs no
+/// cleaning up. objc2 keeps such a class's Rust state in one instance variable, `ivars` (tao's: whether the window may
+/// take the keyboard), and adds a `drop_flag` and a `dealloc` only for state that needs dropping. A tao update that
+/// changes any of this leaves the window as it is, and the Mac check says so.
+pub fn tao_window_shape(class: &AnyClass) -> Result<(), String> {
+    let mut methods: Vec<String> = class.instance_methods().iter().map(|m| m.name().name().to_string_lossy().into_owned()).collect();
+    methods.sort();
+    if methods != TAO_WINDOW_METHODS {
+        return Err(format!("its class has the methods {}", methods.join(", ")));
+    }
+    let state: Vec<String> = class.instance_variables().iter().map(|v| v.name().to_string_lossy().into_owned()).collect();
+    if state.iter().any(|name| name != "ivars") {
+        return Err(format!("its class keeps state that needs cleaning up ({})", state.join(", ")));
+    }
+    Ok(())
+}
+
+/// The window server is told a click on a panel must not activate EchoLedger through this setter (`make_panel`).
+const PREVENTS_ACTIVATION: &str = "_setPreventsActivation:";
+
 /// Makes an overlay a non-activating panel (main thread): its class becomes [`PANEL_CLASS`], its style gets
 /// `NonactivatingPanel`, and it stays on screen when EchoLedger is not the active app. A window of any other class than
-/// tao's (or one that already is a panel) is left as it is and the reason returned.
+/// tao's, or of a tao class shaped otherwise than [`tao_window_shape`] expects, is left as it is and the reason returned.
 pub fn make_panel(window: &NSWindow) -> Result<(), String> {
     let class = panel_class().ok_or("NSPanel is laid out unlike NSWindow on this macOS")?;
     let object: &AnyObject = window.as_ref();
@@ -111,8 +136,10 @@ pub fn make_panel(window: &NSWindow) -> Result<(), String> {
         if name != TAO_WINDOW_CLASS || current.instance_size() < class.instance_size() {
             return Err(format!("left as {name}"));
         }
-        // SAFETY: on the main thread, a TaoWindow (an NSWindow whose own state comes after NSWindow's) becomes a panel
-        // class whose objects are exactly NSWindow's layout (`panel_layout_matches`), so every byte it reads is there.
+        tao_window_shape(current).map_err(|why| format!("left as {name}: {why}"))?;
+        // SAFETY: on the main thread, a TaoWindow (an NSWindow whose own state comes after NSWindow's and needs no
+        // cleaning up) becomes a panel class whose objects are exactly NSWindow's layout (`panel_layout_matches`), so
+        // every byte it reads is there.
         unsafe { objc2::ffi::object_setClass((object as *const AnyObject).cast_mut(), class) };
     }
     window.setStyleMask(NSWindowStyleMask(mac_overlay_style(window.styleMask().0)));
@@ -123,9 +150,21 @@ pub fn make_panel(window: &NSWindow) -> Result<(), String> {
         unsafe {
             let _: () = msg_send![window, _setPreventsActivation: Bool::YES];
         }
+    } else {
+        static SAID: AtomicBool = AtomicBool::new(false);
+        if !SAID.swap(true, Ordering::SeqCst) {
+            eprintln!("[echoledger] this macOS has no {PREVENTS_ACTIVATION}: a click on the recording controls or the captions may bring EchoLedger to the front");
+        }
     }
     window.setHidesOnDeactivate(false);
     Ok(())
+}
+
+/// Whether `make_panel` told the window server about this window (pure over the runtime): it is a panel of
+/// [`PANEL_CLASS`] and the setter is there (`make_panel` always sends it then).
+fn activation_setter_applied(window: &NSWindow) -> bool {
+    let object: &AnyObject = window.as_ref();
+    panel_class().is_some_and(|class| std::ptr::eq(object.class(), class)) && window.respondsToSelector(sel!(_setPreventsActivation:))
 }
 
 /// Above full-screen windows and in every Space. `always_on_top` and `visible_on_all_workspaces` alone give the floating
@@ -175,6 +214,8 @@ pub fn window_facts<R: Runtime>(window: &WebviewWindow<R>, label: &'static str) 
             class: object.class().name().to_string_lossy().into_owned(),
             style,
             panel: is_panel && style & MAC_NONACTIVATING as u64 != 0 && !ns_window.canBecomeKeyWindow(),
+            activation_setter: activation_setter_applied(ns_window),
+            sharing: ns_window.sharingType().0 as u64,
         });
     });
     rx.recv_timeout(Duration::from_secs(2)).ok()
@@ -199,6 +240,45 @@ pub fn order<R: Runtime>(window: &WebviewWindow<R>, front: bool) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    extern "C-unwind" fn answer_no(_: *mut AnyObject, _: Sel) -> Bool {
+        Bool::NO
+    }
+
+    extern "C-unwind" fn take_event(_: *mut AnyObject, _: Sel, _: *mut AnyObject) {}
+
+    extern "C-unwind" fn release(_: *mut AnyObject, _: Sel) {}
+
+    /// A window class shaped like tao's, with `extra` methods (by selector) and instance variables.
+    fn shaped(name: &std::ffi::CStr, extra_methods: &[&str], ivars: &[&std::ffi::CStr]) -> &'static AnyClass {
+        let mut builder = ClassBuilder::new(name, AnyClass::get(c"NSWindow").unwrap()).expect("a fresh class");
+        // SAFETY: each function has the signature its selector expects.
+        unsafe {
+            builder.add_method(sel!(canBecomeKeyWindow), answer_no as extern "C-unwind" fn(*mut AnyObject, Sel) -> Bool);
+            builder.add_method(sel!(canBecomeMainWindow), answer_no as extern "C-unwind" fn(*mut AnyObject, Sel) -> Bool);
+            builder.add_method(sel!(sendEvent:), take_event as extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject));
+            for method in extra_methods {
+                match *method {
+                    "dealloc" => builder.add_method(sel!(dealloc), release as extern "C-unwind" fn(*mut AnyObject, Sel)),
+                    _ => builder.add_method(sel!(windowDidMove:), take_event as extern "C-unwind" fn(*mut AnyObject, Sel, *mut AnyObject)),
+                }
+            }
+        }
+        for ivar in ivars {
+            builder.add_ivar::<u8>(ivar);
+        }
+        builder.register()
+    }
+
+    #[test]
+    fn only_a_window_class_shaped_like_tao_s_becomes_a_panel() {
+        assert_eq!(tao_window_shape(shaped(c"ShapedLikeTao", &[], &[c"ivars"])), Ok(()), "tao's own: three methods, its flag in `ivars`");
+        assert_eq!(tao_window_shape(shaped(c"ShapedNoState", &[], &[])), Ok(()));
+        assert_eq!(tao_window_shape(shaped(c"ShapedExtraMethod", &["windowDidMove:"], &[c"ivars"])).unwrap_err(), "its class has the methods canBecomeKeyWindow, canBecomeMainWindow, sendEvent:, windowDidMove:");
+        assert!(tao_window_shape(shaped(c"ShapedDealloc", &["dealloc"], &[c"ivars"])).unwrap_err().contains("dealloc"), "a dealloc the panel would skip");
+        assert_eq!(tao_window_shape(shaped(c"ShapedDropFlag", &[], &[c"ivars", c"drop_flag"])).unwrap_err(), "its class keeps state that needs cleaning up (ivars, drop_flag)");
+        assert_eq!(TAO_WINDOW_METHODS, ["canBecomeKeyWindow", "canBecomeMainWindow", "sendEvent:"], "sorted, as compared");
+    }
 
     #[test]
     fn nspanel_is_laid_out_as_nswindow_on_this_mac() {

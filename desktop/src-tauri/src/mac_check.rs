@@ -109,25 +109,38 @@ pub struct WindowFacts {
     /// A non-activating panel that never takes the keyboard: it floats over a full-screen meeting, and a click on it
     /// leaves the meeting in front.
     pub panel: bool,
+    /// The window server was told a click on it must not activate EchoLedger (`overlay::macos::make_panel`).
+    pub activation_setter: bool,
+    /// Its `NSWindowSharingType`: 0 none (hidden from screen capture), 1 read-only, 2 read-write.
+    pub sharing: u64,
 }
 
 impl WindowFacts {
     /// A window that could not be read.
     pub fn missing(label: &'static str) -> Self {
-        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false }
+        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false, activation_setter: false, sharing: 0 }
     }
 
-    /// One line for a report (pure): its class and style, and what that means.
+    /// Left out of screen capture (`NSWindowSharingNone`): the privacy service's flag, kept through the class change.
+    pub fn hidden_from_capture(&self) -> bool {
+        self.exists && self.sharing == 0
+    }
+
+    /// One line for a report (pure): its class, style and sharing type, and what they mean (Copy diagnostics, the smoke
+    /// test).
     pub fn line(&self) -> String {
         if !self.exists {
             return "not open".into();
         }
         let yes = |ok: bool, said: &'static str| if ok { said.to_string() } else { format!("not {said}") };
         format!(
-            "{}, style 0x{:x}: {}, {}, {}, {}",
+            "{}, style 0x{:x}, sharing {}: {}, {}, {}, {}, {}, {}",
             self.class,
             self.style,
+            self.sharing,
             yes(self.panel, "a non-activating panel"),
+            yes(self.activation_setter, "kept from activating EchoLedger"),
+            yes(self.hidden_from_capture(), "hidden from screen capture"),
             yes(self.level_ok, "above other windows"),
             yes(self.spaces_ok, "in every Space and over full screen"),
             yes(self.visible && self.on_screen, "on screen"),
@@ -324,7 +337,7 @@ pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
         } else if !window.spaces_ok {
             Some(format!("{who} do not follow you across Spaces and over full-screen windows."))
         } else if !window.panel {
-            Some(format!("{who} could take a full-screen meeting's place when clicked ({}, style 0x{:x}).", window.class, window.style))
+            Some(format!("{who} may not stay over a full-screen meeting, and clicking them can bring EchoLedger to the front."))
         } else {
             None
         };
@@ -501,7 +514,7 @@ mod tests {
     }
 
     fn good_windows() -> Vec<WindowFacts> {
-        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true }).to_vec()
+        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true, activation_setter: true, sharing: 0 }).to_vec()
     }
 
     /// A Mac on which everything works; each test changes what it is about. It records which tests really ran.
@@ -822,7 +835,7 @@ mod tests {
             (|w| w.on_screen = false, "off screen"),
             (|w| w.level_ok = false, "above other windows"),
             (|w| w.spaces_ok = false, "across Spaces"),
-            (|w| (w.panel, w.class, w.style) = (false, "TaoWindow".into(), 0), "full-screen meeting's place when clicked (TaoWindow, style 0x0)"),
+            (|w| (w.panel, w.class, w.style) = (false, "TaoWindow".into(), 0), "may not stay over a full-screen meeting, and clicking them can bring EchoLedger to the front."),
         ];
         for (change, says) in cases {
             let mut windows = good_windows();
@@ -837,10 +850,24 @@ mod tests {
     #[test]
     fn a_window_s_report_line_names_its_class_and_style() {
         let panel = good_windows().remove(1);
-        assert_eq!(panel.line(), "EchoLedgerFloatingPanel, style 0x80: a non-activating panel, above other windows, in every Space and over full screen, on screen");
-        let plain = WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, spaces_ok: false, ..panel };
-        assert_eq!(plain.line(), "TaoWindow, style 0x0: not a non-activating panel, above other windows, not in every Space and over full screen, on screen");
+        assert_eq!(panel.line(), "EchoLedgerFloatingPanel, style 0x80, sharing 0: a non-activating panel, kept from activating EchoLedger, hidden from screen capture, above other windows, in every Space and over full screen, on screen");
+        assert!(panel.hidden_from_capture());
+        let plain = WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, spaces_ok: false, activation_setter: false, sharing: 1, ..panel };
+        assert_eq!(plain.line(), "TaoWindow, style 0x0, sharing 1: not a non-activating panel, not kept from activating EchoLedger, not hidden from screen capture, above other windows, not in every Space and over full screen, on screen");
         assert_eq!(WindowFacts::missing("pill").line(), "not open");
+        assert!(!WindowFacts::missing("pill").hidden_from_capture());
+    }
+
+    #[test]
+    fn the_mac_check_says_it_in_plain_words() {
+        // People read the detail in the Mac check: no class name or style mask there (Copy diagnostics has them).
+        let mut windows = good_windows();
+        (windows[1].panel, windows[1].class, windows[1].style) = (false, "TaoWindow".into(), 0);
+        let detail = check_overlay_windows(&windows).detail;
+        assert_eq!(detail, "The recording controls may not stay over a full-screen meeting, and clicking them can bring EchoLedger to the front.");
+        for technical in ["TaoWindow", "style", "0x", "panel", "class"] {
+            assert!(!detail.contains(technical), "{technical}");
+        }
     }
 
     #[test]
