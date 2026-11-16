@@ -225,8 +225,11 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const groups: [string, PaletteCommand[]][] = shownGroups.map(([name, list]) => [name, list]);
   const options: PaletteCommand[] = groups.flatMap(([, list]) => list);
   const scores: number[] = shownGroups.flatMap(([, , s]) => s);
-  // Enter runs the best match (the first of the best, in the order shown) until the arrows move.
-  const best = scores.reduce((at, s, i) => (s > scores[at] ? i : at), 0);
+  // Enter runs the best match (the first of the best, in the order shown) until the arrows move. Recordings come in later
+  // (from 250 ms, the last group): they never take the highlight from a row already shown for what was typed, so Enter
+  // runs what was on screen; they are the best match only when nothing else is listed.
+  const early = scores.length - recordings.length;
+  const best = scores.slice(0, early > 0 ? early : scores.length).reduce((at, s, i) => (s > scores[at] ? i : at), 0);
   const selected = Math.min(index ?? best, Math.max(0, options.length - 1));
 
   const choose = (option: PaletteCommand | undefined) => {

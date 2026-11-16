@@ -305,7 +305,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   recovered_sessions: () => (screen === "library-recovered" ? [ITEMS[0].id] : []),
   upload_list: () => [],
   activity_list: () => ({ data: ACTIVITY, unread_count: ACTIVITY.filter((a) => !a.read).length }),
-  search_library: () => ({ data: [], next_page: null }),
+  // `&found=1`: recordings whose title holds what was typed come back, as from the server (D-087: they arrive later).
+  search_library: ({ query }) => {
+    const q = String((query as { q?: string } | undefined)?.q ?? "").toLowerCase();
+    const data = params.get("found") === "1" && q ? ITEMS.filter((i) => i.title?.toLowerCase().includes(q)).map((session) => ({ session, hit_count: 1, hits: [] })) : [];
+    return { data, next_page: null };
+  },
   session_notes: ({ id }) => (id === "r5" ? { data: NOTES_R5 } : null),
   client_workspace: ({ id }) => ({ data: id === "c-acme" ? WORKSPACE : { ...WORKSPACE, client: { ...WORKSPACE.client, id, name: CLIENTS.find((c) => c.id === id)?.name ?? "" }, brief: null, memory: [], notes: [], files: [] } }),
   client_ask: () => ({ data: ANSWER }),

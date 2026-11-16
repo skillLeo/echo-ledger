@@ -244,6 +244,37 @@ describe("command palette (B9)", () => {
     expect(props.onOpenRecording).toHaveBeenCalledWith("s1", 65_000);
   });
 
+  it("keeps the highlight on a row already shown when recordings come in later, so Enter runs it (D-087)", async () => {
+    respond("search_library", { data: [{ session: makeItem("s1", { title: "Budget review" }), hit_count: 1, hits: [] }], next_page: null });
+    const open = vi.fn();
+    const onOpenRecording = vi.fn();
+    const settings = () => [{ id: "limit", title: "Monthly limit", breadcrumb: "Account › Plan & usage", open }];
+    render(<CommandPalette status={makeStatus()} onClose={vi.fn()} onGo={vi.fn()} run={vi.fn()} onOpenRecording={onOpenRecording} settings={settings} />);
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "budget" } });
+    // Found by what it is about, not its name: still the one row on screen, highlighted at once.
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Monthly limit");
+    // "Budget review" (its name starts with what was typed) arrives after 250 ms: the highlight stays.
+    await screen.findByRole("option", { name: /Budget review/ });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Monthly limit");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(open).toHaveBeenCalled();
+    expect(onOpenRecording).not.toHaveBeenCalled();
+  });
+
+  it("highlights the best recording when only recordings match", async () => {
+    respond("search_library", { data: [
+      { session: makeItem("s1", { title: "Weekly sync" }), hit_count: 1, hits: [] },
+      { session: makeItem("s2", { title: "Budget review" }), hit_count: 1, hits: [] },
+    ], next_page: null });
+    const props = renderPalette();
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "budget" } });
+    await screen.findByRole("option", { name: /Budget review/ });
+    expect(screen.getByRole("option", { selected: true })).toHaveTextContent("Budget review");
+    fireEvent.keyDown(screen.getByRole("combobox"), { key: "Enter" });
+    expect(props.onOpenRecording).toHaveBeenCalledWith("s2", 0);
+  });
+
   it("asks for one more letter rather than saying nothing matches a single letter", () => {
     expect(emptyLine("q", false)).toBe("Type one more letter to search recordings.");
     expect(emptyLine(" q ", true)).toBe("Type one more letter to search recordings.");
