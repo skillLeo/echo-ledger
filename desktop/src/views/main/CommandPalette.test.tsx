@@ -275,6 +275,25 @@ describe("command palette (B9)", () => {
     expect(props.onOpenRecording).toHaveBeenCalledWith("s2", 0);
   });
 
+  it("chooses a row only when the pointer moves, never when rows slide under a still pointer (D-087)", () => {
+    const props = renderPalette();
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "go to" } });
+    const rows = screen.getAllByRole("option");
+    expect(rows[2]).toHaveTextContent("Go to Home");
+    // A row arriving under the pointer: the mouse entering it, or a move event where the pointer has not moved.
+    fireEvent.mouseEnter(rows[2]);
+    fireEvent.mouseMove(rows[2], { clientX: 40, clientY: 90 });
+    fireEvent.mouseMove(rows[2], { clientX: 40, clientY: 90 });
+    expect(rows[0]).toHaveAttribute("aria-selected", "true");
+    expect(rows[2]).toHaveAttribute("aria-selected", "false");
+    // The pointer moves over it: chosen, and Enter runs it.
+    fireEvent.mouseMove(rows[2], { clientX: 42, clientY: 91 });
+    expect(rows[2]).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onGo).toHaveBeenCalledWith("record");
+  });
+
   it("asks for one more letter rather than saying nothing matches a single letter", () => {
     expect(emptyLine("q", false)).toBe("Type one more letter to search recordings.");
     expect(emptyLine(" q ", true)).toBe("Type one more letter to search recordings.");

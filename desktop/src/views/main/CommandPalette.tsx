@@ -176,6 +176,8 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const [lookingUp, setLookingUp] = useState(false);
   const listId = useId();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // Where the pointer last was over the list: only its own movement chooses a row (see `pointed`).
+  const pointer = useRef<{ x: number; y: number } | null>(null);
   const commands = useMemo(() => paletteCommands(status, { go: onGo, run, folders, openFolder: onFolder, extra }), [status, onGo, run, folders, onFolder, extra]);
 
   useEffect(() => {
@@ -232,6 +234,14 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
   const best = scores.slice(0, early > 0 ? early : scores.length).reduce((at, s, i) => (s > scores[at] ? i : at), 0);
   const selected = Math.min(index ?? best, Math.max(0, options.length - 1));
 
+  // The pointer chooses a row only by moving: rows re-ranked or arriving under a still pointer (recordings coming in, a
+  // group appearing) leave what Enter runs alone, so a mouse entering a row or a move event in place chooses nothing.
+  const pointed = (e: React.MouseEvent, i: number) => {
+    const last = pointer.current;
+    pointer.current = { x: e.clientX, y: e.clientY };
+    if (last && (last.x !== e.clientX || last.y !== e.clientY) && i !== selected) setIndex(i);
+  };
+
   const choose = (option: PaletteCommand | undefined) => {
     if (!option) return;
     onClose();
@@ -278,7 +288,7 @@ export function CommandPalette({ status, onClose, onGo, run, onOpenRecording, fo
                 const crumb = (o as { crumb?: string }).crumb;
                 return (
                   <div key={o.id} id={`${listId}-${o.id}`} role="option" aria-selected={i === selected} className={`palette-item ${i === selected ? "active" : ""}`}
-                    onMouseEnter={() => setIndex(i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
+                    onMouseMove={(e) => pointed(e, i)} onMouseDown={(e) => { e.preventDefault(); choose(o); }}>
                     <span className="palette-label">{o.label}{o.feature && <BadgeMark feature={o.feature} />}</span>
                     {o.feature && isLocked(entitlements, o.feature) && <span className="sr-only">, {featureWords(entitlements, o.feature).name} is in {lowestPlan(entitlements, o.feature)?.name ?? "a paid plan"}</span>}
                     {crumb && <span className="palette-detail small muted">{crumb}</span>}
