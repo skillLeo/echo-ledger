@@ -921,6 +921,13 @@ pub fn diagnostics_text(app: &AppHandle) -> String {
     for line in &s.lines {
         header.push(line.text.clone());
     }
+    // A Mac: each open floating window's class and style (a non-activating panel floats over a full-screen meeting).
+    #[cfg(target_os = "macos")]
+    for label in crate::overlay::WINDOWS.into_iter().chain([crate::translate::WINDOW]) {
+        if let Some(facts) = app.get_webview_window(label).and_then(|window| crate::overlay::macos::window_facts(&window, label)) {
+            header.push(format!("The {}: {}", super::window_name(label), facts.line()));
+        }
+    }
     diag::text(&header, &diag::read(&state.data_dir))
 }
 

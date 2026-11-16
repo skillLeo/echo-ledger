@@ -183,9 +183,17 @@ fn overlays_never_activate_echoledger_and_stay_out_of_its_window_lists() {
     let mac = include_str!("../src/overlay/macos.rs");
     let keep = &mac[mac.find("pub fn keep_above_everything").unwrap()..];
     let keep = &keep[..keep.find("\n}\n").unwrap()];
-    for applied in ["setStyleMask(NSWindowStyleMask(mac_overlay_style(ns_window.styleMask().0)))", "setExcludedFromWindowsMenu(true)", "setCollectionBehavior(NSWindowCollectionBehavior(MAC_OVERLAY_BEHAVIOUR))", "setLevel(MAC_OVERLAY_LEVEL)", "setCanHide(false)"] {
+    for applied in ["make_panel(ns_window)", "setExcludedFromWindowsMenu(true)", "setCollectionBehavior(NSWindowCollectionBehavior(MAC_OVERLAY_BEHAVIOUR))", "setLevel(MAC_OVERLAY_LEVEL)", "setCanHide(false)"] {
         assert!(keep.contains(applied), "{applied}");
     }
+    // A real panel: its class becomes the NSPanel subclass, then the non-activating style, kept on screen when
+    // EchoLedger is not the active app.
+    let panel = &mac[mac.find("pub fn make_panel").unwrap()..];
+    let panel = &panel[..panel.find("\n}\n").unwrap()];
+    for step in ["object_setClass(", "setStyleMask(NSWindowStyleMask(mac_overlay_style(window.styleMask().0)))", "setHidesOnDeactivate(false)"] {
+        assert!(panel.contains(step), "{step}");
+    }
+    assert!(panel.find("object_setClass(").unwrap() < panel.find("setStyleMask(").unwrap(), "a panel first, then its style");
     // Every floating window gets it: the recording controls, captions, dictation, the after-call card and Live Translate
     // are all built by `create_overlay` or `create_translate_window`, never focusable.
     let overlay = include_str!("../src/overlay/mod.rs");

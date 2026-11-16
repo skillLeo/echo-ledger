@@ -125,6 +125,11 @@ syn = { version = "2.0.119", features = ["full", "visit"] }
 quote = "1.0.47"
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 
+# AppKit on the main thread: the floating windows become panels, the delegate answers quits from outside (macOS).
+[[test]]
+name = "mac_appkit"
+harness = false
+
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]
 codegen-units = 1

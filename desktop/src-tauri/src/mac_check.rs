@@ -102,6 +102,37 @@ pub struct WindowFacts {
     pub on_screen: bool,
     pub level_ok: bool,
     pub spaces_ok: bool,
+    /// Its Objective-C class (a floating window's is the panel class, `overlay::macos::PANEL_CLASS`).
+    pub class: String,
+    /// Its `NSWindowStyleMask`.
+    pub style: u64,
+    /// A non-activating panel that never takes the keyboard: it floats over a full-screen meeting, and a click on it
+    /// leaves the meeting in front.
+    pub panel: bool,
+}
+
+impl WindowFacts {
+    /// A window that could not be read.
+    pub fn missing(label: &'static str) -> Self {
+        Self { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false, class: String::new(), style: 0, panel: false }
+    }
+
+    /// One line for a report (pure): its class and style, and what that means.
+    pub fn line(&self) -> String {
+        if !self.exists {
+            return "not open".into();
+        }
+        let yes = |ok: bool, said: &'static str| if ok { said.to_string() } else { format!("not {said}") };
+        format!(
+            "{}, style 0x{:x}: {}, {}, {}, {}",
+            self.class,
+            self.style,
+            yes(self.panel, "a non-activating panel"),
+            yes(self.level_ok, "above other windows"),
+            yes(self.spaces_ok, "in every Space and over full screen"),
+            yes(self.visible && self.on_screen, "on screen"),
+        )
+    }
 }
 
 /// Why a screen could not be captured.
@@ -292,6 +323,8 @@ pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
             Some(format!("{who} are not above other windows."))
         } else if !window.spaces_ok {
             Some(format!("{who} do not follow you across Spaces and over full-screen windows."))
+        } else if !window.panel {
+            Some(format!("{who} could take a full-screen meeting's place when clicked ({}, style 0x{:x}).", window.class, window.style))
         } else {
             None
         };
@@ -468,7 +501,7 @@ mod tests {
     }
 
     fn good_windows() -> Vec<WindowFacts> {
-        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true }).to_vec()
+        ["overlay", "pill"].map(|label| WindowFacts { label, exists: true, visible: true, on_screen: true, level_ok: true, spaces_ok: true, class: "EchoLedgerFloatingPanel".into(), style: 0x80, panel: true }).to_vec()
     }
 
     /// A Mac on which everything works; each test changes what it is about. It records which tests really ran.
@@ -783,12 +816,13 @@ mod tests {
     fn the_windows_must_exist_show_be_on_screen_and_stay_above_everything() {
         assert_eq!(check_overlay_windows(&good_windows()).state, CheckState::Ok);
         type Change = fn(&mut WindowFacts);
-        let cases: [(Change, &str); 5] = [
+        let cases: [(Change, &str); 6] = [
             (|w| w.exists = false, "could not be opened"),
             (|w| w.visible = false, "did not show"),
             (|w| w.on_screen = false, "off screen"),
             (|w| w.level_ok = false, "above other windows"),
             (|w| w.spaces_ok = false, "across Spaces"),
+            (|w| (w.panel, w.class, w.style) = (false, "TaoWindow".into(), 0), "full-screen meeting's place when clicked (TaoWindow, style 0x0)"),
         ];
         for (change, says) in cases {
             let mut windows = good_windows();
@@ -798,6 +832,15 @@ mod tests {
             assert!(check.detail.contains(says) && check.detail.contains("recording controls"), "{}", check.detail);
         }
         assert_eq!(check_overlay_windows(&[]).state, CheckState::Failed);
+    }
+
+    #[test]
+    fn a_window_s_report_line_names_its_class_and_style() {
+        let panel = good_windows().remove(1);
+        assert_eq!(panel.line(), "EchoLedgerFloatingPanel, style 0x80: a non-activating panel, above other windows, in every Space and over full screen, on screen");
+        let plain = WindowFacts { class: "TaoWindow".into(), style: 0, panel: false, spaces_ok: false, ..panel };
+        assert_eq!(plain.line(), "TaoWindow, style 0x0: not a non-activating panel, above other windows, not in every Space and over full screen, on screen");
+        assert_eq!(WindowFacts::missing("pill").line(), "not open");
     }
 
     #[test]

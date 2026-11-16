@@ -451,10 +451,7 @@ pub fn run() {
             // A normal Mac app for the whole run (`app_life`): in the Dock with its dot, ⌘Tab and Force Quit, quit from the
             // Dock with a running recording kept first.
             #[cfg(target_os = "macos")]
-            {
-                app.set_activation_policy(tauri::ActivationPolicy::Regular);
-                app_life::mac::answer_quits_from_outside(&handle);
-            }
+            app.set_activation_policy(tauri::ActivationPolicy::Regular);
             if !autostart {
                 tray::show_main(&handle);
             }
@@ -692,6 +689,12 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building EchoLedger");
+    // The Dock's Quit and the system's keep a running recording first (`app_life`): taught to the application delegate
+    // once it exists and before the app runs, also in the smoke test, which fails without it.
+    #[cfg(target_os = "macos")]
+    if !app_life::mac::answer_quits_from_outside(app.handle()) {
+        eprintln!("[echoledger] a quit from the Dock would not keep a running recording first");
+    }
 
     app.run(|handle, event| {
         // macOS hands an echoledger://open or echoledger://signed-in link to the running app as an opened URL (Info.plist

@@ -131,7 +131,7 @@ impl MacProbe for NativeProbe {
             self.app
                 .get_webview_window(label)
                 .and_then(|window| overlay::macos::window_facts(&window, label))
-                .unwrap_or(WindowFacts { label, exists: false, visible: false, on_screen: false, level_ok: false, spaces_ok: false })
+                .unwrap_or_else(|| WindowFacts::missing(label))
         });
         for label in LABELS {
             lifecycle::hide(&self.app, label, USE);

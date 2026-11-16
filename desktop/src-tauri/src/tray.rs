@@ -502,9 +502,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         Ok(())
                     }
                     "quit" => {
-                        // Never lose audio on quit: a running recording is kept first (the Dock's Quit does the same).
+                        // Never lose audio on quit: a running recording is kept first (the Dock's Quit does the same). When
+                        // macOS's own quit waits for that keeping too, its answer ends the app.
                         crate::actions::save_before_quit(&app).await;
-                        app.exit(0);
+                        if !crate::app_life::terminate_pending() {
+                            app.exit(0);
+                        }
                         Ok(())
                     }
                     _ => Ok(()),
