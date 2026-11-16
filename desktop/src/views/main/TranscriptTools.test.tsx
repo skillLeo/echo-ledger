@@ -166,6 +166,11 @@ describe("export and share (B10)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Copy" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("https://ledger.example.test/s/abc"));
 
+    // Revoke asks first: no answer, nothing revoked; then yes.
+    const asked = answerConfirm().mockReturnValueOnce(false).mockReturnValueOnce(true);
+    fireEvent.click(within(screen.getByRole("list", { name: "Share links" })).getByRole("button", { name: "Revoke" }));
+    await waitFor(() => expect(asked).toHaveBeenCalledWith("Revoke this link? It stops working for everyone who has it."));
+    expect(callsOf("share_revoke")).toEqual([]);
     fireEvent.click(within(screen.getByRole("list", { name: "Share links" })).getByRole("button", { name: "Revoke" }));
     await waitFor(() => expect(screen.getByText("Revoked")).toBeInTheDocument());
   });

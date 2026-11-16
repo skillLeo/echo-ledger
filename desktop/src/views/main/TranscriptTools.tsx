@@ -9,6 +9,7 @@ import { ChevronRightIcon, CloseIcon, SearchIcon, SkipIcon } from "../../compone
 import { ChevronLeftIcon, PauseIcon, PlayIcon } from "../../components/ControlIcons";
 import type { Notify } from "../../lib/notice";
 import { confirmAction } from "../../lib/confirm";
+import { REVOKE_LINK_QUESTION } from "../../lib/sharing";
 
 /** Speed, skip silence and follow. */
 export function PlayerControls({ rate, onRate, skipSilence, onSkipSilence, follow, onFollow }: {
@@ -355,6 +356,7 @@ export function SharePanel({ sessionId, hasAudio, notify, onClose }: {
     }
   };
   const revoke = async (id: string) => {
+    if (!(await confirmAction(REVOKE_LINK_QUESTION))) return;
     try {
       await api.revokeShare(id);
       await load();
