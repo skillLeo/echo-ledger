@@ -88,6 +88,19 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     whole 18 pt icon edge to edge, so it looks cramped next to other items. Decision for the desktop builder (next
     round, before v1.8.1): a smaller rounded red badge inside the 18 pt canvas (about 14 pt, centred, transparent
     margin), the mark inset in it, amber when paused; a screenshot next to other menu bar items for the review.
+  - Mac Meet share (S-5): **Meet in Chrome passes** (17:01, 17:02: EchoLedger's recording controls and dictation box
+    not seen by the phone viewer; SCREEN_SHARE_MATRIX.md). Then the app FROZE (~17:10, installed 5d9f9779): the menu
+    opened on neither click, `sample` showed the main thread in a Tauri IPC command (WebKit URL scheme task) blocked on
+    a mutex while 4 tokio workers, el-share-watch and el-audio-mac waited on the main thread: the tray-lock deadlock
+    the follow-up review named, plus at least the share watcher. Stopped at 17:24:54 (TERM), restarted at 17:26 after
+    the WAVs were over a minute old: the open recording (16:49:58) came back as "Recovered recording", 34 min 54 s,
+    uploading; the zero-space safety copy was deleted after the check. The sample is in the session scratchpad
+    (echoledger-hang.sample.txt). Findings for the desktop builder: on macOS a left click on the menu bar icon opens
+    only the window (show_menu_on_left_click(false)), so Hassam couldn't find the menu → menu on left click on macOS.
+  - Resumed 17:30 (Hassam: "complete the remaining things" while he is away): desktop-2 on b-desktop-reopen (the
+    re-review points, a main-thread-wait audit of every path with a source check, menu on left click on macOS, the
+    recording badge with a margin, PNGs for the review) and phone on b-phone (A4–A9, B7–B15, B17, wording, the A6
+    Watch translate bug). Web, relay and desktop-1 stay paused (usage); the reviewer reviews each when they report.
   - Mac meeting shares (S-5/S-6): Meet started 16:44 (Chrome, meeting jdd-cdmz-meb, the phone asked to join from the
     Meet app over adb), paused before the share because Hassam took a call. Method from now on: the phone is the viewer
     and `scratchpad/phone/meetmap.py` maps each EchoLedger window into the phone's view of the share and measures its

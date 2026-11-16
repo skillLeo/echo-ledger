@@ -80,10 +80,27 @@ same black rectangle.
 | App | Windows 11 | Windows 10 | macOS 27 (this Mac) | macOS 15 |
 |---|---|---|---|---|
 | Zoom desktop | — / — / n/a | — / — / n/a | — / — / n/a (and each Screen capture mode) | — |
-| Google Meet in Chrome | — / — / — | — / — / — | — / — / — | — |
+| Google Meet in Chrome | — / — / — | — / — / — | **Hidden** / — / — | — |
 | Microsoft Teams | — / — / n/a | — / — / n/a | — / — / n/a | — |
 | Slack huddle | — / — / n/a | — / — / n/a | — / — / n/a | — |
 | WhatsApp desktop | — / — / n/a | — / — / n/a | — / — / n/a | — |
+
+### Google Meet in Chrome, whole screen (macOS 27.3, 2026-11-16 17:01)
+
+The installed CI build 5d9f9779 on the built-in display (Chrome's "Entire Screen" → Screen 1), a call recording
+running. The viewer: the S25 in the same meeting (the Meet app, a second Google account, camera and microphone off).
+`scratchpad/phone/meetmap.py` maps each EchoLedger window from its CGWindowList frame into the presenter's tile on
+the phone (1.23 phone pixels per Mac point), measures the red of the recording dot there, and crops only those small
+windows; the rest of the shared screen is never looked at.
+
+| Window (sharing state) | 17:01:30 | 17:02:40 |
+|---|---|---|
+| EchoLedger recording controls, 352 × 84 (0) | Not shown: the phone shows Chrome's sharing bar behind it ("Skill Leo (You, presenting)"); red 0 % | Not shown: the phone shows Meet's tile behind it (its 4.8 % red is Meet's red tile, no timer) |
+| EchoLedger dictation, 420 × 110 (0) | Not shown: Chrome's tabs and address bar behind it; red 0 % | Not shown; red 0.2 % |
+
+Result: **hidden** in a Meet whole-screen share. The macOS screenshot Hassam took during the share left EchoLedger out
+too (the same capture rule). Not yet run: "Show EchoLedger in screen share for 10 minutes" (S-8) as the positive
+control, because the app froze (HANDOFF, 17:10).
 
 ## Windows in each test
 
