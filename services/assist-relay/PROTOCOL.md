@@ -1,7 +1,16 @@
 # Live Assist relay protocol (protocol 1)
 
 **Status: draft, adopted into docs/API.md by the lead.** Until then this file is the reference for the relay in
-`services/assist-relay`. Field names follow the REST contract: snake_case, machine-readable `code`, plain-words
+`services/assist-relay`.
+
+> **Being aligned with the assist contract 1.9.0-b (docs/API_ASSIST.md), which wins where they differ.** The code
+> already follows it: the endpoint is `wss://<relay>/v1/assist` (the session is the token's `sid`), with
+> `Authorization: Bearer` or a first message `{"type": "auth", "token": …}`; claims `ws`, `budget.seconds_left`,
+> `budget.cents_left` (what is left at minting; the relay counts down from it), `practice`, `jti`; one secret
+> (`RELAY_SECRET`, the `assist_relay` secret) for tokens and the signed internal API; every message carries `seq`;
+> `error` carries `retry` (and `in_reply_to`, the app's `seq`); `context_update.brief` (was `prep`) and
+> `turn_*.language` (was `lang`); the context is rendered from the server's pack 1.0.1 (`pack/`). The sections below
+> still show the earlier draft in places and are rewritten next. Field names follow the REST contract: snake_case, machine-readable `code`, plain-words
 `message`, durations in milliseconds, timestamps ISO-8601 UTC.
 
 ## Connecting

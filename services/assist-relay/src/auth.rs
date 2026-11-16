@@ -27,15 +27,15 @@ pub const MAX_TOKEN_BYTES: usize = 4096;
 const MAX_ID_CHARS: usize = 128;
 const MAX_MODELS: usize = 32;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Claims {
     pub iss: String,
     pub aud: String,
     /// The user.
     pub sub: String,
-    /// The workspace, when the account has one.
+    /// The workspace.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tid: Option<String>,
+    pub ws: Option<String>,
     /// The assist session.
     pub sid: String,
     pub plan: Plan,
@@ -44,25 +44,34 @@ pub struct Claims {
     /// Model ids this session may use (primary, fallback and upgrade models alike).
     pub models: Vec<String>,
     pub budget: BudgetClaim,
+    /// A Practice session: the questions come from the model, not from a call.
+    #[serde(default)]
+    pub practice: bool,
     pub iat: i64,
     pub exp: i64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub jti: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+/// What the person has left when the server mints the token. The relay counts down from it: what this session
+/// spends, and the time it stays connected, after the relay received the token.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BudgetClaim {
-    /// The most this session may spend on models, in USD, counted from the session's start.
-    pub limit_usd: f64,
-    /// Assist time left this month, in seconds. Absent: the relay sets no time limit.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub assist_seconds: Option<u64>,
+    /// Assist time left, in seconds.
+    pub seconds_left: u64,
+    /// Model budget left, in US cents.
+    pub cents_left: u64,
 }
 
 impl Claims {
-    pub fn limit_micros(&self) -> u64 {
-        // Checked finite and non-negative in `verify`; the cast saturates.
-        (self.budget.limit_usd * 1_000_000.0).floor() as u64
+    /// The model budget left at minting, in micro-dollars.
+    pub fn budget_micros(&self) -> u64 {
+        self.budget.cents_left.saturating_mul(10_000)
+    }
+
+    /// Tells two tokens apart: a reconnect with the same token keeps counting from where it was.
+    pub fn token_key(&self) -> (i64, Option<String>) {
+        (self.iat, self.jti.clone())
     }
 }
 
@@ -182,11 +191,10 @@ impl TokenVerifier {
         }
         if !valid_id(&claims.sub)
             || !valid_id(&claims.sid)
-            || claims.tid.as_deref().is_some_and(|t| !valid_id(t))
+            || claims.ws.as_deref().is_some_and(|w| !valid_id(w))
+            || claims.jti.as_deref().is_some_and(|j| !valid_id(j))
             || claims.models.len() > MAX_MODELS
             || claims.models.iter().any(|m| !valid_id(m))
-            || !claims.budget.limit_usd.is_finite()
-            || claims.budget.limit_usd < 0.0
         {
             return Err(AuthError::Claims);
         }
@@ -265,15 +273,16 @@ mod tests {
             iss: "echoledger".into(),
             aud: AUDIENCE.into(),
             sub: "42".into(),
-            tid: Some("7".into()),
+            ws: Some("7".into()),
             sid: "01JSESSION".into(),
             plan: Plan::Pro,
             modes: vec![Mode::Fast, Mode::Balanced],
             models: vec!["claude-haiku-5-5".into(), "claude-sonnet-5-5".into()],
-            budget: BudgetClaim { limit_usd: 1.5, assist_seconds: Some(3600) },
+            budget: BudgetClaim { seconds_left: 36_000, cents_left: 150 },
+            practice: false,
             iat: NOW - 10,
             exp: NOW + 600,
-            jti: None,
+            jti: Some("01JTOKEN".into()),
         }
     }
 
@@ -289,7 +298,7 @@ mod tests {
     fn a_good_token_round_trips() {
         let token = sign(&claims());
         assert_eq!(verifier().verify_for_session(&token, "01JSESSION", NOW), Ok(claims()));
-        assert_eq!(claims().limit_micros(), 1_500_000);
+        assert_eq!(claims().budget_micros(), 1_500_000);
     }
 
     #[test]
@@ -368,15 +377,26 @@ mod tests {
     }
 
     #[test]
-    fn odd_ids_and_budgets_are_refused() {
+    fn odd_ids_are_refused() {
         let mut odd = claims();
-        odd.sid = "../../etc".into();
-        assert!(verifier().verify(&sign(&odd), NOW).is_ok(), "dots and slashes are fine in an opaque id");
         odd.sid = "has space".into();
         assert_eq!(verifier().verify(&sign(&odd), NOW), Err(AuthError::Claims));
-        let mut negative = claims();
-        negative.budget.limit_usd = -1.0;
-        assert_eq!(verifier().verify(&sign(&negative), NOW), Err(AuthError::Claims));
+        let mut odd = claims();
+        odd.jti = Some(String::new());
+        assert_eq!(verifier().verify(&sign(&odd), NOW), Err(AuthError::Claims));
+    }
+
+    #[test]
+    fn the_contracts_claims_parse() {
+        let json = r#"{"iss":"echoledger","aud":"assist-relay","sub":"42","ws":"7","sid":"01JC","plan":"ultra",
+            "modes":["fast","balanced","deep","max"],"models":["claude-opus-5-5"],"budget":{"seconds_left":3600,"cents_left":250},
+            "practice":true,"iat":1,"exp":2,"jti":"j"}"#;
+        let claims: Claims = serde_json::from_str(json).unwrap();
+        assert!(claims.practice);
+        assert_eq!(claims.budget, BudgetClaim { seconds_left: 3600, cents_left: 250 });
+        assert_eq!(claims.budget_micros(), 2_500_000);
+        let missing_budget = json.replace(r#""budget":{"seconds_left":3600,"cents_left":250},"#, "");
+        assert!(serde_json::from_str::<Claims>(&missing_budget).is_err());
     }
 
     #[test]

@@ -21,17 +21,18 @@ use tokio::time::Instant;
 
 use crate::auth::{Claims, TokenVerifier};
 use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_micros, micros_to_usd};
-use crate::config::RelayConfig;
+use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
-use crate::instructions::InstructionPack;
+use crate::internal::{Report, ReportSink, SuggestionText, UsageRecord};
+use crate::pack::Pack;
 use crate::protocol::{
     ClientMessage, ContextUpdate, EndStatus, ErrorMessage, Latency, ModeChanged, ModeReason, PROTOCOL_VERSION, Ready,
     ReadyLimits, ServerMessage, Skip, SuggestionEnd, SuggestionKind, SuggestionStart, TokenChunk, TokenRefreshed,
     TurnMessage, UsageReport,
 };
 use crate::provider::{CompletionRequest, ProviderError, Providers, Purpose, StreamEvent, Usage};
-use crate::registry::Registry;
+use crate::registry::{Ledger, Registry};
 use crate::skip::{GateEnd, SkipGate, is_skip};
 use crate::telemetry::{Outcome, SessionEvent, SuggestionRecord, TelemetrySink, Trigger};
 use crate::text::{estimate_tokens, has_phrase, is_backchannel, looks_like_question, normalize, same_question, words};
@@ -55,10 +56,12 @@ const HISTORY: usize = 20;
 /// The question and task lines, for estimates before the request is built.
 const QUESTION_TOKENS: u32 = 80;
 
-/// A message from the app, with the time the relay read it from the socket (the "end of turn" of a suggestion).
+/// A message from the app, with its `seq` and the time the relay read it from the socket (the "end of turn" of a
+/// suggestion).
 #[derive(Debug)]
 pub struct Inbound {
     pub message: ClientMessage,
+    pub seq: Option<u64>,
     pub received_at: Instant,
 }
 
@@ -87,10 +90,13 @@ pub(crate) enum Control {
 /// What every session needs, shared.
 #[derive(Debug, Clone)]
 pub struct SessionDeps {
-    pub config: Arc<RelayConfig>,
-    pub pack: Arc<InstructionPack>,
+    /// The settings in use (the server's catalog replaces the file's models and modes when it arrives).
+    pub config: Arc<Shared<RelayConfig>>,
+    pub pack: Arc<Shared<Pack>>,
     pub providers: Arc<Providers>,
     pub telemetry: Arc<dyn TelemetrySink>,
+    /// Usage and suggestion texts for the server.
+    pub reports: Arc<dyn ReportSink>,
     pub verifier: Arc<TokenVerifier>,
 }
 
@@ -167,7 +173,7 @@ impl Origin {
         match self {
             Origin::Speculative { turn_id, text } => Task::Answer { turn_id: Some(turn_id.as_str()), text, partial: true },
             Origin::Final { turn_id, text } => Task::Answer { turn_id: Some(turn_id.as_str()), text, partial: false },
-            Origin::HelpNow { .. } => Task::HelpNow,
+            Origin::HelpNow { question, .. } => Task::HelpNow { latest: Some(question.as_str()) },
             Origin::Rewrite { kind, question, previous, .. } => Task::Rewrite { kind: *kind, question, previous },
         }
     }
@@ -290,13 +296,6 @@ struct Attached {
     inbound: mpsc::Receiver<Inbound>,
 }
 
-/// Assist time used in this session, counted while a connection is attached and suggestions are not paused.
-#[derive(Default)]
-struct AssistClock {
-    used: Duration,
-    on_since: Option<Instant>,
-}
-
 pub(crate) struct Engine {
     deps: SessionDeps,
     registry: Arc<Registry>,
@@ -324,8 +323,13 @@ pub(crate) struct Engine {
     last_me_speech: Option<Instant>,
     model_used_at: HashMap<String, Instant>,
     last_warm: Option<Instant>,
-    assist: AssistClock,
+    /// What the session has spent and how long it was connected, and both when the current token arrived: the
+    /// token's `cents_left` and `seconds_left` count down from there.
+    ledger: Ledger,
+    connected_since: Option<Instant>,
     assist_used_up: bool,
+    /// The `seq` of the app's message being handled (quoted in errors about it).
+    replying_to: Option<u64>,
     feed_tx: mpsc::Sender<Feed>,
     feed_rx: mpsc::Receiver<Feed>,
     suggestions: u64,
@@ -346,10 +350,10 @@ async fn sleep_until(deadline: Option<Instant>) {
 }
 
 impl Engine {
-    pub(crate) fn new(registry: Arc<Registry>, generation: u64, claims: Claims, spent: u64) -> Self {
+    pub(crate) fn new(registry: Arc<Registry>, generation: u64, claims: Claims, ledger: Ledger) -> Self {
         let deps = registry.deps().clone();
         let (feed_tx, feed_rx) = mpsc::channel(1024);
-        let transcript = Transcript::new(&deps.config.context);
+        let transcript = Transcript::new(&deps.config.get().context);
         let nonce = format!("{:x}", (unix_now().unsigned_abs() << 16) ^ generation);
         Engine {
             session_id: claims.sid.clone(),
@@ -371,15 +375,17 @@ impl Engine {
             requested: Mode::Balanced,
             effective: EffectiveMode::CaptionsOnly,
             paused: false,
-            spent,
+            spent: ledger.spent,
             spec: None,
             active: HashMap::new(),
             history: VecDeque::new(),
             last_me_speech: None,
             model_used_at: HashMap::new(),
             last_warm: None,
-            assist: AssistClock::default(),
+            ledger,
+            connected_since: None,
             assist_used_up: false,
+            replying_to: None,
             feed_tx,
             feed_rx,
             suggestions: 0,
@@ -433,35 +439,77 @@ impl Engine {
     // Connections
     // -----------------------------------------------------------------------------------------------------------
 
+    fn config(&self) -> Arc<RelayConfig> {
+        self.deps.config.get()
+    }
+
     fn attach(&mut self, connection: Connection) {
         let resumed = self.ever_attached;
         if let Some(old) = self.conn.take() {
             let _ = old.out.try_send(Outbound::Close { code: close::REPLACED, reason: "replaced by a newer connection" });
         }
         self.cancel_all();
-        self.claims = connection.claims;
-        self.token_deadline = Some(deadline_for(self.claims.exp));
+        self.stop_clock();
+        self.take_token(connection.claims);
         self.grace_deadline = None;
         self.conn = Some(Attached { out: connection.out, inbound: connection.inbound });
+        self.connected_since = Some(Instant::now());
         self.ever_attached = true;
-        self.refresh_assist_clock();
         self.effective = self.compute_mode().0;
+        let config = self.config();
         let ready = Ready {
             protocol: PROTOCOL_VERSION,
             session_id: self.session_id.clone(),
             mode: self.effective,
             requested_mode: self.requested,
-            allowed_modes: allowed_modes(&self.deps.config, &self.claims),
+            allowed_modes: allowed_modes(&config, &self.claims),
             expires_at: iso8601(self.claims.exp),
             resumed,
+            practice: self.claims.practice,
             limits: ReadyLimits {
-                max_message_bytes: self.deps.config.limits.max_message_bytes,
-                max_turn_chars: self.deps.config.limits.max_turn_chars,
-                messages_per_second: self.deps.config.limits.messages_per_second,
+                max_message_bytes: config.limits.max_message_bytes,
+                max_turn_chars: config.limits.max_turn_chars,
+                messages_per_second: config.limits.messages_per_second,
             },
         };
         self.emit(ServerMessage::Ready(ready));
         self.deps.telemetry.event(&SessionEvent::Attached { session: self.session_id.clone(), resumed });
+    }
+
+    /// Starts counting from a token the session had not seen; the same token again (a reconnect) keeps counting.
+    fn take_token(&mut self, claims: Claims) {
+        if claims.token_key() != self.ledger.token_key {
+            self.ledger.token_key = claims.token_key();
+            self.ledger.spend_base = self.spent;
+            self.ledger.time_base = self.connected_time();
+        }
+        self.claims = claims;
+        self.token_deadline = Some(deadline_for(self.claims.exp));
+        self.assist_used_up = self.time_left().is_zero();
+        self.save_ledger();
+    }
+
+    fn connected_time(&self) -> Duration {
+        self.ledger.connected + self.connected_since.map_or(Duration::ZERO, |since| since.elapsed())
+    }
+
+    fn stop_clock(&mut self) {
+        if let Some(since) = self.connected_since.take() {
+            self.ledger.connected += since.elapsed();
+        }
+    }
+
+    /// Assist time left on the current token.
+    fn time_left(&self) -> Duration {
+        let used = self.connected_time().saturating_sub(self.ledger.time_base);
+        Duration::from_secs(self.claims.budget.seconds_left).saturating_sub(used)
+    }
+
+    fn save_ledger(&mut self) {
+        self.ledger.spent = self.spent;
+        let mut ledger = self.ledger.clone();
+        ledger.connected = self.connected_time();
+        self.registry.save_ledger(&self.session_id, ledger);
     }
 
     fn detach(&mut self, reason: &'static str) {
@@ -471,8 +519,9 @@ impl Engine {
         self.cancel_all();
         self.spec = None;
         self.token_deadline = None;
-        self.grace_deadline = Some(Instant::now() + self.deps.config.session.resume_grace());
-        self.refresh_assist_clock();
+        self.stop_clock();
+        self.save_ledger();
+        self.grace_deadline = Some(Instant::now() + self.config().session.resume_grace());
         self.deps.telemetry.event(&SessionEvent::Detached { session: self.session_id.clone(), reason });
     }
 
@@ -503,12 +552,14 @@ impl Engine {
         }
     }
 
+    /// An error, quoting the `seq` of the message being handled.
     fn error(&mut self, error: ErrorMessage) {
-        self.emit(ServerMessage::Error(error));
+        let seq = self.replying_to;
+        self.emit(ServerMessage::Error(error.in_reply_to(seq)));
     }
 
     fn on_token_expired(&mut self) {
-        self.error(ErrorMessage::new("token_expired", "The session token has expired. Connect again with a new token.").fatal());
+        self.error(ErrorMessage::new("token_expired", "The session token has expired. Connect again with a new token.").retry().fatal());
         if let Some(conn) = &self.conn {
             let _ = conn.out.try_send(Outbound::Close { code: close::TOKEN_EXPIRED, reason: "token expired" });
         }
@@ -518,10 +569,7 @@ impl Engine {
     fn on_token_refresh(&mut self, token: &str) {
         match self.deps.verifier.verify_for_session(token, &self.session_id, unix_now()) {
             Ok(claims) if claims.sub == self.user => {
-                self.claims = claims;
-                self.token_deadline = Some(deadline_for(self.claims.exp));
-                self.assist_used_up = false;
-                self.refresh_assist_clock();
+                self.take_token(claims);
                 self.emit(ServerMessage::TokenRefreshed(TokenRefreshed { expires_at: iso8601(self.claims.exp) }));
                 self.deps.telemetry.event(&SessionEvent::TokenRefreshed { session: self.session_id.clone() });
                 self.evaluate_mode(Why::Refresh);
@@ -540,7 +588,11 @@ impl Engine {
 
     fn on_message(&mut self, inbound: Inbound) {
         let at = inbound.received_at;
+        self.replying_to = inbound.seq;
         match inbound.message {
+            ClientMessage::Auth(_) => {
+                self.error(ErrorMessage::new("bad_message", "The connection is signed in already; use token_refresh for a new token."));
+            }
             ClientMessage::ContextUpdate(update) => self.on_context(update),
             ClientMessage::TurnPartial(turn) => self.on_partial(turn, at),
             ClientMessage::TurnFinal(turn) => self.on_final(turn, at),
@@ -554,19 +606,20 @@ impl Engine {
             ClientMessage::Cancel(cancel) => self.on_cancel(cancel.suggestion_id),
             ClientMessage::TokenRefresh(refresh) => self.on_token_refresh(&refresh.token),
         }
+        self.replying_to = None;
     }
 
     fn on_context(&mut self, update: ContextUpdate) {
         let mut fixed_changed = false;
-        if let Some(prep) = update.prep
-            && prep != self.call.prep
+        if let Some(brief) = update.brief
+            && brief != self.call.brief
         {
-            self.call.prep = prep;
+            self.call.brief = brief;
             fixed_changed = true;
         }
         if let Some(documents) = update.documents {
             let tokens: u32 = documents.iter().map(|d| estimate_tokens(&d.text)).sum();
-            let most = self.deps.config.context.max_document_tokens;
+            let most = self.config().context.max_document_tokens;
             if tokens > most {
                 self.error(ErrorMessage::new(
                     "documents_too_large",
@@ -590,17 +643,13 @@ impl Engine {
             self.call.summary = summary.0;
         }
         if let Some(settings) = update.settings {
-            if let Some(hint) = settings.hint_level
-                && hint != self.call.hint_level
-            {
-                self.call.hint_level = hint;
-                fixed_changed = true;
+            // The hint level and the language help sit near the end of the request ("Now"), so they change nothing
+            // that is cached.
+            if let Some(hint) = settings.hint_level {
+                self.call.hint_level = Some(hint);
             }
-            if let Some(language) = settings.language_help
-                && language != self.call.language_help
-            {
+            if let Some(language) = settings.language_help {
                 self.call.language_help = language;
-                fixed_changed = true;
             }
             if let Some(assist) = settings.assist {
                 self.set_paused(assist == crate::domain::AssistState::Paused);
@@ -627,7 +676,6 @@ impl Engine {
                 self.finish_shown(&id, Finish::Cancelled);
             }
         }
-        self.refresh_assist_clock();
     }
 
     fn suggestions_on(&self) -> bool {
@@ -643,7 +691,8 @@ impl Engine {
             self.last_me_speech = Some(at);
             return;
         }
-        let window = Duration::from_millis(self.deps.config.speculative.restart_window_ms);
+        let config = self.config();
+        let window = Duration::from_millis(config.speculative.restart_window_ms);
         if let Some(spec) = &self.spec {
             if spec.turn_id != turn.turn_id {
                 // A new turn: the earlier speculation stays as it is.
@@ -667,7 +716,7 @@ impl Engine {
             return;
         }
         let silence = turn.silence_ms.unwrap_or(0);
-        if silence >= self.deps.config.speculative.min_silence_ms && looks_like_question(&turn.text) && !is_backchannel(&turn.text) {
+        if silence >= config.speculative.min_silence_ms && looks_like_question(&turn.text) && !is_backchannel(&turn.text) {
             self.start(Origin::Speculative { turn_id: turn.turn_id, text: turn.text }, at, None);
         }
     }
@@ -762,13 +811,13 @@ impl Engine {
     }
 
     fn is_hard(&self, question: &str) -> bool {
-        let upgrade = &self.deps.config.upgrade;
+        let config = self.config();
         let normalized = normalize(question);
-        words(&normalized).len() >= upgrade.min_words || has_phrase(question, &upgrade.phrases)
+        words(&normalized).len() >= config.upgrade.min_words || has_phrase(question, &config.upgrade.phrases)
     }
 
     fn model_allowed(&self, model: &str) -> bool {
-        self.claims.models.iter().any(|m| m == model) && self.deps.config.model(model).is_some_and(|spec| spec.enabled)
+        self.claims.models.iter().any(|m| m == model) && self.config().model(model).is_some_and(|spec| spec.enabled)
     }
 
     fn start(&mut self, origin: Origin, t0: Instant, replaces: Option<String>) {
@@ -788,9 +837,10 @@ impl Engine {
         for id in self.shown_ids() {
             self.finish_shown(&id, Finish::Superseded);
         }
-        let config = self.deps.config.clone();
+        let config = self.config();
+        let pack = self.deps.pack.get();
         let plan = config.modes.get(mode);
-        let builder = ContextBuilder { pack: &self.deps.pack, config: &config.context };
+        let builder = ContextBuilder { pack: &pack, config: &config.context };
         let context = Arc::new(builder.build(&self.call, &self.transcript, origin.task(), plan.transcript));
         let upgrade = plan
             .upgrade
@@ -837,8 +887,9 @@ impl Engine {
         t0: Instant,
         linked: Option<String>,
     ) {
-        let provider = self.deps.config.model(&model).map_or(ProviderKind::Anthropic, |spec| spec.provider);
-        let max_output_tokens = self.deps.config.modes.get(mode).max_output_tokens;
+        let config = self.config();
+        let provider = config.model(&model).map_or(ProviderKind::Anthropic, |spec| spec.provider);
+        let max_output_tokens = config.modes.get(mode).max_output_tokens;
         let task = self.spawn_attempt(&id, 1, &model, &context, max_output_tokens, &origin);
         let active = Active {
             id: id.clone(),
@@ -874,7 +925,8 @@ impl Engine {
         max_output_tokens: u32,
         origin: &Origin,
     ) -> JoinHandle<()> {
-        let spec = self.deps.config.model(model);
+        let config = self.config();
+        let spec = config.model(model);
         let provider = self.deps.providers.get(spec.map_or(ProviderKind::Anthropic, |s| s.provider));
         let first_token_timeout = spec.map_or(Duration::from_secs(5), |s| s.first_token_timeout());
         let request = CompletionRequest {
@@ -973,9 +1025,10 @@ impl Engine {
         {
             // Nothing reached the card yet: the same suggestion on the fallback model.
             let attempt = active.attempt + 1;
-            let max_output_tokens = self.deps.config.modes.get(active.mode).max_output_tokens;
+            let config = self.config();
+            let max_output_tokens = config.modes.get(active.mode).max_output_tokens;
             let task = self.spawn_attempt(id, attempt, &fallback, &active.context, max_output_tokens, &active.origin);
-            let provider = self.deps.config.model(&fallback).map_or(active.provider, |spec| spec.provider);
+            let provider = config.model(&fallback).map_or(active.provider, |spec| spec.provider);
             if let Some(active) = self.active.get_mut(id) {
                 active.task.abort();
                 active.task = task;
@@ -1053,10 +1106,14 @@ impl Engine {
                 (if superseded { Outcome::Superseded } else { Outcome::Cancelled }, None)
             }
             Finish::Error(error) => {
-                self.error(ErrorMessage::new(error.code(), plain_error(error)).for_suggestion(&active.id));
+                let message = ErrorMessage::new(error.code(), plain_error(error)).for_suggestion(&active.id);
+                self.emit(ServerMessage::Error(if retryable(error) { message.retry() } else { message }));
                 (Outcome::Error, Some(error.code()))
             }
         };
+        if outcome == Outcome::Done {
+            self.report_text(&active, None);
+        }
         // A draft that will not stay on the card needs no upgrade.
         if outcome != Outcome::Done
             && let Some(upgrade) = &active.linked
@@ -1109,6 +1166,7 @@ impl Engine {
             usage: report,
         }));
         self.remember(&shown);
+        self.report_text(&shown, shown.linked.clone());
         self.record(&shown, Outcome::Done, latency, report, None);
         self.evaluate_mode(Why::Spend);
     }
@@ -1134,6 +1192,22 @@ impl Engine {
         }
     }
 
+    /// The words of a suggestion that was shown, for the call's report on the server.
+    fn report_text(&self, active: &Active, replaces: Option<String>) {
+        let kind = if active.visibility == Visibility::Upgrade { SuggestionKind::Upgrade } else { active.origin.kind() };
+        self.deps.reports.report(Report::Suggestion(SuggestionText {
+            suggestion_id: active.id.clone(),
+            session_id: self.session_id.clone(),
+            turn_id: active.origin.turn_id().map(str::to_owned),
+            kind,
+            mode: active.mode,
+            model: active.model.clone(),
+            replaces,
+            text: active.text.clone(),
+            at: iso8601(unix_now()),
+        }));
+    }
+
     fn remember(&mut self, active: &Active) {
         self.history.push_back(Finished {
             id: active.id.clone(),
@@ -1146,8 +1220,26 @@ impl Engine {
         }
     }
 
+    /// Telemetry for the log, and the usage record for the server.
     fn record(&self, active: &Active, outcome: Outcome, latency: Latency, usage: UsageReport, error: Option<&'static str>) {
         let trigger = if active.visibility == Visibility::Upgrade { Trigger::Upgrade } else { active.origin.trigger() };
+        let kind = if active.visibility == Visibility::Upgrade { SuggestionKind::Upgrade } else { active.origin.kind() };
+        self.deps.reports.report(Report::Usage(UsageRecord {
+            suggestion_id: active.id.clone(),
+            session_id: self.session_id.clone(),
+            model: active.model.clone(),
+            provider: active.provider,
+            mode: active.mode,
+            kind,
+            trigger: trigger.as_str(),
+            outcome: outcome.as_str(),
+            fallback: active.fallback_used,
+            tokens: UsageRecord::tokens_of(&usage),
+            cost_usd: usage.cost_usd,
+            estimated: usage.estimated,
+            latency,
+            at: iso8601(unix_now()),
+        }));
         self.deps.telemetry.suggestion(&SuggestionRecord {
             session: self.session_id.clone(),
             suggestion: active.id.clone(),
@@ -1170,7 +1262,7 @@ impl Engine {
     /// Adds what a request cost to the session's spend (kept by the registry across reconnects).
     fn charge(&mut self, active: &Active) -> UsageReport {
         let (usage, estimated) = active.usage();
-        let cost = self.deps.config.model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
+        let cost = self.config().model(&active.model).map_or(0, |spec| cost_micros(spec, &usage));
         self.add_spend(cost, &active.model);
         UsageReport {
             input_tokens: usage.input_tokens,
@@ -1185,11 +1277,12 @@ impl Engine {
     fn add_spend(&mut self, micros: u64, model: &str) {
         self.spent = self.spent.saturating_add(micros);
         self.model_used_at.insert(model.to_owned(), Instant::now());
-        self.registry.record_spend(&self.session_id, self.spent);
+        self.save_ledger();
     }
 
+    /// Model budget left on the current token: its `cents_left`, less what was spent since it arrived.
     fn remaining(&self) -> u64 {
-        self.claims.limit_micros().saturating_sub(self.spent)
+        self.claims.budget_micros().saturating_sub(self.spent.saturating_sub(self.ledger.spend_base))
     }
 
     /// Tokens of the fixed part (rules to memory), built once per context change.
@@ -1197,25 +1290,28 @@ impl Engine {
         if let Some(tokens) = self.fixed_tokens {
             return tokens;
         }
-        let empty = Transcript::new(&self.deps.config.context);
-        let builder = ContextBuilder { pack: &self.deps.pack, config: &self.deps.config.context };
-        let context = builder.build(&self.call, &empty, Task::HelpNow, crate::config::TranscriptScope::Recent);
+        let config = self.config();
+        let pack = self.deps.pack.get();
+        let empty = Transcript::new(&config.context);
+        let builder = ContextBuilder { pack: &pack, config: &config.context };
+        let context = builder.build(&self.call, &empty, Task::HelpNow { latest: None }, TranscriptScope::Recent);
         let tokens = context.cacheable_tokens();
         self.fixed_tokens = Some(tokens);
         tokens
     }
 
     fn estimate(&self, mode: Mode, fixed: u32) -> u64 {
-        let plan = self.deps.config.modes.get(mode);
+        let config = self.config();
+        let plan = config.modes.get(mode);
         let ledger: u32 = self.call.facts.iter().map(|f| estimate_tokens(&f.text) + 2).sum::<u32>() + estimate_tokens(&self.call.summary);
         let tokens = fixed + ledger + self.transcript.tokens(plan.transcript) + QUESTION_TOKENS;
         let cacheable = match plan.transcript {
-            crate::config::TranscriptScope::Recent => fixed,
-            crate::config::TranscriptScope::Full => fixed + ledger + self.transcript.full_block_tokens(),
+            TranscriptScope::Recent => fixed,
+            TranscriptScope::Full => fixed + ledger + self.transcript.full_block_tokens(),
         };
-        let output = self.deps.config.budget.expected_output_tokens;
+        let output = config.budget.expected_output_tokens;
         let one = |model: &str| -> u64 {
-            let Some(spec) = self.deps.config.model(model) else {
+            let Some(spec) = config.model(model) else {
                 return u64::MAX / 16;
             };
             let warm = self.model_used_at.get(model).is_some_and(|at| at.elapsed() < CACHE_TTL);
@@ -1225,7 +1321,8 @@ impl Engine {
         if let Some(upgrade) = &plan.upgrade
             && self.model_allowed(upgrade)
         {
-            micros = micros.saturating_add(one(upgrade));
+            // Only hard questions go to the upgrade model.
+            micros = micros.saturating_add((one(upgrade) as f64 * config.budget.upgrade_share).ceil() as u64);
         }
         micros
     }
@@ -1235,8 +1332,9 @@ impl Engine {
             return (EffectiveMode::CaptionsOnly, None);
         }
         let fixed = self.fixed_tokens();
-        let allowed = allowed_modes(&self.deps.config, &self.claims);
-        let reserve = self.deps.config.budget.reserve_suggestions;
+        let config = self.config();
+        let allowed = allowed_modes(&config, &self.claims);
+        let reserve = config.budget.reserve_suggestions;
         let (mode, cause) = choose_mode(self.requested, &allowed, self.remaining(), reserve, |mode| self.estimate(mode, fixed));
         (mode, Some(cause))
     }
@@ -1264,35 +1362,14 @@ impl Engine {
             to: next,
             reason: reason.as_str(),
         });
-        self.refresh_assist_clock();
     }
 
-    fn refresh_assist_clock(&mut self) {
-        let counting = self.conn.is_some() && !self.paused;
-        let now = Instant::now();
-        match (self.assist.on_since, counting) {
-            (Some(since), false) => {
-                self.assist.used += now.saturating_duration_since(since);
-                self.assist.on_since = None;
-            }
-            (None, true) => self.assist.on_since = Some(now),
-            _ => {}
-        }
-        if let Some(limit) = self.claims.budget.assist_seconds {
-            let used = self.assist.used + self.assist.on_since.map_or(Duration::ZERO, |s| now.saturating_duration_since(s));
-            if used >= Duration::from_secs(limit) {
-                self.assist_used_up = true;
-            }
-        }
-    }
-
+    /// When the token's assist time runs out (assist time is wall-clock time with the relay connected).
     fn assist_deadline(&self) -> Option<Instant> {
-        if self.assist_used_up {
+        if self.assist_used_up || self.connected_since.is_none() {
             return None;
         }
-        let limit = Duration::from_secs(self.claims.budget.assist_seconds?);
-        let since = self.assist.on_since?;
-        Some(since + limit.saturating_sub(self.assist.used))
+        Some(Instant::now() + self.time_left())
     }
 
     fn on_assist_time_up(&mut self) {
@@ -1312,18 +1389,19 @@ impl Engine {
         if self.conn.is_none() {
             return;
         }
-        let interval = Duration::from_secs(self.deps.config.session.warm_min_interval_secs);
+        let config = self.config();
+        let interval = Duration::from_secs(config.session.warm_min_interval_secs);
         if self.last_warm.is_some_and(|at| at.elapsed() < interval) {
             return;
         }
-        let config = self.deps.config.clone();
+        let pack = self.deps.pack.get();
         let plan = config.modes.get(mode);
         let model = plan.primary.clone();
         let Some(spec) = config.model(&model).filter(|_| self.model_allowed(&model)) else {
             return;
         };
-        let builder = ContextBuilder { pack: &self.deps.pack, config: &config.context };
-        let context = builder.build(&self.call, &self.transcript, Task::HelpNow, plan.transcript);
+        let builder = ContextBuilder { pack: &pack, config: &config.context };
+        let context = builder.build(&self.call, &self.transcript, Task::HelpNow { latest: None }, plan.transcript);
         let request = CompletionRequest {
             model: model.clone(),
             context: Arc::new(context),
@@ -1343,7 +1421,7 @@ impl Engine {
 
     fn on_warmed(&mut self, model: String, result: Result<Usage, ProviderError>) {
         let (cost, error) = match result {
-            Ok(usage) => (self.deps.config.model(&model).map_or(0, |spec| cost_micros(spec, &usage)), None),
+            Ok(usage) => (self.config().model(&model).map_or(0, |spec| cost_micros(spec, &usage)), None),
             Err(error) => (0, Some(error.code())),
         };
         if error.is_none() {
@@ -1358,6 +1436,11 @@ impl Engine {
 fn deadline_for(exp: i64) -> Instant {
     let left = exp.saturating_add(crate::auth::LEEWAY_SECS).saturating_sub(unix_now()).max(0);
     Instant::now() + Duration::from_secs(left.unsigned_abs())
+}
+
+/// Whether the same request may work a little later.
+fn retryable(error: ProviderError) -> bool {
+    matches!(error, ProviderError::Unavailable | ProviderError::RateLimited | ProviderError::Timeout | ProviderError::Protocol)
 }
 
 /// The sentence the app may show for a failed suggestion.

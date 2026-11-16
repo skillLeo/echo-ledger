@@ -28,6 +28,8 @@ max_document_tokens = 60000
 reserve_suggestions = 3
 # Output tokens assumed for one suggestion when estimating its cost.
 expected_output_tokens = 160
+# Share of Balanced suggestions that also go to the upgrade model (hard questions), for the estimate only.
+upgrade_share = 0.3
 
 [session]
 # A session survives a dropped connection this long; a reconnect with a valid token resumes it.

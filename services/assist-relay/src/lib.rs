@@ -8,8 +8,9 @@ pub mod budget;
 pub mod config;
 pub mod context;
 pub mod domain;
-pub mod instructions;
+pub mod internal;
 pub mod logging;
+pub mod pack;
 pub mod protocol;
 pub mod provider;
 pub mod registry;
@@ -27,33 +28,40 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use auth::TokenVerifier;
-use config::{RelayConfig, Secret};
-use instructions::InstructionPack;
+use config::{RelayConfig, Secret, Shared};
+use internal::ReportSink;
+use pack::Pack;
 use provider::Providers;
 use registry::Registry;
 use server::AppState;
 use session::SessionDeps;
 use telemetry::TelemetrySink;
 
+/// What a relay is built from.
+#[derive(Debug)]
+pub struct Parts {
+    pub config: Arc<Shared<RelayConfig>>,
+    pub pack: Pack,
+    pub providers: Providers,
+    pub telemetry: Arc<dyn TelemetrySink>,
+    pub reports: Arc<dyn ReportSink>,
+    /// The `assist_relay` secret (and the previous one during a rotation).
+    pub secrets: Vec<Secret>,
+    pub issuer: String,
+}
+
 /// Builds the shared state of a relay.
-pub fn app_state(
-    config: RelayConfig,
-    pack: InstructionPack,
-    providers: Providers,
-    telemetry: Arc<dyn TelemetrySink>,
-    secrets: Vec<Secret>,
-    issuer: &str,
-) -> AppState {
-    let config = Arc::new(config);
-    let verifier = Arc::new(TokenVerifier::new(secrets, issuer));
+pub fn app_state(parts: Parts) -> AppState {
+    let verifier = Arc::new(TokenVerifier::new(parts.secrets, parts.issuer));
     let deps = SessionDeps {
-        config: config.clone(),
-        pack: Arc::new(pack),
-        providers: Arc::new(providers),
-        telemetry: telemetry.clone(),
+        config: parts.config.clone(),
+        pack: Arc::new(Shared::new(parts.pack)),
+        providers: Arc::new(parts.providers),
+        telemetry: parts.telemetry.clone(),
+        reports: parts.reports,
         verifier: verifier.clone(),
     };
-    AppState { registry: Registry::new(deps), verifier, config, telemetry }
+    AppState { registry: Registry::new(deps), verifier, config: parts.config, telemetry: parts.telemetry }
 }
 
 /// `assist-relay --check-health`: asks the local relay's `/healthz` (for container health checks, where there is no

@@ -1,4 +1,5 @@
-//! The WebSocket messages (PROTOCOL.md). One JSON object per text frame, named by `type`.
+//! The WebSocket messages (PROTOCOL.md; contract 1.9.0-b, docs/API_ASSIST.md). One JSON object per text frame, named
+//! by `type`, with a per-direction `seq`.
 //!
 //! Every type that carries words someone said or wrote has a `Debug` that shows lengths only, so a stray `{:?}` can
 //! never put call content in a log.
@@ -29,9 +30,20 @@ impl fmt::Debug for Len<'_> {
 // App -> relay
 // ---------------------------------------------------------------------------------------------------------------
 
+/// A message from the app with its `seq` (the app's own counter; the relay quotes it in an error about that message).
+#[derive(Debug, Clone, Deserialize)]
+pub struct ClientEnvelope {
+    #[serde(default)]
+    pub seq: Option<u64>,
+    #[serde(flatten)]
+    pub message: ClientMessage,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ClientMessage {
+    /// The token, as the first message, from apps that cannot set `Authorization` on a WebSocket.
+    Auth(AuthMessage),
     ContextUpdate(ContextUpdate),
     TurnPartial(TurnMessage),
     TurnFinal(TurnMessage),
@@ -47,6 +59,7 @@ pub enum ClientMessage {
 impl ClientMessage {
     pub fn kind(&self) -> &'static str {
         match self {
+            ClientMessage::Auth(_) => "auth",
             ClientMessage::ContextUpdate(_) => "context_update",
             ClientMessage::TurnPartial(_) => "turn_partial",
             ClientMessage::TurnFinal(_) => "turn_final",
@@ -82,8 +95,8 @@ impl ClientMessage {
                 translate.suggestion_id.as_deref().map_or(Ok(()), check_id)
             }
             ClientMessage::Cancel(cancel) => cancel.suggestion_id.as_deref().map_or(Ok(()), check_id),
-            ClientMessage::TokenRefresh(refresh) => {
-                if refresh.token.is_empty() || refresh.token.len() > crate::auth::MAX_TOKEN_BYTES {
+            ClientMessage::TokenRefresh(TokenRefresh { token }) | ClientMessage::Auth(AuthMessage { token }) => {
+                if token.is_empty() || token.len() > crate::auth::MAX_TOKEN_BYTES {
                     return Err("The token is missing or too long.");
                 }
                 Ok(())
@@ -103,8 +116,9 @@ fn check_id(id: &str) -> Result<(), &'static str> {
 /// what the relay had (an empty string or list clears it).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct ContextUpdate {
-    #[serde(default)]
-    pub prep: Option<Prep>,
+    /// The prep's brief (`prep` is accepted too).
+    #[serde(default, alias = "prep")]
+    pub brief: Option<Brief>,
     #[serde(default)]
     pub settings: Option<SettingsUpdate>,
     #[serde(default)]
@@ -120,10 +134,10 @@ pub struct ContextUpdate {
 impl ContextUpdate {
     fn validate(&self, limits: &Limits) -> Result<(), &'static str> {
         let too_long = |text: &str| text.chars().count() > limits.max_field_chars;
-        if let Some(prep) = &self.prep
-            && prep.fields().iter().any(|field| too_long(field))
+        if let Some(brief) = &self.brief
+            && brief.fields().iter().any(|field| too_long(field))
         {
-            return Err("A prep field is too long.");
+            return Err("A brief field is too long.");
         }
         if let Some(documents) = &self.documents {
             if documents.len() > limits.max_documents {
@@ -162,9 +176,9 @@ impl fmt::Debug for Text {
     }
 }
 
-/// The prep, as on the server's `assist_preps`.
+/// The brief, as on the server's `assist_preps`.
 #[derive(Clone, Default, PartialEq, Eq, Deserialize)]
-pub struct Prep {
+pub struct Brief {
     #[serde(default)]
     pub meeting_type: MeetingType,
     #[serde(default)]
@@ -185,7 +199,7 @@ pub struct Prep {
     pub instructions: String,
 }
 
-impl Prep {
+impl Brief {
     fn fields(&self) -> [&str; 8] {
         [
             &self.title,
@@ -200,10 +214,10 @@ impl Prep {
     }
 }
 
-impl fmt::Debug for Prep {
+impl fmt::Debug for Brief {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let total: usize = self.fields().iter().map(|field| field.chars().count()).sum();
-        f.debug_struct("Prep").field("meeting_type", &self.meeting_type).field("chars", &total).finish()
+        f.debug_struct("Brief").field("meeting_type", &self.meeting_type).field("chars", &total).finish()
     }
 }
 
@@ -253,8 +267,8 @@ pub struct TurnMessage {
     pub turn_id: String,
     pub channel: Channel,
     pub text: String,
-    #[serde(default)]
-    pub lang: Option<String>,
+    #[serde(default, alias = "lang")]
+    pub language: Option<String>,
     /// Start of the turn, ms since the session started (audio clock).
     #[serde(default)]
     pub start_ms: Option<u64>,
@@ -313,9 +327,28 @@ impl fmt::Debug for TokenRefresh {
     }
 }
 
+#[derive(Clone, Deserialize)]
+pub struct AuthMessage {
+    pub token: String,
+}
+
+impl fmt::Debug for AuthMessage {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("AuthMessage(<redacted>)")
+    }
+}
+
 // ---------------------------------------------------------------------------------------------------------------
 // Relay -> app
 // ---------------------------------------------------------------------------------------------------------------
+
+/// A message to the app with its `seq` (1, 2, 3… on each connection).
+#[derive(Debug, Serialize)]
+pub struct ServerEnvelope<'a> {
+    pub seq: u64,
+    #[serde(flatten)]
+    pub message: &'a ServerMessage,
+}
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
@@ -339,6 +372,7 @@ pub struct Ready {
     pub allowed_modes: Vec<Mode>,
     pub expires_at: String,
     pub resumed: bool,
+    pub practice: bool,
     pub limits: ReadyLimits,
 }
 
@@ -458,14 +492,28 @@ pub struct Skip {
 pub struct ErrorMessage {
     pub code: &'static str,
     pub message: String,
+    /// Trying the same again later may work.
+    pub retry: bool,
     pub suggestion_id: Option<String>,
+    /// The `seq` of the app's message this error answers.
+    pub in_reply_to: Option<u64>,
     /// The relay closes the connection after a fatal error.
     pub fatal: bool,
 }
 
 impl ErrorMessage {
     pub fn new(code: &'static str, message: impl Into<String>) -> Self {
-        ErrorMessage { code, message: message.into(), suggestion_id: None, fatal: false }
+        ErrorMessage { code, message: message.into(), retry: false, suggestion_id: None, in_reply_to: None, fatal: false }
+    }
+
+    pub fn retry(mut self) -> Self {
+        self.retry = true;
+        self
+    }
+
+    pub fn in_reply_to(mut self, seq: Option<u64>) -> Self {
+        self.in_reply_to = seq;
+        self
     }
 
     pub fn for_suggestion(mut self, suggestion_id: &str) -> Self {
@@ -525,11 +573,17 @@ mod tests {
 
     #[test]
     fn client_messages_parse_by_type() {
-        let partial: ClientMessage = serde_json::from_str(
-            r#"{"type":"turn_partial","turn_id":"o-1","channel":"other","text":"what is your","silence_ms":40,"extra":1}"#,
+        let partial: ClientEnvelope = serde_json::from_str(
+            r#"{"type":"turn_partial","seq":7,"turn_id":"o-1","channel":"other","text":"what is your","language":"en","silence_ms":40,"extra":1}"#,
         )
         .unwrap();
-        assert!(matches!(partial, ClientMessage::TurnPartial(ref t) if t.silence_ms == Some(40)));
+        assert_eq!(partial.seq, Some(7));
+        assert!(matches!(partial.message, ClientMessage::TurnPartial(ref t) if t.silence_ms == Some(40) && t.language.as_deref() == Some("en")));
+        let auth: ClientEnvelope = serde_json::from_str(r#"{"type":"auth","seq":1,"token":"t"}"#).unwrap();
+        assert!(matches!(auth.message, ClientMessage::Auth(_)));
+        let old_names: ClientMessage =
+            serde_json::from_str(r#"{"type":"context_update","prep":{"meeting_type":"boss"}}"#).unwrap();
+        assert!(matches!(old_names, ClientMessage::ContextUpdate(ref u) if u.brief.as_ref().is_some_and(|b| b.meeting_type == MeetingType::Boss)));
         let translate: ClientMessage = serde_json::from_str(r#"{"type":"translate","language":"roman_urdu"}"#).unwrap();
         assert!(matches!(translate, ClientMessage::Translate(ref t) if t.language == LanguageHelp::RomanUrdu));
         let update: ClientMessage = serde_json::from_str(
@@ -547,7 +601,7 @@ mod tests {
             turn_id: "o-1".into(),
             channel: Channel::Other,
             text: "x".repeat(limits.max_turn_chars + 1),
-            lang: None,
+            language: None,
             start_ms: None,
             end_ms: None,
             silence_ms: None,
@@ -560,15 +614,16 @@ mod tests {
     #[test]
     fn debug_output_never_shows_content() {
         let message: ClientMessage = serde_json::from_str(
-            r#"{"type":"context_update","prep":{"goals":"SECRET-GOAL"},"documents":[{"id":"d","text":"SECRET-DOC"}],
+            r#"{"type":"context_update","brief":{"goals":"SECRET-GOAL"},"documents":[{"id":"d","text":"SECRET-DOC"}],
                 "memory":"SECRET-MEMORY","facts":[{"text":"SECRET-FACT"}],"summary":"SECRET-SUMMARY"}"#,
         )
         .unwrap();
         let turn: ClientMessage =
             serde_json::from_str(r#"{"type":"turn_final","turn_id":"t","channel":"me","text":"SECRET-TURN"}"#).unwrap();
         let refresh: ClientMessage = serde_json::from_str(r#"{"type":"token_refresh","token":"SECRET-TOKEN"}"#).unwrap();
+        let auth: ClientMessage = serde_json::from_str(r#"{"type":"auth","token":"SECRET-AUTH"}"#).unwrap();
         let token = TokenChunk { suggestion_id: "s".into(), text: "SECRET-OUTPUT".into() };
-        let shown = format!("{message:?} {turn:?} {refresh:?} {token:?}");
+        let shown = format!("{message:?} {turn:?} {refresh:?} {auth:?} {token:?}");
         assert!(!shown.contains("SECRET"), "{shown}");
     }
 
@@ -580,9 +635,13 @@ mod tests {
             latency: Latency::default(),
             usage: UsageReport::default(),
         });
-        let json = serde_json::to_value(&skip).unwrap();
+        let json = serde_json::to_value(ServerEnvelope { seq: 3, message: &skip }).unwrap();
         assert_eq!(json["type"], "skip");
+        assert_eq!(json["seq"], 3);
         assert_eq!(json["suggestion_id"], "s-1");
+        let error = ServerMessage::Error(ErrorMessage::new("provider_timeout", "x").retry().in_reply_to(Some(9)));
+        let json = serde_json::to_value(ServerEnvelope { seq: 4, message: &error }).unwrap();
+        assert_eq!((json["retry"].as_bool(), json["in_reply_to"].as_u64()), (Some(true), Some(9)));
         let changed = ServerMessage::ModeChanged(ModeChanged {
             from: EffectiveMode::Assist(Mode::Fast),
             to: EffectiveMode::CaptionsOnly,

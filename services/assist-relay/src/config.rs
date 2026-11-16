@@ -1,10 +1,12 @@
-//! Settings: the relay file (models, modes, timing, limits; `config/relay.toml` is built in) and the environment
-//! (address, token secret, which providers). Secrets are only ever read from the environment and never printed.
+//! Settings: the relay file (models, modes, timing, limits; `config/relay.toml` is built in), the server's model
+//! catalog once fetched (it replaces the file's models and mode map), and the environment (address, the `assist_relay`
+//! secret, the server, which providers). Secrets are only ever read from the environment or the server, never printed.
 
 use std::collections::BTreeMap;
 use std::fmt;
 use std::net::SocketAddr;
 use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use serde::Deserialize;
@@ -62,6 +64,7 @@ pub struct ContextConfig {
 pub struct BudgetConfig {
     pub reserve_suggestions: u32,
     pub expected_output_tokens: u32,
+    pub upgrade_share: f64,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -167,12 +170,19 @@ pub struct MockLatency {
     pub token_ms: u64,
 }
 
+impl Default for MockLatency {
+    fn default() -> Self {
+        MockLatency { first_token_ms: 300, token_ms: 10 }
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ModelSpec {
     pub provider: ProviderKind,
     #[serde(default = "enabled_by_default")]
     pub enabled: bool,
+    #[serde(default = "default_first_token_timeout_ms")]
     pub first_token_timeout_ms: u64,
     pub price: Price,
     #[serde(default)]
@@ -180,11 +190,25 @@ pub struct ModelSpec {
     /// Provider request options, passed on unchanged (effort, thinking).
     #[serde(default)]
     pub options: toml::Table,
+    #[serde(default)]
     pub mock: MockLatency,
 }
 
 fn enabled_by_default() -> bool {
     true
+}
+
+fn default_first_token_timeout_ms() -> u64 {
+    3000
+}
+
+/// The part of `GET /api/internal/assist/providers` that replaces the file's models and mode map.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct Catalog {
+    #[serde(default)]
+    pub models: Option<BTreeMap<String, ModelSpec>>,
+    #[serde(default)]
+    pub modes: Option<ModesConfig>,
 }
 
 impl ModelSpec {
@@ -232,6 +256,19 @@ impl RelayConfig {
         self.models.get(id)
     }
 
+    /// These settings with the server's models and mode map in place, checked like the file.
+    pub fn with_catalog(&self, catalog: Catalog) -> Result<RelayConfig, ConfigError> {
+        let mut next = self.clone();
+        if let Some(models) = catalog.models {
+            next.models = models;
+        }
+        if let Some(modes) = catalog.modes {
+            next.modes = modes;
+        }
+        next.validate()?;
+        Ok(next)
+    }
+
     fn validate(&self) -> Result<(), ConfigError> {
         let invalid = |reason: String| Err(ConfigError::Invalid(reason));
         for (id, spec) in &self.models {
@@ -271,6 +308,9 @@ impl RelayConfig {
         if self.budget.reserve_suggestions == 0 || self.budget.expected_output_tokens == 0 {
             return invalid("budget.reserve_suggestions and budget.expected_output_tokens must be above 0".to_owned());
         }
+        if !(0.0..=1.0).contains(&self.budget.upgrade_share) {
+            return invalid("budget.upgrade_share must be between 0 and 1".to_owned());
+        }
         let limits = &self.limits;
         if [limits.max_message_bytes, limits.max_turn_chars, limits.max_field_chars, limits.max_documents, limits.max_document_chars]
             .contains(&0)
@@ -283,6 +323,28 @@ impl RelayConfig {
             return invalid("session.idle_timeout_secs must be longer than session.ping_interval_secs".to_owned());
         }
         Ok(())
+    }
+}
+
+/// A value the whole relay reads and the provider refresh may replace (the settings once the server's catalog is in).
+#[derive(Debug)]
+pub struct Shared<T>(RwLock<Arc<T>>);
+
+impl<T> Shared<T> {
+    pub fn new(value: T) -> Self {
+        Shared(RwLock::new(Arc::new(value)))
+    }
+
+    pub fn get(&self) -> Arc<T> {
+        self.0.read().map_or_else(|poisoned| poisoned.into_inner().clone(), |guard| guard.clone())
+    }
+
+    pub fn set(&self, value: T) {
+        let value = Arc::new(value);
+        match self.0.write() {
+            Ok(mut guard) => *guard = value,
+            Err(poisoned) => *poisoned.into_inner() = value,
+        }
     }
 }
 
@@ -313,7 +375,7 @@ impl fmt::Debug for Secret {
     }
 }
 
-/// The token secrets need at least this many bytes (the server signs with the same value).
+/// The `assist_relay` secret needs at least this many bytes.
 pub const MIN_SECRET_BYTES: usize = 32;
 
 /// Everything the relay reads from its environment.
@@ -321,10 +383,16 @@ pub const MIN_SECRET_BYTES: usize = 32;
 pub struct Settings {
     pub bind: SocketAddr,
     pub config_path: Option<PathBuf>,
+    /// A pack folder instead of the built-in copy.
+    pub pack_dir: Option<PathBuf>,
     pub providers: ProviderMode,
-    /// The current secret first, then the previous one while a rotation is under way.
-    pub token_secrets: Vec<Secret>,
+    /// The `assist_relay` secret from Admin -> API Credentials: it signs the assist tokens and the relay's requests
+    /// to the server. The current one first, then the previous one while a rotation is under way (tokens only).
+    pub secrets: Vec<Secret>,
     pub token_issuer: String,
+    /// The server for the internal API (`https://console.example`). Absent in development: the relay then runs on its
+    /// own settings and reports nothing.
+    pub server_url: Option<String>,
     pub log: String,
 }
 
@@ -356,15 +424,28 @@ impl Settings {
                 Some(value) => Ok(Some(Secret::new(value.into_bytes()))),
             }
         };
-        let current = secret("RELAY_TOKEN_SECRET")?.ok_or(ConfigError::Missing { name: "RELAY_TOKEN_SECRET" })?;
-        let mut token_secrets = vec![current];
-        token_secrets.extend(secret("RELAY_TOKEN_SECRET_PREVIOUS")?);
+        let current = secret("RELAY_SECRET")?.ok_or(ConfigError::Missing { name: "RELAY_SECRET" })?;
+        let mut secrets = vec![current];
+        secrets.extend(secret("RELAY_SECRET_PREVIOUS")?);
+        let server_url = match lookup("RELAY_SERVER_URL") {
+            None => None,
+            Some(url) => {
+                let url = url.trim().trim_end_matches('/').to_owned();
+                let local = ["http://127.0.0.1", "http://localhost", "http://[::1]"].iter().any(|p| url.starts_with(p));
+                if !url.starts_with("https://") && !local {
+                    return Err(ConfigError::BadValue { name: "RELAY_SERVER_URL", reason: "use https:// (http:// only for this machine)" });
+                }
+                Some(url)
+            }
+        };
         Ok(Settings {
             bind,
             config_path: lookup("RELAY_CONFIG").map(PathBuf::from),
+            pack_dir: lookup("RELAY_PACK_DIR").map(PathBuf::from),
             providers,
-            token_secrets,
+            secrets,
             token_issuer: lookup("RELAY_TOKEN_ISSUER").unwrap_or_else(|| "echoledger".to_owned()),
+            server_url,
             log: lookup("RELAY_LOG").unwrap_or_else(|| "info".to_owned()),
         })
     }
@@ -420,14 +501,12 @@ mod tests {
     #[test]
     fn the_environment_needs_a_long_secret_and_never_shows_it() {
         assert!(matches!(Settings::from_lookup(env(&[])), Err(ConfigError::Missing { .. })));
-        assert!(matches!(
-            Settings::from_lookup(env(&[("RELAY_TOKEN_SECRET", "short")])),
-            Err(ConfigError::BadValue { .. })
-        ));
+        assert!(matches!(Settings::from_lookup(env(&[("RELAY_SECRET", "short")])), Err(ConfigError::BadValue { .. })));
         let secret = "s".repeat(40);
-        let settings = Settings::from_lookup(env(&[("RELAY_TOKEN_SECRET", &secret), ("RELAY_PROVIDERS", "mock")])).unwrap();
+        let settings = Settings::from_lookup(env(&[("RELAY_SECRET", &secret), ("RELAY_PROVIDERS", "mock")])).unwrap();
         assert_eq!(settings.providers, ProviderMode::Mock);
         assert_eq!(settings.bind.to_string(), "127.0.0.1:8787");
+        assert_eq!(settings.server_url, None);
         assert!(!format!("{settings:?}").contains(&secret));
     }
 
@@ -435,9 +514,34 @@ mod tests {
     fn a_previous_secret_is_kept_for_rotations() {
         let current = "c".repeat(40);
         let previous = "p".repeat(40);
-        let settings =
-            Settings::from_lookup(env(&[("RELAY_TOKEN_SECRET", &current), ("RELAY_TOKEN_SECRET_PREVIOUS", &previous)])).unwrap();
-        assert_eq!(settings.token_secrets.len(), 2);
-        assert_eq!(settings.token_secrets[1].expose(), previous.as_bytes());
+        let settings = Settings::from_lookup(env(&[("RELAY_SECRET", &current), ("RELAY_SECRET_PREVIOUS", &previous)])).unwrap();
+        assert_eq!(settings.secrets.len(), 2);
+        assert_eq!(settings.secrets[1].expose(), previous.as_bytes());
+    }
+
+    #[test]
+    fn the_server_url_must_be_https_unless_it_is_this_machine() {
+        let secret = "s".repeat(40);
+        let with = |url: &str| Settings::from_lookup(env(&[("RELAY_SECRET", &secret), ("RELAY_SERVER_URL", url)]));
+        assert_eq!(with("https://console.example/").unwrap().server_url.as_deref(), Some("https://console.example"));
+        assert!(with("http://127.0.0.1:8000").is_ok());
+        assert!(matches!(with("http://console.example"), Err(ConfigError::BadValue { .. })));
+    }
+
+    #[test]
+    fn the_servers_catalog_replaces_models_and_modes_after_the_same_checks() {
+        let config = RelayConfig::built_in();
+        let catalog: Catalog = serde_json::from_str(
+            r#"{"modes":{"fast":{"primary":"claude-sonnet-5-5","transcript":"recent","max_output_tokens":200},
+                         "balanced":{"primary":"claude-haiku-5-5","transcript":"full","max_output_tokens":300},
+                         "deep":{"primary":"claude-sonnet-5-5","transcript":"full","max_output_tokens":400},
+                         "max":{"primary":"claude-opus-5-5","transcript":"full","max_output_tokens":500}}}"#,
+        )
+        .unwrap();
+        let next = config.with_catalog(catalog).unwrap();
+        assert_eq!(next.modes.fast.primary, "claude-sonnet-5-5");
+        assert_eq!(next.models.len(), config.models.len());
+        let broken: Catalog = serde_json::from_str(r#"{"models":{}}"#).unwrap();
+        assert!(config.with_catalog(broken).is_err(), "modes would name missing models");
     }
 }

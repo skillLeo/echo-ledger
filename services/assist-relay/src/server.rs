@@ -1,5 +1,7 @@
-//! HTTP: `GET /healthz`, and `GET /v1/assist/sessions/{session_id}/ws`, the WebSocket. The assist token is checked
-//! before the upgrade (`Authorization: Bearer <token>`), so an unauthenticated socket never opens.
+//! HTTP: `GET /healthz`, and `GET /v1/assist`, the WebSocket (contract 1.9.0-b). The session is the token's `sid`.
+//! With `Authorization: Bearer <token>` the token is checked before the upgrade, so a refused app gets an HTTP answer
+//! and no socket. Apps that cannot set headers send `{"type": "auth", "token": …}` as the first message instead,
+//! within 5 seconds; until then nothing else is read.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -7,7 +9,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::extract::ws::rejection::WebSocketUpgradeRejection;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade};
-use axum::extract::{Path, State};
+use axum::extract::State;
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -17,9 +19,9 @@ use serde::Serialize;
 use tokio::sync::mpsc;
 use tokio::time::Instant;
 
-use crate::auth::{AuthError, TokenVerifier};
-use crate::config::{Limits, RelayConfig};
-use crate::protocol::{ClientMessage, ErrorMessage, ServerMessage};
+use crate::auth::{AuthError, Claims, MAX_TOKEN_BYTES, TokenVerifier};
+use crate::config::{Limits, RelayConfig, Shared};
+use crate::protocol::{AuthMessage, ClientEnvelope, ClientMessage, ErrorMessage, ServerEnvelope, ServerMessage};
 use crate::registry::Registry;
 use crate::session::{Inbound, Outbound, close};
 use crate::telemetry::{SessionEvent, TelemetrySink};
@@ -28,21 +30,19 @@ use crate::time::unix_now;
 /// Messages waiting for the socket writer; a client that falls this far behind is dropped.
 const OUT_CAPACITY: usize = 512;
 const IN_CAPACITY: usize = 256;
+/// How long an app without the header has to send its `auth` message.
+const AUTH_WAIT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub registry: Arc<Registry>,
     pub verifier: Arc<TokenVerifier>,
-    pub config: Arc<RelayConfig>,
+    pub config: Arc<Shared<RelayConfig>>,
     pub telemetry: Arc<dyn TelemetrySink>,
 }
 
 pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/healthz", get(health))
-        .route("/v1/assist/sessions/{session_id}/ws", get(connect))
-        .fallback(not_found)
-        .with_state(state)
+    Router::new().route("/healthz", get(health)).route("/v1/assist", get(connect)).fallback(not_found).with_state(state)
 }
 
 #[derive(Serialize)]
@@ -74,31 +74,37 @@ async fn not_found() -> Response {
     http_error(StatusCode::NOT_FOUND, "not_found", "Not found.")
 }
 
-fn bearer(headers: &HeaderMap) -> &str {
-    headers
-        .get(header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .map_or("", str::trim)
+/// The token in `Authorization: Bearer …`: `None` without the header (the app sends it as its first message).
+fn bearer(headers: &HeaderMap) -> Option<&str> {
+    let value = headers.get(header::AUTHORIZATION)?;
+    Some(value.to_str().ok().and_then(|value| value.strip_prefix("Bearer ")).map_or("", str::trim))
+}
+
+/// Checks a token, and that its session is not someone else's.
+fn admit(state: &AppState, token: &str) -> Result<Claims, AuthError> {
+    let claims = state.verifier.verify(token, unix_now())?;
+    if state.registry.owner(&claims.sid).is_some_and(|owner| owner != claims.sub) {
+        return Err(AuthError::WrongSession);
+    }
+    Ok(claims)
 }
 
 async fn connect(
     State(state): State<AppState>,
-    Path(session_id): Path<String>,
     headers: HeaderMap,
     upgrade: Result<WebSocketUpgrade, WebSocketUpgradeRejection>,
 ) -> Response {
-    let claims = match state.verifier.verify_for_session(bearer(&headers), &session_id, unix_now()) {
-        Ok(claims) => claims,
-        Err(error) => return reject(&state, error),
+    let claims = match bearer(&headers) {
+        Some(token) => match admit(&state, token) {
+            Ok(claims) => Some(claims),
+            Err(error) => return reject(&state, error),
+        },
+        None => None,
     };
-    if state.registry.owner(&session_id).is_some_and(|owner| owner != claims.sub) {
-        return reject(&state, AuthError::WrongSession);
-    }
     let Ok(upgrade) = upgrade else {
         return http_error(StatusCode::BAD_REQUEST, "websocket_required", "Connect with a WebSocket.");
     };
-    let limits = state.config.limits.clone();
+    let limits = state.config.get().limits.clone();
     upgrade
         .max_message_size(limits.max_message_bytes)
         .max_frame_size(limits.max_message_bytes)
@@ -111,28 +117,59 @@ fn reject(state: &AppState, error: AuthError) -> Response {
     http_error(status, error.code(), &error.to_string())
 }
 
-async fn run_socket(socket: WebSocket, state: AppState, claims: crate::auth::Claims) {
-    let (sink, stream) = socket.split();
+/// The first message of an app that could not send the header: `auth`, within 5 seconds.
+async fn first_message_auth(stream: &mut SplitStream<WebSocket>, state: &AppState) -> Result<Claims, AuthError> {
+    let frame = match tokio::time::timeout(AUTH_WAIT, stream.next()).await {
+        Ok(Some(Ok(Message::Text(text)))) if text.len() <= MAX_TOKEN_BYTES + 256 => text,
+        Ok(Some(Ok(_))) => return Err(AuthError::Malformed),
+        _ => return Err(AuthError::Missing),
+    };
+    match serde_json::from_str::<ClientEnvelope>(frame.as_str()) {
+        Ok(ClientEnvelope { message: ClientMessage::Auth(AuthMessage { token }), .. }) => admit(state, &token),
+        _ => Err(AuthError::Missing),
+    }
+}
+
+async fn run_socket(socket: WebSocket, state: AppState, claims: Option<Claims>) {
+    let (mut sink, mut stream) = socket.split();
+    let claims = match claims {
+        Some(claims) => claims,
+        None => match first_message_auth(&mut stream, &state).await {
+            Ok(claims) => claims,
+            Err(error) => {
+                state.telemetry.event(&SessionEvent::AuthRejected { reason: error.reason() });
+                let code = if error == AuthError::WrongSession { close::WRONG_SESSION } else { close::TOKEN_EXPIRED };
+                let refused = ServerMessage::Error(ErrorMessage::new(error.code(), error.to_string()).fatal());
+                if let Ok(text) = serde_json::to_string(&ServerEnvelope { seq: 1, message: &refused }) {
+                    let _ = sink.send(Message::Text(text.into())).await;
+                }
+                let _ = sink.send(Message::Close(Some(CloseFrame { code, reason: error.code().into() }))).await;
+                return;
+            }
+        },
+    };
     let (out_tx, out_rx) = mpsc::channel::<Outbound>(OUT_CAPACITY);
     let (in_tx, in_rx) = mpsc::channel::<Inbound>(IN_CAPACITY);
-    let session = &state.config.session;
-    let ping_every = Duration::from_secs(session.ping_interval_secs);
-    let idle = Duration::from_secs(session.idle_timeout_secs);
+    let config = state.config.get();
+    let ping_every = Duration::from_secs(config.session.ping_interval_secs);
+    let idle = Duration::from_secs(config.session.idle_timeout_secs);
     if state.registry.connect(claims, out_tx.clone(), in_rx).is_err() {
         let _ = out_tx.try_send(Outbound::Close { code: close::WRONG_SESSION, reason: "this session belongs to someone else" });
     }
     let writer = tokio::spawn(write_loop(sink, out_rx, ping_every));
-    read_loop(stream, in_tx, out_tx, &state.config.limits, idle).await;
+    read_loop(stream, in_tx, out_tx, &config.limits, idle).await;
     let _ = writer.await;
 }
 
 async fn write_loop(mut sink: SplitSink<WebSocket, Message>, mut out: mpsc::Receiver<Outbound>, ping_every: Duration) {
     let mut ping = tokio::time::interval_at(Instant::now() + ping_every, ping_every);
+    let mut seq = 0u64;
     loop {
         tokio::select! {
             next = out.recv() => match next {
                 Some(Outbound::Message(message)) => {
-                    let Ok(text) = serde_json::to_string(&message) else { continue };
+                    seq += 1;
+                    let Ok(text) = serde_json::to_string(&ServerEnvelope { seq, message: &message }) else { continue };
                     if sink.send(Message::Text(text.into())).await.is_err() {
                         break;
                     }
@@ -191,6 +228,13 @@ async fn read_loop(
     let reply = |error: ErrorMessage| {
         let _ = out.try_send(Outbound::Message(ServerMessage::Error(error)));
     };
+    /// Only the `seq` of a message that did not parse, to quote it in the error.
+    #[derive(serde::Deserialize)]
+    struct SeqOnly {
+        #[serde(default)]
+        seq: Option<u64>,
+    }
+    let seq_of = |text: &str| serde_json::from_str::<SeqOnly>(text).ok().and_then(|s| s.seq);
     loop {
         let frame = match tokio::time::timeout(idle, stream.next()).await {
             Err(_) => {
@@ -213,20 +257,20 @@ async fn read_loop(
         if !bucket.take(received_at) {
             if last_limit_notice.is_none_or(|at| received_at.saturating_duration_since(at) >= Duration::from_secs(1)) {
                 last_limit_notice = Some(received_at);
-                reply(ErrorMessage::new("rate_limited", "Too many messages; some were dropped."));
+                reply(ErrorMessage::new("rate_limited", "Too many messages; some were dropped.").retry().in_reply_to(seq_of(text.as_str())));
             }
             continue;
         }
         // Parse errors are answered with a fixed sentence: the parser's own message can quote the text.
-        let Ok(message) = serde_json::from_str::<ClientMessage>(text.as_str()) else {
-            reply(ErrorMessage::new("bad_message", "The message is not JSON of a known type."));
+        let Ok(ClientEnvelope { seq, message }) = serde_json::from_str::<ClientEnvelope>(text.as_str()) else {
+            reply(ErrorMessage::new("bad_message", "The message is not JSON of a known type.").in_reply_to(seq_of(text.as_str())));
             continue;
         };
         if let Err(reason) = message.validate(limits) {
-            reply(ErrorMessage::new("bad_message", reason));
+            reply(ErrorMessage::new("bad_message", reason).in_reply_to(seq));
             continue;
         }
-        if inbound.send(Inbound { message, received_at }).await.is_err() {
+        if inbound.send(Inbound { message, seq, received_at }).await.is_err() {
             break;
         }
     }

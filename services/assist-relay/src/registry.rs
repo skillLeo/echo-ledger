@@ -1,8 +1,8 @@
 //! Live sessions by id, and what each session has spent.
 //!
 //! One connection per session: a second connection for the same session takes over (the first is closed with 4409),
-//! and a reconnect within the grace period resumes the session. The spend outlives the session for a day, so a new
-//! connection never starts the budget from zero.
+//! and a reconnect within the grace period resumes the session. The ledger (spend, connected time, and both when the
+//! current token arrived) outlives the session for a day, so reconnecting with the same token never resets the count.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -20,8 +20,18 @@ struct Entry {
     generation: u64,
 }
 
-struct Spend {
-    micros: u64,
+/// A session's spend and connected time, and both at the moment its current token arrived.
+#[derive(Debug, Clone, Default)]
+pub struct Ledger {
+    pub spent: u64,
+    pub connected: Duration,
+    pub token_key: (i64, Option<String>),
+    pub spend_base: u64,
+    pub time_base: Duration,
+}
+
+struct Kept {
+    ledger: Ledger,
     updated: Instant,
 }
 
@@ -29,7 +39,7 @@ struct Spend {
 pub struct Registry {
     deps: SessionDeps,
     sessions: Mutex<HashMap<String, Entry>>,
-    spend: Mutex<HashMap<String, Spend>>,
+    ledgers: Mutex<HashMap<String, Kept>>,
     generations: AtomicU64,
     connections: AtomicU64,
 }
@@ -40,9 +50,9 @@ impl std::fmt::Debug for Entry {
     }
 }
 
-impl std::fmt::Debug for Spend {
+impl std::fmt::Debug for Kept {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Spend").field("micros", &self.micros).finish()
+        f.debug_struct("Kept").field("spent", &self.ledger.spent).finish()
     }
 }
 
@@ -56,7 +66,7 @@ impl Registry {
         Arc::new(Registry {
             deps,
             sessions: Mutex::new(HashMap::new()),
-            spend: Mutex::new(HashMap::new()),
+            ledgers: Mutex::new(HashMap::new()),
             generations: AtomicU64::new(1),
             connections: AtomicU64::new(1),
         })
@@ -90,9 +100,9 @@ impl Registry {
         }
         let generation = self.generations.fetch_add(1, Ordering::Relaxed);
         let (control, control_rx) = mpsc::unbounded_channel();
-        let spent = self.spent(&session_id);
+        let ledger = self.ledger(&session_id);
         let user = connection.claims.sub.clone();
-        let engine = Engine::new(self.clone(), generation, connection.claims.clone(), spent);
+        let engine = Engine::new(self.clone(), generation, connection.claims.clone(), ledger);
         let _ = control.send(Control::Attach(connection));
         sessions.insert(session_id, Entry { user, control, generation });
         drop(sessions);
@@ -147,18 +157,19 @@ impl Registry {
 
     /// What a session has spent so far, in micro-dollars.
     pub fn spent(&self, session_id: &str) -> u64 {
-        lock(&self.spend).get(session_id).map_or(0, |spend| spend.micros)
+        lock(&self.ledgers).get(session_id).map_or(0, |kept| kept.ledger.spent)
     }
 
-    pub(crate) fn record_spend(&self, session_id: &str, micros: u64) {
-        let mut spend = lock(&self.spend);
-        let entry = spend.entry(session_id.to_owned()).or_insert(Spend { micros: 0, updated: Instant::now() });
-        entry.micros = entry.micros.max(micros);
-        entry.updated = Instant::now();
+    fn ledger(&self, session_id: &str) -> Ledger {
+        lock(&self.ledgers).get(session_id).map(|kept| kept.ledger.clone()).unwrap_or_default()
     }
 
-    /// Forgets the spend of sessions idle for longer than `older_than` (tokens live 15 minutes, sessions hours).
+    pub(crate) fn save_ledger(&self, session_id: &str, ledger: Ledger) {
+        lock(&self.ledgers).insert(session_id.to_owned(), Kept { ledger, updated: Instant::now() });
+    }
+
+    /// Forgets the ledgers of sessions idle for longer than `older_than` (tokens live 15 minutes, sessions hours).
     pub fn sweep(&self, older_than: Duration) {
-        lock(&self.spend).retain(|_, spend| spend.updated.elapsed() < older_than);
+        lock(&self.ledgers).retain(|_, kept| kept.updated.elapsed() < older_than);
     }
 }

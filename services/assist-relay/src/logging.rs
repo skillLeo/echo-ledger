@@ -41,8 +41,9 @@ mod tests {
 
     #[test]
     fn libraries_stay_at_warn_whatever_the_level() {
-        assert_eq!(filter("trace").to_string(), "warn,assist_relay=trace");
-        assert_eq!(filter("hyper=trace").to_string(), "warn,assist_relay=info");
-        assert_eq!(filter(" DEBUG ").to_string(), "warn,assist_relay=debug");
+        // EnvFilter prints the directives with a target first.
+        assert_eq!(filter("trace").to_string(), "assist_relay=trace,warn");
+        assert_eq!(filter("hyper=trace").to_string(), "assist_relay=info,warn");
+        assert_eq!(filter(" DEBUG ").to_string(), "assist_relay=debug,warn");
     }
 }

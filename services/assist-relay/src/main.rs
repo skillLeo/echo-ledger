@@ -3,8 +3,9 @@
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use assist_relay::config::{ProviderMode, RelayConfig, Settings};
-use assist_relay::instructions::InstructionPack;
+use assist_relay::config::{ProviderMode, RelayConfig, Settings, Shared};
+use assist_relay::internal::{InternalApi, NoReports, ProviderKeys, ReportSink, Reporter, spawn_provider_refresh};
+use assist_relay::pack::Pack;
 use assist_relay::provider::{MockStats, Providers};
 use assist_relay::telemetry::LogSink;
 
@@ -31,33 +32,54 @@ fn main() -> ExitCode {
 }
 
 async fn run(settings: Settings) -> ExitCode {
-    let config = match RelayConfig::load(settings.config_path.as_ref()) {
-        Ok(config) => config,
+    let file = match RelayConfig::load(settings.config_path.as_ref()) {
+        Ok(config) => Arc::new(config),
         Err(error) => {
             tracing::error!(event = "startup_failed", reason = %error);
             return ExitCode::from(2);
         }
     };
-    let instructions_path = std::env::var_os("RELAY_INSTRUCTIONS").map(std::path::PathBuf::from);
-    let pack = match InstructionPack::load(instructions_path.as_deref()) {
-        Ok(pack) => pack,
-        Err(error) => {
-            tracing::error!(event = "startup_failed", reason = %error);
-            return ExitCode::from(2);
-        }
+    let pack = match &settings.pack_dir {
+        None => Pack::built_in(),
+        Some(dir) => match Pack::load_dir(dir) {
+            Ok(pack) => pack,
+            Err(error) => {
+                tracing::error!(event = "startup_failed", reason = %error);
+                return ExitCode::from(2);
+            }
+        },
     };
+    let config = Arc::new(Shared::new((*file).clone()));
     let providers = match settings.providers {
         ProviderMode::Live => Providers::live(),
-        ProviderMode::Mock => Providers::mock(&config, Arc::new(MockStats::default())).0,
+        ProviderMode::Mock => Providers::mock(&file, Arc::new(MockStats::default())).0,
     };
-    let state = assist_relay::app_state(
+    // With a server, the provider keys and the model catalog come from it, and usage goes back to it.
+    let keys = Arc::new(ProviderKeys::default());
+    let reports: Arc<dyn ReportSink> = match &settings.server_url {
+        None => Arc::new(NoReports),
+        Some(url) => match InternalApi::new(url, settings.secrets[0].clone()) {
+            Ok(api) => {
+                let api = Arc::new(api);
+                spawn_provider_refresh(api.clone(), file.clone(), config.clone(), keys.clone());
+                Arc::new(Reporter::spawn(api))
+            }
+            Err(error) => {
+                tracing::error!(event = "startup_failed", reason = %error);
+                return ExitCode::FAILURE;
+            }
+        },
+    };
+    let pack_version = pack.version.clone();
+    let state = assist_relay::app_state(assist_relay::Parts {
         config,
         pack,
         providers,
-        Arc::new(LogSink),
-        settings.token_secrets.clone(),
-        &settings.token_issuer,
-    );
+        telemetry: Arc::new(LogSink),
+        reports,
+        secrets: settings.secrets.clone(),
+        issuer: settings.token_issuer.clone(),
+    });
     let listener = match tokio::net::TcpListener::bind(settings.bind).await {
         Ok(listener) => listener,
         Err(error) => {
@@ -69,7 +91,14 @@ async fn run(settings: Settings) -> ExitCode {
         ProviderMode::Live => "live",
         ProviderMode::Mock => "mock",
     };
-    tracing::info!(event = "listening", addr = %settings.bind, providers, version = env!("CARGO_PKG_VERSION"));
+    tracing::info!(
+        event = "listening",
+        addr = %settings.bind,
+        providers,
+        server = settings.server_url.is_some(),
+        pack = %pack_version,
+        version = env!("CARGO_PKG_VERSION")
+    );
     match assist_relay::server::serve(listener, state, shutdown_signal()).await {
         Ok(()) => {
             tracing::info!(event = "stopped");
