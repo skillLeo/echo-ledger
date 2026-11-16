@@ -52,7 +52,14 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     2.4 snackbar).
   - desktop-1 b-desktop: 0.1 → signing → key → 0.1c → 0.1b chain in its fix round (0.1b/0.1c blocker: Ctrl+Alt+S =
     AltGr; detector copies beside a camera panel); P1 WIP on b-desktop-wip. Merge the whole chain after both re-reviews.
-  - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) in review; 0.2b/0.2/0.2d review =
+  - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) reviewed = changes needed: [major]
+    tray.rs:479 (+:226) a queued older draw can overwrite a newer one → a generation number taken first in
+    commands::status (AtomicU64 SeqCst) passed through update(); TrayCache keeps the newest; changes() ignores older;
+    test changes(gen 2,Y) then (gen 1,X) → Y stays (replace the try_lock asserts at :629/:633); [minor]
+    PrivacySettings.tsx:176/:186 follow hidden_line's order (line only when barOnScreen && !hiddenByShortcut; Show when
+    hiddenByShortcut || !barOnScreen; test); [minor] check.rs:851 a source check that the PrivacyStatus literal in
+    status() holds no .lock(); also PrivacySettings.tsx:45 still says "the pill".
+    NOTE: v1.1 has the merged audit with the tray-lock deadlock risk until this follow-up merges; 0.2b/0.2/0.2d review =
     changes needed (4 blockers, false missed reports) — fixes D1–D5, D8–D10 on b-desktop-reopen-d-wip @d1bfd347
     (regression tests pass), D6, D7, D11–D14 still to do.
   - phone b-phone (clean): all 9 majors of the 0.2 re-review + 0.3 review fixed (`8c22e1bd` trust/security B1–B4,
@@ -63,7 +70,9 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
     remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
     Dockerfile/systemd/README, clippy.
   - Mac: the v1.8.1 CI build (5d9f9779, ad hoc) is INSTALLED in /Applications (v1.6.0 kept in the session scratchpad
-    as mac-backup-160); Hassam is running the Mac batch.
+    as mac-backup-160). Measured: every window state 0 incl. TUINSWindow; the installed app's own Share Check passes as
+    itself (capture allowed through "Device Control and Data Access" on macOS 27). Still to do with Hassam: MAC-31,
+    the meeting shares (Meet, Zoom both modes, WhatsApp) with the phone as viewer, S-7 to S-13.
 - **Merge log (v1.8 / v1.9, one line per reviewed item):**
   - 2026-11-16 · v1.8 0.4 Mac reopen · `10c7a743` · reviewer approve (3 minor → R12 work: one show path, the 10-minute
     jump only without a main window) · waiting: MAC-31.
