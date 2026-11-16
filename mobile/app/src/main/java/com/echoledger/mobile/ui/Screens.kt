@@ -153,7 +153,9 @@ fun SessionScreen(
     onBack: () -> Unit,
     startAtMs: Long? = null,
     onCaptureTest: () -> Unit = {},
-    backToSource: Pair<String, () -> Unit>? = null
+    backToSource: Pair<String, () -> Unit>? = null,
+    /** Opens a Settings page by its id (since 1.8.1-b: "Check your key" on a refused own key). */
+    onOpenSettings: (String) -> Unit = {}
 ) {
     var transcript by remember { mutableStateOf<TranscriptDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
@@ -519,15 +521,16 @@ fun SessionScreen(
                         "Transcription failed. ${failureText(t)}",
                         Modifier.padding(horizontal = Space.screen),
                         kind = BannerKind.Error,
-                        action = if (t.errorCode == "no_audio") {
-                            null
-                        } else if (retrying) {
-                            "Retrying…"
-                        } else {
-                            "Retry"
+                        action = when {
+                            t.errorCode == "own_key_rejected" -> "Check your key"
+                            t.errorCode in NO_RETRY -> null
+                            retrying -> "Retrying…"
+                            else -> "Retry"
                         },
                         onAction = {
-                            if (!retrying) {
+                            if (t.errorCode == "own_key_rejected") {
+                                onOpenSettings(TRANSCRIPTION_KEY_PAGE)
+                            } else if (!retrying) {
                                 retrying = true
                                 retryScope.launch {
                                     vm.retranscribe(item.id, t.language)
@@ -1154,14 +1157,23 @@ internal fun failureText(t: TranscriptDto): String = when (t.errorCode) {
 
     "interrupted" -> "Transcription was interrupted. Tap Retry."
 
-    "recording_missing" -> "The recording is missing or not ready."
+    "recording_missing" -> "The audio did not fully reach the server, or it is no longer stored."
 
     // Since v1.6 (the Free plan): transcription uses the person's own free Groq key.
     "needs_transcription_key" ->
         "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry."
 
+    // Since 1.8.1-b (P-076): the person's own key was refused; the page's "Check your key" opens it.
+    "own_key_rejected" -> "Groq did not accept your key. Check it in Transcription key, then try again."
+
     else -> "The transcript could not be made. Tap Retry."
 }
+
+/** Failed transcripts a Retry cannot help (since 1.8.1-b): nothing was heard, or the audio is not on the server. */
+internal val NO_RETRY = setOf("no_audio", "recording_missing")
+
+/** The Settings page of the Free plan's own key ([SettingsIndex] id), opened by "Check your key". */
+internal const val TRANSCRIPTION_KEY_PAGE = "key"
 
 /** Setup → Call capture: the guided test and "Copy diagnostics". */
 @Composable

@@ -35,6 +35,7 @@ class VendorNamesTest {
         "Groq API key",
         "Groq did not accept that key. Copy it again from console.groq.com.",
         "The Free plan transcribes with your own free Groq key. Add it in You → Transcription key, then tap Retry.",
+        "Groq did not accept your key. Check it in Transcription key, then try again.",
         // The settings search finds the key step by its vendor's name too (search words, never shown).
         "groq key free own transcription",
         "groq api key free own key transcribe"
@@ -280,7 +281,9 @@ class VendorNamesTest {
         sentences.forEach { (code, sentence) ->
             assertTrue("$code has its own sentence", sentence != unknown)
             assertFalse("$code never shows the server's text", "provider said" in sentence)
-            if (code != "needs_transcription_key") assertFalse("$code: $sentence", VendorNames.mentions(sentence))
+            if (code !in setOf("needs_transcription_key", "own_key_rejected")) {
+                assertFalse("$code: $sentence", VendorNames.mentions(sentence))
+            }
         }
         assertEquals("one sentence per code", codes.size, sentences.values.toSet().size)
     }

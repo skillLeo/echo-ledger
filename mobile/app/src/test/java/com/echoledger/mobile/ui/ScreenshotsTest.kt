@@ -236,6 +236,14 @@ class ScreenshotsTest : ScreenTest() {
         "The transcription service could not transcribe this recording."
     )
 
+    /** A refused own key (since 1.8.1-b, P-076): the sentence and "Check your key", with no Retry. */
+    @Test
+    fun sessionOwnKeyRejected() = sessionState(
+        "session-own-key-rejected",
+        ServerFixtures.transcript(status = "failed", errorCode = "own_key_rejected", error = "rejected", segments = "[]", text = null),
+        "Groq did not accept your key."
+    )
+
     /** Made by the backup engine: the offer of the best one, naming neither engine. */
     @Test
     fun sessionBackup() = sessionState(
