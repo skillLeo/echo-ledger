@@ -1382,6 +1382,10 @@ export interface PrivacyStatus {
   hiddenForShare: boolean;
   /** The person opened the main window during a whole-screen share: it says it may be in the screen share. */
   mainInShare: boolean;
+  /** Which whole-screen share that is, counted in this run: the notice closed in one share shows again in the next. */
+  shareNumber: number;
+  /** The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends). */
+  barOnScreen: boolean;
   share: ShareSeen | null;
   lastCheck: LastCheck | null;
   checkRunning: boolean;

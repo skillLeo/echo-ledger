@@ -69,7 +69,8 @@ const planParam = params.get("plan");
 // (the setting Off, Only floating windows, the 10 minutes running), "controls-share-visible" and
 // "controls-share-notchecked" (the floating windows' badge), "controls-translate-box" / "-subtitles" (Live Translate
 // with its badge), "controls-check-card" (the test card of the test with the phone), "library-share-notice-mac" (the
-// main window opened during a whole-screen share).
+// main window opened during a whole-screen share), "settings-share-bar-mac" (the windows off while the sharing bar is on
+// screen: no Show, and when they come back).
 const share = screen.includes("share");
 const shareResult = screen.includes("-fail") ? "fail" : screen.includes("-error") ? "error" : "pass";
 /** A desktop as a capture would show it: a page, its text, the green control, and the test window where it leaked. */
@@ -111,6 +112,8 @@ function privacyStatus() {
   const visible = shownOnPurpose || screen.includes("share-visible") || shareResult === "fail" && screen.includes("-fail");
   const badge = old ? "black_box" : visible ? "visible" : screen.includes("share-error") || screen.includes("share-notchecked") ? "not_checked" : "private";
   const inShare = screen.includes("share-notice");
+  // "settings-share-bar-mac": a whole-screen share keeps the windows off and its sharing bar is on screen.
+  const bar = screen.includes("share-bar");
   return {
     platform: mac ? "macos" : "windows",
     badge,
@@ -121,9 +124,11 @@ function privacyStatus() {
     lines: old ? [{ warning: true, text: "On this Windows version, people see a black box instead of EchoLedger. Update Windows for a clear result.", fix: null }] : [],
     demoSecondsLeft: screen.includes("share-demo") ? 540 : null,
     hiddenByShortcut: false,
-    hiddenForShare: inShare,
+    hiddenForShare: inShare || bar,
     mainInShare: inShare,
-    share: inShare ? { app: "teams", mode: "screen", hid: true } : null,
+    shareNumber: inShare || bar ? 1 : 0,
+    barOnScreen: bar,
+    share: inShare || bar ? { app: "teams", mode: "screen", hid: true } : null,
     lastCheck: old ? { at: new Date().toISOString(), result: "pass", reason: "old_windows", methods: [{ method: "wgc", result: "pass", reason: "old_windows" }] }
       : screen.includes("share-notchecked") ? null : { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: mac ? "sck" : "wgc", result: "pass", reason: null }] },
     checkRunning: false,

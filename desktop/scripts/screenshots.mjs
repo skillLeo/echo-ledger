@@ -356,6 +356,12 @@ const SCREENS = [
     await nav(page, "Screen-share privacy");
     await page.waitForSelector("[data-testid=privacy-badge]");
   }]),
+  ["settings-share-privacy-bar-mac", "settings-share-bar-mac", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.waitForSelector("[data-testid=back-after-share]");
+    await page.locator("[data-testid=back-after-share]").scrollIntoViewIfNeeded();
+  }],
   ["settings-share-privacy-old-windows", "settings-share-old", async (page) => { await settingsReady(page); await nav(page, "Screen-share privacy"); await page.waitForSelector(".privacy-line.warning"); }],
   ...["pass", "fail", "error"].map((result) => [`share-check-${result}`, `settings-share-${result}-mac`, async (page) => {
     await settingsReady(page);
@@ -384,6 +390,32 @@ const SCREENS = [
     await page.getByRole("button", { name: "Test", exact: true }).first().click();
     await page.waitForSelector("[data-testid=guided]");
     await page.locator("[data-testid=guided]").scrollIntoViewIfNeeded();
+  }],
+  // The test card over the page: where the core puts it for a main window filling a Mac's screen (privacy::check::
+  // card_frame finds no room beside it, so the smallest card goes in the top left corner, over the window's title and
+  // the top of the page, never over the question and its answers). The card is its own window: drawn here in a frame.
+  ["share-check-guided-card-mac", "settings-share-mac", async (page) => {
+    await settingsReady(page);
+    await nav(page, "Screen-share privacy");
+    await page.locator("#setting-share_privacy\\.check").click();
+    await page.getByRole("heading", { level: 1, name: "Check screen-share privacy" }).waitFor();
+    await page.getByRole("button", { name: "Test", exact: true }).first().click();
+    await page.waitForSelector("[data-testid=guided]");
+    await page.locator("[data-testid=guided]").scrollIntoViewIfNeeded();
+    const theme = new URL(page.url()).searchParams.get("theme");
+    // A maximised window starts under the menu bar (33 points): the card's corner is 16 points from the screen's.
+    await page.evaluate((src) => {
+      const frame = document.createElement("div");
+      frame.className = "screens-card-window";
+      frame.style.cssText = "position:fixed;left:16px;top:-17px;width:480px;height:270px;border-radius:10px;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.35);z-index:99999";
+      const card = document.createElement("iframe");
+      card.src = src;
+      card.title = "Test card";
+      card.style.cssText = "border:0;width:480px;height:270px;display:block";
+      frame.appendChild(card);
+      document.body.appendChild(frame);
+    }, `${base}scripts/screens/index.html?screen=controls-check-card&theme=${theme}`);
+    await page.frameLocator(".screens-card-window iframe").locator("[data-testid=check-card]").waitFor();
   }],
   ["settings-captions", "settings", async (page) => { await settingsReady(page); await nav(page, "Captions"); await page.waitForSelector(".caption-sample"); }],
   ["onboarding-private-notes-mac", "onboarding-mac", async (page) => {

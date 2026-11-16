@@ -448,6 +448,8 @@ export function makePrivacyStatus(overrides: Partial<PrivacyStatus> = {}): Priva
     hiddenByShortcut: false,
     hiddenForShare: false,
     mainInShare: false,
+    shareNumber: 0,
+    barOnScreen: false,
     share: null,
     lastCheck: { at: new Date().toISOString(), result: "pass", reason: null, methods: [{ method: "wgc", result: "pass", reason: null }, { method: "dxgi", result: "pass", reason: null }] },
     checkRunning: false,

@@ -5,7 +5,9 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
 import { makePrivacyStatus, makeSettings } from "../../test/fixtures";
 import type { ShareCheckView } from "../../lib/ipc";
-import { GUIDED_ALONE, LIMITS, ONE_WINDOW_TIP, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
+import { BACK_AFTER_SHARE, GUIDED_ALONE, LIMITS, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, OnboardingShareCheck, PATTERN_FLASH, SHARE_NOTICE, ShareCheckPage, ShareNotice, SharePrivacyPage, lastCheckValue } from "./PrivacySettings";
+import { resetClosedBanners } from "../../components/StateBanner";
+import { setting } from "../../lib/settingsRegistry";
 import ShareCheckWindow, { CONTROL_TEXT } from "../sharecheck/ShareCheckWindow";
 import { PrivacyBadge, PrivacyBadgeView } from "../../components/PrivacyBadge";
 
@@ -58,7 +60,7 @@ describe("Share Check", () => {
     render(<ShareCheckPage />);
     const line = await screen.findByTestId("permission-first");
     expect(line).toHaveTextContent("Screen Recording");
-    fireEvent.click(within(line).getByRole("button", { name: "Open Settings" }));
+    fireEvent.click(within(line).getByRole("button", { name: "Open System Settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
   });
 
@@ -68,7 +70,7 @@ describe("Share Check", () => {
     expect(await screen.findByRole("button", { name: "Checking…" })).toBeDisabled();
   });
 
-  it("names a missing permission with Open Settings, and a failed capture with Try again", async () => {
+  it("names a missing permission with Open System Settings, and a failed capture with Try again", async () => {
     respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: true }));
     respond("share_check_run", view({ result: "error", reason: "permission_missing", picture: null, testArea: null, controlArea: null }));
     respond("share_check_card", null);
@@ -76,7 +78,7 @@ describe("Share Check", () => {
     render(<ShareCheckPage />);
     fireEvent.click(await screen.findByRole("button", { name: "Check now" }));
     const result = await screen.findByTestId("check-result");
-    fireEvent.click(within(result).getByRole("button", { name: "Open Settings" }));
+    fireEvent.click(within(result).getByRole("button", { name: "Open System Settings" }));
     expect(callsOf("open_privacy_settings")).toEqual([{ kind: "screen" }]);
     expect(screen.queryByText("What others see")).toBeNull();
 
@@ -151,9 +153,17 @@ describe("Settings › Screen-share privacy", () => {
     expect(screen.getByText("Chrome 142.0"), "Meet's result is kept for Chrome's version").toBeInTheDocument();
     expect(screen.getByText("Hidden"), "the tags are a pair: Hidden / Visible").toBeInTheDocument();
     expect(screen.queryByTestId("zoom-steps"), "a step, not a value read from Zoom").toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: /Set up Zoom/ }));
+    const zoom = screen.getByRole("button", { name: /Set up Zoom/ });
+    expect(zoom).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(zoom);
     expect(screen.getByTestId("zoom-steps")).toHaveTextContent("Settings › Share Screen › Advanced and set Screen capture mode to Advanced capture with window filtering");
+    expect(zoom).toHaveAttribute("aria-expanded", "true");
+    expect(within(zoom).queryByText("Hide"), "a disclosure, not a Hide button").toBeNull();
+    fireEvent.click(zoom);
+    expect(screen.queryByTestId("zoom-steps")).toBeNull();
     expect(screen.getByRole("switch", { name: "I share one window or a tab" })).toBeInTheDocument();
+    // The switch's own words, in the section's footer.
+    expect(screen.getByText(setting("share_privacy.one_window").description!)).toBeInTheDocument();
   });
 
   it("shows and changes Hide EchoLedger windows, and counts the demo down", async () => {
@@ -177,8 +187,29 @@ describe("Settings › Screen-share privacy", () => {
     respond("privacy_set_hidden", null);
     render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
     expect(await screen.findByText("Hidden while you share your screen")).toBeInTheDocument();
+    expect(screen.queryByTestId("back-after-share")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Show EchoLedger windows" }));
     expect(callsOf("privacy_set_hidden")).toEqual([{ hidden: false }]);
+  });
+
+  it("does not offer Show while the sharing bar is on screen, and says when they come back", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: true }));
+    render(<SharePrivacyPage settings={makeSettings()} patch={vi.fn(async () => true)} onCheck={() => undefined} />);
+    expect(await screen.findByText("Hidden while you share your screen")).toBeInTheDocument();
+    expect(screen.getByTestId("back-after-share")).toHaveTextContent(BACK_AFTER_SHARE);
+    expect(screen.queryByRole("button", { name: "Show EchoLedger windows" }), "it would last until the next look").toBeNull();
+    // The bar was hidden (Zoom hid its controls): Show works again.
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, barOnScreen: false }));
+    await act(async () => emitEvent("privacy:changed", null));
+    expect(await screen.findByRole("button", { name: "Show EchoLedger windows" })).toBeInTheDocument();
+    expect(screen.queryByTestId("back-after-share")).toBeNull();
+  });
+
+  it("labels every button to the system's settings the same way", async () => {
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", permission: false }));
+    render(<ShareCheckPage />);
+    expect(within(await screen.findByTestId("permission-first")).getByRole("button", { name: OPEN_SYSTEM_SETTINGS })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open Settings" })).toBeNull();
   });
 
   it("moves the floating windows only when one is open, and says what happened", async () => {
@@ -240,6 +271,24 @@ describe("hidden windows and the flags", () => {
     render(<ShareNotice />);
     expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
     expect(screen.getByTestId("main-in-share")).toHaveAttribute("role", "status");
+  });
+
+  it("says it again in the next share once closed in one", async () => {
+    resetClosedBanners();
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 1 }));
+    const { unmount } = render(<ShareNotice />);
+    const notice = await screen.findByTestId("main-in-share");
+    fireEvent.click(within(notice).getByRole("button", { name: /close|dismiss/i }));
+    expect(screen.queryByTestId("main-in-share")).toBeNull();
+    unmount();
+    // The same share: it stays closed.
+    render(<ShareNotice />);
+    await waitFor(() => expect(callsOf("privacy_status").length).toBeGreaterThan(1));
+    expect(screen.queryByTestId("main-in-share")).toBeNull();
+    // A later share, with the main window opened during it again.
+    respond("privacy_status", makePrivacyStatus({ platform: "macos", hiddenForShare: true, mainInShare: true, shareNumber: 2 }));
+    await act(async () => emitEvent("privacy:changed", null));
+    expect(await screen.findByText(SHARE_NOTICE)).toBeInTheDocument();
   });
 
   it("says nothing when the main window is not on screen for a share", async () => {

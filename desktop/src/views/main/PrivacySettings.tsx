@@ -30,19 +30,26 @@ export const PATTERN_FLASH = "While it checks, a checkered test window and a gre
 /** The main window opened during a whole-screen share that keeps the floating windows off (since v1.8.1). */
 export const SHARE_NOTICE = "You're sharing your whole screen, so this window may be visible in the screen share.";
 
-/** The one plain line at the top of the main window while it is on screen during such a share. */
+/** While a sharing bar keeps the windows off, "Show EchoLedger windows" would last until the next look: what happens. */
+export const BACK_AFTER_SHARE = "They come back when the screen share ends. To keep them on screen while you share, share one window or a tab.";
+
+/** The label of every button that opens the system's settings on this page. */
+export const OPEN_SYSTEM_SETTINGS = "Open System Settings";
+
+/** The one plain line at the top of the main window while it is on screen during such a share. Closed, it stays closed
+ * for that share only: the next share says it again. */
 export function ShareNotice() {
   const status = usePrivacyStatus();
   if (!status?.mainInShare) return null;
   return (
-    <StateBanner id="main-in-share" state="on" tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
+    <StateBanner id="main-in-share" state={`share-${status.shareNumber}`} tone="warn" icon={<AlertIcon size={16} />} role="status" testId="main-in-share">
       <span>{SHARE_NOTICE}</span>
     </StateBanner>
   );
 }
 
 /** A status line's button (pure label). */
-export const LINE_FIX_LABEL = { open_settings: "Open System Settings", hide_again: "Hide again" } as const;
+export const LINE_FIX_LABEL = { open_settings: OPEN_SYSTEM_SETTINGS, hide_again: "Hide again" } as const;
 
 function LineFix({ fix }: { fix: "open_settings" | "hide_again" }) {
   const [problem, setProblem] = useState<string | null>(null);
@@ -152,7 +159,10 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
         <LinkRow id="share_privacy.check" value={lastCheckValue(status?.lastCheck?.result ?? null, status?.lastCheck?.at ?? null, new Date(), status?.lastCheck?.reason ?? null)} onOpen={onCheck} chevron />
       </Section>
       {mac && status && (
-        <Section title="Meeting apps" footer={<p>Each app captures your screen its own way. A 1-minute test with your phone tells you for sure.</p>}>
+        <Section title="Meeting apps" footer={<>
+          <p>Each app captures your screen its own way. A 1-minute test with your phone tells you for sure.</p>
+          <p>{setting("share_privacy.one_window").description}</p>
+        </>}>
           <div role="list" aria-label="Meeting apps">
             {status.apps.filter((a) => a.version || a.app === "meet").map((a) => <AppLine key={a.app} row={a} />)}
           </div>
@@ -161,6 +171,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
         </Section>
       )}
       <Section title="Sharing" footer={<>
+        {status?.barOnScreen && <p className="privacy-line" role="status" data-testid="back-after-share">{BACK_AFTER_SHARE}</p>}
         <p>{ONE_WINDOW_TIP}</p><p>{LIMITS}</p>
         {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
       </>}>
@@ -169,7 +180,10 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
           disabled={settings.hideFromSharing === "off"}
           onClick={() => act(api.privacyShowInShares(demoSeconds ? 0 : 10))} />
         <InfoRow id="share_privacy.hide_all" value={hidden ?? shortcut}>
-          <button type="button" className="btn compact" onClick={() => act(api.privacySetHidden(!hidden))}>{hidden ? "Show EchoLedger windows" : "Hide now"}</button>
+          {/* While the sharing bar is on screen Show would last until the next look: the footer says when they come back. */}
+          {!status?.barOnScreen && (
+            <button type="button" className="btn compact" onClick={() => act(api.privacySetHidden(!hidden))}>{hidden ? "Show EchoLedger windows" : "Hide now"}</button>
+          )}
         </InfoRow>
         {status && status.displays > 1 && (
           <ActionRow id="share_privacy.displays" value={displaysValue(status.floatingOpen, moved)} disabled={!status.floatingOpen}
@@ -190,7 +204,7 @@ function ZoomStep() {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <ActionRow id="share_privacy.zoom" value={open ? "Hide" : "1 setting"} onClick={() => setOpen((o) => !o)} label={`${setting("share_privacy.zoom").title}, ${open ? "hide the step" : "show the step"}`} />
+      <ActionRow id="share_privacy.zoom" value="1 setting" expanded={open} onClick={() => setOpen((o) => !o)} />
       {open && <div className="set-row set-block" data-testid="zoom-steps"><p>{ZOOM_SETTING}</p></div>}
     </>
   );
@@ -275,14 +289,14 @@ export function ShareCheckPage() {
         {problem && <p className="privacy-line warning" role="alert">{problem}</p>}
         {permissionFirst && (
           <p className="privacy-line warning" data-testid="permission-first">
-            {permissionFirst.text} <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open Settings</button>
+            {permissionFirst.text} <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>{OPEN_SYSTEM_SETTINGS}</button>
           </p>
         )}
       </div>
       {view && line && (
         <div className={`check-result ${view.result}`} data-testid="check-result" role="status">
           <p className={`check-line ${line.tone}`}>{line.text}</p>
-          {line.fix === "open_settings" && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open Settings</button>}
+          {line.fix === "open_settings" && <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>{OPEN_SYSTEM_SETTINGS}</button>}
           {line.fix === "try_again" && <button type="button" className="btn compact" onClick={() => void run()} disabled={busy}>Try again</button>}
           {view.picture && <SidePictures view={view} />}
         </div>
@@ -374,7 +388,7 @@ export function OnboardingShareCheck({ platform }: { platform: string }) {
       {line && (
         <p className={`check-line small ${line.tone}`} role="status">
           {line.text}
-          {line.fix === "open_settings" && <> <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>Open Settings</button></>}
+          {line.fix === "open_settings" && <> <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("screen").catch(() => undefined)}>{OPEN_SYSTEM_SETTINGS}</button></>}
           {line.fix === "try_again" && <> <button type="button" className="btn compact" onClick={() => void run()} disabled={busy}>Try again</button></>}
         </p>
       )}
