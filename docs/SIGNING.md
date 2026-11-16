@@ -76,15 +76,19 @@ Developer ID exists (Needs Hassam H9), every Mac build is signed with one self-s
 - It exists only in those two GitHub secrets: no copy is kept anywhere else. Losing or renewing it costs every Mac one
   more "allow Screen Recording" (the requirement pins this certificate), so keep the secrets; make a new one only when
   it expires or leaks.
-- Everyone allows Screen Recording once more on the first self-signed build (the requirement changes once, from the
-  build's hash to the certificate); after that it stays allowed across updates.
+- Everyone allows the microphone, system audio and Screen Recording once more on the first self-signed build (the
+  requirement changes once, from the build's hash to the certificate), and the stored sign-in may ask once for keychain
+  access; after that all of them stay allowed across updates.
 - Gatekeeper still treats the app as from an unidentified developer (first open: System Settings → Privacy & Security
   → Open Anyway) until the Developer ID and notarization replace it.
 
 ### The updater key
 The workflows can make the updater's packages only with the private key in `TAURI_SIGNING_PRIVATE_KEY`. Today the key
 stays outside GitHub (and outside the Mac): releases are built and signed in the release shell (`desktop/RELEASE.md`)
-and the CI builds carry no `.sig`. Putting the key in a secret is the lead's call: it lets every tagged build be
+and the CI builds carry no `.sig`. Decided for v1.8.1: the key stays out of GitHub. CI builds the self-signed `.dmg` and `.app.tar.gz`; the release
+shell signs that `.app.tar.gz` with `tauri signer sign` (keeping the version binding) and checks, before
+`echoledger:publish-release`, that `codesign -d -r-` on the packaged app shows the pinned certificate leaf. Putting the
+key in a secret instead would let every tagged build be
 published as an update, but whoever can read the repository's secrets (or change a workflow on a branch that runs
 with them) can then sign an update every installed app accepts. If it ever leaks, make a new key pair, ship one
 release signed with the old key that carries the new public key, and only then retire the old one.
