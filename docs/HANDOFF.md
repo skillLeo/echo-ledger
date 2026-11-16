@@ -55,8 +55,10 @@ Active plan: docs/PLAN_V1_5.md (local only). Checklist (single source of truth):
   - desktop-2 b-desktop-reopen @025cde89: audit follow-ups (tray lock, bar sentence) in review; 0.2b/0.2/0.2d review =
     changes needed (4 blockers, false missed reports) — fixes D1–D5, D8–D10 on b-desktop-reopen-d-wip @d1bfd347
     (regression tests pass), D6, D7, D11–D14 still to do.
-  - phone b-phone: 0.2 re-review (3 major) + 0.3 review (6 major incl. spoofed dialer names, Android 14 <queries>) in
-    progress, B1–B4 first; P1 WIP on b-phone-p1-wip (+ "Delete must win over every timer").
+  - phone b-phone (clean): all 9 majors of the 0.2 re-review + 0.3 review fixed (`8c22e1bd` trust/security B1–B4,
+    `8398ad2e` A1, A2/B6, A3, B5, B16; each regression test fails on the old code); left: A4–A9 minors, B7–B15, B17, the
+    "heard both sides itself" wording, the full suite + repo-policy, then a re-review; B18 guide text is in its report
+    (ask it again on resume); P1 WIP on b-phone-p1-wip @91141de6 (+ "Delete must win over every timer").
   - relay b-relay @f9e1f4c7: aligned with 1.9.0-b, 57/58 unit tests; next: the token-replay budget fix (decision: cap
     remaining at its previous value — a top-up applies from the next session), tests/pending → tests, load test,
     Dockerfile/systemd/README, clippy.
