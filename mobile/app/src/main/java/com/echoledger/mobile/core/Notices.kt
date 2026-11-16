@@ -43,7 +43,7 @@ object Notices {
 
     private val CONFIRMATIONS = listOf(
         "Saved", "Copied", "Restored", "Renamed", "Added", "Moved", "Signed in", "Shared", "Sent", "Erased", "Removed",
-        "Settings imported", "Settings saved", "Welcome", "Stopped sharing", "Upload cancelled", "Device revoked"
+        "Settings imported", "Settings saved", "Welcome", "Stopped sharing", "Recording deleted", "Device revoked"
     )
     private val PROBLEMS = listOf(
         "could not", "couldn't", "can't", "cannot", "failed", "is not running", "not reach", "no audio", "first",

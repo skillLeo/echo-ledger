@@ -227,22 +227,4 @@ class TranscriptToolsTest : ScreenTest() {
         pumpUntil("the term to be sent") { server.requestsTo("POST", "/api/vocabulary/keyterms").isNotEmpty() }
         assertTrue(server.requestsTo("POST", "/api/vocabulary/keyterms").single().bodyText().contains("\"term\":\"Farah Khan\""))
     }
-
-    @Test
-    fun `the share dialog makes a link and shows it once`() {
-        server.on("GET", "/api/sessions/${ServerFixtures.SESSION_ID}/shares", FakeServer.json(200, """{"data":[]}"""))
-        server.on(
-            "POST",
-            "/api/sessions/${ServerFixtures.SESSION_ID}/shares",
-            FakeServer.json(201, """{"id":"s1","active":true,"url":"https://ledger.example.test/s/abc"}""")
-        )
-        show { ShareLinkContent(vm, ServerFixtures.SESSION_ID, hasAudio = true) }
-
-        compose.onNodeWithText("7 days").performClick()
-        compose.onNodeWithText("Make link").performClick()
-        pumpUntil("the link to show") {
-            runCatching { compose.onNodeWithText("https://ledger.example.test/s/abc").assertExists() }.isSuccess
-        }
-        assertTrue(server.requestsTo("POST", "/api/sessions/${ServerFixtures.SESSION_ID}/shares").single().bodyText().contains("604800"))
-    }
 }

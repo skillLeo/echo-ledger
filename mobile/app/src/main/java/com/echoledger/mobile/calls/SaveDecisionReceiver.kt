@@ -6,11 +6,13 @@ import android.content.Intent
 import android.os.Handler
 import android.os.Looper
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.data.LocalRecording
 import com.echoledger.mobile.net.DiscardWorker
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.overlay.DecisionPopup
 import com.echoledger.mobile.widget.WidgetStateStore
+import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,6 +79,51 @@ object Decisions {
         WidgetStateStore.refresh(context)
     }
 
+    /**
+     * The after-call chip's Discard (since v1.8.1, bug P-003): the call leaves every list now and stops counting down
+     * to Keep, but its file stays until "Discarded · Undo" is over and a little longer ([DISCARD_AFTER_MS]), so Undo
+     * still finds it. [DiscardLaterWorker] deletes it then, also after the app was closed or killed. Null when the
+     * call is gone or was already decided (nothing is discarded).
+     */
+    suspend fun discardLater(context: Context, recordingId: String, nowMs: Long = System.currentTimeMillis()): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        Notifications.cancelDecision(context, recordingId)
+        DecisionTimeoutWorker.cancel(context, recordingId)
+        val at = Instant.ofEpochMilli(nowMs + DISCARD_AFTER_MS).toString()
+        val discarding = graph.recordings.update(recordingId) {
+            if (it.state == WAITING) it.copy(state = DISCARDING, discardAt = at) else it
+        }?.takeIf { it.state == DISCARDING } ?: return null
+        DiscardLaterWorker.schedule(context, recordingId, DISCARD_AFTER_MS)
+        WidgetStateStore.refresh(context)
+        return discarding
+    }
+
+    /**
+     * Undo on "Discarded · …" (since v1.8.1): the call waits for Keep or Discard again, as before the tap. Null when
+     * its time was over and it is gone.
+     */
+    suspend fun undoDiscard(context: Context, recordingId: String): LocalRecording? {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        DiscardLaterWorker.cancel(context, recordingId)
+        val back = graph.recordings.update(recordingId) {
+            if (it.state == DISCARDING) it.copy(state = WAITING, discardAt = null) else it
+        }?.takeIf { it.state == WAITING } ?: return null
+        WidgetStateStore.refresh(context)
+        return back
+    }
+
+    /** The end of a chip's Discard: the call is deleted, unless Undo brought it back meanwhile. */
+    suspend fun finishDiscard(context: Context, recordingId: String) {
+        val graph = (context.applicationContext as EchoLedgerApp).graph
+        if (graph.recordings.get(recordingId)?.state == DISCARDING) apply(context, recordingId, keep = false)
+    }
+
+    /** The calls discarded from the chip whose Undo time is over at [now] (the hourly check finishes any left). */
+    fun discardsDue(recordings: List<LocalRecording>, now: Instant): List<String> = recordings
+        .filter { it.state == DISCARDING }
+        .filter { (runCatching { Instant.parse(it.discardAt) }.getOrNull() ?: Instant.EPOCH) <= now }
+        .map { it.id }
+
     /** Restore of a skipped call (since v1.5): it is kept like any other call and uploads now. */
     suspend fun restoreSkipped(context: Context, recordingId: String) {
         val graph = (context.applicationContext as EchoLedgerApp).graph
@@ -84,4 +131,12 @@ object Decisions {
         UploadWorker.enqueue(context, recordingId)
         WidgetStateStore.refresh(context)
     }
+
+    private const val WAITING = "pending_decision"
+
+    /** A call discarded from the after-call chip, its file kept for Undo until [LocalRecording.discardAt]. */
+    const val DISCARDING = "discarding"
+
+    /** How long a call discarded from the chip keeps its file: "Discarded · Undo" and 2 s more, so a late Undo finds it. */
+    const val DISCARD_AFTER_MS = DecisionPopup.DISCARDED_MS + 2_000L
 }

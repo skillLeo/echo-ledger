@@ -20,11 +20,16 @@ enum TranscriptErrorCode: string
     case RecordingMissing = 'recording_missing';
     /** Since v1.6: the plan leaves transcription on EchoLedger out and the person has no key of their own. */
     case NeedsTranscriptionKey = 'needs_transcription_key';
+    /** Since v1.8.1: Groq refused the person's own key (401/403); another try with the same key cannot work. */
+    case OwnKeyRejected = 'own_key_rejected';
 
     /** Longest provider reason quoted in a `provider_rejected` message. */
     public const MAX_REASON_CHARS = 200;
 
-    /** The documented message; `provider_rejected` and `provider_not_configured` add their own detail. */
+    /**
+     * The message kept with a failed transcript, for the operator and the logs; `provider_rejected` and
+     * `provider_not_configured` add their own detail. People read plainWords() instead.
+     */
     public function message(): string
     {
         return match ($this) {
@@ -37,6 +42,28 @@ enum TranscriptErrorCode: string
             self::Interrupted => 'Transcription was interrupted. Retry it from the console.',
             self::RecordingMissing => 'The recording is missing or not ready.',
             self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key',
+            self::OwnKeyRejected => "Groq did not accept the person's own key.",
+        };
+    }
+
+    /**
+     * Why a transcript failed, in plain words: the one set of sentences people read everywhere (since v1.8.1, D-129 and
+     * D-131), on the console's recording page and Library, in Activity and the bell, and as the API's `error` (so an app
+     * that shows `error` says the same). Never the stored `error`, which may quote the engine or its provider: that stays
+     * in the transcript's `error` column, for the operator and the logs. A missing or unknown code reads as an engine
+     * problem. The Free plan's own Groq key is the one name people must act on.
+     */
+    public static function plainWords(?self $code): string
+    {
+        return match ($code) {
+            self::NoAudio => 'Nothing could be heard in this recording.',
+            self::BudgetExceeded => 'The monthly transcription limit was reached.',
+            self::RecordingMissing => 'The audio did not fully reach the server, or it is no longer stored.',
+            self::ProviderNotConfigured => 'No speech engine is set up for this language yet.',
+            self::NeedsTranscriptionKey => 'Add your free Groq key in Account → Transcription key.',
+            self::OwnKeyRejected => 'Groq did not accept your key. Check it in Account → Transcription key, then try again.',
+            self::Interrupted => 'Transcription was interrupted. Your audio is safe: try again.',
+            default => 'The speech engines could not transcribe it this time. Your audio is safe: try again.',
         };
     }
 

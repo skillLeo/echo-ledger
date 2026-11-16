@@ -60,7 +60,7 @@
                                     @endif
                                 </span>
                                 @if ($file->status === 'failed' && $file->error)
-                                    <span class="el-caption" style="color: var(--danger)">{{ $file->error }}</span>
+                                    <span class="el-caption" style="color: var(--danger)">{{ $file->errorForPeople() }}</span>
                                 @endif
                             </span>
                             <button type="button" class="el-icon-btn" wire:click="mountAction('removeFile', { file: '{{ $file->id }}' })" aria-label="Remove {{ $file->name }}" title="Remove">

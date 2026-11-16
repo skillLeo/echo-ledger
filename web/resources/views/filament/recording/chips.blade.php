@@ -9,9 +9,8 @@
     $canRetranscribe = $session->primaryRecording?->isReady() === true && ! $session->hasNoAudio();
     $labels = $session->labelList();
     // Since v1.5: an Urdu or Auto recording written by a lower engine of its list (the first one stayed busy or refused it).
+    // Since v1.8.1 (D-129) in plain words: which engine or provider it was is never said here.
     $backup = $final?->status === \App\Enums\TranscriptStatus::Completed ? \App\Services\EngineWait::fields($final) : null;
-    $first = \App\Enums\SttProviderKey::tryFrom((string) ($final?->meta['route']['tried'][0]['engine'] ?? ''))?->getLabel() ?? 'The first engine for this language';
-    $writer = $final?->providerKey()?->getLabel() ?? 'another engine';
     // Since v1.5 members and viewers read the console only: the chips say what is set, and change nothing.
     $readOnly = \App\Services\Workspaces\ConsoleAccess::readOnly();
 @endphp
@@ -64,7 +63,7 @@
     @elseif ($final?->status === \App\Enums\TranscriptStatus::Failed)
         <x-notice id="transcript-failed-{{ $session->id }}" :state="$final->id.':'.($final->updated_at?->getTimestamp() ?? '')" class="el-banner el-banner-danger" role="alert">
             @svg('heroicon-o-exclamation-circle', ['aria-hidden' => 'true'])
-            <p class="el-banner-body"><strong>Transcription failed.</strong> {{ $final->error ?? 'Try again.' }}</p>
+            <p class="el-banner-body"><strong>Transcription failed.</strong> {{ $final->failureText() }}</p>
             @if ($session->primaryRecording?->isReady() && ! $readOnly)
                 <button type="button" class="el-text-btn" wire:click="mountAction('retry')">Transcribe again</button>
             @endif
@@ -74,8 +73,8 @@
             @svg('heroicon-o-arrow-path', ['aria-hidden' => 'true'])
             <p class="el-banner-body"><strong>Backup engine — Re-transcribe?</strong>
                 {{ $backup['backup_reason'] === 'rejected'
-                    ? $first.' could not take this recording, so '.$writer.' wrote this transcript.'
-                    : $first.' stayed busy, so '.$writer.' wrote this transcript.' }}</p>
+                    ? 'The first engine for this language could not take this recording, so a backup engine wrote this transcript.'
+                    : 'The first engine for this language stayed busy, so a backup engine wrote this transcript.' }}</p>
             @if ($canRetranscribe && ! $readOnly)
                 <button type="button" class="el-text-btn" wire:click="mountAction('retranscribeBackup')">Re-transcribe</button>
             @endif

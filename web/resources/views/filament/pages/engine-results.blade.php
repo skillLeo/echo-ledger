@@ -38,7 +38,11 @@
                         <div class="el-warn">Wrong script detected: mostly {{ $run['script_warning'] }}</div>
                     @endif
                     @if ($run['error'])
+                        {{-- Plain words for everyone; the engine's own words for the operator only (D-131). --}}
                         <div class="el-warn">{{ $run['error'] }}</div>
+                        @if ($canSetDefault && $run['detail'])
+                            <div class="el-muted">{{ $run['detail'] }}</div>
+                        @endif
                     @endif
                     @if ($run['status'] === 'completed')
                         <div class="el-text" dir="auto">{{ $run['text'] }}</div>

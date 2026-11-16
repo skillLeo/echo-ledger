@@ -651,6 +651,10 @@ class MainActivity : FragmentActivity() {
                                         }, startAtMs = openAtMs, onCaptureTest = {
                                             showItem(null)
                                             showSetup = true
+                                        }, onOpenSettings = { page ->
+                                            showItem(null)
+                                            settingsPage = page
+                                            tab = TAB_YOU
                                         })
                                     } else {
                                         AnimatedContent(
