@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\SttUseCase;
+use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\User;
@@ -98,6 +99,8 @@ final class DeviceConfigPayload
             'app_update' => app(PlatformNotices::class)->updateFor($device),
             'announcement' => app(PlatformNotices::class)->announcement(),
             'maintenance' => app(PlatformNotices::class)->maintenance(),
+            // Since 2.0.0-b: how long a deleted recording can be restored, the bin's own length (never a fixed number).
+            'trash' => ['keep_hours' => CaptureSession::BIN_HOURS],
             // Since 2.0.0-a (docs/API.md "Interface flags"): each flag's answer for this person in this workspace, and
             // whether they chose "Switch back to classic".
             ...self::uiFlags($device->user, $device->workspace_id),
