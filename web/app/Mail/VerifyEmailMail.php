@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Mail;
 
+use App\Support\Brand;
+
 /** The link that confirms an account's email (sign-up, a changed email, "send it again"). */
 final class VerifyEmailMail extends AccountMail
 {
@@ -11,7 +13,7 @@ final class VerifyEmailMail extends AccountMail
 
     protected function subjectLine(): string
     {
-        return 'Confirm your email for EchoLedger';
+        return 'Confirm your email for '.Brand::name();
     }
 
     protected function template(): string

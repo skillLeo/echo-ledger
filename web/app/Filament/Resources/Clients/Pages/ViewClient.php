@@ -31,6 +31,7 @@ use App\Models\FilingRule;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\ClientAi\ClientWorkspace;
+use App\Services\Entitlements\Entitlements;
 use App\Services\Projects\FilingRules;
 use App\Services\Projects\ProjectTree;
 use App\Services\SettingsRepository;
@@ -281,7 +282,7 @@ class ViewClient extends ViewRecord
         ], [], ['memoryText' => 'line', 'memoryKind' => 'kind']);
         $client = $this->client();
         if (! app(PlanLimits::class)->allows($client->workspace_id, 'ai_notes')) {
-            Notification::make()->title(PlanLimits::FEATURE_MESSAGES['ai_notes'])->url(EditProfile::settingsUrl('plan'))->warning()->send();
+            Notification::make()->title(Entitlements::lockedMessage('ai_notes'))->url(EditProfile::settingsUrl('plan'))->warning()->send();
 
             return;
         }

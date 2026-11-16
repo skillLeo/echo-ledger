@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
     <meta name="referrer" content="no-referrer">
-    <title>@yield('title', 'Shared transcript') · EchoLedger</title>
+    <title>@yield('title', 'Shared transcript') · @brand</title>
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <link rel="alternate icon" href="{{ asset('favicon.ico') }}">
     <style>
@@ -49,13 +49,13 @@
 </head>
 <body>
 <main>
-    <p class="brand"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">EchoLedger</p>
+    <p class="brand"><img src="{{ asset('mark.svg') }}" width="24" height="24" alt="">@brand</p>
     @yield('content')
     @isset($pageUrl)
         {{-- Opens the page in the desktop app when it is installed (the phone opens these links itself). --}}
-        <p class="open-app"><a href="echoledger://open?link={{ rawurlencode($pageUrl) }}">Open in EchoLedger</a></p>
+        <p class="open-app"><a href="echoledger://open?link={{ rawurlencode($pageUrl) }}">Open in @brand</a></p>
     @endisset
-    <footer>@yield('footer', 'Shared with EchoLedger · view only')</footer>
+    <footer>@yield('footer', 'Shared with '.\App\Support\Brand::name().' · view only')</footer>
 </main>
 </body>
 </html>

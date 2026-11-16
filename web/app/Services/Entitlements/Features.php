@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Services\Entitlements;
 
+use App\Support\Brand;
+
 /**
  * The features registry (since v1.6, P1, docs/API.md "Entitlements"): every feature a plan can grant, with its name and
  * description as the apps show them, and whether it is free or costs money to run. Free features are in every plan;
@@ -23,7 +25,7 @@ final class Features
         'share_links' => ['name' => 'Share links', 'description' => 'Links to a recording or a project that you can take back at any time.', 'cost' => self::FREE],
         'export' => ['name' => 'Export', 'description' => 'Transcripts as text and subtitles.', 'cost' => self::FREE],
         'ready_check' => ['name' => 'Ready check', 'description' => 'Checks that your phone or computer will record your calls.', 'cost' => self::FREE],
-        'platform_transcription' => ['name' => 'Transcription on EchoLedger', 'description' => 'Your recordings are transcribed for you, with no key of your own.', 'cost' => self::PAID],
+        'platform_transcription' => ['name' => 'Transcription on '.Brand::TOKEN, 'description' => 'Your recordings are transcribed for you, with no key of your own.', 'cost' => self::PAID],
         'views' => ['name' => 'Roman Urdu, English and Urdu', 'description' => 'Read any call in Roman Urdu, English or Urdu, side by side with what was said.', 'cost' => self::PAID],
         'double_check' => ['name' => 'Double-check', 'description' => 'A second engine listens again to the words the first one was unsure of, and to every short note.', 'cost' => self::PAID],
         'screen_moments' => ['name' => 'Screen moments', 'description' => 'What was on the screen during a meeting, next to the words that were said.', 'cost' => self::PAID],
@@ -69,6 +71,16 @@ final class Features
     /** Engines that run on the person's own key or device and cost the server nothing. */
     public const OWN_ENGINES = ['own_groq', 'on_device'];
 
+    /**
+     * The registry as people read it: ALL with the product's name in the names and descriptions that have it.
+     *
+     * @return array<string, array{name: string, description: string, cost: string}>
+     */
+    public static function all(): array
+    {
+        return array_map(fn (array $f): array => ['name' => Brand::fill($f['name']), 'description' => Brand::fill($f['description'])] + $f, self::ALL);
+    }
+
     /** @return list<string> */
     public static function keys(): array
     {
@@ -86,8 +98,9 @@ final class Features
         return (self::ALL[$feature]['cost'] ?? self::PAID) === self::FREE;
     }
 
+    /** The feature's name as people read it (the product's name in it, as all() has it), or its key for an unknown one. */
     public static function name(string $feature): string
     {
-        return self::ALL[$feature]['name'] ?? $feature;
+        return isset(self::ALL[$feature]) ? Brand::fill(self::ALL[$feature]['name']) : $feature;
     }
 }

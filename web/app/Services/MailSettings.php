@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Support\Brand;
 use Illuminate\Mail\MailManager;
 use Throwable;
 
@@ -67,7 +68,8 @@ final class MailSettings
     }
 
     /**
-     * The sender: the from address and name of the settings, each falling back to [$fallback] (the .env one).
+     * The sender: the from address of the settings, else [$fallback]'s (the .env one); the from name saved in the
+     * settings, else the product's name (since v1.9, L0: a rename changes the sender too), else the .env one.
      *
      * @param  array<string, mixed>  $settings
      * @param  array<string, mixed>  $fallback
@@ -77,10 +79,11 @@ final class MailSettings
     {
         $address = trim((string) ($settings['mail.from_address'] ?? ''));
         $name = trim((string) ($settings['mail.from_name'] ?? ''));
+        $brand = trim(Brand::name());
 
         return [
             'address' => $address !== '' ? $address : ($fallback['address'] ?? null),
-            'name' => $name !== '' ? $name : ($fallback['name'] ?? null),
+            'name' => $name !== '' ? $name : ($brand !== '' ? $brand : ($fallback['name'] ?? null)),
         ];
     }
 

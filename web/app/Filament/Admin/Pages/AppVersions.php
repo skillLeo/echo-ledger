@@ -10,6 +10,7 @@ use App\Services\AuditLog;
 use App\Services\SettingsRepository;
 use App\Services\Staff\StaffAccess;
 use App\Services\System\PlatformNotices;
+use App\Support\Brand;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -72,7 +73,7 @@ class AppVersions extends Page
                         ->regex('/^\d{1,4}(\.\d{1,4}){0,3}$/')->helperText(fn (): string => $this->inUse($platform)),
                     array_keys(PlatformNotices::PLATFORMS), PlatformNotices::PLATFORMS,
                 )),
-                TextInput::make('message')->label('Message (optional)')->maxLength(300)->placeholder('Please update EchoLedger to 1.6.0 or later.'),
+                TextInput::make('message')->label('Message (optional)')->maxLength(300)->placeholder('Please update '.Brand::name().' to 1.6.0 or later.'),
                 Toggle::make('refuse_older')->label('Refuse older apps')
                     ->helperText('Their calls are refused until they update. Leave it off to only ask them to update.'),
             ]),

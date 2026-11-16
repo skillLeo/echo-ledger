@@ -1,4 +1,4 @@
-{{-- Activity rows: tile, title (a dot while unread), time, and the line under it (a missed recording's may take two: it ends with why). --}}
+{{-- Activity rows: tile, title (a dot while unread), time, and the line under it (a missed recording's may wrap: it ends with why). --}}
 <ul class="el-rows" role="list">
     @foreach ($items as $item)
         <li class="el-row-item">

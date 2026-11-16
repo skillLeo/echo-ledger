@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', 'Account deletion scheduled · EchoLedger')
+@section('title', 'Account deletion scheduled · '.\App\Support\Brand::name())
 
 @section('content')
     @include('auth.form-styles')

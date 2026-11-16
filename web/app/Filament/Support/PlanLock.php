@@ -102,7 +102,7 @@ final class PlanLock
         $user = self::person();
         $has = $user === null ? [] : app(Entitlements::class)->features((int) CurrentWorkspace::id(), $user->id);
         $rows = [];
-        foreach (Features::ALL as $key => $feature) {
+        foreach (Features::all() as $key => $feature) {
             $on = $has[$key] ?? false;
             $plan = $on ? null : app(Entitlements::class)->lowestPlan($key);
             $rows[] = ['key' => $key, 'name' => $feature['name'], 'description' => $feature['description'], 'has' => $on, 'badge' => $plan === null ? null : self::badgeFor($plan)];

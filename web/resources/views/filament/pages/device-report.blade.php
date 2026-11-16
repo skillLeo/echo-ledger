@@ -1,6 +1,6 @@
 <div class="space-y-3 text-sm">
     <p class="text-gray-500 dark:text-gray-400">
-        {{ trim($report->platform.' '.$report->os_version) }} · EchoLedger {{ $report->app_version ?? '?' }}
+        {{ trim($report->platform.' '.$report->os_version) }} · @brand {{ $report->app_version ?? '?' }}
     </p>
     <ul class="space-y-2">
         @foreach ($report->checks as $check)

@@ -31,7 +31,7 @@ class RecordingConsentNotice extends Page
         return $schema->components([
             Section::make()->schema([
                 Text::make(RecordingConsent::TEXT),
-                Text::make(RecordingConsent::APPS),
+                Text::make(RecordingConsent::apps()),
                 Text::make('You are responsible for having the right to record. The Terms of Service and the Privacy Policy say more.'),
                 Actions::make([
                     Action::make('understood')->label(RecordingConsent::CONFIRM)->icon(Heroicon::OutlinedCheck)

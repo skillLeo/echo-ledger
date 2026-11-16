@@ -10,6 +10,7 @@ use App\Models\Device;
 use App\Models\User;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\Workspaces;
+use App\Support\Brand;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
@@ -102,7 +103,7 @@ class DeviceResource extends Resource
                 Action::make('signInAgain')->label('Sign in again')->icon(Heroicon::OutlinedQrCode)->color('gray')
                     ->visible(fn (Device $record): bool => $record->user_id === (int) auth()->id() && $record->status() !== Device::ACTIVE)
                     ->modalHeading(fn (Device $record): string => 'Sign in '.$record->readableName().' again')
-                    ->modalDescription('Open the EchoLedger app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.')
+                    ->modalDescription('Open the '.Brand::name().' app on that device and scan the QR code, or type the code. It works once, on that device only, and expires in 10 minutes.')
                     ->fillForm(fn (Device $record, ListDevices $livewire): array => $livewire->signInAgainForm($record))
                     ->schema([ViewField::make('pairing')->view('filament.pair-device')->hiddenLabel()])
                     ->modalSubmitAction(false)->modalCancelActionLabel('Done')->modalWidth('md'),
@@ -119,7 +120,7 @@ class DeviceResource extends Resource
             ])
             ->emptyStateIcon(Heroicon::OutlinedDevicePhoneMobile)
             ->emptyStateHeading('No devices signed in')
-            ->emptyStateDescription('Use "Sign in a device" to connect the EchoLedger phone or desktop app.');
+            ->emptyStateDescription('Use "Sign in a device" to connect the '.Brand::name().' phone or desktop app.');
     }
 
     public static function getPages(): array

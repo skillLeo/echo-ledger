@@ -24,6 +24,6 @@ Reply to this email if you have a question.
 @endif
 
 <x-mail::button :url="$url">
-Open EchoLedger
+Open @brand
 </x-mail::button>
 </x-mail::message>

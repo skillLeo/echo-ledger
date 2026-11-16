@@ -24,7 +24,7 @@
             <li>On the Free plan, add your own free Groq key in Account → Transcription key to get transcripts.</li>
         </ol>
         <div style="margin-top:1rem">
-            <x-filament::button tag="a" :href="\App\Filament\Pages\Dashboard::getUrl()">Continue to EchoLedger</x-filament::button>
+            <x-filament::button tag="a" :href="\App\Filament\Pages\Dashboard::getUrl()">Continue to @brand</x-filament::button>
         </div>
     </x-filament::section>
 </div>

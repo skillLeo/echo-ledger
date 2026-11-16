@@ -16,6 +16,7 @@ use App\Services\Entitlements\Entitlements;
 use App\Services\Entitlements\Features;
 use App\Services\Entitlements\PaymentProofs;
 use App\Services\Entitlements\PromoCodes;
+use App\Support\Brand;
 use App\Support\Formats;
 use Filament\Actions\Action;
 use Filament\Forms\Components\TextInput;
@@ -78,7 +79,7 @@ trait ManagesPlanPage
             'cards' => $context->flag('member') ? [] : $cards,
             'matrixPlans' => array_map(fn (Plan $p): array => ['key' => $p->key, 'name' => $p->name, 'yours' => $p->is($plan),
                 'features' => array_values(array_filter(Features::keys(), fn (string $f): bool => $p->allows($f))), 'plan' => $p], $matrixPlans),
-            'features' => array_map(fn (string $key): array => ['key' => $key, 'name' => Features::ALL[$key]['name'], 'has' => (bool) ($features[$key] ?? false)], Features::keys()),
+            'features' => array_map(fn (string $key): array => ['key' => $key, 'name' => Features::all()[$key]['name'], 'has' => (bool) ($features[$key] ?? false)], Features::keys()),
             'history' => $history->map(fn (UpgradeRequest $r): array => [
                 'id' => $r->id, 'title' => UpgradeFlow::planName($r->plan).', 1 month', 'value' => UpgradeFlow::amount($r),
                 'line' => match (UpgradeFlow::stage($r)) {
@@ -169,7 +170,7 @@ trait ManagesPlanPage
                 try {
                     app(PaymentProofs::class)->cancel($request, $this->account());
                 } catch (ApiError $e) {
-                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach EchoLedger. Try again.")->danger()->send();
+                    Notification::make()->title($e->apiCode() === 'request_decided' ? 'This request has already been decided.' : "Couldn't reach ".Brand::name().'. Try again.')->danger()->send();
 
                     throw new Halt;
                 }

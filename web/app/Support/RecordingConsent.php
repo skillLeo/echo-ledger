@@ -12,7 +12,14 @@ final class RecordingConsent
 {
     public const TEXT = 'Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it.';
 
-    public const APPS = 'While EchoLedger records, the phone always shows a recording notification and the computer a red indicator.';
+    /** Read through apps() (the product's name). */
+    private const APPS = 'While '.Brand::TOKEN.' records, the phone always shows a recording notification and the computer a red indicator.';
 
     public const CONFIRM = 'I understand and will get consent where required';
+
+    /** What the apps show while they record. */
+    public static function apps(): string
+    {
+        return Brand::fill(self::APPS);
+    }
 }

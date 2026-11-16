@@ -1,6 +1,6 @@
 @extends('site.layout')
 
-@section('title', 'Privacy Policy · EchoLedger')
+@section('title', 'Privacy Policy · '.\App\Support\Brand::name())
 
 @section('content')
     <div class="legal">
@@ -8,7 +8,7 @@
         <h1>Privacy Policy</h1>
         <p class="muted">Last changed {{ \Illuminate\Support\Carbon::parse('2026-11-09')->format('F j, Y') }}</p>
 
-        <p>EchoLedger keeps a complete written record of your meetings, interviews and voice notes. Those conversations are often confidential, so protecting them is the most important thing we do. This policy explains, in plain words, what we keep, how it is protected, who processes it and what you control. EchoLedger is provided by SkillLeo SMC Private Limited, Pakistan.</p>
+        <p>@brand keeps a complete written record of your meetings, interviews and voice notes. Those conversations are often confidential, so protecting them is the most important thing we do. This policy explains, in plain words, what we keep, how it is protected, who processes it and what you control. @brand is provided by SkillLeo SMC Private Limited, Pakistan.</p>
 
         <h2>Our promises</h2>
         <ul>
@@ -24,7 +24,7 @@
             <li><strong>On your phone:</strong> a recording is stored encrypted until it has been uploaded.</li>
             <li><strong>On the way:</strong> the apps and the website talk to our server only over encrypted connections (TLS), and the apps check that it really is our server (certificate pinning), so nobody in between can read or change what is sent.</li>
             <li><strong>In storage:</strong> the audio is encrypted on our server with a key kept separately from the server's own login details; transcripts, notes and project files are kept on the same server behind your account.</li>
-            <li><strong>Access:</strong> only you, and the people you choose to share a recording with, can open it. The admin panel of EchoLedger shows how much each account uses, never what it recorded. If you ask for help with a recording, you can let support look for a limited time (Account → Privacy & data → Support access); every look is logged and shown to you.</li>
+            <li><strong>Access:</strong> only you, and the people you choose to share a recording with, can open it. The admin panel of @brand shows how much each account uses, never what it recorded. If you ask for help with a recording, you can let support look for a limited time (Account → Privacy & data → Support access); every look is logged and shown to you.</li>
             <li><strong>Your sign-in:</strong> passwords are stored only as a one-way hash, two-step sign-in is available for every account, and each phone or computer has its own sign-in that you can end at any time.</li>
         </ul>
 
@@ -81,7 +81,7 @@
         </ul>
 
         <h2>Recording other people</h2>
-        <p>{{ \App\Support\RecordingConsent::TEXT }} {{ \App\Support\RecordingConsent::APPS }}</p>
+        <p>{{ \App\Support\RecordingConsent::TEXT }} {{ \App\Support\RecordingConsent::apps() }}</p>
 
         <h2>Questions</h2>
         <p>Write to <a href="mailto:hassam.dev.571@gmail.com">hassam.dev.571@gmail.com</a> about anything in this policy or about your data. When this policy changes, the date above changes and signed-in people are told in the app.</p>

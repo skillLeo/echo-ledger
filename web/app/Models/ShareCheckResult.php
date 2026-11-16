@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\MassPrunable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
@@ -11,7 +13,8 @@ use Illuminate\Support\Carbon;
 /**
  * One Share Check result a desktop app chose to send (since v1.8.1, docs/API.md "Screen-share privacy"): whether
  * EchoLedger's test window stayed out of a capture on that computer. Never pictures, window titles or contents. Read
- * only by staff, and only as the counts of Admin → Diagnostics → Screen-share checks.
+ * only by staff, and only as the counts of Admin → Diagnostics → Screen-share checks. Kept 180 days, then pruned by
+ * `model:prune` (since the v1.8.1 audit, R26); it goes earlier with its person.
  *
  * @property int $id
  * @property int $user_id
@@ -31,6 +34,8 @@ use Illuminate\Support\Carbon;
  */
 class ShareCheckResult extends Model
 {
+    use MassPrunable;
+
     public const PLATFORMS = ['windows', 'macos', 'android'];
 
     public const METHODS = ['wgc', 'dxgi', 'sck', 'readback', 'guided', 'recording_callback'];
@@ -43,9 +48,25 @@ class ShareCheckResult extends Model
 
     public const SHARE_MODES = ['screen', 'window', 'tab'];
 
+    /** A version or build as systems write them ("10.0.26100", "15.1 (24B83)", "1.8.1+2"): nothing else is kept. */
+    public const VERSION_PATTERN = '/^[0-9A-Za-z .()_+-]+$/D';
+
+    /** Days a result is kept: the matrix shows the last half year of checks. */
+    public const KEEP_DAYS = 180;
+
     public const UPDATED_AT = null;
 
     protected $fillable = ['user_id', 'device_id', 'platform', 'os_build', 'app_version', 'method', 'result', 'reason', 'meeting_app', 'meeting_app_version', 'share_mode'];
+
+    /**
+     * Results older than KEEP_DAYS (the daily `model:prune`).
+     *
+     * @return Builder<static>
+     */
+    public function prunable(): Builder
+    {
+        return static::query()->where('created_at', '<', now()->subDays(self::KEEP_DAYS));
+    }
 
     /** @return BelongsTo<Device, $this> */
     public function device(): BelongsTo

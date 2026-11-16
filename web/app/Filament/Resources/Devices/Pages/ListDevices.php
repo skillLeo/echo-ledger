@@ -10,6 +10,7 @@ use App\Filament\Resources\Devices\DeviceResource;
 use App\Models\Device;
 use App\Models\User;
 use App\Services\PairingService;
+use App\Support\Brand;
 use chillerlan\QRCode\QRCode;
 use Filament\Actions\Action;
 use Filament\Forms\Components\ViewField;
@@ -30,7 +31,7 @@ class ListDevices extends ListRecords
                 ->label('Sign in a device')
                 ->icon(Heroicon::OutlinedQrCode)
                 ->modalHeading('Sign in a phone or computer')
-                ->modalDescription('Scan the QR code in the EchoLedger app, or type the code. It works once and expires in 10 minutes.')
+                ->modalDescription('Scan the QR code in the '.Brand::name().' app, or type the code. It works once and expires in 10 minutes.')
                 // fillForm runs once on mount, so the code is generated exactly once per modal.
                 ->fillForm(function (PairingService $pairing): array {
                     /** @var User $user */
