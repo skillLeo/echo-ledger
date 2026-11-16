@@ -180,6 +180,12 @@ Check: `curl -s https://<server>/.well-known/assetlinks.json` returns JSON namin
 Upload the new code, then: `php artisan migrate --force && php artisan optimize:clear && php artisan optimize`. The first
 update to v1.5 with the connector also needs its keys, once: see "Claude and ChatGPT connector" above.
 
+**"Transcription failed" notifications in plain words (after the v1.8.1 update).** The migration rewrites the ones
+already sent. A queue worker the cron started before the upload still runs the old code for up to 55 seconds
+(`--max-time=55`) and can send one more in the old words. So after `migrate`, wait a minute, then run
+`php artisan echoledger:plain-failure-notifications`. It leaves alone the ones already in plain words, so running it
+again is safe (`--dry-run` only counts them).
+
 **Automatic titles for older recordings (once, after the v1.6 update).** Recordings named "Voice note", "WhatsApp call",
 after their file ("PTT-20261108-WA0012") or not at all get the first words of their transcript as an automatic title; a
 title a person set is never touched, and a call with a known person shows "Call with …" again. No migration, no AI cost.

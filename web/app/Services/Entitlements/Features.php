@@ -10,6 +10,10 @@ use App\Support\Brand;
  * The features registry (since v1.6, P1, docs/API.md "Entitlements"): every feature a plan can grant, with its name and
  * description as the apps show them, and whether it is free or costs money to run. Free features are in every plan;
  * paid ones only in the plans that grant them. Also the limits a plan sets and the engines it may use.
+ *
+ * Names and descriptions say what a feature does in plain words, never which provider, model or vendor does it (since
+ * v1.8.1, D-129): the apps show them on the plan badge, its screen-reader name and the upgrade sheet. The keys never
+ * change: the apps key on them.
  */
 final class Features
 {
@@ -29,9 +33,9 @@ final class Features
         'views' => ['name' => 'Roman Urdu, English and Urdu', 'description' => 'Read any call in Roman Urdu, English or Urdu, side by side with what was said.', 'cost' => self::PAID],
         'double_check' => ['name' => 'Double-check', 'description' => 'A second engine listens again to the words the first one was unsure of, and to every short note.', 'cost' => self::PAID],
         'screen_moments' => ['name' => 'Screen moments', 'description' => 'What was on the screen during a meeting, next to the words that were said.', 'cost' => self::PAID],
-        'connector' => ['name' => 'Claude and ChatGPT', 'description' => 'Ask Claude or ChatGPT about your recordings.', 'cost' => self::PAID],
+        'connector' => ['name' => 'Ask an AI assistant', 'description' => 'Ask your AI assistant about your recordings.', 'cost' => self::PAID],
         'team' => ['name' => 'Team workspace', 'description' => 'Invite people to a shared workspace, with roles and seats.', 'cost' => self::PAID],
-        'premium_engines' => ['name' => 'Premium engines', 'description' => 'ElevenLabs and Gemini for the hardest calls and languages.', 'cost' => self::PAID],
+        'premium_engines' => ['name' => 'Premium engines', 'description' => 'Extra transcription engines for the hardest calls and languages.', 'cost' => self::PAID],
         'live_translate' => ['name' => 'Live Translate', 'description' => 'Live subtitles in your language for games and videos.', 'cost' => self::PAID],
         'ai_notes' => ['name' => 'AI notes', 'description' => 'Project notes, memory and Ask about a project.', 'cost' => self::PAID],
     ];

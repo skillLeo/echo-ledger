@@ -8,6 +8,7 @@ use App\Enums\SttProviderKey;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Models\CaptureSession;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Stt\LanguageChoice;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Infolists\Components\ViewEntry;
@@ -66,12 +67,15 @@ final class CaptureSessionInfolist
                     ->state('No audio')->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
                 TextEntry::make('finalTranscript.status')->label('Transcript')->badge()->placeholder('Not started')
                     ->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
+                // Which engine wrote it and the engine's own error text are for the server's operator only (since v1.8.1,
+                // D-129): everyone else reads the banner's plain words above the transcript.
                 TextEntry::make('finalTranscript.provider')->label('Transcribed by')->placeholder('—')
-                    ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state),
+                    ->formatStateUsing(fn (?string $state): string => SttProviderKey::tryFrom((string) $state)?->getLabel() ?? (string) $state)
+                    ->visible(fn (): bool => ConsoleAccess::operator()),
                 TextEntry::make('finalTranscript.language')->label('Language')->placeholder('Automatic')
                     ->formatStateUsing(fn (?string $state): string => LanguageChoice::OFFERED[(string) $state] ?? (string) $state),
                 TextEntry::make('finalTranscript.error')->label('Error')->color('danger')->placeholder('—')
-                    ->visible(fn (CaptureSession $r): bool => filled($r->finalTranscript?->error) && ! $r->hasNoAudio())->columnSpan(2),
+                    ->visible(fn (CaptureSession $r): bool => ConsoleAccess::operator() && filled($r->finalTranscript?->error) && ! $r->hasNoAudio())->columnSpan(2),
             ]),
         ]);
     }

@@ -32,7 +32,7 @@ final class UpgradeFlow
         'views' => 'Roman Urdu, English and Urdu side by side',
         'double_check' => 'A second check on words that were unclear',
         'screen_moments' => 'Screenshots of shared screens, placed in the transcript',
-        'connector' => 'Ask Claude or ChatGPT about your recordings',
+        'connector' => 'Ask your AI assistant about your recordings',
         'premium_engines' => 'More accurate transcription for difficult audio',
         'live_translate' => 'Live Translate for games and videos',
         'ai_notes' => 'AI notes for projects',

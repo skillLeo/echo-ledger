@@ -51,7 +51,7 @@ it('says what to do when there is no Soniox key, or Soniox refuses', function ()
     app(CredentialVault::class)->put('soniox', 'api_key', 'snx-account-key-1234567890');
     Http::fake(['api.soniox.com/*' => Http::response(['error' => 'payment required'], 402)]);
     $this->postJson('/api/live-translate/token', ['mode' => 'watch', 'target_language' => 'ur'])
-        ->assertStatus(502)->assertJsonPath('message', 'Soniox has no credit left. Add credit to the Soniox account, then try again.');
+        ->assertStatus(502)->assertJsonPath('message', 'The Live Translate service has no credit left. Add credit to its account, then try again.');
 });
 
 it('accepts only the two modes and two-letter languages', function () {

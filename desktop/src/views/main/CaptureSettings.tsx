@@ -21,7 +21,7 @@ import { meterLevel } from "../../lib/controls";
 import { fillWidth } from "../../lib/motion";
 import { BLUETOOTH_NOTE, bluetoothMic } from "../../lib/microphone";
 import { sourceAppLabel } from "../../lib/format";
-import { decisionText, lastNotRecordedLine, micTone, micUserName, notRecorded } from "../../lib/explainer";
+import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../lib/explainer";
 import { useWindowShown } from "../../lib/visibility";
 import { BUILTIN_SITE_RULES, SITE_RULE_APPS, builtinEnabled, customRules, hasSameRule, isNeverRule, ruleFromInput, rulePattern, withBuiltinEnabled } from "../../lib/sites";
 import { SKIP_SHORTER_THAN } from "../../lib/pending";
@@ -109,8 +109,9 @@ export function CallsPage({ settings, patch, platform, onSites, consentRead, onC
 /**
  * "Why a call wasn't recorded" (A1.8; moved here from Home, D-014): each app using the microphone now and what EchoLedger
  * does with it, in plain words, and the last one that was not recorded, which the core keeps since EchoLedger started
- * (with its reason and time), so a call from before this page was opened is explained too. Read every 2 s, only while
- * this page is on screen (C9).
+ * (with its reason and time), so a call from before this page was opened is explained too. The core chooses it among
+ * the apps not using the microphone now, a call first, so an app that always holds it never hides the call that was
+ * missed. Read every 2 s, only while this page is on screen (C9).
  */
 function WhyNotRecorded() {
   const [users, setUsers] = useState<MicUser[]>([]);
@@ -140,7 +141,7 @@ function WhyNotRecorded() {
             ))}
           </ul>
         )}
-        {last && !users.some((u) => u.name === last.user.name && notRecorded(u)) && (
+        {last && !users.some((u) => sameMicApp(u, last.user)) && (
           <p className="small muted" data-testid="last-not-recorded" dir="auto">{lastNotRecordedLine(last)}</p>
         )}
       </div>
@@ -308,7 +309,9 @@ export function MicrophonePage({ settings, patch, disabled, systemAudioNote }: {
           )}
         </InfoRow>
         {permissions?.platform === "macos" && (
-          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed" : "Asked on first use"}>
+          <InfoRow id="mic.perm.system_audio" value={permissions.systemAudio === "allowed" ? "Allowed" : permissions.systemAudio === "denied" ? "Not allowed"
+            // macOS does not say without the privacy call (D-136): Fix opens System Settings, where it shows.
+            : permissions.canTellNotAsked === false ? "Check in System Settings" : "Asked on first use"}>
             {permissions.systemAudio !== "allowed" && (
               <button type="button" className="btn compact" onClick={() => void api.openPrivacySettings("system_audio").catch(() => undefined)}>Fix</button>
             )}

@@ -5,9 +5,11 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
@@ -24,12 +26,16 @@ import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ReadinessFixtures
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.storeRecording
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import mockwebserver3.MockResponse
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Ignore
@@ -583,4 +589,43 @@ class LibraryScreenTest : ScreenTest() {
         compose.onAllNodesWithText("Doomed call").assertCountEquals(0)
         compose.onNodeWithText("Surviving call").assertIsDisplayed()
     }
+
+    @Test
+    fun `holding an upload never deletes it, and its menu deletes only after asking (P-002)`() {
+        seed(item("a", title = "Call with Acme"))
+        app.storeRecording(id = "q1", state = "queued")
+        app.graph.recordings.update("q1") { it.copy(title = "Waiting call") }
+        app.storeRecording(id = "f1", state = "failed", lastError = "Chunk checksum mismatch.")
+        app.graph.recordings.update("f1") { it.copy(title = "Failed call") }
+        showLibrary()
+        pumpUntil("the uploads") { exists("Waiting call") && exists("Failed call") }
+        compose.onNodeWithText("Waiting to upload").assertIsDisplayed()
+        compose.onNodeWithText("Upload failed · Tap to retry").assertIsDisplayed()
+
+        // A long press deleted this only copy at once and said "Upload cancelled"; now it opens the row's menu.
+        compose.onNodeWithText("Waiting call").performTouchInput { longClick() }
+        awaitAppIdle()
+        assertTrue("nothing is deleted by holding it", app.graph.recordings.encryptedFile("q1").exists())
+        compose.onNodeWithText("Delete recording…").performClick()
+        compose.onNodeWithText(
+            "Delete this recording? It was never uploaded, so this phone has the only copy. It can't be brought back."
+        ).assertIsDisplayed()
+        inDialog("Cancel").performClick()
+        awaitAppIdle()
+        assertNotNull(app.graph.recordings.get("q1"))
+
+        // The failed one through its ⋮: Retry upload, or Delete recording… and then Delete.
+        compose.onNodeWithContentDescription("More for Failed call").performClick()
+        compose.onNodeWithText("Retry upload").assertIsDisplayed()
+        compose.onNodeWithText("Delete recording…").performClick()
+        inDialog("Delete").performClick()
+        pumpUntil("the failed upload to be deleted") { app.graph.recordings.get("f1") == null }
+        assertFalse(app.graph.recordings.encryptedFile("f1").exists())
+        pumpUntil("it to say so") { vm.message.value == "Recording deleted" }
+        assertNotNull("the other upload stays", app.graph.recordings.get("q1"))
+    }
+
+    private fun exists(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().isNotEmpty()
+
+    private fun inDialog(text: String) = compose.onNode(hasText(text) and hasAnyAncestor(isDialog()))
 }

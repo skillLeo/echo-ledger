@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -24,9 +23,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,23 +31,19 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.SearchItemDto
-import com.echoledger.mobile.data.ShareLinkDto
 import java.io.File
 import kotlinx.coroutines.launch
 
@@ -67,9 +60,6 @@ val EXPORT_FORMATS = listOf(
     "vtt" to "Subtitles (VTT)",
     "json" to "JSON"
 )
-
-/** Share link lifetimes in seconds. */
-val SHARE_LIFETIMES = listOf(3_600L to "1 hour", 86_400L to "1 day", 604_800L to "7 days")
 
 /** The search-match highlight: the warning token at 35 % (readable under light and dark text). */
 private val SNIPPET_HIGHLIGHT = androidx.compose.ui.graphics.Color(0x59F5B731)
@@ -203,122 +193,6 @@ fun ExportShareRow(vm: MainViewModel, sessionId: String, transcriptId: String?, 
     // Since v1.5: who may open the link (anyone, a password, chosen people), downloads, and how long it works.
     if (shareDialog) ShareSheet(vm, sessionId = sessionId, clientId = null, title = "this recording", onDismiss = { shareDialog = false })
     if (sendSheet) SendSheet(vm, sessionId = sessionId, clientId = null, title = "this recording", onDismiss = { sendSheet = false })
-}
-
-/** Make a view-only link (shown once, with Copy and the share sheet) and see or revoke the recording's links. */
-@Composable
-fun ShareLinkDialog(vm: MainViewModel, sessionId: String, hasAudio: Boolean, onDismiss: () -> Unit) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Share a view-only link") },
-        text = { ShareLinkContent(vm, sessionId, hasAudio) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
-    )
-}
-
-/** The share dialog's body: lifetime, password, audio, Make link, the new link once, and the existing links. */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun ShareLinkContent(vm: MainViewModel, sessionId: String, hasAudio: Boolean) {
-    val context = LocalContext.current
-    val clipboard = LocalClipboard.current
-    val scope = rememberCoroutineScope()
-    var lifetime by remember { mutableStateOf(86_400L) }
-    var password by remember { mutableStateOf("") }
-    var audio by remember { mutableStateOf(false) }
-    var made by remember { mutableStateOf<String?>(null) }
-    var links by remember { mutableStateOf<List<ShareLinkDto>>(emptyList()) }
-    var refresh by remember { mutableStateOf(0) }
-    LaunchedEffect(sessionId, refresh) { links = vm.shares(sessionId) }
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("Expires after", color = Brand.Muted, fontSize = 12.sp)
-        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            SHARE_LIFETIMES.forEach { (seconds, label) ->
-                FilterChip(selected = lifetime == seconds, onClick = { lifetime = seconds }, label = { Text(label) })
-            }
-        }
-        OutlinedTextField(
-            value = password,
-            onValueChange = { password = it.take(100) },
-            label = { Text("Password (optional, 6+ characters)") },
-            visualTransformation = PasswordVisualTransformation(),
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth()
-        )
-        if (hasAudio) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Include the recording", modifier = Modifier.weight(1f))
-                Switch(
-                    checked = audio,
-                    onCheckedChange = { audio = it },
-                    modifier = Modifier.semantics {
-                        contentDescription =
-                            "Include the recording"
-                    }
-                )
-            }
-        }
-        Button(enabled = password.isEmpty() || password.length >= 6, onClick = {
-            scope.launch {
-                vm.createShare(sessionId, lifetime, password.ifEmpty { null }, audio)?.let {
-                    made = it.url
-                    password = ""
-                    refresh++
-                }
-            }
-        }) { Text("Make link") }
-        made?.let { url ->
-            Text("Copy it now — it is shown only once:", color = Brand.Muted, fontSize = 12.sp)
-            Text(url, fontSize = 13.sp)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(onClick = {
-                    scope.launch { clipboard.setClipEntry(ClipData.newPlainText("Share link", url).toClipEntry()) }
-                }) { Text("Copy") }
-                TextButton(onClick = {
-                    context.startActivity(
-                        Intent.createChooser(
-                            Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, url),
-                            "Share link"
-                        )
-                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    )
-                }) { Text("Send") }
-            }
-        }
-        links.forEach { link ->
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        if (link.active) {
-                            "Active"
-                        } else if (link.revokedAt != null) {
-                            "Revoked"
-                        } else {
-                            "Expired"
-                        },
-                        fontSize = 13.sp
-                    )
-                    Text(
-                        listOfNotNull(
-                            "${link.viewCount} view${if (link.viewCount == 1) "" else "s"}",
-                            "password".takeIf {
-                                link.hasPassword
-                            },
-                            "audio".takeIf { link.includeAudio }
-                        )
-                            .joinToString(" · "),
-                        color = Brand.Muted,
-                        fontSize = 12.sp
-                    )
-                }
-                if (link.active) {
-                    TextButton(onClick = {
-                        scope.launch { if (vm.revokeShare(link.id)) refresh++ }
-                    }) { Text("Revoke", color = Brand.Danger) }
-                }
-            }
-        }
-    }
 }
 
 /** Matches in transcripts above the library list; tapping one opens the recording at that moment. */

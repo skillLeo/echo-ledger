@@ -1015,3 +1015,17 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   tags; the release script signs a freshly packed archive of the checked app. Open, logged for later: move the two
   signing secrets into a GitHub environment that only release refs can use (needs the owner's repo settings).
 - Decided: the pill shape ("full") does not count toward the three corner radii (4/8/12).
+- Merged `132df07c` (b-desktop-batches at the reviewed ec4f6c34): D-133–D-137 and the review minors; every coded
+  error in the app's own words (no vendor names), `own_key_rejected` with "Check my Groq key", `recording_missing`
+  without a retry. Merged `52e49da1` (b-mac-signing-2 at 23e35a08): the archive check follows links on disk and
+  refuses filesystem name twins. The first v1.1 CI run after this proves self-signed signing without trust settings.
+- Merged `6fcfc953` (b-web-181b at the reviewed 5f9ede63): the web v1.8.1 fixes (W-001–W-003, D-129/D-131 on the
+  server, own_key_rejected, recording_missing only for missing or undecryptable audio, plain token errors, the
+  provider kept out of exports, one cost source). Deploy notes: run `echoledger:plain-failure-notifications` after
+  `queue:restart` and drained workers (VPS) or a minute after `migrate` (shared hosting).
+- Merged `b16bfa64` (b-relay at the reviewed 266df3ca): the Live Assist relay with auth, the budget per token,
+  the capped context, connection limits, the load test and the deploy notes; the streaming clients are next.
+- Merged b-phone-sweep at the reviewed 4baffd02: batch 1 (P-002–P-005: no delete of an unuploaded recording without
+  a confirmation or Undo; Discard with a delayed delete that survives process death), P-076 and the P-001
+  follow-ups. Batch 2 next, with the review minors (Saved · Undo through the delayed delete, an atomic
+  finishDiscard).

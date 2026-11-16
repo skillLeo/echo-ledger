@@ -6,7 +6,6 @@ namespace App\Filament\Infolists;
 
 use App\Enums\TranscriptKind;
 use App\Enums\TranscriptStatus;
-use App\Http\Resources\TranscriptResource;
 use App\Models\CaptureSession;
 use App\Models\Screen;
 use App\Models\SessionMarker;
@@ -43,7 +42,7 @@ class TranscriptPlayerEntry extends Entry
      * Everything the player shows; also sent to it after an edit (`el-transcript-updated`).
      *
      * @return array{audio_url: string|null, segments: list<array<string, mixed>>, speaker_names: array<string, string>, kind: string|null,
-     *     status: string|null, editable: bool, edited: bool, model: string|null, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
+     *     status: string|null, editable: bool, edited: bool, language: string, language_code: string|null, markers: list<array{at_ms: int, tag: string|null, note: string|null}>,
      *     pauses: list<array{at_ms: int, paused_ms: int}>, views: array<string, mixed>|null, views_locked: bool, duration_ms: int, audio_bytes: int|null,
      *     suggestions: list<array{id: int, line: int, from: string, to: string, reason: string}>, client: string|null,
      *     screens: list<array{id: string, index: int, at_ms: int, thumb: string, image: string, description: string|null}>}
@@ -52,7 +51,7 @@ class TranscriptPlayerEntry extends Entry
     {
         if ($record === null) {
             return ['audio_url' => null, 'segments' => [], 'speaker_names' => [], 'kind' => null, 'status' => null, 'editable' => false,
-                'edited' => false, 'model' => null, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'views_locked' => false, 'duration_ms' => 1,
+                'edited' => false, 'language' => LanguageChoice::label(null), 'language_code' => null, 'markers' => [], 'pauses' => [], 'views' => null, 'views_locked' => false, 'duration_ms' => 1,
                 'audio_bytes' => null, 'suggestions' => [], 'client' => null, 'screens' => []];
         }
         $record->loadMissing(['primaryRecording', 'client']);
@@ -82,8 +81,9 @@ class TranscriptPlayerEntry extends Entry
                 'words' => $words,
                 'uncertain' => (bool) ($s['uncertain'] ?? false),
                 // Double-check: what a second engine heard on this line when it disagreed (shown under it, never merged).
+                // "Second engine heard:", never which engine it was (since v1.8.1, D-129).
                 'check' => is_array($s['check'] ?? null) && isset($s['check']['text'])
-                    ? ['label' => (string) ($s['check']['label'] ?? 'Second engine'), 'text' => (string) $s['check']['text']] : null,
+                    ? ['label' => 'Second engine', 'text' => (string) $s['check']['text']] : null,
             ];
         }
 
@@ -95,7 +95,6 @@ class TranscriptPlayerEntry extends Entry
             'status' => $final?->status->value,
             'editable' => $shown !== null && $shown === $final && $final->status === TranscriptStatus::Completed,
             'edited' => $final?->edited_at !== null,
-            'model' => $final !== null ? TranscriptResource::model($final) : null,
             'language' => LanguageChoice::label($final->language ?? $record->language),
             // The code too (ur, ar…): Urdu lines are set in Nastaliq, Arabic in Naskh.
             'language_code' => LanguageChoice::normalize($final->language ?? $record->language),
@@ -104,7 +103,8 @@ class TranscriptPlayerEntry extends Entry
                 ->map(fn (SessionMarker $m): array => ['at_ms' => $m->at_ms, 'tag' => $m->tag, 'note' => $m->note])->values()->all(),
             'pauses' => $record->pauses ?? [],
             // Show as: the Roman Urdu and English views of the final transcript, when they are made (labelled as views).
-            'views' => $final !== null && $shown === $final && $final->status === TranscriptStatus::Completed ? app(TranscriptViews::class)->state($final) : null,
+            'views' => $final !== null && $shown === $final && $final->status === TranscriptStatus::Completed
+                ? self::views(app(TranscriptViews::class)->state($final)) : null,
             // Since v1.6.2: views the plan leaves out keep their buttons, with the plan's badge beside them, and open the upgrade sheet.
             'views_locked' => $final !== null && ! TranscriptViews::entitled($final),
             'duration_ms' => max(1, (int) ($record->duration_ms ?? 0), ...array_map(fn (array $s): int => $s['end_ms'], $segments ?: [['end_ms' => 0]])),
@@ -116,6 +116,20 @@ class TranscriptPlayerEntry extends Entry
             // Screen moments (v1.5): shown between the lines at their moments and in the Screens tab.
             'screens' => self::screens($record),
         ];
+    }
+
+    /**
+     * The views' state as the player gets it: without the model that wrote them, as the page never names a model or
+     * its maker (since v1.8.1, D-129).
+     *
+     * @param  array<string, mixed>  $state  TranscriptViews::state()
+     * @return array<string, mixed>
+     */
+    public static function views(array $state): array
+    {
+        unset($state['model']);
+
+        return $state;
     }
 
     /**

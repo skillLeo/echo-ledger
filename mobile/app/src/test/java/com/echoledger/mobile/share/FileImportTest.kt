@@ -82,7 +82,8 @@ class FileImportTest : AppTest() {
         assertEquals("734 KB", ImportCopy.size(734_000))
         assertEquals("12.4 MB", ImportCopy.size(12_400_000))
         assertEquals("Already in your Library · Tap to dismiss", UploadRow.meta("duplicate"))
-        assertEquals("Waiting to upload · Hold to cancel", UploadRow.meta("queued"))
+        assertEquals("Waiting to upload", UploadRow.meta("queued"))
+        assertEquals("Upload failed · Tap to retry", UploadRow.meta("failed"))
         assertEquals("Uploading…", UploadRow.meta("uploading"))
         assertEquals("Nothing to import.", FileImport.Summary(emptyList(), 0, 0).message())
     }

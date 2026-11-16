@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace App\Services\ClientAi;
 
 use Anthropic\Client;
+use Anthropic\Core\Exceptions\AnthropicException;
 use App\Services\CredentialVault;
 use App\Services\Views\TranscriptViews;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -18,6 +20,9 @@ class ClaudeClientAi implements ClientAi
     public const MODEL = 'claude-sonnet-5-5';
 
     public const CHEAP_MODEL = 'claude-haiku-5-5';
+
+    /** What a note, a brief or a file says when the provider refused the request or could not be reached. */
+    public const UNAVAILABLE = 'The AI could not do this right now. Try again in a few minutes.';
 
     private const LANGUAGES = [
         'en' => 'Write in plain English.',
@@ -109,7 +114,7 @@ class ClaudeClientAi implements ClientAi
         ], ['effort' => 'medium', 'format' => ['type' => 'json_schema', 'schema' => $schema]]);
         $data = json_decode(self::text($message), true);
         if (! is_array($data)) {
-            throw new RuntimeException('Claude did not return the notes in the expected form.');
+            throw new RuntimeException('The AI did not return the notes in the expected form.');
         }
 
         return ['sections' => $data] + self::usage($message);
@@ -142,7 +147,7 @@ class ClaudeClientAi implements ClientAi
         ]);
         $data = json_decode(self::text($message), true);
         if (! is_array($data)) {
-            throw new RuntimeException('Claude did not return the brief in the expected form.');
+            throw new RuntimeException('The AI did not return the brief in the expected form.');
         }
 
         return ['sections' => $data] + self::usage($message);
@@ -249,9 +254,17 @@ class ClaudeClientAi implements ClientAi
             $arguments['fallbacks'] = 'default';
             $arguments['betas'] = ['server-side-fallback-2026-07-01'];
         }
-        $message = $this->client($key)->beta->messages->create(...$arguments);
+        try {
+            $message = $this->client($key)->beta->messages->create(...$arguments);
+        } catch (AnthropicException $e) {
+            // The provider's own words (its JSON, its host) go to the log for the operator; the note, the brief or the
+            // file says this in plain words (since v1.8.1, D-129).
+            Log::warning('Project AI request failed', ['error' => mb_substr($e->getMessage(), 0, 300)]);
+
+            throw new RuntimeException(self::UNAVAILABLE, previous: $e);
+        }
         if ($message->stopReason === 'refusal') {
-            throw new RuntimeException('Claude declined this request.');
+            throw new RuntimeException('The AI declined this request.');
         }
 
         return $message;

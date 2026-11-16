@@ -230,6 +230,14 @@ fun LibraryScreen(
             }
         }, onDismiss = { renaming = null })
     }
+    // Since v1.8.1 (bug P-002): a recording that never reached the server is deleted only after this question.
+    var deletingUpload by remember { mutableStateOf<String?>(null) }
+    deletingUpload?.let { id ->
+        ConfirmDialog(DELETE_NOT_UPLOADED, "Delete", onConfirm = {
+            deletingUpload = null
+            vm.deleteNotUploaded(id)
+        }, onDismiss = { deletingUpload = null })
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -407,24 +415,15 @@ fun LibraryScreen(
                             if (uploading.isNotEmpty() && filters.count == 0) {
                                 item(key = "h-uploading") { SectionHeader("Uploading") }
                                 itemsIndexed(uploading, key = { _, it -> "u-${it.id}" }) { i, rec ->
-                                    val failed = rec.state == "failed"
-                                    val moving = rec.state == "uploading"
-                                    RecordingRow(
+                                    UploadingRow(
+                                        rec = rec,
                                         title = rec.title ?: Notifications.decisionText(rec, null).substringBefore(" · "),
                                         time = rowTime(rec.startedAt, today),
                                         meta = UploadRow.meta(rec.state, sending[rec.id]),
-                                        tile = { SourceAppTile(SourceApp.from(rec.sourceApp)) },
-                                        onClick = {
-                                            when (rec.state) {
-                                                "failed" -> vm.retryUpload(rec.id)
-                                                "duplicate" -> vm.dismissLocal(rec.id)
-                                            }
-                                        },
-                                        // Hold: cancel an upload that has not started, or remove a failed one.
-                                        onLongClick = { if (!moving) vm.cancelUpload(rec.id) },
-                                        metaColor = if (failed) LocalEchoColors.current.danger else LocalEchoColors.current.textMuted,
-                                        status = if (moving || rec.state == "queued") ({ Spinner(14.dp) }) else null,
-                                        divider = i < uploading.lastIndex
+                                        divider = i < uploading.lastIndex,
+                                        onRetry = { vm.retryUpload(rec.id) },
+                                        onDismiss = { vm.dismissLocal(rec.id) },
+                                        onDelete = { deletingUpload = rec.id }
                                     )
                                 }
                             }
@@ -639,12 +638,79 @@ private val MOVING_STATES = setOf("queued", "uploading")
 object UploadRow {
     /** [sent]: chunks sent of all chunks while it uploads (since v1.5): "Uploading 40%". */
     fun meta(state: String, sent: Pair<Int, Int>? = null): String = when (state) {
-        "failed" -> "Upload failed · Tap to retry, hold to remove"
+        "failed" -> "Upload failed · Tap to retry"
         "duplicate" -> "Already in your Library · Tap to dismiss"
-        "queued" -> "Waiting to upload · Hold to cancel"
+        "queued" -> "Waiting to upload"
         else -> sent?.let { com.echoledger.mobile.core.RowProgress.uploading(it.first, it.second).text } ?: "Uploading…"
     }
+
+    /** Which uploads can be deleted (from their menu, after a question): not one being sent right now. */
+    fun deletable(state: String): Boolean = state == "queued" || state == "failed"
 }
+
+/**
+ * A recording on its way to the server. A tap retries a failed upload (or dismisses one the Library already has); its
+ * ⋮, or a long press, opens Retry and Delete. Since v1.8.1 (bug P-002) no touch deletes it at once: it was never
+ * uploaded, so Delete asks first ([DELETE_NOT_UPLOADED]).
+ */
+@Composable
+private fun UploadingRow(
+    rec: LocalRecording,
+    title: String,
+    time: String,
+    meta: String,
+    divider: Boolean,
+    onRetry: () -> Unit,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val failed = rec.state == "failed"
+    val deletable = UploadRow.deletable(rec.state)
+    var menu by remember { mutableStateOf(false) }
+    val tap = {
+        when (rec.state) {
+            "failed" -> onRetry()
+            "duplicate" -> onDismiss()
+        }
+    }
+    RecordingRow(
+        title = title,
+        time = time,
+        meta = meta,
+        tile = { SourceAppTile(SourceApp.from(rec.sourceApp)) },
+        onClick = tap,
+        onLongClick = { if (deletable) menu = true },
+        onTileClick = tap,
+        metaColor = if (failed) LocalEchoColors.current.danger else LocalEchoColors.current.textMuted,
+        status = if (rec.state in MOVING_STATES) ({ Spinner(14.dp) }) else null,
+        divider = divider,
+        trailing = if (!deletable) {
+            null
+        } else {
+            {
+                Box {
+                    BarIcon(Icons.Rounded.MoreVert, "More for $title", { menu = true })
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (failed) {
+                            DropdownMenuItem(text = { Text("Retry upload") }, onClick = {
+                                menu = false
+                                onRetry()
+                            })
+                        }
+                        DropdownMenuItem(text = { Text("Delete recording…", color = LocalEchoColors.current.danger) }, onClick = {
+                            menu = false
+                            onDelete()
+                        })
+                    }
+                }
+            }
+        }
+    )
+}
+
+/** Asked before deleting a recording that never reached the server (P-002, P-004): this phone has its only copy. */
+internal const val DELETE_NOT_UPLOADED =
+    "Delete this recording? It was never uploaded, so this phone has the only copy. It can't be brought back."
 
 /** How often the Library asks again while something is uploading or being transcribed. */
 private const val LIVE_REFRESH_MS = 5_000L

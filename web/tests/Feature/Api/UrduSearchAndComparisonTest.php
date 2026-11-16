@@ -146,8 +146,11 @@ describe('compare engines', function () {
         $page = $this->panelComponent(ViewCaptureSession::class, ['record' => $this->session->id]);
 
         $page->assertActionVisible('wrong_script')->assertActionVisible('compare_engines')->assertActionHidden('engine_results');
-        // Urdu's list is Groq, Soniox, ElevenLabs: without a Groq key here, Soniox is next.
-        $page->callAction('wrong_script')->assertNotified('Second version queued with Soniox');
+        // Urdu's list is Groq, Soniox, ElevenLabs: without a Groq key here, Soniox is next. The server picks it, so the
+        // button and the message never name it (D-129).
+        $page->assertActionHasLabel('wrong_script', 'Wrong script detected · Transcribe with the next engine')
+            ->callAction('wrong_script')->assertNotified('Second version queued');
+        expect($this->session->transcripts()->where('kind', 'alternate')->sole()->provider)->toBe('soniox');
 
         $page->callAction('compare_engines', data: ['language' => 'ur', 'engines' => ['elevenlabs', 'soniox']])->assertHasNoActionErrors();
         expect($this->session->trials()->pluck('provider')->sort()->values()->all())->toBe(['elevenlabs', 'soniox']);

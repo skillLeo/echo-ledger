@@ -860,7 +860,8 @@ async fn the_error_code_and_retry_after_come_from_the_documented_places() {
     );
     let dated = c.library(None, None).await.unwrap_err();
     assert_eq!(dated.retry_after_secs(), None, "an HTTP-date is ignored");
-    assert_eq!(dated.to_string(), "Server returned 429: Too Many Attempts.");
+    // A coded answer is said in the app's words, never the server's text (D-135).
+    assert_eq!(dated.to_string(), "The server is busy.");
     let odd = c.clients().await.unwrap_err();
     assert_eq!(odd.code(), None);
 }

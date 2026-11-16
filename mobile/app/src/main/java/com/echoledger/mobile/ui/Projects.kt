@@ -666,6 +666,21 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
         links = if (clientId != null) vm.projectShares(clientId) else vm.shares(sessionId!!)
         sent = vm.sentOf(sessionId, clientId)
     }
+    // Since v1.8.1 (bug P-005): Revoke and Stop sharing end it for everyone who has it, so they ask first.
+    var revoking by remember { mutableStateOf<String?>(null) }
+    var stopping by remember { mutableStateOf<com.echoledger.mobile.data.SentItemDto?>(null) }
+    revoking?.let { id ->
+        ConfirmDialog(ShareText.REVOKE_QUESTION, "Revoke", onConfirm = {
+            revoking = null
+            scope.launch { if (vm.revokeShare(id)) reload++ }
+        }, onDismiss = { revoking = null })
+    }
+    stopping?.let { item ->
+        ConfirmDialog(ShareText.stopQuestion(item), "Stop sharing", onConfirm = {
+            stopping = null
+            scope.launch { if (vm.stopSharing(item.id)) reload++ }
+        }, onDismiss = { stopping = null })
+    }
     val ready = when (audience) {
         "password" -> password.length >= 6
         "people" -> LinkExpiry.emails(people).isNotEmpty()
@@ -751,7 +766,7 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
                             Text(ShareText.meta(link), style = type.caption, color = Brand.Muted)
                         }
                         if (link.revokedAt == null) {
-                            EchoButton("Revoke", { scope.launch { if (vm.revokeShare(link.id)) reload++ } }, kind = ButtonKind.Text)
+                            EchoButton("Revoke", { revoking = link.id }, kind = ButtonKind.Text)
                         }
                     }
                 }
@@ -764,7 +779,7 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
                             Text(item.to?.name ?: item.to?.email.orEmpty(), style = type.bodyM, color = Brand.Text)
                             Text(ShareText.sentMeta(item), style = type.caption, color = Brand.Muted)
                         }
-                        EchoButton("Stop sharing", { scope.launch { if (vm.stopSharing(item.id)) reload++ } }, kind = ButtonKind.Text)
+                        EchoButton("Stop sharing", { stopping = item }, kind = ButtonKind.Text)
                     }
                 }
             }
@@ -773,6 +788,14 @@ internal fun ShareSheet(vm: MainViewModel, sessionId: String?, clientId: String?
 }
 
 internal object ShareText {
+    const val REVOKE_QUESTION = "Revoke this link? It stops working for everyone who has it."
+
+    /** Before Stop sharing (DELETE /api/sent/{id}): it leaves their list; a copy they saved stays theirs. */
+    fun stopQuestion(item: com.echoledger.mobile.data.SentItemDto): String {
+        val who = item.to?.name ?: item.to?.email ?: "them"
+        return "Stop sharing with $who? It leaves their list and they can no longer open it. A copy they already saved stays theirs."
+    }
+
     fun sentMeta(item: com.echoledger.mobile.data.SentItemDto): String = listOfNotNull(
         item.to?.email.takeIf { item.to?.name != null },
         item.sentAt?.let { "sent ${it.take(10)}" },
@@ -900,7 +923,10 @@ internal object FilingRuleText {
     }
 }
 
-/** Request files (since v1.5): links anyone can use to send voice notes and files into the Inbox or a project. */
+/**
+ * Request files (since v1.5): links anyone can use to send voice notes and files into the Inbox or a project. Turn off
+ * asks first (since v1.8.1, bug P-005): the link stops working for everyone who has it.
+ */
 @Composable
 private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
@@ -915,7 +941,14 @@ private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onB
     var picking by remember { mutableStateOf(false) }
     var days by remember { mutableIntStateOf(30) }
     var made by remember { mutableStateOf<RequestLinkDto?>(null) }
+    var turningOff by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(reload) { links = vm.requestLinks() }
+    turningOff?.let { id ->
+        ConfirmDialog(RequestLinkText.TURN_OFF_QUESTION, "Turn off", onConfirm = {
+            turningOff = null
+            scope.launch { if (vm.revokeRequestLink(id)) reload++ }
+        }, onDismiss = { turningOff = null })
+    }
     LazyColumn(Modifier.fillMaxSize(), contentPadding = ListPadding) {
         item(key = "top") {
             EchoTopBar("Request files", large = false, navigation = {
@@ -1003,10 +1036,8 @@ private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onB
                         Text(link.title ?: "Request link", style = type.bodyL, color = Brand.Text)
                         Text(RequestLinkText.meta(link, projects), style = type.caption, color = Brand.Muted)
                     }
-                    if (link.revokedAt ==
-                        null
-                    ) {
-                        EchoButton("Turn off", { scope.launch { if (vm.revokeRequestLink(link.id)) reload++ } }, kind = ButtonKind.Text)
+                    if (link.revokedAt == null) {
+                        EchoButton("Turn off", { turningOff = link.id }, kind = ButtonKind.Text)
                     }
                 }
             }
@@ -1021,6 +1052,9 @@ private fun RequestLinksScreen(vm: MainViewModel, projects: List<ClientDto>, onB
 }
 
 internal object RequestLinkText {
+    const val TURN_OFF_QUESTION =
+        "Turn off this request link? It stops working for everyone who has it, and no more files can be sent with it."
+
     fun meta(link: RequestLinkDto, projects: List<ClientDto>): String = listOfNotNull(
         if (link.revokedAt != null) "Off" else null,
         projects.firstOrNull { it.id == link.clientId }?.name ?: "Inbox",

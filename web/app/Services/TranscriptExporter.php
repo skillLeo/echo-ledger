@@ -8,6 +8,7 @@ use App\Models\CaptureSession;
 use App\Models\SessionMarker;
 use App\Models\Transcript;
 use App\Services\Views\TranscriptViews;
+use App\Services\Workspaces\ConsoleAccess;
 use App\Support\UnsureMarkers;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -208,7 +209,8 @@ final class TranscriptExporter
             'transcript' => [
                 'id' => $transcript->id,
                 'kind' => $transcript->kind->value,
-                'provider' => $transcript->provider,
+                // Which engine wrote it is for the server's operator only (since v1.8.1): it names the provider.
+                ...(ConsoleAccess::operator() ? ['provider' => $transcript->provider] : []),
                 'language' => $transcript->language,
                 'edited_at' => $transcript->edited_at?->toAtomString(),
                 // Each line's words with the engine's confidence (0-1), so unsure words can be judged (plan A4).

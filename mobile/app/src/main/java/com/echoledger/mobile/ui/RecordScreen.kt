@@ -259,6 +259,7 @@ fun RecordScreen(
     // Import (since 1.4): pick one file or many, then one client and language for all of them in the sheet.
     var picked by remember { mutableStateOf<List<com.echoledger.mobile.share.FileImport.Picked>>(emptyList()) }
     var discardingHeld by remember { mutableStateOf<Pair<Owner, List<String>>?>(null) }
+    var deletingFailed by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
     val import = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         if (uris.isNotEmpty()) scope.launch { picked = vm.describeFiles(uris) }
@@ -393,10 +394,17 @@ fun RecordScreen(
                     rec.lastError?.let { Text(it, style = type.labelM, color = Brand.Muted) }
                     Row {
                         EchoButton("Retry", { vm.retryUpload(rec.id) }, kind = ButtonKind.Text)
-                        EchoButton("Discard", { vm.decide(rec.id, keep = false) }, kind = ButtonKind.Text)
+                        // Since v1.8.1 (bug P-004): it deletes the only copy, so it says so and asks first.
+                        EchoButton("Delete", { deletingFailed = rec.id }, kind = ButtonKind.Text)
                     }
                 }
             }
+        }
+        deletingFailed?.let { id ->
+            ConfirmDialog(DELETE_NOT_UPLOADED, "Delete", onConfirm = {
+                deletingFailed = null
+                vm.deleteNotUploaded(id)
+            }, onDismiss = { deletingFailed = null })
         }
         if (mode == RecordMode.VOICE) {
             Text(

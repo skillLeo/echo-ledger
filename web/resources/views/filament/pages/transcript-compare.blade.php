@@ -1,5 +1,7 @@
 @php
     $clock = fn (int $ms): string => \App\Services\TranscriptExporter::clock($ms);
+    // Which engine and model wrote each version: for the server's operator only (since v1.8.1, W-002).
+    $operator = \App\Services\Workspaces\ConsoleAccess::operator();
     $label = fn (?\App\Models\Transcript $t): string => $t === null ? '—'
         : (\App\Enums\SttProviderKey::tryFrom($t->provider)?->getLabel() ?? $t->provider).(\App\Http\Resources\TranscriptResource::model($t) ? ' · '.\App\Http\Resources\TranscriptResource::model($t) : '');
 @endphp
@@ -20,9 +22,13 @@
         <p class="el-muted">There is no second version.</p>
     @elseif ($alternate->status !== \App\Enums\TranscriptStatus::Completed)
         <p>
-            The second version ({{ $label($alternate) }}) is {{ str_replace('_', ' ', $alternate->status->value) }}.
-            @if ($alternate->status === \App\Enums\TranscriptStatus::Failed && $alternate->error)
-                <span class="el-err">{{ $alternate->error }}</span>
+            The second version{{ $operator ? ' ('.$label($alternate).')' : '' }} is {{ str_replace('_', ' ', $alternate->status->value) }}.
+            @if ($alternate->status === \App\Enums\TranscriptStatus::Failed)
+                {{-- Plain words for everyone; the engine's own words for the operator only (D-131). --}}
+                <span class="el-err">{{ $alternate->failureText() }}</span>
+                @if ($operator && filled($alternate->error))
+                    <span class="el-muted">{{ $alternate->error }}</span>
+                @endif
             @else
                 Open this again when it is done.
             @endif
@@ -34,8 +40,8 @@
         </p>
         <div class="el-grid">
             <div class="el-blank"></div>
-            <div class="el-h">Current: {{ $label($final) }}</div>
-            <div class="el-h">Second: {{ $label($alternate) }}</div>
+            <div class="el-h">{{ $operator ? 'Current: '.$label($final) : 'Current version' }}</div>
+            <div class="el-h">{{ $operator ? 'Second: '.$label($alternate) : 'Second version' }}</div>
             @foreach ($diff['rows'] as $row)
                 <div class="el-t el-muted">{{ $clock($row['start_ms']) }}</div>
                 @foreach (['a', 'b'] as $side)

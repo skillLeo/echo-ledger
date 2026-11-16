@@ -50,12 +50,15 @@ impl CheckState {
     }
 }
 
-/// A button: what it says and the System Settings pane it opens (`privacy_settings_url`).
+/// A button: what it says and the System Settings pane it opens (`privacy_settings_url`), or, with `reopen`, Quit &
+/// reopen (Screen Recording allowed while EchoLedger ran; `settings` is then the pane it applies to).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CheckFix {
     pub label: &'static str,
     pub settings: &'static str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub reopen: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -161,6 +164,10 @@ pub trait MacProbe {
     /// (major, minor, patch).
     fn os_version(&self) -> Option<(u32, u32, u32)>;
     fn permissions(&self) -> Permissions;
+    /// Screen Recording still waits for a reopen although EchoLedger was reopened since it was allowed.
+    fn reopen_did_not_apply(&self) -> bool;
+    /// macOS answers the privacy call that tells "not asked" apart for system audio and Screen Recording.
+    fn can_tell_not_asked(&self) -> bool;
     /// Listens to the microphone and returns the loudest 100 ms (RMS, 0-1). `stop` ends it early (a recording started).
     fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String>;
     /// Runs the system-audio tap while the soft tone plays and returns what the tap captured (16 kHz mono). `stop` ends it
@@ -176,10 +183,27 @@ pub trait MacProbe {
 const OPEN_SETTINGS: &str = "Open System Settings";
 /// Screen Recording allowed in System Settings while EchoLedger ran: macOS applies it when the app opens again.
 const REOPEN: &str = "Allowed in System Settings. Quit and reopen EchoLedger to finish.";
+/// The same after EchoLedger was reopened: reopening did not apply it, so reopening again would not either.
+const SWITCH_OFF_ON: &str = "Allowed in System Settings, but macOS has not applied it, even after EchoLedger reopened. Switch EchoLedger off and on again there.";
 const SCREEN_NOT_ASKED: &str = "macOS has not asked yet: turn on screen moments in Settings → Screen moments and press Allow Screen Recording.";
 
 fn fix(settings: &'static str) -> Option<CheckFix> {
-    Some(CheckFix { label: OPEN_SETTINGS, settings })
+    Some(CheckFix { label: OPEN_SETTINGS, settings, reopen: false })
+}
+
+/// Quit & reopen, the step's own button for Screen Recording allowed while EchoLedger ran.
+fn reopen_fix() -> Option<CheckFix> {
+    Some(CheckFix { label: "Quit & reopen", settings: "screen", reopen: true })
+}
+
+/// Screen Recording waiting for a reopen: Quit & reopen, or, once a reopen did not apply it, to switch EchoLedger off and
+/// on in System Settings (never Quit & reopen again).
+fn reopen_item(key: &'static str, title: &'static str, prefix: &str, did_not_apply: bool) -> CheckItem {
+    if did_not_apply {
+        item(key, title, CheckState::Limited, format!("{prefix}{SWITCH_OFF_ON}"), fix("screen"))
+    } else {
+        item(key, title, CheckState::Limited, format!("{prefix}{REOPEN}"), reopen_fix())
+    }
 }
 
 /// The meeting apps a person is most likely to use, with the bundle ids the detector knows them by.
@@ -226,7 +250,11 @@ pub fn check_version(version: Option<(u32, u32, u32)>) -> CheckItem {
     }
 }
 
-fn check_permission(kind: Kind, access: Access, version: Option<(u32, u32, u32)>) -> CheckItem {
+/// System audio and Screen Recording when this macOS does not answer the privacy call that tells "not asked" apart
+/// (D-136): nothing is said that cannot be read, only where to look.
+const CANNOT_TELL: &str = "macOS does not say whether EchoLedger may use this. Check it in System Settings → Privacy & Security → Screen & System Audio Recording.";
+
+fn check_permission(kind: Kind, access: Access, version: Option<(u32, u32, u32)>, reopen_did_not_apply: bool, can_tell_not_asked: bool) -> CheckItem {
     let (key, title, settings, what_for): (&'static str, &'static str, &'static str, &str) = match kind {
         Kind::Microphone => ("microphone_permission", "Microphone permission", "microphone", "Without it a recording has the other side of the call, not your voice."),
         Kind::SystemAudio => ("system_audio_permission", "System audio permission", "system_audio", "Without it a recording has your voice, not the other side of the call."),
@@ -238,10 +266,12 @@ fn check_permission(kind: Kind, access: Access, version: Option<(u32, u32, u32)>
         }
         Access::Allowed => item(key, title, CheckState::Ok, "Allowed.", None),
         Access::Denied => item(key, title, CheckState::Off, format!("Off. {what_for}"), fix(settings)),
+        // Read only through the privacy call: without it, "unknown" says nothing (D-136).
+        Access::Unknown if kind != Kind::Microphone && !can_tell_not_asked => item(key, title, CheckState::Limited, CANNOT_TELL, fix(settings)),
         // Recording never asks for this one, and System Settings does not list EchoLedger until it has asked.
         Access::Unknown if kind == Kind::Screen => item(key, title, CheckState::Limited, SCREEN_NOT_ASKED, None),
         Access::Unknown => item(key, title, CheckState::Limited, "macOS has not asked yet. It asks the first time you record.", fix(settings)),
-        Access::Reopen => item(key, title, CheckState::Limited, REOPEN, None),
+        Access::Reopen => reopen_item(key, title, "", reopen_did_not_apply),
     }
 }
 
@@ -351,7 +381,7 @@ pub fn check_overlay_windows(windows: &[WindowFacts]) -> CheckItem {
     item(KEY, TITLE, CheckState::Ok, "The captions and the recording controls are on screen, above other windows, in every Space and over full-screen meetings.", None)
 }
 
-pub fn check_screen_capture(access: Access, frame: impl FnOnce() -> Result<(), FrameProblem>) -> CheckItem {
+pub fn check_screen_capture(access: Access, reopen_did_not_apply: bool, can_tell_not_asked: bool, frame: impl FnOnce() -> Result<(), FrameProblem>) -> CheckItem {
     const KEY: &str = "screen_capture_test";
     const TITLE: &str = "Screen moment test";
     if access == Access::Denied {
@@ -359,8 +389,9 @@ pub fn check_screen_capture(access: Access, frame: impl FnOnce() -> Result<(), F
     }
     match frame() {
         Ok(()) => item(KEY, TITLE, CheckState::Ok, "One frame captured and thrown away. Nothing was stored.", None),
+        Err(FrameProblem::Permission) if access == Access::Unknown && !can_tell_not_asked => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {CANNOT_TELL}"), fix("screen")),
         Err(FrameProblem::Permission) if access == Access::Unknown => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {SCREEN_NOT_ASKED}"), None),
-        Err(FrameProblem::Permission) if access == Access::Reopen => item(KEY, TITLE, CheckState::Limited, format!("Not tested. {REOPEN}"), None),
+        Err(FrameProblem::Permission) if access == Access::Reopen => reopen_item(KEY, TITLE, "Not tested. ", reopen_did_not_apply),
         Err(FrameProblem::Permission) => item(KEY, TITLE, CheckState::Off, "Screen Recording is off for EchoLedger. Recordings keep their sound without screen moments.", fix("screen")),
         Err(FrameProblem::Other(e)) => item(KEY, TITLE, CheckState::Failed, format!("No frame came back: {e}"), fix("screen")),
     }
@@ -394,14 +425,14 @@ pub fn run_all(probe: &dyn MacProbe, mut on_step: impl FnMut(CheckProgress), sto
         let permissions = probe.permissions();
         let result = match key {
             "macos_version" => check_version(version),
-            "microphone_permission" => check_permission(Kind::Microphone, permissions.microphone, version),
-            "system_audio_permission" => check_permission(Kind::SystemAudio, permissions.system_audio, version),
-            "screen_permission" => check_permission(Kind::Screen, permissions.screen, version),
+            "microphone_permission" => check_permission(Kind::Microphone, permissions.microphone, version, false, true),
+            "system_audio_permission" => check_permission(Kind::SystemAudio, permissions.system_audio, version, false, probe.can_tell_not_asked()),
+            "screen_permission" => check_permission(Kind::Screen, permissions.screen, version, probe.reopen_did_not_apply(), probe.can_tell_not_asked()),
             "microphone_test" => check_microphone_test(permissions.microphone, || probe.listen_to_microphone(MICROPHONE_TEST_SECONDS, &stop)),
             "system_audio_test" => check_tone_test(version, permissions.system_audio, || probe.tap_while_tone_plays(TONE_TEST_SECONDS, &stop)),
             "meeting_apps" => check_meeting_apps(|bundle| probe.is_installed(bundle)),
             "overlay_windows" => check_overlay_windows(&probe.overlay_windows()),
-            _ => check_screen_capture(permissions.screen, || probe.capture_one_frame()),
+            _ => check_screen_capture(permissions.screen, probe.reopen_did_not_apply(), probe.can_tell_not_asked(), || probe.capture_one_frame()),
         };
         if let Some(reason) = stop_reason() {
             return (items, Some(reason));
@@ -535,6 +566,10 @@ mod tests {
         recording: Cell<bool>,
         /// What `stop` said once the recording had started.
         stop_saw_it: Cell<bool>,
+        /// Screen Recording still waits although EchoLedger was reopened.
+        reopen_did_not_apply: bool,
+        /// This macOS lacks the privacy call (D-136).
+        no_privacy_call: bool,
     }
 
     impl FakeMac {
@@ -566,6 +601,8 @@ mod tests {
                 recording_starts_in: None,
                 recording: Cell::new(false),
                 stop_saw_it: Cell::new(false),
+                reopen_did_not_apply: false,
+                no_privacy_call: false,
             }
         }
     }
@@ -576,6 +613,12 @@ mod tests {
         }
         fn permissions(&self) -> Permissions {
             self.permissions
+        }
+        fn reopen_did_not_apply(&self) -> bool {
+            self.reopen_did_not_apply
+        }
+        fn can_tell_not_asked(&self) -> bool {
+            !self.no_privacy_call
         }
         fn listen_to_microphone(&self, seconds: u32, stop: &dyn Fn() -> bool) -> Result<f32, String> {
             assert_eq!(seconds, 5);
@@ -779,8 +822,44 @@ mod tests {
             assert_eq!(item.state, CheckState::Limited, "{key}");
             assert!(item.detail.contains("Quit and reopen EchoLedger to finish"), "{}", item.detail);
             assert!(!item.detail.contains("is off") && !item.detail.contains("not asked"), "{}", item.detail);
-            assert_eq!(item.fix, None, "System Settings has nothing left to change");
+            // The step's own Quit & reopen, as on the permission sheet.
+            assert_eq!(item.fix, Some(CheckFix { label: "Quit & reopen", settings: "screen", reopen: true }), "{key}");
         }
+    }
+
+    #[test]
+    fn after_a_reopen_that_did_not_apply_it_says_to_switch_echoledger_off_and_on_never_reopen_again() {
+        let reopen = Permissions { screen: Access::Reopen, ..ON };
+        let mac = FakeMac { permissions: reopen, frame: Err(FrameProblem::Permission), reopen_did_not_apply: true, ..FakeMac::default() };
+        let items = run(&mac);
+        for key in ["screen_permission", "screen_capture_test"] {
+            let item = find(&items, key);
+            assert_eq!(item.state, CheckState::Limited, "{key}");
+            assert!(item.detail.contains("Switch EchoLedger off and on again there."), "{}", item.detail);
+            assert!(!item.detail.contains("Quit and reopen"), "{}", item.detail);
+            assert_eq!(item.fix, Some(CheckFix { label: "Open System Settings", settings: "screen", reopen: false }), "{key}");
+        }
+        // Serialized, Open System Settings carries no reopen flag; Quit & reopen does.
+        assert_eq!(serde_json::to_value(fix("screen")).unwrap(), serde_json::json!({ "label": "Open System Settings", "settings": "screen" }));
+        assert_eq!(serde_json::to_value(reopen_fix()).unwrap()["reopen"], true);
+    }
+
+    #[test]
+    fn without_the_privacy_call_nothing_is_said_about_system_audio_or_screen_recording_but_where_to_look() {
+        // D-136: "unknown" from a missing privacy call is not "not asked yet".
+        let unknown = Permissions { system_audio: Access::Unknown, screen: Access::Unknown, ..ON };
+        let mac = FakeMac { permissions: unknown, frame: Err(FrameProblem::Permission), no_privacy_call: true, ..FakeMac::default() };
+        let items = run(&mac);
+        for (key, pane) in [("system_audio_permission", "system_audio"), ("screen_permission", "screen"), ("screen_capture_test", "screen")] {
+            let item = find(&items, key);
+            assert_eq!(item.state, CheckState::Limited, "{key}");
+            assert!(item.detail.contains("macOS does not say whether EchoLedger may use this"), "{}", item.detail);
+            assert!(!item.detail.contains("not asked") && !item.detail.contains("has not asked"), "{}", item.detail);
+            assert_eq!(item.fix.as_ref().map(|f| (f.label, f.settings)), Some(("Open System Settings", pane)), "{key}");
+        }
+        // With the call, "unknown" is a real "not asked yet".
+        let told = run(&FakeMac { permissions: unknown, frame: Err(FrameProblem::Permission), ..FakeMac::default() });
+        assert!(find(&told, "system_audio_permission").detail.contains("macOS has not asked yet"));
     }
 
     #[test]
@@ -890,11 +969,11 @@ mod tests {
 
     #[test]
     fn the_screen_test_takes_one_frame_and_keeps_nothing() {
-        let check = check_screen_capture(Access::Allowed, || Ok(()));
+        let check = check_screen_capture(Access::Allowed, false, true, || Ok(()));
         assert_eq!(check.state, CheckState::Ok);
         assert!(check.detail.contains("thrown away"));
-        assert_eq!(check_screen_capture(Access::Allowed, || Err(FrameProblem::Permission)).state, CheckState::Off);
-        assert_eq!(check_screen_capture(Access::Allowed, || Err(FrameProblem::Other("timed out".into()))).state, CheckState::Failed);
+        assert_eq!(check_screen_capture(Access::Allowed, false, true, || Err(FrameProblem::Permission)).state, CheckState::Off);
+        assert_eq!(check_screen_capture(Access::Allowed, false, true, || Err(FrameProblem::Other("timed out".into()))).state, CheckState::Failed);
     }
 
     #[test]

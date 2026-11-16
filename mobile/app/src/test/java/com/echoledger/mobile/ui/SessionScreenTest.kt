@@ -79,7 +79,11 @@ class SessionScreenTest : ScreenTest() {
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
     }
 
-    private fun showSession(item: LibraryItem = item()) = show { SessionScreen(vm, item, onBack = { backTaps++ }) }
+    private var settingsOpened: String? = null
+
+    private fun showSession(item: LibraryItem = item()) = show {
+        SessionScreen(vm, item, onBack = { backTaps++ }, onOpenSettings = { settingsOpened = it })
+    }
 
     private fun awaitText(text: String) {
         // The whole suite runs in parallel forks; a loaded machine can take longer than the default 20 s.
@@ -315,9 +319,32 @@ class SessionScreenTest : ScreenTest() {
     fun `a transcript made by the backup engine offers the best one without naming either engine`() {
         serve(ServerFixtures.transcript(backupEngine = true, providerLabel = "Groq Whisper large-v3"))
         showSession(item())
-        awaitText("Backup transcription — Re-transcribe?")
+        awaitText("Made with a backup service. Re-transcribe for the best quality?")
         compose.onAllNodesWithText("Groq", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("AssemblyAI", substring = true).assertCountEquals(0)
+    }
+
+    @Test
+    fun `a refused own key says so and opens the key page, with no Retry (P-076)`() {
+        serve(
+            ServerFixtures.transcript(status = "failed", errorCode = "own_key_rejected", error = "rejected", segments = "[]", text = null)
+        )
+        showSession(item(finalStatus = "failed"))
+
+        awaitText("Groq did not accept your key. Check it in Transcription key, then try again.")
+        compose.onAllNodesWithText("Retry").assertCountEquals(0)
+        compose.onNodeWithText("Check your key").performClick()
+        assertEquals("key", settingsOpened)
+        assertTrue(server.requestsTo("POST", "/api/sessions/.+/retranscribe").isEmpty())
+    }
+
+    @Test
+    fun `audio the server does not have reads as such and offers no retry (1_8_1-b)`() {
+        serve(ServerFixtures.transcript(status = "failed", errorCode = "recording_missing", error = "x", segments = "[]", text = null))
+        showSession(item(finalStatus = "failed"))
+
+        awaitText("The audio did not fully reach the server, or it is no longer stored.")
+        compose.onAllNodesWithText("Retry").assertCountEquals(0)
     }
 
     @Test

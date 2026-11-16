@@ -145,8 +145,9 @@ it('shows the second engine\'s words under the line in the console and drops the
     $transcript = checkedTranscript($this);
     app(DoubleCheck::class)->run($transcript);
 
+    // The console says "Second engine heard:", never which engine it was (D-129); the stored line keeps it for the API.
     $player = TranscriptPlayerEntry::payload(CaptureSession::query()->findOrFail($transcript->capture_session_id));
-    expect($player['segments'][1]['check'])->toBe(['label' => SttProviderKey::Groq->getLabel(), 'text' => 'Something else entirely'])
+    expect($player['segments'][1]['check'])->toBe(['label' => 'Second engine', 'text' => 'Something else entirely'])
         ->and($player['segments'][0]['check'])->toBeNull();
 
     app(TranscriptEditor::class)->edit($transcript->refresh(), [1 => 'Send it to Farah Khan']);

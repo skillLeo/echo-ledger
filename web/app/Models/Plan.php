@@ -60,15 +60,18 @@ class Plan extends Model
     /** The four features the v1.5 apps read in `GET /api/config` (`plan.features`). */
     public const V15_FEATURES = ['live_translate', 'screen_moments', 'ai_notes', 'connector'];
 
-    /** What the features are called in messages and on the Plans page: read through featureLabel() (the product's name). */
+    /**
+     * What the features are called in messages and on the Plans page: read through featureLabel() (the product's name).
+     * Plain words, never a provider, model or vendor (since v1.8.1, D-129), as the features registry.
+     */
     public const FEATURE_LABELS = [
         'platform_transcription' => 'Transcription on '.Brand::TOKEN,
         'views' => 'Roman Urdu, English and Urdu views',
         'double_check' => 'Double-check',
         'screen_moments' => 'Screen moments',
-        'connector' => 'Claude and ChatGPT connector',
+        'connector' => 'Ask an AI assistant',
         'team' => 'Team workspace',
-        'premium_engines' => 'Premium engines (ElevenLabs, Gemini)',
+        'premium_engines' => 'Premium engines',
         'live_translate' => 'Live Translate',
         'ai_notes' => 'AI notes (project notes, memory and Ask)',
     ];
