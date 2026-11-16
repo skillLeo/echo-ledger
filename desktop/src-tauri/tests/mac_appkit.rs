@@ -85,6 +85,37 @@ fn main() {
     drop(web_view);
     drop(tao_window);
 
+    // Only a method NSWindow owns is ever swapped (never NSObject's, which every class allocates with).
+    let own_allocator = desktop_lib::overlay::macos::nswindow_own_allocator().is_some();
+    println!("mac_appkit: NSWindow has {} allocWithZone: of its own on this Mac", if own_allocator { "an" } else { "no" });
+    assert!(own_allocator, "NSWindow's own +allocWithZone: (else build_as_panel builds plain windows and the checks say so)");
+
+    // Within one build_as_panel call only the first TaoWindow becomes the panel: a plain NSWindow, an NSPanel and a second
+    // TaoWindow allocated in the same call are what they are.
+    let deferred = |class: &AnyClass| -> Retained<NSWindow> {
+        let frame = CGRect::new(CGPoint::new(0.0, 0.0), CGSize::new(10.0, 10.0));
+        // SAFETY: on the main thread, a window class initialised with NSWindow's designated initialiser, deferred, never shown.
+        let window: Retained<NSWindow> = unsafe {
+            let allocated: Allocated<NSWindow> = msg_send![class, alloc];
+            msg_send![allocated, initWithContentRect: frame, styleMask: NSWindowStyleMask::Borderless, backing: NSBackingStoreType::Buffered, defer: true]
+        };
+        // SAFETY: the Retained owns it.
+        unsafe { window.setReleasedWhenClosed(false) };
+        window
+    };
+    let (plain, panel, first, second) = desktop_lib::overlay::macos::build_as_panel(|| {
+        let plain = deferred(AnyClass::get(c"NSWindow").unwrap());
+        let panel = deferred(AnyClass::get(c"NSPanel").unwrap());
+        (plain, panel, new_tao_window(), new_tao_window())
+    });
+    assert_eq!(isa(&plain), "NSWindow");
+    assert_eq!(isa(&panel), "NSPanel");
+    // SAFETY: as above.
+    assert_eq!(isa(unsafe { &*(first.ns_window() as *const NSWindow) }), PANEL_CLASS, "the TaoWindow asked for");
+    // SAFETY: as above.
+    assert_eq!(isa(unsafe { &*(second.ns_window() as *const NSWindow) }), TAO_WINDOW_CLASS, "only the first");
+    drop((plain, panel, first, second));
+
     // The fix: tao builds the floating window as a panel from the start (build_as_panel), so everything that observes it
     // later observes a panel: KVO makes its class for the panel, and every observer is told and removed as usual.
     let tao_window = desktop_lib::overlay::macos::build_as_panel(new_tao_window);

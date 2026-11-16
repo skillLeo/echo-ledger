@@ -9,8 +9,10 @@
 //! (KVO gives it a class of its own, `NSKVONotifying_TaoWindow`), after which its class must never change: KVO's records
 //! are tied to it. So a floating window is a panel from its allocation on ([`build_as_panel`]): while it is built, on the
 //! main thread, NSWindow's allocator hands tao an object of [`PANEL_CLASS`] (a subclass of `NSPanel` made once at
-//! runtime) with TaoWindow's size, and tao's NSWindow initialiser runs NSPanel's own start for it; whatever observes it
-//! later observes a panel. [`make_panel`] then gives it the non-activating style. `NSPanel` adds no instance variables
+//! runtime) with TaoWindow's size. tao initialises it with NSWindow's own initialiser (a `super` call, so NSPanel's
+//! initialiser overrides are skipped), and whatever observes it later observes a panel; what a floating panel needs is set
+//! by [`make_panel`] (the non-activating style, the window server's activation setter, staying on screen when EchoLedger
+//! is not active) and checked by tests/mac_appkit.rs and the smoke test. `NSPanel` adds no instance variables
 //! to `NSWindow` and neither does the panel class, so tao's own state sits after NSWindow's part where tao puts it
 //! (checked at runtime: a layout or a TaoWindow that ever differs leaves the window as it is, and the Mac check and the
 //! smoke test say so). tao's window delegate and the capture flag (`sharingType`) are tao's and the privacy service's as
@@ -156,8 +158,9 @@ pub fn make_panel(window: &NSWindow) -> Result<(), String> {
         unsafe { objc2::ffi::object_setClass((object as *const AnyObject).cast_mut(), class) };
     }
     window.setStyleMask(NSWindowStyleMask(mac_overlay_style(window.styleMask().0)));
-    // The class changed after AppKit made the window, so NSPanel's own start never told the window server that a click
-    // must not activate EchoLedger: the setter it uses, when this macOS has it (tauri-nspanel does the same).
+    // NSPanel's own initialiser never ran for this panel (its class changed after AppKit made it, or tao's `super` call to
+    // NSWindow's initialiser skipped it), so the window server was never told that a click must not activate EchoLedger:
+    // the setter NSPanel uses, when this macOS has it (tauri-nspanel does the same).
     if window.respondsToSelector(sel!(_setPreventsActivation:)) {
         // SAFETY: the selector exists on this window (asked just above) and takes a BOOL.
         unsafe {
@@ -187,18 +190,20 @@ pub fn kvo_name(class: &AnyClass) -> String {
 }
 
 thread_local! {
-    /// While [`build_as_panel`] runs (on the main thread): NSWindow's own `allocWithZone:`, which [`allocate`] stands in
-    /// for, and whether the TaoWindow it asks for is still to come.
-    static ORIGINAL: std::cell::Cell<Option<objc2::runtime::Imp>> = const { std::cell::Cell::new(None) };
+    /// [`build_as_panel`] runs on this (the main) thread, and the TaoWindow it asks for is still to come.
+    static BUILDING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static NEXT_IS_PANEL: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
+
+/// NSWindow's own `allocWithZone:` implementation, kept for every thread (set before the first swap, never cleared): any
+/// thread that allocates a window while [`allocate`] stands in reaches the real allocator.
+static ORIGINAL: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 type AllocWithZone = extern "C-unwind" fn(*const AnyClass, Sel, *mut std::ffi::c_void) -> *mut AnyObject;
 
 /// `+[NSWindow allocWithZone:]` while [`build_as_panel`] runs: every window is allocated by NSWindow's own allocator as
-/// before, except the one TaoWindow asked for, which is allocated as the panel class with TaoWindow's size (tao's own
-/// state goes after NSWindow's part). tao then initialises it with NSWindow's initialiser, which runs NSPanel's own start
-/// for it: a panel before anything can observe it.
+/// before, except the one TaoWindow asked for on the main thread, which is allocated as the panel class with TaoWindow's
+/// size (tao's own state goes after NSWindow's part), a panel before anything can observe it.
 extern "C-unwind" fn allocate(class: *const AnyClass, cmd: Sel, zone: *mut std::ffi::c_void) -> *mut AnyObject {
     // SAFETY: the runtime passes the class being allocated.
     let asked = unsafe { class.as_ref() };
@@ -209,12 +214,19 @@ extern "C-unwind" fn allocate(class: *const AnyClass, cmd: Sel, zone: *mut std::
         // `alloc` returns it (+1, uninitialised).
         return unsafe { objc2::ffi::class_createInstance(panel, tao.instance_size() - panel.instance_size()) };
     }
-    match ORIGINAL.with(|original| original.get()) {
-        // SAFETY: NSWindow's own `allocWithZone:`, called as the runtime would.
-        Some(original) => unsafe { std::mem::transmute::<objc2::runtime::Imp, AllocWithZone>(original)(class, cmd, zone) },
-        // SAFETY: what an allocator does (never reached: the swap is undone before ORIGINAL is cleared).
-        None => unsafe { objc2::ffi::class_createInstance(class, 0) },
-    }
+    let original = ORIGINAL.load(Ordering::SeqCst);
+    // SAFETY: NSWindow's own `allocWithZone:` (stored before `allocate` was ever swapped in, never cleared), called as the
+    // runtime would.
+    unsafe { std::mem::transmute::<usize, AllocWithZone>(original)(class, cmd, zone) }
+}
+
+/// NSWindow's own `allocWithZone:` (a method of NSWindow's metaclass itself, never the one it inherits from NSObject,
+/// which every class uses); none when NSWindow has none of its own on this macOS.
+pub fn nswindow_own_allocator() -> Option<&'static objc2::runtime::Method> {
+    let window = AnyClass::get(c"NSWindow")?.metaclass();
+    let own = window.instance_methods().iter().any(|m| m.name() == sel!(allocWithZone:));
+    // The method found is NSWindow's own (asked just above), so its lookup lands on it.
+    own.then(|| window.instance_method(sel!(allocWithZone:))).flatten()
 }
 
 /// Puts NSWindow's own allocator back when the build ends, also if it panics.
@@ -222,32 +234,32 @@ struct Restore(*const objc2::runtime::Method);
 
 impl Drop for Restore {
     fn drop(&mut self) {
-        if let Some(original) = ORIGINAL.with(|o| o.take()) {
-            // SAFETY: the method swapped in `build_as_panel`, given back its own implementation on the main thread.
-            unsafe { objc2::ffi::method_setImplementation(self.0, original) };
-        }
+        // SAFETY: the method swapped in `build_as_panel`, given back its own implementation on the main thread.
+        unsafe { objc2::ffi::method_setImplementation(self.0, std::mem::transmute::<usize, objc2::runtime::Imp>(ORIGINAL.load(Ordering::SeqCst))) };
+        BUILDING.with(|b| b.set(false));
         NEXT_IS_PANEL.with(|next| next.set(false));
     }
 }
 
 /// Runs `build` on the main thread so the TaoWindow it builds is a floating panel from its allocation on: for the
-/// length of the call NSWindow's `allocWithZone:` is [`allocate`] (AppKit makes windows on the main thread only, so no
-/// other thread allocates one meanwhile), then its own again. Off the main thread it runs as it is (and `make_panel` says
-/// what it got).
+/// length of the call NSWindow's own `allocWithZone:` is [`allocate`], then its own again. Only a method NSWindow owns is
+/// swapped (never NSObject's, which every class allocates with); off the main thread, nested, or without that method it
+/// runs as it is, and `make_panel`, the Mac check and the smoke test say what it got.
 pub fn build_as_panel<T>(build: impl FnOnce() -> T) -> T {
-    let nested = ORIGINAL.with(|o| o.get()).is_some();
-    let method = AnyClass::get(c"NSWindow").map(|window| {
-        // SAFETY: a class method lookup on NSWindow.
-        unsafe { objc2::ffi::class_getInstanceMethod(window.metaclass(), sel!(allocWithZone:)) }
-    });
-    let (Some(method), false, Some(_)) = (method.filter(|m| !m.is_null()), nested || MainThreadMarker::new().is_none(), panel_class()) else {
+    let (Some(method), false, Some(_)) = (nswindow_own_allocator(), BUILDING.with(|b| b.get()) || MainThreadMarker::new().is_none(), panel_class()) else {
         return build();
     };
     let ours: AllocWithZone = allocate;
+    let original = method.implementation() as usize;
+    // Kept for every thread before `allocate` can run anywhere.
+    if original != ours as usize {
+        ORIGINAL.store(original, Ordering::SeqCst);
+    }
+    let method = method as *const objc2::runtime::Method;
     // SAFETY: `ours` has `allocWithZone:`'s signature and calls the implementation it replaces for every other window.
-    let original = unsafe { objc2::ffi::method_setImplementation(method, std::mem::transmute::<AllocWithZone, objc2::runtime::Imp>(ours)) };
+    unsafe { objc2::ffi::method_setImplementation(method, std::mem::transmute::<AllocWithZone, objc2::runtime::Imp>(ours)) };
     let _restore = Restore(method);
-    ORIGINAL.with(|o| o.set(original));
+    BUILDING.with(|b| b.set(true));
     NEXT_IS_PANEL.with(|next| next.set(true));
     build()
 }
