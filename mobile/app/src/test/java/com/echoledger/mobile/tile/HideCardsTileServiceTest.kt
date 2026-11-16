@@ -97,25 +97,27 @@ class HideCardsTileServiceTest : AppTest() {
         assertTrue(ShareGuard.textVisible.value)
     }
 
+    /** Hide lasts the session (review of v1.8.1): after a restart the tile reads Shown, and the setting is still kept. */
     @Test
-    fun `the hidden state survives a new process and the tile reads it`() {
+    fun `after a new process the tile shows Shown, because Hide lasts the session only`() {
+        ShareGuard.restore(ShareGuardMemory(app))
+        ShareGuard.setMode(ShareGuard.Mode.SHOW)
         bind().apply {
             onStartListening()
             onClick()
         }
-        assertEquals(true, ShareGuardMemory(app).read()?.hidden)
+        assertTrue(ShareGuard.hiddenByUser.value)
 
         ShareGuard.resetForTest() // the process ends (a cached kill, a crash, an update)
-        assertFalse(ShareGuard.hiddenByUser.value)
         ShareGuard.restore(ShareGuardMemory(app)) // EchoLedgerApp of the next process
 
         val tile = bind()
         tile.onStartListening()
-        tile.shows(Tile.STATE_ACTIVE, "Hidden")
-        assertFalse(ShareGuard.textVisible.value)
-        tile.onClick()
         tile.shows(Tile.STATE_INACTIVE, "Shown")
-        assertEquals(false, ShareGuardMemory(app).read()?.hidden)
+        assertTrue(ShareGuard.textVisible.value)
+        assertEquals("the setting outlives the process", ShareGuard.Mode.SHOW, ShareGuard.mode.value)
+        tile.onClick()
+        tile.shows(Tile.STATE_ACTIVE, "Hidden")
     }
 
     @Test

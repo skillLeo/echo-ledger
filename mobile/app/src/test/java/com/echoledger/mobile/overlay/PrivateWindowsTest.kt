@@ -52,7 +52,7 @@ class PrivateWindowsTest : AppTest() {
         idle()
     }
 
-    private fun idle() = shadowOf(Looper.getMainLooper()).idle()
+    private fun idle() = shadowOf(Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(50))
 
     /** Title → flags as the window manager has them, for each EchoLedger window on screen. */
     private fun onScreen(): Map<String, Int> = Shadow.extract<ShadowWindowManagerImpl>(wm).views.mapNotNull { view ->
@@ -98,6 +98,9 @@ class PrivateWindowsTest : AppTest() {
             if (toolbar) it.showToolbar()
         }
 
+    /** Every kind of floating window that is on screen while nothing is hidden (the grey dot shows only while hidden). */
+    private val usual = FloatingWindow.entries - FloatingWindow.LIVE_TRANSLATE_DOT
+
     private fun everyWindow(): TranslateOverlay {
         pill()
         captions()
@@ -111,7 +114,7 @@ class PrivateWindowsTest : AppTest() {
         everyWindow()
 
         val shown = onScreen()
-        assertEquals("every kind of floating window is on screen", FloatingWindow.entries.map { it.title }.toSet(), shown.keys)
+        assertEquals("every kind of floating window is on screen", usual.map { it.title }.toSet(), shown.keys)
         shown.forEach { (title, flags) -> assertTrue("$title has FLAG_SECURE", secure(flags)) }
     }
 
@@ -121,14 +124,14 @@ class PrivateWindowsTest : AppTest() {
         everyWindow()
 
         val shown = onScreen()
-        assertEquals(FloatingWindow.entries.map { it.title }.toSet(), shown.keys)
+        assertEquals(usual.map { it.title }.toSet(), shown.keys)
         shown.forEach { (title, flags) -> assertFalse("$title has no FLAG_SECURE", secure(flags)) }
     }
 
     @Test
     fun `each window keeps its own flags beside the secure one`() {
         everyWindow()
-        FloatingWindow.entries.forEach { window ->
+        usual.forEach { window ->
             val flags = flagsOf(window)
             assertEquals("${window.title} keeps its flags", window.flags, flags and window.flags)
             // Android adds hardware acceleration to a window of a hardware-accelerated app; nothing else is added.
@@ -148,7 +151,7 @@ class PrivateWindowsTest : AppTest() {
         assertTrue(onScreen().values.none(::secure))
 
         setting(ShareGuard.Mode.PRIVATE)
-        assertEquals(FloatingWindow.entries.size, onScreen().size)
+        assertEquals(usual.size, onScreen().size)
         onScreen().forEach { (title, flags) -> assertTrue("$title became secure", secure(flags)) }
 
         setting(ShareGuard.Mode.SHOW)
@@ -263,6 +266,102 @@ class PrivateWindowsTest : AppTest() {
         assertFalse(TranslateOverlay(app, subtitles = false, actions = NoActions).show(BoxPlacement(0.1f, 0.1f, 0.5f, 0.2f), 0.8f, true))
         assertEquals(before, PrivateWindows.count)
         assertTrue(onScreen().isEmpty())
+    }
+
+    // ---- Live Translate while the floating windows are hidden (review of v1.8.1) -------------------------------------
+
+    private fun boxView(): android.view.View = Shadow.extract<ShadowWindowManagerImpl>(wm).views.single {
+        (it.layoutParams as? WindowManager.LayoutParams)?.title == FloatingWindow.LIVE_TRANSLATE.title
+    }
+
+    private fun dotView(): android.view.View? = Shadow.extract<ShadowWindowManagerImpl>(wm).views.firstOrNull {
+        (it.layoutParams as? WindowManager.LayoutParams)?.title == FloatingWindow.LIVE_TRANSLATE_DOT.title
+    }
+
+    private fun tap(view: android.view.View) {
+        val x = view.width / 2f
+        val y = view.height / 2f
+        val down = android.os.SystemClock.uptimeMillis()
+        view.dispatchTouchEvent(android.view.MotionEvent.obtain(down, down, android.view.MotionEvent.ACTION_DOWN, x, y, 0))
+        view.dispatchTouchEvent(android.view.MotionEvent.obtain(down, down + 50, android.view.MotionEvent.ACTION_UP, x, y, 0))
+        idle()
+    }
+
+    @Test
+    fun `hidden before Live Translate opens, its box is never drawn, from the first frame`() {
+        ShareGuard.setHidden(true)
+        liveTranslate(toolbar = false)
+        // Checked before the main thread runs anything: no frame with text slips out.
+        assertEquals(android.view.View.INVISIBLE, boxView().visibility)
+        assertTrue("the grey dot is there at once", dotView() != null)
+        assertEquals(android.view.View.GONE, onScreenView(FloatingWindow.LIVE_TRANSLATE_GRIP).visibility)
+    }
+
+    private fun onScreenView(window: FloatingWindow): android.view.View = Shadow.extract<ShadowWindowManagerImpl>(wm).views.single {
+        (it.layoutParams as? WindowManager.LayoutParams)?.title == window.title
+    }
+
+    @Test
+    fun `in Game and in Watch mode the grey dot shows the floating windows again`() {
+        listOf(false, true).forEach { subtitles ->
+            ShareGuard.setHidden(false)
+            val box = TranslateOverlay(app, subtitles = subtitles, actions = NoActions)
+            assertTrue(box.show(null, 0.8f, showGrip = true))
+            closers += { box.hideAll() }
+            assertEquals("mode $subtitles: no dot while shown", null, dotView())
+
+            ShareGuard.setHidden(true)
+            idle()
+            val dot = checkNotNull(dotView()) { "mode $subtitles: the grey dot replaces the grip" }
+            assertTrue("the dot is secure like every floating window", secure(flagsOf(FloatingWindow.LIVE_TRANSLATE_DOT)))
+            assertEquals(android.view.View.INVISIBLE, boxView().visibility)
+
+            tap(dot)
+            assertFalse("mode $subtitles: the tap is Show EchoLedger windows", ShareGuard.hiddenByUser.value)
+            idle()
+            assertEquals(null, dotView())
+            assertEquals(android.view.View.VISIBLE, boxView().visibility)
+            box.hideAll()
+        }
+    }
+
+    @Test
+    fun `a hidden box never becomes touchable, and Edit going on locks the moment it is hidden`() {
+        val box = liveTranslate(toolbar = false)
+        ShareGuard.setHidden(true)
+        idle()
+        box.state(BoxState.EDIT)
+        assertEquals("no Edit while hidden", TranslateOverlay.LOCKED_FLAGS or FLAG_SECURE, flagsOf(FloatingWindow.LIVE_TRANSLATE))
+
+        ShareGuard.setHidden(false)
+        idle()
+        assertEquals(TranslateOverlay.EDIT_FLAGS or FLAG_SECURE, flagsOf(FloatingWindow.LIVE_TRANSLATE))
+
+        ShareGuard.setHidden(true)
+        idle()
+        assertEquals(
+            "hiding while editing locks at once",
+            TranslateOverlay.LOCKED_FLAGS or FLAG_SECURE,
+            flagsOf(FloatingWindow.LIVE_TRANSLATE)
+        )
+    }
+
+    @Test
+    fun `the Live Translate notification's Show brings back hidden windows, and its Edit does nothing while hidden`() {
+        ShareGuard.setHidden(true)
+        val service = buildService(
+            com.echoledger.mobile.translate.LiveTranslateService::class.java,
+            android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
+                .setAction(com.echoledger.mobile.translate.LiveTranslateService.ACTION_EDIT)
+        ).create()
+        service.startCommand(0, 1) // the notification's Edit while hidden: ignored, no crash
+        assertTrue(ShareGuard.hiddenByUser.value)
+
+        service.withIntent(
+            android.content.Intent(app, com.echoledger.mobile.translate.LiveTranslateService::class.java)
+                .setAction(com.echoledger.mobile.translate.LiveTranslateService.ACTION_SHOW)
+        ).startCommand(0, 2)
+        assertFalse(ShareGuard.hiddenByUser.value)
     }
 
     private object NoActions : TranslateBoxActions {

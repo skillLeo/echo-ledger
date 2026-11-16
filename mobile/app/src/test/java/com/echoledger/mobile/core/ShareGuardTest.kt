@@ -164,25 +164,36 @@ class ShareGuardTest {
         }
     }
 
+    /**
+     * Review of v1.8.1: a Hide kept across process death left Live Translate without a way back, and every floating
+     * window is a black box in a screen share anyway. So only the setting outlives the process; Hide lasts the session.
+     */
     @Test
-    fun `hide and the setting survive a new process`() {
+    fun `the setting survives a new process but Hide does not, since every window is already a black box in a screen share`() {
         val memory = FakeMemory()
         ShareGuard.restore(memory)
         ShareGuard.setMode(Mode.SHOW)
         assertTrue(ShareGuard.toggleHidden())
-        assertEquals(ShareGuard.Saved(Mode.SHOW, hidden = true), memory.saved)
+        assertEquals(ShareGuard.Saved(Mode.SHOW), memory.saved)
 
         ShareGuard.resetForTest() // the process ends (a cached kill, a crash, an update)
-        assertFalse(ShareGuard.hiddenByUser.value)
+        ShareGuard.setHidden(true)
         ShareGuard.setShared(true)
         ShareGuard.restore(memory) // a new one starts
 
-        assertTrue(ShareGuard.hiddenByUser.value)
         assertEquals(Mode.SHOW, ShareGuard.mode.value)
-        assertFalse(ShareGuard.textVisible.value)
+        assertFalse("Hide is for the session only", ShareGuard.hiddenByUser.value)
         assertFalse("nothing is in a screen share when a process starts", ShareGuard.shared.value)
-        assertFalse("the next tap shows the windows", ShareGuard.toggleHidden())
-        assertEquals(ShareGuard.Saved(Mode.SHOW, hidden = false), memory.saved)
+        assertTrue(ShareGuard.textVisible.value)
+        assertTrue("the next tap hides them again", ShareGuard.toggleHidden())
+    }
+
+    @Test
+    fun `a Hide stored by the first v1_8_1 builds is not brought back`() {
+        ShareGuard.setHidden(true)
+        ShareGuard.restore(FakeMemory(ShareGuard.Saved(Mode.PRIVATE)))
+        assertFalse(ShareGuard.hiddenByUser.value)
+        assertTrue(ShareGuard.textVisible.value)
     }
 
     @Test
@@ -196,17 +207,17 @@ class ShareGuardTest {
     }
 
     @Test
-    fun `only a change of the setting or of hide is written`() {
+    fun `only a change of the setting is written, never Hide`() {
         val memory = FakeMemory()
         ShareGuard.restore(memory)
         ShareGuard.setShared(true)
         ShareGuard.setShared(false)
         ShareGuard.setMode(Mode.PRIVATE)
+        ShareGuard.setHidden(true)
         ShareGuard.setHidden(false)
         assertEquals(0, memory.writes)
-        ShareGuard.setHidden(true)
         ShareGuard.setMode(Mode.SHOW)
-        assertEquals(2, memory.writes)
+        assertEquals(1, memory.writes)
     }
 
     @Test

@@ -20,8 +20,10 @@ import kotlinx.coroutines.flow.asStateFlow
  * on the recording controls or the Quick Settings tile), and in Private also while Android reports them in a screen
  * share or recording. Public APIs only; nothing here hides EchoLedger from other software.
  *
- * The setting and the person's Hide survive the process ([Memory], restored by EchoLedgerApp before any window or the
- * tile can ask), so a window opened before the settings store has loaded already has the right flag.
+ * The setting survives the process ([Memory], restored by EchoLedgerApp before any window or the tile can ask), so a
+ * window opened before the settings store has loaded already has the right flag. The person's Hide lasts the session
+ * only: every window is a black box in a screen share anyway, and a Hide kept across restarts left a window with no
+ * way back.
  *
  * Safe from any thread: changes are made under one lock and listeners are told in order, on the thread that made the
  * change.
@@ -54,14 +56,14 @@ object ShareGuard {
         flags and WindowManager.LayoutParams.FLAG_SECURE.inv()
     }
 
-    /** Where the setting and the person's Hide are kept between processes (a small preference file in the app). */
+    /** Where the setting is kept between processes (a small preference file in the app). */
     interface Memory {
         fun read(): Saved?
 
         fun write(saved: Saved)
     }
 
-    data class Saved(val mode: Mode, val hidden: Boolean)
+    data class Saved(val mode: Mode)
 
     private val lock = Any()
     private var memory: Memory? = null
@@ -78,7 +80,7 @@ object ShareGuard {
     /** Android reported our windows visible in a screen share or recording (Android 15+, our own screens only). */
     val shared: StateFlow<Boolean> = _shared.asStateFlow()
 
-    /** The person hid the floating windows, until they show them again (kept across restarts). */
+    /** The person hid the floating windows, until they show them again or the app restarts. */
     val hiddenByUser: StateFlow<Boolean> = _hiddenByUser.asStateFlow()
 
     /** [showsText] for the current state. */
@@ -101,8 +103,8 @@ object ShareGuard {
     }
 
     /**
-     * At process start: the last saved setting and Hide (Private and shown when nothing was saved), nothing in a screen
-     * share; every later change is saved to [memory].
+     * At process start: the last saved setting (Private when nothing was saved), the floating windows shown and nothing
+     * in a screen share; every later change of the setting is saved to [memory].
      */
     fun restore(memory: Memory) {
         val saved = runCatching { memory.read() }.getOrNull()
@@ -110,7 +112,7 @@ object ShareGuard {
             this.memory = null
             change {
                 _mode.value = saved?.mode ?: Mode.PRIVATE
-                _hiddenByUser.value = saved?.hidden == true
+                _hiddenByUser.value = false
                 _shared.value = false
             }
             this.memory = memory
@@ -139,13 +141,13 @@ object ShareGuard {
     private inline fun change(block: () -> Unit) {
         synchronized(lock) {
             val before = _mode.value
-            val wasHidden = _hiddenByUser.value
             block()
             val mode = _mode.value
-            val hidden = _hiddenByUser.value
-            if (mode != before || hidden != wasHidden) memory?.let { m -> runCatching { m.write(Saved(mode, hidden)) } }
-            if (mode != before) modeListeners.forEach { it(mode) }
-            val visible = showsText(mode, _shared.value, hidden)
+            if (mode != before) {
+                memory?.let { m -> runCatching { m.write(Saved(mode)) } }
+                modeListeners.forEach { it(mode) }
+            }
+            val visible = showsText(mode, _shared.value, _hiddenByUser.value)
             if (visible != _textVisible.value) {
                 _textVisible.value = visible
                 listeners.forEach { it(visible) }

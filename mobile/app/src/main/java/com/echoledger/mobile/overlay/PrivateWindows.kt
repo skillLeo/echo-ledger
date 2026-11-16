@@ -91,7 +91,13 @@ internal enum class FloatingWindow(val title: String, val flags: Int) {
         "EchoLedger Live Translate grip",
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
     ),
-    LIVE_TRANSLATE_TOOLBAR("EchoLedger Live Translate toolbar", TOUCHABLE)
+    LIVE_TRANSLATE_TOOLBAR("EchoLedger Live Translate toolbar", TOUCHABLE),
+
+    /** Only while the floating windows are hidden: the grey dot that shows them again, where the grip sits. */
+    LIVE_TRANSLATE_DOT(
+        "EchoLedger Live Translate hidden dot",
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+    )
 }
 
 /** Touchable, never takes the keyboard, and hears a tap outside (to close a menu). */

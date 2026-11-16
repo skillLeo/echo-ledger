@@ -99,19 +99,48 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     private val fadeGrip = Runnable { gripFaded.value = true }
     private val closeToolbar = Runnable { hideToolbar() }
 
-    /** The floating windows are hidden (by the person, or in a screen share Android reports; since v1.8.1): no box. */
+    /**
+     * The floating windows are hidden (Hide EchoLedger windows, or a screen share Android reports; since v1.8.1): the box
+     * is not drawn and never touchable, the grip and toolbar go, and a grey dot ("Show EchoLedger windows") takes the
+     * grip's place, in Watch mode too, so there is always a way back.
+     */
     private var private = false
     private var stopWatching: (() -> Unit)? = null
 
-    private fun shownVisibility() = if (private) View.INVISIBLE else View.VISIBLE
+    /** The grey dot while [private]. */
+    private var hiddenDot: ComposeView? = null
+    private var hiddenDotParams: WindowManager.LayoutParams? = null
 
     private fun applyPrivate(on: Boolean) {
+        if (on == private && text != null) return
         private = on
-        val view = text ?: return
-        if (state == BoxState.HIDDEN) return
-        view.visibility = shownVisibility()
         if (on) hideToolbar()
+        applyBox()
     }
+
+    /**
+     * The box's window for [state] and [private]: touchable only while editing and never while hidden, and the grip or
+     * the grey dot beside it.
+     */
+    private fun applyBox() {
+        val view = text ?: return
+        val params = boxParams ?: return
+        val editing = state == BoxState.EDIT && !private
+        params.flags = if (editing) EDIT_FLAGS else LOCKED_FLAGS
+        params.alpha = if (editing) 1f else opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
+        view.visibility = when {
+            state == BoxState.HIDDEN -> View.GONE
+            private -> View.INVISIBLE
+            else -> View.VISIBLE
+        }
+        view.setEditing(editing)
+        PrivateWindows.update(wm, view, params)
+        grip?.visibility = if (state == BoxState.HIDDEN || private) View.GONE else View.VISIBLE
+        if (private && state != BoxState.HIDDEN) addHiddenDot() else removeHiddenDot()
+    }
+
+    /** "Show EchoLedger windows": the grey dot's tap. */
+    internal fun showWindows() = ShareGuard.setHidden(false)
 
     val showing: Boolean get() = text != null
 
@@ -123,6 +152,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         this.opacity = opacity
         this.showGrip = showGrip && !subtitles
         val view = TranslateTextView(context, subtitles)
+        // Hidden already (the tile, a screen share): the very first frame is drawn without text.
+        private = !ShareGuard.textVisible.value
+        view.visibility = if (private) View.INVISIBLE else View.VISIBLE
         val (sw, sh) = screen()
         val safe = safeArea()
         val rect = placement?.let { BoxGeometry.place(BoxGeometry.fromPlacement(it, sw, sh), safe, snapPx()) }
@@ -159,6 +191,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         boxParams = params
         attachDrag(view)
         if (this.showGrip) addGrip()
+        applyBox()
         // The latest state when the post runs, so changes from other threads can never arrive out of order.
         stopWatching = ShareGuard.observe { main.post { applyPrivate(!ShareGuard.textVisible.value) } }
         return true
@@ -169,6 +202,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         hideToolbar()
         grip?.let { PrivateWindows.remove(wm, it) }
         grip = null
+        removeHiddenDot()
         text?.let { PrivateWindows.remove(wm, it) }
         text = null
         stopWatching?.invoke()
@@ -195,7 +229,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             params.height = wanted
             if (subtitles) params.y = safeArea().bottom - wanted - offsetPx
         }
-        if (state != BoxState.EDIT) params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
+        if (state != BoxState.EDIT || private) params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
         PrivateWindows.update(wm, view, params)
         moveGrip()
     }
@@ -209,6 +243,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
             if (subtitles) {
                 params.y = safeArea().bottom - params.height - value
                 PrivateWindows.update(wm, view, params)
+                moveGrip()
             }
         }
 
@@ -223,38 +258,17 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         }
     }
 
-    /** Applies a state from the box machine: touchable only while editing; hidden windows leave the screen. */
+    /**
+     * Applies a state from the box machine: touchable only while editing (never while the floating windows are hidden);
+     * Hidden means nothing on screen, the dot included (since 1.3.0.1): the notification's Show brings it back.
+     */
     fun state(next: BoxState) {
         if (next == state) return
         state = next
-        val view = text ?: return
-        val params = boxParams ?: return
+        if (text == null) return
         paused.value = next == BoxState.PAUSED
-        when (next) {
-            BoxState.EDIT -> {
-                params.flags = EDIT_FLAGS
-                params.alpha = 1f
-                view.visibility = shownVisibility()
-                view.setEditing(true)
-            }
-
-            // Hidden means nothing on screen, the dot included (since 1.3.0.1): the notification's Show brings it back.
-            BoxState.HIDDEN -> {
-                view.visibility = View.GONE
-                view.setEditing(false)
-                params.flags = LOCKED_FLAGS
-                hideToolbar()
-            }
-
-            else -> {
-                params.flags = LOCKED_FLAGS
-                params.alpha = opacity.coerceAtMost(MAX_PASS_THROUGH_ALPHA)
-                view.visibility = shownVisibility()
-                view.setEditing(false)
-            }
-        }
-        PrivateWindows.update(wm, view, params)
-        grip?.visibility = if (next == BoxState.HIDDEN) View.GONE else View.VISIBLE
+        if (next == BoxState.HIDDEN) hideToolbar()
+        applyBox()
         wakeGrip()
     }
 
@@ -379,6 +393,7 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
     }
 
     private fun moveGrip() {
+        moveHiddenDot()
         val g = grip ?: return
         val gp = gripParams ?: return
         val bp = boxParams ?: return
@@ -386,6 +401,46 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         gp.x = (bp.x + bp.width - size / 2).coerceAtMost(screen().first - size)
         gp.y = (bp.y - size / 2).coerceAtLeast(0)
         PrivateWindows.update(wm, g, gp)
+    }
+
+    /** The grey dot at the box's top-right corner, where the grip sits (Watch mode has no grip). */
+    private fun addHiddenDot() {
+        if (hiddenDot != null || text == null) return
+        val view = ComposeView(context).apply {
+            setViewTreeLifecycleOwner(owner)
+            setViewTreeSavedStateRegistryOwner(owner)
+            setContent { PrivateDot(onShow = ::showWindows) }
+        }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.WRAP_CONTENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            FloatingWindow.LIVE_TRANSLATE_DOT.flags,
+            PixelFormat.TRANSLUCENT
+        ).apply {
+            gravity = Gravity.TOP or Gravity.START
+            title = FloatingWindow.LIVE_TRANSLATE_DOT.title
+        }
+        if (!PrivateWindows.add(wm, view, params)) return
+        hiddenDot = view
+        hiddenDotParams = params
+        moveHiddenDot()
+    }
+
+    private fun removeHiddenDot() {
+        hiddenDot?.let { PrivateWindows.remove(wm, it) }
+        hiddenDot = null
+        hiddenDotParams = null
+    }
+
+    private fun moveHiddenDot() {
+        val dot = hiddenDot ?: return
+        val dp = hiddenDotParams ?: return
+        val bp = boxParams ?: return
+        val size = (HIDDEN_DOT_DP * density).toInt()
+        dp.x = (bp.x + bp.width - size / 2).coerceIn(0, (screen().first - size).coerceAtLeast(0))
+        dp.y = (bp.y - size / 2).coerceAtLeast(0)
+        PrivateWindows.update(wm, dot, dp)
     }
 
     private fun wakeGrip() {
@@ -519,6 +574,9 @@ class TranslateOverlay(private val context: Context, private val subtitles: Bool
         /** Android 12+ passes touches through another app's overlay only while its alpha is at most 0.8. */
         const val MAX_PASS_THROUGH_ALPHA = 0.8f
         const val GRIP_DP = 24
+
+        /** The grey dot's touch target (the dot itself is 16 dp). */
+        const val HIDDEN_DOT_DP = 48
         const val GRIP_FADE_MS = 3_000L
         const val TOOLBAR_IDLE_MS = 6_000L
 
