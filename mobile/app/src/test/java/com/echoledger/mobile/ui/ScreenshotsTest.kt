@@ -2,6 +2,8 @@ package com.echoledger.mobile.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -41,6 +43,7 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
+import com.echoledger.mobile.testsupport.simulateBiometrics
 import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.design.DesignGallery
 import com.github.takahirom.roborazzi.captureRoboImage
@@ -245,6 +248,88 @@ class ScreenshotsTest : ScreenTest() {
         compose.onNodeWithText("Privacy & data").performScrollTo().performClick()
         compose.onNodeWithText("Private (black box)").assertExists()
         capture("settings-privacy")
+    }
+
+    /** Setup: Display over other apps names the floating windows it is for (review of v1.8.1). */
+    @Test
+    fun setupOverlayStep() {
+        runBlocking { app.pairLocally(server) }
+        shoot {
+            SetupScreen(
+                vm,
+                Capabilities(34, true, micPermission = true, notificationPermission = false, overlayPermission = false),
+                onBack = {},
+                onRecheck = {}
+            )
+        }
+        compose.onNodeWithText("Display over other apps (optional)").assertExists()
+        capture("setup")
+    }
+
+    /**
+     * Live Translate while the floating windows are hidden (review of v1.8.1): the real box with its text, then the same
+     * place hidden, where only the grey dot ("Show EchoLedger windows") stays, in Game and in Watch mode.
+     */
+    @Test
+    fun translateHidden() {
+        shoot {
+            androidx.compose.foundation.layout.Column(
+                Modifier.padding(16.dp),
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(24.dp)
+            ) {
+                listOf(false, true).forEach { subtitles ->
+                    androidx.compose.ui.viewinterop.AndroidView(
+                        factory = { context ->
+                            com.echoledger.mobile.overlay.TranslateTextView(context, subtitles).apply {
+                                style(
+                                    18,
+                                    2,
+                                    com.echoledger.mobile.translate.BoxBackground.DARK,
+                                    showOriginal = true,
+                                    language = "EN",
+                                    subtitleBox = true
+                                )
+                                content(
+                                    "Push to the left side, they are behind the wall.",
+                                    "",
+                                    "بائیں طرف چلو، وہ دیوار کے پیچھے ہیں۔",
+                                    "UR",
+                                    false,
+                                    null
+                                )
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth().height(110.dp)
+                    )
+                    androidx.compose.foundation.layout.Box(Modifier.fillMaxWidth().height(110.dp)) {
+                        com.echoledger.mobile.overlay.PrivateDot(
+                            onShow = {},
+                            modifier = Modifier.align(androidx.compose.ui.Alignment.TopEnd)
+                        )
+                    }
+                }
+            }
+        }
+        capture("translate-hidden")
+    }
+
+    /** Settings → App lock: the floating windows are left out of screenshots unless During screen sharing is Show. */
+    @Test
+    fun settingsAppLock() {
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(appLockEnabled = true) }
+        }
+        app.simulateBiometrics(true)
+        pumpUntil("the lock to be on") { vm.settings.value.appLockEnabled }
+        shoot {
+            androidx.compose.runtime.CompositionLocalProvider(LocalUnlockPrompter provides UnlockPrompter { it(true) }) {
+                SettingsScreen(vm, onSetup = {})
+            }
+        }
+        compose.onNodeWithText("App lock").performScrollTo().performClick()
+        compose.onNodeWithText("Hide content in Recents and screenshots", useUnmergedTree = true).assertExists()
+        capture("settings-lock")
     }
 
     /** Settings → Captions: live captions are a floating window over the call. */

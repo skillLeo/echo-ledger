@@ -790,7 +790,7 @@ private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
         Triple(
             ShareGuard.Mode.PRIVATE,
             "Private (black box)",
-            "People watching a screen share or recording see a black box where the floating windows are. You see them as usual."
+            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual."
         ),
         Triple(ShareGuard.Mode.SHOW, "Show", "Everyone watching can read them.")
     )

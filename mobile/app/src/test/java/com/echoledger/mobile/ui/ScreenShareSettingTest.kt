@@ -38,7 +38,7 @@ class ScreenShareSettingTest : ScreenTest() {
         compose.onNodeWithText("Show").assertIsNotSelected()
         compose.onAllNodes(SemanticsMatcher.keyIsDefined(SemanticsProperties.Selected)).assertCountEquals(2)
         compose.onNodeWithText(
-            "People watching a screen share or recording see a black box where the floating windows are. You see them as usual.",
+            "In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual.",
             useUnmergedTree = true
         ).assertExists()
         compose.onNodeWithText("Everyone watching can read them.", useUnmergedTree = true).assertExists()
@@ -55,12 +55,13 @@ class ScreenShareSettingTest : ScreenTest() {
 
         compose.onNodeWithText("Show").performClick()
         pumpUntil("Show to be saved") { stored() == "show" }
-        assertEquals(ShareGuard.Mode.SHOW, ShareGuard.mode.value)
+        // The store commits on its own thread; the save's own continuation tells the floating windows on the main one.
+        pumpUntil("Show to reach the floating windows") { ShareGuard.mode.value == ShareGuard.Mode.SHOW }
         compose.onNodeWithText("Show").assertIsSelected()
 
         compose.onNodeWithText("Private (black box)").performClick()
         pumpUntil("Private to be saved") { stored() == "hide" }
-        assertEquals(ShareGuard.Mode.PRIVATE, ShareGuard.mode.value)
+        pumpUntil("Private to reach the floating windows") { ShareGuard.mode.value == ShareGuard.Mode.PRIVATE }
     }
 
     @Test

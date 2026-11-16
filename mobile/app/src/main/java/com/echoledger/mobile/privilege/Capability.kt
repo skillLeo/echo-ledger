@@ -55,5 +55,5 @@ enum class SetupStep(val title: String) {
     MICROPHONE("Allow microphone"),
     NOTIFICATIONS("Allow notifications"),
     HELPER("Enable call capture (Shizuku or ADB)"),
-    OVERLAY("Allow the caption bubble (optional)")
+    OVERLAY("Allow display over other apps (optional)")
 }
