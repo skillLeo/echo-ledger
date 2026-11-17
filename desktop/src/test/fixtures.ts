@@ -113,7 +113,7 @@ export function makeSettings(overrides: Partial<Settings> = {}): Settings {
     dictationOutput: "type",
     clientId: null,
     consentAcknowledged: false,
-    afterCall: "keep",
+    afterCall: "ask",
     skipCallsShorterThanS: 10,
     askUnknownApps: false,
     siteRules: [],

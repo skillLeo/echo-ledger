@@ -9,14 +9,29 @@ use serde_json::Value;
 use crate::overlay::geometry::{Corner, PillPosition};
 use crate::shortcuts::{Action, default_map};
 
-/// "After a call" (v1.5): a finished call is kept at once ("Saved · … · Undo" for a few seconds) or a small chip asks,
-/// keeping it by itself after 10 s. Replaces "Ask before saving" and "If I don't choose within 60 s".
+/// "After a call" (contract 1.8.0-e, the same on every app): a call is transcribed only with the person's permission.
+/// `ask` (default): the after-call card asks, and with no answer within 12 s saves the audio, not transcribed;
+/// `always_transcribe`: kept and transcribed at once ("Saved · … · Undo"); `always_audio`: kept at once as audio only.
+/// v1.5's "Keep automatically" (`keep`) and "Ask me" both become `ask`: permission first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AfterCall {
     #[default]
-    Keep,
+    #[serde(alias = "keep")]
     Ask,
+    AlwaysTranscribe,
+    AlwaysAudio,
+}
+
+impl AfterCall {
+    /// Kept at once, without asking: `Some(transcribe)`; `None` when the card asks.
+    pub fn keeps_at_once(self) -> Option<bool> {
+        match self {
+            AfterCall::Ask => None,
+            AfterCall::AlwaysTranscribe => Some(true),
+            AfterCall::AlwaysAudio => Some(false),
+        }
+    }
 }
 
 /// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
@@ -335,9 +350,9 @@ impl Default for Settings {
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,
-            // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: the user
-            // asked for Keep automatically as the default. The old keys are read and ignored.
-            after_call: AfterCall::Keep,
+            // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: permission
+            // first (contract 1.8.0-e). The old keys are read and ignored.
+            after_call: AfterCall::Ask,
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),

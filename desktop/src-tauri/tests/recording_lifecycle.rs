@@ -128,11 +128,17 @@ fn the_recorder_measures_how_long_each_side_was_heard() {
 
 #[test]
 fn after_a_call_applies_to_calls_and_voice_notes_are_always_kept() {
-    assert_eq!(pending::after_call(AfterCall::Ask, RecordingMode::Call), AfterCall::Ask);
-    assert_eq!(pending::after_call(AfterCall::Keep, RecordingMode::Call), AfterCall::Keep);
-    for note in [RecordingMode::VoiceNote, RecordingMode::MicNote] {
-        assert_eq!(pending::after_call(AfterCall::Ask, note), AfterCall::Keep, "a voice note was stopped on purpose");
+    for setting in [AfterCall::Ask, AfterCall::AlwaysTranscribe, AfterCall::AlwaysAudio] {
+        assert_eq!(pending::after_call(setting, RecordingMode::Call), setting);
     }
+    for note in [RecordingMode::VoiceNote, RecordingMode::MicNote] {
+        for setting in [AfterCall::Ask, AfterCall::AlwaysAudio] {
+            assert_eq!(pending::after_call(setting, note), AfterCall::AlwaysTranscribe, "a voice note was stopped on purpose");
+        }
+    }
+    assert_eq!(AfterCall::Ask.keeps_at_once(), None, "the card asks");
+    assert_eq!(AfterCall::AlwaysTranscribe.keeps_at_once(), Some(true));
+    assert_eq!(AfterCall::AlwaysAudio.keeps_at_once(), Some(false), "kept at once, not transcribed");
     assert_eq!(pending::CHIP_SECONDS, 12, "v1.8 P1: no answer within 12 s saves the audio");
 }
 

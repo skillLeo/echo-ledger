@@ -51,8 +51,12 @@ fn after_a_call_and_the_caption_lines_are_applied() {
     let mut s = Settings::default();
     patch(json!({"afterCall": "ask", "captionLines": 2})).apply(&mut s);
     assert_eq!((s.after_call, s.caption_lines), (AfterCall::Ask, 2));
+    patch(json!({"afterCall": "always_audio"})).apply(&mut s);
+    assert_eq!(s.after_call, AfterCall::AlwaysAudio);
+    patch(json!({"afterCall": "always_transcribe"})).apply(&mut s);
+    assert_eq!(s.after_call, AfterCall::AlwaysTranscribe);
     patch(json!({"afterCall": "keep"})).apply(&mut s);
-    assert_eq!(s.after_call, AfterCall::Keep);
+    assert_eq!(s.after_call, AfterCall::Ask, "v1.5's Keep automatically, from an older window, is permission first");
 }
 
 #[test]

@@ -106,7 +106,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
-    assert_eq!(s.after_call, AfterCall::Keep, "a call is kept at once, with Undo");
+    assert_eq!(s.after_call, AfterCall::Ask, "permission first: the card asks (contract 1.8.0-e)");
     assert_eq!(s.skip_calls_shorter_than_s, 10, "automatic calls under 10 s are skipped");
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
@@ -444,7 +444,7 @@ fn one_bad_value_costs_only_its_own_key() {
     }));
     assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
     assert!(s.auto_mode, "an invalid value falls back to the default");
-    assert_eq!(s.after_call, AfterCall::Keep);
+    assert_eq!(s.after_call, AfterCall::Ask);
     assert_eq!(s.pill_position, None);
     assert_eq!(s.hide_from_sharing, ShareHiding::All, "an unknown choice is the default");
 }
@@ -526,14 +526,13 @@ fn a_settings_file_from_version_one_loads_with_the_new_defaults() {
     assert_eq!(s.overlay_corner, Corner::TopRight);
     assert_eq!(
         (s.after_call, s.caption_lines, s.pill_position),
-        (AfterCall::Keep, 3, None)
+        (AfterCall::Ask, 3, None)
     );
 }
 
 #[test]
-fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
-    // v1.5: "Ask before saving: Always" with "Keep waiting" piled calls up in the waiting list; the user asked for
-    // Keep automatically as the new default, so every older file becomes Keep. The old keys still read cleanly.
+fn a_file_from_before_after_call_loads_as_ask_whatever_it_asked_before() {
+    // Contract 1.8.0-e: permission first, so every older file becomes Ask. The old keys still read cleanly.
     let d = dir();
     let path = d.path().join("settings.json");
     for (ask, timeout) in [("always", "wait"), ("auto_only", "discard"), ("never", "keep"), ("sometimes", "later")] {
@@ -543,14 +542,14 @@ fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
         )
         .unwrap();
         let s = Settings::load(&path);
-        assert_eq!(s.after_call, AfterCall::Keep, "{ask} + {timeout}");
+        assert_eq!(s.after_call, AfterCall::Ask, "{ask} + {timeout}");
         assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"), "the pairing is kept");
         assert!(!s.auto_mode, "the other settings are kept");
     }
     let s = Settings::load(&path);
     s.save(&path).unwrap();
     let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(written["afterCall"], "keep");
+    assert_eq!(written["afterCall"], "ask");
     assert!(written.get("askBeforeSaving").is_none() && written.get("decisionTimeout").is_none(), "the next save drops the old keys");
 }
 
@@ -566,12 +565,23 @@ fn skip_calls_shorter_than_takes_only_the_offered_choices() {
 }
 
 #[test]
-fn ask_me_survives_a_save_and_load() {
+fn every_after_a_call_choice_survives_a_save_and_load_and_v1_5_s_choices_become_ask() {
     let d = dir();
     let path = d.path().join("settings.json");
-    Settings { after_call: AfterCall::Ask, ..Settings::default() }.save(&path).unwrap();
-    assert_eq!(Settings::load(&path).after_call, AfterCall::Ask);
-    assert_eq!(Settings::from_value(json!({"afterCall": "keep"})).after_call, AfterCall::Keep);
+    for (choice, written) in [(AfterCall::Ask, "ask"), (AfterCall::AlwaysTranscribe, "always_transcribe"), (AfterCall::AlwaysAudio, "always_audio")] {
+        Settings { after_call: choice, ..Settings::default() }.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).after_call, choice);
+        let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(file["afterCall"], written);
+    }
+    // v1.5's "Keep automatically" and "Ask me" both migrate to ask (contract 1.8.0-e), and are written back as ask.
+    std::fs::write(&path, r#"{"serverUrl": "https://ledger.example.com", "afterCall": "keep"}"#).unwrap();
+    let s = Settings::load(&path);
+    assert_eq!(s.after_call, AfterCall::Ask);
+    assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
+    s.save(&path).unwrap();
+    let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(file["afterCall"], "ask");
 }
 
 #[test]

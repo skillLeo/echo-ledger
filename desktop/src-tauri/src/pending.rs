@@ -32,9 +32,9 @@ const MAX_FIRST_LINE_CHARS: usize = 140;
 pub const RECOVERED_TITLE: &str = "Recovered recording";
 
 /// What "After a call" means for a finished recording: calls (automatic or by hand) follow the setting; voice notes
-/// were stopped on purpose and are always kept, with the same Undo.
+/// were stopped on purpose and are always kept and transcribed, with the same Undo.
 pub fn after_call(setting: AfterCall, mode: RecordingMode) -> AfterCall {
-    if mode == RecordingMode::Call { setting } else { AfterCall::Keep }
+    if mode == RecordingMode::Call { setting } else { AfterCall::AlwaysTranscribe }
 }
 
 /// The waiting list's preview: the first final caption turn as `Me: …` / `Client: …`, at most 140 characters.

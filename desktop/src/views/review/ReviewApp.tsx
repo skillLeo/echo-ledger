@@ -26,7 +26,7 @@ const EMPTY: AfterCallState = { saved: null, discarded: null, ask: null };
 
 /**
  * The `review` window (360 x 168, bottom-right, near the tray): what shows after a call (v1.5) and the ask chip for an
- * unrecognised app. "Keep automatically" shows a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
+ * unrecognised app. "Always transcribe" and "Always save audio" show a one-line toast, "Saved · Call with Omar · 4:12 · Undo", for 6 s; "Ask
  * me" shows a pill-size chip with the title, ✓ Keep and a labelled Discard (a trash, never ×: one click) that saves the
  * audio by itself after 12 s, not transcribed (a thin line counts down, "Saves the audio in N s"), and its title opens the recording in the main window to
  * rename it or pick a project. Discard deletes nothing at once: "Discarded · … · Undo" shows for 6 s and Undo puts

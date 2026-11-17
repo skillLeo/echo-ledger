@@ -56,7 +56,7 @@ function setup() {
   respondAll({ overlay_set_hit_regions: undefined, saved_undo: undefined, pending_keep: undefined, pending_discard: undefined, after_call_discard: undefined, after_call_discard_undo: undefined, pending_open: undefined, ask_answer: undefined });
 }
 
-describe("Saved toast (Keep automatically)", () => {
+describe("Saved toast (Always transcribe, Always save audio)", () => {
   beforeEach(setup);
   afterEach(() => {
     vi.useRealTimers();

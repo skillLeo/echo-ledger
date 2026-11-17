@@ -1,6 +1,7 @@
-//! After a call (v1.5): what the small window near the tray shows once a recording ends. "Keep automatically" keeps
-//! the recording at once and shows "Saved · … · Undo" for 6 s; "Ask me" shows a pill-size chip with the title, ✓ and
-//! ✕ that saves the recording as audio only by itself after 12 s (`pending::CHIP_SECONDS`). Both live in the `review` window
+//! After a call (v1.5): what the small window near the tray shows once a recording ends. "Always transcribe" and "Always
+//! save audio" keep the recording at once and show "Saved · … · Undo" for 6 s; "Ask me" shows a pill-size chip with the
+//! title, ✓ and ✕ that saves the recording as audio only by itself after 12 s (`pending::CHIP_SECONDS`). Both live in
+//! the `review` window
 //! (overlay/mod.rs) beside the unknown-app chip. `Surfaces` is plain data (unit-tested below); `actions` adds the
 //! files, timers and events.
 

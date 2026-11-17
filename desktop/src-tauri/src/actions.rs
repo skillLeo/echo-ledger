@@ -19,7 +19,6 @@ use crate::net::uploader::{
     AfterAttempt, DiscardQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
 };
 use crate::overlay::{OVERLAY, set_overlay_visible};
-use crate::settings::AfterCall;
 use crate::shortcuts::Action;
 use crate::skipped::{SkipReason, SkippedCall, SkippedFiles, SkippedItem};
 use crate::stt::captions::{CaptionEvent, CaptionHub};
@@ -529,7 +528,8 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
         return skip_finished(app, decision, late, reason, now);
     }
-    let ask = pending::after_call(settings.after_call, mode) == AfterCall::Ask;
+    let at_once = pending::after_call(settings.after_call, mode).keeps_at_once();
+    let ask = at_once.is_none();
     let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
     let keep_at = decision.keep_at();
@@ -542,8 +542,8 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             files.set_server_session(&id, &late)?;
         }
     }
-    if !ask {
-        keep_decision(app, &id)?;
+    if let Some(transcribe) = at_once {
+        keep_decision_as(app, &id, transcribe)?;
         if let Some(toast) = toast {
             show_saved(app, toast);
         }
@@ -921,12 +921,13 @@ pub fn restore_pending(app: &AppHandle) {
 }
 
 /// Recordings recovered at start (since v1.3) wait in the Library. One stopped in the middle of the recording follows
-/// "After a call" (`cut_short`): under "Keep automatically" it is kept at once. One that was already finished waits
-/// whatever the setting, as it may have been discarded, undone or uploaded before (`recovery::Recovery`).
+/// "After a call" (`cut_short`): under "Always transcribe" or "Always save audio" it is kept at once, that way. One that
+/// was already finished waits whatever the setting, as it may have been discarded, undone or uploaded before
+/// (`recovery::Recovery`).
 pub fn after_recovery(app: &AppHandle, cut_short: &[String]) {
-    if app.state::<crate::AppState>().settings().after_call == AfterCall::Keep {
+    if let Some(transcribe) = app.state::<crate::AppState>().settings().after_call.keeps_at_once() {
         for id in cut_short {
-            if let Err(e) = keep_decision(app, id) {
+            if let Err(e) = keep_decision_as(app, id, transcribe) {
                 eprintln!("[echoledger] keeping the recovered recording {id}: {e}");
             }
         }
