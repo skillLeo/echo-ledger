@@ -17,8 +17,13 @@ use App\Services\Assist\AssistReport;
 use App\Services\Assist\AssistReportFailed;
 use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\CredentialVault;
+use GuzzleHttp\Exception\ConnectException;
+use GuzzleHttp\Exception\NetworkTimeoutException;
+use GuzzleHttp\Psr7\Request;
 use GuzzleHttp\Psr7\Response;
+use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Testing\TestResponse;
 use Psr\Http\Message\RequestInterface;
 use Tests\Feature\Security\Support\ApiClient;
@@ -294,8 +299,11 @@ it('counts the coaching numbers on fixtures', function () {
 
 describe('the model\'s cost', function () {
     it('asks the model only when the run\'s worst case fits what is left of the allowance', function () {
-        // 20,000 characters ≈ 10,000 tokens written to the cache at $2.50, and 6,000 out at $10, per million: 8.5 → 9 cents.
-        expect(AssistReport::worstCaseCents(20000))->toBe(9);
+        // 20,000 ASCII characters: 5,000 tokens and 10% (5,500) written to the cache at $2.50, and 6,000 out at $10, per
+        // million: 7.375 → 8 cents. Urdu or Arabic counts a token a character.
+        expect(AssistReport::worstCaseCents(str_repeat('a', 20000)))->toBe(8)
+            ->and(AssistReport::worstCaseTokens(str_repeat('a', 400)))->toBe(110)
+            ->and(AssistReport::worstCaseTokens(str_repeat('بات', 100)))->toBe(330);
         $ai = fakeAssistReportAi();
         $device = assistPerson('pro');
         $id = practiceSession($this, $this->api(Fx::token($device)));
@@ -307,6 +315,40 @@ describe('the model\'s cost', function () {
 
         expect($api->getJson("/api/assist/sessions/{$id}/report")->json('ai'))->toMatchArray(['status' => 'skipped', 'reason' => 'budget', 'runs' => 0])
             ->and($ai->inputs)->toBe([]);
+    });
+
+    it('skips an Urdu transcript that the old rule (two characters a token) would have let through', function () {
+        $ai = fakeAssistReportAi();
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        $id = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->json('session.id');
+        $line = mb_substr(str_repeat('بات ', 1000), 0, 3900);
+        $api->postJson("/api/assist/sessions/{$id}/turns", ['turns' => array_map(fn (int $i): array => ['client_ref' => "t{$i}", 'channel' => $i % 2 === 0 ? 'other' : 'me',
+            'start_ms' => $i * 10000, 'end_ms' => $i * 10000 + 9000, 'text' => $line], range(0, 9))])->assertOk();
+        // Practice's $5 less $4.87: 13 cents left.
+        AssistUsage::query()->create(['assist_session_id' => $id, 'workspace_id' => $device->workspace_id, 'user_id' => $device->user_id,
+            'suggestion_id' => 'spent', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer', 'cost_usd' => 4.87, 'occurred_at' => now()]);
+        $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+
+        $prompt = $ai->prompts[0];
+        $oldRule = (int) ceil(((int) ceil(mb_strlen($prompt) / 2) * 2.5 + 6000 * 10) / 1_000_000 * 100);
+        expect($oldRule)->toBeLessThanOrEqual(13)->and(AssistReport::worstCaseCents($prompt))->toBeGreaterThan(13)
+            ->and($api->getJson("/api/assist/sessions/{$id}/report")->json('ai'))->toMatchArray(['status' => 'skipped', 'reason' => 'budget'])
+            ->and($ai->inputs)->toBe([]);
+    });
+
+    it('counts a request sent with no answer back as a run, charged at its worst case and marked estimated', function () {
+        $ai = fakeAssistReportAi(fails: new AssistReportFailed(ClaudeAssistReportAi::UNAVAILABLE, unknownCost: true));
+        $device = assistPerson('pro');
+        $id = practiceSession($this, $this->api(Fx::token($device)));
+        $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+
+        $usage = AssistUsage::query()->where('kind', 'report')->sole();
+        expect($usage->estimated)->toBeTrue()
+            ->and((int) round((float) $usage->cost_usd * 100))->toBeLessThanOrEqual(AssistReport::worstCaseCents($ai->prompts[0]))
+            ->and((float) $usage->cost_usd)->toBeGreaterThan((AssistReport::worstCaseCents($ai->prompts[0]) - 1) / 100)
+            ->and($usage->output_tokens)->toBe(6000)
+            ->and($this->api(Fx::token($device))->getJson("/api/assist/sessions/{$id}/report")->json('ai'))->toMatchArray(['status' => 'failed', 'runs' => 1]);
     });
 
     it('charges a failed run the provider billed, and counts it toward the three runs', function () {
@@ -337,9 +379,21 @@ describe('the model\'s cost', function () {
             ->and(AssistUsage::query()->where('kind', 'report')->count())->toBe(0);
     });
 
-    it('runs the job once, with time for one whole model request', function () {
+    it('runs the job once, on its own queue, with time for one whole model request and more before it is given back', function () {
         $job = new MakeAssistReportJob('x');
-        expect($job->tries)->toBe(1)->and($job->timeout)->toBeGreaterThan((int) ClaudeAssistReportAi::TIMEOUT_SECONDS);
+        expect($job->tries)->toBe(1)->and($job->timeout)->toBeGreaterThan((int) ClaudeAssistReportAi::TIMEOUT_SECONDS)
+            ->and($job->connection)->toBe('assist-reports')->and($job->queue)->toBe('assist-reports')
+            ->and(config('queue.connections.assist-reports.retry_after'))->toBe(480)->toBeGreaterThan($job->timeout)
+            ->and(config('queue.connections.assist-reports.queue'))->toBe('assist-reports');
+
+        Queue::fake();
+        MakeAssistReportJob::enqueue(AssistSession::query()->withoutGlobalScopes()->create(['workspace_id' => assistPerson()->workspace_id, 'user_id' => Fx::user()->id,
+            'mode' => 'fast', 'platform' => 'android', 'status' => 'ended', 'started_at' => now()]));
+        Queue::connection('assist-reports')->assertPushedOn('assist-reports', MakeAssistReportJob::class);
+
+        // The shared host's scheduler runs its worker too.
+        $events = collect(app(Schedule::class)->events())->map(fn ($e): string => (string) $e->command);
+        expect($events->contains(fn (string $c): bool => str_contains($c, 'queue:work assist-reports --queue=assist-reports') && str_contains($c, '--timeout=420') && str_contains($c, '--tries=1')))->toBeTrue();
     });
 });
 
@@ -374,6 +428,31 @@ describe('the Claude call', function () {
     $message = fn (string $text, string $stop = 'end_turn'): array => ['id' => 'msg_1', 'type' => 'message', 'role' => 'assistant', 'model' => 'claude-sonnet-5-5',
         'stop_reason' => $stop, 'stop_sequence' => null, 'content' => [['type' => 'text', 'text' => $text]],
         'usage' => ['input_tokens' => 900, 'output_tokens' => 40, 'cache_read_input_tokens' => 100, 'cache_creation_input_tokens' => 0]];
+
+    it('knows a request that timed out after it was sent from one that never connected', function () {
+        app(CredentialVault::class)->put('anthropic', 'api_key', 'sk-ant-report-test-0123456789');
+        $throwing = fn (Throwable $e) => new class(app(CredentialVault::class), $e) extends ClaudeAssistReportAi
+        {
+            public function __construct(CredentialVault $vault, private readonly Throwable $e)
+            {
+                parent::__construct($vault);
+            }
+
+            protected function client(string $key): Client
+            {
+                return new Client(apiKey: $key, requestOptions: ['middleware' => [fn (RequestInterface $request) => throw $this->e]]);
+            }
+        };
+        $request = new Request('POST', 'https://api.anthropic.com/v1/messages');
+        foreach ([[new NetworkTimeoutException('timed out', $request), true], [new ConnectException('refused', $request), false]] as [$cause, $unknown]) {
+            try {
+                $throwing($cause)->write(['questions' => []]);
+                $this->fail('No failure');
+            } catch (AssistReportFailed $e) {
+                expect($e->unknownCost)->toBe($unknown, get_class($cause))->and($e->usage)->toBeNull();
+            }
+        }
+    });
 
     it('asks once, never retrying a failed request', function () {
         $ai = claudeReportAi(529, ['type' => 'error', 'error' => ['type' => 'overloaded_error', 'message' => 'Overloaded']]);

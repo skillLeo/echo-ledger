@@ -26,7 +26,13 @@ final class MakeAssistReportJob implements ShouldQueue
     /** Longer than one model request (ClaudeAssistReportAi::TIMEOUT_SECONDS), so the worker never cuts one off. */
     public int $timeout = 420;
 
-    public function __construct(public readonly string $sessionId) {}
+    /** The queue (and its connection) of its own: config/queue.php `assist-reports`, retry_after 480 s. */
+    public const QUEUE = 'assist-reports';
+
+    public function __construct(public readonly string $sessionId)
+    {
+        $this->onConnection(self::QUEUE)->onQueue(self::QUEUE);
+    }
 
     /** Queues the report of [$session], after the wait for the relay's last posts. */
     public static function enqueue(AssistSession $session): void

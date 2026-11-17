@@ -21,9 +21,10 @@ interface AssistReportAi
     public function write(array $input): array;
 
     /**
-     * How many characters a call with [$input] sends (the instructions and the input), for the run's worst-case cost.
+     * Everything a call with [$input] sends as text (the instructions, the input and the answer's schema), for the
+     * run's worst-case cost.
      *
      * @param  array<string, mixed>  $input
      */
-    public function inputChars(array $input): int;
+    public function promptText(array $input): string;
 }

@@ -229,7 +229,8 @@ final class AssistReport
         }
         $input = $this->input($session, $prep, $turns, $qa);
         // Asked only when its worst case fits what is left of the allowance (Practice's for Practice).
-        if (self::worstCaseCents($this->ai->inputChars($input)) > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
+        $prompt = $this->ai->promptText($input);
+        if (self::worstCaseCents($prompt) > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
             return [$ai('skipped', 'budget'), self::empty()];
         }
         try {
@@ -238,6 +239,12 @@ final class AssistReport
             if ($e->usage !== null) {
                 $runs++;
                 $this->charge($session, $e->usage, $runs);
+            } elseif ($e->unknownCost) {
+                // Sent, and no answer: charged at the run's worst case, marked estimated.
+                $runs++;
+                $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
+                $this->charge($session, ['model' => $model, 'tokens' => ['input' => 0, 'cached' => 0, 'written' => self::worstCaseTokens($prompt),
+                    'output' => (int) config('assist.report.max_output_tokens', 6000)]], $runs, estimated: true);
             }
 
             return [['status' => 'failed', 'reason' => $e->getMessage() === ClaudeAssistReportAi::NOT_SET_UP ? 'not_set_up' : 'unavailable', 'model' => null, 'runs' => $runs], self::empty()];
@@ -249,13 +256,26 @@ final class AssistReport
     }
 
     /**
-     * The most a run can cost, in US cents: its input at about one token per two characters (written to the cache at
-     * worst) and the longest answer allowed, at the report model's price.
+     * The most the input of [$prompt] can be in tokens: a character that is not ASCII (Urdu, Arabic, emoji) at one token
+     * each, ASCII at one per four, and 10% over.
      */
-    public static function worstCaseCents(int $inputChars): int
+    public static function worstCaseTokens(string $prompt): int
+    {
+        $ascii = (int) preg_match_all('/[\x00-\x7F]/', $prompt);
+        $other = mb_strlen($prompt) - $ascii;
+
+        // (other + ascii / 4) × 1.1, in whole numbers: no rounding drift.
+        return intdiv(($other * 4 + $ascii) * 11 + 39, 40);
+    }
+
+    /**
+     * The most a run can cost, in US cents: its input (worstCaseTokens, written to the cache at worst) and the longest
+     * answer allowed, at the report model's price.
+     */
+    public static function worstCaseCents(string $prompt): int
     {
         $price = (array) config('assist.models.'.config('assist.report.model', 'claude-sonnet-5-5').'.price', []);
-        $input = (int) ceil($inputChars / 2) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
+        $input = self::worstCaseTokens($prompt) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
         $output = (int) config('assist.report.max_output_tokens', 6000) * (float) ($price['output'] ?? 0);
 
         return (int) ceil(($input + $output) / 1_000_000 * 100);
@@ -317,7 +337,7 @@ final class AssistReport
      *
      * @param  array{model: string, tokens: array{input: int, cached: int, written: int, output: int}}  $answer
      */
-    private function charge(AssistSession $session, array $answer, int $run): void
+    private function charge(AssistSession $session, array $answer, int $run, bool $estimated = false): void
     {
         $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
         $price = (array) config("assist.models.{$model}.price", []);
@@ -328,7 +348,7 @@ final class AssistReport
             InternalAssistController::record($session, [
                 'suggestion_id' => "report-{$session->id}-{$run}", 'provider' => (string) config("assist.models.{$model}.provider", 'anthropic'),
                 'model' => $answer['model'], 'mode' => $session->mode, 'kind' => 'report', 'trigger' => 'report',
-                'tokens' => $tokens, 'cost_usd' => $cost,
+                'tokens' => $tokens, 'cost_usd' => $cost, 'estimated' => $estimated,
             ], now());
         } catch (UniqueConstraintViolationException) {
             // Counted already (the same run made twice at once).

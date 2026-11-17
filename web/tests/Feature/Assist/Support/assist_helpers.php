@@ -85,11 +85,14 @@ function fakeAssistReportAi(?array $data = null, ?Throwable $fails = null): obje
         /** @var list<array<string, mixed>> */
         public array $inputs = [];
 
+        /** @var list<string> what the budget check measured */
+        public array $prompts = [];
+
         public function __construct(public ?array $data, public ?Throwable $fails) {}
 
-        public function inputChars(array $input): int
+        public function promptText(array $input): string
         {
-            return mb_strlen((string) json_encode($input, JSON_UNESCAPED_UNICODE));
+            return $this->prompts[] = (string) json_encode($input, JSON_UNESCAPED_UNICODE);
         }
 
         public function write(array $input): array

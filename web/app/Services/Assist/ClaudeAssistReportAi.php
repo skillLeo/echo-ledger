@@ -6,7 +6,9 @@ namespace App\Services\Assist;
 
 use Anthropic\Client;
 use Anthropic\Core\Exceptions\AnthropicException;
+use Anthropic\Core\Exceptions\APIConnectionException;
 use App\Services\CredentialVault;
+use GuzzleHttp\Exception\ConnectException;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -78,7 +80,8 @@ class ClaudeAssistReportAi implements AssistReportAi
         } catch (AnthropicException $e) {
             Log::warning('Live Assist report request failed', ['error' => mb_substr($e->getMessage(), 0, 300)]);
 
-            throw new AssistReportFailed(self::UNAVAILABLE, previous: $e);
+            // No answer to a request that went out: the provider may have billed it.
+            throw new AssistReportFailed(self::UNAVAILABLE, previous: $e, unknownCost: $e instanceof APIConnectionException && self::wasSent($e));
         }
         $usage = [
             'model' => (string) $message->model,
@@ -106,10 +109,25 @@ class ClaudeAssistReportAi implements AssistReportAi
         return ['data' => $data, ...$usage];
     }
 
-    public function inputChars(array $input): int
+    public function promptText(array $input): string
     {
-        return mb_strlen(self::INSTRUCTIONS) + mb_strlen(json_encode(self::prepared($input), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR))
-            + mb_strlen(json_encode(self::schema(), JSON_THROW_ON_ERROR));
+        return self::INSTRUCTIONS.json_encode(self::prepared($input), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR).json_encode(self::schema(), JSON_THROW_ON_ERROR);
+    }
+
+    /**
+     * Whether a connection failure came after the request went out (a timeout waiting for the answer, a connection
+     * dropped mid-way), rather than before (Guzzle's ConnectException: the connection was never made): only then may
+     * the provider have billed it.
+     */
+    private static function wasSent(APIConnectionException $e): bool
+    {
+        for ($cause = $e->getPrevious(); $cause !== null; $cause = $cause->getPrevious()) {
+            if ($cause instanceof ConnectException) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /**
