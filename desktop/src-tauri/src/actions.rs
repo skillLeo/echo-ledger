@@ -1715,12 +1715,48 @@ async fn run_upload_cycle(app: &AppHandle) {
 /// How long after an OS notification bringing the app forward opens its recording.
 const NOTIFIED_WINDOW: Duration = Duration::from_secs(600);
 
+/// Opens from outside (a second launch, a reopen) and whether the start-up is done: one that comes before is kept and
+/// answered by [`started`].
+pub struct Outside {
+    started: bool,
+    queued: Vec<Vec<String>>,
+}
+
+static OUTSIDE: std::sync::Mutex<Outside> = std::sync::Mutex::new(Outside { started: false, queued: Vec::new() });
+
+/// Whether EchoLedger has started; if not, `args` is kept for when it has (pure on `gate`).
+pub fn ready_or_queue(gate: &std::sync::Mutex<Outside>, args: &[String]) -> bool {
+    let mut gate = gate.lock().unwrap_or_else(|p| p.into_inner());
+    if !gate.started {
+        gate.queued.push(args.to_vec());
+    }
+    gate.started
+}
+
+/// Marks the start-up done and gives what came before it, in order (pure on `gate`).
+pub fn mark_started(gate: &std::sync::Mutex<Outside>) -> Vec<Vec<String>> {
+    let mut gate = gate.lock().unwrap_or_else(|p| p.into_inner());
+    gate.started = true;
+    std::mem::take(&mut gate.queued)
+}
+
+/// The end of the setup: the opens from outside that came during the start-up are answered, once each.
+pub fn started(app: &AppHandle) {
+    for args in mark_started(&OUTSIDE) {
+        show_main_from_outside(app, &args);
+    }
+}
+
 /// Another start of the app (a second launch, the app opened again on a Mac from Finder, Launchpad, Spotlight or the
 /// Dock, an `echoledger://open` link, or a click on one of our notifications): show the window and open the link it was
 /// started with. With no main window yet it opens on the recording of a notification sent in the last ten minutes; an
 /// existing window only comes to the front and keeps its page (`lifecycle::reopen_action`). The notified recording is
 /// forgotten either way.
 pub fn show_main_from_outside(app: &AppHandle, args: &[String]) {
+    // Opened again while EchoLedger still starts (the setup may wait on the keychain's prompt): answered once started.
+    if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {
+        return;
+    }
     if handle_links(app, args) {
         return;
     }
@@ -1863,5 +1899,41 @@ mod notice_tests {
             serde_json::json!({"text": "Uploaded 2 recording(s) for transcription", "target": {"kind": "page", "page": "library"}})
         );
         assert_eq!(Target::Account("general").json(), serde_json::json!({"kind": "account", "section": "general"}));
+    }
+}
+
+#[cfg(test)]
+mod start_up_tests {
+    use super::{Outside, mark_started, ready_or_queue};
+
+    #[test]
+    fn an_open_from_outside_during_the_start_up_waits_for_it_and_is_answered_once() {
+        let gate = std::sync::Mutex::new(Outside { started: false, queued: Vec::new() });
+        let link = vec!["EchoLedger".to_string(), "echoledger://open/library".to_string()];
+        assert!(!ready_or_queue(&gate, &[]), "still starting: kept");
+        assert!(!ready_or_queue(&gate, &link));
+        assert_eq!(mark_started(&gate), vec![Vec::new(), link], "answered in order once started");
+        assert!(ready_or_queue(&gate, &[]), "started: answered at once");
+        assert!(mark_started(&gate).is_empty(), "never twice");
+    }
+
+    #[test]
+    fn the_state_is_managed_before_the_keychain_is_read_and_opens_from_outside_wait_for_the_start_up() {
+        // A second launch while the setup waited on the keychain's prompt found no state and crashed the running app.
+        let lib = include_str!("lib.rs");
+        let load = &lib[lib.find("    fn load(data_dir: PathBuf, smoke: bool) -> Self {").unwrap()..];
+        let load = &load[..load.find("\n    }\n").unwrap()];
+        assert!(!load.contains("token_store.load()"), "AppState::load reads no keychain: {load}");
+        let setup = &lib[lib.find(".setup(move |app| {").unwrap()..];
+        let manage = setup.find("app.manage(AppState::load(data_dir, smoke_test));").unwrap();
+        let token = setup.find("app.state::<AppState>().load_token();").expect("the token is read in the setup");
+        let started = setup.find("actions::started(&handle);").expect("the setup ends by answering what came during it");
+        assert!(manage < token && token < started);
+        assert!(started > setup.find("actions::handle_links(&handle, &std::env::args()").unwrap() && setup[started..].find("Ok(())") < setup[started..].find(".on_window_event"));
+        let actions = include_str!("actions.rs");
+        let outside = &actions[actions.find("pub fn show_main_from_outside(").unwrap()..];
+        let gate = outside.find("if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {").expect("gated");
+        assert!(gate < outside.find("handle_links(app, args)").unwrap() && gate < outside.find(".state::<crate::AppState>()").unwrap());
+        assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"));
     }
 }
