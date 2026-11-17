@@ -15,7 +15,8 @@ use Illuminate\Support\Carbon;
 
 /**
  * What Live Assist allows a person (docs/API_ASSIST.md "Plans", config/assist.php): the live modes of their plan, the
- * Practice mode every plan has, and the month's assist time and model budget, less what they used this month.
+ * Practice mode every plan has, and the month's assist time and model budget, less what they used this month. Live
+ * sessions and Practice have separate allowances (since 1.9.0-h): each counts only its own sessions and their usage.
  */
 final class AssistPlans
 {
@@ -24,7 +25,7 @@ final class AssistPlans
     /**
      * The workspace's plan for Live Assist.
      *
-     * @return array{key: string, claim: string, live_modes: list<string>, seconds: int, cents: int}
+     * @return array{key: string, claim: string, live_modes: list<string>, seconds: int, cents: int, practice: array{seconds: int, cents: int}}
      */
     public function for(int $workspaceId): array
     {
@@ -44,31 +45,57 @@ final class AssistPlans
     }
 
     /**
-     * What is left this month: assist seconds and model budget in US cents (never below 0).
+     * What is left this month of the live allowance, or of Practice's: assist seconds and model budget in US cents
+     * (never below 0). Each counts only its own kind of session, and the usage of those sessions (pending reservations
+     * too), less what the relay tokens of the sessions still on granted and they have not spent yet (held()).
      *
      * @return array{seconds_left: int, cents_left: int}
      */
-    public function left(int $workspaceId, int $userId): array
+    public function left(int $workspaceId, int $userId, bool $practice, ?string $exceptClaimOf = null): array
     {
         $plan = $this->for($workspaceId);
+        $allowance = $practice ? $plan['practice'] : ['seconds' => $plan['seconds'], 'cents' => $plan['cents']];
         $from = $this->monthStart();
         $seconds = 0;
-        AssistSession::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $userId)->where('started_at', '>=', $from)
-            ->each(function (AssistSession $session) use (&$seconds): void {
-                $seconds += $session->seconds();
-            });
-        $spent = (float) AssistUsage::query()->where('user_id', $userId)->where('occurred_at', '>=', $from)->sum('cost_usd');
+        $sessions = fn () => AssistSession::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $userId)->where('practice', $practice);
+        $sessions()->where('started_at', '>=', $from)->each(function (AssistSession $session) use (&$seconds): void {
+            $seconds += $session->seconds();
+        });
+        $spent = (float) AssistUsage::query()->where('user_id', $userId)->where('occurred_at', '>=', $from)
+            ->whereIn('assist_session_id', $sessions()->select('id'))->sum('cost_usd');
 
         return [
-            'seconds_left' => max(0, $plan['seconds'] - $seconds),
-            'cents_left' => max(0, (int) floor($plan['cents'] - $spent * 100)),
+            'seconds_left' => max(0, $allowance['seconds'] - $seconds),
+            // Rounded first: $4.98 in decimals is 497.99999… cents in floats, which floor() would make one cent less.
+            'cents_left' => max(0, (int) floor(round($allowance['cents'] - $spent * 100, 6)) - $this->held($userId, $practice, $exceptClaimOf)),
         ];
     }
 
-    /** `402 budget_exhausted` when the month's assist time or model budget is used up. */
+    /**
+     * What the relay may still spend of what its tokens granted, in cents: for each session still on (of this kind),
+     * the budget its last token claimed less what the session spent since, never below 0; a token past its lifetime
+     * holds nothing. [$except] is the session whose own claim is being made again (a token refresh).
+     */
+    private function held(int $userId, bool $practice, ?string $except): int
+    {
+        $held = 0;
+        AssistSession::query()->withoutGlobalScopes()->where('user_id', $userId)->where('practice', $practice)->where('status', 'active')
+            ->whereNotNull('claimed_cents')->where('claimed_at', '>', now()->subSeconds((int) config('assist.token_ttl_seconds', 900)))
+            ->when($except !== null, fn ($q) => $q->whereKeyNot($except))
+            ->each(function (AssistSession $session) use (&$held): void {
+                // After the claim, strictly: a call in the same second may predate it, and counting it as spent from the
+                // claim would hold back too little.
+                $since = (float) AssistUsage::query()->where('assist_session_id', $session->id)->where('occurred_at', '>', $session->claimed_at)->sum('cost_usd');
+                $held += max(0, (int) $session->claimed_cents - (int) ceil($since * 100));
+            });
+
+        return $held;
+    }
+
+    /** `402 budget_exhausted` when the month's assist time or model budget (live, or Practice's) is used up. */
     public function assertLeft(int $workspaceId, int $userId, bool $practice): void
     {
-        $left = $this->left($workspaceId, $userId);
+        $left = $this->left($workspaceId, $userId, $practice);
         if ($left['seconds_left'] <= 0 || $left['cents_left'] <= 0) {
             throw new ApiError(402, 'budget_exhausted', $practice
                 ? 'This month\'s Practice time is used up. It starts again next month.'
@@ -111,7 +138,7 @@ final class AssistPlans
     /**
      * The Live Assist values of one plan key; a plan the file does not name gets Free's.
      *
-     * @return array{claim: string, live_modes: list<string>, seconds: int, cents: int}
+     * @return array{claim: string, live_modes: list<string>, seconds: int, cents: int, practice: array{seconds: int, cents: int}}
      */
     public static function config(string $planKey): array
     {
@@ -124,6 +151,7 @@ final class AssistPlans
             'live_modes' => array_values(array_filter((array) ($plan['live_modes'] ?? []), fn (mixed $m): bool => in_array($m, (array) config('assist.modes_order'), true))),
             'seconds' => (int) ($plan['seconds'] ?? 0),
             'cents' => (int) ($plan['cents'] ?? 0),
+            'practice' => ['seconds' => (int) ($plan['practice']['seconds'] ?? 0), 'cents' => (int) ($plan['practice']['cents'] ?? 0)],
         ];
     }
 

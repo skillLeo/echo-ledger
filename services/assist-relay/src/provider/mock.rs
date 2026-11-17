@@ -50,6 +50,10 @@ pub enum MockBehavior {
     Late(Duration),
     /// The usual answer's first this-many words, then a dropped connection.
     Break(usize),
+    /// The usual answer, complete, but no token counts (some providers send none).
+    NoUsage,
+    /// The stream panics when it is first read (a bug in a provider client).
+    Panic,
 }
 
 #[derive(Debug)]
@@ -58,6 +62,8 @@ pub struct MockProvider {
     latency: BTreeMap<String, MockLatency>,
     cache: Mutex<HashSet<(String, u64)>>,
     script: Mutex<VecDeque<MockBehavior>>,
+    /// Behaviours for the next warm-ups (Fail and Stall), apart from the answers' script.
+    warm_script: Mutex<VecDeque<MockBehavior>>,
     requests: Mutex<Vec<(String, Purpose)>>,
     stats: Arc<MockStats>,
 }
@@ -72,6 +78,7 @@ impl MockProvider {
             latency,
             cache: Mutex::new(HashSet::new()),
             script: Mutex::new(VecDeque::new()),
+            warm_script: Mutex::new(VecDeque::new()),
             requests: Mutex::new(Vec::new()),
             stats,
         }
@@ -80,6 +87,13 @@ impl MockProvider {
     /// Queues a behaviour for the next request to this provider.
     pub fn push(&self, behavior: MockBehavior) {
         if let Ok(mut script) = self.script.lock() {
+            script.push_back(behavior);
+        }
+    }
+
+    /// Queues a behaviour for the next warm-up (Fail or Stall; anything else warms as usual).
+    pub fn push_warm(&self, behavior: MockBehavior) {
+        if let Ok(mut script) = self.warm_script.lock() {
             script.push_back(behavior);
         }
     }
@@ -119,6 +133,15 @@ impl MockProvider {
     }
 }
 
+/// The mock's practice questions, in order.
+pub const PRACTICE: [&str; 5] = [
+    "Tell me about yourself and your current role?",
+    "What is a project you are proud of, and what was your part in it?",
+    "How do you handle a deadline you cannot meet?",
+    "Why are you interested in this role?",
+    "What would you do in your first month here?",
+];
+
 /// The mock's answer: SKIP for words that are not a question, otherwise a short answer in the output contract's shape.
 pub fn mock_reply(purpose: Purpose, question: &str) -> String {
     let normalized = normalize(question);
@@ -136,6 +159,18 @@ pub fn mock_reply(purpose: Purpose, question: &str) -> String {
         Purpose::Formal => "Certainly, I would be glad to explain.\n- **Experience**: two similar projects".to_owned(),
         Purpose::Translate => "اردو: وہ آپ کے تجربے کے بارے میں پوچھ رہے ہیں۔\nSay: I have two years of experience.".to_owned(),
         Purpose::Warm => String::new(),
+        // `question` is the question's number.
+        Purpose::PracticeQuestion => {
+            let index: usize = question.trim().parse().unwrap_or(1);
+            PRACTICE[(index.max(1) - 1) % PRACTICE.len()].to_owned()
+        }
+        // `question` is the new lines of the call: each line with a number becomes a fact.
+        Purpose::Facts => {
+            let facts: Vec<String> =
+                question.lines().filter(|line| line.chars().any(|c| c.is_ascii_digit())).map(|line| line.trim().to_owned()).collect();
+            if facts.is_empty() { "NONE".to_owned() } else { facts.join("\n") }
+        }
+        Purpose::Summary => format!("The call so far: {} new lines, starting with {}.", question.lines().count(), topic),
     }
 }
 
@@ -212,6 +247,28 @@ impl Provider for MockProvider {
                 });
                 return texts.chain(broken).boxed();
             }
+            Some(MockBehavior::Panic) => {
+                return stream::poll_fn(|_| -> std::task::Poll<Option<Result<StreamEvent, ProviderError>>> {
+                    panic!("the mock provider panics, as asked")
+                })
+                .boxed();
+            }
+            Some(MockBehavior::NoUsage) => {
+                let next = Duration::from_millis(latency.token_ms);
+                let chunks: Vec<String> =
+                    mock_reply(request.purpose, &request.question).split_inclusive(char::is_whitespace).map(str::to_owned).collect();
+                // Counted as completed when the stream is dropped: it ends normally, only without counts.
+                let guard = Arc::new(CancelGuard { stats: self.stats.clone(), finished: true });
+                return stream::iter(chunks.into_iter().enumerate())
+                    .then(move |(i, chunk)| {
+                        let _held = guard.clone();
+                        async move {
+                            tokio::time::sleep(if i == 0 { first } else { next }).await;
+                            Ok(StreamEvent::Text(chunk))
+                        }
+                    })
+                    .boxed();
+            }
             None => mock_reply(request.purpose, &request.question),
         };
         let chunks: VecDeque<String> = text.split_inclusive(char::is_whitespace).map(str::to_owned).collect();
@@ -244,9 +301,14 @@ impl Provider for MockProvider {
         // A warm-up sends the cached prefix and a one-line placeholder, and asks for no output.
         usage.input_tokens = 8;
         let delay = Duration::from_millis(self.latency_for(&request.model).first_token_ms / 2);
+        let behavior = self.warm_script.lock().ok().and_then(|mut script| script.pop_front());
         async move {
             tokio::time::sleep(delay).await;
-            Ok(usage)
+            match behavior {
+                Some(MockBehavior::Fail(error)) => Err(error),
+                Some(MockBehavior::Stall) => std::future::pending().await,
+                _ => Ok(usage),
+            }
         }
         .boxed()
     }

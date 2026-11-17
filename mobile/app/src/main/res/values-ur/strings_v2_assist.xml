@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (assist). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_assist_title">لائیو اسسٹ</string>
+    <string name="v2_assist_consent">Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?</string>
+    <string name="v2_assist_consent_label">شروع کرنے سے پہلے یہ کہیں:</string>
+    <string name="v2_assist_interview_note">دیکھ لیں کہ اس انٹرویو میں اے آئی کی مدد کی اجازت ہے یا نہیں۔</string>
+    <string name="v2_assist_copy">کاپی</string>
+    <string name="v2_assist_ok">ٹھیک ہے</string>
+    <string name="v2_assist_help_now">ابھی مدد کریں</string>
+    <string name="v2_assist_regenerate">دوبارہ لکھیں</string>
+    <string name="v2_assist_shorter">مختصر</string>
+    <string name="v2_assist_urdu">اردو</string>
+    <string name="v2_assist_writing">تجویز لکھی جا رہی ہے</string>
+    <string name="v2_assist_no_reply">جواب کی ضرورت نہیں</string>
+    <string name="v2_assist_waiting">جب وہ آپ سے کچھ پوچھیں گے تو تجاویز یہاں آئیں گی۔</string>
+    <string name="v2_assist_say_next">اگلا کہیں</string>
+    <string name="v2_assist_ready_dot">تجویز تیار ہے۔ دیکھنے کے لیے ٹیپ کریں۔</string>
+    <string name="v2_assist_collapse">کارڈ چھوٹا کریں</string>
+    <string name="v2_assist_mode_fast">تیز</string>
+    <string name="v2_assist_mode_balanced">متوازن</string>
+    <string name="v2_assist_mode_deep">گہرا</string>
+    <string name="v2_assist_mode_max">زیادہ سے زیادہ</string>
+    <string name="v2_assist_mode_captions_only">صرف کیپشنز</string>
+    <string name="v2_assist_mode_off_plan">لائیو اسسٹ آپ کے پلان میں شامل نہیں۔ کیپشنز چلتے رہیں گے۔</string>
+    <string name="v2_assist_mode_off_budget">اس مہینے کے اسسٹ کے گھنٹے ختم ہو گئے۔ اسسٹ رکا ہے؛ کیپشنز چلتے رہیں گے۔</string>
+    <string name="v2_assist_mode_budget">اسسٹ کے گھنٹوں میں رہنے کے لیے %1$s پر منتقل کر دیا۔</string>
+    <string name="v2_assist_mode_restored">واپس %1$s پر۔</string>
+    <string name="v2_assist_mode_plan">%1$s آپ کے پلان کا بہترین موڈ ہے۔</string>
+    <string name="v2_assist_mode_time">%1$s پر منتقل کر دیا: یہ سیشن اپنی وقت کی حد کے قریب ہے۔</string>
+    <string name="v2_assist_error_reconnecting">لائیو اسسٹ سے دوبارہ رابطہ ہو رہا ہے۔ ریکارڈنگ جاری ہے۔</string>
+    <string name="v2_assist_error_session">یہ لائیو اسسٹ سیشن ختم ہو گیا۔ لائیو سے نیا شروع کریں۔</string>
+    <string name="v2_assist_error_busy">لائیو اسسٹ ابھی مصروف ہے۔ دوبارہ کوشش ہو رہی ہے۔</string>
+    <string name="v2_assist_error_not_set_up">لائیو اسسٹ ابھی سرور پر سیٹ اپ نہیں ہوا۔</string>
+    <string name="v2_assist_error_slow">اسسٹنٹ نے وقت پر جواب نہیں دیا۔ دوبارہ کوشش کے لیے \'ابھی مدد کریں\' دبائیں۔</string>
+    <string name="v2_assist_error_declined">اسسٹنٹ اس کا جواب نہیں دے سکا۔</string>
+    <string name="v2_assist_error_nothing_to_rewrite">کارڈ پر ابھی دوبارہ لکھنے کے لیے کچھ نہیں۔</string>
+    <string name="v2_assist_error_documents_too_large">یہ دستاویزات بہت بڑی ہیں۔ پہلے والی استعمال ہو رہی ہیں۔</string>
+    <string name="v2_assist_error_too_fast">بہت زیادہ درخواستیں۔ تھوڑا رک کر دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_error_bad_message">یہ درخواست نہیں پہنچی۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_error_budget_off">تجاویز بند ہیں: اس مہینے کے اسسٹ کے گھنٹے ختم ہو گئے۔ کیپشنز چلتے رہیں گے۔</string>
+    <string name="v2_assist_error_budget_wait">تھوڑی دیر میں دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_error_other">لائیو اسسٹ میں کچھ گڑبڑ ہو گئی۔ ریکارڈنگ جاری ہے۔</string>
+    <string name="v2_assist_practice_question">سوال %2$d میں سے %1$d</string>
+    <string name="v2_assist_practice_done">مشق مکمل: %1$d سوالات۔</string>
+    <string name="v2_assist_ended">لائیو اسسٹ ختم ہو گیا۔</string>
+    <string name="v2_assist_start">لائیو اسسٹ شروع کریں</string>
+    <string name="v2_assist_start_help">بات چیت کے دوران اسکرین پر تجاویز، کال پِل میں</string>
+</resources>

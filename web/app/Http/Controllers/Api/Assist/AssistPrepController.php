@@ -11,7 +11,8 @@ use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
-use App\Services\Assist\PromptPack;
+use App\Services\Assist\AssistDefaults;
+use App\Services\Assist\AssistRecords;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,13 +44,15 @@ final class AssistPrepController extends Controller
         $data = $request->validate($this->rules(true));
         $device = $this->device($request);
         $type = (string) $data['meeting_type'];
+        // What the request leaves out comes from the person's Live Assist settings for this meeting type (L8).
+        $defaults = AssistDefaults::for($device->user, $type);
         $prep = new AssistPrep([
             'workspace_id' => $device->workspace_id,
             'user_id' => $device->user_id,
             'meeting_type' => $type,
-            'hint_level' => $data['hint_level'] ?? PromptPack::shipped()->defaultHintLevel($type),
-            'mode' => $data['mode'] ?? 'balanced',
-            'language_help' => $data['language_help'] ?? 'off',
+            'hint_level' => $data['hint_level'] ?? $defaults['hint_level'],
+            'mode' => $data['mode'] ?? $defaults['mode'],
+            'language_help' => $data['language_help'] ?? $defaults['language_help'],
             'status' => $data['status'] ?? (isset($data['scheduled_at']) ? 'scheduled' : 'draft'),
         ]);
         $this->fill($request, $prep, $data);
@@ -61,7 +64,7 @@ final class AssistPrepController extends Controller
     /** GET /api/assist/preps/{id} */
     public function show(Request $request, string $id): JsonResponse
     {
-        return response()->json(self::payload($this->find($request, $id)->load('documents')));
+        return response()->json(self::payload($this->find($request, $id)->load('documents'), withText: true));
     }
 
     /** PATCH /api/assist/preps/{id} */
@@ -83,11 +86,7 @@ final class AssistPrepController extends Controller
     /** DELETE /api/assist/preps/{id} */
     public function destroy(Request $request, string $id): Response
     {
-        $prep = $this->find($request, $id);
-        // The texts go now; the soft-deleted row keeps only what a session started from it points at.
-        $prep->forceFill(array_fill_keys(AssistPrep::TEXT_FIELDS, null))->save();
-        $prep->documents()->detach();
-        $prep->delete();
+        AssistRecords::erasePrep($this->find($request, $id));
 
         return response()->noContent();
     }
@@ -98,7 +97,10 @@ final class AssistPrepController extends Controller
         $prep = $this->find($request, $id);
         $data = $request->validate(['file_ids' => ['required', 'array', 'min:1', 'max:20'], 'file_ids.*' => ['string', 'max:26']]);
         $device = $this->device($request);
+        // Files of the person's own projects in this workspace (projects are private, v1.5).
         $files = ClientFile::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+            ->whereIn('client_id', Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+                ->where('user_id', $device->user_id)->select('id'))
             ->whereIn('id', array_unique($data['file_ids']))->get();
         if ($files->count() !== count(array_unique($data['file_ids']))) {
             throw new NotFoundHttpException;
@@ -136,7 +138,7 @@ final class AssistPrepController extends Controller
     }
 
     /** @return array<string, mixed> a prep as the apps read it */
-    public static function payload(AssistPrep $prep): array
+    public static function payload(AssistPrep $prep, bool $withText = false): array
     {
         return [
             'id' => $prep->id,
@@ -156,8 +158,10 @@ final class AssistPrepController extends Controller
             'scheduled_at' => $prep->scheduled_at?->toAtomString(),
             'armed_until' => $prep->armed_until?->toAtomString(),
             'status' => $prep->currentStatus(),
+            // Since 1.9.0-m the extracted text too, on the single read only (the app sends it to the relay), never in lists.
             'documents' => $prep->documents->map(fn (ClientFile $f): array => [
                 'file_id' => $f->id, 'name' => $f->name, 'tokens' => (int) $f->getRelationValue('pivot')?->getAttribute('tokens'),
+                ...($withText ? ['text' => (string) $f->text] : []),
             ])->values()->all(),
             'created_at' => $prep->created_at?->toAtomString(),
             'updated_at' => $prep->updated_at?->toAtomString(),
@@ -201,7 +205,10 @@ final class AssistPrepController extends Controller
     /** A project of the device's workspace, or 404. */
     private function project(Request $request, string $id): string
     {
-        $exists = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $this->device($request)->workspace_id)->whereKey($id)->exists();
+        // The person's own project in this workspace: a teammate's is as unknown as any other (projects are private, v1.5).
+        $device = $this->device($request);
+        $exists = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+            ->where('user_id', $device->user_id)->whereKey($id)->exists();
         if (! $exists) {
             throw new NotFoundHttpException;
         }

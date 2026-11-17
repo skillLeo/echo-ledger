@@ -1,6 +1,7 @@
 // What the v2 Library shows of the core's recordings (api.library(), the same list today's Library uses): the saved
 // views, the WhatsApp-style row and the day groups. Pure functions, so the rules are tested without a window.
 import type { BinItem, LibraryItem } from "../../lib/ipc";
+import { TRASH_KEEP_HOURS_FALLBACK, hoursWords } from "../../lib/trash";
 import { dayGroup, itemState, recordingName, searchItems, sortItems, type ItemState } from "../../lib/library";
 import { formatDuration, formatTime, rowDate, sourceAppLabel } from "../../lib/format";
 
@@ -80,11 +81,15 @@ export function rowModel(item: LibraryItem, now: Date = new Date()): RowModel {
   return { title: recordingName(item.title), meta, badge, when, duration: formatDuration(item.duration_ms), app };
 }
 
-/** How long the server keeps a deleted recording (CaptureSession::BIN_HOURS on the server; docs/API.md "GET /api/bin"). */
-export const BIN_HOURS = 48;
+/** The server's default for how long a deleted recording is kept (lib/trash.ts has the fallback). */
+export const BIN_HOURS = TRASH_KEEP_HOURS_FALLBACK;
 
-/** The bin's length from what the server sent (erase_at less deleted_at), else the server's 48 hours. */
-export function binHours(items: readonly Pick<BinItem, "deleted_at" | "erase_at">[]): number {
+/**
+ * The bin's length: the server's setting (trash_keep_hours) when the core says it; else what the items show
+ * (erase_at less deleted_at); else the server's 48 hours.
+ */
+export function binHours(items: readonly Pick<BinItem, "deleted_at" | "erase_at">[], serverHours: number | null = null): number {
+  if (serverHours !== null && serverHours > 0) return serverHours;
   for (const b of items) {
     const hours = Math.round((Date.parse(b.erase_at) - Date.parse(b.deleted_at)) / 3_600_000);
     if (Number.isFinite(hours) && hours > 0) return hours;
@@ -94,5 +99,5 @@ export function binHours(items: readonly Pick<BinItem, "deleted_at" | "erase_at"
 
 /** The Trash sentence, in the classic Library's words. */
 export function binSentence(hours: number): string {
-  return `Deleted recordings stay here for ${hours} hours, then their audio and transcripts are erased.`;
+  return `Deleted recordings stay here for ${hoursWords(hours)}, then their audio and transcripts are erased.`;
 }

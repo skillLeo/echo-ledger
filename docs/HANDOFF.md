@@ -1048,3 +1048,30 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   side (ui_flags, ui_classic, trash.keep_hours read leniently; setClassicUi; binOrError; deleteAwait) and a discarded
   call never reaching the server. Next: Undo after a server-side discard (restore), batches 4–6, then the v2 activity
   hook once b-phone-ui is approved.
+- Merged b-phone-ui at the reviewed 4c3e96ab: phone v2 (components, shell, Home, Library, Trash, Settings, Setup &
+  health, pill and after-call card, Urdu strings) behind the ui_v2 flags. The activity hook that shows it is the
+  phone core's next step; until then nothing of v2 is reachable in the app.
+- Merged b-web-l7 at the reviewed 7b97507c: the post-call report (Urdu-safe worst-case budget, billed failures counted, its
+  own assist-reports queue: deploy needs the second worker), practice and facts endpoints, document text on the single
+  read, /end across workspaces, escaped Markdown downloads, the console's Preps, Sessions and Report pages, all behind
+  live_assist.
+- Merged b-relay at the reviewed aca8ee86: practice over the relay, facts and summary within the budget, the hard
+  budget gate with Urdu-safe upper bounds, held questions (finals only, 5 s, dropped on new speech or disconnect),
+  RELEASE.md (the owner's VPS release steps) and EVAL_RUN.md (the owner's eval and latency runs). Waiting on keys and
+  the VPS.
+- Merged b-desktop-ui at the reviewed 9bed4da6: desktop v2 Home, the Live tab, the Live Assist card and prep (contract
+  1.9.0-n; prepared meetings only start after the person taps Start), the screens-captured flash, the After-a-call
+  notice in the new shell, the trash time from the server, designed load/error states.
+- Merged b-web-l7 at the reviewed ea959798: reserve-and-settle for report and Ask, relay claims held back in
+  left(), assist:sweep every 5 minutes (needs the scheduler), Ask over a session, the super-admin Live Assist stats,
+  Live Assist settings, export and erasure of Live Assist data. Migration 2026_12_10_000003 changed after its first
+  merge: local and test databases that ran it need migrate:fresh (never deployed; not in release/v1.8.1).
+- Merged b-desktop-core at the reviewed 9cb9442c: ui_flags / ui_classic_set; the Live Assist client (pinned
+  relay_pins, seq per connection, bounded queue, backoff) and the 13 session commands with the assist window (hidden
+  from screen share); prepared meetings only offer, never start; the After a call setting (ask / always transcribe /
+  always audio, 12 s → audio only, a one-time notice for former "keep" users); Capture now (Ctrl/⌘+Alt+S);
+  trash_keep_hours; callerName and the screens count.
+- Disk: to keep builds running, build outputs (Rust target folders) were deleted and nine finished worktrees were
+  removed (b-web-181, b-web-fix, b-desktop, b-desktop-reopen, b-web, review-a, -dock, -sign, -desk2). Their branches
+  stay in git; `git worktree add .claude/worktrees/<name> <branch>` brings any of them back. Nothing tracked was
+  deleted.

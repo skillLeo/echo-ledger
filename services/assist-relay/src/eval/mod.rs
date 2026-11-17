@@ -15,6 +15,7 @@
 //! and for real with the live providers.
 
 pub mod judge;
+pub mod practice;
 pub mod run;
 pub mod score;
 

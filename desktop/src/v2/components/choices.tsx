@@ -43,11 +43,11 @@ export function Checkbox({ label, hint, id, ...rest }: BoxProps) {
   return (
     <label className="el-check-row" htmlFor={inputId}>
       <span className="el-check-box">
-        <input type="checkbox" className="el-check" id={inputId} aria-describedby={hint ? `${inputId}-hint` : undefined} {...rest} />
+        <input type="checkbox" className="el-check" id={inputId} aria-labelledby={`${inputId}-label`} aria-describedby={hint ? `${inputId}-hint` : undefined} {...rest} />
         <Icon icon={CheckIcon} />
       </span>
       <span className="el-check-row__text">
-        <span>{label}</span>
+        <span id={`${inputId}-label`}>{label}</span>
         {hint && <span className="el-caption" id={`${inputId}-hint`}>{hint}</span>}
       </span>
     </label>
@@ -60,9 +60,9 @@ export function Radio({ label, hint, id, ...rest }: BoxProps) {
   const inputId = id ?? auto;
   return (
     <label className="el-check-row" htmlFor={inputId}>
-      <input type="radio" className="el-check el-check--radio" id={inputId} aria-describedby={hint ? `${inputId}-hint` : undefined} {...rest} />
+      <input type="radio" className="el-check el-check--radio" id={inputId} aria-labelledby={`${inputId}-label`} aria-describedby={hint ? `${inputId}-hint` : undefined} {...rest} />
       <span className="el-check-row__text">
-        <span>{label}</span>
+        <span id={`${inputId}-label`}>{label}</span>
         {hint && <span className="el-caption" id={`${inputId}-hint`}>{hint}</span>}
       </span>
     </label>

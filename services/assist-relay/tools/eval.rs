@@ -1,7 +1,8 @@
 //! The golden eval set (plan L9): ten call transcripts with traps, replayed through a relay session and scored.
 //!
 //!   cargo build --release
-//!   target/release/assist-relay-eval --ci                    # mocked models, no keys: the set, the harness, the scorer
+//!   target/release/assist-relay-eval --ci                    # mocked models, no keys: the set, the harness, the scorer,
+//!                                                            # and the practice cases (eval/practice)
 //!   target/release/assist-relay-eval --live --yes            # real models, Balanced, keys from the environment
 //!   target/release/assist-relay-eval --live --yes --mode fast --out eval/RESULTS.md
 //!   target/release/assist-relay-eval --live --yes --judge    # plus the model judge for invented claims
@@ -105,10 +106,23 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    let practice_dir = o.dir.parent().map_or_else(|| PathBuf::from("eval/practice"), |p| p.join("practice"));
+    let practice_cases = match assist_relay::eval::practice::load_dir(&practice_dir) {
+        Ok(cases) => cases,
+        Err(error) => {
+            eprintln!("assist-relay-eval: {error}");
+            return ExitCode::from(2);
+        }
+    };
     if o.ci {
-        let problems = runtime.block_on(ci_check(&cases));
+        let mut problems = runtime.block_on(ci_check(&cases));
+        problems.extend(runtime.block_on(assist_relay::eval::practice::ci_check(&practice_cases)));
         if problems.is_empty() {
-            println!("{} transcripts: the set follows the plan, every reference passes, every bad answer fails as named.", cases.len());
+            println!(
+                "{} transcripts and {} practice cases: the set follows the plan, every reference passes, every bad answer fails as named.",
+                cases.len(),
+                practice_cases.len()
+            );
             return ExitCode::SUCCESS;
         }
         for problem in &problems {
@@ -155,6 +169,7 @@ fn main() -> ExitCode {
     store.replace(keys);
     let providers = Providers::live(store, &Endpoints::default(), Retry::default());
     let judge_provider = providers.get(ProviderKind::Anthropic);
+    let practice_providers = providers.clone();
     let runner = Runner::live(config.clone(), providers, o.mode);
     let (scores, totals, harness) = runtime.block_on(run_all(&runner, &cases));
     let judge = o.judge.then(|| {
@@ -183,6 +198,18 @@ fn main() -> ExitCode {
         text.push_str("\nThe judge's findings:\n\n");
         judge.failures.iter().for_each(|f| text.push_str(&format!("- {f}\n")));
     }
+    // The practice questions: five per case from the real models, checked for invented names and numbers.
+    let practice_judge = o.judge.then(|| {
+        let options = config.model(JUDGE_MODEL).map(|spec| spec.options.clone()).unwrap_or_default();
+        (judge_provider.clone(), JUDGE_MODEL.to_owned(), options)
+    });
+    text.push_str(&runtime.block_on(assist_relay::eval::practice::run_live(
+        config.clone(),
+        practice_providers,
+        &practice_cases,
+        5,
+        practice_judge.as_ref(),
+    )));
     if !harness.is_empty() {
         text.push_str("\nTurns that got no suggestion or an error:\n\n");
         harness.iter().for_each(|p| text.push_str(&format!("- {p}\n")));

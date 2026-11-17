@@ -187,6 +187,8 @@ class AppPanelProvider extends PanelProvider
             ->collapsedSidebarWidth(Shell::RAIL_WIDTH.'px')
             // The everyday pages sit ungrouped at the top, like the phone's tabs; the rest below.
             ->navigationGroups([
+                // Since v1.9 (L8): for the people the live_assist flag is on for.
+                NavigationGroup::make('Live Assist'),
                 NavigationGroup::make('More'),
                 NavigationGroup::make('System'),
             ])

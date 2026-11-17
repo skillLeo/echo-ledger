@@ -198,7 +198,8 @@ describe('the code flow with PKCE', function () {
         $tokens = connectorExchange($this, $client, $code, $verifier)->assertOk();
 
         expect($tokens->json('token_type'))->toBe('Bearer')
-            ->and($tokens->json('expires_in'))->toBe(3600)
+            // An hour, counted by the OAuth server from its own clock: a slow run crossing a second gets 3599 (W-006).
+            ->and($tokens->json('expires_in'))->toBeGreaterThanOrEqual(3598)->toBeLessThanOrEqual(3600)
             ->and($tokens->json('refresh_token'))->toBeString();
         $names = collect(connectorMessage($this, $tokens->json('access_token'), 'tools/list')->assertOk()->json('result.tools'))->pluck('name')->all();
         expect($names)->toBe(['list_projects', 'search', 'get_recording', 'get_project_brief', 'list_recent']);

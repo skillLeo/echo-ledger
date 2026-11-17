@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (ask). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_ask_title">Ask</string>
+    <string name="v2_ask_scope">Ask about</string>
+    <string name="v2_ask_scope_all">All recordings</string>
+    <string name="v2_ask_scope_all_soon">All recordings (not available yet)</string>
+    <string name="v2_ask_question">Your question</string>
+    <string name="v2_ask_question_hint">What did Bilal Traders agree on payment?</string>
+    <string name="v2_ask_ask_button">Ask</string>
+    <string name="v2_ask_asking">Asking</string>
+    <string name="v2_ask_sources">From</string>
+    <string name="v2_ask_no_projects_title">No projects yet</string>
+    <string name="v2_ask_no_projects_body">Ask works on a project\'s recordings. Put recordings in a project from Library first.</string>
+    <string name="v2_ask_error">The answer couldn\'t be made. Check the internet connection and try again.</string>
+    <string name="v2_ask_empty_title">Ask your recordings</string>
+    <string name="v2_ask_empty_body">Pick a project, then ask in your own words. Answers say which recording they come from.</string>
+</resources>

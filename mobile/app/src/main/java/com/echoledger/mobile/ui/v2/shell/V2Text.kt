@@ -1,0 +1,166 @@
+package com.echoledger.mobile.ui.v2.shell
+
+import android.content.res.Resources
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import com.echoledger.mobile.R
+
+/** The words of the v2 shell, Library, recording and Settings screens, from strings_v2_core.xml (values and values-ur). */
+@Immutable
+data class V2Text(
+    val home: String,
+    val library: String,
+    val live: String,
+    val ask: String,
+    val recordings: String,
+    val searchRecordings: String,
+    val accountAndSettings: String,
+    val today: String,
+    val untranscribed: String,
+    val trash: String,
+    val yesterday: String,
+    val transcribing: String,
+    val uploading: String,
+    val failed: String,
+    val waitingToUpload: String,
+    val noRecordingsTitle: String,
+    val noRecordingsBody: String,
+    val noMatchTitle: String,
+    val noMatchBody: String,
+    val loadErrorTitle: String,
+    val loadErrorBody: String,
+    val offlineBanner: String,
+    val tryAgain: String,
+    val deleted: String,
+    val restored: String,
+    val delete: String,
+    val cancel: String,
+    val restore: String,
+    val eraseNow: String,
+    val eraseTitle: String,
+    val eraseBody: String,
+    val trashEmptyTitle: String,
+    val trashError: String,
+    val trashKeeps: (Int) -> String,
+    val erasesOn: (String) -> String,
+    val share: String,
+    val transcript: String,
+    val summary: String,
+    val moments: String,
+    val details: String,
+    val detailSource: String,
+    val detailLength: String,
+    val detailProject: String,
+    val detailLanguage: String,
+    val transcribed: String,
+    val noTranscriptTitle: String,
+    val noTranscriptBody: String,
+    val transcriptLoadingError: String,
+    val me: String,
+    val client: String,
+    val speaker: String,
+    val play: String,
+    val pause: String,
+    val back10: String,
+    val forward10: String,
+    val position: String,
+    val speed: String,
+    val settings: String,
+    val allSettings: String,
+    val classicLook: String,
+    val classicLookHelp: String,
+    val plan: (String) -> String,
+    val minutesUsed: (Long, Long) -> String,
+    val storageUsed: (String, Int) -> String,
+    val upgrade: String,
+    val accountError: String,
+    val notSignedIn: String,
+    /** A source's name from the server's `source_app` key. */
+    val sourceName: (String?) -> String
+) {
+    companion object {
+        /** The words in the language of [res] (values/ English, values-ur/ Urdu). */
+        fun from(res: Resources) = V2Text(
+            home = res.getString(R.string.v2_home),
+            library = res.getString(R.string.v2_library),
+            live = res.getString(R.string.v2_live),
+            ask = res.getString(R.string.v2_ask),
+            recordings = res.getString(R.string.v2_recordings),
+            searchRecordings = res.getString(R.string.v2_search_recordings),
+            accountAndSettings = res.getString(R.string.v2_account_and_settings),
+            today = res.getString(R.string.v2_today),
+            untranscribed = res.getString(R.string.v2_untranscribed),
+            trash = res.getString(R.string.v2_trash),
+            yesterday = res.getString(R.string.v2_yesterday),
+            transcribing = res.getString(R.string.v2_transcribing),
+            uploading = res.getString(R.string.v2_uploading),
+            failed = res.getString(R.string.v2_failed),
+            waitingToUpload = res.getString(R.string.v2_waiting_to_upload),
+            noRecordingsTitle = res.getString(R.string.v2_no_recordings_title),
+            noRecordingsBody = res.getString(R.string.v2_no_recordings_body),
+            noMatchTitle = res.getString(R.string.v2_no_match_title),
+            noMatchBody = res.getString(R.string.v2_no_match_body),
+            loadErrorTitle = res.getString(R.string.v2_load_error_title),
+            loadErrorBody = res.getString(R.string.v2_load_error_body),
+            offlineBanner = res.getString(R.string.v2_offline_banner),
+            tryAgain = res.getString(R.string.v2_try_again),
+            deleted = res.getString(R.string.v2_deleted),
+            restored = res.getString(R.string.v2_restored),
+            delete = res.getString(R.string.v2_delete),
+            cancel = res.getString(R.string.v2_cancel),
+            restore = res.getString(R.string.v2_restore),
+            eraseNow = res.getString(R.string.v2_erase_now),
+            eraseTitle = res.getString(R.string.v2_erase_title),
+            eraseBody = res.getString(R.string.v2_erase_body),
+            trashEmptyTitle = res.getString(R.string.v2_trash_empty_title),
+            trashError = res.getString(R.string.v2_trash_error),
+            trashKeeps = { a -> res.getString(R.string.v2_trash_keeps, a) },
+            erasesOn = { a -> res.getString(R.string.v2_erases_on, a) },
+            share = res.getString(R.string.v2_share),
+            transcript = res.getString(R.string.v2_transcript),
+            summary = res.getString(R.string.v2_summary),
+            moments = res.getString(R.string.v2_moments),
+            details = res.getString(R.string.v2_details),
+            detailSource = res.getString(R.string.v2_detail_source),
+            detailLength = res.getString(R.string.v2_detail_length),
+            detailProject = res.getString(R.string.v2_detail_project),
+            detailLanguage = res.getString(R.string.v2_detail_language),
+            transcribed = res.getString(R.string.v2_transcribed),
+            noTranscriptTitle = res.getString(R.string.v2_no_transcript_title),
+            noTranscriptBody = res.getString(R.string.v2_no_transcript_body),
+            transcriptLoadingError = res.getString(R.string.v2_transcript_loading_error),
+            me = res.getString(R.string.v2_me),
+            client = res.getString(R.string.v2_client),
+            speaker = res.getString(R.string.v2_speaker),
+            play = res.getString(R.string.v2_play),
+            pause = res.getString(R.string.v2_pause),
+            back10 = res.getString(R.string.v2_back10),
+            forward10 = res.getString(R.string.v2_forward10),
+            position = res.getString(R.string.v2_position),
+            speed = res.getString(R.string.v2_speed),
+            settings = res.getString(R.string.v2_settings),
+            allSettings = res.getString(R.string.v2_all_settings),
+            classicLook = res.getString(R.string.v2_classic_look),
+            classicLookHelp = res.getString(R.string.v2_classic_look_help),
+            plan = { a -> res.getString(R.string.v2_plan, a) },
+            minutesUsed = { used, limit -> res.getString(R.string.v2_minutes_used, used, limit) },
+            storageUsed = { size, count -> res.getString(R.string.v2_storage_used, size, count) },
+            upgrade = res.getString(R.string.v2_upgrade),
+            accountError = res.getString(R.string.v2_account_error),
+            notSignedIn = res.getString(R.string.v2_not_signed_in),
+            sourceName = { wire -> sourceName(res, wire) }
+        )
+    }
+}
+
+/** The current v2 screen words, from the composition's resources (so they follow the screen's language). */
+val v2Text: V2Text
+    @Composable
+    get() {
+        val res = LocalContext.current.resources
+        val config = LocalConfiguration.current
+        return remember(res, config) { V2Text.from(res) }
+    }

@@ -2,7 +2,8 @@
 // controls: Captions, Pause, Stop, Screens on/off and Capture now, Language, Discard. Captions are off by default (the
 // core's choice). Media controls never mirror. The window never takes focus, so everything works on click; [data-hit]
 // marks what the core keeps clickable.
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { listen } from "@tauri-apps/api/event";
 import { Button, Icons, Status } from "../components";
 import { PauseIcon, PlayIcon } from "../components/icons";
 import { RecordDotIcon, StopIcon } from "../../components/ControlIcons";
@@ -32,13 +33,46 @@ export type PillActions = {
   onDiscard: () => void;
 };
 
+/** How long the pill marks a kept screen (the flash, or the still highlight under Reduce motion). */
+export const CAPTURE_MARK_MS = 1200;
+
+/**
+ * `screens:captured {count}` from the core: the latest kept screen, for the pill's mark. The mark is one short flash
+ * (never a loop); under Reduce motion it is a still highlight instead (CSS), for the same time.
+ */
+export function useScreenCaptured(): { count: number; seq: number } | null {
+  const [captured, setCaptured] = useState<{ count: number; seq: number } | null>(null);
+  useEffect(() => {
+    let live = true;
+    const un = listen<{ count: number }>("screens:captured", (e) => {
+      if (live) setCaptured((c) => ({ count: e.payload?.count ?? 0, seq: (c?.seq ?? 0) + 1 }));
+    });
+    return () => {
+      live = false;
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
+  return captured;
+}
+
 export function RecordingPill({ model, actions, defaultOpen = false }: { model: PillModel; actions: PillActions; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(defaultOpen);
   const [confirming, setConfirming] = useState(false);
+  const captured = useScreenCaptured();
+  const [marked, setMarked] = useState(false);
+  useEffect(() => {
+    if (!captured) return;
+    setMarked(true);
+    const timer = window.setTimeout(() => setMarked(false), CAPTURE_MARK_MS);
+    return () => window.clearTimeout(timer);
+  }, [captured]);
   const status = model.paused ? `Paused ${model.elapsed}` : `Recording ${model.elapsed}`;
 
   return (
-    <div className="el-pill" data-hit role="toolbar" aria-label="Recording controls" data-testid="recording-pill-v2">
+    <div className={`el-pill${marked ? " el-pill--captured" : ""}`} data-hit role="toolbar" aria-label="Recording controls" data-testid="recording-pill-v2">
+      <span className="el-visually-hidden" role="status">
+        {captured ? `Screen kept. ${captured.count} ${captured.count === 1 ? "screen" : "screens"} in this recording.` : ""}
+      </span>
       <button type="button" className="el-pill__summary" aria-expanded={open} aria-controls="el-pill-controls"
         aria-label={`${status}, ${model.name}. ${open ? "Hide" : "Show"} the controls`} onClick={() => { setOpen(!open); setConfirming(false); }}>
         <Status kind={model.paused ? "idle" : "recording"}><span className="el-num">{model.elapsed}</span></Status>

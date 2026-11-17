@@ -29,7 +29,7 @@ use crate::telemetry::Recorder;
 use crate::time::unix_now;
 
 /// The answer CI scripts for an `answer` or `any` turn that has no reference: short, no numbers, nothing claimed.
-pub const GENERIC_ANSWER: &str = "Sure, happy to answer that.\n- **Point**: from my notes";
+pub const GENERIC_ANSWER: &str = "Sure, happy to answer that.\n- **Point**: short and clear";
 
 /// Which answers CI scripts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -86,6 +86,10 @@ impl Runner {
         for spec in config.models.values_mut() {
             spec.mock = MockLatency { first_token_ms: 1, token_ms: 0 };
         }
+        // Every model call answers from the script: the relay's own background calls (facts, summary) would take
+        // scripted answers meant for the suggestions, so they are off here.
+        config.background.facts_every_finals = u32::MAX;
+        config.background.summary_every_secs = u64::MAX / 4;
         let (providers, mocks) = Providers::mock(&config, Arc::new(MockStats::default()));
         Runner {
             state: state(&config, providers),
