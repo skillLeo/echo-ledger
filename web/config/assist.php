@@ -11,13 +11,14 @@ declare(strict_types=1);
  */
 return [
     // Plan key => what Live Assist gives it. `claim`: the plan the relay token names (free, pro, ultra). `live_modes`:
-    // the modes of a live session, the most capable last. `seconds`: the month's assist time (Free: Practice only).
-    // `cents`: the month's model budget in US cents.
+    // the modes of a live session, the most capable last. `seconds` and `cents`: the month's live assist time and model
+    // budget (US cents). `practice`: Practice's own allowance (since 1.9.0-h), counted apart from the live one: Practice
+    // sessions, their questions, facts, summary and report are billed to it.
     'plans' => [
-        'free' => ['claim' => 'free', 'live_modes' => [], 'seconds' => 30 * 60, 'cents' => 100],
-        'pro' => ['claim' => 'pro', 'live_modes' => ['fast', 'balanced'], 'seconds' => 10 * 3600, 'cents' => 1500],
-        'business' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000],
-        'personal' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000],
+        'free' => ['claim' => 'free', 'live_modes' => [], 'seconds' => 0, 'cents' => 0, 'practice' => ['seconds' => 30 * 60, 'cents' => 100]],
+        'pro' => ['claim' => 'pro', 'live_modes' => ['fast', 'balanced'], 'seconds' => 10 * 3600, 'cents' => 1500, 'practice' => ['seconds' => 5 * 3600, 'cents' => 500]],
+        'business' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000, 'practice' => ['seconds' => 10 * 3600, 'cents' => 1000]],
+        'personal' => ['claim' => 'ultra', 'live_modes' => ['fast', 'balanced', 'deep', 'max'], 'seconds' => 40 * 3600, 'cents' => 6000, 'practice' => ['seconds' => 10 * 3600, 'cents' => 1000]],
     ],
 
     // A Practice session runs this mode on every plan, Free included, within the plan's assist time.
@@ -65,6 +66,21 @@ return [
             'price' => ['input' => 1.50, 'cache_write' => 1.50, 'cache_read' => 0.15, 'output' => 7.50],
             'options' => ['thinking_budget' => 0],
         ],
+    ],
+
+    // The usage kinds the relay reports (1.9.0-h): a suggestion's (`suggestion`, or the relay's own kind of it) and its
+    // background calls. `report` is the server's own: the post-call report (L7).
+    'usage_kinds' => ['suggestion', 'answer', 'help_now', 'regenerate', 'shorter', 'formal', 'translate', 'upgrade', 'practice_question', 'facts', 'summary', 'report'],
+
+    // The post-call report (L7): the model that writes its words (from the catalog above, for its price), how much of the
+    // transcript it reads, and the coaching numbers' settings.
+    'report' => [
+        'model' => 'claude-sonnet-5-5',
+        'max_output_tokens' => 6000,
+        'transcript_chars' => 60000,
+        'long_pause_ms' => 3000,
+        // Counted as whole words or phrases, ignoring case.
+        'filler_words' => ['um', 'uh', 'erm', 'er', 'hmm', 'you know', 'i mean', 'basically', 'actually', 'sort of', 'kind of', 'matlab', 'yaani'],
     ],
 
     // Provider keys the relay knows (services/assist-relay/src/domain.rs ProviderKind); any other key stays here.

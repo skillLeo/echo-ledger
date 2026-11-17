@@ -87,7 +87,7 @@ final class AssistSessionController extends Controller
         return response()->json([
             'session' => ['id' => $session->id, 'auto_saved' => $session->auto_saved, 'mode' => $session->mode, 'practice' => $session->practice],
             ...$this->tokens($session),
-            'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id)['seconds_left']],
+            'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id, $practice)['seconds_left']],
         ], 201)->header('Cache-Control', 'no-store');
     }
 

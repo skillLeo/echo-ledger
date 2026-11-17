@@ -14,7 +14,9 @@ use App\Services\CredentialVault;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -47,7 +49,11 @@ final class InternalAssistController extends Controller
         return response()->json(['keys' => (object) $keys, 'models' => $models, 'modes' => $modes])->header('Cache-Control', 'no-store');
     }
 
-    /** POST /api/internal/assist/usage: one suggestion's tokens and cost; the same suggestion_id once only. */
+    /**
+     * POST /api/internal/assist/usage: one model call's tokens and cost, a suggestion's or (since 1.9.0-h) a practice
+     * question's, the facts ledger's or the summary's; the same suggestion_id once only. It is billed to the session's
+     * allowance: a Practice session's to Practice's (AssistPlans::left).
+     */
     public function usage(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -56,7 +62,7 @@ final class InternalAssistController extends Controller
             'model' => ['required', 'string', 'max:128'],
             'provider' => ['required', 'string', 'max:20'],
             'mode' => ['required', 'string', 'max:10'],
-            'kind' => ['required', 'string', 'max:20'],
+            'kind' => ['required', Rule::in((array) config('assist.usage_kinds'))],
             'trigger' => ['sometimes', 'nullable', 'string', 'max:20'],
             'outcome' => ['sometimes', 'nullable', 'string', 'max:20'],
             'fallback' => ['sometimes', 'boolean'],
@@ -75,6 +81,23 @@ final class InternalAssistController extends Controller
             return response()->json(['stored' => false]);
         }
         $at = isset($data['at']) ? Carbon::parse((string) $data['at'])->utc() : now();
+        try {
+            self::record($session, $data, $at);
+        } catch (UniqueConstraintViolationException) {
+            // The same report twice at once (the relay's retry): the first one counts.
+            return response()->json(['stored' => false]);
+        }
+
+        return response()->json(['stored' => true]);
+    }
+
+    /**
+     * Stores one model call's usage for [$session], and counts it in the month's usage ledger.
+     *
+     * @param  array<string, mixed>  $data  as POST /api/internal/assist/usage takes it
+     */
+    public static function record(AssistSession $session, array $data, Carbon $at): void
+    {
         DB::transaction(function () use ($data, $session, $at): void {
             AssistUsage::query()->create([
                 'assist_session_id' => $session->id,
@@ -119,8 +142,6 @@ final class InternalAssistController extends Controller
                 'occurred_at' => $at,
             ]);
         });
-
-        return response()->json(['stored' => true]);
     }
 
     /** POST /api/internal/assist/suggestions: the words of a suggestion that was shown, for the report. */
@@ -150,27 +171,54 @@ final class InternalAssistController extends Controller
         return response()->json(['stored' => true]);
     }
 
-    /** POST /api/internal/assist/facts: the facts ledger as it is now (it replaces the last one). */
+    /**
+     * POST /api/internal/assist/facts `{session_id, facts: [...], at}`: the whole facts ledger as it is now (1.9.0-h); it
+     * replaces the stored one, encrypted, unless a newer one is already stored (a late retry changes nothing).
+     */
     public function facts(Request $request): JsonResponse
     {
         $data = $request->validate([
             'session_id' => ['required', 'string', 'max:26'],
             'facts' => ['present', 'array', 'max:500'],
-            'facts.*' => ['required'],
+            'facts.*' => ['required', 'string', 'max:2000'],
+            'at' => ['sometimes', 'nullable', 'date'],
         ]);
-        $facts = array_values(array_filter($data['facts'], fn (mixed $f): bool => (is_string($f) && mb_strlen($f) <= 2000) || is_array($f)));
-        $this->session((string) $data['session_id'])->forceFill(['facts' => $facts])->save();
 
-        return response()->json(['stored' => true]);
+        return $this->replace((string) $data['session_id'], 'facts', array_values($data['facts']), $data['at'] ?? null);
     }
 
-    /** POST /api/internal/assist/summary: the running summary as it is now. */
+    /**
+     * POST /api/internal/assist/summary `{session_id, summary, at}`: the running summary as it is now (1.9.0-h); it replaces
+     * the stored one, encrypted, unless a newer one is already stored.
+     */
     public function summary(Request $request): JsonResponse
     {
-        $data = $request->validate(['session_id' => ['required', 'string', 'max:26'], 'summary' => ['present', 'nullable', 'string', 'max:20000']]);
-        $this->session((string) $data['session_id'])->forceFill(['summary' => $data['summary']])->save();
+        $data = $request->validate([
+            'session_id' => ['required', 'string', 'max:26'],
+            'summary' => ['present', 'nullable', 'string', 'max:20000'],
+            'at' => ['sometimes', 'nullable', 'date'],
+        ]);
 
-        return response()->json(['stored' => true]);
+        return $this->replace((string) $data['session_id'], 'summary', $data['summary'], $data['at'] ?? null);
+    }
+
+    /** Replaces the session's [$field] (facts or summary) with [$value] written at [$at], unless what is stored is newer. */
+    private function replace(string $sessionId, string $field, mixed $value, ?string $at): JsonResponse
+    {
+        $session = $this->session($sessionId);
+        $written = $at !== null ? Carbon::parse($at)->utc() : now();
+        $stored = DB::transaction(function () use ($session, $field, $value, $written): bool {
+            $current = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->lockForUpdate()->findOrFail($session->id);
+            $storedAt = $current->getAttribute($field.'_at');
+            if ($storedAt instanceof Carbon && $storedAt->greaterThan($written)) {
+                return false;
+            }
+            $current->forceFill([$field => $value, $field.'_at' => $written])->save();
+
+            return true;
+        });
+
+        return response()->json(['stored' => $stored]);
     }
 
     private function session(string $id): AssistSession
