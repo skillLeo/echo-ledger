@@ -72,6 +72,9 @@ sealed interface AssistMessage {
     data class Budget(val secondsLeft: Long?, val secondsTotal: Long?) : AssistMessage
     data object Ended : AssistMessage
 
+    /** The core's own: automatic suggestions are paused for this session (a mono recording); Help me now still works. */
+    data object AutoPaused : AssistMessage
+
     /** Practice: the relay plays Them; the question counts as their turn. */
     data class PracticeQuestion(val questionId: String, val turnId: String, val index: Int, val total: Int, val text: String) :
         AssistMessage
@@ -135,7 +138,9 @@ data class CardState(
     val skipped: Boolean = false,
     val secondsLeft: Long? = null,
     val secondsTotal: Long? = null,
-    val ended: Boolean = false
+    val ended: Boolean = false,
+    /** Automatic suggestions are paused (a mono recording): only Help me now asks for one. */
+    val autoPaused: Boolean = false
 ) {
     val shown: Suggestion? get() = suggestions.firstOrNull { it.id == shownId }
     val captionsOnly: Boolean get() = mode == LiveMode.CaptionsOnly
@@ -316,6 +321,8 @@ object AssistCard {
         is AssistMessage.Budget -> state.copy(secondsLeft = m.secondsLeft, secondsTotal = m.secondsTotal)
 
         AssistMessage.Ended -> state.copy(ended = true)
+
+        AssistMessage.AutoPaused -> state.copy(autoPaused = true)
 
         is AssistMessage.PracticeQuestion -> state.copy(turns = state.turns + (m.turnId to m.text), practice = m.index to m.total)
 

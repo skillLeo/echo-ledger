@@ -156,6 +156,12 @@ final class InterfaceFlags
         return $this->rules;
     }
 
+    /** Whether [$flag] is on for everyone (the public website, whose visitors are not signed in, follows only this). */
+    public function forEveryone(string $flag): bool
+    {
+        return (bool) ($this->rules()[$flag]->everyone ?? false);
+    }
+
     /** Drops what this request already decided, after a change. */
     public function forget(): void
     {

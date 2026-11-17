@@ -42,6 +42,8 @@ $console = ['auth:web', AuthenticateSession::class, $consoleVerified, EnsureWork
 Route::middleware('throttle:site')->group(function (): void {
     Route::get('/', [SiteController::class, 'home'])->name('site.home');
     Route::get('/downloads', [DownloadsController::class, 'page'])->name('downloads');
+    // Since v2.0 (ui_v2.website): the plans on offer; 404 while the new website is off.
+    Route::get('/pricing', [SiteController::class, 'pricing'])->name('site.pricing');
     // The legal pages (drafts for review), linked from the site, the console and the apps.
     Route::get('/terms', [LegalController::class, 'terms'])->name('legal.terms');
     // Since v1.6: the sign-up page's short address (docs/API.md "Sign-up and sign-in with an email code").

@@ -33,6 +33,8 @@ class EchoLedgerApp : Application() {
         graph = AppGraph(this)
         Notifications.createChannels(this)
         graph.helper.autoConnect()
+        // This phone's Live Assist card comes and goes with its session.
+        com.echoledger.mobile.overlay.AssistCardWindow.follow(this, graph.scope)
         // Auto-record comes back on by itself after an update or a restart, without the app being opened.
         cancelStartCheck = AutoRecordKeeper.onAppStart(this)
     }
@@ -58,6 +60,14 @@ class AppGraph(val context: Context) {
     val recordings: RecordingStore by lazy { RecordingStore(context, recordingCipher) }
     val library: LibraryRepository by lazy { LibraryRepository(context, secretCipher) { api() } }
     val helper: HelperConnection by lazy { HelperConnection(context) }
+
+    /** When this phone last sent its device report (Help v2's Contact support). */
+    val deviceReports: com.echoledger.mobile.help.DeviceReports by lazy { com.echoledger.mobile.help.DeviceReports(context) }
+
+    /** Help v2 on this phone's API client. */
+    val help: com.echoledger.mobile.help.PhoneHelpSource by lazy {
+        com.echoledger.mobile.help.PhoneHelpSource({ api() }, deviceReports)
+    }
 
     @Volatile private var cached: Pair<String, ApiClient>? = null
 

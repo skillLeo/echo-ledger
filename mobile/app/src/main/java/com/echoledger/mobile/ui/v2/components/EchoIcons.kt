@@ -2,8 +2,11 @@ package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
@@ -17,12 +20,14 @@ import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -74,6 +79,13 @@ object EchoIcons {
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
     val SignOut: ImageVector get() = Icons.AutoMirrored.Outlined.Logout
     val Captions: ImageVector get() = Icons.Outlined.ClosedCaption
+
+    /** A recording's screen moments (the Screens strip, a Library row's count). */
+    val Screens: ImageVector get() = Icons.Outlined.Image
+    val Previous: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowLeft
+    val Next: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowRight
+    val Add: ImageVector get() = Icons.Outlined.Add
+    val Pin: ImageVector get() = Icons.Outlined.PushPin
     val Todo: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 

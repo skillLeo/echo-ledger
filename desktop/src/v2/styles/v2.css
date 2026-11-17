@@ -828,3 +828,78 @@ button.el-step__head { cursor: pointer; }
 .el-markdown th, .el-markdown td { text-align: start; vertical-align: top; padding: var(--el-space-8); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-code { font-family: var(--el-font-family-mono); font-size: var(--el-text-caption-size); background: var(--el-role-bg-subtle); border-radius: var(--el-radius-sm); padding-inline: var(--el-space-4); }
 pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
+
+/* Live Translate in the Live tab. */
+.el-translate { margin-block-start: var(--el-space-12); }
+.el-translate__app { display: flex; align-items: flex-end; gap: var(--el-space-8); flex-wrap: wrap; }
+.el-translate__app > .el-select { flex: 1; min-inline-size: calc(var(--el-space-64) * 3); }
+.el-translate__choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 2.5), 1fr)); gap: var(--el-space-12); }
+
+/* Settings pages in the new look: rows' controls, colour swatches, a pair of fields, reset. */
+.el-settings-v2 { display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-settings-v2 .el-group { margin: 0; }
+.el-setting__select { min-inline-size: calc(var(--el-space-64) * 3.5); max-inline-size: calc(var(--el-space-64) * 5); }
+.el-range { inline-size: calc(var(--el-space-64) * 2.5); accent-color: var(--el-role-accent-default); cursor: pointer; margin: 0; }
+.el-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-swatch {
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); padding: 0; cursor: pointer;
+  border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong);
+}
+.el-swatch--auto {
+  inline-size: auto; padding-inline: var(--el-space-8);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-primary); font: inherit; font-size: var(--el-text-caption-size);
+}
+.el-swatch[aria-checked="true"] { outline: var(--el-focus-width) solid var(--el-role-accent-default); outline-offset: var(--el-focus-offset); }
+.el-settings-v2__pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3), 1fr)); gap: var(--el-space-12); }
+.el-settings-v2__reset { display: flex; justify-content: flex-start; }
+.el-settings-v2 .set-preview { margin: 0; }
+.el-why { display: grid; gap: var(--el-space-8); padding: var(--el-space-16); }
+.el-why > p { margin: 0; }
+.el-why__list { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-8); }
+.el-steps-list { margin: 0; padding-inline-start: var(--el-space-24); display: grid; gap: var(--el-space-8); }
+.el-steps-list__item { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-12); flex-wrap: wrap; }
+.el-key-paste { display: flex; align-items: flex-end; gap: var(--el-space-8); flex-wrap: wrap; }
+.el-key-paste > .el-field { flex: 1; min-inline-size: calc(var(--el-space-64) * 3); }
+.el-form > h2.el-body-strong { margin: 0; font-size: var(--el-text-body-size); }
+.el-prose { display: grid; gap: var(--el-space-12); max-inline-size: calc(var(--el-space-64) * 10); }
+.el-prose .consent-notice p { font-size: var(--el-text-body-size); line-height: var(--el-text-body-line); }
+.el-form--flush { padding: 0; gap: var(--el-space-12); }
+.el-form--flush > .el-button--quiet { align-self: flex-start; }
+.el-dialog__actions--inline { display: flex; justify-content: flex-end; gap: var(--el-space-8); padding: 0; }
+.el-help__report { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-4); }
+.el-row--disabled { color: var(--el-role-text-disabled); }
+.el-row--disabled .el-row__hit { cursor: not-allowed; }
+
+/* Screen-share privacy: the status lines, the value's tone, the check's result and its two pictures. */
+.el-privacy-lines { display: grid; gap: var(--el-space-8); margin-block-start: var(--el-space-4); }
+.el-privacy-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--el-space-8); margin: 0; color: var(--el-role-text-secondary); }
+.el-privacy-line--warning { color: var(--el-role-warning-default); }
+.el-privacy-line > svg { inline-size: var(--el-icon-sm); block-size: var(--el-icon-sm); flex: none; }
+.el-privacy-value--warning { color: var(--el-role-warning-default); }
+.el-row--note { padding-block: var(--el-space-8); }
+.el-row--note > p { margin: 0; }
+.el-check-line { margin: 0; font-weight: var(--el-text-body-strong-weight); }
+.el-check-line--success { color: var(--el-role-success-default); }
+.el-check-line--warning { color: var(--el-role-warning-default); }
+.el-check-none { margin: 0; padding: var(--el-space-16); }
+.el-check-pictures { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3.5), 1fr)); gap: var(--el-space-12); }
+.el-check-pictures figure { margin: 0; display: grid; gap: var(--el-space-4); }
+.el-check-frame { position: relative; overflow: hidden; border-radius: var(--el-radius-sm); border: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-check-frame img { inline-size: 100%; block-size: auto; display: block; }
+.el-check-mark { position: absolute; }
+.el-setting__time { inline-size: calc(var(--el-space-64) * 2); }
+.el-input:has(> input:disabled) { background: var(--el-role-bg-subtle); color: var(--el-role-text-disabled); border-color: var(--el-role-border-default); }
+.el-input > input:disabled { color: var(--el-role-text-disabled); cursor: not-allowed; }
+
+/* Microphone & audio: the two level bars and the test's result. */
+.el-meters { display: inline-flex; align-items: center; gap: var(--el-space-8); }
+.el-meter { display: inline-block; inline-size: calc(var(--el-space-64) * 1.5); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-border-default); overflow: hidden; }
+.el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); }
+.el-test-result { display: grid; gap: var(--el-space-8); }
+.el-test-result > p { margin: 0; }
+.el-test-result audio { inline-size: 100%; }
+.el-meter--wide { inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 5); margin-block-start: var(--el-space-4); }
+.el-meter--warn .el-meter__fill { background: var(--el-role-warning-default); }
+.el-meter--full .el-meter__fill { background: var(--el-role-danger-default); }
+.el-storage-value--warn { color: var(--el-role-warning-default); }
+.el-storage-value--full { color: var(--el-role-danger-default); }

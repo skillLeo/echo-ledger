@@ -24,9 +24,11 @@ import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import com.echoledger.mobile.R
+import com.echoledger.mobile.core.Problems
 import com.echoledger.mobile.data.AskAnswerDto
 import com.echoledger.mobile.data.CitationDto
 import com.echoledger.mobile.data.ClientDto
+import com.echoledger.mobile.ui.AskOutcome
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoBanner
 import com.echoledger.mobile.ui.v2.components.EchoBannerKind
@@ -58,8 +60,8 @@ sealed interface AskState {
     data class Failed(val offline: Boolean = false, val words: String? = null) : AskState
 }
 
-/** What the API client says when the server gave no message ("Request failed (502)"): not words for a person. */
-private const val NO_WORDS = "Request failed ("
+/** The core's catch-all failures: the screen says its own "The answer couldn't be made. Try again." instead. */
+private val GENERIC = setOf(MainViewModel.ASK_FAILED, Problems.SERVER)
 
 /** The answer's language (`language` on `POST /api/clients/{id}/ask`: en or roman_urdu). */
 enum class AskLanguage(val wire: String) {
@@ -79,8 +81,15 @@ enum class AskLanguage(val wire: String) {
  * view model's Ask and project list.
  */
 @Composable
-fun V2AskScreen(vm: MainViewModel, onOpenAt: (sessionId: String, atMs: Long) -> Unit, modifier: Modifier = Modifier) {
-    val projects by vm.clients.collectAsState()
+fun V2AskScreen(
+    vm: MainViewModel,
+    onOpenAt: (sessionId: String, atMs: Long) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Ask inside a project's page: the scope is that project, with no picker and no page title. */
+    fixedProject: ClientDto? = null
+) {
+    val all by vm.clients.collectAsState()
+    val projects = fixedProject?.let { listOf(it) } ?: all
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var question by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<AskState>(AskState.Idle) }
@@ -102,21 +111,22 @@ fun V2AskScreen(vm: MainViewModel, onOpenAt: (sessionId: String, atMs: Long) -> 
         onAsk = { id ->
             state = AskState.Asking
             scope.launch {
-                val answer = vm.ask(id, question.trim(), answerIn.wire)
-                state = if (answer != null) {
-                    AskState.Answer(answer)
-                } else {
-                    // The view model put its plain words in its message; they show here instead of as a toast.
-                    // TODO(phone core): return the failure from ask() so the screen needn't take the message.
-                    val words = vm.message.value?.also { vm.consumeMessage() }?.takeUnless { it.startsWith(NO_WORDS) }
-                    AskState.Failed(offline = vm.offline.value, words = words?.let { VmMessages.localize(res, it) })
+                state = when (val outcome = vm.askOutcome(id, question.trim(), answerIn.wire)) {
+                    is AskOutcome.Answer -> AskState.Answer(outcome.answer)
+
+                    // The connection sentence only when offline; else the core's plain words, or ours when they're generic.
+                    is AskOutcome.Failed -> AskState.Failed(
+                        offline = outcome.offline,
+                        words = outcome.words.takeUnless { it in GENERIC }?.let { VmMessages.localize(res, it) }
+                    )
                 }
             }
         },
         onOpenAt = onOpenAt,
         answerIn = answerIn,
         onAnswerIn = { answerIn = it },
-        modifier = modifier
+        modifier = modifier,
+        inProject = fixedProject != null
     )
 }
 
@@ -133,11 +143,13 @@ fun V2AskContent(
     onOpenAt: (sessionId: String, atMs: Long) -> Unit,
     answerIn: AskLanguage = AskLanguage.English,
     onAnswerIn: (AskLanguage) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Inside a project's page: no title, no scope picker (the project is the scope), and what answers use. */
+    inProject: Boolean = false
 ) {
     val c = EchoV2.colors
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        EchoTopBar(stringResource(R.string.v2_ask_title), large = true)
+        if (!inProject) EchoTopBar(stringResource(R.string.v2_ask_title), large = true)
         if (projects.isEmpty()) {
             EchoEmptyState(
                 stringResource(R.string.v2_ask_no_projects_title),
@@ -152,14 +164,23 @@ fun V2AskContent(
                 verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
             ) {
                 val chosen = projects.firstOrNull { it.id == selectedId } ?: projects.first()
-                EchoSelect(
-                    label = stringResource(R.string.v2_ask_scope),
-                    options = projects,
-                    selected = chosen,
-                    onSelect = { onSelect(it.id) },
-                    optionLabel = { it.name }
-                )
-                Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
+                if (inProject) {
+                    Text(
+                        stringResource(R.string.v2_ws_ask_footer, chosen.name),
+                        style = EchoV2.type.caption,
+                        color = c.textSecondary,
+                        modifier = Modifier.padding(top = EchoTokens.Space.s12)
+                    )
+                } else {
+                    EchoSelect(
+                        label = stringResource(R.string.v2_ask_scope),
+                        options = projects,
+                        selected = chosen,
+                        onSelect = { onSelect(it.id) },
+                        optionLabel = { it.name }
+                    )
+                    Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
+                }
                 EchoTextField(
                     value = question,
                     onValueChange = onQuestion,

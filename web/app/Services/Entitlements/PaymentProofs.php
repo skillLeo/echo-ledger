@@ -113,7 +113,7 @@ final class PaymentProofs
                     }
 
                     return $size;
-                });
+                }, (int) $user->id);
             }
             $bytes = (int) filesize($stored);
             $mainPath = $folder.'/'.$id.'.elr';

@@ -12,8 +12,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -27,9 +29,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.core.Speakers
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.data.ScreenDto
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.TranscriptDto
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.RecordingPlayerState
 import com.echoledger.mobile.ui.rememberRecordingPlayer
 import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
@@ -98,7 +102,46 @@ fun V2RecordingScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, 
         tried = true
     }
     LaunchedEffect(item.id) { url = vm.playbackUrl(item.id) }
+    // The recording's screens (meeting assets): read when the Library says it has any, or doesn't say.
+    var screens by remember(item.id) { mutableStateOf<List<ScreenDto>>(emptyList()) }
+    LaunchedEffect(item.id) { if (item.screenCount != 0) screens = vm.screens(item.id).sortedBy { it.atMs } }
+    var viewing by remember(item.id) { mutableStateOf<Int?>(null) }
     val player = rememberRecordingPlayer(url)
+    val segments = transcript?.segments.orEmpty()
+    CompositionLocalProvider(LocalScreenPictures provides { link -> vm.screenImage(link) }) {
+        viewing?.let { start ->
+            V2ScreenViewer(
+                moments = remember(screens, segments, text) { ScreenAssets.moments(screens, segments) { speakerName(it, text) } },
+                startIndex = start,
+                onPlayFrom = { at ->
+                    player.seekTo(at)
+                    if (!player.playing) player.toggle()
+                    viewing = null
+                },
+                onClose = { viewing = null },
+                modifier = modifier,
+                transcriptReady = transcript != null
+            )
+            return@CompositionLocalProvider
+        }
+        V2RecordingPage(vm, item, text, transcript, tried, player, screens, { viewing = it }, { attempt++ }, onBack, modifier)
+    }
+}
+
+@Composable
+private fun V2RecordingPage(
+    vm: MainViewModel,
+    item: LibraryItem,
+    text: V2Text,
+    transcript: TranscriptDto?,
+    tried: Boolean,
+    player: RecordingPlayerState,
+    screens: List<ScreenDto>,
+    onOpenScreen: (Int) -> Unit,
+    onRetry: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier
+) {
     val context = LocalContext.current
     val toasts = LocalEchoToasts.current
     val scope = rememberCoroutineScope()
@@ -127,9 +170,11 @@ fun V2RecordingScreen(vm: MainViewModel, item: LibraryItem, onBack: () -> Unit, 
             scope.launch { toasts.showUndo(text.deleted, undo) { scope.launch { vm.restore(item.id) } } }
             onBack()
         },
-        onRetry = { attempt++ },
+        onRetry = onRetry,
         onBack = onBack,
-        modifier = modifier
+        modifier = modifier,
+        screens = screens,
+        onOpenScreen = onOpenScreen
     )
 }
 
@@ -156,7 +201,9 @@ fun V2RecordingContent(
     onDelete: () -> Unit,
     onRetry: () -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    screens: List<ScreenDto> = emptyList(),
+    onOpenScreen: (index: Int) -> Unit = {}
 ) {
     val c = EchoV2.colors
     val text = v2Text
@@ -171,7 +218,13 @@ fun V2RecordingContent(
                     Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
                     verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
                 ) {
-                    Text(row.title, style = EchoV2.type.titleL, color = c.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        row.title,
+                        style = EchoV2.type.content(row.title, EchoV2.type.titleL),
+                        color = c.textPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                         Text(
                             listOf(row.source, row.time).filter { it.isNotBlank() }.joinToString(" · "),
@@ -205,6 +258,9 @@ fun V2RecordingContent(
                     EchoActionItem(EchoIcons.Delete, text.delete, onClick = onDelete, modifier = Modifier.weight(1f))
                 }
             }
+            if (screens.isNotEmpty()) {
+                item { ScreensStrip(screens, onOpen = onOpenScreen, modifier = Modifier.padding(bottom = EchoTokens.Space.s8)) }
+            }
             item { EchoTabs(listOf(text.transcript, text.details), tab, onSelect = { tab = it }) }
             if (tab == 1) {
                 item { DetailRows(item, row, text) }
@@ -224,8 +280,23 @@ fun V2RecordingContent(
                         EchoErrorState(text.failed, transcript.sentence ?: text.transcriptLoadingError)
                     }
 
-                    is TranscriptState.Lines -> items(transcript.segments) { s ->
-                        EchoTranscriptLine(speakerName(s.speaker, text), formatClock(s.startMs), s.text, isMe = s.speaker == Speakers.ME)
+                    is TranscriptState.Lines -> {
+                        // Each screen sits after the last line that started at or before its moment.
+                        val after = ScreenAssets.byLine(transcript.segments, screens)
+                        itemsIndexed(transcript.segments) { i, s ->
+                            Column {
+                                EchoTranscriptLine(
+                                    speakerName(s.speaker, text),
+                                    formatClock(s.startMs),
+                                    s.text,
+                                    isMe =
+                                        s.speaker == Speakers.ME
+                                )
+                                after[i].orEmpty().forEach { screen ->
+                                    ScreenInline(screen, onOpen = { onOpenScreen(screens.indexOf(screen)) })
+                                }
+                            }
+                        }
                     }
                 }
             }

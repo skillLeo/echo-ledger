@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (screens). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_screens_title">اسکرینز</string>
+    <string name="v2_screens_label">اسکرین %1$d · %2$s</string>
+    <string name="v2_screens_count_one">1 اسکرین</string>
+    <string name="v2_screens_count_other">%1$d اسکرینز</string>
+    <string name="v2_screens_position">%2$d میں سے %1$d</string>
+    <string name="v2_screens_said">کیا کہا گیا</string>
+    <string name="v2_screens_said_none">اس کے آس پاس 15 سیکنڈ میں کچھ نہیں کہا گیا۔</string>
+    <string name="v2_screens_said_loading">ٹرانسکرپٹ ابھی تیار نہیں۔</string>
+    <string name="v2_screens_play_from_here">یہاں سے چلائیں</string>
+    <string name="v2_screens_text_on_screen">اسکرین پر لکھا متن</string>
+    <string name="v2_screens_file">فائل</string>
+    <string name="v2_screens_picture_failed">تصویر لوڈ نہیں ہو سکی۔</string>
+    <string name="v2_screens_previous">پچھلی اسکرین</string>
+    <string name="v2_screens_next">اگلی اسکرین</string>
+    <string name="v2_screens_open">اسکرین کھولیں</string>
+</resources>

@@ -77,7 +77,9 @@ class ApiException(
     val code: String? = null,
     val retryAfterSeconds: Long? = null,
     /** The plan an answer names (since v1.6.2: `promo_other_plan`). */
-    val planKey: String? = null
+    val planKey: String? = null,
+    /** The session a `409 session_active` names (Live Assist, 1.9.0-k). */
+    val sessionId: String? = null
 ) : IOException(message)
 
 /**
@@ -136,7 +138,8 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         if (resp.code == 401 && code != "otp_required") throw NotPairedException()
         val retryAfter = resp.header("Retry-After")?.trim()?.toLongOrNull()?.coerceAtLeast(0)
         val plan = json?.get("plan")?.let { (it as? JsonPrimitive)?.contentOrNull }
-        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan)
+        val session = json?.get("session_id")?.let { (it as? JsonPrimitive)?.contentOrNull }
+        throw ApiException(resp.code, message ?: "Request failed (${resp.code})", code, retryAfter, plan, session)
     }
 
     private val jsonType = "application/json".toMediaType()
@@ -942,6 +945,99 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             ids?.let { list -> put("ids", buildJsonArray { list.forEach { add(kotlinx.serialization.json.JsonPrimitive(it)) } }) }
         }.toString().toRequestBody(jsonType)
         return call(request("activity/read").post(body).build(), UnreadAnswer.serializer())!!.unreadCount
+    }
+
+    /**
+     * `POST /api/assist/sessions` (Live Assist, docs/API_ASSIST.md): a session of this phone, linked to its recording
+     * ([recordingSessionId]) or a practice. `409 session_active` when one runs already.
+     */
+    suspend fun startAssist(
+        prepId: String?,
+        mode: String?,
+        recordingSessionId: String?,
+        practice: Boolean
+    ): com.echoledger.mobile.data.AssistStartDto {
+        val body = buildJsonObject {
+            prepId?.let { put("prep_id", it) }
+            mode?.let { put("mode", it) }
+            put("platform", "android")
+            recordingSessionId?.let { put("recording_session_id", it) }
+            put("practice", practice)
+        }.toString().toRequestBody(jsonType)
+        return call(request("assist/sessions").post(body).build(), com.echoledger.mobile.data.AssistStartDto.serializer())!!
+    }
+
+    /** `POST /api/assist/sessions/{id}/token`: new relay grant (tokens last at most 15 minutes). */
+    suspend fun assistToken(id: String): com.echoledger.mobile.data.AssistTokenDto = call(
+        request("assist/sessions/$id/token").post("{}".toRequestBody(jsonType)).build(),
+        com.echoledger.mobile.data.AssistTokenDto.serializer()
+    )!!
+
+    /** `POST /api/assist/sessions/{id}/turns`: final turns in a batch (a repeated `client_ref` is ignored). */
+    suspend fun assistTurns(id: String, rows: List<com.echoledger.mobile.assist.TurnRow>) {
+        val body = buildJsonObject {
+            put(
+                "turns",
+                buildJsonArray {
+                    rows.forEach { row ->
+                        add(
+                            buildJsonObject {
+                                put("client_ref", row.clientRef)
+                                put("channel", if (row.other) "other" else "me")
+                                put("start_ms", row.startMs)
+                                put("end_ms", row.endMs)
+                                put("text", row.text)
+                                row.language?.let { put("language", it) }
+                                put("is_question", row.isQuestion)
+                            }
+                        )
+                    }
+                }
+            )
+        }.toString().toRequestBody(jsonType)
+        call(request("assist/sessions/$id/turns").post(body).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action`: shown (with its render time), used, dismissed. */
+    suspend fun assistAction(id: String, suggestionId: String, action: String, renderMs: Long?) {
+        val body = buildJsonObject {
+            put("action", action)
+            renderMs?.let { put("render_ms", it) }
+        }.toString().toRequestBody(jsonType)
+        call(request("assist/sessions/$id/suggestions/$suggestionId/action").post(body).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `POST /api/assist/sessions/{id}/end`: the report is made; the recording goes on. */
+    suspend fun endAssist(id: String) {
+        call(request("assist/sessions/$id/end").post("{}".toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
+    }
+
+    /** `GET /api/help/guides?q=` (contract 2.0.0-d): the user guide's sections, or those matching [query], best first. */
+    suspend fun helpGuides(query: String?): com.echoledger.mobile.data.HelpGuidesDto {
+        val url = url("help/guides").toHttpUrl().newBuilder().apply { query?.let { addQueryParameter("q", it) } }.build()
+        val req = Request.Builder().url(url).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        return call(req, com.echoledger.mobile.data.HelpGuidesDto.serializer())!!
+    }
+
+    /** `GET /api/help/guides/{id}`: one guide's Markdown (`404` for an unknown id). */
+    suspend fun helpGuide(id: String): com.echoledger.mobile.data.HelpGuideDto = call(
+        request("help/guides/${java.net.URLEncoder.encode(id, "UTF-8")}").get().build(),
+        com.echoledger.mobile.data.HelpGuideDto.serializer()
+    )!!
+
+    /** `GET /api/help/whats-new?platform=`: the platform's last releases with notes, newest first. */
+    suspend fun whatsNew(platform: String): com.echoledger.mobile.data.WhatsNewDto =
+        call(request("help/whats-new?platform=$platform").get().build(), com.echoledger.mobile.data.WhatsNewDto.serializer())!!
+
+    /** `POST /api/support/messages` → `202`: to the server's support address; the last device report only when asked. */
+    suspend fun sendSupportMessage(subject: String, message: String, includeDeviceReport: Boolean) {
+        val body = buildJsonObject {
+            put("subject", subject.take(120))
+            put("message", message.take(5000))
+            put("include_device_report", includeDeviceReport)
+        }.toString().toRequestBody(jsonType)
+        call(request("support/messages").post(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
     }
 
     /** `PUT /api/account/ui` (since 2.0.0-a): "Switch back to classic" ([classic] true) or its undo; the new flags. */

@@ -15,9 +15,7 @@ import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.InputChip
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +32,8 @@ import com.echoledger.mobile.core.Organise
 import com.echoledger.mobile.core.SmartView
 import com.echoledger.mobile.data.ClientDto
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /** Client folder chips with "No project" and a field to create a new folder. */

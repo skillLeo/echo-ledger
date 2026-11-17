@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_privacy). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_priv_lock_title">ایپ لاک</string>
+    <string name="v2_priv_lock_line">EchoLedger کھلنے پر آپ کا فنگر پرنٹ، چہرہ یا اسکرین لاک مانگیں۔</string>
+    <string name="v2_priv_lock_no_screen_lock">ایپ لاک کے لیے اس فون پر اسکرین لاک لگائیں۔</string>
+    <string name="v2_priv_lock_security_update">ایپ لاک کے لیے تازہ ترین سیکیورٹی اپ ڈیٹ انسٹال کریں۔</string>
+    <string name="v2_priv_lock_open_security">سیکیورٹی کی ترتیبات کھولیں</string>
+    <string name="v2_priv_lock_after">کب لاک ہو</string>
+    <string name="v2_priv_lock_now">فوراً</string>
+    <string name="v2_priv_lock_1min">1 منٹ بعد</string>
+    <string name="v2_priv_lock_5min">5 منٹ بعد</string>
+    <string name="v2_priv_lock_hide">حالیہ ایپس اور اسکرین شاٹس میں مواد چھپائیں</string>
+    <string name="v2_priv_lock_hide_line">پہلے سے بند ہے، تاکہ آپ ایپ کے اسکرین شاٹ لے سکیں۔ EchoLedger کی تیرتی کھڑکیاں اسکرین شاٹس میں ہمیشہ سیاہ ڈبہ رہتی ہیں، جب تک آپ اسکرین شیئرنگ کے دوران میں دکھائیں نہ چنیں۔</string>
+    <string name="v2_priv_lock_widget">ویجیٹ پر ریکارڈنگز کے عنوان چھپائیں</string>
+    <string name="v2_priv_lock_widget_line">پھر ہوم اسکرین ویجیٹ پر صرف ایپ کا نام آتا ہے، جیسے \"WhatsApp call\" یا \"Voice note\"۔ ایپ لاک آن ہو تو کوئی ریکارڈنگ نظر نہیں آتی۔</string>
+    <string name="v2_priv_consent_line">ریکارڈنگ کے قوانین ہر ملک میں مختلف ہیں۔ جہاں قانون کہے، میٹنگ کے لوگوں کو بتائیں کہ آپ ریکارڈ کر رہے ہیں۔ ریکارڈنگ کی اطلاع ہمیشہ دکھائی جاتی ہے۔</string>
+    <string name="v2_priv_consent_ok">میں سمجھ گیا ہوں</string>
+    <string name="v2_priv_share_line">EchoLedger کی تیرتی کھڑکیاں ریکارڈنگ کے کنٹرول، کیپشنز، کال کے بعد کا کارڈ اور لائیو ترجمہ ہیں۔</string>
+    <string name="v2_priv_share_private">نجی (سیاہ ڈبہ)</string>
+    <string name="v2_priv_share_private_line">اسکرین شیئر، ریکارڈنگ یا اسکرین شاٹ میں تیرتی کھڑکیاں سیاہ ڈبہ ہوتی ہیں۔ آپ انہیں معمول کے مطابق دیکھتے ہیں۔</string>
+    <string name="v2_priv_share_show">دکھائیں</string>
+    <string name="v2_priv_share_show_line">دیکھنے والا ہر شخص انہیں پڑھ سکتا ہے۔</string>
+    <string name="v2_priv_share_note">Android ایپس کو نہیں بتاتا کہ تیرتی کھڑکی اسکرین شیئر میں ہے، اس لیے سیاہ ڈبہ ہمیشہ آن رہتا ہے جب تک آپ دکھائیں نہ چنیں۔</string>
+    <string name="v2_priv_export">میرا ڈیٹا ایکسپورٹ یا حذف کریں</string>
+    <string name="v2_priv_storage_error">سرور کی اسٹوریج لوڈ نہیں ہو سکی۔ کنکشن چیک کریں۔</string>
+    <string name="v2_priv_storage_retry">دوبارہ کوشش کریں</string>
+    <string name="v2_priv_storage_recordings">سرور پر ریکارڈنگز</string>
+    <string name="v2_priv_storage_one">1 ریکارڈنگ میں \u2066%1$s\u2069</string>
+    <string name="v2_priv_storage_many">%2$d ریکارڈنگز میں \u2066%1$s\u2069</string>
+    <string name="v2_priv_storage_plan">آپ کے پلان کی اسٹوریج</string>
+    <string name="v2_priv_storage_plan_of">\u2066%2$s\u2069 میں سے \u2066%1$s\u2069</string>
+    <string name="v2_priv_storage_plan_limit">\u2066%1$s\u2069</string>
+    <string name="v2_priv_storage_meter">پلان کی استعمال شدہ اسٹوریج</string>
+    <string name="v2_priv_storage_kept">ریکارڈنگز %1$s بعد حذف ہو جاتی ہیں، جب تک انہیں رکھا نہ جائے۔</string>
+    <string name="v2_priv_storage_restore">حذف کی ہوئی ریکارڈنگز %1$s تک واپس لائی جا سکتی ہیں۔</string>
+    <string name="v2_priv_hour_one">1 گھنٹہ</string>
+    <string name="v2_priv_hours">%1$d گھنٹے</string>
+    <string name="v2_priv_day_one">1 دن</string>
+    <string name="v2_priv_days">%1$d دن</string>
+</resources>

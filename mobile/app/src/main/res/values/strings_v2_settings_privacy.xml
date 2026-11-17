@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_privacy). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_priv_lock_title">App lock</string>
+    <string name="v2_priv_lock_line">Ask for your fingerprint, face or screen lock when EchoLedger opens.</string>
+    <string name="v2_priv_lock_no_screen_lock">Set a screen lock on this phone to use App lock.</string>
+    <string name="v2_priv_lock_security_update">Install the latest security update to use App lock.</string>
+    <string name="v2_priv_lock_open_security">Open security settings</string>
+    <string name="v2_priv_lock_after">Lock after</string>
+    <string name="v2_priv_lock_now">Immediately</string>
+    <string name="v2_priv_lock_1min">After 1 minute</string>
+    <string name="v2_priv_lock_5min">After 5 minutes</string>
+    <string name="v2_priv_lock_hide">Hide content in Recents and screenshots</string>
+    <string name="v2_priv_lock_hide_line">Off by default, so you can take screenshots of the app. EchoLedger\'s floating windows are always a black box in screenshots unless you choose Show in During screen sharing.</string>
+    <string name="v2_priv_lock_widget">Hide recording titles on the widget</string>
+    <string name="v2_priv_lock_widget_line">The home-screen widget then says \"WhatsApp call\" or \"Voice note\". With App lock on it shows no recordings.</string>
+    <string name="v2_priv_consent_line">Recording laws differ by country. Tell the people in your meeting that you are recording where the law requires it. A recording notification is always shown.</string>
+    <string name="v2_priv_consent_ok">I understand</string>
+    <string name="v2_priv_share_line">EchoLedger\'s floating windows are the recording controls, captions, the after-call card and Live Translate.</string>
+    <string name="v2_priv_share_private">Private (black box)</string>
+    <string name="v2_priv_share_private_line">In a screen share, recording or screenshot, the floating windows are a black box. You see them as usual.</string>
+    <string name="v2_priv_share_show">Show</string>
+    <string name="v2_priv_share_show_line">Everyone watching can read them.</string>
+    <string name="v2_priv_share_note">Android doesn\'t tell apps when a floating window is in a screen share, so the black box is always on unless you choose Show.</string>
+    <string name="v2_priv_export">Export or delete my data</string>
+    <string name="v2_priv_storage_error">Couldn\'t load the server\'s storage. Check the connection.</string>
+    <string name="v2_priv_storage_retry">Retry</string>
+    <string name="v2_priv_storage_recordings">Recordings on the server</string>
+    <string name="v2_priv_storage_one">%1$s in 1 recording</string>
+    <string name="v2_priv_storage_many">%1$s in %2$d recordings</string>
+    <string name="v2_priv_storage_plan">Your plan\'s storage</string>
+    <string name="v2_priv_storage_plan_of">%1$s of %2$s</string>
+    <string name="v2_priv_storage_plan_limit">%1$s</string>
+    <string name="v2_priv_storage_meter">Plan storage used</string>
+    <string name="v2_priv_storage_kept">Recordings are deleted after %1$s unless kept.</string>
+    <string name="v2_priv_storage_restore">Deleted recordings can be restored for %1$s.</string>
+    <string name="v2_priv_hour_one">1 hour</string>
+    <string name="v2_priv_hours">%1$d hours</string>
+    <string name="v2_priv_day_one">1 day</string>
+    <string name="v2_priv_days">%1$d days</string>
+</resources>

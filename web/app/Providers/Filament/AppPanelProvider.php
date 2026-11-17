@@ -12,11 +12,13 @@ use App\Filament\Auth\Register;
 use App\Filament\Auth\RequestPasswordReset;
 use App\Filament\Pages\WorkspaceSettings;
 use App\Filament\Support\CommandPalette;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\InitialsAvatarProvider;
 use App\Filament\Support\LocalInterFontProvider;
 use App\Filament\Support\Palette;
 use App\Filament\Support\Shell;
 use App\Http\Middleware\AccountGate;
+use App\Http\Middleware\ConsoleLanguage;
 use App\Http\Middleware\EnsureAppAvailable;
 use App\Http\Middleware\EnsureWorkspaceMember;
 use App\Http\Middleware\NoReferrerOnInvites;
@@ -71,6 +73,14 @@ class AppPanelProvider extends PanelProvider
         // Since v1.6.1: the notices' behaviour (toasts, banners), on every page of both panels, the sign-in pages too.
         FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => in_array(Filament::getCurrentPanel()?->getId(), ['app', 'admin'], true) ? view('filament.shell.notices') : '');
         FilamentView::registerRenderHook(PanelsRenderHook::BODY_END, $shell(fn (): View => view('filament.shell.help')));
+        // Since v2.0: the design values (tokens/) and the new frame's script, only while a v2.0 part is on for the
+        // person; nothing at all otherwise, so the classic console stays as it was.
+        // The admin panel takes the same values under ui_v2.admin (admin.css: no markup change, the page's HTML stays as it is).
+        FilamentView::registerRenderHook(PanelsRenderHook::HEAD_END, fn (): View|string => match (true) {
+            ConsoleV2::any() => view('filament.v2.head', ['sheet' => 'console']),
+            ConsoleV2::admin() => view('filament.v2.head', ['sheet' => 'admin']),
+            default => '',
+        });
         // The page pattern (P4.4): the section above the title and a one-line subtitle, where a page has neither.
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_BEFORE, fn (): View|HtmlString|string => self::pageHeader('crumbs'));
         FilamentView::registerRenderHook(PanelsRenderHook::PAGE_HEADER_HEADING_AFTER, fn (): View|HtmlString|string => self::pageHeader('subtitle'));
@@ -81,6 +91,15 @@ class AppPanelProvider extends PanelProvider
     {
         $page = Livewire::current();
         if (Filament::getCurrentPanel()?->getId() !== 'app' || ! $page instanceof Page) {
+            return '';
+        }
+        // Since v2.0: a page under the new Library has a back link above its title; the new frame's pages carry their
+        // own title only, as in the apps.
+        $back = method_exists($page, 'v2BackLink') ? $page->v2BackLink() : null;
+        if (is_array($back)) {
+            return $part === 'crumbs' ? view('filament.v2.back-link', $back) : '';
+        }
+        if (ConsoleV2::shell()) {
             return '';
         }
         if ($part === 'crumbs') {
@@ -174,7 +193,7 @@ class AppPanelProvider extends PanelProvider
                 'info' => Palette::TEAL,
             ])
             // Narrow screens get the phone's bottom bar; the sidebar stays one tap away behind the menu button.
-            ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view('filament.bottom-nav')))
+            ->renderHook(PanelsRenderHook::BODY_END, self::here(fn (): View => view(ConsoleV2::shell() ? 'filament.v2.bottom-nav' : 'filament.bottom-nav')))
             // Self-hosted font and initials avatars: the console asks no third-party host for anything.
             ->font('Inter', provider: LocalInterFontProvider::class)
             ->defaultAvatarProvider(InitialsAvatarProvider::class)
@@ -217,6 +236,8 @@ class AppPanelProvider extends PanelProvider
                 AccountGate::class,
                 // Since v1.6 (P2.7): during maintenance customers see the pause page.
                 EnsureAppAvailable::class,
+                // Since v2.0 (ui_v2.shell): the console's language, English unless the person chose Urdu.
+                ConsoleLanguage::class,
             ], isPersistent: true);
     }
 }

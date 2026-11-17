@@ -3,7 +3,7 @@
 // this computer's last device check goes with it only when the person ticks it).
 import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, type HelpGuide, type HelpGuideHit, type WhatsNewRelease } from "../../lib/ipc";
-import { rowDate } from "../../lib/format";
+import { rowDate, sentenceDate } from "../../lib/format";
 import { Button, Card, Checkbox, EmptyState, Icons, List, ListRow, Loading, SearchField, Skeleton, SkeletonRow, Tabs, TextArea, TextField } from "../components";
 import { Markdown } from "./markdown";
 
@@ -35,7 +35,7 @@ export function HelpV2({ platform, onBack, onMacCheck }: HelpV2Props) {
       <Tabs label="Help" value={tab} onChange={setTab}
         tabs={[{ value: "guides", label: "Guides" }, { value: "whats_new", label: "What's new" }, { value: "contact", label: "Contact support" }]}>
         {tab === "guides" ? <Guides platform={platform} onMacCheck={onMacCheck} />
-          : tab === "whats_new" ? <WhatsNew /> : <ContactSupport />}
+          : tab === "whats_new" ? <WhatsNew /> : <ContactSupport platform={platform} onMacCheck={onMacCheck} />}
       </Tabs>
     </div>
   );
@@ -171,8 +171,27 @@ function WhatsNew() {
   );
 }
 
+/** "Mac check" on a Mac, where the report comes from; "device check" elsewhere. */
+const checkName = (platform: string) => (platform === "macos" ? "Mac check" : "device check");
+
+/** Exactly what "Include a report from this computer" attaches (undefined: still asking the core). */
+export function reportLine(platform: string, sentAt: string | null | undefined): string {
+  if (sentAt === undefined) return "Looking for this computer's last report…";
+  if (!sentAt) return "No report from this computer yet";
+  return `Your last ${checkName(platform)} report, from ${sentenceDate(sentAt) || sentAt}`;
+}
+
 /** A message to support, with this computer's last device check only when ticked. */
-function ContactSupport() {
+function ContactSupport({ platform, onMacCheck }: { platform: string; onMacCheck?: () => void }) {
+  // The last report this computer sent; null when there is none, or when the core can't say yet (an older core).
+  const [sentAt, setSentAt] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    let live = true;
+    api.lastDeviceReport().then((r) => live && setSentAt(r?.sentAt ?? null), () => live && setSentAt(null));
+    return () => {
+      live = false;
+    };
+  }, []);
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
   const [attach, setAttach] = useState(false);
@@ -199,7 +218,7 @@ function ContactSupport() {
     setBusy(true);
     setError(null);
     try {
-      await api.supportSend(subject.trim(), message.trim(), attach);
+      await api.supportSend(subject.trim(), message.trim(), attach && !!sentAt);
       setSent(true);
     } catch (e) {
       setError(helpError(e));
@@ -214,8 +233,11 @@ function ContactSupport() {
         <TextField label="Subject" value={subject} maxLength={SUBJECT_MAX} required onChange={(e) => setSubject(e.target.value)} />
         <TextArea label="Message" value={message} rows={8} maxLength={MESSAGE_MAX} required onChange={(e) => setMessage(e.target.value)}
           hint={`${message.length.toLocaleString("en")} of ${MESSAGE_MAX.toLocaleString("en")} characters`} />
-        <Checkbox label="Attach this computer's last device check" checked={attach} onChange={(e) => setAttach(e.target.checked)}
-          hint="The app version, the system and what it allows EchoLedger. Never your recordings or transcripts." />
+        <div className="el-help__report">
+          <Checkbox label="Include a report from this computer" checked={attach && !!sentAt} disabled={!sentAt} onChange={(e) => setAttach(e.target.checked)}
+            hint={sentAt ? `${reportLine(platform, sentAt)}: the app version, the system and what it allows EchoLedger. Never your recordings or transcripts.` : `${reportLine(platform, sentAt)}.`} />
+          {platform === "macos" && onMacCheck && <Button variant="quiet" size="sm" onClick={onMacCheck}>Run the Mac check first</Button>}
+        </div>
         {error && <p className="el-field__error" role="alert">{error}</p>}
         <div className="el-page__actions">
           <Button type="submit" variant="primary" disabled={!subject.trim() || !message.trim()} loading={busy} loadingLabel="Sending…">Send</Button>

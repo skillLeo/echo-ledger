@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (help). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_help_title">مدد</string>
+    <string name="v2_help_tab_guides">رہنمائی</string>
+    <string name="v2_help_tab_new">نیا کیا ہے</string>
+    <string name="v2_help_tab_contact">سپورٹ سے رابطہ</string>
+    <string name="v2_help_search">مدد میں تلاش کریں</string>
+    <string name="v2_help_guides_failed">رہنمائی لوڈ نہیں ہوئی</string>
+    <string name="v2_help_no_match_title">کوئی رہنمائی نہیں ملی</string>
+    <string name="v2_help_no_match_body">دوسرے الفاظ آزمائیں، یا سپورٹ سے رابطہ میں ہم سے پوچھیں۔</string>
+    <string name="v2_help_no_guides_title">ابھی کوئی رہنمائی نہیں</string>
+    <string name="v2_help_no_guides_body">آپ کے سرور پر کوئی رہنمائی نہیں۔ سپورٹ سے رابطہ مدد کر سکتا ہے۔</string>
+    <string name="v2_help_checks">جانچ</string>
+    <string name="v2_help_phone_check">فون کی جانچ</string>
+    <string name="v2_help_phone_check_help">اینڈرائیڈ EchoLedger کو کیا اجازت دیتا ہے، اور باقی کیسے ٹھیک کریں</string>
+    <string name="v2_help_guide_failed">یہ رہنمائی نہیں کھلی</string>
+    <string name="v2_help_new_failed">نیا کیا ہے لوڈ نہیں ہوا</string>
+    <string name="v2_help_no_notes_title">ابھی کوئی ریلیز نوٹس نہیں</string>
+    <string name="v2_help_no_notes_body">ایپ کے ہر نئے ورژن کے نوٹس یہاں نظر آتے ہیں۔</string>
+    <string name="v2_help_version">ورژن %1$s</string>
+    <string name="v2_help_contact_intro">ہمیں بتائیں کیا ہوا اور آپ کیا توقع کر رہے تھے۔ ہم ای میل سے جواب دیتے ہیں۔</string>
+    <string name="v2_help_subject">موضوع</string>
+    <string name="v2_help_message">پیغام</string>
+    <string name="v2_help_count">%2$s میں سے %1$s حروف</string>
+    <string name="v2_help_attach">اس فون کی آخری رپورٹ ساتھ لگائیں</string>
+    <string name="v2_help_report_none">اس فون سے ابھی کوئی رپورٹ نہیں</string>
+    <string name="v2_help_report_last">آپ کی آخری رپورٹ %1$s کی</string>
+    <string name="v2_help_report_what">ایپ کا ورژن، اینڈرائیڈ اور یہ EchoLedger کو کیا اجازت دیتا ہے۔ آپ کی ریکارڈنگز یا ٹرانسکرپٹس کبھی نہیں۔</string>
+    <string name="v2_help_send">بھیجیں</string>
+    <string name="v2_help_sending">بھیجا جا رہا ہے</string>
+    <string name="v2_help_sent_title">پیغام بھیج دیا گیا</string>
+    <string name="v2_help_sent_body">سپورٹ آپ کے اکاؤنٹ کے ای میل پر جواب دیتی ہے، عموماً ایک کاروباری دن میں۔</string>
+    <string name="v2_help_write_another">ایک اور لکھیں</string>
+    <string name="v2_help_offline">آپ آف لائن ہیں۔ انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_failed_generic">کچھ غلط ہو گیا۔ دوبارہ کوشش کریں۔</string>
+    <string name="v2_help_try_again">دوبارہ کوشش کریں</string>
+</resources>

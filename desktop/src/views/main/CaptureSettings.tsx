@@ -219,7 +219,7 @@ export function testVerdict(result: Pick<TestResult, "micHeard" | "systemHeard">
   ];
 }
 
-const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
+export const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
   allowed: "Allowed",
   denied: "Not allowed",
   unknown: "Asked on first use",
@@ -331,7 +331,7 @@ export const DEFAULT_CLIENT_COLOR = "#0bd8b6";
 export const COLOUR_PRESETS = ["#a78bfa", "#22d3ee", "#34d399", "#fbbf24", "#fb7185", "#ffffff"] as const;
 
 /** The caption as the overlay draws it, with the chosen colours and size. */
-function CaptionPreview({ style }: { style: CaptionStyle }) {
+export function CaptionPreview({ style }: { style: CaptionStyle }) {
   const size = style.size === "small" ? 13 : style.size === "large" ? 19 : 15;
   return (
     <div className="set-preview" aria-hidden="true">

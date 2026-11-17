@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.net.toUri
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
@@ -233,6 +234,9 @@ class MainActivity : FragmentActivity() {
         var showSetup by rememberSaveable { mutableStateOf(false) }
         // Waiting for you (since 1.3.2): every call waiting for Keep or Discard on one screen.
         var showWaiting by rememberSaveable { mutableStateOf(false) }
+
+        // The tab a Record page was opened from through the New sheet: Back goes there (since v1.8.1, bug P-026).
+        var recordReturnTab by rememberSaveable { mutableStateOf<String?>(null) }
         // Voice notes just shared from another app (local ids, comma-separated): their page, until Back leaves the app.
         var sharedNotes by rememberSaveable { mutableStateOf<String?>(null) }
         var sharedFrom by rememberSaveable { mutableStateOf<String?>(null) }
@@ -474,9 +478,25 @@ class MainActivity : FragmentActivity() {
         LaunchedEffect(unlocked, settings.paired) {
             if (unlocked && settings.paired) vm.activity()?.let { activityUnread = ActivityBadge.server(it.data, missed) }
         }
-        BackHandler(enabled = unlocked && (openItem != null || showSetup)) {
-            showItem(null)
-            showSetup = false
+        // System Back closes what is open over a tab (since v1.8.1, bug P-026: Waiting for you and the Record pages
+        // opened from the New sheet too), and only then leaves the app.
+        BackHandler(
+            enabled = unlocked && (openItem != null || showSetup || showWaiting || (recordReturnTab != null && tab == TAB_RECORD))
+        ) {
+            when {
+                openItem != null || showSetup -> {
+                    showItem(null)
+                    showSetup = false
+                }
+
+                showWaiting -> showWaiting = false
+
+                else -> {
+                    tab = recordReturnTab ?: tab
+                    recordMode = RecordMode.VOICE
+                    recordReturnTab = null
+                }
+            }
         }
 
         // The classic tabs, the same in the classic layout and inside the v2 shell (where an area's flag is off).
@@ -584,6 +604,7 @@ class MainActivity : FragmentActivity() {
                     recordSheet = false
                     upgradeLock = it
                 }, onPick = {
+                    if (tab != TAB_RECORD) recordReturnTab = tab
                     recordMode = it
                     tab = TAB_RECORD
                     recordSheet = false
@@ -591,6 +612,7 @@ class MainActivity : FragmentActivity() {
                     // Since v1.6 (tap audit): straight to recording; without the microphone allowed, the voice page asks.
                     recordSheet = false
                     if (!toggleRecording("record sheet")) {
+                        if (tab != TAB_RECORD) recordReturnTab = tab
                         recordMode = RecordMode.VOICE
                         tab = TAB_RECORD
                     }
@@ -658,6 +680,7 @@ class MainActivity : FragmentActivity() {
                                 // A tab always opens on its main screen; tapped again it closes what is open on it, then scrolls up.
                                 onSelect = {
                                     tab = it
+                                    recordReturnTab = null
                                     showSetup = false
                                     showWaiting = false
                                     showItem(null)
@@ -813,13 +836,82 @@ class MainActivity : FragmentActivity() {
                                     BackHandler(onBack = onBack)
                                     SettingsScreen(vm, onSetup = { showSetup = true }, openPage = page)
                                 },
-                                setup = { onBack -> SetupScreen(vm, caps, onBack = onBack, onRecheck = { recheck++ }) }
+                                setup = { onBack -> SetupScreen(vm, caps, onBack = onBack, onRecheck = { recheck++ }) },
+                                liveEntry = { entry, onBack ->
+                                    LiveEntryScreen(
+                                        entry,
+                                        onBack,
+                                        caps,
+                                        onSetup = { showSetup = true },
+                                        onReviewWaiting = { showWaiting = true }
+                                    )
+                                }
                             ),
-                            onSwitchToClassic = vm::setClassicUi
+                            onSwitchToClassic = vm::setClassicUi,
+                            help = (application as EchoLedgerApp).graph.help
                         )
                     }
                 }
             }
+        }
+    }
+
+    /**
+     * What a row of the v2 Live tab opens: the existing Record (calls), voice note and Live Translate screens, the
+     * Dictation and Captions settings, and Live Assist's start on the recording under way.
+     */
+    @Composable
+    private fun LiveEntryScreen(
+        entry: com.echoledger.mobile.ui.v2.live.LiveEntry,
+        onBack: () -> Unit,
+        caps: com.echoledger.mobile.privilege.Capabilities,
+        onSetup: () -> Unit,
+        onReviewWaiting: () -> Unit
+    ) {
+        BackHandler(onBack = onBack)
+        when (entry) {
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Record ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.CALLS, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.VoiceNote ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.VOICE, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.LiveTranslate ->
+                RecordScreen(vm, caps, onSetup = onSetup, mode = RecordMode.GAME, onReviewWaiting = onReviewWaiting)
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Dictation -> SettingsScreen(vm, onSetup = onSetup, openPage = "voice")
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.Captions -> SettingsScreen(vm, onSetup = onSetup, openPage = "captions")
+
+            com.echoledger.mobile.ui.v2.live.LiveEntry.LiveAssist -> com.echoledger.mobile.ui.v2.assist.V2AssistStart(
+                onBack = onBack,
+                // A recording whose captions are still starting is left alone (the record button would stop it).
+                onRecord = { if (!RecordingService.isRecording) toggleRecording("live assist") },
+                start = { endOther ->
+                    val graph = (application as EchoLedgerApp).graph
+                    graph.api()?.let { api ->
+                        com.echoledger.mobile.assist.AssistHub.start(
+                            api,
+                            graph.settings.current().relayPins,
+                            graph.scope,
+                            endOther = endOther
+                        )
+                    } ?: com.echoledger.mobile.assist.AssistHub.Start.Failed(com.echoledger.mobile.core.Problems.SIGN_IN)
+                },
+                cardAllowed = { android.provider.Settings.canDrawOverlays(this) },
+                showCard = {
+                    com.echoledger.mobile.assist.AssistHub.active.value?.let {
+                        com.echoledger.mobile.overlay.AssistCardWindow.show(this, it)
+                    }
+                },
+                onAllowCard = {
+                    runCatching {
+                        startActivity(
+                            Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION, "package:$packageName".toUri())
+                        )
+                    }
+                }
+            )
         }
     }
 

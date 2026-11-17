@@ -38,11 +38,9 @@ import androidx.compose.material.icons.rounded.VideoCall
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -77,10 +75,12 @@ import com.echoledger.mobile.ui.design.IconTile
 import com.echoledger.mobile.ui.design.InlineBanner
 import com.echoledger.mobile.ui.design.LibraryItemRow
 import com.echoledger.mobile.ui.design.ListPadding
+import com.echoledger.mobile.ui.design.OutlinedTextField
 import com.echoledger.mobile.ui.design.RecordingRow
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SkeletonRow
 import com.echoledger.mobile.ui.design.SuccessCheck
+import com.echoledger.mobile.ui.design.TextButton
 import com.echoledger.mobile.ui.design.rowTime
 import java.time.Instant
 import java.time.LocalDate
@@ -387,14 +387,31 @@ private fun ProjectPage(
         onNested = { nested = it },
         onMenu = { sheet = it }
     )
-    when (sheet) {
-        "subfolder" -> ProjectNameDialog("New folder in ${project.name}", "", onDismiss = { sheet = null }) { name ->
-            sheet = null
+    sheet?.let { key -> ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject) }
+}
+
+/**
+ * What the project menu's items open ([PROJECT_MENU] keys): name, move, share, send, filing rules and delete dialogs.
+ * Today's project page and the v2 one (behind `ui_v2.ask`) both use these.
+ */
+@Composable
+internal fun ProjectMenuDialogs(
+    vm: MainViewModel,
+    project: ClientDto,
+    all: List<ClientDto>,
+    key: String,
+    onClose: () -> Unit,
+    onOpenProject: (String?) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    when (key) {
+        "subfolder" -> ProjectNameDialog("New folder in ${project.name}", "", onDismiss = { onClose() }) { name ->
+            onClose()
             scope.launch { vm.createProject(name, project.id)?.let { onOpenProject(it.id) } }
         }
 
-        "rename" -> ProjectNameDialog("Rename project", project.name, onDismiss = { sheet = null }) { name ->
-            sheet = null
+        "rename" -> ProjectNameDialog("Rename project", project.name, onDismiss = { onClose() }) { name ->
+            onClose()
             scope.launch { vm.renameProject(project.id, name) }
         }
 
@@ -403,20 +420,20 @@ private fun ProjectPage(
             all = all,
             allow = { target -> ProjectTree.canMove(all, project.id, target) },
             topLabel = "Top level",
-            onDismiss = { sheet = null }
+            onDismiss = { onClose() }
         ) { target ->
-            sheet = null
+            onClose()
             scope.launch { vm.moveProject(project.id, target) }
         }
 
-        "share" -> ShareSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { sheet = null })
+        "share" -> ShareSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { onClose() })
 
-        "send" -> SendSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { sheet = null })
+        "send" -> SendSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { onClose() })
 
-        "rules" -> FilingRulesSheet(vm, project, onDismiss = { sheet = null })
+        "rules" -> FilingRulesSheet(vm, project, onDismiss = { onClose() })
 
         "delete" -> AlertDialog(
-            onDismissRequest = { sheet = null },
+            onDismissRequest = { onClose() },
             title = { Text("Delete ${project.name}?") },
             text = {
                 Text(
@@ -425,11 +442,11 @@ private fun ProjectPage(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    sheet = null
+                    onClose()
                     scope.launch { if (vm.deleteProject(project.id)) onOpenProject(project.parentId) }
                 }) { Text("Delete", color = Brand.Danger) }
             },
-            dismissButton = { TextButton(onClick = { sheet = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { onClose() }) { Text("Cancel") } }
         )
     }
 }

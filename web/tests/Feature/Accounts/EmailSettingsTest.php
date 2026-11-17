@@ -260,9 +260,9 @@ it('queues every account email and draws it in the console theme', function (Acc
 })->with([
     'verify email' => [new VerifyEmailMail('https://ledger.test/verify/1'), 'https://ledger.test/verify/1'],
     'reset password' => [new ResetPasswordMail('https://ledger.test/reset/1'), 'https://ledger.test/reset/1'],
-    'invitation' => [new InvitationMail('Acme team', 'Hassam', 'https://ledger.test/invite/1', true), 'Acme team'],
+    'invitation' => [new InvitationMail('Acme team', 'Ayesha', 'https://ledger.test/invite/1', true), 'Acme team'],
     'login alert' => [new LoginAlertMail('S25 Ultra, Android', 'Nov 6, 2026 10:00', '203.0.113.9', 'PK', 'https://ledger.test/app/profile'), 'S25 Ultra, Android'],
-    'share received' => [new ShareReceivedMail('Hassam', 'Weekly call', false, 'https://ledger.test/admin/shared/1'), 'Weekly call'],
+    'share received' => [new ShareReceivedMail('Ayesha', 'Weekly call', false, 'https://ledger.test/admin/shared/1'), 'Weekly call'],
     'transcript ready' => [new TranscriptReadyMail('Weekly call', 'https://ledger.test/app/sessions/1'), 'Weekly call'],
     'export ready' => [new ExportReadyMail('https://ledger.test/export/1', 'Nov 7, 2026 10:00', '12 MB'), 'https://ledger.test/export/1'],
     'deletion scheduled' => [new DeletionScheduledMail('Nov 13, 2026', 'https://ledger.test/admin'), 'Nov 13, 2026'],

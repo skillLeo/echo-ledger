@@ -7,14 +7,14 @@ import { setting } from "../../lib/settingsRegistry";
 import { useLockedTag, useLocked } from "./Upgrade";
 import { EntityRow, InfoRow, LinkRow, ResetRow, Section, SelectRow, SwitchRow } from "./SettingsControls";
 
-const TARGET_HINT: Record<ScreenTarget, string> = {
+export const TARGET_HINT: Record<ScreenTarget, string> = {
   meeting_window: "Only the meeting app's window: nothing else on your screen is kept.",
   whole_screen: "The screen the meeting is on, without EchoLedger's own windows. Screens pause while an excluded app shows on it.",
 };
 /** macOS 15's monthly question, in plain words. */
 export const MONTHLY_NOTE = "From macOS 15, macOS asks again about once a month whether EchoLedger may still see your screen. That is normal: choose Allow. If you miss it, screen moments pause and the recording goes on.";
 /** Windows leaves EchoLedger out of a whole screen's picture only by hiding it from every screen capture meanwhile. */
-const WINDOWS_WHOLE_SCREEN = " Meanwhile Windows hides EchoLedger's window from screen sharing too.";
+export const WINDOWS_WHOLE_SCREEN = " Meanwhile Windows hides EchoLedger's window from screen sharing too.";
 
 /** A name as the excluded list compares it (the core cleans the list the same way): no capitals, spaces or `.exe`. */
 export function comparableApp(name: string): string {

@@ -209,12 +209,14 @@ describe("ending the running session from the prep", () => {
 });
 
 describe("the Live tab", () => {
-  const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn() });
+  const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn(), run: <T,>(fn: () => Promise<T>) => fn() });
 
   it("has Record, Live Assist (when on), Live Translate, Dictation and Captions", async () => {
     respond("assist_preps_list", [PREP]);
     const p = props();
-    render(<LiveV2 status={makeStatus()} assistOn projects={[]} translate={<p>translate panel</p>} {...p} />);
+    respond("translate_apps", [{ pid: 4242, name: "Valorant" }]);
+    respond("translate_status", null);
+    render(<LiveV2 status={makeStatus({ plan: { ...makeStatus().plan, liveTranslate: true } })} assistOn projects={[]} {...p} />);
     await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "Record now" }));
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
@@ -228,7 +230,8 @@ describe("the Live tab", () => {
     await act(flushAsync);
     const during = screen.getByRole("list", { name: "During a call" });
     fireEvent.click(within(during).getByRole("button", { name: "Live Translate" }));
-    expect(screen.getByText("translate panel")).toBeInTheDocument();
+    await act(flushAsync);
+    expect(screen.getByRole("region", { name: "Live Translate" })).toBeInTheDocument();
     fireEvent.click(within(during).getByRole("button", { name: "Dictation" }));
     expect(p.onSettings).toHaveBeenCalledWith("voice");
     fireEvent.click(within(during).getByRole("button", { name: "Captions" }));
@@ -248,7 +251,7 @@ describe("the Live tab", () => {
 });
 
 describe("the Live tab's and the prep's states", () => {
-  const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn() });
+  const props = () => ({ onRecord: vi.fn(), onVoiceNote: vi.fn(), onCaptions: vi.fn(), onSettings: vi.fn(), run: <T,>(fn: () => Promise<T>) => fn() });
 
   it("sessions: loading, then an error with Try again, never a false 'none scheduled'", async () => {
     let answer: (v: unknown) => void = () => undefined;

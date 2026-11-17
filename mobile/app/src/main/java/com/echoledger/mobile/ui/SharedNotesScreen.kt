@@ -4,6 +4,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,13 +12,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -35,6 +37,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.SharedNotes
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.delay
 
 /** How often the page asks the server how far the shared notes are (only while one is not done). */
@@ -93,47 +96,54 @@ internal fun SharedNotesScreen(
     }
 
     BackHandler { onLeave() }
-    Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onLeave) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
-            Text(
-                if (localIds.size == 1) "Voice note" else "${localIds.size} voice notes",
-                fontSize = 22.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            // Since v1.6 (P5.4): while it is still being made, Continue in background goes back and a notification follows it.
-            TextButton(onClick = {
-                if (!allDone) com.echoledger.mobile.share.SharedNotesWorker.enqueue(context, localIds)
-                onBackToSource()
-            }) { Text(if (allDone) "Back to ${sourceApp ?: "the app"}" else "Continue in background") }
-        }
-        statuses.forEachIndexed { i, status ->
-            SectionCard {
-                Row(
-                    Modifier.fillMaxWidth().clickable(enabled = status.stage != SharedNotes.Stage.WAITING && status.sessionId != null) {
-                        opened = status.sessionId
-                    },
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    if (!SharedNotes.done(status.stage)) {
-                        CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(12.dp))
-                    }
-                    Column(Modifier.weight(1f)) {
-                        Text(if (localIds.size == 1) "Shared voice note" else "Voice note ${i + 1}", fontWeight = FontWeight.SemiBold)
-                        Text(
-                            status.text,
-                            color = if (status.stage == SharedNotes.Stage.FAILED) Brand.Danger else Brand.Muted,
-                            fontSize = 13.sp,
-                            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
-                        )
+    // Since v1.8.1 (bug P-013): the notes scroll under the top bar, so with many notes or large text none is out of reach.
+    Column(Modifier.fillMaxSize()) {
+        com.echoledger.mobile.ui.design.EchoTopBar(
+            if (localIds.size == 1) "Voice note" else "${localIds.size} voice notes",
+            large = false,
+            navigation = {
+                IconButton(onClick = onLeave) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
+            },
+            actions = {
+                // Since v1.6 (P5.4): while it is still being made, Continue in background goes back and a notification follows it.
+                TextButton(onClick = {
+                    if (!allDone) com.echoledger.mobile.share.SharedNotesWorker.enqueue(context, localIds)
+                    onBackToSource()
+                }) { Text(if (allDone) "Back to ${sourceApp ?: "the app"}" else "Continue in background") }
+            }
+        )
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            itemsIndexed(statuses) { i, status ->
+                SectionCard {
+                    Row(
+                        Modifier.fillMaxWidth().clickable(enabled = status.stage != SharedNotes.Stage.WAITING && status.sessionId != null) {
+                            opened = status.sessionId
+                        },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (!SharedNotes.done(status.stage)) {
+                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(12.dp))
+                        }
+                        Column(Modifier.weight(1f)) {
+                            Text(if (localIds.size == 1) "Shared voice note" else "Voice note ${i + 1}", fontWeight = FontWeight.SemiBold)
+                            Text(
+                                status.text,
+                                color = if (status.stage == SharedNotes.Stage.FAILED) Brand.Danger else Brand.Muted,
+                                fontSize = 13.sp,
+                                modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+                            )
+                        }
                     }
                 }
             }
-        }
-        if (localIds.size == 1 && !allDone) {
-            Text("The transcript opens here as soon as it is ready.", color = Brand.Muted, fontSize = 12.sp)
+            if (localIds.size == 1 && !allDone) {
+                item { Text("The transcript opens here as soon as it is ready.", color = Brand.Muted, fontSize = 12.sp) }
+            }
         }
     }
 }

@@ -138,6 +138,8 @@ data class AppSettings(
     val uiFlags: Map<String, Boolean> = emptyMap(),
     /** This person chose "Switch back to classic" (since 2.0.0-a). */
     val uiClassic: Boolean = false,
+    /** The Live Assist relay host's pins from the server (`relay_pins`, since 1.9.0-g); empty: it can't connect yet. */
+    val relayPins: List<String> = emptyList(),
     /** How long a deleted recording can be restored, in hours, from the server (since 2.0.0-b; 48 on an older one). */
     val trashKeepHours: Int = com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
 ) {
@@ -239,6 +241,8 @@ class SettingsStore(private val context: Context, private val cipher: SecretCiph
     }
 
     suspend fun clearPairing() {
+        // A device report sent for this account is never attached to another account's support message.
+        com.echoledger.mobile.help.DeviceReports(context).clear()
         context.dataStore.edit {
             it.remove(Keys.TOKEN)
             it[Keys.SETTINGS] = ApiJson.encodeToString(AppSettings.serializer(), it.toSettings().copy(deviceId = null, deviceName = null))

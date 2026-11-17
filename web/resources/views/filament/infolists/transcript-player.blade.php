@@ -420,19 +420,19 @@
 
         <div class="el-head">
             <p class="el-meta-line">
-                <span x-text="d.kind === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript'"></span>
+                <span x-text="d.kind === 'live' ? {{ Js::from(__('Live captions (final transcript pending)')) }} : {{ Js::from(__('Final transcript')) }}"></span>
                 <span x-show="d.status && d.status !== 'completed'" x-text="'· ' + (d.status || '').replace('_', ' ')"></span>
                 <span x-text="'· ' + d.language"></span>
                 <span x-show="d.edited">· edited</span>
-                <span x-show="view !== 'original'" x-text="'· ' + ({roman: 'Roman Urdu', english: 'English', urdu: 'اردو'}[view] || '') + ' view'"></span>
+                <span x-show="view !== 'original'" x-text="'· ' + ({roman: {{ Js::from(__('Roman Urdu')) }}, english: {{ Js::from(__('English')) }}, urdu: 'اردو'}[view] || '') + {{ Js::from(__(' view')) }}"></span>
                 <span x-show="d.views && d.views.status === 'making'">· making the views…</span>
             </p>
             {{-- Show as: Roman Urdu · اردو · English · Original. A view not made yet is made when it is chosen. --}}
             <span class="el-views" role="group" aria-label="Show as" x-show="d.views && (d.views.available || []).length" x-cloak>
-                <button type="button" x-show="viewOffered('roman')" x-on:click="pickView('roman')" :aria-pressed="view === 'roman'" :data-unmade="viewReady('roman') ? null : ''">Roman Urdu</button>
+                <button type="button" x-show="viewOffered('roman')" x-on:click="pickView('roman')" :aria-pressed="view === 'roman'" :data-unmade="viewReady('roman') ? null : ''">{{ __('Roman Urdu') }}</button>
                 <button type="button" lang="ur" x-show="viewOffered('urdu')" x-on:click="pickView('urdu')" :aria-pressed="view === 'urdu'" :data-unmade="viewReady('urdu') ? null : ''">اردو</button>
-                <button type="button" x-show="viewOffered('english')" x-on:click="pickView('english')" :aria-pressed="view === 'english'" :data-unmade="viewReady('english') ? null : ''">English</button>
-                <button type="button" x-on:click="pickView('original')" :aria-pressed="view === 'original'">Original</button>
+                <button type="button" x-show="viewOffered('english')" x-on:click="pickView('english')" :aria-pressed="view === 'english'" :data-unmade="viewReady('english') ? null : ''">{{ __('English') }}</button>
+                <button type="button" x-on:click="pickView('original')" :aria-pressed="view === 'original'">{{ __('Original') }}</button>
                 @if (($data['views_locked'] ?? false) && ($viewsBadge = \App\Filament\Support\PlanLock::lowestBadge('views')))<button type="button" class="el-views-lock" x-show="d.views_locked" x-cloak x-on:click="$wire.mountAction('upgradeViews')" aria-label="Roman Urdu, English and Urdu views are not in your plan. See plans" data-views-locked>{!! $viewsBadge->toHtml() !!}</button>@endif
             </span>
         </div>
@@ -441,16 +441,16 @@
             <label class="el-find" x-show="d.segments.length">
                 <span class="el-i el-i-search" aria-hidden="true"></span>
                 <input type="search" x-model="find" x-on:input="hitAt = 0" x-on:keydown.enter.prevent="findMove($event.shiftKey ? -1 : 1)" x-on:keydown.escape="find = ''"
-                    placeholder="Find" aria-label="Find in the transcript">
-                <span class="el-find-count" x-show="find.trim().length > 1" x-text="hits().length ? (hitAt + 1) + ' of ' + hits().length : 'None'"></span>
+                    placeholder="{{ __('Find') }}" aria-label="{{ __('Find in the transcript') }}">
+                <span class="el-find-count" x-show="find.trim().length > 1" x-text="hits().length ? (hitAt + 1) + {{ Js::from(__(' of ')) }} + hits().length : {{ Js::from(__('None')) }}"></span>
                 <button type="button" x-show="hits().length > 1" x-on:click="findMove(-1)" aria-label="Previous match"><span class="el-i el-i-up" aria-hidden="true"></span></button>
                 <button type="button" x-show="hits().length > 1" x-on:click="findMove(1)" aria-label="Next match"><span class="el-i el-i-down" aria-hidden="true"></span></button>
             </label>
             <span class="el-spacer"></span>
-            <button type="button" class="el-btn" x-show="d.editable && view === 'original'" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? 'Done editing' : 'Edit text'"></button>
-            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
-            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
-            <button type="button" class="el-btn el-btn-text" x-show="d.segments.length" x-on:click="copy(false, true)" title="Unsure words marked [?word], with a first line that tells an AI what the marks mean" x-text="copied === 'ai' ? 'Copied' : 'Copy for AI'"></button>
+            <button type="button" class="el-btn" x-show="d.editable && view === 'original'" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? {{ Js::from(__('Done editing')) }} : {{ Js::from(__('Edit text')) }}"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? {{ Js::from(__('Copied')) }} : {{ Js::from(__('Copy text')) }}"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? {{ Js::from(__('Copied')) }} : (copied === 'failed' ? {{ Js::from(__('Copy failed')) }} : {{ Js::from(__('Copy with timestamps')) }})"></button>
+            <button type="button" class="el-btn el-btn-text" x-show="d.segments.length" x-on:click="copy(false, true)" title="Unsure words marked [?word], with a first line that tells an AI what the marks mean" x-text="copied === 'ai' ? {{ Js::from(__('Copied')) }} : {{ Js::from(__('Copy for AI')) }}"></button>
             <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : (saving !== null ? 'Saving' : ''))"></span>
         </div>
 
@@ -458,8 +458,8 @@
         <template x-for="(r, ri) in learn" :key="'learn' + ri">
             <div class="el-learn" role="status">
                 <span>Always write “<strong x-text="r.from"></strong>” as “<strong x-text="r.to"></strong>” for <span x-text="r.client_name"></span>?</span>
-                <button type="button" class="el-btn" x-on:click="teach(ri, true)">Yes</button>
-                <button type="button" class="el-btn el-btn-text" x-on:click="teach(ri, false)">No</button>
+                <button type="button" class="el-btn" x-on:click="teach(ri, true)">{{ __('Yes') }}</button>
+                <button type="button" class="el-btn el-btn-text" x-on:click="teach(ri, false)">{{ __('No') }}</button>
             </div>
         </template>
 
@@ -468,18 +468,18 @@
         <div class="el-chips" x-show="d.markers.length || d.pauses.length" aria-label="Bookmarks and pauses">
             <template x-for="(m, i) in d.markers" :key="'mc' + i">
                 <button type="button" class="el-chip" x-on:click="seekTo(m.at_ms)" :aria-label="'Play from the bookmark at ' + clock(m.at_ms)">
-                    <span class="el-time" x-text="clock(m.at_ms)"></span><span x-text="m.tag || 'Bookmark'"></span><span class="el-note" x-show="m.note" x-text="m.note"></span>
+                    <span class="el-time" x-text="clock(m.at_ms)"></span><span x-text="m.tag || {{ Js::from(__('Bookmark')) }}"></span><span class="el-note" x-show="m.note" x-text="m.note"></span>
                 </button>
             </template>
             <template x-for="(p, i) in d.pauses" :key="'pc' + i">
-                <span class="el-chip el-chip-pause" x-text="'Paused at ' + clock(p.at_ms) + ' for ' + clock(p.paused_ms)"></span>
+                <span class="el-chip el-chip-pause" x-text="{{ Js::from(__('Paused at ')) }} + clock(p.at_ms) + {{ Js::from(__(' for ')) }} + clock(p.paused_ms)"></span>
             </template>
         </div>
 
         {{-- Screen moments (v1.5): the transcript with the screens between its lines, or all of them as a gallery. --}}
         <div class="el-panels" role="tablist" aria-label="Transcript and screens" x-show="(d.screens || []).length" x-cloak>
-            <button type="button" role="tab" :aria-selected="panel === 'transcript'" x-on:click="panel = 'transcript'">Transcript</button>
-            <button type="button" role="tab" :aria-selected="panel === 'screens'" x-on:click="panel = 'screens'" x-text="'Screens ' + (d.screens || []).length">Screens</button>
+            <button type="button" role="tab" :aria-selected="panel === 'transcript'" x-on:click="panel = 'transcript'">{{ __('Transcript') }}</button>
+            <button type="button" role="tab" :aria-selected="panel === 'screens'" x-on:click="panel = 'screens'" x-text="{{ Js::from(__('Screens ')) }} + (d.screens || []).length">{{ __('Screens') }}</button>
         </div>
         <div class="el-gallery" x-show="panel === 'screens'" x-cloak aria-label="Screens of this recording">
             <template x-for="(s, k) in (d.screens || [])" :key="'g' + s.id">
@@ -489,7 +489,7 @@
                 </button>
             </template>
         </div>
-        <div class="el-empty" x-show="panel === 'transcript' && !d.segments.length">No transcript yet.</div>
+        <div class="el-empty" x-show="panel === 'transcript' && !d.segments.length">{{ __('No transcript yet.') }}</div>
         <div class="el-list" x-ref="list" x-show="panel === 'transcript' && d.segments.length" :lang="view === 'original' ? d.language_code : (view === 'urdu' ? 'ur' : null)" aria-label="Transcript. Choose a line to play from there.">
             <template x-for="s in screensAt(-1)" :key="'sb' + s.id">
                 <button type="button" class="el-screen" x-on:click="openShot(s.index - 1)" :aria-label="'Open ' + screenLabel(s)">
@@ -519,9 +519,9 @@
                                 </template>
                                 <template x-for="s in suggFor(i)" :key="'sg' + s.id">
                                     <p class="el-sugg-row">
-                                        <span>Suggested: “<strong x-text="s.from"></strong>” → “<strong x-text="s.to"></strong>”<span x-show="s.reason" x-text="' · ' + s.reason"></span></span>
-                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, true)">Accept</button>
-                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, false)">Dismiss</button>
+                                        <span>{{ __('Suggested:') }} {!! app()->getLocale() === 'ur' ? '<bdi>' : '' !!}“<strong x-text="s.from"></strong>”{!! app()->getLocale() === 'ur' ? '</bdi>' : '' !!} {{ app()->getLocale() === 'ur' ? '←' : '→' }} {!! app()->getLocale() === 'ur' ? '<bdi>' : '' !!}“<strong x-text="s.to"></strong>”{!! app()->getLocale() === 'ur' ? '</bdi>' : '' !!}{!! app()->getLocale() === 'ur' ? '<span x-show="s.reason"> · </span><bdi x-show="s.reason" x-text="s.reason"></bdi>' : '<span x-show="s.reason" x-text="\' · \' + s.reason"></span>' !!}</span>
+                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, true)">{{ __('Accept') }}</button>
+                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, false)">{{ __('Dismiss') }}</button>
                                     </p>
                                 </template>
                                 <template x-if="d.segments[i].check && !editing">
@@ -552,11 +552,11 @@
                     <img :src="d.screens[shot].image" :alt="screenLabel(d.screens[shot]) + (d.screens[shot].description ? ': ' + d.screens[shot].description : '')">
                     <figcaption><strong x-text="screenLabel(d.screens[shot])"></strong><span x-show="d.screens[shot].description" x-text="d.screens[shot].description"></span></figcaption>
                     <div class="el-shot-tools">
-                        <button type="button" class="el-btn" :disabled="shot === 0" x-on:click="moveShot(-1)">Previous</button>
-                        <button type="button" class="el-btn" :disabled="shot === d.screens.length - 1" x-on:click="moveShot(1)">Next</button>
-                        <button type="button" class="el-btn" x-show="$refs.audio" x-on:click="playShot()" x-text="'Play from ' + clock(d.screens[shot].at_ms)"></button>
+                        <button type="button" class="el-btn" :disabled="shot === 0" x-on:click="moveShot(-1)">{{ __('Previous') }}</button>
+                        <button type="button" class="el-btn" :disabled="shot === d.screens.length - 1" x-on:click="moveShot(1)">{{ __('Next') }}</button>
+                        <button type="button" class="el-btn" x-show="$refs.audio" x-on:click="playShot()" x-text="{{ Js::from(__('Play from ')) }} + clock(d.screens[shot].at_ms)"></button>
                         <span class="el-spacer"></span>
-                        <button type="button" class="el-btn el-btn-text" x-ref="shotClose" x-on:click="shot = null">Close</button>
+                        <button type="button" class="el-btn el-btn-text" x-ref="shotClose" x-on:click="shot = null">{{ __('Close') }}</button>
                     </div>
                 </figure>
             </template>
@@ -592,7 +592,7 @@
                 </div>
             </div>
         @else
-            <div class="el-empty">Audio is not available (still uploading, deleted, or retention expired).</div>
+            <div class="el-empty">{{ __('Audio is not available (still uploading, deleted, or retention expired).') }}</div>
         @endif
     </div>
 </x-dynamic-component>

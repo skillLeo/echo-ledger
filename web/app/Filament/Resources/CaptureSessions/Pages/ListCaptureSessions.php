@@ -6,10 +6,12 @@ namespace App\Filament\Resources\CaptureSessions\Pages;
 
 use App\Filament\Concerns\DropsRecordings;
 use App\Filament\Pages\SharedWithMe;
+use App\Filament\Pages\Upload;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Widgets\FailedUploadsWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\PlanLimitWidget;
 use App\Filament\Resources\CaptureSessions\Widgets\WaitingDecisionsWidget;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\Shell;
@@ -35,6 +37,7 @@ use Filament\Support\Facades\FilamentView;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\View\TablesRenderHook;
 use Filament\View\PanelsRenderHook;
+use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Builder;
 use Livewire\Attributes\On;
@@ -216,6 +219,12 @@ class ListCaptureSessions extends ListRecords
                 ->badge($counts[$view] > 0 ? $counts[$view] : null)
                 ->modifyQueryUsing(fn (Builder $query): Builder => $organiser->applyView($query, $view));
         }
+        // Since v2.0 (ui_v2.library): the apps' saved view Untranscribed.
+        if (ConsoleV2::library()) {
+            $untranscribed = $organiser->untranscribedCount((int) CurrentWorkspace::id());
+            $tabs['untranscribed'] = Tab::make(__('Untranscribed'))->badge($untranscribed > 0 ? $untranscribed : null)
+                ->modifyQueryUsing(fn (Builder $query): Builder => $organiser->applyView($query, 'untranscribed'));
+        }
 
         return $tabs;
     }
@@ -238,6 +247,34 @@ class ListCaptureSessions extends ListRecords
         return $folders;
     }
 
+    /**
+     * The v2.0 Library's saved views as chips: All, Today, Untranscribed, Pinned and Voice notes, with Waiting and
+     * Failed uploads only while they hold something. Each is a place openPlace() opens.
+     *
+     * @return list<array{key: string, label: string, count: int|null, on: bool}>
+     */
+    public function v2Views(): array
+    {
+        $tabs = $this->getCachedTabs();
+        $badge = fn (string $key): ?int => isset($tabs[$key]) && is_numeric($tabs[$key]->getBadge()) ? (int) $tabs[$key]->getBadge() : null;
+        $place = $this->activePlace();
+        $voice = $this->folders()['voice_notes']['count'] ?? 0;
+        $views = [
+            ['key' => 'all', 'label' => __('All'), 'count' => null],
+            ['key' => 'today', 'label' => __('Today'), 'count' => $badge('today')],
+            ['key' => 'untranscribed', 'label' => __('Untranscribed'), 'count' => $badge('untranscribed')],
+            ['key' => 'pinned', 'label' => __('Pinned'), 'count' => $badge('pinned')],
+            ['key' => 'folder:voice_notes', 'label' => __('Voice notes'), 'count' => $voice > 0 ? $voice : null],
+        ];
+        foreach (['waiting' => __('Waiting'), 'failed' => __('Failed uploads')] as $key => $label) {
+            if ($badge($key) !== null || $place === $key) {
+                $views[] = ['key' => $key, 'label' => $label, 'count' => $badge($key)];
+            }
+        }
+
+        return array_map(fn (array $v): array => $v + ['on' => $v['key'] === $place], $views);
+    }
+
     /** The empty state's "Show all recordings": no smart view and no folder. */
     public function showAllRecordings(): void
     {
@@ -258,7 +295,7 @@ class ListCaptureSessions extends ListRecords
         } elseif (str_starts_with($key, 'folder:') && array_key_exists(substr($key, 7), self::FOLDER_LABELS) && $key !== 'folder:shared') {
             $this->folder = substr($key, 7);
             $this->activeTab = 'all';
-        } elseif (array_key_exists($key, self::VIEW_LABELS)) {
+        } elseif (array_key_exists($key, self::VIEW_LABELS) || ($key === 'untranscribed' && ConsoleV2::library())) {
             $this->folder = null;
             $this->activeTab = $key;
         } else {
@@ -277,7 +314,7 @@ class ListCaptureSessions extends ListRecords
         }
         $tab = (string) ($this->activeTab ?: 'all');
 
-        return array_key_exists($tab, self::VIEW_LABELS) ? $tab : 'all';
+        return array_key_exists($tab, self::VIEW_LABELS) || ($tab === 'untranscribed' && ConsoleV2::library()) ? $tab : 'all';
     }
 
     /** A recording moved by a drop on the sidebar: the list is drawn again with it in its new place. */
@@ -325,6 +362,11 @@ class ListCaptureSessions extends ListRecords
      */
     protected function getHeaderWidgets(): array
     {
+        // Since v2.0 (ui_v2.library) Waiting and Failed uploads are saved views with their counts; Home lists what needs you.
+        if (ConsoleV2::library()) {
+            return [PlanLimitWidget::class];
+        }
+
         return [WaitingDecisionsWidget::class, FailedUploadsWidget::class, PlanLimitWidget::class];
     }
 
@@ -340,6 +382,22 @@ class ListCaptureSessions extends ListRecords
      */
     public function content(Schema $schema): Schema
     {
+        // Since v2.0 (ui_v2.library): the apps' Library, one column: the saved views as chips, the search and the
+        // quick filters, then the rows grouped by day; the chosen recording still opens beside the list.
+        if (ConsoleV2::library()) {
+            return $schema->components([
+                View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
+                    ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
+                Group::make([
+                    View::make('filament.v2.library-views'),
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_BEFORE),
+                    EmbeddedTable::make(),
+                    RenderHook::make(PanelsRenderHook::RESOURCE_PAGES_LIST_RECORDS_TABLE_AFTER),
+                ])->extraAttributes(['class' => 'v2-library el-library']),
+                View::make('filament.library.detail')->viewData(fn (): array => ['detail' => $this->selectedRecording()]),
+            ]);
+        }
+
         return $schema->components([
             View::make('filament.library.uploader')->visible(fn (): bool => ! ConsoleAccess::readOnly())
                 ->viewData(fn (): array => ['config' => self::uploaderConfig(), 'compact' => true]),
@@ -369,7 +427,9 @@ class ListCaptureSessions extends ListRecords
     {
         // Both are registered together: the scoped one says whether this panel's views have them already.
         if (! FilamentView::hasRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, self::class)) {
-            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self ? view('filament.library.toolbar')->render() : '');
+            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_AFTER, fn (): string => Livewire::current() instanceof self && ! ConsoleV2::library() ? view('filament.library.toolbar')->render() : '');
+            // Since v2.0 (ui_v2.library): the quick filters right after the search field.
+            FilamentView::registerRenderHook(TablesRenderHook::TOOLBAR_SEARCH_AFTER, fn (): string => Livewire::current() instanceof self && ConsoleV2::library() ? view('filament.v2.library-toolbar')->render() : '');
             FilamentView::registerRenderHook(TablesRenderHook::SELECTION_INDICATOR_ACTIONS_BEFORE, fn (): ViewContract => view('filament.library.bulk-bar'), scopes: self::class);
         }
     }
@@ -406,6 +466,15 @@ class ListCaptureSessions extends ListRecords
         if (ConsoleAccess::readOnly()) {
             return [];
         }
+        // Since v2.0 (ui_v2.library): Import beside the one primary action, a voice note recorded here.
+        if (ConsoleV2::library()) {
+            return [
+                Action::make('upload')->label(__('Import'))->color('gray')->outlined()
+                    ->alpineClickHandler("\$dispatch('el-upload-pick')"),
+                Action::make('voiceNote')->label(__('New voice note'))
+                    ->url(fn (): string => Upload::getUrl(['record' => 1])),
+            ];
+        }
 
         return [
             // Opens the file picker of the drop zone below (several files at once, on phones too).
@@ -435,6 +504,11 @@ class ListCaptureSessions extends ListRecords
             'maxBytes' => (int) config('echoledger.max_recording_bytes'),
             'nativeHashMaxBytes' => self::NATIVE_HASH_MAX_BYTES,
         ];
+    }
+
+    public function getTitle(): string|Htmlable
+    {
+        return ConsoleV2::library() ? __('Library') : parent::getTitle();
     }
 
     /** A list page is the top of its section: no "Sessions > List" trail (C3). */

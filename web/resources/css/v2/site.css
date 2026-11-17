@@ -1,0 +1,453 @@
+/*
+ * The v2.0 website (ui_v2.website, docs/v2/DESIGN_SYSTEM.md): Home, Pricing and Download. Every value comes from
+ * tokens/ (resources/css/tokens.css); light and dark follow the system. No gradient (the hero's one tonal gradient
+ * waits for the owner's approval), no grid of identical feature cards, shadows on nothing but floating layers.
+ * A media query can't read a variable, so the window breakpoints are written as tokens.css defines them.
+ */
+@import '../tokens.css';
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+.s-body {
+    margin: 0;
+    background-color: var(--el-role-bg-canvas);
+    color: var(--el-role-text-primary);
+    font-family: var(--el-font-family-sans);
+    font-size: var(--el-text-body-mobile-size);
+    line-height: var(--el-text-body-mobile-line);
+}
+
+.s-wrap {
+    width: 100%;
+    max-width: calc(var(--el-space-64) * 16);
+    margin-inline: auto;
+    padding-inline: var(--el-layout-page-padding-mobile);
+}
+
+@media (min-width: 1024px) {
+    .s-wrap {
+        padding-inline: var(--el-layout-page-padding-desktop);
+    }
+}
+
+.s-skip {
+    position: absolute;
+    inset-inline-start: var(--el-space-8);
+    top: calc(var(--el-space-64) * -1);
+    padding: var(--el-space-8) var(--el-space-12);
+    border-radius: var(--el-radius-sm);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+.s-skip:focus {
+    top: var(--el-space-8);
+}
+
+:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}
+
+a {
+    color: inherit;
+}
+
+.s-link {
+    color: var(--el-role-accent-text);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+/* the frame */
+.s-header {
+    border-bottom: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.s-header-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-16);
+    min-height: var(--el-space-64);
+}
+
+.s-brand {
+    margin-inline-end: auto;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+    text-decoration: none;
+}
+
+.s-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-20);
+    font-size: var(--el-text-body-size);
+}
+
+.s-nav a {
+    color: var(--el-role-text-secondary);
+    text-decoration: none;
+}
+
+.s-nav a:hover,
+.s-nav a[aria-current='page'] {
+    color: var(--el-role-text-primary);
+}
+
+.s-nav a[aria-current='page'] {
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+@media (max-width: 720px) {
+    .s-header-row {
+        padding-block: var(--el-space-12);
+    }
+
+    /* On a phone the page's own primary action is enough: the header keeps its links. */
+    .s-header .s-header-action {
+        display: none;
+    }
+}
+
+.s-main {
+    padding-block: var(--el-space-48) var(--el-space-64);
+}
+
+.s-footer {
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.s-footer-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-16);
+    padding-block: var(--el-space-24) var(--el-space-40);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+}
+
+/* type */
+.s-display {
+    margin: 0 0 var(--el-space-16);
+    font-size: var(--el-text-display-size);
+    font-weight: var(--el-text-display-weight);
+    line-height: var(--el-text-display-line);
+}
+
+.s-title {
+    margin: 0 0 var(--el-space-12);
+    font-size: var(--el-text-title-m-size);
+    font-weight: var(--el-text-title-m-weight);
+    line-height: var(--el-text-title-m-line);
+}
+
+.s-lead {
+    max-width: calc(var(--el-space-64) * 11);
+    margin: 0 0 var(--el-space-24);
+    color: var(--el-role-text-secondary);
+}
+
+.s-text {
+    margin: 0;
+    color: var(--el-role-text-secondary);
+}
+
+.s-note,
+.s-meta {
+    margin: 0;
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+}
+
+.s-note {
+    margin-top: var(--el-space-16);
+}
+
+.s-code {
+    font-family: var(--el-font-family-mono);
+    font-size: var(--el-text-mono-size);
+    overflow-wrap: anywhere;
+}
+
+/* buttons: one primary per area */
+.s-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--el-space-12);
+    margin: 0;
+}
+
+.s-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: var(--el-layout-control-touch-min);
+    padding-inline: var(--el-space-20);
+    border: var(--el-border-hairline) solid transparent;
+    border-radius: var(--el-component-button-radius);
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background-color var(--el-motion-fast) var(--el-motion-ease-out);
+}
+
+.s-header .s-btn {
+    min-height: var(--el-component-button-height);
+    padding-inline: var(--el-component-button-padding-x);
+}
+
+.s-btn-primary {
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}
+
+.s-btn-primary:hover {
+    background-color: var(--el-role-accent-hover);
+}
+
+.s-btn-secondary {
+    border-color: var(--el-role-border-strong);
+    background-color: var(--el-role-bg-surface);
+    color: var(--el-role-text-primary);
+}
+
+.s-btn-secondary:hover {
+    background-color: var(--el-role-bg-subtle);
+}
+
+/* Home */
+.s-hero {
+    padding-block: var(--el-space-24) var(--el-space-48);
+}
+
+.s-points {
+    display: flex;
+    flex-direction: column;
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+/* Each point a row: the glyph, the title, then the words; on a computer the words sit beside the title. */
+.s-point {
+    display: grid;
+    grid-template-columns: var(--el-icon-lg) 1fr;
+    column-gap: var(--el-space-16);
+    row-gap: var(--el-space-4);
+    padding-block: var(--el-space-24);
+    border-bottom: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.s-point-icon {
+    width: var(--el-icon-lg);
+    height: var(--el-icon-lg);
+    color: var(--el-role-accent-default);
+}
+
+.s-point-title {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.s-point-text {
+    grid-column: 2;
+    margin: 0;
+    color: var(--el-role-text-secondary);
+}
+
+@media (min-width: 1024px) {
+    .s-point {
+        grid-template-columns: var(--el-icon-lg) calc(var(--el-space-64) * 4) 1fr;
+    }
+
+    .s-point-text {
+        grid-column: 3;
+    }
+}
+
+.s-band {
+    margin-top: var(--el-space-48);
+}
+
+/* Pricing: the plans side by side on a computer, one under another on a phone (cards: mixed content). */
+.s-page-head {
+    margin-bottom: var(--el-space-32);
+}
+
+.s-plans {
+    display: grid;
+    gap: var(--el-space-16);
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+    .s-plans {
+        grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 4), 1fr));
+    }
+}
+
+.s-plan {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-12);
+    padding: var(--el-space-24);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.s-plan-name {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.s-plan-price {
+    margin: 0;
+    font-size: var(--el-text-title-l-size);
+    font-weight: var(--el-text-title-l-weight);
+    line-height: var(--el-text-title-l-line);
+}
+
+.s-plan-everything {
+    margin: 0;
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.s-list,
+.s-limits,
+.s-bullets,
+.s-builds {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.s-list {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+}
+
+.s-list li {
+    display: flex;
+    gap: var(--el-space-8);
+}
+
+.s-list .v2-icon {
+    flex: none;
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+    color: var(--el-role-accent-default);
+}
+
+.s-limits {
+    padding-top: var(--el-space-12);
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    line-height: var(--el-text-body-line);
+}
+
+/* Download */
+.s-section {
+    margin-top: var(--el-space-40);
+}
+
+.s-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    margin: 0;
+    padding-inline-start: var(--el-space-24);
+}
+
+.s-bullets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--el-space-8);
+    color: var(--el-role-text-secondary);
+}
+
+.s-bullets strong,
+.s-steps strong {
+    color: var(--el-role-text-primary);
+}
+
+.s-builds {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.s-build {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--el-space-16);
+    padding: var(--el-space-16) var(--el-space-20);
+}
+
+.s-build + .s-build {
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.s-build-main {
+    display: flex;
+    flex: 1;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--el-space-4);
+}
+
+.s-build-name {
+    margin: 0;
+    font-size: var(--el-text-title-s-size);
+    font-weight: var(--el-text-title-s-weight);
+    line-height: var(--el-text-title-s-line);
+}
+
+.s-hash {
+    color: var(--el-role-text-secondary);
+}
+
+.s-details {
+    padding: var(--el-space-16) var(--el-space-20);
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.s-details summary {
+    cursor: pointer;
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.s-details .s-bullets {
+    margin-top: var(--el-space-12);
+}
+
+/* the glyphs the site shares with the console (components/el/v2/icon) */
+.v2-icon {
+    width: var(--el-icon-md);
+    height: var(--el-icon-md);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .s-btn {
+        transition: none;
+    }
+}

@@ -10,7 +10,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextDirection
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -33,6 +32,7 @@ fun EchoTranscriptLine(speaker: String, time: String, text: String, modifier: Mo
             Text(speaker, style = EchoV2.type.label, color = if (isMe) c.textSecondary else c.textPrimary, maxLines = 1)
             Text(time, style = EchoV2.type.mono, color = c.textSecondary)
         }
-        Text(text, style = EchoV2.type.body.copy(textDirection = TextDirection.Content), color = c.textPrimary)
+        // Its own direction, and the system face for an English line on an Urdu screen (not the Urdu font's Latin).
+        Text(text, style = EchoV2.type.content(text, EchoV2.type.body), color = c.textPrimary)
     }
 }

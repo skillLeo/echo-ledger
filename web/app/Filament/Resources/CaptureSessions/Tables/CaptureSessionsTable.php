@@ -12,6 +12,7 @@ use App\Exceptions\ApiError;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Pages\ListCaptureSessions;
 use App\Filament\Resources\Devices\DeviceResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\FailedUpload;
 use App\Filament\Support\LibraryView;
 use App\Filament\Support\Notice as Notification;
@@ -72,10 +73,11 @@ final class CaptureSessionsTable
             ->groups(LibraryView::groups())
             ->groupingSettingsHidden()
             ->groupingDirectionSettingHidden()
-            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with('labels'))
+            ->modifyQueryUsing(fn (Builder $query): Builder => $query->with(ConsoleV2::library() ? ['labels', 'finalTranscript', 'client'] : 'labels'))
             // The phone's list: one row per recording (tile, title, time, a second line, a status only when needed).
             // Since v1.6 (P4.4) the Library's List/Table switch shows a table instead, its columns chosen in Columns.
-            ->columns(self::isTable($table) ? self::tableColumns() : [
+            // Since v2.0 (ui_v2.library) the rows of the apps' Library: filament.v2.library-row.
+            ->columns(self::isTable($table) ? self::tableColumns() : (ConsoleV2::library() ? self::v2Columns() : [
                 Split::make([
                     ViewColumn::make('title')->label('Title')->view('filament.library.row')
                         ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
@@ -94,7 +96,7 @@ final class CaptureSessionsTable
                 TextColumn::make('device.name')->label('Device')->state(fn (CaptureSession $r): string => self::deviceLabel($r))->hidden(),
                 TextColumn::make('status')->hidden(),
                 TextColumn::make('finalTranscript.status')->label('Transcript')->hidden(),
-            ])
+            ]))
             ->columnManagerTriggerAction(fn (Action $action): Action => $action->label('Columns')->icon(Heroicon::OutlinedViewColumns))
             ->recordClasses(fn (CaptureSession $record, HasTable $livewire): ?string => property_exists($livewire, 'selected') && $livewire->selected === $record->id ? 'el-current' : null)
             ->filters([
@@ -167,6 +169,22 @@ final class CaptureSessionsTable
                     ->visible(fn (HasTable $livewire, Table $table): bool => self::emptyState($livewire, $table)['kind'] === 'empty')
                     ->url(fn (): string => DeviceResource::getUrl('index')),
             ]);
+    }
+
+    /**
+     * The v2.0 Library's list (ui_v2.library): one row per recording as the apps draw it, the source's icon, the
+     * title, one status at most, the second line, and the time above the length.
+     *
+     * @return list<Split>
+     */
+    public static function v2Columns(): array
+    {
+        return [
+            Split::make([
+                ViewColumn::make('title')->label(__('Title'))->view('filament.v2.library-row')
+                    ->searchable(query: fn (Builder $query, string $search): Builder => self::searchTitleOrClient($query, $search)),
+            ]),
+        ];
     }
 
     /** Whether the Library shows its table rather than its list (the page's List/Table switch). */

@@ -22,20 +22,49 @@ first: it gates the release.
    4. Press Capture screen now, then Bookmark; wait 30 seconds; stop.
    5. After upload, open the recording: pass if it is about 1:30 long with the screen and bookmark at about 1:00.
       Send a photo of the pill after waking and of the recording page.
-4. DC-03, if a second monitor is at hand: open the main window and the pill on the second display, unplug it, check
-   both come back on screen; plug it back and drag the pill across.
+4. DC-03 (needs the v2 test build from the main code, not the 1.8.1 installer; only if time is left and a 150 %
+   second display is at hand). Start it from PowerShell so it keeps a log:
+   `Start-Process "<path>\echoledger-desktop.exe" -RedirectStandardError "$env:TEMP\echoledger-log.txt"`
+   1. Start a recording; drag the pill onto the 150 % display and press Mark at once: it answers at once, same size,
+      not cut off. Drag it back and repeat.
+   2. Drag the Live Assist card near the right edge of the 150 % display; quit and restart: pill and card open there,
+      whole.
+   3. With both on the 150 % display, unplug it: within about 5 s both move to the other display, whole, clickable.
+   4. Make the 150 % display the primary and stop a recording: the after-call card docks bottom-right, whole.
+   Send the log lines that start "[echoledger] placing" and "... was off screen at".
 
 **2. Gate 3, about 15 minutes**
 Look at the 24 sample screens (phone and desktop, light and dark, English and Urdu) in `docs/v2/gate3/` and choose the
-look, or say what to change.
+look, or say what to change. Also look at the website (`docs/v2/web/site/`, Home, Pricing and Download, light and
+dark) and approve the new Home lines: "written down" instead of "word for word", "transcripts you can trust" instead
+of "accurate transcripts", "Urdu and Roman Urdu" instead of "Urdu, accurately".
 
 **3. Decisions, 5 minutes**
 Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
+Also: the desktop app's words are English only (the phone is translated). Its Urdu pictures show the right-to-left
+layout with English words. Translating the desktop interface into Urdu is a separate piece of work: now, or later?
+Each Gate 3 folder (phone and desktop) has an index of its pictures.
 
 **4. Mac, if time is left, about 15 minutes**
 DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build. Later, in a v2 Mac build: Cmd+Z on an
 Undo toast undoes the delete, and Edit › Undo still works in text fields (D-150) (the first self-signed build asks once
 for the microphone, system audio and Screen Recording; allow them, then they stay).
+
+**5. Mac, Live Translate (next free Mac slot, about 25 minutes)**
+macOS 14.2 or later, the build from `b-desktop-core-5`, a plan with Live Translate; allow System Audio Recording;
+start the app from Terminal for its log.
+1. Chrome: play a YouTube video with speech, open Live Translate, pick "Google Chrome", start Watch. Subtitles appear
+   bottom-centre within a few seconds; the video still sounds normal; no orange microphone dot. Stop: the window
+   closes and Cmd+Shift+T reopens a closed tab in Chrome again.
+2. While it runs: Cmd+Shift+T unlocks (drag it) and locks (clicks pass through); Cmd+Shift+H hides and shows the
+   content, and something visible still says it is listening.
+3. Only the app picked: also play Music or Spotify; none of their words appear.
+4. Safari: play a video; Safari is expected not to be listed. Note what the list shows.
+5. Zoom: join zoom.us/test, play its audio, pick "zoom.us", start Game: captions top-centre.
+6. A full-screen app or game: the window stays above it, in its full-screen Space too.
+7. AirPods as output: repeat step 1; no microphone indicator at any point.
+8. Pause the video, then Start: the window says the app stopped playing sound, or the app is no longer listed.
+Send the "[echoledger]" log lines and any notice with an OSStatus number.
 
 ## Phone (S25, Android 17) — v1.8.1 S5 retest + v1.8 0.3, about 35 minutes
 

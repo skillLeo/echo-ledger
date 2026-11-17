@@ -31,6 +31,8 @@ import com.echoledger.mobile.ui.v2.components.EchoSearchField
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
+import com.echoledger.mobile.ui.v2.help.HelpSource
+import com.echoledger.mobile.ui.v2.help.V2HelpScreen
 import com.echoledger.mobile.ui.v2.shell.ProfileCardSlot
 import com.echoledger.mobile.ui.v2.shell.ProfileState
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -119,9 +121,9 @@ sealed interface SettingsRoute {
 
 /**
  * Settings v2 (behind `ui_v2.settings`): the profile card at the top, search that reaches every individual setting
- * and jumps to it, the goals of docs/v2/IA.md with their pages and values, and Sign out. Appearance, Notifications and
- * Setup & health are v2 pages; the others open their classic page ([openClassicPage]) with the same settings and
- * actions. Nothing here changes the view model: choices go through [MainViewModel.updateSettings] as before.
+ * and jumps to it, the goals of docs/v2/IA.md with their pages and values, and Sign out. The pages of
+ * [SettingsTree.nativePages] are v2 pages; the others open their classic page ([openClassicPage]) with the same settings
+ * and actions. Nothing here changes the view model: choices go through [MainViewModel.updateSettings] as before.
  */
 @Composable
 fun V2SettingsScreen(
@@ -132,7 +134,9 @@ fun V2SettingsScreen(
     openClassicPage: @Composable (page: String, onBack: () -> Unit) -> Unit,
     setupPage: @Composable (highlight: String?, onBack: () -> Unit) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Help v2's source (the phone core's); without one, Help opens its classic page. */
+    help: HelpSource? = null
 ) {
     val settings by vm.settings.collectAsState()
     var route by remember { mutableStateOf<SettingsRoute>(SettingsRoute.Root) }
@@ -152,8 +156,37 @@ fun V2SettingsScreen(
             val back = { route = SettingsRoute.Root }
             when (r.id) {
                 "appearance" -> AppearancePage(settings, vm::updateSettings, flags, onSwitchToClassic, r.highlight, back)
+
                 "notifications" -> NotificationsPage(settings, vm::updateSettings, r.highlight, back)
+
                 SettingsTree.SETUP -> setupPage(r.highlight, back)
+
+                "calls" -> CallsPage(settings, vm::updateSettings, r.highlight, back, onSetup = {
+                    route =
+                        SettingsRoute.Page(SettingsTree.SETUP)
+                })
+
+                "language" -> LanguagePage(vm, settings, r.highlight, back)
+
+                "words" -> WordsPage(vm, settings, r.highlight, back)
+
+                "key" -> KeyPage(vm, settings.plan, r.highlight, back)
+
+                "lock" -> AppLockPage(settings, vm::updateSettings, { vm.setWidgetHideTitles(it) }, r.highlight, back)
+
+                "privacy" -> PrivacyPage(settings, vm::updateSettings, r.highlight, { page -> route = SettingsRoute.Page(page) }, back)
+
+                "storage" -> StoragePage(
+                    load = { vm.storage() },
+                    planStorage = settings.plan.limits["storage_bytes"],
+                    keepHours = settings.trashKeepHours,
+                    highlight = r.highlight,
+                    onBack = back
+                )
+
+                // Help v2 (guides, what's new, contact support); its phone check is the classic help page.
+                "help" -> if (help != null) HelpPage(help, openClassicPage, back) else openClassicPage(r.id, back)
+
                 else -> openClassicPage(r.id, back)
             }
         }
@@ -245,5 +278,15 @@ fun V2SettingsRoot(
                 item { EchoSettingRow(stringResource(R.string.v2_set_sign_out), icon = EchoIcons.SignOut, onClick = onSignOut) }
             }
         }
+    }
+}
+
+@Composable
+private fun HelpPage(help: HelpSource, openClassicPage: @Composable (String, () -> Unit) -> Unit, onBack: () -> Unit) {
+    var phoneCheck by remember { mutableStateOf(false) }
+    if (phoneCheck) {
+        openClassicPage("help") { phoneCheck = false }
+    } else {
+        V2HelpScreen(help, onPhoneCheck = { phoneCheck = true }, onBack = onBack)
     }
 }

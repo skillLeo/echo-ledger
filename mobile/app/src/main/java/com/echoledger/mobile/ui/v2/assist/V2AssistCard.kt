@@ -30,6 +30,7 @@ import androidx.compose.runtime.withFrameMillis
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
@@ -40,9 +41,11 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.R
 import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoButtonKind
@@ -198,6 +201,14 @@ private fun AssistExpanded(
             }
             if (!noteSeen && state.meetingType != null) {
                 Reminder(state.meetingType, onCopyConsent, onOk = { noteSeen = true })
+            }
+            if (state.autoPaused) {
+                Text(
+                    stringResource(R.string.v2_assist_auto_paused),
+                    style = EchoV2.type.meta,
+                    color = c.textSecondary,
+                    modifier = Modifier.padding(horizontal = EchoTokens.Space.s16)
+                )
             }
             state.modeChange?.let { change ->
                 modeNote(change)?.let {
@@ -373,12 +384,17 @@ private fun Reminder(meeting: MeetingType, onCopyConsent: () -> Unit, onOk: () -
             )
         } else {
             Text(stringResource(R.string.v2_assist_consent_label), style = EchoV2.type.caption, color = c.textSecondary)
-            Text(
-                stringResource(R.string.v2_assist_consent),
-                style = EchoV2.type.metaLatin.copy(textDirection = TextDirection.Ltr),
-                color = c.textPrimary,
-                modifier = Modifier.padding(end = EchoTokens.Space.s8)
-            )
+            // The sentence to say is English in every language: laid out left to right as a whole (its own direction,
+            // alignment and layout), so on an Urdu screen its "?" stays at the end of the last line.
+            CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                Text(
+                    stringResource(R.string.v2_assist_consent),
+                    style = EchoV2.type.metaLatin.copy(textDirection = TextDirection.Ltr),
+                    color = c.textPrimary,
+                    textAlign = TextAlign.Left,
+                    modifier = Modifier.fillMaxWidth().padding(end = EchoTokens.Space.s8).testTag(CONSENT_TAG)
+                )
+            }
         }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
             if (meeting !=
@@ -396,3 +412,6 @@ const val TEXT_TAG = "assist-text"
 
 /** Lines of suggestion shown at large text before the text area scrolls. */
 private const val MAX_LINES_LARGE = 6
+
+/** The consent sentence, for tests. */
+const val CONSENT_TAG = "assist-consent"

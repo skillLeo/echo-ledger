@@ -23,10 +23,13 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.text.TextLayoutResult
+import androidx.compose.ui.text.style.ResolvedTextDirection
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.assist.AssistCard
 import com.echoledger.mobile.ui.v2.assist.AssistFixtures
 import com.echoledger.mobile.ui.v2.assist.AssistMessage
+import com.echoledger.mobile.ui.v2.assist.CONSENT_TAG
 import com.echoledger.mobile.ui.v2.assist.CardState
 import com.echoledger.mobile.ui.v2.assist.EndStatus
 import com.echoledger.mobile.ui.v2.assist.FixtureAssistAdapter
@@ -162,6 +165,24 @@ class LiveAssistUiTest {
         val sixLines = EchoTokens.Type.bodyMobile.lineHeight.value * 6 * 2f * node.layoutInfo.density.density
         assertTrue("${node.size.height} > $sixLines", node.size.height <= sixLines + 1)
         compose.onNodeWithText("Rate held", substring = true).performScrollTo().assertIsDisplayed()
+    }
+
+    @Test
+    fun theConsentSentenceReadsLeftToRightOnAnUrduScreen() {
+        show(EchoLanguage.Urdu) { V2AssistCard(AssistCard.reduce(AssistFixtures.clientCall), true, {}, {}, {}) }
+        val node = compose.onNodeWithTag(CONSENT_TAG).fetchSemanticsNode()
+        val results = mutableListOf<TextLayoutResult>()
+        node.config[SemanticsActions.GetTextLayoutResult].action?.invoke(results)
+        val layout = results.single()
+        val text = layout.layoutInput.text.text
+        assertTrue(text, text.endsWith("Is that okay with you?"))
+        assertEquals(ResolvedTextDirection.Ltr, layout.getParagraphDirection(0))
+        // Every line starts at the left, and the "?" is the last thing on the last line, at its right.
+        val last = layout.lineCount - 1
+        for (line in 0..last) assertTrue("line $line starts at ${layout.getLineLeft(line)}", layout.getLineLeft(line) < 1f)
+        val mark = layout.getBoundingBox(text.lastIndex)
+        assertEquals(last, layout.getLineForOffset(text.lastIndex))
+        assertTrue("? at ${mark.right}, line ends at ${layout.getLineRight(last)}", mark.right >= layout.getLineRight(last) - 1f)
     }
 
     @Composable

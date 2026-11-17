@@ -41,12 +41,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -74,6 +73,7 @@ import androidx.core.net.toUri
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.BuildConfig
+import com.echoledger.mobile.R
 import com.echoledger.mobile.calls.PhoneCallLog
 import com.echoledger.mobile.core.CallTargets
 import com.echoledger.mobile.core.Languages
@@ -92,6 +92,8 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
 import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /** Sends an action to the running recording service (pause, resume, mark, tag, undo). */
@@ -505,12 +507,13 @@ internal fun PhoneAppRecordingsBlock(
                 ) { Text("Not this call") }
             }
         }
-        note?.let { (at, text) ->
+        note?.let { (at, code) ->
+            val text = code.english.replaceFirstChar { it.uppercase() }
             Text("Last call ${clock.format(java.time.Instant.ofEpochMilli(at))}: $text", color = Brand.Muted, fontSize = 12.sp)
         }
     }
     confirm?.let { c ->
-        ImportRecordingDialog(c, clock.format(java.time.Instant.ofEpochMilli(c.callAtMs)), fileOf, onDismiss = { confirm = null }) {
+        ClassicImportRecordingDialog(c, clock.format(java.time.Instant.ofEpochMilli(c.callAtMs)), fileOf, onDismiss = { confirm = null }) {
             confirm = null
             // The import runs in the app's own scope: leaving this screen never stops it half-way.
             val app = context.applicationContext as com.echoledger.mobile.EchoLedgerApp
@@ -526,11 +529,26 @@ internal fun PhoneAppRecordingsBlock(
 }
 
 /**
+ * The import dialog on today's (classic) page: in English whatever the phone's language, as the rest of that page;
+ * the v2 page shows the same dialog in the screen's language.
+ */
+@Composable
+internal fun ClassicImportRecordingDialog(
+    candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
+    time: String,
+    fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
+    onDismiss: () -> Unit,
+    onImport: () -> Unit
+) = com.echoledger.mobile.ui.v2.theme.ProvideLanguage(com.echoledger.mobile.ui.v2.theme.EchoLanguage.English) {
+    ImportRecordingDialog(candidate, time, fileOf, onDismiss, onImport)
+}
+
+/**
  * "Import this recording?" for the file of the call at [time]: its name and length as the media store has them, and
  * Play to listen first, so the person knows it is that call's before EchoLedger takes it in.
  */
 @Composable
-private fun ImportRecordingDialog(
+internal fun ImportRecordingDialog(
     candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
     time: String,
     fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
@@ -554,16 +572,23 @@ private fun ImportRecordingDialog(
             player = null
         }
     }
+    // Its words in the screen's language (the same English as before; Urdu on a v2 Urdu screen).
+    val recordingWord = stringResource(R.string.v2_calls_dlg_recording)
+    val playWord = stringResource(R.string.v2_calls_dlg_play)
+    val stopWord = stringResource(R.string.v2_calls_dlg_stop)
+    val playDesc = stringResource(R.string.v2_calls_dlg_play_desc, time)
+    val stopDesc = stringResource(R.string.v2_calls_dlg_stop_desc, time)
+    val importDesc = stringResource(R.string.v2_calls_pa_import_one_desc, time)
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Import this recording?") },
+        title = { Text(stringResource(R.string.v2_calls_dlg_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Import it only if it is your call at $time. EchoLedger could not check that the Phone app made the file.")
+                Text(stringResource(R.string.v2_calls_dlg_body, time))
                 file?.let { f ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
-                            Text(f.name.ifBlank { "Recording" }, fontWeight = FontWeight.SemiBold, maxLines = 2)
+                            Text(f.name.ifBlank { recordingWord }, fontWeight = FontWeight.SemiBold, maxLines = 2)
                             Text(formatDuration(f.durationMs).ifEmpty { "0:00" }, color = Brand.Muted, fontSize = 12.sp)
                         }
                         TextButton(
@@ -595,17 +620,8 @@ private fun ImportRecordingDialog(
                                     }.getOrNull()
                                 }
                             },
-                            modifier = Modifier.semantics {
-                                contentDescription =
-                                    if (player !=
-                                        null
-                                    ) {
-                                        "Stop the recording of your call at $time"
-                                    } else {
-                                        "Play the recording of your call at $time"
-                                    }
-                            }
-                        ) { Text(if (player != null) "Stop" else "Play") }
+                            modifier = Modifier.semantics { contentDescription = if (player != null) stopDesc else playDesc }
+                        ) { Text(if (player != null) stopWord else playWord) }
                     }
                 }
             }
@@ -613,14 +629,12 @@ private fun ImportRecordingDialog(
         confirmButton = {
             TextButton(
                 onClick = onImport,
-                modifier = Modifier.semantics {
-                    contentDescription = "Import the recording of your call at $time"
-                }
+                modifier = Modifier.semantics { contentDescription = importDesc }
             ) {
-                Text("Import")
+                Text(stringResource(R.string.v2_calls_dlg_import))
             }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.v2_calls_dlg_cancel)) } }
     )
 }
 
