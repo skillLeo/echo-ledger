@@ -379,7 +379,7 @@ describe("wire types", () => {
 
   it("Live Translate's availability has the fields and reasons Rust sends", () => {
     const source = rustSourceDeclaring("struct", "Availability");
-    expect(sorted(tsInterfaceKeys("LiveTranslateStatus"))).toEqual(sorted(rustFields(source, "Availability", false)));
+    expect(sorted(tsInterfaceKeys("LiveTranslateAvailability"))).toEqual(sorted(rustFields(source, "Availability", false)));
     expect(sorted(tsUnionValues("LiveTranslateUnavailable"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "Unavailable"), "Unavailable")));
   });
 
