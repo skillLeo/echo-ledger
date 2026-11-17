@@ -65,14 +65,15 @@ export function RulesV2({ projectId, projectName, say }: {
   const text = kind === "app" ? value || RULE_APPS[0] : value.trim();
 
   return (
-    <section className="el-group" aria-label="Filing rules">
+    <section className="el-group el-workspace-rules" aria-label="Filing rules">
       <h2 className="el-caption el-body-strong el-group__title">Filing rules</h2>
       <Card>
         <p className="el-group__note el-home-empty el-secondary">{`Calls that match a rule go into ${projectName} by themselves.`}</p>
         {list.length > 0 && (
           <List label={`${projectName} filing rules`} className="el-group__rows">
             {list.map((rule) => (
-              <ListRow key={String(rule.id)} compact iconStyle="plain" icon={Icons.FolderIcon} title={ruleText(rule)}
+              <ListRow key={String(rule.id)} compact iconStyle="plain" title={ruleText(rule)}
+                icon={rule.kind === "app" ? (p) => <Icons.SourceAppIcon app={rule.value} {...p} /> : rule.kind === "contact" ? Icons.PhoneIcon : Icons.TranscriptIcon}
                 control={<Button size="sm" variant="quiet" icon={Icons.TrashIcon} aria-label={`Remove the rule ${ruleText(rule)}`} disabled={busy} onClick={() => void remove(rule)} />} />
             ))}
           </List>

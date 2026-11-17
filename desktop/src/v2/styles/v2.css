@@ -670,6 +670,7 @@ button.el-step__head { cursor: pointer; }
 .el-ask__row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--el-space-12); }
 .el-ask--embedded, .el-workspace-memory { display: flex; flex-direction: column; gap: var(--el-space-16); }
 .el-workspace-folders { margin-block-end: var(--el-space-16); }
+.el-workspace-rules { margin-block-start: var(--el-space-24); }
 .el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
