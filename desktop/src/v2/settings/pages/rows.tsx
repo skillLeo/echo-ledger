@@ -81,7 +81,7 @@ export function PageLoading() {
 export function SwitchSetting({ id, on, onChange, disabled, hint }: { id: string; on: boolean; onChange: (on: boolean) => void; disabled?: boolean; hint?: ReactNode }) {
   const s = setting(id);
   return (
-    <ListRow compact anchor={id} title={s.title} meta={hint ?? s.description}
+    <ListRow compact anchor={id} title={s.title} meta={hint === undefined ? s.description : hint ?? undefined}
       control={<Toggle label={s.title} hideLabel checked={on} disabled={disabled} onChange={onChange} />} />
   );
 }

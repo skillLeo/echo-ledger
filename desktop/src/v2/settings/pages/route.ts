@@ -10,6 +10,7 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "transcription.language", "words", "key",
   "privacy", "privacy.consent",
   "lock", "security", "security.activity",
+  "share_privacy", "share_privacy.check",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */

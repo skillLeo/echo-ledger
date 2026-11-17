@@ -14,6 +14,7 @@ import { useAccount } from "../../../views/main/AccountSettings";
 import { ConsentPageV2, PrivacyPageV2 } from "./PrivacyV2";
 import { LockPageV2 } from "./LockV2";
 import { SecurityPageV2, SignInActivityPageV2 } from "./SecurityV2";
+import { SharePrivacyPageV2, ShareCheckPageV2 } from "./SharePrivacyV2";
 
 export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
   section: { id: string; seq: number };
@@ -59,6 +60,8 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
       case "lock": return <LockPageV2 settings={settings} patch={patch} run={run} />;
       case "security": return account ? <SecurityPageV2 account={account} run={run} onSignedOut={onUnpaired} onActivity={() => open("security.activity")} /> : <PageLoading />;
       case "security.activity": return <SignInActivityPageV2 />;
+      case "share_privacy": return <SharePrivacyPageV2 settings={settings} patch={patch} onCheck={() => open("share_privacy.check")} />;
+      case "share_privacy.check": return <ShareCheckPageV2 />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }

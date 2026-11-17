@@ -869,3 +869,21 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-help__report { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-4); }
 .el-row--disabled { color: var(--el-role-text-disabled); }
 .el-row--disabled .el-row__hit { cursor: not-allowed; }
+
+/* Screen-share privacy: the status lines, the value's tone, the check's result and its two pictures. */
+.el-privacy-lines { display: grid; gap: var(--el-space-8); margin-block-start: var(--el-space-4); }
+.el-privacy-line { display: flex; align-items: center; flex-wrap: wrap; gap: var(--el-space-8); margin: 0; color: var(--el-role-text-secondary); }
+.el-privacy-line--warning { color: var(--el-role-warning-default); }
+.el-privacy-line > svg { inline-size: var(--el-icon-sm); block-size: var(--el-icon-sm); flex: none; }
+.el-privacy-value--warning { color: var(--el-role-warning-default); }
+.el-row--note { padding-block: var(--el-space-8); }
+.el-row--note > p { margin: 0; }
+.el-check-line { margin: 0; font-weight: var(--el-text-body-strong-weight); }
+.el-check-line--success { color: var(--el-role-success-default); }
+.el-check-line--warning { color: var(--el-role-warning-default); }
+.el-check-none { margin: 0; padding: var(--el-space-16); }
+.el-check-pictures { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3.5), 1fr)); gap: var(--el-space-12); }
+.el-check-pictures figure { margin: 0; display: grid; gap: var(--el-space-4); }
+.el-check-frame { position: relative; overflow: hidden; border-radius: var(--el-radius-sm); border: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-check-frame img { inline-size: 100%; block-size: auto; display: block; }
+.el-check-mark { position: absolute; }

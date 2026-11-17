@@ -76,7 +76,7 @@ export function lastCheckValue(result: "pass" | "fail" | "error" | null, at: str
   return "Nothing measured";
 }
 
-function statusValue(s: PrivacyStatus, demoSeconds: number | null): { text: string; tone?: "warning" } {
+export function statusValue(s: PrivacyStatus, demoSeconds: number | null): { text: string; tone?: "warning" } {
   if (s.hiding === "off") return { text: "Off", tone: "warning" };
   if (demoSeconds) return { text: `Shown for ${demoLeft(demoSeconds)?.replace(" left", "")}`, tone: "warning" };
   return s.badge === "visible" ? { text: s.badgeLabel, tone: "warning" } : { text: s.badgeLabel };
@@ -231,7 +231,7 @@ function ZoomStep() {
 }
 
 /** The version a meeting app's result is kept for: Chrome's for Meet, which runs in it. */
-function versionLine(row: MeetingAppRow): string | null {
+export function versionLine(row: MeetingAppRow): string | null {
   if (!row.version) return null;
   return row.app === "meet" ? `Chrome ${row.version}` : `Version ${row.version}`;
 }

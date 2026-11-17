@@ -38,6 +38,8 @@ export type ListRowProps = {
   mark?: ReactNode;
   /** What the row stands for (a recording's id): a page can give it keyboard focus back after a change. */
   rowId?: string;
+  /** The row opens and closes what follows it in place (aria-expanded). */
+  expanded?: boolean;
   /** The row's button can't be pressed now (it says why elsewhere). */
   disabled?: boolean;
   /** A setting this row is the home of: search and links scroll to it and highlight it (id "setting-<id>"). */
@@ -53,7 +55,7 @@ export type ListRowProps = {
  * by the rest; with a control the row is a label for it.
  */
 export function ListRow({
-  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled,
+  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor, disabled, expanded,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -65,7 +67,7 @@ export function ListRow({
     <li className={cls} {...(anchor ? { id: `setting-${anchor}`, "data-setting": anchor, tabIndex: -1 } : {})}>
       {interactive && (
         <button type="button" className="el-row__hit" aria-label={label} aria-labelledby={label ? undefined : `${id}-title`} aria-describedby={describedBy}
-          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} disabled={disabled} />
+          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} disabled={disabled} aria-expanded={expanded} />
       )}
       {leading ?? (icon && (
         <span className={`el-row__leading${iconStyle === "avatar" ? " el-row__leading--avatar" : ""}`}>
