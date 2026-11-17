@@ -246,7 +246,7 @@ describe('the signed picture links', function () {
             ->and($image->headers->get('Content-Type'))->toBe('image/png')
             ->and($image->headers->get('Cache-Control'))->toContain('private')->not->toContain('public')
             ->and($thumb->headers->get('Content-Type'))->toBe('image/webp')
-            ->and(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(480);
+            ->and(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(320);
     });
 
     it('refuse a changed signature, another screen or picture in the same link, and an expired link', function () {

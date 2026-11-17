@@ -32,7 +32,14 @@ class ScreenStore
     /** A recording keeps at most this many screens (`409 too_many_screens`). */
     public const MAX_PER_RECORDING = 400;
 
-    public const THUMB_WIDTH = 480;
+    /** Since v1.8 P4.1, 320 px (480 before: those thumbnails stay as they are). */
+    public const THUMB_WIDTH = 320;
+
+    /** Since v1.8 P4.1: at most this many screens in any hour of a recording, on top of MAX_PER_RECORDING. */
+    public const MAX_PER_HOUR = 120;
+
+    /** A near-duplicate is looked for among the screens this close in time (ScreenSimilarity). */
+    public const NEIGHBOUR_MS = 300_000;
 
     /** Larger pictures are refused before they are decoded (a small file can hold a huge picture). */
     public const MAX_PIXELS = 25_000_000;
@@ -86,7 +93,7 @@ class ScreenStore
         if ($existing instanceof Screen) {
             return [$existing, false];
         }
-        $this->assertRoom($session);
+        $this->assertRoom($session, (int) $meta['at_ms']);
         app(PlanLimits::class)->assertStorage($session->workspace_id, (int) filesize($plainPath), $session->user_id);
 
         $id = (string) Str::ulid();
@@ -98,6 +105,12 @@ class ScreenStore
         $written = [];
         try {
             self::writeThumbnail($plainPath, $thumbPlain);
+            // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is the one
+            // kept already, as an exact repeat is (ScreenSimilarity, conservative).
+            $near = $this->nearDuplicate($session, $plainPath, $meta);
+            if ($near instanceof Screen) {
+                return [$near, false];
+            }
             $storedBytes = $files->encryptInto($plainPath, $imagePath, $id);
             $written[] = $imagePath;
             $storedBytes += $files->encryptInto($thumbPlain, $thumbPath, self::thumbKey($id));
@@ -109,7 +122,7 @@ class ScreenStore
                 if ($twin instanceof Screen) {
                     return [$twin, false];
                 }
-                $this->assertRoom($session);
+                $this->assertRoom($session, (int) $meta['at_ms']);
                 $screen = new Screen([
                     'workspace_id' => $session->workspace_id,
                     'capture_session_id' => $session->id,
@@ -289,7 +302,7 @@ class ScreenStore
         return $id.'/thumb';
     }
 
-    /** The 480 px wide WebP thumbnail (narrower pictures keep their width), made with GD. */
+    /** The 320 px wide WebP thumbnail (narrower pictures keep their width), made with GD. */
     public static function writeThumbnail(string $plainPath, string $targetPath): void
     {
         $image = @imagecreatefromstring((string) file_get_contents($plainPath));
@@ -316,11 +329,47 @@ class ScreenStore
         return $screen instanceof Screen ? $screen : null;
     }
 
-    private function assertRoom(CaptureSession $session): void
+    private function assertRoom(CaptureSession $session, int $atMs): void
     {
-        if (Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)->count() >= self::MAX_PER_RECORDING) {
+        $screens = fn () => Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id);
+        if ($screens()->count() >= self::MAX_PER_RECORDING) {
             throw new ApiError(409, 'too_many_screens', 'This recording already keeps '.self::MAX_PER_RECORDING.' screens.');
         }
+        // Since v1.8 P4.1: at most 120 in the hour of the recording up to this moment.
+        if ($screens()->where('at_ms', '>', $atMs - 3_600_000)->where('at_ms', '<=', $atMs)->count() >= self::MAX_PER_HOUR) {
+            throw new ApiError(409, 'too_many_screens', 'This recording already keeps '.self::MAX_PER_HOUR.' screens in an hour.');
+        }
+    }
+
+    /**
+     * The screen of [$session] just before or after [$meta]'s moment (within 5 minutes, the same size) that shows the
+     * same picture as the one at [$plainPath], if one does (the pictures themselves, ScreenSimilarity).
+     *
+     * @param  array{at_ms: int, width: int, height: int}  $meta
+     */
+    private function nearDuplicate(CaptureSession $session, string $plainPath, array $meta): ?Screen
+    {
+        $base = fn () => Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)
+            ->where('width', $meta['width'])->where('height', $meta['height']);
+        $neighbours = array_filter([
+            $base()->where('at_ms', '<=', $meta['at_ms'])->where('at_ms', '>=', $meta['at_ms'] - self::NEIGHBOUR_MS)->orderByDesc('at_ms')->first(),
+            $base()->where('at_ms', '>', $meta['at_ms'])->where('at_ms', '<=', $meta['at_ms'] + self::NEIGHBOUR_MS)->orderBy('at_ms')->first(),
+        ]);
+        if ($neighbours === []) {
+            return null;
+        }
+        $mine = ScreenSimilarity::signature((string) file_get_contents($plainPath));
+        if ($mine === null) {
+            return null;
+        }
+        foreach ($neighbours as $neighbour) {
+            $theirs = ($picture = $this->picture($neighbour)) !== null ? ScreenSimilarity::signature($picture) : null;
+            if ($theirs !== null && ScreenSimilarity::same($mine, $theirs)) {
+                return $neighbour;
+            }
+        }
+
+        return null;
     }
 
     /** @param  list<string|null>  $paths */
