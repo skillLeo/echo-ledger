@@ -976,6 +976,14 @@ pub fn subscribe_captions(window: WebviewWindow, on_event: IpcChannel<CaptionEve
     hub.subscribe(window.label(), on_event);
 }
 
+/// The latency probe (development only): the captions window painted word `id`. Nothing happens unless the probe runs.
+#[tauri::command]
+pub fn caption_probe_painted(id: u64) {
+    if crate::stt::latency::enabled() {
+        crate::stt::latency::painted(id);
+    }
+}
+
 /// The page has attached its listeners: it gets the events kept while its window was built (C9, lifecycle.rs).
 #[tauri::command]
 pub fn window_ready(app: AppHandle, window: WebviewWindow) {

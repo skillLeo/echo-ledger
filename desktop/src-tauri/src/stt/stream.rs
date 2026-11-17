@@ -58,17 +58,35 @@ impl SessionUsage {
 }
 
 /// What a session is for, as far as the socket cares.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct SessionOptions {
     /// Audio kept while the provider has not started (the newest, in whole frames).
     pub pre_begin: Duration,
+    /// The latency probe (development and tests only, [`super::latency`]): timings of speech sent and words back.
+    pub probe: Option<std::sync::Arc<super::latency::Probe>>,
+}
+
+impl PartialEq for SessionOptions {
+    fn eq(&self, other: &Self) -> bool {
+        self.pre_begin == other.pre_begin
+            && match (&self.probe, &other.probe) {
+                (None, None) => true,
+                (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+                _ => false,
+            }
+    }
 }
 
 impl SessionOptions {
     /// Captions and Live Assist: one second, so a provider throttled to about 1.25x real time never starts behind.
-    pub const LIVE: Self = Self { pre_begin: Duration::from_secs(1) };
+    pub const LIVE: Self = Self { pre_begin: Duration::from_secs(1), probe: None };
     /// Dictation: ten seconds, because its first words are the result.
-    pub const DICTATION: Self = Self { pre_begin: Duration::from_secs(10) };
+    pub const DICTATION: Self = Self { pre_begin: Duration::from_secs(10), probe: None };
+
+    /// The same options with a latency probe.
+    pub fn with_probe(self, probe: Option<std::sync::Arc<super::latency::Probe>>) -> Self {
+        Self { probe, ..self }
+    }
 
     /// The options for a token's use case (pure): `dictation` keeps its first words, everything else is live.
     pub fn for_use_case(use_case: &str) -> Self {
@@ -219,10 +237,15 @@ async fn stream_socket(
                             continue;
                         }
                         if let Some(event) = protocol.parse(text.as_str()) {
+                            // An interim word goes to the window as it arrives: neither the wait above nor anything else
+                            // holds it back (the forced end only brings a final sooner).
                             if let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event
                                 && !text.is_empty()
                             {
                                 waits.caption();
+                                if let Some(probe) = &options.probe {
+                                    probe.word(std::time::Instant::now());
+                                }
                             }
                             match &event {
                                 SttEvent::Started if !started => {
@@ -236,6 +259,7 @@ async fn stream_socket(
                                     for frame in pending[..whole].chunks(frame_bytes) {
                                         send_audio(&mut tx, protocol, frame).await?;
                                         waits.sent(frame);
+                                        probe_sent(&options, frame);
                                     }
                                     pending.drain(..whole);
                                 }
@@ -259,6 +283,7 @@ async fn stream_socket(
                                 let frame: Vec<u8> = pending.drain(..frame_bytes).collect();
                                 send_audio(&mut tx, protocol, &frame).await?;
                                 waits.sent(&frame);
+                                probe_sent(&options, &frame);
                             }
                         } else if pending.len() > max_buffer {
                             let excess = pending.len() - max_buffer;
@@ -295,6 +320,13 @@ async fn stream_socket(
                 }
             }
         }
+    }
+}
+
+/// The probe hears of a frame sent (development and tests only).
+fn probe_sent(options: &SessionOptions, frame: &[u8]) {
+    if let Some(probe) = &options.probe {
+        probe.sent(voiced(frame), std::time::Instant::now());
     }
 }
 

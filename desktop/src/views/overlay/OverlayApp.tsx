@@ -36,9 +36,15 @@ export const initialCaptions: CaptionState = { lines: [], partial: {}, live: fal
 /** Pure reducer (unit-tested): keeps the last MAX_CAPTION_LINES final lines plus the current partial per speaker. */
 export function captionsReducer(state: CaptionState, event: CaptionEvent): CaptionState {
   switch (event.kind) {
-    case "partial":
-      // Display only: Hindi letters from an engine that guessed Hindi are shown in Urdu script.
-      return { ...state, partial: { ...state.partial, [event.channel]: devanagariToUrdu(event.text) } };
+    case "partial": {
+      // Interim words show as they arrive and the final replaces them. An empty interim (a turn that has no words yet)
+      // clears the channel's line instead of drawing an empty one. Display only: Hindi letters from an engine that
+      // guessed Hindi are shown in Urdu script.
+      const partial = { ...state.partial };
+      if (event.text.trim()) partial[event.channel] = devanagariToUrdu(event.text);
+      else delete partial[event.channel];
+      return { ...state, partial };
+    }
     case "final": {
       const line = { id: state.nextId, channel: event.channel, speaker: event.speaker, text: devanagariToUrdu(event.text) };
       const lines = [...state.lines, line].slice(-MAX_CAPTION_LINES);
@@ -50,7 +56,15 @@ export function captionsReducer(state: CaptionState, event: CaptionEvent): Capti
       return { ...state, live: event.live, message: event.message };
     case "clear":
       return initialCaptions;
+    case "probe":
+      return state;
   }
+}
+
+/** The latency probe (development only): once the caption that carried word `id` has been painted, say so. A frame,
+ * then a task: the task runs after the browser painted that frame. */
+export function reportPainted(id: number, frame: (cb: () => void) => void = (cb) => requestAnimationFrame(() => cb())): void {
+  frame(() => setTimeout(() => void api.captionProbePainted(id).catch(() => undefined), 0));
 }
 
 /** The "Caption lines" setting: 2, 3 or 5 visible lines; anything else shows 3. */
@@ -106,6 +120,7 @@ export default function OverlayApp() {
   useEffect(() => {
     let alive = true;
     const subscribed = subscribeCaptions((e) => {
+      if (e.kind === "probe") return reportPainted(e.id);
       dispatch(e);
       if (e.kind === "status" && e.live) setVisible(true);
       if (e.kind === "partial" || e.kind === "final" || (e.kind === "status" && e.live)) setLastActivity(Date.now());

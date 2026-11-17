@@ -1229,7 +1229,9 @@ export type CaptionEvent =
   | { kind: "partial"; speaker: string; channel: number; text: string }
   | { kind: "final"; speaker: string; channel: number; text: string; startMs: number; endMs: number }
   | { kind: "status"; live: boolean; recording: boolean; provider: string | null; message: string | null }
-  | { kind: "clear" };
+  | { kind: "clear" }
+  /** The latency probe (development only): the caption just sent carried word `id`; say when it is painted. */
+  | { kind: "probe"; id: number };
 
 export interface RectPx {
   x: number;
@@ -1681,6 +1683,8 @@ export const api = {
   /** That window's own switch: shown in screen shares only by this explicit choice. */
   privacyWindowShareSet: (shown: boolean, which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share_set", { which, shown }),
   shareNoticeDismiss: () => invoke<void>("share_notice_dismiss"),
+  /** The latency probe (development only): word `id` is on screen. */
+  captionProbePainted: (id: number) => invoke<void>("caption_probe_painted", { id }),
   privacyConcealed: () => invoke<boolean>("privacy_concealed"),
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
   /** Windows: sets every capture flag again after something else on the computer changed one. */

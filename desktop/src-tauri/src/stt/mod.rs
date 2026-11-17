@@ -3,6 +3,7 @@
 //! together, closed by stop, pause or the end of the recording) is reported once to `usage.json` (A5.4).
 
 pub mod captions;
+pub mod latency;
 pub mod protocol;
 pub mod stream;
 
@@ -193,6 +194,8 @@ impl LiveCaptions {
             done: Vec::new(),
         }));
         let options = stream::SessionOptions::for_use_case(use_case);
+        // Development only (`ECHOLEDGER_LATENCY_PROBE=1` in a debug build): timings of speech to word on screen.
+        let probing = latency::enabled() && use_case == "live_captions";
         let mut senders = Vec::new();
         let mut stops = Vec::new();
         for (channel, grant) in grants {
@@ -201,19 +204,25 @@ impl LiveCaptions {
             let handle = app.clone();
             let stream_start = Instant::now();
             let (run, running, idle) = (run.clone(), self.running.clone(), self.idle.clone());
+            let probe = probing.then(latency::Probe::new_registered);
+            let options = options.clone().with_probe(probe.clone());
             running.fetch_add(1, Ordering::SeqCst);
             tauri::async_runtime::spawn(async move {
                 let hub_app = handle.clone();
                 let mut usage = SessionUsage::default();
+                let event_probe = probe.clone();
                 let result = stream::run_session_into(
                     grant,
                     pcm_rx,
                     stop_rx,
-                    move |event| on_stt_event(&hub_app, channel, targets, record_turns, (base_offset_ms, stream_start), event),
+                    move |event| on_stt_event(&hub_app, channel, targets, record_turns, (base_offset_ms, stream_start), event, event_probe.as_deref()),
                     options,
                     &mut usage,
                 )
                 .await;
+                if let Some(probe) = probe {
+                    eprintln!("[echoledger] {} (channel {})", probe.summary().line(), channel.grant_name());
+                }
                 if let Err(e) = result {
                     handle.state::<CaptionHub>().send(targets, CaptionEvent::Status { live: false, recording: false, provider: None, message: Some(e) });
                 }
@@ -259,8 +268,22 @@ impl LiveCaptions {
     }
 }
 
-/// `stream`: the stream's offset into the recording (ms) and the instant the stream started.
-fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent) {
+/// `stream`: the stream's offset into the recording (ms) and the instant the stream started; `probe`: the latency probe
+/// (development only), whose word id follows its caption to the window.
+fn on_stt_event(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent, probe: Option<&latency::Probe>) {
+    on_caption(app, channel, targets, record_turns, stream, event);
+    if let Some(probe) = probe
+        && let Some(id) = probe.take_unreported()
+    {
+        app.state::<CaptionHub>().send(targets, CaptionEvent::Probe { id });
+        let samples = probe.samples().len();
+        if samples % latency::LOG_EVERY_WORDS == 0 {
+            eprintln!("[echoledger] {}", probe.summary().line());
+        }
+    }
+}
+
+fn on_caption(app: &AppHandle, channel: Channel, targets: &[&str], record_turns: bool, stream: (u64, Instant), event: SttEvent) {
     let hub = app.state::<CaptionHub>();
     let speaker = channel.speaker().to_string();
     let index = (channel.index() + 1) as u8;

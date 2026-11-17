@@ -538,6 +538,7 @@ pub fn run() {
             commands::privacy_diagnostics,
             commands::privacy_move_to_other_display,
             commands::privacy_main_hide,
+            commands::caption_probe_painted,
             commands::privacy_main_show,
             commands::privacy_window_share,
             commands::privacy_window_share_set,
