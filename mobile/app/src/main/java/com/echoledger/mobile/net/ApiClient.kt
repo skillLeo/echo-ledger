@@ -985,8 +985,11 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
             .apply { token?.let { header("Authorization", "Bearer $it") } }
             .post(json.toRequestBody(jsonType))
             .build()
-        return http.newCall(req)
+        return liveHttp.newCall(req)
     }
+
+    /** The API's client (its pins kept) that never follows a redirect: the meeting's words go to this server or nowhere. */
+    private val liveHttp: OkHttpClient by lazy { http.newBuilder().followRedirects(false).followSslRedirects(false).build() }
 
     /** `POST /api/assist/sessions/{id}/token`: new relay grant (tokens last at most 15 minutes). */
     suspend fun assistToken(id: String): com.echoledger.mobile.data.AssistTokenDto = call(

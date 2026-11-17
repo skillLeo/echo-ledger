@@ -49,6 +49,11 @@ class SseStandIn : Closeable {
         refusals += status to json
     }
 
+    /** The next request is answered with a redirect ([status], usually 307) to [location]. */
+    fun redirect(status: Int, location: String) {
+        refusals += status to "LOCATION $location"
+    }
+
     /** The next request (waits up to 5 s). */
     fun next(): Post = requests.poll(5, TimeUnit.SECONDS) ?: error("no request reached the stand-in")
 
@@ -71,7 +76,16 @@ class SseStandIn : Closeable {
         val out = client.getOutputStream()
         val refusal = refusals.poll()
         val post = Post(parts.getOrElse(0) { "" }, parts.getOrElse(1) { "" }, headers, String(body), client, out)
-        if (refusal != null) {
+        if (refusal != null && refusal.second.startsWith("LOCATION ")) {
+            out.write(
+                (
+                    "HTTP/1.1 ${refusal.first} Moved\r\nLocation: ${refusal.second.removePrefix("LOCATION ")}\r\n" +
+                        "Content-Length: 0\r\nConnection: close\r\n\r\n"
+                    ).toByteArray()
+            )
+            out.flush()
+            client.close()
+        } else if (refusal != null) {
             val text = refusal.second.toByteArray()
             out.write(
                 (

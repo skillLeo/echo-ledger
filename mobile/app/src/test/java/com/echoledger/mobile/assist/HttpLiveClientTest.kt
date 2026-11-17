@@ -260,6 +260,54 @@ class HttpLiveClientTest {
     }
 
     @Test
+    fun `a redirect is never followed, so the message never reaches another host`() {
+        val elsewhere = SseStandIn()
+        try {
+            val live = client()
+            live.start()
+            sse.redirect(307, elsewhere.url("/api/assist/sessions/a1/live"))
+            live.send(ClientMessage.TurnFinal(Turn("o-1", true, "The meeting's words", 0, 900)))
+            sse.next()
+            waitFor("the problem") { events.any { it is RelayEvent.Error } }
+            assertEquals("connection_failed", events.filterIsInstance<RelayEvent.Error>().single().code)
+            assertTrue("the body never arrives at the redirect's host", elsewhere.quiet(500))
+            sse.redirect(308, elsewhere.url("/api/assist/sessions/a1/live"))
+            live.send(ClientMessage.Command(SendKind.HelpNow))
+            sse.next()
+            assertTrue(elsewhere.quiet(500))
+        } finally {
+            elsewhere.close()
+        }
+    }
+
+    @Test
+    fun `a line longer than 64 KiB ends the stream as a drop`() {
+        val live = client()
+        live.start()
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        val post = sse.next()
+        post.send(start("s-1"))
+        waitFor("s-1") { cards().size == 1 }
+        post.write("data: " + "x".repeat(70 * 1024) + "\n\n")
+        waitFor("s-1 let go") { cards().lastOrNull() == AssistMessage.Lost(setOf("s-1")) }
+    }
+
+    @Test
+    fun `event data past 256 KiB ends the stream as a drop`() {
+        val live = client()
+        live.start()
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        val post = sse.next()
+        post.send(start("s-1"))
+        waitFor("s-1") { cards().size == 1 }
+        // Five lines of 60 KiB each fit the line limit, but not the event's.
+        val chunk = "data: " + "y".repeat(60 * 1024) + "\n"
+        repeat(5) { runCatching { post.write(chunk) } }
+        waitFor("s-1 let go") { cards().lastOrNull() == AssistMessage.Lost(setOf("s-1")) }
+        assertEquals(2, cards().size)
+    }
+
+    @Test
     fun `a failure before the stream begins says the server couldn't be reached`() {
         val nobody = okhttp3.Request.Builder().url("http://127.0.0.1:1/").post("{}".toRequestBody()).build()
         val live = client(call = { _, _ -> okhttp3.OkHttpClient().newCall(nobody) })

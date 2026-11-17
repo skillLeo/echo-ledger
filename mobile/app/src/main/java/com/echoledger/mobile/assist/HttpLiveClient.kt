@@ -19,6 +19,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import okio.utf8Size
 
 /** How a session's live messages travel: the relay's WebSocket ([RelayClient]) or HTTP mode ([HttpLiveClient]). */
 interface LiveTransport {
@@ -195,6 +196,11 @@ class HttpLiveClient(
     private suspend fun stream(id: Int, message: ClientMessage, begun: CompletableDeferred<Unit>) {
         val c = call(grant.liveUrl, message.body()) ?: return end(RelayEnd.NotTrusted)
         calls += c
+        if (stopped) {
+            c.cancel()
+            calls -= c
+            return
+        }
         // Ended with `end`: whatever it was writing was ended in this stream or by another one, whose end may still be on
         // its way (a new question's `superseded`), so nothing is let go. Cut without `end`: what it wrote gets no end.
         var ended = false
@@ -209,8 +215,11 @@ class HttpLiveClient(
                     val source = response.body.source()
                     var event: String? = null
                     val data = StringBuilder()
+                    var dataBytes = 0L
                     while (!stopped) {
-                        val line = source.readUtf8Line() ?: break
+                        if (source.exhausted()) break
+                        // A line longer than this throws (an EOFException): the stream is treated as dropped.
+                        val line = source.readUtf8LineStrict(MAX_LINE_BYTES)
                         when {
                             line.isEmpty() -> {
                                 if (event == "end") {
@@ -220,6 +229,7 @@ class HttpLiveClient(
                                 if (data.isNotEmpty()) received(id, event, data.toString())
                                 event = null
                                 data.setLength(0)
+                                dataBytes = 0
                             }
 
                             // A keep-alive.
@@ -228,6 +238,9 @@ class HttpLiveClient(
                             line.startsWith("event:") -> event = line.removePrefix("event:").trim()
 
                             line.startsWith("data:") -> {
+                                dataBytes += line.utf8Size()
+                                // An event this large is no relay message: the stream is ended as if it dropped.
+                                if (dataBytes > MAX_EVENT_BYTES) break
                                 if (data.isNotEmpty()) data.append('\n')
                                 data.append(line.removePrefix("data:").removePrefix(" "))
                             }
@@ -318,6 +331,10 @@ class HttpLiveClient(
     }
 
     companion object {
+        /** The longest line of an event stream read (64 KiB), and the most data one event may carry (256 KiB). */
+        const val MAX_LINE_BYTES = 64 * 1024L
+        const val MAX_EVENT_BYTES = 256 * 1024L
+
         const val CONNECTION_FAILED = "Live Assist couldn't reach the server. Try again."
         const val TOO_FAST = "Too much at once. Try again in a moment."
     }
