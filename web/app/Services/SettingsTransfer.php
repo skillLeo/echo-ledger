@@ -68,6 +68,7 @@ final class SettingsTransfer
         'assemblyai.region',
         'assemblyai.streaming_model',
         'assemblyai.streaming_mode',
+        'assemblyai.fastest_min_silence_ms',
         'assemblyai.async_models',
         'groq.plan',
         'gemini.model',
@@ -134,6 +135,12 @@ final class SettingsTransfer
         if (array_key_exists('assemblyai.streaming_mode', $settings)
             && (! is_string($settings['assemblyai.streaming_mode']) || ! array_key_exists($settings['assemblyai.streaming_mode'], AssemblyAiDriver::STREAMING_MODES))) {
             unset($settings['assemblyai.streaming_mode']);
+        }
+        // Fastest's silence is whole milliseconds between the floor and the ceiling, or dropped.
+        $silence = $settings['assemblyai.fastest_min_silence_ms'] ?? null;
+        if (array_key_exists('assemblyai.fastest_min_silence_ms', $settings)
+            && (! is_int($silence) || $silence < AssemblyAiDriver::FASTEST_MIN_SILENCE_FLOOR || $silence > AssemblyAiDriver::FASTEST_MIN_SILENCE_CEILING)) {
+            unset($settings['assemblyai.fastest_min_silence_ms']);
         }
 
         return $settings;

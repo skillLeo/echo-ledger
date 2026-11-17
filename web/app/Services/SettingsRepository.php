@@ -36,6 +36,7 @@ final class SettingsRepository
         'assemblyai.region' => 'us',                // us | eu
         'assemblyai.streaming_model' => 'universal-3-6-pro',
         'assemblyai.streaming_mode' => 'min_latency',   // min_latency | balanced | max_accuracy (caption speed)
+        'assemblyai.fastest_min_silence_ms' => 80,       // Fastest's min_turn_silence, 50-600 ms
         'assemblyai.async_models' => ['universal-3-5-pro', 'universal-2'],
         'elevenlabs.base_url' => 'https://api.elevenlabs.io',
         'elevenlabs.model_id' => 'scribe_v2',

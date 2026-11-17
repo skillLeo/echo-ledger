@@ -51,7 +51,7 @@ it('asks Universal-3.6 Pro for the fastest turn preset by default, on every chan
         $q = captionWsQuery($channel['ws_url']);
         expect($q['speech_model'])->toBe('universal-3-6-pro')
             ->and($q['mode'])->toBe('min_latency')
-            ->and($q['min_turn_silence'])->toBe('128')
+            ->and($q['min_turn_silence'])->toBe('80')
             ->and($q['max_turn_silence'])->toBe('640')
             ->and($q['token'])->toBe('tmp_tok')
             // Not a Pro parameter (Universal-Streaming only, absent from the current spec): never sent.
@@ -96,7 +96,7 @@ it('sends only the turn silences to the budget Universal-Streaming models, which
     $q = captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url']);
 
     expect($q)->not->toHaveKey('mode')
-        ->and($q['min_turn_silence'])->toBe('128')
+        ->and($q['min_turn_silence'])->toBe('80')
         ->and($q['max_turn_silence'])->toBe('640');
 });
 
@@ -139,4 +139,52 @@ it('saves the caption speed from Admin › Settings and refuses an unknown one',
         ->assertHasNoErrors();
 
     expect(app(SettingsRepository::class)->get('assemblyai.streaming_mode'))->toBe('balanced');
+});
+
+describe('Fastest\'s quiet before a line may end (target: words on screen within a second)', function () {
+    it('is 80 ms by default and follows the admin\'s value, only under Fastest', function () {
+        expect(captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url'])['min_turn_silence'])->toBe('80');
+
+        app(SettingsRepository::class)->set('assemblyai.fastest_min_silence_ms', 50);
+        expect(captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url'])['min_turn_silence'])->toBe('50');
+
+        app(SettingsRepository::class)->set('assemblyai.streaming_mode', 'balanced');
+        expect(captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url'])['min_turn_silence'])->toBe('128');
+    });
+
+    it('never goes under the provider\'s floor of 50 or over 600, and reads anything else as 80', function (mixed $stored, int $sent) {
+        app(SettingsRepository::class)->set('assemblyai.fastest_min_silence_ms', $stored);
+
+        expect(captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url'])['min_turn_silence'])->toBe((string) $sent);
+    })->with([
+        'under the floor' => [10, 50],
+        'over the ceiling' => [5000, 600],
+        'not a number' => ['soon', 80],
+        'a number as text' => ['120', 120],
+    ]);
+
+    it('is set in Admin › Settings under Fastest, and refused out of range', function () {
+        $admin = User::factory()->create(['is_super_admin' => true]);
+        $this->actingAs($admin);
+        Filament::setCurrentPanel('admin');
+
+        Livewire::test(Settings::class)
+            ->assertSet('data.assemblyai_fastest_min_silence_ms', 80)
+            ->set('data.assemblyai_fastest_min_silence_ms', 40)->call('save')->assertHasErrors(['data.assemblyai_fastest_min_silence_ms'])
+            ->set('data.assemblyai_fastest_min_silence_ms', 601)->call('save')->assertHasErrors(['data.assemblyai_fastest_min_silence_ms'])
+            ->set('data.assemblyai_fastest_min_silence_ms', 60)->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(60);
+
+        // Under another speed the field is hidden: its value is neither checked nor changed.
+        Livewire::test(Settings::class)->set('data.assemblyai_streaming_mode', 'balanced')
+            ->set('data.assemblyai_fastest_min_silence_ms', 5)->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->get('assemblyai.streaming_mode'))->toBe('balanced');
+    });
+
+    it('imports only whole milliseconds between 50 and 600 from a settings file', function () {
+        $read = fn (mixed $v): array => app(SettingsTransfer::class)->read(json_encode(['format' => SettingsTransfer::FORMAT, 'settings' => ['assemblyai.fastest_min_silence_ms' => $v]]));
+
+        expect($read(90))->toBe(['assemblyai.fastest_min_silence_ms' => 90])
+            ->and($read(20))->toBe([])->and($read(900))->toBe([])->and($read('90'))->toBe([]);
+    });
 });

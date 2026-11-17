@@ -49,12 +49,23 @@ final class AssemblyAiDriver implements SttProvider
      * grant never asks for speaker labels, because the two channels already tell the speakers apart.
      */
     public const STREAMING_MODES = [
-        'min_latency' => ['min_turn_silence' => 128, 'max_turn_silence' => 640],
+        'min_latency' => ['min_turn_silence' => self::FASTEST_MIN_SILENCE_DEFAULT, 'max_turn_silence' => 640],
         'balanced' => ['min_turn_silence' => 128, 'max_turn_silence' => 1280],
         'max_accuracy' => ['min_turn_silence' => 512, 'max_turn_silence' => 2560],
     ];
 
     public const STREAMING_MODE_DEFAULT = 'min_latency';
+
+    /**
+     * Fastest's min_turn_silence (ms): how soon AssemblyAI checks whether a line has ended, so its words show sooner
+     * (target: words on screen within a second). Admin › Settings › AssemblyAI sets it; 80 by default, never under the
+     * provider's floor of 50, and below Fastest's max_turn_silence.
+     */
+    public const FASTEST_MIN_SILENCE_DEFAULT = 80;
+
+    public const FASTEST_MIN_SILENCE_FLOOR = 50;
+
+    public const FASTEST_MIN_SILENCE_CEILING = 600;
 
     public function __construct(
         private readonly CredentialVault $vault,
@@ -209,7 +220,22 @@ final class AssemblyAiDriver implements SttProvider
             $mode = self::STREAMING_MODE_DEFAULT;
         }
 
-        return ($model === 'universal-3-6-pro' ? ['mode' => $mode] : []) + self::STREAMING_MODES[$mode];
+        $silences = self::STREAMING_MODES[$mode];
+        if ($mode === 'min_latency') {
+            $silences['min_turn_silence'] = self::fastestMinSilence($this->settings->get('assemblyai.fastest_min_silence_ms'));
+        }
+
+        return ($model === 'universal-3-6-pro' ? ['mode' => $mode] : []) + $silences;
+    }
+
+    /** The admin's Fastest min_turn_silence, kept between the floor and the ceiling; anything else is the default. */
+    public static function fastestMinSilence(mixed $value): int
+    {
+        if (! is_numeric($value)) {
+            return self::FASTEST_MIN_SILENCE_DEFAULT;
+        }
+
+        return max(self::FASTEST_MIN_SILENCE_FLOOR, min(self::FASTEST_MIN_SILENCE_CEILING, (int) $value));
     }
 
     /**

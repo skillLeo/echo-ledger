@@ -32,6 +32,7 @@ use App\Services\TextReplacements;
 use App\Services\Workspaces\CurrentWorkspace;
 use App\Services\Workspaces\PlanLimits;
 use App\Stt\DialectHint;
+use App\Stt\Drivers\AssemblyAiDriver;
 use App\Stt\Drivers\GeminiDriver;
 use App\Stt\GroqPacer;
 use App\Stt\KeytermPolicy;
@@ -179,6 +180,7 @@ class Settings extends Page
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
             'assemblyai_streaming_mode' => $all['assemblyai.streaming_mode'],
+            'assemblyai_fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($all['assemblyai.fastest_min_silence_ms'] ?? null),
             'assemblyai_async_models' => $all['assemblyai.async_models'],
             'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini_model' => GeminiDriver::modelOr($all['gemini.model'] ?? null),
@@ -406,7 +408,11 @@ class Settings extends Page
                             'balanced' => 'Balanced',
                             'max_accuracy' => 'Most accurate, slower',
                         ])->required()->selectablePlaceholder(false)
-                            ->helperText('How soon live captions end a line. Fastest ends it after 0.64 s of quiet, Balanced after 1.28 s, Most accurate after 2.56 s. Applies to captions started after saving.'),
+                            ->live()->helperText('How soon live captions end a line. Fastest ends it after 0.64 s of quiet, Balanced after 1.28 s, Most accurate after 2.56 s. Applies to captions started after saving.'),
+                        TextInput::make('assemblyai_fastest_min_silence_ms')->label('Fastest: quiet before a line may end (ms)')
+                            ->integer()->required()->minValue(AssemblyAiDriver::FASTEST_MIN_SILENCE_FLOOR)->maxValue(AssemblyAiDriver::FASTEST_MIN_SILENCE_CEILING)
+                            ->visible(fn (Get $get): bool => $get('assemblyai_streaming_mode') === 'min_latency')
+                            ->helperText('How soon AssemblyAI checks whether a line has ended, so its words show sooner. 80 by default; 50 to 600. Applies to captions started after saving.'),
                         TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
                     ]),
                     $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
@@ -865,6 +871,7 @@ class Settings extends Page
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.streaming_mode' => $state['assemblyai_streaming_mode'],
+            'assemblyai.fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($state['assemblyai_fastest_min_silence_ms'] ?? null),
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
             'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),

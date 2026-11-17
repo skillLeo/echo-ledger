@@ -830,7 +830,7 @@ the problem).
  ]}
 ```
 - `elevenlabs` → `protocol: "elevenlabs_realtime"`, one single-use token per grant baked into `ws_url`
-  (keyterms included as repeated query params), `frame_ms: 100`, `init_messages: []`.
+  (keyterms included as repeated query params), `frame_ms: 50` (100 before 2026-11-18; the apps take 50 to 250), `init_messages: []`.
 - `azure_mai` → `transport: "azure_speech_sdk"`, grant fields `token`, `region`, `expires_in` (600), `refresh_after` (540), `phrases`.
 - `whispercpp_local` / `parakeet_local` → `{"provider": "…", "mode": "on_device", "grants": []}`.
 - Captions off in the console (`captions.channels = off`) → `200 {"provider": null, "mode": "off", "expires_at": null, "keyterms": [], "grants": []}`.
