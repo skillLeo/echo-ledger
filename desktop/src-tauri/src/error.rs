@@ -28,8 +28,8 @@ fn retry_hint(retry_after_secs: &Option<u64>) -> String {
     retry_after_secs.map(|n| format!(" Try again in {n} s.")).unwrap_or_default()
 }
 
-/// Answers whose `message` is written for people (plan limits and roles, the missing Anthropic key for the views, the
-/// client workspace's AI budget and key, docs/API.md): shown as they are.
+/// Answers whose `message` is written for people and names no vendor or key (plan limits, roles, the client workspace's
+/// AI budget, docs/API.md): shown as they are. Every other code reads in the app's own words (`CODE_TEXT`, `coded_text`).
 const PLAIN_CODES: [&str; 11] = [
     "budget_exceeded", "storage_limit_reached", "device_limit_reached", "not_allowed", "ai_budget_reached", "no_client",
     "suggestion_not_found", "feature_not_in_plan", "seat_limit_reached", "limit_reached", "promo_other_plan",
@@ -37,7 +37,7 @@ const PLAIN_CODES: [&str; 11] = [
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 34] = [
+const CODE_TEXT: [(&str, &str); 37] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -79,6 +79,10 @@ const CODE_TEXT: [(&str, &str); 34] = [
     ("too_large", "This file is too large for the server."),
     ("too_many_labels", "A recording can have 20 labels at most. Remove one first."),
     ("session_required", "Captions need a recording to belong to. Start the recording again."),
+    // Live Assist (docs/API_ASSIST.md).
+    ("budget_exhausted", "This month's Live Assist time is used up. Captions go on."),
+    ("session_active", "Live Assist is already running for you on another device."),
+    ("session_ended", "This Live Assist session has ended."),
 ];
 
 /// `503 provider_not_configured` from `stt/token` and `live-translate/token` (docs/API.md), in the app's words.
@@ -311,6 +315,8 @@ mod server_text_tests {
             let answer = server(status, "ElevenLabs (scribe_v1) said: quota", Some("something_new")).to_string();
             assert_eq!(answer, said);
         }
+        assert_eq!(server(402, "Allowance used", Some("budget_exhausted")).to_string(), "This month's Live Assist time is used up. Captions go on.");
+        assert_eq!(server(409, "Active", Some("session_active")).to_string(), "Live Assist is already running for you on another device.");
         // The AI answers (the server's real sentences name the vendor and its key).
         let views = server(409, "Claude declined to write the views for this transcript.", Some("views_unavailable"));
         assert_eq!(views.to_string(), "The other views of this transcript aren't available yet: the transcript must be finished, and AI must be set up on the server.");

@@ -64,6 +64,33 @@ final class MakeAssistReportJob implements ShouldQueue
         }
     }
 
+    /** The job failed (an error, its timeout, or a worker that died and the queue gave it back): once more, then failed. */
+    public function failed(?\Throwable $e = null): void
+    {
+        $session = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->find($this->sessionId);
+        if ($session instanceof AssistSession) {
+            self::retryOrFail($session);
+        }
+    }
+
+    /**
+     * A report that did not come: queued once more (report_requeued_at), and after that marked failed ("report":
+     * "failed" on the session; the console says so). One already made stays.
+     */
+    public static function retryOrFail(AssistSession $session): void
+    {
+        if ($session->report_status === 'ready') {
+            return;
+        }
+        if ($session->report_requeued_at === null) {
+            $session->forceFill(['report_requeued_at' => now(), 'report_status' => 'queued'])->save();
+            self::enqueue($session);
+
+            return;
+        }
+        $session->forceFill(['report_status' => 'failed'])->save();
+    }
+
     public function handle(): void
     {
         $session = AssistSession::query()->withoutGlobalScope(WorkspaceScope::class)->find($this->sessionId);

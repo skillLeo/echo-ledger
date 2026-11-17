@@ -408,3 +408,27 @@ fn loopback_detection_compares_hosts_not_prefixes() {
         assert!(!is_local_dev(url), "{url}");
     }
 }
+
+#[test]
+fn the_relay_is_reached_only_with_its_pinned_key() {
+    init();
+    let (c, other) = (chain(), chain());
+    let mut roots = RootCertStore::empty();
+    roots.add(c.root.clone()).unwrap();
+    let roots = Arc::new(roots);
+    let pin = |p: [u8; 32]| format!("sha256/{}", base64::engine::general_purpose::STANDARD.encode(p));
+    // The relay's key, or its backup: accepted.
+    let current = relay_verifier(&[pin(c.leaf_pin), pin(other.leaf_pin)], roots.clone()).unwrap();
+    assert!(check(&current, &c, HOST).is_ok());
+    let backup = relay_verifier(&[pin(other.leaf_pin), pin(c.intermediate_pin)], roots.clone()).unwrap();
+    assert!(check(&backup, &c, HOST).is_ok());
+    // Another key than pinned: refused.
+    let mismatch = relay_verifier(&[pin(other.leaf_pin)], roots.clone()).unwrap();
+    assert!(is_pin_failure(&check(&mismatch, &c, HOST)));
+    // No pins, or none usable: no connection at all, in plain words.
+    for pins in [vec![], vec!["sha256/@@@".to_string()]] {
+        assert_eq!(relay_verifier(&pins, roots.clone()).err().as_deref(), Some(RELAY_INSECURE));
+        assert_eq!(relay_tls_config(&pins).err().as_deref(), Some("Live Assist could not make a secure connection."));
+    }
+    assert_eq!(relay_tls_config(&[pin(c.leaf_pin)]).unwrap().alpn_protocols, vec![b"http/1.1".to_vec()], "HTTP/1.1 for the upgrade");
+}

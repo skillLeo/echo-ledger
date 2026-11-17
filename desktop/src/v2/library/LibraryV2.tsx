@@ -6,6 +6,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type LibraryItem } from "../../lib/ipc";
 import { formatDuration, rowDate } from "../../lib/format";
 import { eraseIn } from "../../views/main/LibraryOrganise";
+import { useTrashKeepHours } from "../../lib/trash";
 import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
@@ -20,9 +21,11 @@ export type LibraryV2Props = {
   onRecord?: () => void;
   /** Open this recording (a notice, the palette, a link); `seq` makes the same one open again. */
   openRequest?: { id: string; seq: number } | null;
+  /** Open a saved view (Home's "isn't transcribed"); `seq` makes the same one open again. */
+  viewRequest?: { view: SavedView; seq: number } | null;
 };
 
-export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
+export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: LibraryV2Props) {
   const [items, setItems] = useState<LibraryItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
@@ -33,6 +36,7 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
   const [erase, setErase] = useState<BinItem | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const seq = useRef(0);
+  const keepHours = useTrashKeepHours();
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
 
@@ -63,6 +67,12 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
   useEffect(() => {
     if (view === "trash") void loadBin();
   }, [view, loadBin]);
+  useEffect(() => {
+    if (viewRequest) {
+      setOpenId(null);
+      setView(viewRequest.view);
+    }
+  }, [viewRequest]);
   useEffect(() => {
     if (openRequest) {
       setView("all");
@@ -156,10 +166,10 @@ export function LibraryV2({ onImport, onRecord, openRequest }: LibraryV2Props) {
           ) : !bin ? (
             <Loading label="Loading Trash">{Array.from({ length: 4 }, (_, i) => <SkeletonRow key={i} />)}</Loading>
           ) : bin.length === 0 ? (
-            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin))} />
+            <EmptyState icon={Icons.TrashIcon} title="Trash is empty" body={binSentence(binHours(bin, keepHours))} />
           ) : (
             <>
-            <p className="el-secondary">{binSentence(binHours(bin))}</p>
+            <p className="el-secondary">{binSentence(binHours(bin, keepHours))}</p>
             <List label="Deleted recordings">
               {bin.map((b) => (
                 <ListRow key={b.id} icon={Icons.TrashIcon} title={b.title || "Recording"}

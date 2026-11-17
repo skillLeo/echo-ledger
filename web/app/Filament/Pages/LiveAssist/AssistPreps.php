@@ -9,8 +9,9 @@ use App\Filament\Support\Notice as Notification;
 use App\Models\AssistPrep;
 use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\User;
+use App\Services\Assist\AssistDefaults;
 use App\Services\Assist\AssistRecords;
-use App\Services\Assist\PromptPack;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\CurrentWorkspace;
 use BackedEnum;
@@ -81,7 +82,7 @@ class AssistPreps extends Page implements HasTable
             Action::make('create')->label('New prep')->icon(Heroicon::OutlinedPlus)
                 ->visible(fn (): bool => self::canChange())
                 ->modalHeading('New prep')->modalWidth('3xl')
-                ->fillForm(fn (): array => ['meeting_type' => 'general', 'hint_level' => self::defaultHint('general'), 'mode' => 'balanced', 'language_help' => 'off'])
+                ->fillForm(fn (): array => ['meeting_type' => 'general', ...AssistDefaults::for(self::person(), 'general')])
                 ->schema(fn (): array => self::form())
                 ->modalSubmitActionLabel('Save prep')
                 ->action(function (array $data): void {
@@ -159,7 +160,12 @@ class AssistPreps extends Page implements HasTable
         return [
             Grid::make(2)->schema([
                 Select::make('meeting_type')->label('Meeting type')->options(AssistRecords::MEETING_TYPES)->required()->selectablePlaceholder(false)->live()
-                    ->afterStateUpdated(fn (Set $set, ?string $state) => $set('hint_level', self::defaultHint((string) $state))),
+                    // A new meeting type brings its defaults (Live Assist → Settings).
+                    ->afterStateUpdated(function (Set $set, ?string $state): void {
+                        foreach (AssistDefaults::for(self::person(), (string) $state) as $field => $value) {
+                            $set($field, $value);
+                        }
+                    }),
                 TextInput::make('title')->label('Title')->placeholder('Interview at Acme')->maxLength(200),
                 TextInput::make('counterpart')->label('With')->placeholder('Sara Khan')->maxLength(200),
                 TextInput::make('company')->label('Company')->maxLength(200),
@@ -231,10 +237,10 @@ class AssistPreps extends Page implements HasTable
             ->whereIn('client_id', self::projects()->whereKey($projectId)->select('id'))->orderBy('name');
     }
 
-    private static function defaultHint(string $meetingType): string
+    private static function person(): ?User
     {
-        $level = PromptPack::shipped()->defaultHintLevel($meetingType);
+        $user = auth()->user();
 
-        return array_key_exists($level, AssistRecords::HINT_LEVELS) ? $level : 'full';
+        return $user instanceof User ? $user : null;
     }
 }

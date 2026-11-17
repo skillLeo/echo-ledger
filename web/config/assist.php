@@ -70,7 +70,7 @@ return [
 
     // The usage kinds the relay reports (1.9.0-h): a suggestion's (`suggestion`, or the relay's own kind of it) and its
     // background calls. `report` is the server's own: the post-call report (L7).
-    'usage_kinds' => ['suggestion', 'answer', 'help_now', 'regenerate', 'shorter', 'formal', 'translate', 'upgrade', 'practice_question', 'facts', 'summary', 'report'],
+    'usage_kinds' => ['suggestion', 'answer', 'help_now', 'regenerate', 'shorter', 'formal', 'translate', 'upgrade', 'practice_question', 'facts', 'summary', 'report', 'ask'],
 
     // The post-call report (L7): the model that writes its words (from the catalog above, for its price), how much of the
     // transcript it reads, and the coaching numbers' settings.
@@ -83,6 +83,15 @@ return [
         'long_pause_ms' => 3000,
         // Counted as whole words or phrases, ignoring case.
         'filler_words' => ['um', 'uh', 'erm', 'er', 'hmm', 'you know', 'i mean', 'basically', 'actually', 'sort of', 'kind of', 'matlab', 'yaani'],
+    ],
+
+    // Ask over a session (L7): a question about one call, answered from its transcript, report and facts, with the
+    // moments it rests on. Billed as usage kind "ask" to the session's allowance (Practice's for Practice).
+    'ask' => [
+        'model' => 'claude-haiku-5-5',
+        'max_output_tokens' => 800,
+        'transcript_chars' => 40000,
+        'question_chars' => 500,
     ],
 
     // Provider keys the relay knows (services/assist-relay/src/domain.rs ProviderKind); any other key stays here.

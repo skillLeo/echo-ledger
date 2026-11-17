@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace App\Services\Assist;
 
-use App\Http\Controllers\Api\Assist\InternalAssistController;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
+use App\Models\AssistUsage;
 use App\Models\Client;
 use App\Models\ClientMemoryItem;
 use App\Services\SettingsRepository;
@@ -37,7 +37,7 @@ final class AssistReport
 {
     public const VERSION = 1;
 
-    public function __construct(private readonly AssistReportAi $ai, private readonly AssistPlans $plans, private readonly SettingsRepository $settings) {}
+    public function __construct(private readonly AssistReportAi $ai, private readonly AssistBudget $budget, private readonly SettingsRepository $settings) {}
 
     /**
      * @param  array<string, mixed>|null  $previous  the report made before, if any
@@ -216,7 +216,8 @@ final class AssistReport
      */
     private function words(AssistSession $session, ?AssistPrep $prep, Collection $turns, array $qa, ?array $previous): array
     {
-        $runs = (int) ($previous['ai']['runs'] ?? 0);
+        // Every run reserved, settled or left behind by a job that died: counted from the usage rows, never the report.
+        $runs = self::runs($session);
         $ai = fn (string $status, ?string $reason, ?string $model = null) => ['status' => $status, 'reason' => $reason, 'model' => $model, 'runs' => $runs];
         if (! $turns->contains('channel', 'me')) {
             return [$ai('skipped', 'nothing_said'), self::empty()];
@@ -228,31 +229,53 @@ final class AssistReport
                 : [$ai('failed', 'unavailable'), self::empty()];
         }
         $input = $this->input($session, $prep, $turns, $qa);
-        // Asked only when its worst case fits what is left of the allowance (Practice's for Practice).
+        // Its worst case is reserved first from what is left of the allowance (Practice's for Practice), with the
+        // person's row locked (AssistBudget), so an Ask at the same moment cannot spend it too.
         $prompt = $this->ai->promptText($input);
-        if (self::worstCaseCents($prompt) > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
+        $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
+        $worst = ['input' => 0, 'cached' => 0, 'written' => self::worstCaseTokens($prompt), 'output' => (int) config('assist.report.max_output_tokens', 6000)];
+        try {
+            $reservation = $this->budget->reserve($session, 'report', $model, self::worstCaseCents($prompt), 'report-'.$session->id.'-'.($runs + 1));
+        } catch (UniqueConstraintViolationException) {
+            // This run is being made already (the same job twice): keep what there is.
+            return ($previous['ai']['status'] ?? null) === 'ready'
+                ? [$ai('ready', null, $previous['ai']['model'] ?? null), self::fromReport($previous)]
+                : [$ai('failed', 'unavailable'), self::empty()];
+        }
+        if ($reservation === null) {
             return [$ai('skipped', 'budget'), self::empty()];
         }
         try {
             $answer = $this->ai->write($input);
         } catch (AssistReportFailed $e) {
-            if ($e->usage !== null) {
+            if ($e->usage !== null || $e->unknownCost) {
+                // Billed (a refusal, an answer that is not the report), or sent with no answer back (its worst case,
+                // estimated): a run.
                 $runs++;
-                $this->charge($session, $e->usage, $runs);
-            } elseif ($e->unknownCost) {
-                // Sent, and no answer: charged at the run's worst case, marked estimated.
-                $runs++;
-                $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
-                $this->charge($session, ['model' => $model, 'tokens' => ['input' => 0, 'cached' => 0, 'written' => self::worstCaseTokens($prompt),
-                    'output' => (int) config('assist.report.max_output_tokens', 6000)]], $runs, estimated: true);
+                $e->usage !== null
+                    ? $this->budget->settle($reservation, $model, $e->usage['model'], $e->usage['tokens'])
+                    : $this->budget->settle($reservation, $model, $model, $worst, lost: true);
+            } else {
+                $this->budget->release($reservation);
             }
 
             return [['status' => 'failed', 'reason' => $e->getMessage() === ClaudeAssistReportAi::NOT_SET_UP ? 'not_set_up' : 'unavailable', 'model' => null, 'runs' => $runs], self::empty()];
+        } catch (\Throwable $e) {
+            // Anything else: whether it was sent is unknown, so it stays at its worst case.
+            $this->budget->settle($reservation, $model, $model, $worst, lost: true);
+
+            throw $e;
         }
         $runs++;
-        $this->charge($session, $answer, $runs);
+        $this->budget->settle($reservation, $model, $answer['model'], $answer['tokens']);
 
         return [['status' => 'ready', 'reason' => null, 'model' => $answer['model'], 'runs' => $runs], self::clean($answer['data'], $qa, $prep, $session->practice)];
+    }
+
+    /** The report runs of [$session] so far: its report-<id>-N usage rows (pending, settled or lost). */
+    public static function runs(AssistSession $session): int
+    {
+        return AssistUsage::query()->where('assist_session_id', $session->id)->where('suggestion_id', 'like', 'report-'.$session->id.'-%')->count();
     }
 
     /**
@@ -274,11 +297,29 @@ final class AssistReport
      */
     public static function worstCaseCents(string $prompt): int
     {
-        $price = (array) config('assist.models.'.config('assist.report.model', 'claude-sonnet-5-5').'.price', []);
-        $input = self::worstCaseTokens($prompt) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
-        $output = (int) config('assist.report.max_output_tokens', 6000) * (float) ($price['output'] ?? 0);
+        return self::worstCaseCentsOf((string) config('assist.report.model', 'claude-sonnet-5-5'), (int) config('assist.report.max_output_tokens', 6000), $prompt);
+    }
 
-        return (int) ceil(($input + $output) / 1_000_000 * 100);
+    /** The most one call of [$model] with [$prompt] and at most [$maxOutput] tokens out can cost, in US cents. */
+    public static function worstCaseCentsOf(string $model, int $maxOutput, string $prompt): int
+    {
+        $price = (array) config("assist.models.{$model}.price", []);
+        $input = self::worstCaseTokens($prompt) * max((float) ($price['input'] ?? 0), (float) ($price['cache_write'] ?? 0));
+
+        return (int) ceil(($input + $maxOutput * (float) ($price['output'] ?? 0)) / 1_000_000 * 100);
+    }
+
+    /**
+     * What [$tokens] of [$model] cost in US$, at the catalog's prices.
+     *
+     * @param  array{input: int, cached: int, written: int, output: int}  $tokens
+     */
+    public static function costUsd(string $model, array $tokens): float
+    {
+        $price = (array) config("assist.models.{$model}.price", []);
+
+        return ($tokens['input'] * (float) ($price['input'] ?? 0) + $tokens['cached'] * (float) ($price['cache_read'] ?? 0)
+            + $tokens['written'] * (float) ($price['cache_write'] ?? 0) + $tokens['output'] * (float) ($price['output'] ?? 0)) / 1_000_000;
     }
 
     /**
@@ -330,29 +371,6 @@ final class AssistReport
             'transcript' => $lines,
             'translate_to' => $prep instanceof AssistPrep && $prep->language_help !== 'off' ? $prep->language_help : null,
         ];
-    }
-
-    /**
-     * The report's call, in the session's usage (its allowance: Practice's for Practice) and the month's ledger.
-     *
-     * @param  array{model: string, tokens: array{input: int, cached: int, written: int, output: int}}  $answer
-     */
-    private function charge(AssistSession $session, array $answer, int $run, bool $estimated = false): void
-    {
-        $model = (string) config('assist.report.model', 'claude-sonnet-5-5');
-        $price = (array) config("assist.models.{$model}.price", []);
-        $tokens = $answer['tokens'];
-        $cost = ($tokens['input'] * (float) ($price['input'] ?? 0) + $tokens['cached'] * (float) ($price['cache_read'] ?? 0)
-            + $tokens['written'] * (float) ($price['cache_write'] ?? 0) + $tokens['output'] * (float) ($price['output'] ?? 0)) / 1_000_000;
-        try {
-            InternalAssistController::record($session, [
-                'suggestion_id' => "report-{$session->id}-{$run}", 'provider' => (string) config("assist.models.{$model}.provider", 'anthropic'),
-                'model' => $answer['model'], 'mode' => $session->mode, 'kind' => 'report', 'trigger' => 'report',
-                'tokens' => $tokens, 'cost_usd' => $cost, 'estimated' => $estimated,
-            ], now());
-        } catch (UniqueConstraintViolationException) {
-            // Counted already (the same run made twice at once).
-        }
     }
 
     /**

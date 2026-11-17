@@ -19,7 +19,7 @@ use Illuminate\Support\Carbon;
  * @property string $provider
  * @property string $model
  * @property string $mode
- * @property string|null $plan the plan the call ran on (free, pro, ultra), as the relay token named it
+ * @property string|null $plan the sold plan's key the call ran on (its session's)
  * @property string $kind
  * @property string|null $outcome
  * @property array<string, mixed>|null $latency the relay's latency stages in ms (AssistStats::STAGES)

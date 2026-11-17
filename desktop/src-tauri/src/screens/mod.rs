@@ -22,7 +22,7 @@ use std::time::{Duration, Instant};
 
 use chrono::Utc;
 use serde::Serialize;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio::{RecordingInfo, RecordingMode};
 use crate::net::api::ApiClient;
@@ -39,6 +39,9 @@ const SAMPLE_EVERY: Duration = Duration::from_millis(1_000);
 const PROJECT_CHECK_FOR: Duration = Duration::from_secs(10);
 /// How long the next try waits after the server could not answer (offline, away or slow).
 const PROJECT_RETRY_EVERY: Duration = Duration::from_secs(30);
+
+/// Sent when a screen asked for with "Capture screen now" was kept: `{"count": n}`, the recording's screens so far.
+pub const CAPTURED_EVENT: &str = "screens:captured";
 
 /// What the recording pill shows (`RecordingState.screens`); none while screens are off for this recording.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -104,6 +107,8 @@ struct Live {
     user_paused: AtomicBool,
     /// Pointing words were heard since the last sample.
     words: AtomicBool,
+    /// "Capture now" was pressed since the last sample.
+    manual: AtomicBool,
     count: AtomicU32,
     pill: Mutex<Option<ScreensPill>>,
 }
@@ -245,6 +250,16 @@ impl Screens {
         }
     }
 
+    /// "Capture now" in the pill (or its shortcut): the next sample keeps the screen whatever it shows. False when no
+    /// recording captures screens.
+    pub fn capture_now(&self) -> bool {
+        if lock(&self.running).is_none() {
+            return false;
+        }
+        self.live.manual.store(true, Ordering::SeqCst);
+        true
+    }
+
     /// A caption line of the running recording: pointing words take a screen at the next sample.
     pub fn heard(&self, text: &str) {
         if lock(&self.running).is_some() && words::points_at_screen(text) {
@@ -318,6 +333,7 @@ pub fn on_recording_started(app: &AppHandle, info: &RecordingInfo) {
     let live = screens.live.clone();
     live.user_paused.store(false, Ordering::SeqCst);
     live.words.store(false, Ordering::SeqCst);
+    live.manual.store(false, Ordering::SeqCst);
     live.count.store(0, Ordering::SeqCst);
     *lock(&live.pill) = None;
     let wake = Arc::new(Wake::default());
@@ -461,7 +477,7 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
         };
         let meeting = state.detect.meeting();
         let wanted = platform::Wanted { mode: &settings.screen_target, meeting: meeting.as_ref(), excluded: &settings.screen_excluded_apps, site_rules: &settings.site_rules };
-        let sample = sampler.tick(facts, &wanted, clock.elapsed().as_millis() as u64, &live.words);
+        let sample = sampler.tick_asked(facts, &wanted, clock.elapsed().as_millis() as u64, &live.words, &live.manual);
         let count = live.count.load(Ordering::SeqCst);
         let (frame, trigger) = match sample {
             Sample::Off(_) => {
@@ -487,7 +503,11 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
                 Ok(encoded) if encoded.webp.len() <= encode::MAX_BYTES => {
                     match store.add(recording, key, &encoded.webp, at_ms, encoded.width, encoded.height, trigger.as_str(), Utc::now()) {
                         Ok(_) => {
-                            live.count.fetch_add(1, Ordering::SeqCst);
+                            let count = live.count.fetch_add(1, Ordering::SeqCst) + 1;
+                            // "Capture screen now" kept it: the pill flashes to confirm.
+                            if trigger == detect::Trigger::Manual {
+                                let _ = app.emit(CAPTURED_EVENT, serde_json::json!({ "count": count }));
+                            }
                         }
                         Err(e) => eprintln!("[echoledger] storing a screen: {e}"),
                     }
@@ -564,6 +584,16 @@ mod tests {
         assert_eq!(s.listed(Ok(json!({"data": []}))).unwrap(), Some(json!({"data": []})));
         assert!(s.listed(Err(server(500, "server_error"))).is_err());
         assert!(s.in_plan(), "only the plan's answer stops the capture");
+    }
+
+    #[test]
+    fn capture_now_asks_the_running_capture_only() {
+        let s = screens();
+        assert!(!s.capture_now(), "no recording captures screens");
+        assert!(!s.live.manual.load(Ordering::SeqCst));
+        *lock(&s.running) = Some(Running { recording: "rec-1".into(), wake: Arc::default(), thread: std::thread::spawn(|| ()) });
+        assert!(s.capture_now());
+        assert!(s.live.manual.load(Ordering::SeqCst), "the next sample keeps the screen");
     }
 
     #[test]

@@ -24,7 +24,8 @@ use Illuminate\Support\Facades\Route;
  */
 function documentedEndpoints(): array
 {
-    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
+    // docs/API.md, and Live Assist's contract (docs/API_ASSIST.md, since v1.9) until it moves into it.
+    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md')."\n".(string) file_get_contents(dirname(__DIR__, 4).'/docs/API_ASSIST.md');
     $endpoints = [];
     foreach (explode("\n", $doc) as $line) {
         if (preg_match('/^### `(GET|POST|PUT|PATCH|DELETE) (\/api\/[^`?]*)(?:\?[^`]*)?`(.*)$/', $line, $m) === 1) {
@@ -85,29 +86,10 @@ function registeredApiRoutes(): array
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
 const SERVED_BEFORE_DOCUMENTED = [
-    // Live Assist (v1.9 L1): its contract is docs/API_ASSIST.md until the L1 merge moves it into docs/API.md.
+    // Live Assist (v1.9): docs/API_ASSIST.md names these two together as `GET|PATCH|DELETE /api/assist/preps/{id}`, which
+    // the reader above does not split.
     'DELETE /api/assist/preps/{}',
-    'DELETE /api/assist/preps/{}/documents/{}',
-    'DELETE /api/assist/sessions/{}',
-    'GET /api/assist/preps',
-    'GET /api/assist/preps/{}',
-    'GET /api/assist/sessions',
-    'GET /api/assist/sessions/{}',
-    'GET /api/assist/sessions/{}/report',
-    'GET /api/internal/assist/providers',
     'PATCH /api/assist/preps/{}',
-    'POST /api/assist/preps',
-    'POST /api/assist/preps/{}/arm',
-    'POST /api/assist/preps/{}/documents',
-    'POST /api/assist/sessions',
-    'POST /api/assist/sessions/{}/end',
-    'POST /api/assist/sessions/{}/suggestions/{}/action',
-    'POST /api/assist/sessions/{}/token',
-    'POST /api/assist/sessions/{}/turns',
-    'POST /api/internal/assist/facts',
-    'POST /api/internal/assist/suggestions',
-    'POST /api/internal/assist/summary',
-    'POST /api/internal/assist/usage',
 ];
 
 const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
@@ -124,7 +106,8 @@ it('documents every endpoint the router serves, except the provider webhook whic
 });
 
 it('documents the provider webhook', function () {
-    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
+    // docs/API.md, and Live Assist's contract (docs/API_ASSIST.md, since v1.9) until it moves into it.
+    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md')."\n".(string) file_get_contents(dirname(__DIR__, 4).'/docs/API_ASSIST.md');
 
     expect($doc)->toContain('POST /api/webhooks/stt/{provider}')->and(array_keys(registeredApiRoutes()))->toContain('POST /api/webhooks/stt/{}');
 });
@@ -173,7 +156,8 @@ it('states the documented throttles the limiters really apply', function () {
 });
 
 it('documents the same abilities on every device token as the code grants', function () {
-    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
+    // docs/API.md, and Live Assist's contract (docs/API_ASSIST.md, since v1.9) until it moves into it.
+    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md')."\n".(string) file_get_contents(dirname(__DIR__, 4).'/docs/API_ASSIST.md');
     preg_match('/Abilities on every device\s+token: ([^.]+)\./s', $doc, $m);
     preg_match_all('/`([a-z]+:[a-z]+)`/', $m[1] ?? '', $tokens);
 
@@ -181,7 +165,8 @@ it('documents the same abilities on every device token as the code grants', func
 });
 
 it('documents the error statuses the API really uses', function () {
-    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md');
+    // docs/API.md, and Live Assist's contract (docs/API_ASSIST.md, since v1.9) until it moves into it.
+    $doc = (string) file_get_contents(dirname(__DIR__, 4).'/docs/API.md')."\n".(string) file_get_contents(dirname(__DIR__, 4).'/docs/API_ASSIST.md');
 
     foreach (['`401`', '`403`', '`404`', '`409`', '`413`', '`422`', '`429`'] as $status) {
         expect($doc)->toContain($status);

@@ -19,6 +19,7 @@ import { roleOf } from "./AccountSettings";
 import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
+import { AfterCallNotice } from "./AfterCallNotice";
 import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
@@ -47,6 +48,7 @@ import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { anyV2, useUiFlags } from "../../v2/flags";
+import { LiveTranslateCard } from "./LiveTranslateCard";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
@@ -57,6 +59,11 @@ const StorageCardV2 = lazy(() => v2().then((m) => ({ default: m.StorageCard })))
 const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch })));
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
+const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
+const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
+const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
+const WorkspaceV2 = lazy(() => v2().then((m) => ({ default: m.WorkspaceV2 })));
+const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -438,6 +445,7 @@ export default function MainApp() {
   const entitlements = useEntitlements();
   // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
+  const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
   useEffect(() => {
     const open = (e: Event) => {
       const id = (e as CustomEvent<string>).detail;
@@ -703,6 +711,8 @@ export default function MainApp() {
       <BannerSlot>
       <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
       <ServerBanners server={status.server} notify={notify} />
+      {/* The new shell shows its own (ui_v2.shell). */}
+      {!ui.flags["ui_v2.shell"] && <AfterCallNotice text={status.afterCallNotice} notify={notify} />}
       <ShareNotice />
       {status.platform === "macos" && <PermissionLossNotice />}
       {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
@@ -721,7 +731,7 @@ export default function MainApp() {
     <>
       {tab === "library" && ui.flags["ui_v2.library"] && (
         <Suspense fallback={null}>
-          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} />
+          <LibraryV2 onImport={canRecord ? () => void pickImport() : undefined} onRecord={canRecord ? record : undefined} openRequest={openRequest} viewRequest={libraryViewV2} />
         </Suspense>
       )}
       {tab === "library" && !ui.flags["ui_v2.library"] && (
@@ -731,13 +741,40 @@ export default function MainApp() {
           aside={<LibraryColumn places={places} folder={libraryFolder} view={libraryView} onOpen={openPlace} projects={projects} expanded={expanded}
             onToggle={toggleExpanded} onProject={(id) => openProject(id)} />} />
       )}
-      {tab === "projects" && (
+      {tab === "projects" && ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId) && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <WorkspaceV2 key={projectId} project={(projects ?? []).find((p) => p.id === projectId)!} onBack={() => openProject(null)}
+              onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "projects" && !(ui.flags["ui_v2.ask"] && projectId && (projects ?? []).some((p) => p.id === projectId)) && (
         <ProjectsView notify={notify} projects={projects} error={projectsError} onReload={loadProjects} onChanged={changeProjects}
           projectId={projectId} onOpenProject={openProject} onOpenRecording={openRecording} expanded={expanded} onToggle={toggleExpanded}
           requestFocus={requestFocus} onRequestFocusHandled={clearRequestFocus} aiNotesInPlan={status.plan?.aiNotes !== false} request={projectRequest}
           aside={<ProjectsColumn projects={projects} selectedId={projectId} expanded={expanded} onToggle={toggleExpanded} onOpen={openProject} onNew={newProject} />} />
       )}
-      {tab === "record" && (
+      {tab === "record" && ui.flags["ui_v2.home"] && (
+        <Suspense fallback={null}>
+          <div className="el-root el-embedded">
+            <HomeV2 status={status} onRecord={canRecord && !status.recording ? record : undefined} onStop={status.recording ? record : undefined}
+              onSetup={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
+              onReadyCheck={() => openAccount(ui.flags["ui_v2.settings"] && ui.flags["ui_v2.setup_health"] ? "setup_health" : "mic")}
+              onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} onPlan={() => openAccount("plan")}
+              onAction={(a) => {
+                if (a === "failed") openLibraryView("failed");
+                else if (a === "waiting") openLibraryView("waiting");
+                else if (a === "missed") goTo("activity");
+                else {
+                  openFolder(null);
+                  setLibraryViewV2({ view: "untranscribed", seq: ++navigations.current });
+                }
+              }} />
+          </div>
+        </Suspense>
+      )}
+      {tab === "record" && !ui.flags["ui_v2.home"] && (
         <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
           onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
           onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />
@@ -804,6 +841,22 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
+            notices={<Suspense fallback={null}><div className="el-root el-embedded">
+              <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
+            </div></Suspense>}
+            ask={ui.flags["ui_v2.ask"] ? (
+              <Suspense fallback={null}><div className="el-root el-embedded">
+                <AskV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
+                  onOpenProject={(id) => openProject(id)} onLibrary={() => openFolder(null)} />
+              </div></Suspense>
+            ) : undefined}
+            live={ui.flags["ui_v2.live"] ? (
+              <Suspense fallback={null}><div className="el-root el-embedded">
+                <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
+                  onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
+                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} translate={<LiveTranslateCard run={run} />} />
+              </div></Suspense>
+            ) : undefined}
             banners={<div className="shell-banners">{banners}</div>}>
             <section ref={contentRef} className={`content page-${tab}`}>{page}</section>
           </ShellV2>

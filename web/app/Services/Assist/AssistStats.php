@@ -6,6 +6,8 @@ namespace App\Services\Assist;
 
 use App\Models\AssistSession;
 use App\Models\AssistUsage;
+use App\Models\Plan;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 
 /**
@@ -59,10 +61,17 @@ final class AssistStats
         foreach ($usage()->selectRaw("COALESCE(plan, 'unknown') AS plan, {$tokens}")->groupBy('plan')->toBase()->get() as $row) {
             $plans[(string) $row->plan] = self::sums($row);
         }
+        // By the sold plan (Business and Personal apart), with the Live Assist tier it gives (free, pro, ultra).
+        $names = Plan::query()->pluck('name', 'key')->all();
         $byPlan = [];
         foreach (array_unique([...array_keys($plans), ...array_keys($hours['plan'] ?? [])]) as $plan) {
-            $byPlan[] = self::perHour(['plan' => $plan], $plans[$plan] ?? self::sums(null), $hours['plan'][$plan] ?? []);
+            $byPlan[] = self::perHour([
+                'plan' => (string) $plan,
+                'name' => $plan === 'unknown' ? 'Not recorded' : (string) ($names[$plan] ?? $plan),
+                'tier' => $plan === 'unknown' ? null : AssistPlans::config((string) $plan)['claim'],
+            ], $plans[$plan] ?? self::sums(null), $hours['plan'][$plan] ?? []);
         }
+        usort($byPlan, fn (array $a, array $b): int => $b['cost_usd'] <=> $a['cost_usd']);
 
         // Cost per mode follows the session's mode (Practice apart), so it sits with that mode's hours.
         $modes = [];
@@ -101,7 +110,7 @@ final class AssistStats
     /**
      * p50 and p95 of each stage, overall and per model, for the calls a person waits for.
      *
-     * @param  \Illuminate\Database\Eloquent\Builder<AssistUsage>  $usage
+     * @param  Builder<AssistUsage>  $usage
      * @return array{all: array<string, array{p50: float|null, p95: float|null, n: int}>, models: array<string, array<string, array{p50: float|null, p95: float|null, n: int}>>, rows: int}
      */
     private function latency($usage): array
@@ -163,7 +172,7 @@ final class AssistStats
     }
 
     /**
-     * @param  array<string, string>  $key
+     * @param  array<string, string|null>  $key
      * @param  array<string, mixed>  $cost
      * @param  array{sessions?: int, seconds?: int}  $time
      * @return array<string, mixed>

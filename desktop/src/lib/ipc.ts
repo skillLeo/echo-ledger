@@ -3,14 +3,15 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 
 /** `translate_lock` and `translate_hide` (v1.3, Live Translate) are bound only while it runs and never shown in Settings. */
-export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "hide_all" | "translate_lock" | "translate_hide";
+export type ShortcutAction = "record_now" | "toggle_captions" | "toggle_saving" | "copy_last2_min" | "dictation" | "voice_note" | "mark" | "hide_all" | "capture_screen" | "translate_lock" | "translate_hide";
 /** "Hide EchoLedger from screen sharing" (since v1.8.1). */
 export type ShareHiding = "all" | "floating" | "off";
 /** Windows before 10 version 2004: a black box where EchoLedger is, or the window as it is. */
 export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
-/** After a call (v1.5): kept at once with "Saved · Undo", or a small chip that keeps it by itself after 10 s. */
-export type AfterCall = "keep" | "ask";
+/** After a call (contract 1.8.0-e): `ask` (default), a small chip that saves the audio by itself after 12 s, not
+ * transcribed; `always_transcribe` or `always_audio`, kept at once with "Saved · Undo". v1.5's `keep` reads as `ask`. */
+export type AfterCall = "ask" | "always_transcribe" | "always_audio";
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
@@ -65,6 +66,8 @@ export interface AppStatus {
   readyProblems?: number;
   /** What the server says to every app (v1.6, P2.7); missing from an older core. */
   server?: ServerNotices;
+  /** Said once after "Keep automatically" became Ask me; null otherwise (missing from an older core). */
+  afterCallNotice?: string | null;
 }
 
 /** `config.app_update`: this version is below the server's minimum; `refused`: its other requests are refused. */
@@ -374,11 +377,13 @@ export interface Settings {
   clientId: string | null;
   consentAcknowledged: boolean;
   afterCall: AfterCall;
+  afterCallNotice: boolean;
   skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
   captionLines: number;
   pillPosition: PillPosition | null;
+  assistCardPosition: PillPosition | null;
   browserAutomation: boolean;
   autoRecordApps: Record<string, boolean>;
   captionStyle: CaptionStyle;
@@ -643,6 +648,81 @@ export interface MicUser {
   site: string | null;
   decision: MicDecision;
   reason: IgnoreReason | null;
+}
+
+/** Live Assist (docs/API_ASSIST.md 1.9.0-g): the core's side of the card's commands (desktop/src/v2/assist/adapter.ts). */
+export type AssistMeetingType = "interview" | "boss" | "existing_client" | "new_client" | "general";
+export type AssistHintLevel = "keywords" | "outline" | "full";
+export type AssistMode = "fast" | "balanced" | "deep" | "max";
+export type AssistLanguageHelp = "off" | "urdu" | "roman_urdu" | "arabic";
+export type AssistPrepStatus = "draft" | "scheduled" | "armed" | "done" | "cancelled";
+export interface AssistPrepDocument {
+  file_id: string;
+  name: string;
+  tokens: number | null;
+}
+export interface AssistPrepDraft {
+  id?: string;
+  meeting_type: AssistMeetingType;
+  title: string;
+  counterpart: string;
+  company: string;
+  project_id: string | null;
+  goals: string;
+  done: string;
+  not_done: string;
+  to_discuss: string;
+  instructions: string;
+  hint_level: AssistHintLevel;
+  mode: AssistMode;
+  language_help: AssistLanguageHelp;
+  scheduled_at: string | null;
+}
+export type AssistPrep = AssistPrepDraft & { id: string; status: AssistPrepStatus; documents: AssistPrepDocument[] };
+export interface AssistStarted {
+  session_id: string;
+  /** Started from a prep: the call is saved without the after-call card. */
+  auto_saved: boolean;
+  mode: AssistMode | "captions_only";
+  allowed_modes: AssistMode[];
+  seconds_left: number | null;
+  practice: boolean;
+}
+export type AssistSendKind = "help_now" | "regenerate" | "shorter" | "formal" | "translate" | "cancel";
+export interface AssistCardSettings {
+  mode?: AssistMode;
+  hint_level?: AssistHintLevel;
+  paused?: boolean;
+  muted_seconds?: number;
+}
+/** `assist:message`: the relay's messages as it sends them (without `seq`) and the core's `turn`, `budget` and `ended`. */
+export type AssistMessage =
+  | { type: "ready"; session_id: string; mode: AssistMode | "captions_only"; requested_mode: AssistMode; allowed_modes: AssistMode[]; resumed: boolean; practice: boolean; meeting_type?: AssistMeetingType }
+  | { type: "suggestion_start"; suggestion_id: string; turn_id: string | null; kind: "answer" | "help_now" | "regenerate" | "shorter" | "formal" | "translate" | "upgrade" | "other"; speculative: boolean; replaces: string | null; mode: string; model: string; draft: boolean }
+  | { type: "token"; suggestion_id: string; text: string }
+  | { type: "suggestion_end"; suggestion_id: string; status: "done" | "cancelled" | "superseded" | "other" }
+  | { type: "skip"; suggestion_id: string; turn_id?: string | null }
+  | { type: "mode_changed"; from: string; to: string; reason: "budget" | "budget_restored" | "plan" | "assist_time" | "requested" | "other"; requested?: AssistMode | null }
+  | { type: "error"; code: string; message: string; retry: boolean; suggestion_id: string | null; in_reply_to: number | null; fatal: boolean }
+  | { type: "turn"; turn_id: string; channel: "me" | "other"; text: string; final: boolean }
+  | { type: "budget"; seconds_left: number | null; seconds_total: number | null }
+  | { type: "session_active"; session_id: string; practice: boolean; text: string; action: string }
+  | { type: "offer"; prep_id: string; title: string; caller: string | null; question: string; client_ref: string }
+  | { type: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up" | "token_rejected"; message: string | null };
+/** `assist_state`: the session so far, for a window opened mid-session. */
+export interface AssistSnapshot {
+  messages: AssistMessage[];
+  hint_level: AssistHintLevel;
+  paused: boolean;
+  muted_until: string | null;
+  meeting_type: AssistMeetingType | null;
+}
+
+/** The interface flags (contract 2.0.0-a): every flag the app knows, on or off, for this person, and the "classic"
+ * choice; `ui:flags` carries the same when the cached flags change. */
+export interface UiFlagsAnswer {
+  ui_flags: Record<string, boolean>;
+  ui_classic: boolean;
 }
 
 /** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
@@ -920,7 +1000,7 @@ export interface SessionOrganisePatch {
   keep?: boolean;
 }
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
-/** A recording in the 48-hour undo bin (B17). */
+/** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
   id: string;
   title: string;
@@ -1163,6 +1243,8 @@ export interface PendingItem {
   language?: TranscriptionLanguage | null;
   /** Who the call was with (a meeting window's title), for "Call with <name>" while it has no title. */
   callerName?: string | null;
+  /** Screens kept for this recording on this computer (the after-call card's "3 screens"). */
+  screens?: number;
 }
 
 /** A kept recording in the upload queue. */
@@ -1212,6 +1294,8 @@ export interface RecordingState {
   missing?: MissingPermission[];
   /** One of its devices is gone, or changed a moment ago (since v1.5). */
   deviceNote?: DeviceNote | null;
+  /** Who the call is with, once its meeting window's title says; null until then. */
+  callerName?: string | null;
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
@@ -1421,6 +1505,10 @@ export interface PrivacyStatus {
 /** Events the core emits to the webviews and the payload each one carries (none = `null`). */
 export interface EventPayloads {
   "app:status": AppStatus;
+  "ui:flags": UiFlagsAnswer;
+  "assist:message": AssistMessage;
+  /** "Capture screen now" kept the screen (the pill's flash); `count`: the recording's screens so far. */
+  "screens:captured": { count: number };
   /** The words, or (since v1.6.1) the words and where the notice goes (lib/notice.ts NoticePayload). */
   "app:error": string | { text: string; target?: unknown };
   "app:toast": string | { text: string; target?: unknown };
@@ -1656,6 +1744,8 @@ export const api = {
   recordingState: () => invoke<RecordingState>("recording_state"),
   pendingList: () => invoke<PendingItem[]>("pending_list"),
   pendingKeep: (id: string) => invoke<void>("pending_keep", { id }),
+  /** "Save audio": kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in "Not transcribed". */
+  pendingKeepAudio: (id: string) => invoke<void>("pending_keep_audio", { id }),
   pendingDiscard: (id: string) => invoke<void>("pending_discard", { id }),
   pendingRename: (id: string, title: string) => invoke<PendingItem>("pending_rename", { id, title }),
   pendingAssignClient: (id: string, clientId: string | null) => invoke<PendingItem>("pending_assign_client", { id, clientId }),
@@ -1697,7 +1787,41 @@ export const api = {
   permissionRequest: (kind: PermissionKind) => invoke<PermissionsStatus>("permission_request", { kind }),
   /** "Quit & reopen": Screen Recording allowed while EchoLedger ran works once it opens again (refused while recording). */
   quitAndReopen: () => invoke<void>("quit_and_reopen"),
+  /** The interface flags from the last config read, no request (contract 2.0.0-a); desktop/src/v2/flags.ts reads them. */
+  uiFlags: () => invoke<UiFlagsAnswer>("ui_flags"),
+  /** How many hours a deleted recording can be restored (contract 2.0.0-b; 48 from an older server). */
+  trashKeepHours: () => invoke<number>("trash_keep_hours"),
+  /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
+  uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** Live Assist (API_ASSIST.md 1.9.0-g): the person's preps, all of them without a status. */
+  assistPrepsList: (status: AssistPrepStatus | null = null) => invoke<AssistPrep[]>("assist_preps_list", { status }),
+  assistPrepSave: (prep: AssistPrepDraft) => invoke<AssistPrep>("assist_prep_save", { prep }),
+  assistPrepDelete: (id: string) => invoke<void>("assist_prep_delete", { id }),
+  assistPrepDocumentsAdd: (id: string, fileIds: string[]) => invoke<AssistPrep>("assist_prep_documents_add", { id, fileIds }),
+  assistPrepDocumentRemove: (id: string, fileId: string) => invoke<AssistPrep>("assist_prep_document_remove", { id, fileId }),
+  /** Schedules a prep for `at` (RFC 3339): armed 2 minutes before, it waits up to 10 minutes for the meeting. */
+  assistSchedule: (prepId: string, at: string) => invoke<AssistPrep>("assist_schedule", { prepId, at }),
+  /** Starts the recording, the session and the relay while `live_assist` is on; the card hears `assist:message`. */
+  assistStart: (prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
+    invoke<AssistStarted>("assist_start", { prepId, mode, practice, clientRef }),
+  /** "End it and start this one" after `session_active`: that session ends, then this start is tried once more. */
+  assistStartReplacing: (sessionId: string, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
+    invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice, clientRef }),
+  /** "Keep running" after `session_active`: the other session goes on; what this start turned on is undone. */
+  assistKeepRunning: () => invoke<void>("assist_keep_running"),
+  /** Ends the running session and stops the recording (nothing runs: nothing happens). */
+  assistEnd: () => invoke<void>("assist_end"),
+  assistSend: (kind: AssistSendKind) => invoke<void>("assist_send", { kind }),
+  assistSet: (settings: AssistCardSettings) => invoke<AssistSnapshot>("assist_set", { settings }),
+  assistFeedback: (suggestionId: string, action: "used" | "dismissed") => invoke<void>("assist_feedback", { suggestionId, action }),
+  /** The card drew a suggestion's first text `renderMs` after its `suggestion_start` (contract 1.9.0-n "shown"). */
+  assistShown: (suggestionId: string, renderMs: number) => invoke<void>("assist_shown", { suggestionId, renderMs }),
+  /** Hides the card; the session goes on. */
+  assistCardHide: () => invoke<void>("assist_card_hide"),
+  assistState: () => invoke<AssistSnapshot | null>("assist_state"),
   permissionNoticeDismiss: () => invoke<void>("permission_notice_dismiss"),
+  /** The After a call notice: Always transcribe (true) or closed (false); said once either way. */
+  afterCallNoticeAnswer: (alwaysTranscribe: boolean) => invoke<AppStatus>("after_call_notice_answer", { alwaysTranscribe }),
   macCheckRun: () => invoke<CheckReport>("mac_check_run"),
   macCheckLast: () => invoke<CheckReport | null>("mac_check_last"),
   macCheckCopy: () => invoke<void>("mac_check_copy"),
@@ -1754,6 +1878,8 @@ export const api = {
   screensStatus: () => invoke<ScreensStatus>("screens_status"),
   /** The pill's Screens chip: pause or resume screens of the running recording (the recording goes on). */
   screensPause: (paused: boolean) => invoke<RecordingState>("screens_pause", { paused }),
+  /** "Capture now": the running recording keeps the screen at its next sample; `recording:state` then has the count. */
+  screensCaptureNow: () => invoke<RecordingState>("screens_capture_now"),
   /** macOS: asks for Screen Recording, or opens System Settings once it was refused; true when allowed. */
   screensPermission: () => invoke<boolean>("screens_permission"),
   /** A recording's screens in time order; null on a server without screen moments. */

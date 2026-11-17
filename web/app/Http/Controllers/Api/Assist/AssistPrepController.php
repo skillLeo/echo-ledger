@@ -11,8 +11,8 @@ use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
+use App\Services\Assist\AssistDefaults;
 use App\Services\Assist\AssistRecords;
-use App\Services\Assist\PromptPack;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -44,13 +44,15 @@ final class AssistPrepController extends Controller
         $data = $request->validate($this->rules(true));
         $device = $this->device($request);
         $type = (string) $data['meeting_type'];
+        // What the request leaves out comes from the person's Live Assist settings for this meeting type (L8).
+        $defaults = AssistDefaults::for($device->user, $type);
         $prep = new AssistPrep([
             'workspace_id' => $device->workspace_id,
             'user_id' => $device->user_id,
             'meeting_type' => $type,
-            'hint_level' => $data['hint_level'] ?? PromptPack::shipped()->defaultHintLevel($type),
-            'mode' => $data['mode'] ?? 'balanced',
-            'language_help' => $data['language_help'] ?? 'off',
+            'hint_level' => $data['hint_level'] ?? $defaults['hint_level'],
+            'mode' => $data['mode'] ?? $defaults['mode'],
+            'language_help' => $data['language_help'] ?? $defaults['language_help'],
             'status' => $data['status'] ?? (isset($data['scheduled_at']) ? 'scheduled' : 'draft'),
         ]);
         $this->fill($request, $prep, $data);
