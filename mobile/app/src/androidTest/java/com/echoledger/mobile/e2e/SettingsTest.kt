@@ -79,9 +79,11 @@ class SettingsTest : E2eTest() {
 
     @Test
     fun theMicrophoneSourceCanBeSwitchedAndIsRemembered() {
-        // Since v1.8.1 (P-022) the choice is in plain words: "Reduce echo" (recommended) or "Unprocessed".
+        // Since v1.8.1 (P-022) the choice is in plain words, "Reduce echo" (recommended) or "Unprocessed"; the row shows
+        // the choice without its "(recommended)", as the screen makes it.
+        val reduceEcho = com.echoledger.mobile.ui.AudioChoices.mic("voice_communication")
         openSettings("Microphone & audio")
-        Ui.awaitText("Reduce echo")
+        Ui.awaitText(reduceEcho)
         Ui.clickText("Your microphone")
         Ui.clickText("Unprocessed")
         Ui.awaitCondition("the setting to be saved", Ui.NORMAL) { AppState.settings().micSource == "mic" }
@@ -91,7 +93,7 @@ class SettingsTest : E2eTest() {
         Ui.awaitText("Unprocessed")
         Ui.clickText("Your microphone")
         Ui.clickText("Reduce echo (recommended)")
-        Ui.awaitText("Reduce echo")
+        Ui.awaitText(reduceEcho)
     }
 
     @Test
