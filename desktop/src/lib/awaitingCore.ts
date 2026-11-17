@@ -5,8 +5,8 @@
 export const AWAITING_CORE = {
   /** The app version by which the list must be empty. */
   removeBy: "2.0.0",
-  /** Help (docs/API.md 2.0.0-d): GET /api/help/guides, /guides/{id}, /whats-new and POST /api/support/messages. */
-  commands: ["help_guides", "help_guide", "help_whats_new", "support_send"] as readonly string[],
+  /** Empty: the help commands (docs/API.md 2.0.0-d) are in the core. */
+  commands: [] as readonly string[],
 } as const;
 
 /** "1.10.2" ≥ "1.9.0", by number. */

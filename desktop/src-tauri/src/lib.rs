@@ -12,9 +12,11 @@ pub mod call_guard;
 mod commands;
 pub mod deep_link;
 pub mod detect;
+pub mod device_report;
 pub mod dictation;
 pub mod error;
 pub mod files;
+pub mod help;
 pub mod identity;
 pub mod lifecycle;
 pub mod lock;
@@ -539,6 +541,11 @@ pub fn run() {
             commands::upgrade_request_create,
             commands::promo_code_check,
             commands::upgrade_request_latest,
+            commands::help_guides,
+            commands::help_guide,
+            commands::help_whats_new,
+            commands::support_send,
+            commands::last_device_report,
             commands::upgrade_receipt_pick,
             commands::upgrade_request_proof,
             commands::upgrade_request_proof_data,

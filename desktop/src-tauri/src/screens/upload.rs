@@ -1,6 +1,7 @@
 //! Sending stored screens (`POST /api/sessions/{id}/screens`) once their recording reached the server. Each screen is
 //! deleted here as soon as the server holds it (`201`, or `200` for an image it already has). The answers decide the
-//! rest: `409 too_many_screens` and `404 session_not_found` end the recording's screens, `404 not_found` (an older
+//! rest: `409 too_many_screens` (which also stops the recording's capture) and `404 session_not_found` end the
+//! recording's screens, `404 not_found` (an older
 //! server) and `403 feature_not_in_plan` end all of them and stop the capture, a refusal of one screen drops that
 //! screen, and a busy or unreachable server is tried again later, waiting longer each time. Before the first screen
 //! goes, the session's project is read: one with screens switched off keeps none of them.
@@ -20,8 +21,11 @@ pub enum Next {
     Sent,
     /// The server will never take this screen (too large, not an image): delete it.
     DropScreen,
-    /// No screen of this recording can go any more (400 kept, the recording deleted, not allowed).
+    /// No screen of this recording can go any more (the recording deleted, not allowed, no storage left).
     DropRecording,
+    /// The server keeps no more screens of this recording (`409 too_many_screens`): its stored ones go, and the
+    /// capture keeps none for the rest of it.
+    LimitReached,
     /// The server has no screen moments: nothing can go.
     ServerMissing,
     /// The plan leaves screen moments out: nothing can go.
@@ -30,7 +34,14 @@ pub enum Next {
     Unpaired,
     /// Busy or unreachable: try again later (after `Retry-After` seconds when the server said).
     Later(Option<u64>),
+    /// The server is decoding as many pictures as it allows (`503 server_busy`): nothing failed, the same screen goes
+    /// again after these seconds (its `Retry-After`).
+    Busy(u64),
 }
+
+/// How long a screen waits after `503 server_busy` without a `Retry-After` (the server sends 5), and at most.
+pub const BUSY_WAIT_SECS: u64 = 5;
+pub const BUSY_WAIT_MAX_SECS: u64 = 60;
 
 /// The step after an upload's answer (pure).
 pub fn next_after<T>(result: &AppResult<T>) -> Next {
@@ -40,8 +51,10 @@ pub fn next_after<T>(result: &AppResult<T>) -> Next {
         Err(e) => e,
     };
     match e.code() {
-        Some("too_many_screens" | "session_not_found" | "not_allowed" | "storage_limit_reached") => return Next::DropRecording,
+        Some("too_many_screens") => return Next::LimitReached,
+        Some("session_not_found" | "not_allowed" | "storage_limit_reached") => return Next::DropRecording,
         Some("feature_not_in_plan") => return Next::NotInPlan,
+        Some("server_busy") => return Next::Busy(e.retry_after_secs().unwrap_or(BUSY_WAIT_SECS).clamp(1, BUSY_WAIT_MAX_SECS)),
         _ => {}
     }
     if e.is_missing_route() {
@@ -67,6 +80,12 @@ pub struct Drain {
     pub dropped: usize,
     /// The round stopped early for everything (an older server, the plan, unpaired).
     pub stopped: Option<Next>,
+    /// Recordings the server keeps no more screens of (`409 too_many_screens`).
+    pub limited: Vec<String>,
+    /// The server was busy decoding pictures: the round stopped, and the screens go again after these seconds.
+    pub busy_for: Option<u64>,
+    /// Repeats not sent: the server holds the screen they repeat (`repeat`).
+    pub repeats: usize,
 }
 
 /// Does the session's project keep screens? The Inbox does; a project says with its `screens` switch (missing = on).
@@ -101,7 +120,7 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
                     continue;
                 }
                 Err(e) => match next_after::<()>(&Err(e)) {
-                    Next::DropRecording | Next::DropScreen | Next::ServerMissing => {
+                    Next::DropRecording | Next::LimitReached | Next::DropScreen | Next::ServerMissing => {
                         // The recording is gone (or unreadable): its screens have nowhere to go.
                         drain.dropped += manifest.items.len();
                         store.forget(&manifest.recording);
@@ -111,7 +130,7 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
                         drain.stopped = Some(next);
                         return drain;
                     }
-                    Next::Later(_) | Next::Sent => {
+                    Next::Later(_) | Next::Busy(_) | Next::Sent => {
                         wait(store, &manifest, now);
                         return drain;
                     }
@@ -125,6 +144,10 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
             }
             // Busy or away: the other recordings would meet the same server.
             Some(Next::Later(_)) => return drain,
+            Some(Next::Busy(after)) => {
+                drain.busy_for = Some(after);
+                return drain;
+            }
             _ => {}
         }
     }
@@ -133,7 +156,15 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
 
 /// Sends one recording's screens in order; returns the answer that ended it early, if one did.
 async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, manifest: &Manifest, session: &str, drain: &mut Drain) -> Option<Next> {
+    let mut confirmed = manifest.last_confirmed.clone();
     for screen in &manifest.items {
+        // A repeat of the screen the server confirmed last: the server would answer with that one. A repeat of a
+        // screen the server never took (refused, unreadable) goes like any other.
+        if screen.repeat_of.is_some() && screen.repeat_of == confirmed {
+            let _ = store.remove(&manifest.recording, &screen.file);
+            drain.repeats += 1;
+            continue;
+        }
         let image = match store.read(&manifest.recording, screen, key) {
             Ok(image) => image,
             Err(_) => {
@@ -147,6 +178,8 @@ async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, m
         let result = api.upload_screen(session, &upload, &image).await;
         match next_after(&result) {
             Next::Sent => {
+                confirmed = Some(screen.file.clone());
+                let _ = store.update(&manifest.recording, |m| m.last_confirmed = confirmed.clone());
                 let _ = store.remove(&manifest.recording, &screen.file);
                 drain.sent += 1;
             }
@@ -154,14 +187,22 @@ async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, m
                 let _ = store.remove(&manifest.recording, &screen.file);
                 drain.dropped += 1;
             }
-            Next::DropRecording => {
+            next @ (Next::DropRecording | Next::LimitReached) => {
                 drain.dropped += store.count(&manifest.recording);
                 store.forget(&manifest.recording);
+                if next == Next::LimitReached {
+                    drain.limited.push(manifest.recording.clone());
+                }
                 return None;
             }
             Next::Later(after) => {
                 wait_at_least(store, manifest, Utc::now(), after);
                 return Some(Next::Later(after));
+            }
+            Next::Busy(after) => {
+                // Not a failure: the same screen goes again after the server's wait, which does not grow.
+                let _ = store.update(&manifest.recording, |m| m.next_try_at = Some(Utc::now() + Duration::seconds(after as i64)));
+                return Some(Next::Busy(after));
             }
             other => return Some(other),
         }
@@ -197,7 +238,7 @@ mod tests {
     #[test]
     fn every_answer_has_its_next_step() {
         assert_eq!(next_after(&AppResult::Ok(())), Next::Sent);
-        assert_eq!(next_after(&server(409, Some("too_many_screens"))), Next::DropRecording);
+        assert_eq!(next_after(&server(409, Some("too_many_screens"))), Next::LimitReached);
         assert_eq!(next_after(&server(404, Some("session_not_found"))), Next::DropRecording);
         assert_eq!(next_after(&server(403, Some("not_allowed"))), Next::DropRecording);
         assert_eq!(next_after(&server(404, Some("not_found"))), Next::ServerMissing);
@@ -212,6 +253,11 @@ mod tests {
         assert_eq!(next_after::<()>(&Err(AppError::NotPaired)), Next::Unpaired);
         let limited: AppResult<()> = Err(AppError::Server { status: 429, message: "slow".into(), code: Some("rate_limited".into()), retry_after_secs: Some(42) });
         assert_eq!(next_after(&limited), Next::Later(Some(42)));
+        let busy = |secs| -> AppResult<()> { Err(AppError::Server { status: 503, message: "busy".into(), code: Some("server_busy".into()), retry_after_secs: secs }) };
+        assert_eq!(next_after(&busy(Some(5))), Next::Busy(5));
+        assert_eq!(next_after(&busy(None)), Next::Busy(BUSY_WAIT_SECS));
+        assert_eq!(next_after(&busy(Some(0))), Next::Busy(1));
+        assert_eq!(next_after(&busy(Some(3_600))), Next::Busy(BUSY_WAIT_MAX_SECS));
     }
 
     #[test]

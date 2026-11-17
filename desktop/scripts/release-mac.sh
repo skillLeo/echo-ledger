@@ -1,6 +1,9 @@
 #!/bin/sh
 # The Mac half of a release, run in the release shell for each chip (desktop/RELEASE.md). The updater key never goes to
 # GitHub: CI builds the self-signed .dmg and EchoLedger.app.tar.gz, and this signs that .app.tar.gz here.
+#   0. This checkout is the version being signed (src-tauri/tauri.conf.json), so the release gate
+#      (src/lib/releaseGate.test.ts with ECHOLEDGER_RELEASE=1) tests that build: nothing the release can open still
+#      waits for a core command (src/lib/awaitingCore.ts). It stops here when either fails, before anything is signed.
 #   1. The downloaded EchoLedger.app.tar.gz holds EchoLedger.app and nothing else (check-mac-archive.sh: no other entry,
 #      no .. or absolute path, no path twice, no hard link, no symbolic link out of the app) and is unpacked.
 #   2. The unpacked app and the app in the .dmg are this version, signed with the hardened runtime, the microphone and
@@ -45,6 +48,13 @@ one() {
 }
 dmg=$(one '*.dmg')
 tarball=$(one 'EchoLedger.app.tar.gz')
+
+# The release gate, with this checkout's tests (desktop/node_modules): a screen the release can reach must not wait for
+# a command the core lacks. Only when this checkout is the version being signed, or the gate tests another build.
+checkout=$(cd "$here/.." && node -p 'require("./src-tauri/tauri.conf.json").version') || fail "src-tauri/tauri.conf.json could not be read"
+[ "$checkout" = "$version" ] || fail "this checkout is version $checkout, not $version: check out the release's commit first"
+(cd "$here/.." && ECHOLEDGER_RELEASE=1 npx --no-install vitest run src/lib/releaseGate.test.ts) ||
+  fail "the release gate failed (src/lib/releaseGate.test.ts): nothing was signed"
 
 work=$(mktemp -d)
 mounted=

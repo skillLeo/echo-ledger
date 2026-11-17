@@ -8,6 +8,7 @@ import PillApp from "../views/pill/PillApp";
 import ReviewApp from "../views/review/ReviewApp";
 import DictationApp from "../views/dictation/DictationApp";
 import MainApp from "../views/main/MainApp";
+import AssistApp from "../v2/assist/AssistApp";
 import { callsOf, flushAsync, listenerCount, resetTauriMock, respondAll, respondWith, setWindowLabel } from "../test/tauri";
 import { makeRecordingState, makeSettings, makeStatus } from "../test/fixtures";
 
@@ -39,6 +40,8 @@ beforeEach(() => {
     upload_list: [],
     activity_list: { data: [], unread_count: 0 },
     list_clients: { data: [] },
+    ui_flags: { ui_flags: {} },
+    assist_state: null,
   });
 });
 
@@ -53,6 +56,8 @@ const windows: [string, () => ReactElement, string[], boolean][] = [
   ["review", () => <ReviewApp />, ["aftercall:state", "ask:show", "ask:hide"], false],
   ["dictation", () => <DictationApp />, ["overlay:visibility", "dictation:state", "dictation:level"], true],
   ["main", () => <MainApp />, ["main:navigate", "app:status"], false],
+  // Live Assist's card: with its flags off it draws nothing, and still says it listens.
+  ["assist", () => <AssistApp />, ["assist:message"], false],
 ];
 
 describe("each window says when it listens (C9)", () => {
@@ -70,5 +75,24 @@ describe("each window says when it listens (C9)", () => {
     expect(callsOf("window_ready")).toHaveLength(1);
     for (const event of events) expect(attached[event], `${event} listener attached before window_ready`).toBeGreaterThan(0);
     if (captions) expect(subscribed, "captions subscribed before window_ready").toBe(1);
+  });
+});
+
+describe("the assist window says it listens whatever the flags (the Windows smoke test waited for it)", () => {
+  it.each([
+    ["off", {}],
+    ["on", { live_assist: true, "ui_v2.live": true }],
+  ])("flags %s: window_ready once, after assist:message is listened to", async (_, flags) => {
+    setWindowLabel("assist");
+    respondAll({ ui_flags: { ui_flags: flags } });
+    let attached = 0;
+    respondWith("window_ready", () => {
+      attached = listenerCount("assist:message");
+    });
+    render(<AssistApp />);
+    await flushAsync();
+    await flushAsync();
+    expect(callsOf("window_ready")).toHaveLength(1);
+    expect(attached).toBeGreaterThan(0);
   });
 });

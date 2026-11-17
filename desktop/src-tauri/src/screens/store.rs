@@ -135,6 +135,9 @@ pub struct StoredScreen {
     pub sha256: String,
     pub bytes: u64,
     pub taken_at: DateTime<Utc>,
+    /// The stored screen this one repeats (`repeat`): it is sent only if the server does not hold that one.
+    #[serde(default)]
+    pub repeat_of: Option<String>,
 }
 
 /// `screens.json` of one recording.
@@ -163,11 +166,14 @@ pub struct Manifest {
     /// None: the account signed in now.
     #[serde(default)]
     pub owner: Option<Owner>,
+    /// The last screen the server confirmed it holds (`201`, or `200` with one it had): a repeat of it is not sent.
+    #[serde(default)]
+    pub last_confirmed: Option<String>,
 }
 
 impl Manifest {
     fn new(recording: &str, now: DateTime<Utc>) -> Self {
-        Self { recording: recording.to_string(), session_id: None, project_checked: false, created_at: now, updated_at: now, items: Vec::new(), next_number: 1, failures: 0, next_try_at: None, owner: None }
+        Self { recording: recording.to_string(), session_id: None, project_checked: false, created_at: now, updated_at: now, items: Vec::new(), next_number: 1, failures: 0, next_try_at: None, owner: None, last_confirmed: None }
     }
 
     /// Waiting to be sent now: linked to a session, with screens, and not waiting out a failure.
@@ -240,12 +246,22 @@ impl ScreenStore {
             sha256: crate::net::uploader::sha256_hex(webp),
             bytes: webp.len() as u64,
             taken_at: now,
+            repeat_of: None,
         };
         manifest.items.push(screen.clone());
         manifest.next_number = number + 1;
         manifest.updated_at = now;
         self.write_manifest(&manifest)?;
         Ok(screen)
+    }
+
+    /// The stored screen `file` repeats the stored screen `of` (`repeat`).
+    pub fn mark_repeat(&self, recording: &str, file: &str, of: &str) -> AppResult<()> {
+        self.update(recording, |m| {
+            if let Some(screen) = m.items.iter_mut().find(|s| s.file == file) {
+                screen.repeat_of = Some(of.to_string());
+            }
+        })
     }
 
     /// The WebP bytes of a stored screen.
