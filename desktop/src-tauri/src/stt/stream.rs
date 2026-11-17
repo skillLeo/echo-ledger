@@ -57,6 +57,25 @@ impl SessionUsage {
     }
 }
 
+/// What a session is for, as far as the socket cares.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SessionOptions {
+    /// Audio kept while the provider has not started (the newest, in whole frames).
+    pub pre_begin: Duration,
+}
+
+impl SessionOptions {
+    /// Captions and Live Assist: one second, so a provider throttled to about 1.25x real time never starts behind.
+    pub const LIVE: Self = Self { pre_begin: Duration::from_secs(1) };
+    /// Dictation: ten seconds, because its first words are the result.
+    pub const DICTATION: Self = Self { pre_begin: Duration::from_secs(10) };
+
+    /// The options for a token's use case (pure): `dictation` keeps its first words, everything else is live.
+    pub fn for_use_case(use_case: &str) -> Self {
+        if use_case == "dictation" { Self::DICTATION } else { Self::LIVE }
+    }
+}
+
 /// Runs until `stop` flips to true or the provider closes. `on_event` receives parsed events.
 pub async fn run_session(
     grant: Grant,
@@ -64,7 +83,19 @@ pub async fn run_session(
     stop: watch::Receiver<bool>,
     on_event: impl Fn(SttEvent) + Send + 'static,
 ) -> Result<(), String> {
-    run_session_with_usage(grant, pcm, stop, on_event).await.map(|_| ())
+    run_session_with(grant, pcm, stop, on_event, SessionOptions::LIVE).await
+}
+
+/// [`run_session`] with the session's options.
+pub async fn run_session_with(
+    grant: Grant,
+    pcm: UnboundedReceiver<Vec<u8>>,
+    stop: watch::Receiver<bool>,
+    on_event: impl Fn(SttEvent) + Send + 'static,
+    options: SessionOptions,
+) -> Result<(), String> {
+    let mut usage = SessionUsage::default();
+    run_session_into(grant, pcm, stop, on_event, options, &mut usage).await
 }
 
 /// [`run_session`] that also returns how long the socket was open.
@@ -75,7 +106,7 @@ pub async fn run_session_with_usage(
     on_event: impl Fn(SttEvent) + Send + 'static,
 ) -> Result<SessionUsage, String> {
     let mut usage = SessionUsage::default();
-    run_session_into(grant, pcm, stop, on_event, &mut usage).await.map(|_| usage)
+    run_session_into(grant, pcm, stop, on_event, SessionOptions::LIVE, &mut usage).await.map(|_| usage)
 }
 
 /// [`run_session`] writing the socket's usage into `usage` on every way out, so a session that fails after it
@@ -85,6 +116,7 @@ pub async fn run_session_into(
     pcm: UnboundedReceiver<Vec<u8>>,
     stop: watch::Receiver<bool>,
     on_event: impl Fn(SttEvent) + Send + 'static,
+    options: SessionOptions,
     usage: &mut SessionUsage,
 ) -> Result<(), String> {
     let protocol = Protocol::from_grant(&grant).ok_or_else(|| format!("unsupported streaming protocol {:?}", grant.protocol))?;
@@ -96,7 +128,7 @@ pub async fn run_session_into(
         .map_err(|e| format!("connect: {e}"))?;
     let connected = std::time::Instant::now();
     let mut provider_seconds: Option<u64> = None;
-    let result = stream_socket(ws, &grant, protocol, pcm, stop, &on_event, &mut provider_seconds).await;
+    let result = stream_socket(ws, &grant, protocol, pcm, stop, &on_event, options, &mut provider_seconds).await;
     usage.open_ms = (connected.elapsed().as_millis() as u64).max(1);
     usage.provider_session_s = provider_seconds;
     result
@@ -104,6 +136,7 @@ pub async fn run_session_into(
 
 type Socket = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
+#[allow(clippy::too_many_arguments)]
 async fn stream_socket(
     ws: Socket,
     grant: &Grant,
@@ -111,6 +144,7 @@ async fn stream_socket(
     mut pcm: UnboundedReceiver<Vec<u8>>,
     mut stop: watch::Receiver<bool>,
     on_event: &(impl Fn(SttEvent) + Send + 'static),
+    options: SessionOptions,
     provider_seconds: &mut Option<u64>,
 ) -> Result<(), String> {
     let frame_ms = grant.audio.as_ref().map(|a| a.frame_ms).unwrap_or(50).clamp(50, 250);
@@ -119,11 +153,11 @@ async fn stream_socket(
 
     let mut started = false;
     let mut pending: Vec<u8> = Vec::new();
-    // Before Begin only the last second is kept: more would be sent at once and the provider, throttled to about 1.25x
-    // real time, would take four times as long to catch up, every caption late meanwhile.
-    let max_buffer = pre_begin_bytes(frame_bytes);
-    // Speech sent and no caption since: when, so a provider that holds its turn open is made to end it (CAPTION_WAIT).
-    let mut voiced_since: Option<tokio::time::Instant> = None;
+    // Before Begin: live sessions keep one second (more, sent at once, leaves a provider throttled to about 1.25x real
+    // time catching up for four times as long); dictation keeps ten, its first words being the result.
+    let max_buffer = pre_begin_bytes(frame_bytes, options.pre_begin);
+    // A provider that holds its turn open is made to end it (CAPTION_WAIT, backing off when that brings nothing back).
+    let mut waits = CaptionWait::default();
     let mut terminating = false;
     // Once Terminate is sent, the provider gets this long to confirm before the socket is closed (A6.DR11).
     let mut terminate_deadline: Option<tokio::time::Instant> = None;
@@ -140,10 +174,22 @@ async fn stream_socket(
                     let _ = stop_now(&mut tx, protocol).await;
                     terminate_deadline = Some(tokio::time::Instant::now() + TERMINATE_WAIT);
                     if protocol == Protocol::ElevenLabsRealtime {
-                        // ElevenLabs commits and keeps the socket open; allow the final commit to arrive.
-                        let _ = tokio::time::timeout(Duration::from_secs(3), async {
-                            while let Some(Ok(msg)) = rx.next().await {
-                                if let Message::Text(t) = msg && let Some(ev) = protocol.parse(t.as_str()) { let done = matches!(ev, SttEvent::Final { .. }); on_event(ev); if done { break; } }
+                        // ElevenLabs commits and keeps the socket open: every commit still waiting (a forced one in
+                        // flight, and Stop's own) gets its answer, or 3 s pass, before it closes: no last words lost.
+                        waits.forced += 1;
+                        let _ = tokio::time::timeout(TERMINATE_WAIT, async {
+                            while waits.forced > 0 {
+                                let Some(Ok(Message::Text(t))) = rx.next().await else { break };
+                                let raw = t.as_str();
+                                if let Some(answer) = commit_answer(protocol, raw) {
+                                    waits.answered(answer);
+                                    if answer != Answer::Text {
+                                        continue;
+                                    }
+                                }
+                                if let Some(ev) = protocol.parse(raw) {
+                                    on_event(ev);
+                                }
                             }
                         }).await;
                         let _ = tx.send(Message::Close(None)).await;
@@ -159,9 +205,21 @@ async fn stream_socket(
                         {
                             *provider_seconds = Some(seconds);
                         }
+                        // The answer to a forced end: with text, a caption; without (or throttled, or "not enough
+                        // audio"), the wait grows. A refusal after a forced commit is no failure: logged, never shown.
+                        if let Some(answer) = commit_answer(protocol, text.as_str()) {
+                            let forced = waits.forced > 0;
+                            waits.answered(answer);
+                            if forced && answer == Answer::Refused {
+                                eprintln!("[echoledger] captions: the provider declined a forced commit; the wait is now {} ms", waits.wait.as_millis());
+                                continue;
+                            }
+                        }
                         if let Some(event) = protocol.parse(text.as_str()) {
-                            if matches!(event, SttEvent::Partial { .. } | SttEvent::Final { .. }) {
-                                voiced_since = None;
+                            if let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event
+                                && !text.is_empty()
+                            {
+                                waits.caption();
                             }
                             match &event {
                                 SttEvent::Started if !started => {
@@ -174,7 +232,7 @@ async fn stream_socket(
                                     let whole = pending.len() - pending.len() % frame_bytes;
                                     for frame in pending[..whole].chunks(frame_bytes) {
                                         send_audio(&mut tx, protocol, frame).await?;
-                                        note_voice(&mut voiced_since, frame);
+                                        waits.sent(frame);
                                     }
                                     pending.drain(..whole);
                                 }
@@ -197,7 +255,7 @@ async fn stream_socket(
                             while pending.len() >= frame_bytes {
                                 let frame: Vec<u8> = pending.drain(..frame_bytes).collect();
                                 send_audio(&mut tx, protocol, &frame).await?;
-                                note_voice(&mut voiced_since, &frame);
+                                waits.sent(&frame);
                             }
                         } else if pending.len() > max_buffer {
                             let excess = pending.len() - max_buffer;
@@ -219,12 +277,12 @@ async fn stream_socket(
                 let _ = tx.send(Message::Close(None)).await;
                 return Ok(());
             }
-            _ = tokio::time::sleep_until(voiced_since.map_or_else(tokio::time::Instant::now, |at| at + CAPTION_WAIT)), if started && !terminating && voiced_since.is_some() => {
-                // Speech went out and nothing came back for CAPTION_WAIT: the provider holds the turn open (music or
-                // noise under the voice keeps it from hearing a pause). Ending the turn brings its text back now.
-                let waited = voiced_since.map(|at| at.elapsed().as_millis()).unwrap_or_default();
+            _ = tokio::time::sleep_until(waits.due().unwrap_or_else(tokio::time::Instant::now)), if started && !terminating && waits.due().is_some() => {
+                // Speech went out and nothing came back for the wait: the provider holds the turn open (music or noise
+                // under the voice keeps it from hearing a pause). Ending the turn brings its text back now.
+                let waited = waits.since.map(|at| at.elapsed().as_millis()).unwrap_or_default();
                 eprintln!("[echoledger] captions: no caption {waited} ms after speech, the turn is ended now ({protocol:?})");
-                voiced_since = None;
+                waits.forced_end();
                 end_turn(&mut tx, protocol).await?;
             }
             _ = idle.tick(), if started && !terminating && protocol == Protocol::ElevenLabsRealtime => {
@@ -244,10 +302,103 @@ const TERMINATE_WAIT: Duration = Duration::from_secs(3);
 /// ElevenLabs commit) and its text comes back. Never reached while the provider sends partials.
 pub const CAPTION_WAIT: Duration = Duration::from_secs(2);
 
-/// What is kept before the provider's Begin: the last second of audio, in whole frames (pure).
-pub fn pre_begin_bytes(frame_bytes: usize) -> usize {
-    let second: usize = 16_000 * 2;
-    second.div_ceil(frame_bytes).max(1) * frame_bytes
+/// The longest the wait grows to after forced ends that brought nothing back.
+pub const CAPTION_WAIT_MAX: Duration = Duration::from_secs(8);
+
+/// What is kept before the provider's Begin: `keep` of 16 kHz audio, in whole frames (pure).
+pub fn pre_begin_bytes(frame_bytes: usize, keep: Duration) -> usize {
+    let bytes = (16_000 * 2 * keep.as_millis() / 1000) as usize;
+    bytes.div_ceil(frame_bytes).max(1) * frame_bytes
+}
+
+/// How a provider answered a forced end of its turn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Answer {
+    /// The turn's text came back.
+    Text,
+    /// The turn ended with no text (noise, no words).
+    Empty,
+    /// ElevenLabs declined the commit: `commit_throttled`, `insufficient_audio_activity`.
+    Refused,
+}
+
+/// A provider message that ends a turn, and how (pure): AssemblyAI's final (formatted) Turn; ElevenLabs' committed
+/// transcript, or its refusal of a commit. Anything else: none.
+pub fn commit_answer(protocol: Protocol, raw: &str) -> Option<Answer> {
+    let v: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let text = |key: &str| v.get(key).and_then(serde_json::Value::as_str).is_some_and(|t| !t.trim().is_empty());
+    match protocol {
+        Protocol::AssemblyAiV3 => {
+            let ends = v.get("type")?.as_str()? == "Turn"
+                && v.get("end_of_turn").and_then(serde_json::Value::as_bool) == Some(true)
+                && v.get("turn_is_formatted").and_then(serde_json::Value::as_bool) == Some(true);
+            ends.then(|| if text("transcript") { Answer::Text } else { Answer::Empty })
+        }
+        Protocol::ElevenLabsRealtime => match v.get("message_type")?.as_str()? {
+            "committed_transcript" | "committed_transcript_with_timestamps" => Some(if text("text") { Answer::Text } else { Answer::Empty }),
+            "commit_throttled" | "insufficient_audio_activity" => Some(Answer::Refused),
+            _ => None,
+        },
+    }
+}
+
+/// When a caption is overdue, and the turns ended to bring one (pure, the clock passed in where it matters).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CaptionWait {
+    /// The first speech sent since the last caption.
+    pub since: Option<tokio::time::Instant>,
+    /// How long a caption may take: CAPTION_WAIT, doubled after each forced end that brought no text (to
+    /// CAPTION_WAIT_MAX), back to CAPTION_WAIT with the next caption.
+    pub wait: Duration,
+    /// Forced ends (and Stop's commit) not answered yet.
+    pub forced: usize,
+}
+
+impl Default for CaptionWait {
+    fn default() -> Self {
+        Self { since: None, wait: CAPTION_WAIT, forced: 0 }
+    }
+}
+
+impl CaptionWait {
+    /// A frame went out: the first speech since the last caption starts the wait.
+    pub fn sent(&mut self, frame: &[u8]) {
+        self.sent_at(frame, tokio::time::Instant::now());
+    }
+
+    pub fn sent_at(&mut self, frame: &[u8], now: tokio::time::Instant) {
+        if self.since.is_none() && voiced(frame) {
+            self.since = Some(now);
+        }
+    }
+
+    /// When the turn is ended, if speech is waiting for a caption.
+    pub fn due(&self) -> Option<tokio::time::Instant> {
+        self.since.map(|at| at + self.wait)
+    }
+
+    /// A caption with text came: the wait starts over.
+    pub fn caption(&mut self) {
+        self.since = None;
+        self.wait = CAPTION_WAIT;
+    }
+
+    /// The turn was ended now.
+    pub fn forced_end(&mut self) {
+        self.since = None;
+        self.forced += 1;
+    }
+
+    /// A turn ended: text resets the wait; nothing (or a refusal) after a forced end doubles it.
+    pub fn answered(&mut self, answer: Answer) {
+        let forced = self.forced > 0;
+        self.forced = self.forced.saturating_sub(1);
+        match answer {
+            Answer::Text => self.caption(),
+            Answer::Empty | Answer::Refused if forced => self.wait = (self.wait * 2).min(CAPTION_WAIT_MAX),
+            _ => {}
+        }
+    }
 }
 
 /// A 16-bit PCM frame loud enough to be someone speaking (pure): room tone and the silence of a quiet app are not.
@@ -262,13 +413,6 @@ pub fn voiced(frame: &[u8]) -> bool {
 
 /// The level (RMS of 16-bit samples, about -36 dBFS) above which a frame counts as speech for [`CAPTION_WAIT`].
 const VOICE_RMS: f64 = 500.0;
-
-/// The first speech sent since the last caption starts the wait.
-fn note_voice(voiced_since: &mut Option<tokio::time::Instant>, frame: &[u8]) {
-    if voiced_since.is_none() && voiced(frame) {
-        *voiced_since = Some(tokio::time::Instant::now());
-    }
-}
 
 /// Ends the provider's current turn so its text comes back now.
 async fn end_turn(tx: &mut WsSink, protocol: Protocol) -> Result<(), String> {

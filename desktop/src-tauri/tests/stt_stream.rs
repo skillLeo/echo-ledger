@@ -957,7 +957,174 @@ fn speech_is_told_from_silence_and_one_second_waits_for_the_start() {
     assert!(!voiced(&[0u8; 1_600]));
     let hum: Vec<u8> = (0..800).flat_map(|n| ((n % 7) as i16 * 20).to_le_bytes()).collect();
     assert!(!voiced(&hum), "room tone is not speech");
-    assert_eq!(pre_begin_bytes(1_600), 32_000);
-    assert_eq!(pre_begin_bytes(3_200), 32_000);
-    assert_eq!(pre_begin_bytes(8_000), 32_000);
+    let second = Duration::from_secs(1);
+    assert_eq!(pre_begin_bytes(1_600, second), 32_000);
+    assert_eq!(pre_begin_bytes(3_200, second), 32_000);
+    assert_eq!(pre_begin_bytes(8_000, second), 32_000);
+    assert_eq!(pre_begin_bytes(1_600, Duration::from_secs(10)), 320_000);
+}
+
+#[test]
+fn dictation_keeps_its_first_words_and_live_sessions_one_second() {
+    use desktop_lib::stt::stream::SessionOptions;
+    assert_eq!(SessionOptions::for_use_case("dictation").pre_begin, Duration::from_secs(10));
+    assert_eq!(SessionOptions::for_use_case("live_captions").pre_begin, Duration::from_secs(1));
+    assert_eq!(SessionOptions::for_use_case("assist").pre_begin, Duration::from_secs(1));
+}
+
+#[test]
+fn a_forced_end_that_brings_nothing_back_doubles_the_wait_and_a_caption_resets_it() {
+    use desktop_lib::stt::stream::{Answer, CAPTION_WAIT, CAPTION_WAIT_MAX, CaptionWait};
+    let now = tokio::time::Instant::now();
+    let mut waits = CaptionWait::default();
+    assert_eq!(waits.due(), None, "nothing said yet");
+    waits.sent_at(&[0u8; 1_600], now);
+    assert_eq!(waits.due(), None, "silence starts no wait");
+    waits.sent_at(&speech(50), now);
+    assert_eq!(waits.due(), Some(now + CAPTION_WAIT));
+    for expected in [4, 8, 8] {
+        waits.forced_end();
+        assert_eq!(waits.due(), None);
+        waits.answered(Answer::Empty);
+        assert_eq!(waits.wait, Duration::from_secs(expected), "doubled, up to {CAPTION_WAIT_MAX:?}");
+        waits.sent_at(&speech(50), now);
+    }
+    waits.forced_end();
+    waits.answered(Answer::Refused);
+    assert_eq!(waits.wait, CAPTION_WAIT_MAX);
+    waits.caption();
+    assert_eq!(waits.wait, CAPTION_WAIT, "a real caption starts over");
+    // Stop's own commit and one in flight: both counted.
+    waits.forced_end();
+    waits.forced += 1;
+    waits.answered(Answer::Text);
+    assert_eq!(waits.forced, 1);
+    waits.answered(Answer::Empty);
+    assert_eq!(waits.forced, 0, "every commit answered");
+}
+
+#[test]
+fn the_answers_to_a_forced_end_are_read_from_each_provider() {
+    use desktop_lib::stt::stream::{Answer, Protocol, commit_answer};
+    let eleven = Protocol::ElevenLabsRealtime;
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"committed_transcript","text":"Hi."}"#), Some(Answer::Text));
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"committed_transcript","text":" "}"#), Some(Answer::Empty));
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"commit_throttled","error":"Commit throttled"}"#), Some(Answer::Refused));
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"insufficient_audio_activity","error":"Not enough audio"}"#), Some(Answer::Refused));
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"partial_transcript","text":"hi"}"#), None);
+    assert_eq!(commit_answer(eleven, r#"{"message_type":"quota_exceeded","error":"Quota"}"#), None, "a real failure stays one");
+    let assembly = Protocol::AssemblyAiV3;
+    assert_eq!(commit_answer(assembly, r#"{"type":"Turn","end_of_turn":true,"turn_is_formatted":true,"transcript":"Hi."}"#), Some(Answer::Text));
+    assert_eq!(commit_answer(assembly, r#"{"type":"Turn","end_of_turn":true,"turn_is_formatted":true,"transcript":""}"#), Some(Answer::Empty));
+    assert_eq!(commit_answer(assembly, r#"{"type":"Turn","end_of_turn":false,"turn_is_formatted":false,"transcript":"hi"}"#), None);
+}
+
+/// An ElevenLabs stand-in under continuous noise: empty partials every 300 ms (when `empty_partials`), and each commit
+/// answered with `answer` (the committed text, or a refusal) after `delay`. Logs when each commit came.
+async fn noisy_elevenlabs(mut ws: Ws, commits: Arc<Mutex<Vec<std::time::Instant>>>, answers: Vec<Value>, delay: Duration, empty_partials: bool) {
+    ws.send(Message::text(json!({"message_type": "session_started", "session_id": "s1", "config": {}}).to_string())).await.unwrap();
+    let mut answers = answers.into_iter().cycle();
+    let mut partial = tokio::time::interval(Duration::from_millis(300));
+    let (reply_tx, mut reply_rx) = unbounded_channel::<Value>();
+    loop {
+        tokio::select! {
+            message = ws.next() => {
+                let Some(Ok(message)) = message else { return };
+                match message {
+                    Message::Text(text) => {
+                        let v: Value = serde_json::from_str(text.as_str()).unwrap();
+                        if v["commit"] == true {
+                            commits.lock().unwrap().push(std::time::Instant::now());
+                            let (answer, replies) = (answers.next().unwrap(), reply_tx.clone());
+                            tokio::spawn(async move {
+                                tokio::time::sleep(delay).await;
+                                let _ = replies.send(answer);
+                            });
+                        }
+                    }
+                    Message::Close(_) => return,
+                    _ => {}
+                }
+            }
+            Some(reply) = reply_rx.recv() => {
+                if ws.send(Message::text(reply.to_string())).await.is_err() { return; }
+            }
+            _ = partial.tick(), if empty_partials => {
+                let _ = ws.send(Message::text(json!({"message_type": "partial_transcript", "text": ""}).to_string())).await;
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn a_throttled_commit_is_no_failure_and_the_next_one_waits_longer() {
+    let commits: Arc<Mutex<Vec<std::time::Instant>>> = Arc::default();
+    let seen = commits.clone();
+    let throttled = json!({"message_type": "commit_throttled", "error": "Commit throttled"});
+    let (port, _server) = serve(move |ws| noisy_elevenlabs(ws, seen, vec![throttled], Duration::from_millis(50), false)).await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    let fed = feed_real_time(client.pcm.clone(), speech(7_500));
+    tokio::time::sleep(Duration::from_millis(7_000)).await;
+    let at: Vec<Duration> = commits.lock().unwrap().iter().map(|t| t.duration_since(fed)).collect();
+    assert_eq!(at.len(), 2, "after 2 s, then 4 s later: {at:?}");
+    assert!(at[1] - at[0] >= Duration::from_millis(3_800), "the wait doubled: {at:?}");
+    assert!(!client.events().iter().any(|e| matches!(e, SttEvent::Error(_))), "never shown as stopped: {:?}", client.events());
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn continuous_noise_with_only_empty_partials_backs_off_and_shows_nothing() {
+    let commits: Arc<Mutex<Vec<std::time::Instant>>> = Arc::default();
+    let seen = commits.clone();
+    let empty = json!({"message_type": "committed_transcript", "text": ""});
+    let (port, _server) = serve(move |ws| noisy_elevenlabs(ws, seen, vec![empty], Duration::from_millis(50), true)).await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    let fed = feed_real_time(client.pcm.clone(), speech(7_500));
+    tokio::time::sleep(Duration::from_millis(7_000)).await;
+    let at: Vec<Duration> = commits.lock().unwrap().iter().map(|t| t.duration_since(fed)).collect();
+    assert_eq!(at.len(), 2, "empty partials are no caption, empty commits double the wait: {at:?}");
+    assert!(client.events().iter().all(|e| !matches!(e, SttEvent::Error(_) | SttEvent::Final { .. })), "{:?}", client.events());
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn stop_waits_for_every_commit_still_open_so_the_last_words_arrive() {
+    let commits: Arc<Mutex<Vec<std::time::Instant>>> = Arc::default();
+    let seen = commits.clone();
+    let answers = vec![json!({"message_type": "committed_transcript", "text": "First part."}), json!({"message_type": "committed_transcript", "text": "Last words."})];
+    let (port, _server) = serve(move |ws| noisy_elevenlabs(ws, seen, answers, Duration::from_millis(600), false)).await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    feed_real_time(client.pcm.clone(), speech(2_200));
+    let waiting = commits.clone();
+    wait_for("the forced commit", Duration::from_secs(4), || !waiting.lock().unwrap().is_empty()).await;
+    // Stop while the forced commit's answer is still on its way.
+    let events = client.events.clone();
+    client.finish(Duration::from_secs(5)).await.unwrap();
+    let finals: Vec<String> = events.lock().unwrap().iter().filter_map(|e| if let SttEvent::Final { text, .. } = e { Some(text.clone()) } else { None }).collect();
+    assert_eq!(finals, ["First part.", "Last words."], "both commits answered before the close");
+}
+
+#[tokio::test]
+async fn a_dictation_session_whose_start_takes_two_seconds_keeps_its_first_words() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| assemblyai_server(ws, server_log, Duration::from_millis(2_000), true, vec![])).await;
+    let (pcm, pcm_rx) = unbounded_channel();
+    let (stop, stop_rx) = watch::channel(false);
+    let task = tokio::spawn(desktop_lib::stt::stream::run_session_with(
+        grant("assemblyai_v3", port, 50, vec![]),
+        pcm_rx,
+        stop_rx,
+        |_| {},
+        desktop_lib::stt::stream::SessionOptions::DICTATION,
+    ));
+    let spoken = pcm_bytes(64_000, 9); // the first two seconds, said before the provider started
+    for piece in spoken.chunks(3_200) {
+        pcm.send(piece.to_vec()).unwrap();
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    wait_for("the first words", Duration::from_secs(5), || binaries(&log).concat().len() >= 64_000).await;
+    let _ = stop.send(true);
+    tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap().unwrap();
+    assert_eq!(binaries(&log).concat()[..64_000], spoken[..], "nothing said before the start is lost");
 }
