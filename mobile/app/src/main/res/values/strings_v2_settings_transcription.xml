@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_transcription). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_tr_language_title">Language of new recordings</string>
+    <string name="v2_tr_lang_auto">Auto (English / Urdu / Arabic)</string>
+    <string name="v2_tr_lang_en">English only</string>
+    <string name="v2_tr_lang_ur">Urdu (with English words)</string>
+    <string name="v2_tr_lang_ar">Arabic (with English words)</string>
+    <string name="v2_tr_more">More languages</string>
+    <string name="v2_tr_more_none">None of these</string>
+    <string name="v2_tr_lang_help">Auto picks English, Urdu or Arabic. Urdu and Arabic always allow English words inside.</string>
+    <string name="v2_tr_vocab">Add to vocabulary</string>
+    <string name="v2_tr_vocab_hint">A name or term the engine gets wrong</string>
+    <string name="v2_tr_add">Add</string>
+    <string name="v2_tr_vocab_project">Added to the selected project\'s keyterms.</string>
+    <string name="v2_tr_vocab_all">Added for every recording.</string>
+    <string name="v2_tr_keyterms">Project keyterms</string>
+    <string name="v2_tr_keyterms_help">Names and jargon of the selected project improve accuracy.</string>
+    <string name="v2_tr_no_project">No project</string>
+    <string name="v2_tr_key_title">Transcription key</string>
+    <string name="v2_tr_key_not_needed">Your plan transcribes on EchoLedger\'s engines: you don\'t need a key.</string>
+    <string name="v2_tr_key_saved">Your Groq key ending in %1$s is saved. New recordings are transcribed with it.</string>
+    <string name="v2_tr_key_remove">Remove key</string>
+    <string name="v2_tr_key_remove_question">Remove your key? New recordings won\'t be transcribed until you add a key again.</string>
+    <string name="v2_tr_key_remove_confirm">Remove</string>
+    <string name="v2_tr_key_cancel">Cancel</string>
+    <string name="v2_tr_key_intro">The Free plan transcribes with your own free Groq key. It takes two minutes:</string>
+    <string name="v2_tr_key_step1">1. Open console.groq.com and sign in (free).</string>
+    <string name="v2_tr_key_step2">2. API Keys, then Create API key, then copy it.</string>
+    <string name="v2_tr_key_step3">3. Paste it here and tap Save.</string>
+    <string name="v2_tr_key_open">Open console.groq.com</string>
+    <string name="v2_tr_key_replace">Replace with a new key</string>
+    <string name="v2_tr_key_field">Groq API key</string>
+    <string name="v2_tr_key_save">Save</string>
+    <string name="v2_tr_key_private">Your key is encrypted on the server and used only for your own recordings.</string>
+</resources>

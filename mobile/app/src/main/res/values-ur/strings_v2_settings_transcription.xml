@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_transcription). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_tr_language_title">نئی ریکارڈنگز کی زبان</string>
+    <string name="v2_tr_lang_auto">خودکار (انگریزی / اردو / عربی)</string>
+    <string name="v2_tr_lang_en">صرف انگریزی</string>
+    <string name="v2_tr_lang_ur">اردو (انگریزی الفاظ کے ساتھ)</string>
+    <string name="v2_tr_lang_ar">عربی (انگریزی الفاظ کے ساتھ)</string>
+    <string name="v2_tr_more">مزید زبانیں</string>
+    <string name="v2_tr_more_none">ان میں سے کوئی نہیں</string>
+    <string name="v2_tr_lang_help">خودکار انگریزی، اردو یا عربی چنتا ہے۔ اردو اور عربی میں انگریزی الفاظ ہمیشہ آ سکتے ہیں۔</string>
+    <string name="v2_tr_vocab">ذخیرۂ الفاظ میں شامل کریں</string>
+    <string name="v2_tr_vocab_hint">کوئی نام یا اصطلاح جو غلط لکھی جاتی ہے</string>
+    <string name="v2_tr_add">شامل کریں</string>
+    <string name="v2_tr_vocab_project">چنے گئے پروجیکٹ کے الفاظ میں شامل ہوتا ہے۔</string>
+    <string name="v2_tr_vocab_all">ہر ریکارڈنگ کے لیے شامل ہوتا ہے۔</string>
+    <string name="v2_tr_keyterms">پروجیکٹ کے الفاظ</string>
+    <string name="v2_tr_keyterms_help">چنے گئے پروجیکٹ کے نام اور اصطلاحات درستی بہتر کرتی ہیں۔</string>
+    <string name="v2_tr_no_project">کوئی پروجیکٹ نہیں</string>
+    <string name="v2_tr_key_title">ٹرانسکرپشن کی کلید</string>
+    <string name="v2_tr_key_not_needed">آپ کا پلان EchoLedger کے انجنوں پر ٹرانسکرائب کرتا ہے: آپ کو کلید کی ضرورت نہیں۔</string>
+    <string name="v2_tr_key_saved">آپ کی Groq کلید جس کے آخر میں %1$s ہے محفوظ ہے۔ نئی ریکارڈنگز اسی سے ٹرانسکرائب ہوتی ہیں۔</string>
+    <string name="v2_tr_key_remove">کلید ہٹائیں</string>
+    <string name="v2_tr_key_remove_question">اپنی کلید ہٹائیں؟ جب تک آپ دوبارہ کلید نہ ڈالیں نئی ریکارڈنگز ٹرانسکرائب نہیں ہوں گی۔</string>
+    <string name="v2_tr_key_remove_confirm">ہٹائیں</string>
+    <string name="v2_tr_key_cancel">منسوخ کریں</string>
+    <string name="v2_tr_key_intro">مفت پلان آپ کی اپنی مفت Groq کلید سے ٹرانسکرائب کرتا ہے۔ اس میں دو منٹ لگتے ہیں:</string>
+    <string name="v2_tr_key_step1">1. console.groq.com کھولیں اور سائن ان کریں (مفت)۔</string>
+    <string name="v2_tr_key_step2">2. API Keys، پھر Create API key، پھر اسے کاپی کریں۔</string>
+    <string name="v2_tr_key_step3">3. اسے یہاں چسپاں کریں اور محفوظ کریں دبائیں۔</string>
+    <string name="v2_tr_key_open">console.groq.com کھولیں</string>
+    <string name="v2_tr_key_replace">نئی کلید سے بدلیں</string>
+    <string name="v2_tr_key_field">Groq API کلید</string>
+    <string name="v2_tr_key_save">محفوظ کریں</string>
+    <string name="v2_tr_key_private">آپ کی کلید سرور پر خفیہ رہتی ہے اور صرف آپ کی اپنی ریکارڈنگز کے لیے استعمال ہوتی ہے۔</string>
+</resources>

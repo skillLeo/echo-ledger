@@ -339,10 +339,17 @@ private fun PhoneAppRecordingsGroup(settings: AppSettings, update: ((AppSettings
             )
         }
     }
-    // The last call's outcome in the screen's language; a note with no code isn't shown in other words.
-    note?.let { (at, words) -> LastCallNote.code(words)?.let { code -> at to code } }?.let { (at, code) ->
-        val said = stringResource(code.words, *code.args.toTypedArray())
-        Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), said))
+    // The last call's outcome: the core's own words on an English screen; on another, its code in that language, and
+    // nothing when it has no code (never English words inside an Urdu line).
+    val english = androidx.compose.ui.platform.LocalConfiguration.current.locales[0]?.language != "ur"
+    note?.let { (at, words) ->
+        val code = LastCallNote.code(words)
+        val said = when {
+            english -> words
+            code != null -> stringResource(code.words, *code.args.toTypedArray())
+            else -> null
+        }
+        said?.let { Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), it)) }
     }
     confirm?.let { candidate ->
         // Today's dialog (the file's name and length, and Play to listen first).
