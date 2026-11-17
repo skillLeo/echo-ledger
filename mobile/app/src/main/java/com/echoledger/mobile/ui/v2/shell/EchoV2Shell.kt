@@ -29,6 +29,9 @@ import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastState
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
+import com.echoledger.mobile.ui.v2.home.HomeActions
+import com.echoledger.mobile.ui.v2.home.V2HomeScreen
+import com.echoledger.mobile.ui.v2.library.SavedView
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
 import com.echoledger.mobile.ui.v2.library.V2TrashScreen
@@ -53,6 +56,8 @@ sealed interface V2Route {
     data object Settings : V2Route
     data object ClassicSettings : V2Route
     data object Trash : V2Route
+    data object Setup : V2Route
+    data class ClassicPage(val id: String) : V2Route
     data class Recording(val id: String) : V2Route
 }
 
@@ -128,6 +133,7 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
     val text = v2Text
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
+    var libraryViews by remember { mutableStateOf(emptySet<SavedView>()) }
     val library by vm.library.collectAsState()
     val settings by vm.settings.collectAsState()
     BackHandler(enabled = route != V2Route.Tabs) {
@@ -165,6 +171,10 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                 V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
 
                 // TODO(phone core): pass the config's trash.keep_hours (contract 2.0.0-b) once the data layer parses it.
+                V2Route.Setup -> SetupPage(vm, flags, classic, null) { route = V2Route.Tabs }
+
+                is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
+
                 V2Route.Trash -> V2TrashScreen(vm, configKeepHours = null, onBack = { route = V2Route.Tabs })
 
                 is V2Route.Recording -> {
@@ -177,7 +187,31 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                 }
 
                 V2Route.Tabs -> when (tab) {
-                    V2Tab.Home -> classic.home()
+                    V2Tab.Home -> if (flags.isOn(UiFlags.HOME)) {
+                        V2HomeScreen(
+                            vm = vm,
+                            initials = initials,
+                            actions = HomeActions(
+                                onSetup = { route = V2Route.Setup },
+                                onAllow = { route = V2Route.Setup },
+                                onRecord = { tab = V2Tab.Live },
+                                onChooseLanguage = { route = V2Route.ClassicPage("language") },
+                                onOpenRecording = { id -> if (flags.library) route = V2Route.Recording(id) else tab = V2Tab.Library },
+                                onOpenUntranscribed = {
+                                    libraryViews = setOf(SavedView.Untranscribed)
+                                    tab = V2Tab.Library
+                                },
+                                onSeeAll = {
+                                    libraryViews = emptySet()
+                                    tab = V2Tab.Library
+                                },
+                                onPlan = { route = V2Route.ClassicPage("plan") },
+                                onAccount = { route = V2Route.Settings }
+                            )
+                        )
+                    } else {
+                        classic.home()
+                    }
 
                     V2Tab.Library -> if (flags.library) {
                         V2LibraryScreen(
@@ -185,7 +219,8 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                             initials = initials,
                             onOpen = { route = V2Route.Recording(it.id) },
                             onTrash = { route = V2Route.Trash },
-                            onAccount = { route = V2Route.Settings }
+                            onAccount = { route = V2Route.Settings },
+                            initialViews = libraryViews
                         )
                     } else {
                         classic.library()

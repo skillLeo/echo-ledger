@@ -5,11 +5,13 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.pairLocally
+import com.echoledger.mobile.testsupport.storeRecording
 import com.echoledger.mobile.ui.v2.shell.ClassicScreens
 import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
 import com.echoledger.mobile.ui.v2.shell.UiFlags
@@ -106,5 +108,26 @@ class V2ShellTest : ScreenTest() {
         shell(v2)
         vm.showMessage("Restored")
         compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Restored").fetchSemanticsNode() }.isSuccess }
+    }
+
+    @Test
+    fun homeDiscardsACallOnlyAfterItsUndoTime() {
+        seed()
+        app.storeRecording(id = "r-omar", state = "pending_decision")
+        vm.reloadLocal()
+        shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
+        compose.onNodeWithText("Home").performClick()
+        compose.waitUntil(5_000) { runCatching { compose.onNodeWithText("Discard").fetchSemanticsNode() }.isSuccess }
+        compose.onNodeWithText("Discard").performScrollTo().performClick()
+        compose.onNodeWithText("Call discarded").assertExists()
+        // Undo: the call was never touched and is back on Home.
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitForIdle()
+        assertEquals("pending_decision", app.graph.recordings.get("r-omar")?.state)
+        compose.onNodeWithText("Discard").performScrollTo().performClick()
+        assertEquals("pending_decision", app.graph.recordings.get("r-omar")?.state)
+        // Once the Undo time ends, the existing decision runs and the call is gone.
+        compose.mainClock.advanceTimeBy(7_000)
+        compose.waitUntil(5_000) { app.graph.recordings.get("r-omar") == null }
     }
 }

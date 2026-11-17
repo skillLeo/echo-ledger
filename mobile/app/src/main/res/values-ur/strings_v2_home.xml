@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (home). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_home_title">ہوم</string>
+    <string name="v2_home_status_recording">ریکارڈنگ %1$s</string>
+    <string name="v2_home_status_ready">کالز ریکارڈ کرنے کے لیے تیار</string>
+    <string name="v2_home_status_needs">سیٹ اپ باقی</string>
+    <string name="v2_home_status_off">کالز خودبخود ریکارڈ نہیں ہو رہیں</string>
+    <string name="v2_home_status_voice">وائس نوٹس کے لیے تیار</string>
+    <string name="v2_home_fix">ٹھیک کریں</string>
+    <string name="v2_home_open">کھولیں</string>
+    <string name="v2_home_get_started">شروع کریں</string>
+    <string name="v2_home_get_started_progress">%2$d میں سے %1$d مکمل</string>
+    <string name="v2_home_check_capture">کال ریکارڈنگ تیار</string>
+    <string name="v2_home_check_permissions">مائیکروفون اور اطلاعات کی اجازت</string>
+    <string name="v2_home_check_first_recording">پہلی ریکارڈنگ کریں</string>
+    <string name="v2_home_check_language">ٹرانسکرپشن کی زبان چنیں</string>
+    <string name="v2_home_action_set_up">سیٹ اپ کریں</string>
+    <string name="v2_home_action_allow">اجازت دیں</string>
+    <string name="v2_home_action_record">ریکارڈ کریں</string>
+    <string name="v2_home_action_choose">چنیں</string>
+    <string name="v2_home_needs_action">توجہ طلب</string>
+    <string name="v2_home_nothing_needed">ابھی کچھ بھی توجہ طلب نہیں</string>
+    <string name="v2_home_failed_uploads">%1$d ریکارڈنگز اپ لوڈ نہیں ہوئیں</string>
+    <string name="v2_home_failed_upload_one">1 ریکارڈنگ اپ لوڈ نہیں ہوئی</string>
+    <string name="v2_home_failed_uploads_detail">یہ اس فون پر محفوظ ہیں۔</string>
+    <string name="v2_home_retry">دوبارہ کوشش کریں</string>
+    <string name="v2_home_waiting_decision">یہ کال رکھیں؟</string>
+    <string name="v2_home_keep">رکھیں</string>
+    <string name="v2_home_discard">ضائع کریں</string>
+    <string name="v2_home_discarded">کال ضائع کر دی گئی</string>
+    <string name="v2_home_untranscribed">%1$d ریکارڈنگز کا ٹرانسکرپٹ باقی</string>
+    <string name="v2_home_untranscribed_one">1 ریکارڈنگ کا ٹرانسکرپٹ باقی</string>
+    <string name="v2_home_failed_transcripts">%1$d ٹرانسکرپٹ ناکام</string>
+    <string name="v2_home_failed_transcript_one">1 ٹرانسکرپٹ ناکام</string>
+    <string name="v2_home_recent">حالیہ ریکارڈنگز</string>
+    <string name="v2_home_see_all">سب دیکھیں</string>
+    <string name="v2_home_usage">اس مہینے</string>
+    <string name="v2_home_usage_minutes">%2$d میں سے %1$d منٹ</string>
+    <string name="v2_home_usage_unlimited">%1$d منٹ، کوئی حد نہیں</string>
+    <string name="v2_home_empty_title">ابھی کوئی ریکارڈنگ نہیں</string>
+    <string name="v2_home_empty_body">وائس نوٹ ریکارڈ کریں، یا کال ریکارڈنگ تیار ہونے پر کال کریں۔</string>
+    <string name="v2_home_error_title">ریکارڈنگز لوڈ نہیں ہو سکیں</string>
+    <string name="v2_home_error_body">انٹرنیٹ کنکشن چیک کریں۔ اس فون پر موجود ریکارڈنگز محفوظ ہیں۔</string>
+</resources>

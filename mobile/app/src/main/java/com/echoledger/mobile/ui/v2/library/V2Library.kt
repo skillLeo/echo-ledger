@@ -96,7 +96,8 @@ fun V2LibraryScreen(
     onOpen: (LibraryItem) -> Unit,
     onTrash: () -> Unit,
     onAccount: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    initialViews: Set<SavedView> = emptySet()
 ) {
     val text = v2Text
     val library by vm.library.collectAsState()
@@ -104,7 +105,7 @@ fun V2LibraryScreen(
     val syncing by vm.syncing.collectAsState()
     val offline by vm.offline.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
-    var views by remember { mutableStateOf(emptySet<SavedView>()) }
+    var views by remember(initialViews) { mutableStateOf(initialViews) }
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
     val now = remember(library) { ZonedDateTime.now() }
     val rows = remember(library, views, query, text, locale) { LibraryModel.rows(library, views, query, now, text, locale) }
