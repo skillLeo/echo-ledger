@@ -1299,8 +1299,9 @@ export interface RecordingState {
 }
 
 /** Why screen moments are paused (since v1.5): by the person, the recording paused, the meeting window minimised or
- * hidden, no meeting window, an excluded app showing, macOS permission missing, 120 this hour, or the project being read. */
-export type ScreenHoldReason = "you" | "recording_paused" | "minimised" | "no_window" | "excluded_app" | "permission" | "hour_cap" | "starting";
+ * hidden, no meeting window, an excluded app showing, macOS permission missing, 120 this hour, the project being read,
+ * or (since v2.0) the server keeping no more screens of this recording (`409 too_many_screens`). */
+export type ScreenHoldReason = "you" | "recording_paused" | "minimised" | "no_window" | "excluded_app" | "permission" | "hour_cap" | "starting" | "limit";
 
 /** The recording pill's Screens chip: on, or paused and why, and how many screens were kept. */
 export interface ScreensPill {

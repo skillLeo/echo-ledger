@@ -111,6 +111,8 @@ struct Live {
     manual: AtomicBool,
     count: AtomicU32,
     pill: Mutex<Option<ScreensPill>>,
+    /// The server keeps no more screens of this recording (`409 too_many_screens`).
+    limited: AtomicBool,
 }
 
 /// The recording's project switch, one per recording (a read still going for the last recording never reaches the
@@ -235,6 +237,20 @@ impl Screens {
         lock(&self.live.pill).clone()
     }
 
+    /// The server keeps no more screens of these recordings (`409 too_many_screens`): when one is the running
+    /// recording, its capture holds for the rest of it and the pill says why at once.
+    pub fn limit_reached(&self, recordings: &[String]) {
+        let running = lock(&self.running);
+        if !running.as_ref().is_some_and(|r| recordings.contains(&r.recording)) {
+            return;
+        }
+        self.live.limited.store(true, Ordering::SeqCst);
+        if let Some(pill) = lock(&self.live.pill).as_mut() {
+            pill.on = false;
+            pill.reason = Some(HoldReason::Limit);
+        }
+    }
+
     /// One tap in the pill: pause or resume screens for this recording.
     pub fn set_paused(&self, paused: bool) {
         self.live.user_paused.store(paused, Ordering::SeqCst);
@@ -335,6 +351,7 @@ pub fn on_recording_started(app: &AppHandle, info: &RecordingInfo) {
     live.words.store(false, Ordering::SeqCst);
     live.manual.store(false, Ordering::SeqCst);
     live.count.store(0, Ordering::SeqCst);
+    live.limited.store(false, Ordering::SeqCst);
     *lock(&live.pill) = None;
     let wake = Arc::new(Wake::default());
     // The Inbox keeps screens; a project's switch is read first.
@@ -405,6 +422,7 @@ pub async fn send(app: &AppHandle, api: &ApiClient) -> usize {
     }
     let Some(key) = state.screens.key() else { return 0 };
     let drain = upload::drain(api, &store, &key, current.as_ref(), Utc::now()).await;
+    state.screens.limit_reached(&drain.limited);
     match drain.stopped {
         Some(upload::Next::ServerMissing) => {
             state.screens.server_missing.store(true, Ordering::SeqCst);
@@ -474,6 +492,7 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
             user_paused: live.user_paused.load(Ordering::SeqCst),
             recording_paused: state.capture.is_paused(),
             capped: false,
+            limited: live.limited.load(Ordering::SeqCst),
         };
         let meeting = state.detect.meeting();
         let wanted = platform::Wanted { mode: &settings.screen_target, meeting: meeting.as_ref(), excluded: &settings.screen_excluded_apps, site_rules: &settings.site_rules };
@@ -610,6 +629,20 @@ mod tests {
         *lock(&s.live.pill) = Some(ScreensPill { on: false, reason: Some(HoldReason::Minimised), count: 2 });
         s.set_paused(false);
         assert_eq!(lock(&s.live.pill).as_ref().and_then(|p| p.reason), Some(HoldReason::Minimised));
+    }
+
+    #[test]
+    fn the_server_s_limit_holds_the_running_recording_s_capture_only() {
+        let s = screens();
+        s.limit_reached(&["rec-1".into()]);
+        assert!(!s.live.limited.load(Ordering::SeqCst), "no recording runs");
+        *lock(&s.running) = Some(Running { recording: "rec-2".into(), wake: Arc::default(), thread: std::thread::spawn(|| ()) });
+        *lock(&s.live.pill) = Some(ScreensPill { on: true, reason: None, count: 400 });
+        s.limit_reached(&["rec-1".into()]);
+        assert!(!s.live.limited.load(Ordering::SeqCst), "an earlier recording's limit says nothing about this one");
+        s.limit_reached(&["rec-1".into(), "rec-2".into()]);
+        assert!(s.live.limited.load(Ordering::SeqCst));
+        assert_eq!(s.pill(), Some(ScreensPill { on: false, reason: Some(HoldReason::Limit), count: 400 }), "the pill says it at once");
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Sending stored screens (`POST /api/sessions/{id}/screens`) once their recording reached the server. Each screen is
 //! deleted here as soon as the server holds it (`201`, or `200` for an image it already has). The answers decide the
-//! rest: `409 too_many_screens` and `404 session_not_found` end the recording's screens, `404 not_found` (an older
+//! rest: `409 too_many_screens` (which also stops the recording's capture) and `404 session_not_found` end the
+//! recording's screens, `404 not_found` (an older
 //! server) and `403 feature_not_in_plan` end all of them and stop the capture, a refusal of one screen drops that
 //! screen, and a busy or unreachable server is tried again later, waiting longer each time. Before the first screen
 //! goes, the session's project is read: one with screens switched off keeps none of them.
@@ -20,8 +21,11 @@ pub enum Next {
     Sent,
     /// The server will never take this screen (too large, not an image): delete it.
     DropScreen,
-    /// No screen of this recording can go any more (400 kept, the recording deleted, not allowed).
+    /// No screen of this recording can go any more (the recording deleted, not allowed, no storage left).
     DropRecording,
+    /// The server keeps no more screens of this recording (`409 too_many_screens`): its stored ones go, and the
+    /// capture keeps none for the rest of it.
+    LimitReached,
     /// The server has no screen moments: nothing can go.
     ServerMissing,
     /// The plan leaves screen moments out: nothing can go.
@@ -40,7 +44,8 @@ pub fn next_after<T>(result: &AppResult<T>) -> Next {
         Err(e) => e,
     };
     match e.code() {
-        Some("too_many_screens" | "session_not_found" | "not_allowed" | "storage_limit_reached") => return Next::DropRecording,
+        Some("too_many_screens") => return Next::LimitReached,
+        Some("session_not_found" | "not_allowed" | "storage_limit_reached") => return Next::DropRecording,
         Some("feature_not_in_plan") => return Next::NotInPlan,
         _ => {}
     }
@@ -67,6 +72,8 @@ pub struct Drain {
     pub dropped: usize,
     /// The round stopped early for everything (an older server, the plan, unpaired).
     pub stopped: Option<Next>,
+    /// Recordings the server keeps no more screens of (`409 too_many_screens`).
+    pub limited: Vec<String>,
 }
 
 /// Does the session's project keep screens? The Inbox does; a project says with its `screens` switch (missing = on).
@@ -101,7 +108,7 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
                     continue;
                 }
                 Err(e) => match next_after::<()>(&Err(e)) {
-                    Next::DropRecording | Next::DropScreen | Next::ServerMissing => {
+                    Next::DropRecording | Next::LimitReached | Next::DropScreen | Next::ServerMissing => {
                         // The recording is gone (or unreadable): its screens have nowhere to go.
                         drain.dropped += manifest.items.len();
                         store.forget(&manifest.recording);
@@ -154,9 +161,12 @@ async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, m
                 let _ = store.remove(&manifest.recording, &screen.file);
                 drain.dropped += 1;
             }
-            Next::DropRecording => {
+            next @ (Next::DropRecording | Next::LimitReached) => {
                 drain.dropped += store.count(&manifest.recording);
                 store.forget(&manifest.recording);
+                if next == Next::LimitReached {
+                    drain.limited.push(manifest.recording.clone());
+                }
                 return None;
             }
             Next::Later(after) => {
@@ -197,7 +207,7 @@ mod tests {
     #[test]
     fn every_answer_has_its_next_step() {
         assert_eq!(next_after(&AppResult::Ok(())), Next::Sent);
-        assert_eq!(next_after(&server(409, Some("too_many_screens"))), Next::DropRecording);
+        assert_eq!(next_after(&server(409, Some("too_many_screens"))), Next::LimitReached);
         assert_eq!(next_after(&server(404, Some("session_not_found"))), Next::DropRecording);
         assert_eq!(next_after(&server(403, Some("not_allowed"))), Next::DropRecording);
         assert_eq!(next_after(&server(404, Some("not_found"))), Next::ServerMissing);

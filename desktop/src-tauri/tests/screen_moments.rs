@@ -120,6 +120,7 @@ async fn four_hundred_screens_end_the_recordings_screens() {
     let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped, result.stopped), (1, 3, None));
+    assert_eq!(result.limited, ["rec"], "the recording is named, so its capture stops and the pill says why");
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 2, "no screen is sent after 409");
     assert!(!dir.path().join("screens").join("rec").exists());
 }
@@ -135,6 +136,7 @@ async fn a_deleted_recording_drops_its_screens() {
 
     assert_eq!(result.dropped, 2);
     assert!(server.requests_to("POST", &screens_path()).is_empty());
+    assert!(result.limited.is_empty(), "a deleted recording is not a limit reached");
     assert!(!dir.path().join("screens").join("rec").exists());
 }
 
