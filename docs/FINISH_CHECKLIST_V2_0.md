@@ -5,6 +5,11 @@ tagged. Before that, only the docs-only V0 groundwork lane runs (when a builder 
 v1.8/v1.9 sweeps that isn't fixed now is logged in [v2/audit/bugs.csv](v2/audit/bugs.csv). Each item is ticked only with
 its proof (test name, screenshot path or log), a reviewer approve and a HANDOFF line.
 
+> **Status 2026-11-18 03:52 PKT (paused):**
+> - The parity sprint (PLAN_V2_PARITY) comes before every other v2.0 item. Desktop is 62% (372/603), phone 36% (103/285), and the web audit has just started.
+> - Classic stays the default for everyone, with v2 Opt-in on production.
+> - Full state and next steps: [RESUME_HERE.md](RESUME_HERE.md).
+
 ## Needs Hassam
 
 | # | What | When | Action |
