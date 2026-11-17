@@ -1812,6 +1812,8 @@ export const api = {
   assistSend: (kind: AssistSendKind) => invoke<void>("assist_send", { kind }),
   assistSet: (settings: AssistCardSettings) => invoke<AssistSnapshot>("assist_set", { settings }),
   assistFeedback: (suggestionId: string, action: "used" | "dismissed") => invoke<void>("assist_feedback", { suggestionId, action }),
+  /** The card drew a suggestion's first text `renderMs` after its `suggestion_start` (contract 1.9.0-n "shown"). */
+  assistShown: (suggestionId: string, renderMs: number) => invoke<void>("assist_shown", { suggestionId, renderMs }),
   /** Hides the card; the session goes on. */
   assistCardHide: () => invoke<void>("assist_card_hide"),
   assistState: () => invoke<AssistSnapshot | null>("assist_state"),

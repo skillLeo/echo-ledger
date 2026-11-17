@@ -2650,6 +2650,12 @@ pub async fn assist_feedback(app: AppHandle, suggestion_id: String, action: Stri
     crate::assist::live::feedback(&app, &suggestion_id, &action).await
 }
 
+/// The card drew a suggestion's first text `render_ms` after its `suggestion_start` (`POST …/action` `shown`).
+#[tauri::command]
+pub async fn assist_shown(app: AppHandle, suggestion_id: String, render_ms: u64) -> AppResult<()> {
+    crate::assist::live::shown(&app, &suggestion_id, render_ms).await
+}
+
 /// The card hides; the session goes on.
 #[tauri::command]
 pub fn assist_card_hide(app: AppHandle) {

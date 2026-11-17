@@ -50,6 +50,7 @@ describe("api wrappers", () => {
     ["assistSend", () => api.assistSend("help_now"), "assist_send", { kind: "help_now" }],
     ["assistSet", () => api.assistSet({ muted_seconds: 60 }), "assist_set", { settings: { muted_seconds: 60 } }],
     ["assistFeedback", () => api.assistFeedback("s1", "used"), "assist_feedback", { suggestionId: "s1", action: "used" }],
+    ["assistShown", () => api.assistShown("s1", 412), "assist_shown", { suggestionId: "s1", renderMs: 412 }],
     ["assistCardHide", () => api.assistCardHide(), "assist_card_hide", undefined],
     ["assistState", () => api.assistState(), "assist_state", undefined],
     ["importVoiceNotes", () => api.importVoiceNotes(["notes/a.opus", "notes/b.mp3"]), "import_voice_notes", { pathsList: ["notes/a.opus", "notes/b.mp3"], clientId: null, language: null }],

@@ -223,17 +223,48 @@ pub fn first_context(prep: Option<&Prep>, mode: &str) -> ContextUpdate {
         to_discuss: p.to_discuss.clone(),
         instructions: p.instructions.clone(),
     });
+    // `context_update` replaces (1.9.0-n): the settings go whole, every field, every time.
     let settings = Settings {
         mode: Some(mode.to_string()),
-        hint_level: prep.map(|p| p.hint_level.clone()),
-        language_help: prep.map(|p| p.language_help.clone()),
+        hint_level: Some(prep.map_or("outline", |p| p.hint_level.as_str()).to_string()),
+        language_help: Some(prep.map_or("off", |p| p.language_help.as_str()).to_string()),
         assist: Some("on".into()),
     };
-    // The documents' extracted text (contract 1.9.0-m), the ones that have some.
-    let documents: Vec<Document> = prep
-        .map(|p| p.documents.iter().filter_map(|d| d.text.as_ref().filter(|t| !t.trim().is_empty()).map(|text| Document { id: d.file_id.clone(), title: d.name.clone(), text: text.clone() })).collect())
-        .unwrap_or_default();
+    // The documents' extracted text (contract 1.9.0-m), within the relay's limits.
+    let documents = prep.map(|p| documents_within_limits(&p.documents)).unwrap_or_default();
     ContextUpdate { brief, settings: Some(settings), documents: (!documents.is_empty()).then_some(documents), ..ContextUpdate::default() }
+}
+
+/// The relay's limits on documents (contract 1.9.0-n): how many, the characters of each, the tokens of all.
+pub const MAX_DOCUMENTS: usize = 20;
+pub const MAX_DOCUMENT_CHARS: usize = 400_000;
+pub const MAX_DOCUMENT_TOKENS: u64 = 60_000;
+
+/// The prep's documents that have text, as the relay takes them (pure): at most [`MAX_DOCUMENTS`], each cut to
+/// [`MAX_DOCUMENT_CHARS`], and only while all together stay within about [`MAX_DOCUMENT_TOKENS`] (the server's count,
+/// else 4 characters a token), so `documents_too_large` is not met in the ordinary case.
+pub fn documents_within_limits(documents: &[crate::net::models::PrepDocument]) -> Vec<Document> {
+    let mut tokens = 0_u64;
+    let mut kept = Vec::new();
+    for document in documents {
+        let Some(text) = document.text.as_deref().filter(|t| !t.trim().is_empty()) else { continue };
+        if kept.len() == MAX_DOCUMENTS {
+            break;
+        }
+        let cut = text.char_indices().nth(MAX_DOCUMENT_CHARS).map_or(text, |(at, _)| &text[..at]);
+        // The server's count (for a cut text, its share of it), else about 4 characters a token.
+        let cost = match document.tokens {
+            Some(all) if cut.len() < text.len() => (all as u128 * cut.len() as u128 / text.len().max(1) as u128) as u64,
+            Some(all) => all,
+            None => cut.chars().count().div_ceil(4) as u64,
+        };
+        if tokens + cost > MAX_DOCUMENT_TOKENS {
+            continue;
+        }
+        tokens += cost;
+        kept.push(Document { id: document.file_id.clone(), title: document.name.clone(), text: cut.to_string() });
+    }
+    kept
 }
 
 /// `assist_set`'s settings from the card.
@@ -245,9 +276,15 @@ pub struct CardSettings {
     pub muted_seconds: Option<u64>,
 }
 
-/// The `context_update.settings` for a change on the card (pure): `assist` is `paused` while paused or muted.
-pub fn settings_update(change: &CardSettings, quiet: bool) -> Settings {
-    Settings { mode: change.mode.clone(), hint_level: change.hint_level.clone(), language_help: None, assist: Some(if quiet { "paused" } else { "on" }.into()) }
+/// The whole `context_update.settings` after a change on the card (pure): `context_update` replaces, so every field
+/// goes each time; `assist` is `paused` while paused or muted.
+pub fn settings_update(current: &Settings, change: &CardSettings, quiet: bool) -> Settings {
+    Settings {
+        mode: change.mode.clone().or_else(|| current.mode.clone()),
+        hint_level: change.hint_level.clone().or_else(|| current.hint_level.clone()),
+        language_help: current.language_help.clone(),
+        assist: Some(if quiet { "paused" } else { "on" }.into()),
+    }
 }
 
 fn emit(app: &AppHandle, message: &serde_json::Value) {
@@ -364,7 +401,9 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
     let started = AssistStarted::from_answer(&answer);
     let plan = answer.plan.clone().unwrap_or_default();
     let budget = Budget { left_at_start: plan.seconds_left, total: plan.seconds_total, started: Instant::now() };
-    handle.send(ClientMessage::ContextUpdate(Box::new(first_context(prep.as_ref(), &mode))));
+    let context = first_context(prep.as_ref(), &mode);
+    let settings = context.settings.clone().unwrap_or_default();
+    handle.send(ClientMessage::ContextUpdate(Box::new(context)));
     state.assist.begin(Running {
         id: started.session_id.clone(),
         handle,
@@ -375,6 +414,7 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
         translate_to: translate_language(prep.as_ref().map_or("off", |p| p.language_help.as_str()), app_language.as_deref()).into(),
         started_recording,
         captions_were_on,
+        settings,
     });
     // From a prep: the call is saved without the after-call card.
     if started.auto_saved && let Some(info) = state.capture.info() {
@@ -569,7 +609,8 @@ pub fn set(app: &AppHandle, change: CardSettings) -> AppResult<Snapshot> {
             if let Some(seconds) = change.muted_seconds {
                 r.card.mute(seconds, now);
             }
-            let settings = settings_update(&change, r.card.quiet(now));
+            let settings = settings_update(&r.settings, &change, r.card.quiet(now));
+            r.settings = settings.clone();
             r.handle.send(ClientMessage::ContextUpdate(Box::new(ContextUpdate { settings: Some(settings), ..ContextUpdate::default() })));
             (r.id.clone(), r.card.snapshot(now))
         })
@@ -581,7 +622,8 @@ pub fn set(app: &AppHandle, change: CardSettings) -> AppResult<Snapshot> {
             tokio::time::sleep(Duration::from_secs(seconds.min(24 * 3600)) + Duration::from_millis(50)).await;
             app.state::<crate::AppState>().assist.with(&id, |r| {
                 if !r.card.quiet(Utc::now()) {
-                    let settings = Settings { assist: Some("on".into()), ..Settings::default() };
+                    let settings = Settings { assist: Some("on".into()), ..r.settings.clone() };
+                    r.settings = settings.clone();
                     r.handle.send(ClientMessage::ContextUpdate(Box::new(ContextUpdate { settings: Some(settings), ..ContextUpdate::default() })));
                 }
             });
@@ -596,6 +638,13 @@ pub async fn feedback(app: &AppHandle, suggestion_id: &str, action: &str) -> App
     let action = feedback_action(action).ok_or_else(|| AppError::msg("That isn't something Live Assist can do."))?;
     let id = state.assist.session_id().ok_or_else(|| AppError::msg("Live Assist isn't running."))?;
     state.api()?.assist_suggestion_action(&id, checked(suggestion_id)?, action).await
+}
+
+/// The card drew a suggestion's first text `render_ms` after its `suggestion_start` (the "shown" report).
+pub async fn shown(app: &AppHandle, suggestion_id: &str, render_ms: u64) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let id = state.assist.session_id().ok_or_else(|| AppError::msg("Live Assist isn't running."))?;
+    state.api()?.assist_suggestion_shown(&id, checked(suggestion_id)?, render_ms.min(600_000)).await
 }
 
 /// The card's state for a window opened mid-session; none when no session runs.
@@ -828,11 +877,13 @@ mod tests {
         assert!(serde_json::to_value(&with_docs).unwrap()["documents"][0].get("text").is_none(), "and never to a window");
         assert!(!format!("{:?}", with_docs.documents[0]).contains("Payments"), "nor to a log");
         let bare = serde_json::to_value(first_context(None, "fast")).unwrap();
-        assert_eq!(bare, json!({"settings": {"mode": "fast", "assist": "on"}}), "Start now without a prep");
-        let muted = settings_update(&CardSettings { muted_seconds: Some(60), ..CardSettings::default() }, true);
-        assert_eq!(serde_json::to_value(muted).unwrap(), json!({"assist": "paused"}));
-        let level = settings_update(&CardSettings { hint_level: Some("keywords".into()), ..CardSettings::default() }, false);
-        assert_eq!(serde_json::to_value(level).unwrap(), json!({"hint_level": "keywords", "assist": "on"}));
+        assert_eq!(bare, json!({"settings": {"mode": "fast", "hint_level": "outline", "language_help": "off", "assist": "on"}}), "Start now without a prep: every field");
+        // `context_update` replaces (1.9.0-n): a change sends the whole settings, never a delta.
+        let current = first_context(Some(&prep), "balanced").settings.unwrap();
+        let muted = settings_update(&current, &CardSettings { muted_seconds: Some(60), ..CardSettings::default() }, true);
+        assert_eq!(serde_json::to_value(muted).unwrap(), json!({"mode": "balanced", "hint_level": "full", "language_help": "urdu", "assist": "paused"}));
+        let level = settings_update(&current, &CardSettings { hint_level: Some("keywords".into()), mode: Some("fast".into()), ..CardSettings::default() }, false);
+        assert_eq!(serde_json::to_value(level).unwrap(), json!({"mode": "fast", "hint_level": "keywords", "language_help": "urdu", "assist": "on"}));
     }
 
     fn utc(text: &str) -> DateTime<Utc> {
@@ -941,6 +992,24 @@ mod tests {
         assert!(ends_with_flags(&off, true));
         assert!(!ends_with_flags(&on, true), "still on: it runs");
         assert!(!ends_with_flags(&off, false), "nothing runs");
+    }
+
+    #[test]
+    fn documents_stay_within_the_relay_s_limits() {
+        use crate::net::models::PrepDocument;
+        let doc = |id: &str, text: &str, tokens: Option<u64>| PrepDocument { file_id: id.into(), name: format!("{id}.pdf"), tokens, text: Some(text.into()) };
+        let many: Vec<PrepDocument> = (0..25).map(|i| doc(&format!("f{i}"), "short text", Some(3))).collect();
+        assert_eq!(documents_within_limits(&many).len(), MAX_DOCUMENTS);
+        let long = "a".repeat(MAX_DOCUMENT_CHARS + 10);
+        let kept = documents_within_limits(&[doc("big", &long, Some(50_000))]);
+        assert_eq!(kept[0].text.chars().count(), MAX_DOCUMENT_CHARS, "cut to the relay's size, counted by its share of the tokens");
+        assert!(documents_within_limits(&[doc("big", &long, None)]).is_empty(), "about 100,000 tokens without a count: too many");
+        let heavy = [doc("a", "x", Some(40_000)), doc("b", "y", Some(30_000)), doc("c", "z", Some(15_000))];
+        let ids: Vec<String> = documents_within_limits(&heavy).into_iter().map(|d| d.id).collect();
+        assert_eq!(ids, ["a", "c"], "about 60,000 tokens in all: one that would pass it is left out");
+        let words = [doc("u", "ب".repeat(8).as_str(), None)];
+        assert_eq!(documents_within_limits(&words)[0].text.chars().count(), 8, "never cut inside a character");
+        assert!(documents_within_limits(&[PrepDocument { text: Some("  ".into()), ..doc("e", "", None) }]).is_empty(), "no text: nothing to send");
     }
 
     #[test]

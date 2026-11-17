@@ -20,20 +20,30 @@ pub const EVENT: &str = "assist:message";
 /// At most this many messages are kept for a window opened mid-session (a finished suggestion's tokens are kept as one).
 pub const MAX_KEPT: usize = 1_000;
 
-/// What the card says for a relay `error` (the D-135 rule: the app's own words for every code, never the relay's text);
-/// none for what the app handles itself (tokens, connection, its own message format).
-pub fn error_sentence(code: &str) -> Option<&'static str> {
-    Some(match code {
-        "token_refresh_rejected" | "token_expired" | "token_missing" | "token_invalid" | "wrong_session" | "bad_message" => return None,
-        "rate_limited" => "Live Assist is busy. Try again in a moment.",
-        "documents_too_large" => "The prep's documents are too long for Live Assist. Remove some, then try again.",
-        "nothing_to_rewrite" => "There's no suggestion to change yet.",
+/// The app's sentence for every relay `error` code (the D-135 rule: the app's own words, never the relay's text;
+/// contract 1.9.0-n "What the apps must handle"). `budget_exhausted` says two things: with `retry` the budget gate
+/// held it for now, without it suggestions are off.
+pub fn error_sentence(code: &str, retry: bool) -> &'static str {
+    match code {
+        "budget_exhausted" if retry => "Live Assist is busy. Try again in a moment.",
         "budget_exhausted" => "Suggestions are off: this month's Live Assist time is used up. Captions go on.",
+        "rate_limited" => "Live Assist is busy. Try again in a moment.",
+        "documents_too_large" => "The prep's documents are too long for Live Assist, so it kept the earlier ones. Remove some, then try again.",
+        "nothing_to_rewrite" => "There's no suggestion to change yet.",
         "provider_not_configured" => "Live Assist is not set up on the server yet. Ask your admin.",
         "provider_unavailable" | "provider_timeout" => "Live Assist couldn't make this suggestion. Try again, or press Help now.",
         "model_declined" => "Live Assist couldn't help with this one.",
+        "bad_message" => "Live Assist couldn't read one request. Try that again.",
+        "token_refresh_rejected" | "token_expired" | "token_missing" | "token_invalid" => "Live Assist is renewing its access.",
+        "wrong_session" => "This Live Assist session belongs to another account.",
         _ => "Live Assist couldn't make this suggestion. Try again.",
-    })
+    }
+}
+
+/// Errors the app handles itself, which the card never shows: new tokens and reconnects (the session ends in plain
+/// words if they fail for good).
+pub fn handled_by_app(code: &str) -> bool {
+    matches!(code, "token_refresh_rejected" | "token_expired" | "token_missing" | "token_invalid" | "wrong_session")
 }
 
 /// The card's message for something the relay sent, its fields as the relay sends them (without `seq`); none for what
@@ -59,10 +69,8 @@ pub fn relay_message(message: &ServerMessage, meeting_type: Option<&str>) -> Opt
         ServerMessage::Token(token) => tagged("token", token),
         ServerMessage::SuggestionEnd(end) => tagged("suggestion_end", end),
         ServerMessage::Skip(skip) => tagged("skip", skip),
-        ServerMessage::Error(error) => {
-            let sentence = error_sentence(&error.code)?;
-            tagged("error", &super::protocol::RelayError { message: sentence.to_string(), ..error.clone() })
-        }
+        ServerMessage::Error(error) if handled_by_app(&error.code) => return None,
+        ServerMessage::Error(error) => tagged("error", &super::protocol::RelayError { message: error_sentence(&error.code, error.retry).to_string(), ..error.clone() }),
         ServerMessage::ModeChanged(change) => tagged("mode_changed", change),
         ServerMessage::TokenRefreshed { .. } | ServerMessage::Unknown => return None,
     })
@@ -123,12 +131,30 @@ impl Card {
         {
             self.join_tokens(id);
         }
+        // A resumed connection: a suggestion running when it dropped gets no end (1.9.0-n), so it leaves the card.
+        if message["type"] == "ready" && message["resumed"] == true {
+            self.drop_unfinished();
+        }
         self.messages.push_back(message.clone());
         while self.messages.len() > MAX_KEPT {
             let first_is_ready = self.messages.front().is_some_and(|m| m["type"] == "ready");
             let at = usize::from(first_is_ready);
             self.messages.remove(at);
         }
+    }
+
+    /// The suggestions that started and never ended (`suggestion_end`, `skip` or an `error` naming them) leave.
+    fn drop_unfinished(&mut self) {
+        let ended: HashSet<String> = self
+            .messages
+            .iter()
+            .filter(|m| matches!(m["type"].as_str(), Some("suggestion_end" | "skip" | "error")))
+            .filter_map(|m| m["suggestion_id"].as_str().map(str::to_string))
+            .collect();
+        self.messages.retain(|m| {
+            let streaming = matches!(m["type"].as_str(), Some("suggestion_start" | "token"));
+            !streaming || m["suggestion_id"].as_str().is_some_and(|id| ended.contains(id))
+        });
     }
 
     fn join_tokens(&mut self, id: &str) {
@@ -310,15 +336,22 @@ mod tests {
         let error = |code: &str| RelayError { code: code.into(), message: "RELAY TEXT from the provider".into(), retry: true, suggestion_id: Some("s2".into()), in_reply_to: None, fatal: false };
         let sent = relay_message(&ServerMessage::Error(error("provider_timeout")), None).unwrap();
         assert_eq!(sent, json!({"type": "error", "code": "provider_timeout", "message": "Live Assist couldn't make this suggestion. Try again, or press Help now.", "retry": true, "suggestion_id": "s2", "in_reply_to": null, "fatal": false}));
-        for code in ["rate_limited", "documents_too_large", "nothing_to_rewrite", "budget_exhausted", "provider_not_configured", "provider_unavailable", "model_declined", "something_new"] {
+        // Every code of contract 1.9.0-n has the app's sentence.
+        for code in ["rate_limited", "documents_too_large", "nothing_to_rewrite", "budget_exhausted", "provider_not_configured", "provider_unavailable", "provider_timeout", "model_declined", "bad_message", "something_new"] {
             let shown = relay_message(&ServerMessage::Error(error(code)), None).unwrap();
             assert_eq!(shown["code"], code);
             assert!(!shown["message"].as_str().unwrap().contains("RELAY TEXT"), "{code}: never the relay's text");
-            assert_eq!(shown["message"].as_str(), error_sentence(code));
+            assert_eq!(shown["message"].as_str(), Some(error_sentence(code, true)));
         }
-        for handled in ["token_refresh_rejected", "token_expired", "token_missing", "token_invalid", "wrong_session", "bad_message"] {
+        for handled in ["token_refresh_rejected", "token_expired", "token_missing", "token_invalid", "wrong_session"] {
+            assert!(!error_sentence(handled, false).is_empty());
             assert_eq!(relay_message(&ServerMessage::Error(error(handled)), None), None, "{handled}: the app handles it");
         }
+        // The two kinds of budget_exhausted.
+        let held = RelayError { retry: true, ..error("budget_exhausted") };
+        assert_eq!(relay_message(&ServerMessage::Error(held), None).unwrap()["message"], "Live Assist is busy. Try again in a moment.");
+        let off = RelayError { retry: false, ..error("budget_exhausted") };
+        assert_eq!(relay_message(&ServerMessage::Error(off), None).unwrap()["message"], "Suggestions are off: this month's Live Assist time is used up. Captions go on.");
         assert_eq!(relay_message(&ServerMessage::TokenRefreshed { expires_at: "x".into() }, None), None);
         assert_eq!(relay_message(&ServerMessage::Unknown, None), None);
     }
@@ -366,6 +399,23 @@ mod tests {
         let snap = card.snapshot(now);
         assert_eq!(snap.messages.len(), MAX_KEPT);
         assert_eq!(snap.messages[0]["type"], "ready", "the first ready stays");
+    }
+
+    #[test]
+    fn a_resumed_connection_drops_the_suggestion_that_was_streaming() {
+        let mut card = Card::new(None, None);
+        card.record(&json!({"type": "ready", "resumed": false}));
+        card.record(&json!({"type": "suggestion_start", "suggestion_id": "s1"}));
+        card.record(&json!({"type": "token", "suggestion_id": "s1", "text": "Done."}));
+        card.record(&json!({"type": "suggestion_end", "suggestion_id": "s1", "status": "done"}));
+        card.record(&json!({"type": "suggestion_start", "suggestion_id": "s2"}));
+        card.record(&json!({"type": "skip", "suggestion_id": "s2"}));
+        card.record(&json!({"type": "suggestion_start", "suggestion_id": "s3"}));
+        card.record(&json!({"type": "token", "suggestion_id": "s3", "text": "Half"}));
+        card.record(&json!({"type": "ready", "resumed": true}));
+        let ids: Vec<String> = card.snapshot(Utc::now()).messages.iter().filter_map(|m| m["suggestion_id"].as_str().map(str::to_string)).collect();
+        assert!(!ids.contains(&"s3".to_string()), "s3 was streaming when the connection dropped: {ids:?}");
+        assert!(ids.contains(&"s1".to_string()) && ids.contains(&"s2".to_string()), "finished ones stay: {ids:?}");
     }
 
     #[test]

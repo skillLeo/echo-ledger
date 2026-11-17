@@ -58,6 +58,8 @@ pub struct Running {
     pub started_recording: Option<String>,
     /// Live captions were on before the session turned them on.
     pub captions_were_on: bool,
+    /// The settings the relay holds, whole: every change sends all of them (`context_update` replaces).
+    pub settings: protocol::Settings,
 }
 
 /// What is left of a session that was taken out: its id and the turns that still wait for the server.

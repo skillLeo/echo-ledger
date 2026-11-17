@@ -317,6 +317,28 @@ async fn a_relay_that_lost_the_session_gets_the_whole_context_again_first() {
 }
 
 #[tokio::test]
+async fn a_connection_dropped_without_a_close_frame_reconnects_and_resumes() {
+    // A reader too slow for the relay is dropped with no close frame (the app sees 1006): reconnect and resume.
+    let relay = Relay::start(never, |index, mut ws: Ws| async move {
+        let _ = ws.send(ready(index > 0)).await;
+        if index == 0 {
+            drop(ws);
+        } else {
+            while let Some(Ok(_)) = ws.next().await {}
+        }
+    })
+    .await;
+    let (refresh, calls) = refresher(&relay.url);
+    let events = Events::default();
+    let session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink());
+    events.wait_for("the resumed session", |e| matches!(e, AssistEvent::Connected { resumed: true, .. })).await;
+    assert!(events.all().iter().any(|e| matches!(e, AssistEvent::Reconnecting { why, .. } if why == "connection")));
+    assert!(!events.all().iter().any(|e| matches!(e, AssistEvent::Ended(_))), "the session goes on");
+    assert_eq!(*calls.lock().unwrap(), 0, "the same token while it is valid");
+    session.stop();
+}
+
+#[tokio::test]
 async fn an_expired_token_reconnects_at_once_with_a_new_one() {
     // 4401 after the upgrade, and 401 before it: both get a new token first.
     for refuse_first in [false, true] {
@@ -639,6 +661,7 @@ fn running(handle: client::AssistHandle) -> desktop_lib::assist::Running {
         translate_to: "roman_urdu".into(),
         started_recording: None,
         captions_were_on: true,
+        settings: Default::default(),
     }
 }
 

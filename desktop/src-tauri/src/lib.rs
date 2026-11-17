@@ -597,6 +597,7 @@ pub fn run() {
             commands::assist_send,
             commands::assist_set,
             commands::assist_feedback,
+            commands::assist_shown,
             commands::assist_card_hide,
             commands::assist_state,
             commands::ask_answer,

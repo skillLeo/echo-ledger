@@ -659,6 +659,13 @@ impl ApiClient {
         Self::ok_empty(resp).await
     }
 
+    /// The same, `shown` (contract 1.9.0-n): the suggestion was first drawn `render_ms` after its `suggestion_start`.
+    pub async fn assist_suggestion_shown(&self, session_id: &str, suggestion_id: &str, render_ms: u64) -> AppResult<()> {
+        let body = json!({ "action": "shown", "render_ms": render_ms });
+        let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/suggestions/{suggestion_id}/action"))))?.json(&body).send().await?;
+        Self::ok_empty(resp).await
+    }
+
     pub async fn config(&self) -> AppResult<ServerConfig> {
         let resp = self.authed(self.http.get(self.url("config")))?.send().await?;
         Self::parse(resp).await

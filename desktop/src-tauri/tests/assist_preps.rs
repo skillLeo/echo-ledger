@@ -129,6 +129,9 @@ async fn final_turns_go_in_a_batch_and_suggestion_actions_are_told() {
     );
     api.assist_suggestion_action(SESSION, "s-7", "used").await.unwrap();
     assert_eq!(body(&server, "POST", &format!("/api/assist/sessions/{SESSION}/suggestions/s-7/action")), json!({"action": "used"}));
+    api.assist_suggestion_shown(SESSION, "s-7", 412).await.unwrap();
+    let shown = &server.requests_to("POST", &format!("/api/assist/sessions/{SESSION}/suggestions/s-7/action"))[1];
+    assert_eq!(serde_json::from_slice::<serde_json::Value>(&shown.body).unwrap(), json!({"action": "shown", "render_ms": 412}), "contract 1.9.0-n");
 }
 
 #[test]
