@@ -194,10 +194,12 @@ fun EchoTopBar(
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (onBack != null) EchoIconButton(EchoIcons.Back, EchoV2.strings.back, onBack)
+        // A title can be someone's words (a project's or a recording's name): it takes their face and direction.
         Text(
             title,
-            style = if (large) EchoV2.type.titleL else EchoV2.type.titleM,
+            style = EchoV2.type.content(title, if (large) EchoV2.type.titleL else EchoV2.type.titleM),
             color = c.textPrimary,
+            textAlign = startAlign(),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
