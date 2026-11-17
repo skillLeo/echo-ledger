@@ -100,6 +100,6 @@ describe("scaled fills", () => {
   it("a meter's fill (scaled by lib/motion fillWidth) grows from the start edge, in both directions", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
     expect(css).toMatch(/\.el-meter__fill \{[^}]*transform-origin: left center;/);
-    expect(css).toContain('[dir="rtl"] .el-meter__fill { transform-origin: right center; }');
+    expect(css).toContain(".el-meter__fill:dir(rtl) { transform-origin: right center; }");
   });
 });

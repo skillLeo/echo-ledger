@@ -896,7 +896,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-meter { display: inline-block; inline-size: calc(var(--el-space-64) * 1.5); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-border-default); overflow: hidden; }
 /* The fill is scaled (lib/motion fillWidth), so it grows from the start edge, not the middle. */
 .el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); transform-origin: left center; }
-[dir="rtl"] .el-meter__fill { transform-origin: right center; }
+.el-meter__fill:dir(rtl) { transform-origin: right center; }
 .el-test-result { display: grid; gap: var(--el-space-8); }
 .el-test-result > p { margin: 0; }
 .el-test-result audio { inline-size: 100%; }
@@ -937,3 +937,5 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-table tr:last-child th, .el-table tr:last-child td { border-block-end: 0; }
 .el-table__tick { display: inline-flex; color: var(--el-role-accent-default); }
 .el-shortcuts .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); border-color: var(--el-role-accent-default); }
+.el-translate__ended { margin: 0; }
+.el-no-plans { margin: 0; padding: var(--el-space-16); }

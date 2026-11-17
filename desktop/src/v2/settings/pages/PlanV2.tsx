@@ -51,14 +51,14 @@ function MeterRow({ id, label, limitKey, limit, quiet, onUpgrade }: {
     <li className="el-row el-row--compact el-meter-row" id={`setting-${id}`} data-setting={id} tabIndex={-1} data-testid={`meter-${limitKey}`}>
       <span className="el-meter-row__line">
         <span className="el-row__title">{label}</span>
-        <span className={`el-meter-row__value${tone ? ` el-storage-value--${tone}` : ""}`}>{text}</span>
+        <span className={`el-meter-row__value${tone ? ` el-storage-value--${tone}` : ""}`} dir="ltr">{text}</span>
       </span>
       {share !== null
         ? <span className={`el-meter el-meter--wide${tone ? ` el-meter--${tone}` : ""}`} role="meter" aria-label={spoken} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent}>
           <span className="el-meter__fill" style={fillWidth(percent / 100)} />
         </span>
         : <span className="el-visually-hidden">{spoken}</span>}
-      {line && <span className={`el-caption ${tone ? `el-storage-value--${tone}` : "el-secondary"}`}>{line}</span>}
+      {line && <span className={`el-caption ${tone ? `el-storage-value--${tone}` : "el-secondary"}`} dir="auto">{line}</span>}
     </li>
   );
 }
@@ -76,27 +76,27 @@ function RequestCardV2({ e, request, onOpen, onPay, onReceipt, onCancel, onAgain
   const cards: Record<string, Shape> = {
     awaiting_payment: {
       title: `${name} requested`, tag: "Waiting for payment",
-      body: <p>Send {amount ?? "the amount"} to our bank account, then add a screenshot of the receipt.{request.reference_code ? <> Reference <span className="el-mono" dir="ltr">{request.reference_code}</span>.</> : ""}</p>,
+      body: <p dir="auto">Send {amount ?? "the amount"} to our bank account, then add a screenshot of the receipt.{request.reference_code ? <> Reference <span className="el-mono" dir="ltr">{request.reference_code}</span>.</> : ""}</p>,
       primary: ["Payment details", onPay], secondary: ["Cancel request", onCancel, true],
     },
     in_review: {
       title: "Checking your payment", tag: "In review",
-      body: <p>{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt))}. ` : ""}{request.payment?.review_hours ?? "We check receipts every day."}</p>,
+      body: <p dir="auto">{paidAt ? `We got your receipt on ${rowDate(paidAt)} at ${formatTime(new Date(paidAt))}. ` : ""}{request.payment?.review_hours ?? "We check receipts every day."}</p>,
       primary: ["View request", onOpen],
     },
     needs_receipt: {
       title: "We need another receipt", tag: "Action needed", tone: "warning",
-      body: <>{request.payment?.proof_request?.note && <p className="el-pre-line">{request.payment.proof_request.note}</p>}<p>Your request is still open. You don't need to pay again.</p></>,
+      body: <>{request.payment?.proof_request?.note && <p dir="auto" className="el-pre-line">{request.payment.proof_request.note}</p>}<p dir="auto">Your request is still open. You don't need to pay again.</p></>,
       primary: ["Add receipt", onReceipt], secondary: ["Payment details", onPay],
     },
     declined: {
       title: "We couldn't confirm your payment", tag: "Not approved",
-      body: <>{request.reply && <p className="el-pre-line">{request.reply}</p>}<p>If you've paid, reply to our email with your transaction ID and we'll look again.</p></>,
+      body: <>{request.reply && <p dir="auto" className="el-pre-line">{request.reply}</p>}<p dir="auto">If you've paid, reply to our email with your transaction ID and we'll look again.</p></>,
       primary: onAgain ? ["Request again", onAgain] : undefined, secondary: ["Dismiss", onDismiss],
     },
     approved: {
       title: `You're on ${name}`, tag: "Approved", tone: "success",
-      body: <p>Thank you. {name} is on{until ? ` until ${sentenceDate(until)}` : ""}.</p>,
+      body: <p dir="auto">Thank you. {name} is on{until ? ` until ${sentenceDate(until)}` : ""}.</p>,
       secondary: ["Dismiss", onDismiss],
     },
   };
@@ -225,14 +225,14 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
       <section className="el-group" id="setting-plan.current" data-setting="plan.current" tabIndex={-1}>
         <Card>
           <div className="el-plan-card">
-            <div className="el-plan-card__head"><span className="el-title-m">{isFree ? "Free plan" : `${name} plan`}</span></div>
+            <div className="el-plan-card__head"><span className="el-title-m" dir="auto">{isFree ? "Free plan" : `${name} plan`}</span></div>
             <div className="el-plan-card__body el-secondary">
-              {!allowed && workspace && <p>{workspace} is on {name}. Its owner manages the plan.</p>}
-              {isFree && allowed && <p>Transcripts use your own free Groq key.</p>}
-              {!isFree && price && <p className="el-tabular">{price}</p>}
-              {!isFree && <p>{plan?.expires_at ? `Paid until ${rowDateWithYear(plan.expires_at)}` : "No end date"}</p>}
-              {plan?.trial_minutes_left ? <p>{count(plan.trial_minutes_left)} trial minutes left</p> : null}
-              {allowed && !open && top && <p>You're on our top plan.</p>}
+              {!allowed && workspace && <p dir="auto">{workspace} is on {name}. Its owner manages the plan.</p>}
+              {isFree && allowed && <p dir="auto">Transcripts use your own free Groq key.</p>}
+              {!isFree && price && <p dir="auto" className="el-tabular">{price}</p>}
+              {!isFree && <p dir="auto">{plan?.expires_at ? `Paid until ${rowDateWithYear(plan.expires_at)}` : "No end date"}</p>}
+              {plan?.trial_minutes_left ? <p dir="auto">{count(plan.trial_minutes_left)} trial minutes left</p> : null}
+              {allowed && !open && top && <p dir="auto">You're on our top plan.</p>}
             </div>
             {allowed && !open && next && (
               <div className="el-plan-card__actions" id="setting-plan.upgrade" data-setting="plan.upgrade" tabIndex={-1}>
@@ -242,14 +242,14 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
             )}
           </div>
         </Card>
-        {!isFree && plan?.expires_at && <div className="el-group__note el-caption el-secondary"><p>Your plan stops on {sentenceDate(plan.expires_at)}. There is nothing to cancel.</p></div>}
+        {!isFree && plan?.expires_at && <div className="el-group__note el-caption el-secondary"><p dir="auto">Your plan stops on {sentenceDate(plan.expires_at)}. There is nothing to cancel.</p></div>}
       </section>
       {request && requestShown(request) && (
         <RequestCardV2 e={e} request={request} onOpen={() => status("status")} onPay={() => status("pay")} onReceipt={() => status("receipt")} onCancel={() => setCancelling("ask")}
           onAgain={allowed && above.length > 0 ? () => flow(request.plan) : undefined}
           onDismiss={() => { dismissRequest(request.id); rerender((n) => n + 1); }} />
       )}
-      <Group title="This month" footer={!ownKey ? <p>Minutes reset on the 1st of each month. Unused minutes don't carry over.</p> : undefined}>
+      <Group title="This month" footer={!ownKey ? <p dir="auto">Minutes reset on the 1st of each month. Unused minutes don't carry over.</p> : undefined}>
         {ownKey ? (
           <ListRow compact anchor="plan.usage.minutes" title="Transcription" value="Your Groq key"
             meta={e.transcription_key?.set ? "Key added" : "Not added"}
@@ -263,7 +263,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
         })}
         {uploads && (percentOf(uploads) ?? 0) >= 80 && <MeterRow id="plan.usage.uploads" label="Uploads in the last 24 hours" limitKey="uploads_per_day" limit={uploads} quiet={quiet} onUpgrade={onUpgrade} />}
       </Group>
-      <Group title="Included in your plan" footer={isFree ? <p>Every plan can record, organise, search, share links and export.</p> : undefined}>
+      <Group title="Included in your plan" footer={isFree ? <p dir="auto">Every plan can record, organise, search, share links and export.</p> : undefined}>
         {included.map(([key, label]) => {
           const value = e.limits[key]?.limit;
           if (value === undefined) return null;
@@ -282,7 +282,7 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
                 <div className="el-plan-card" data-testid={`plan-${p.key}`}>
                   <div className="el-plan-card__head"><span className="el-title-s">{planName(p)}</span>{priceText(p) && <span className="el-secondary el-tabular">{priceText(p)}</span>}</div>
                   <div className="el-plan-card__body">
-                    {i > 0 && <p className="el-secondary">Everything in {planName(above[i - 1])}, plus:</p>}
+                    {i > 0 && <p dir="auto" className="el-secondary">Everything in {planName(above[i - 1])}, plus:</p>}
                     <ul className="el-plan-card__lines">{planHighlights(e, p, below).map((l) => <li key={l}>{l}</li>)}</ul>
                   </div>
                   {!open && <div className="el-plan-card__actions"><Button onClick={() => flow(p.key)}>Choose {planName(p)}</Button></div>}
@@ -296,13 +296,13 @@ export function PlanPageV2({ e, role, workspace, onKey }: { e: Entitlements; rol
         <Dialog open alert title="Cancel this request?" description="If you've already paid, add your receipt instead. Cancelling doesn't refund a payment."
           onClose={() => { setCancelling(null); setCancelError(null); }}
           actions={<>
-            {cancelError && <p className="el-field__error" role="alert">{cancelError}</p>}
+            {cancelError && <p dir="auto" className="el-field__error" role="alert">{cancelError}</p>}
             <Button onClick={() => { setCancelling(null); setCancelError(null); }}>Keep request</Button>
             <Button variant="danger" loading={cancelling === "busy"} onClick={() => void cancel()}>Cancel request</Button>
           </>} />
       )}
       {allowed && (request || above.length > 0) && (
-        <Group title="Payments" footer={<p>Payments are by bank transfer. We switch your plan on after we see the money in our account.</p>}>
+        <Group title="Payments" footer={<p dir="auto">Payments are by bank transfer. We switch your plan on after we see the money in our account.</p>}>
           {request && stage !== null && (
             <ListRow compact anchor="plan.history" title={`${planName(e.plans.find((p) => p.key === request.plan) ?? { key: request.plan, name: "" })}, 1 month`}
               meta={historyLine(request)} value={request.amount_due_pkr ? rupees(request.amount_due_pkr) : request.amount_due ?? undefined} chevron onClick={() => status("status")} />

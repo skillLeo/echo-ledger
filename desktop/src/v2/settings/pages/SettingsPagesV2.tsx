@@ -2,7 +2,7 @@
 // page's way back goes to the page it sits on, and from a top page to the list.
 import { useEffect, useState } from "react";
 import { setting } from "../../../lib/settingsRegistry";
-import { PageLoading, SettingsPage, useSettings, type Run } from "./rows";
+import { NoPlans, PageLoading, SettingsPage, useSettings, type Run } from "./rows";
 import { sectionTarget } from "./route";
 import { HistoryPageV2, ReplacementsPageV2, SnippetsPageV2, VoicePageV2 } from "./VoiceV2";
 import { CaptionStylePageV2, CaptionsPageV2 } from "./CaptionsV2";
@@ -65,7 +65,7 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, them
       case "calls": return <CallsPageV2 settings={settings} patch={patch} platform={platform} onSites={() => open("calls.sites")} onConsent={() => open("privacy.consent")} />;
       case "transcription.language": return <LanguagePageV2 settings={settings} patch={patch} />;
       case "words": return <WordsPageV2 settings={settings} patch={patch} />;
-      case "key": return entitlements ? <KeyPageV2 e={entitlements} /> : <PageLoading />;
+      case "key": return entitlements === undefined ? <PageLoading /> : entitlements ? <KeyPageV2 e={entitlements} /> : <NoPlans />;
       case "privacy": return account === undefined ? <PageLoading /> : <PrivacyPageV2 account={account} settings={settings} onAccount={setAccount} onConsent={() => open("privacy.consent")} />;
       case "privacy.consent": return <ConsentPageV2 status={status} settings={settings} patch={patch} />;
       case "lock": return <LockPageV2 settings={settings} patch={patch} run={run} />;
@@ -81,9 +81,9 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, them
       case "appearance": return <AppearancePageV2 theme={themeChoice} onTheme={chooseTheme} />;
       case "shortcuts": return <ShortcutsPageV2 settings={settings} status={status} run={run} onSettings={setSettings} />;
       case "profile": return account === undefined ? <PageLoading /> : account ? <ProfilePageV2 account={account} status={status} run={run} /> : null;
-      case "plan": return entitlements
+      case "plan": return entitlements === undefined ? <PageLoading /> : entitlements
         ? <PlanPageV2 e={entitlements} role={roleOf(account, status)} workspace={account?.workspace?.name || status.plan.workspace || null} onKey={() => open("key")} />
-        : <PageLoading />;
+        : <NoPlans />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }

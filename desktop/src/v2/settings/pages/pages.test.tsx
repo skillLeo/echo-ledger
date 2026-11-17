@@ -708,6 +708,25 @@ describe("Plan & usage v2", () => {
     expect(callsOf("upgrade_request_cancel")).toEqual([{ id: e.upgrade_request!.id }]);
   });
 
+  it("a cancelled request has no card, and Payments keeps it as Cancelled by you", async () => {
+    await showPlan({ ...sampleEntitlements("free"), upgrade_request: makeUpgradeRequest("cancelled") });
+    expect(screen.queryByTestId("upgrade-request")).toBeNull();
+    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument();
+    expect(screen.getByText("Cancelled by you")).toBeInTheDocument();
+  });
+
+  it("a server without plans says so on Plan & usage and Transcription key, and waits only while it hasn't answered", async () => {
+    resetEntitlementsForTests(undefined);
+    await show("plan");
+    expect(screen.getByText("Loading settings")).toBeInTheDocument();
+    expect(screen.queryByText("Your server doesn't have plans yet.")).toBeNull();
+    act(() => resetEntitlementsForTests(null));
+    expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+    cleanup();
+    await show("key");
+    expect(screen.getByText("Your server doesn't have plans yet.")).toBeInTheDocument();
+  });
+
   it("a team's member: the plan's facts, who manages it, and no button", async () => {
     respond("account_get", { ...ACCOUNT, workspace: { id: 1, name: "Qureshi Textiles", role: "member" } });
     await showPlan(sampleEntitlements("pro"));
@@ -770,6 +789,7 @@ describe("parity with today's Settings pages, in every state", () => {
       ["Free, request waiting for payment", at("free", "awaiting_payment"), null], ["Free, request in review", at("free", "in_review"), null],
       ["Free, another receipt asked for", at("free", "needs_receipt"), null], ["Free, request not approved", at("free", "declined"), null],
       ["Pro, request approved", at("pro", "approved"), null],
+      ["Free, request cancelled", at("free", "cancelled"), null],
     ];
   })();
   const PLAN_LINES = [
@@ -780,7 +800,7 @@ describe("parity with today's Settings pages, in every state", () => {
     "Everything in Pro, plus:", "Payments are by bank transfer. We switch your plan on after we see the money in our account.",
     "Waiting for payment", "In review", "Action needed", "Not approved", "Approved", "to our bank account, then add a screenshot of the receipt.",
     "Your request is still open. You don't need to pay again.", "If you've paid, reply to our email with your transaction ID and we'll look again.",
-    "If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.", "Uploads in the last 24 hours", "(yours)", "Shown below",
+    "Cancelled by you", "If you've already paid, add your receipt instead. Cancelling doesn't refund a payment.", "Uploads in the last 24 hours", "(yours)", "Shown below",
   ];
   const SCREENS_OK: ScreensStatus = { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true };
   const SCREEN_LINES = [

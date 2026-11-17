@@ -27,7 +27,7 @@ const base = server.resolvedUrls.local[0];
 await mkdir(dir, { recursive: true });
 const browser = await chromium.launch();
 try {
-  for (const screen of ["library", "recording", "settings"]) {
+  for (const screen of ["library", "recording", "settings", "plan"]) {
     if (only && screen !== only) continue;
     for (const state of states) for (const theme of ["light", "dark"]) {
       for (const lang of ["en", "ur"]) {

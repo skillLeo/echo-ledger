@@ -9,7 +9,11 @@ export interface TranslateApp {
   name: string;
 }
 
-/** What the overlay shows; `status` is listening, live, quiet, reconnecting or stopped. */
+/**
+ * What the overlay shows; `status` is listening, live, quiet or reconnecting while it runs, stopped after Stop, and
+ * ended when capture ended on its own (the app stopped playing or closed, or an error; core batch 5), with the reason
+ * in `notice` when the core gives one.
+ */
 export interface TranslateFeed {
   mode: TranslateMode | null;
   app: string;
@@ -23,6 +27,27 @@ export interface TranslateFeed {
 }
 
 export const TRANSLATE_FEED = "translate-feed";
+
+/** The statuses of a session that is running. Anything else, a status this app doesn't know included, is not. */
+export const RUNNING_STATUSES: ReadonlySet<string> = new Set(["listening", "live", "quiet", "reconnecting"]);
+
+/**
+ * Where a session stands for the panels: running, ended on its own (or a status this app doesn't know: it may have
+ * stopped, so it never shows as running, and Close tidies it away), or stopped (none at all).
+ */
+export function translatePhase(feed: TranslateFeed | null | undefined): "running" | "ended" | "stopped" {
+  // No feed, or an answer that isn't one (no status at all): nothing is running and there is nothing to tidy.
+  if (!feed || typeof feed.status !== "string" || feed.status === "stopped") return "stopped";
+  return RUNNING_STATUSES.has(feed.status) ? "running" : "ended";
+}
+
+/** Why an ended session ended, in plain words: the core's reason, else what usually ends one. */
+export function endedWords(feed: TranslateFeed): string {
+  const reason = typeof feed.notice === "string" ? feed.notice.trim() : "";
+  if (reason) return reason;
+  const app = (typeof feed.app === "string" ? feed.app.trim() : "") || "The app";
+  return `Live Translate ended. ${app} closed or stopped playing sound.`;
+}
 
 export const TRANSLATE_TARGETS: [string, string][] = [
   ["en", "English"],

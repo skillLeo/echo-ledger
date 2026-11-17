@@ -5,7 +5,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type { LiveTranslateAvailability } from "../../lib/ipc";
-import { TRANSLATE_FEED, TRANSLATE_TARGETS, translateApi, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed } from "../../lib/translate";
+import {
+  TRANSLATE_FEED, TRANSLATE_TARGETS, endedWords, translateApi, translatePhase, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed,
+} from "../../lib/translate";
 import { Button, Card, Icons, Select, Status } from "../components";
 
 export const MODES: { value: TranslateMode; label: string }[] = [
@@ -80,7 +82,15 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
       stop?.();
     };
   }, []);
-  const running = !!feed && feed.status !== "stopped";
+  const phase = translatePhase(feed);
+  const running = phase === "running";
+  const ended = phase === "ended";
+  const busy = running || ended;
+  // An ended session is tidied away: the core lets go of anything left, and the form comes back.
+  const close = () => {
+    setFeed(null);
+    void translateApi.stop().catch(() => undefined);
+  };
   const chosen = apps.find((a) => a.pid === pid) ?? null;
   const start = async () => {
     if (!chosen) return;
@@ -94,31 +104,35 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
       <div className="el-group__head">
         <h3 className="el-body-strong">Live Translate</h3>
         {running && feed && <Status kind="recording" live>{`${feed.app} · ${feedWords(feed)}`}</Status>}
+        {ended && feed && <Status kind="idle">{feed.app ? `${feed.app} · Ended` : "Ended"}</Status>}
       </div>
       <p className="el-secondary">
         Translates one app's sound as it is heard: teammates in a game's voice chat, or a film. Works over borderless or
         windowed games, not exclusive full screen. A browser is heard with all its tabs. About $0.18 an hour.
       </p>
       <div className="el-translate__app">
-        <Select label="App to translate" value={pid === null ? "" : String(pid)} disabled={running}
+        <Select label="App to translate" value={pid === null ? "" : String(pid)} disabled={busy}
           onChange={(v) => setPid(v ? Number(v) : null)}
           options={[{ value: "", label: apps.length ? "Choose an app playing sound" : "Nothing is playing sound" }, ...apps.map((a) => ({ value: String(a.pid), label: a.name }))]} />
-        <Button variant="quiet" icon={Icons.RefreshIcon} disabled={running} onClick={refresh}>Refresh</Button>
+        <Button variant="quiet" icon={Icons.RefreshIcon} disabled={busy} onClick={refresh}>Refresh</Button>
       </div>
       <div className="el-translate__choices">
-        <Select label="Mode" value={mode} disabled={running} onChange={(v) => setMode(v as TranslateMode)} options={MODES} />
-        <Select label="Translate to" value={target} disabled={running} onChange={setTarget} options={TRANSLATE_TARGETS.map(([value, label]) => ({ value, label }))} />
-        <Select label="Speed" value={speed} disabled={running} onChange={(v) => setSpeed(v as TranslateSpeed)} options={SPEEDS} />
+        <Select label="Mode" value={mode} disabled={busy} onChange={(v) => setMode(v as TranslateMode)} options={MODES} />
+        <Select label="Translate to" value={target} disabled={busy} onChange={setTarget} options={TRANSLATE_TARGETS.map(([value, label]) => ({ value, label }))} />
+        <Select label="Speed" value={speed} disabled={busy} onChange={(v) => setSpeed(v as TranslateSpeed)} options={SPEEDS} />
       </div>
       {running && <p className="el-caption el-secondary">Ctrl+Shift+T lets you move Live Translate (drag it, then Done); Ctrl+Shift+H hides it.</p>}
       {taken.length > 0 && <p className="el-field__error" role="alert">Another app already uses {taken.join(" and ")}: use the buttons here instead.</p>}
-      {feed?.notice && <p className="el-field__error" role="alert">{feed.notice}</p>}
+      {running && feed?.notice && <p className="el-field__error" role="alert">{feed.notice}</p>}
+      {ended && feed && <p className="el-translate__ended" role="status" data-testid="translate-ended">{endedWords(feed)}</p>}
       <div className="el-page__actions">
         {running ? (
           <>
             <Button onClick={() => void run(translateApi.toggleLock)}>{feed?.locked ? "Move Live Translate" : "Lock Live Translate"}</Button>
             <Button variant="primary" icon={Icons.StopIcon} onClick={() => void run(translateApi.stop)}>Stop</Button>
           </>
+        ) : ended ? (
+          <Button variant="primary" onClick={close}>Close</Button>
         ) : (
           <Button variant="primary" icon={Icons.PlayIcon} disabled={!chosen} onClick={() => void start()}>Start</Button>
         )}

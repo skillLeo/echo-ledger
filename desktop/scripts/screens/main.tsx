@@ -327,8 +327,11 @@ const commands: Record<string, (args: Args) => unknown> = {
   // What the core chose: the Zoom call earlier today, not recorded because its switch is off, not the filter (D-014).
   mic_last_not_recorded: () => ({ user: makeMicUser({ name: "zoom.us", app: "zoom", site: null, decision: "ignored", reason: "app_off" }), at: new Date(new Date().setHours(9, 40, 0, 0)).toISOString() }),
   translate_apps: () => [{ pid: 4242, name: "Valorant" }, { pid: 77, name: "Chrome" }],
-  translate_status: () => screen.startsWith("controls-translate") ? {
-    mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "running", notice: null, partial: "",
+  // "&translate=ended": a Live Translate session that ended on its own (core batch 5), its reason in the notice.
+  translate_status: () => params.get("translate") === "ended"
+    ? { mode: "game", app: "Valorant", locked: true, hidden: false, status: "ended", notice: null, partial: "", original: "", text: "" }
+    : screen.startsWith("controls-translate") ? {
+    mode: screen.endsWith("subtitles") ? "watch" : "game", app: "Valorant", locked: true, hidden: false, status: "live", notice: null, partial: "",
     original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",
     text: screen.endsWith("subtitles") ? "We were never supposed to meet like this." : "We need to rotate to site B right now",
   } : null,

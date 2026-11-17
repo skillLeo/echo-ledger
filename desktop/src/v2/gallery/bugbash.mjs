@@ -28,6 +28,7 @@ const nav = (name) => async (page) => {
 const CASES = [
   ["g-library", "gallery", "?v2gallery&screen=library", ["en", "ur"]],
   ["g-recording", "gallery", "?v2gallery&screen=recording", ["en", "ur"]],
+  ["g-plan", "gallery", "?v2gallery&screen=plan", ["en", "ur"]],
   ["g-settings", "gallery", "?v2gallery&screen=settings", ["en", "ur"]],
   ["g-library-error", "gallery", "?v2gallery&screen=library&state=error", ["en", "ur"]],
   ["g-assist", "gallery", "?v2gallery&screen=assist", ["en"]],
@@ -39,6 +40,7 @@ const CASES = [
   ["a-home", "app", app("library"), ["en"], nav("Home")],
   ["a-live", "app", app("library"), ["en"], nav("Live")],
   ["a-live-translate", "app", app("library"), ["en"], async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-live-translate-ended", "app", `${app("library")}&translate=ended`, ["en"], async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
   ["a-ask", "app", app("library"), ["en"], nav("Ask")],
   ["a-workspace", "app", app("project"), ["en"], async (page) => {
     await page.getByRole("button", { name: "Acme Holdings", exact: true }).first().click();

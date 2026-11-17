@@ -68,9 +68,14 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
     <section className="el-group" aria-labelledby={title ? id : undefined}>
       {title && <h2 className="el-caption el-body-strong el-group__title" id={id}>{title}</h2>}
       <Card><List label={title ?? "Settings"} className="el-group__rows">{children}</List></Card>
-      {footer && <div className="el-group__note el-caption el-secondary">{footer}</div>}
+      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{footer}</div>}
     </section>
   );
+}
+
+/** A page about plans on a server that has none (entitlements answered null): said once, instead of waiting forever. */
+export function NoPlans() {
+  return <Card><p className="el-no-plans el-secondary" role="status">Your server doesn't have plans yet.</p></Card>;
 }
 
 /** While the settings are read. */
