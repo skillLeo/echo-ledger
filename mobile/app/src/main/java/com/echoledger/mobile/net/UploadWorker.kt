@@ -69,6 +69,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
             val current = bringBackServerCopy(api, started ?: rec)
             when (upload(api, current)) {
                 Outcome.READY -> {
+                    // After an Undo that brought a server copy back, a delete that landed late may have trashed the
+                    // session this run finished into: the phone's copy stays until the server has it out of the bin.
+                    if (broughtBack && !confirmedOnServer(api, id)) return Result.retry()
                     // The server now holds the (encrypted) copy, so the phone's goes, in one step with the check that
                     // it was not discarded meanwhile; if it was, the server's copy goes too (the phone's with the Discard).
                     if (graph.recordings.deleteIf(id) { it.state != Decisions.DISCARDING } == null) {
@@ -151,6 +154,8 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
      */
     private suspend fun bringBackServerCopy(api: ApiClient, rec: LocalRecording): LocalRecording {
         val copy = rec.serverCopy ?: return rec
+        // A delete still queued is stopped (an Undo did that already, unless it ran meanwhile).
+        DiscardWorker.cancelBeforeItRuns(applicationContext, rec.id)
         val fresh = if (rec.restoreServerCopy) {
             try {
                 api.restoreSession(copy)
@@ -165,9 +170,32 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         } else {
             false
         }
+        // The old session goes on, and a delete that started may still land on it: it is checked again at the end.
+        broughtBack = rec.restoreServerCopy && !fresh
         return keep(rec.id) {
             it.copy(serverCopy = null, restoreServerCopy = false, clientRef = if (fresh) UUID.randomUUID().toString() else it.clientRef)
         } ?: rec
+    }
+
+    /** This run goes on with a session whose delete may have started ([bringBackServerCopy]); checked at the end. */
+    private var broughtBack = false
+
+    /**
+     * Whether the session this run finished into is on the server and not in its bin. A delete that landed after the
+     * restore check trashed it: it is restored. Gone for good (`410`, or not in the bin either), the next run sends the
+     * recording fresh under a new reference, so the phone's copy is never deleted while the server has none.
+     */
+    private suspend fun confirmedOnServer(api: ApiClient, id: String): Boolean {
+        val reached = session ?: return true
+        if (stillThere(api, reached)) return true
+        try {
+            api.restoreSession(reached)
+            return true // it was in the bin and is back
+        } catch (e: ApiException) {
+            if (e.status != 404 && e.status != 410) throw e
+        }
+        keep(id) { it.copy(clientRef = UUID.randomUUID().toString(), state = "queued") }
+        return false
     }
 
     /** Whether the server still has session [id] (not deleted): a 404 says it is gone; any other failure is retried. */
