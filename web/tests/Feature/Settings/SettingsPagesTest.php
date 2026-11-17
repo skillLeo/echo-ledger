@@ -32,7 +32,7 @@ beforeEach(function () {
 
 function settingsPerson(string $plan = 'free', array $attributes = []): User
 {
-    $user = Fx::user(['name' => 'Hassam Ali', ...$attributes]);
+    $user = Fx::user(['name' => 'Ayesha Khan', ...$attributes]);
     Workspace::query()->whereKey($user->current_workspace_id)->update([
         'plan_id' => Plan::query()->where('key', $plan)->value('id'),
         'plan_expires_at' => $plan === 'free' ? null : now()->addDays(30),
@@ -52,7 +52,7 @@ function settingsHtml(User $user, string $path = ''): string
 it('shows who you are first: the name, the email, a plain plan tag and a filled Upgrade on Free', function () {
     $html = settingsHtml(settingsPerson('free'));
     expect($html)->toContain('data-profile-card')
-        ->toContain('Hassam Ali')
+        ->toContain('Ayesha Khan')
         ->toContain('data-plan-chip>Free</span>')
         ->toContain('data-upgrade="primary"')
         ->toContain('Set up free transcription (2 minutes)')
