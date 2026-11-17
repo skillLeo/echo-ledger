@@ -16,7 +16,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalConfiguration
 import com.echoledger.mobile.data.BinItemDto
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.v2.components.EchoAvatar
@@ -30,6 +29,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.shell.v2Text
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.screenLocale
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -92,7 +92,7 @@ fun V2TrashContent(
 ) {
     val c = EchoV2.colors
     val text = v2Text
-    val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
+    val locale = screenLocale()
     var actionsFor by remember { mutableStateOf<BinItemDto?>(null) }
     var confirmErase by remember { mutableStateOf<BinItemDto?>(null) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
