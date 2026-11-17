@@ -372,8 +372,8 @@ fn unregister_hotkeys(app: &AppHandle) {
     }
 }
 
-/// Why Live Translate cannot start on this system.
-pub const PLATFORM_TEXT: &str = "Live Translate needs macOS 14.2 or later on a Mac, or Windows 10 21H2 or later.";
+/// Why Live Translate cannot start on this system: only a Mac older than macOS 14.2 is refused for it.
+pub const PLATFORM_TEXT: &str = "Live Translate needs macOS 14.2 or later.";
 
 /// What Live Translate says when the app picked plays nothing by the time it starts.
 pub const STOPPED_PLAYING: &str = "This app stopped playing sound. Play something in it, then start Live Translate again.";
@@ -406,14 +406,22 @@ fn spawn_capture(
             stop.store(true, Ordering::SeqCst);
             // Only the session still current says anything: an older one's thread never flashes "ended" on a newer
             // session's window, and never takes its keys.
-            if !end_if_current(&stop) {
+            let Some(window) = end_if_current(&stop) else {
                 return;
-            }
+            };
             // Said before the keys go back: a Start during that wait (it waits for the main thread) is never followed
             // by this session's ended feed.
             if let Ok(mut f) = feed.lock() {
                 let ended = mark_ended(&mut f, reason);
                 let _ = app.emit(FEED_EVENT, &ended);
+            }
+            // Its own window goes (the panel keeps the reason and Close): an unlocked window never takes clicks over a
+            // game, and nothing counts it as open. Only while it is still the newest; a quick Start waits for it.
+            if window_generation() == window {
+                CLOSING.store(window, Ordering::SeqCst);
+                if let Some(w) = app.get_webview_window(WINDOW) {
+                    let _ = w.close();
+                }
             }
             unregister_hotkeys(&app);
             crate::actions::emit_status(&app);
@@ -434,11 +442,12 @@ pub fn ended_reason(stopped_by_person: bool, result: Result<(), String>) -> Opti
     Some(result.err().unwrap_or_else(|| STOPPED_HEARING.to_string()))
 }
 
-/// Takes the session out of `running` when it is still the one `stop` belongs to (a newer one is left alone).
-fn end_if_current(stop: &Arc<AtomicBool>) -> bool {
+/// Takes the session out of `running` when it is still the one `stop` belongs to (a newer one is left alone): the
+/// number of its window, which it then closes.
+fn end_if_current(stop: &Arc<AtomicBool>) -> Option<u64> {
     match running().lock() {
-        Ok(mut r) if r.as_ref().is_some_and(|run| Arc::ptr_eq(&run.stop, stop)) => r.take().is_some(),
-        _ => false,
+        Ok(mut r) if r.as_ref().is_some_and(|run| Arc::ptr_eq(&run.stop, stop)) => r.take().map(|run| run.window),
+        _ => None,
     }
 }
 
@@ -675,12 +684,12 @@ mod tests {
 
         let mine = Arc::new(AtomicBool::new(true));
         *running().lock().unwrap() = Some(Running { stop: mine.clone(), feed: Arc::default(), window: 3 });
-        assert!(end_if_current(&mine), "its own session ends: the tray stops saying listening");
+        assert_eq!(end_if_current(&mine), Some(3), "its own session ends (its window, 3, to close): the tray stops saying listening");
         assert!(running().lock().unwrap().is_none());
         // A newer session started meanwhile is left alone.
         let newer = Arc::new(AtomicBool::new(false));
         *running().lock().unwrap() = Some(Running { stop: newer.clone(), feed: Arc::default(), window: 4 });
-        assert!(!end_if_current(&mine));
+        assert_eq!(end_if_current(&mine), None);
         assert!(running().lock().unwrap().is_some() && !newer.load(Ordering::SeqCst));
         *running().lock().unwrap() = None;
         // The capture thread does it, and says it.
@@ -691,7 +700,7 @@ mod tests {
             assert!(thread.contains(step), "{step}");
         }
         // A session no longer current says nothing: the check comes before the keys, the feed and the status.
-        let gate = thread.find("if !end_if_current(&stop) {\n                return;\n            }").expect("an old session's thread returns first");
+        let gate = thread.find("let Some(window) = end_if_current(&stop) else {\n                return;\n            };").expect("an old session's thread returns first");
         for step in ["unregister_hotkeys(&app)", "app.emit(FEED_EVENT", "emit_status(&app)"] {
             assert!(thread.find(step).is_some_and(|at| at > gate), "{step} only for the current session");
         }
@@ -735,6 +744,12 @@ mod tests {
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
         assert!(thread.find("mark_ended(&mut f, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
+        // Then its own window closes: after the ended feed, only while it is the newest, marked closing first.
+        let marked = thread.find("mark_ended(&mut f, reason)").unwrap();
+        let guard = thread.find("if window_generation() == window {").expect("guarded by its window's number");
+        let closing = thread.find("CLOSING.store(window, Ordering::SeqCst);").expect("a quick Start waits for it");
+        let close = thread.find("let _ = w.close();").expect("the window closes");
+        assert!(marked < guard && guard < closing && closing < close && close < thread.find("unregister_hotkeys(&app)").unwrap());
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut f, reason)"));
     }
@@ -782,6 +797,8 @@ mod tests {
         assert!(platform_supported());
         assert!(mac_supports((14, 2, 0)) && mac_supports((15, 0, 0)) && mac_supports((26, 1, 0)));
         assert!(!mac_supports((14, 1, 2)) && !mac_supports((13, 6, 0)), "below 14.2 the reason stays platform");
+        // Only a Mac below 14.2 is refused for the system (Windows says its own build at the capture).
+        assert_eq!(PLATFORM_TEXT, "Live Translate needs macOS 14.2 or later.");
     }
 
     #[test]
