@@ -140,6 +140,9 @@ class CallsPageParityTest : ScreenTest() {
         put("button: Reset", "button: Reset")
     }
 
+    /** The v2 page's own controls (none today), and why. */
+    private val v2Only = emptyMap<String, String>()
+
     /** Today's controls the v2 page doesn't have, and why. */
     private val reasons = mapOf(
         "button: Search settings" to "v2 Settings searches from its first page; Back leads there"
@@ -154,7 +157,7 @@ class CallsPageParityTest : ScreenTest() {
         today += ParityKit.firstSeen(compose, Step.entries, ::run)
         assertEquals(today.toString(), true, today.size > 30)
         v2Walk(v2)
-        assertEquals(emptyList<String>(), ParityKit.problems(today, v2, where, reasons))
+        assertEquals(emptyList<String>(), ParityKit.problems(today, v2, where, reasons, v2Only))
     }
 
     /** The v2 page's walk, in a second composition from the start (settings back to their defaults first). */

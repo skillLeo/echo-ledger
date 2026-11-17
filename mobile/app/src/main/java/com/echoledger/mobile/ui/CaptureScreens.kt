@@ -512,7 +512,7 @@ internal fun PhoneAppRecordingsBlock(
         }
     }
     confirm?.let { c ->
-        ImportRecordingDialog(c, clock.format(java.time.Instant.ofEpochMilli(c.callAtMs)), fileOf, onDismiss = { confirm = null }) {
+        ClassicImportRecordingDialog(c, clock.format(java.time.Instant.ofEpochMilli(c.callAtMs)), fileOf, onDismiss = { confirm = null }) {
             confirm = null
             // The import runs in the app's own scope: leaving this screen never stops it half-way.
             val app = context.applicationContext as com.echoledger.mobile.EchoLedgerApp
@@ -525,6 +525,21 @@ internal fun PhoneAppRecordingsBlock(
             }
         }
     }
+}
+
+/**
+ * The import dialog on today's (classic) page: in English whatever the phone's language, as the rest of that page;
+ * the v2 page shows the same dialog in the screen's language.
+ */
+@Composable
+internal fun ClassicImportRecordingDialog(
+    candidate: com.echoledger.mobile.calls.PhoneAppRecordings.Candidate,
+    time: String,
+    fileOf: (suspend (Context, Long) -> com.echoledger.mobile.calls.PhoneAppRecordings.MediaFile?)?,
+    onDismiss: () -> Unit,
+    onImport: () -> Unit
+) = com.echoledger.mobile.ui.v2.theme.ProvideLanguage(com.echoledger.mobile.ui.v2.theme.EchoLanguage.English) {
+    ImportRecordingDialog(candidate, time, fileOf, onDismiss, onImport)
 }
 
 /**

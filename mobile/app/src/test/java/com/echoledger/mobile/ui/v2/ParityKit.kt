@@ -63,8 +63,17 @@ object ParityKit {
      * [reasons]), nothing mapped is missing from today's page, and each mapped pair is first seen in the same step on
      * both pages. Returns the problems, empty when the pages match.
      */
-    fun <S> problems(today: Map<String, S>, v2: Map<String, S>, where: Map<String, String>, reasons: Map<String, String>): List<String> {
+    fun <S> problems(
+        today: Map<String, S>,
+        v2: Map<String, S>,
+        where: Map<String, String>,
+        reasons: Map<String, String>,
+        v2Only: Map<String, String> = emptyMap()
+    ): List<String> {
         val out = mutableListOf<String>()
+        // And the other way: a v2 control is either one of today's, mapped, or v2's own with a reason.
+        v2.keys.filter { it !in where.values && it !in v2Only }.sorted().forEach { out += "v2 control with no counterpart or reason: $it" }
+        v2Only.keys.filter { it !in v2 }.sorted().forEach { out += "v2-only reason for a control the v2 page doesn't have: $it" }
         today.keys.filter { it !in where && it !in reasons }.sorted().forEach { out += "unmapped today: $it" }
         (where.keys + reasons.keys).filter { it !in today }.sorted().forEach { out += "mapped but not on today's page: $it" }
         for ((old, new) in where) {
