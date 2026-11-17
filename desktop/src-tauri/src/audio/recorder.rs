@@ -9,12 +9,13 @@ use tokio::sync::mpsc::UnboundedSender;
 use super::dsp::{f32_to_i16, rms};
 use super::health::HEARD_LEVEL;
 use super::timeline::{Timeline, frames_to_nanos};
+use super::sleep::{SleepClock, SystemClock};
 use super::types::{AudioChunk, Channel, TARGET_RATE};
-
-/// The longest gap in a channel's packets that is written as silence (a device that went quiet); longer is the
-/// computer sleeping, and the recording goes on from where it was (`Recorder::push`).
-pub const MAX_GAP_NS: u64 = 60 * 1_000_000_000;
 use super::writer::{MonoWav, encode_mono_flac_from_wav, encode_stereo_flac_from_wavs};
+
+/// Sleep shorter than this is not looked for in a gap: the two clocks are read one after the other, and a gap is
+/// measured against when packets reached the recorder, not when they were captured.
+pub const MIN_SLEEP_NS: u64 = 1_000_000_000;
 
 #[derive(Clone, Debug, serde::Serialize)]
 pub struct RecordingOutput {
@@ -43,6 +44,12 @@ pub struct Recorder {
     heard: [u64; 2],
     /// `Some(channel)` = a single-channel recording whose upload file is that channel only (voice notes).
     mono: Option<Channel>,
+    /// Tells a sleep from a silence (`push`).
+    sleep_clock: Box<dyn SleepClock>,
+    /// Time asleep (since boot) already accounted for.
+    asleep_seen_ns: u64,
+    /// Time awake when each channel's last packet reached the recorder (or the timeline was anchored).
+    last_awake_ns: [Option<u64>; 2],
 }
 
 impl Recorder {
@@ -70,7 +77,16 @@ impl Recorder {
             levels: [0.0, 0.0],
             heard: [0, 0],
             mono,
+            sleep_clock: Box::new(SystemClock),
+            asleep_seen_ns: 0,
+            last_awake_ns: [None, None],
         })
+    }
+
+    /// The clocks it tells a sleep by (tests move them by hand).
+    pub fn with_sleep_clock(mut self, clock: Box<dyn SleepClock>) -> Self {
+        self.sleep_clock = clock;
+        self
     }
 
     pub fn set_live_sink(&mut self, channel: Channel, sink: Option<UnboundedSender<Vec<u8>>>) {
@@ -89,19 +105,28 @@ impl Recorder {
         if chunk.samples.is_empty() {
             return Ok(());
         }
-        // The computer slept: a packet stamped far past its channel's cursor is not a gap to fill with silence (hours
-        // of it on a device clock that runs through sleep). Like a resume, both channels are evened out and the
-        // timeline re-anchors so this packet lands at the common cursor.
-        if let (Some(t0), Some(ts)) = (self.t0_ns, chunk.ts_ns) {
+        let now = self.sleep_clock.read();
+        // The computer slept since this side's last packet: on a device clock that runs through sleep, its packets
+        // jump by the time asleep, which is not written as silence. Only the part of the gap the computer was not
+        // awake for goes: a side that was quiet (no packets, e.g. the other person silent on Windows' loopback) keeps
+        // its silence, however long. A device clock that stops in sleep shows no such gap, and nothing goes.
+        let asleep = now.asleep_ns.saturating_sub(self.asleep_seen_ns);
+        if let (Some(t0), Some(ts), Some(last)) = (self.t0_ns, chunk.ts_ns, self.last_awake_ns[chunk.channel.index()])
+            && asleep >= MIN_SLEEP_NS
+        {
             let cursor = match chunk.channel {
                 Channel::Mic => self.mic_tl.cursor(),
                 Channel::System => self.sys_tl.cursor(),
             };
-            if ts.saturating_sub(t0) > frames_to_nanos(cursor, TARGET_RATE) + MAX_GAP_NS {
-                let total = self.even_out()?;
-                self.t0_ns = Some(ts.saturating_sub(frames_to_nanos(total, TARGET_RATE)));
+            let gap = ts.saturating_sub(t0).saturating_sub(frames_to_nanos(cursor, TARGET_RATE));
+            let awake = now.awake_ns.saturating_sub(last).saturating_sub(frames_to_nanos(chunk.samples.len() as u64, TARGET_RATE));
+            let slept = gap.saturating_sub(awake).min(asleep);
+            if slept >= MIN_SLEEP_NS {
+                self.t0_ns = Some(t0 + slept); // both channels move on by it, so they stay aligned
             }
+            self.asleep_seen_ns = now.asleep_ns;
         }
+        self.last_awake_ns[chunk.channel.index()] = Some(now.awake_ns);
         let (timeline, wav) = match chunk.channel {
             Channel::Mic => (&mut self.mic_tl, &mut self.mic),
             Channel::System => (&mut self.sys_tl, &mut self.sys),
@@ -113,6 +138,9 @@ impl Recorder {
             && let Some(ts) = chunk.ts_ns
         {
             self.t0_ns = Some(ts.saturating_sub(frames_to_nanos(timeline.cursor(), TARGET_RATE)));
+            // A side with no packet yet counts its gap from here.
+            self.asleep_seen_ns = now.asleep_ns;
+            self.last_awake_ns = [Some(now.awake_ns); 2];
         }
         let placement = timeline.place(self.t0_ns.unwrap_or(0), chunk.ts_ns, chunk.samples.len());
         if placement.pad > 0 {

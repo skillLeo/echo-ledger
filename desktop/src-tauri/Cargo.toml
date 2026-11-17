@@ -64,6 +64,8 @@ wasapi = "0.26.0"
 windows = { version = "0.62.2", features = [
   "Wdk_System_SystemServices",
   "Win32_System_SystemInformation",
+  # Interrupt time with and without sleep (`audio::sleep`).
+  "Win32_System_WindowsProgramming",
     "Win32_System_Registry",
   "Win32_Foundation",
   "Win32_System_Threading",
