@@ -3,7 +3,11 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-f (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.1.0-a (2026-11-17, proposed; frozen for the sprint at 2.0.0-f until the lead accepts it)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.1.0-a: call rules, the after-call choice and audio clean-up (docs/PLAN_CALL_RULES.md): `GET/PUT/DELETE /api/call-rules…`,
+`POST /api/sessions/{id}/choice`, batch `POST /api/sessions/transcribe[/estimate]`, `GET/PUT /api/account/privacy`;
+library items gain `choice` and `retention`; `GET /api/config` gains `call_rules`; the plan limit `audio_retention_days`
+and the feature `auto_transcribe`; see "Call rules and audio clean-up (since 2.1.0-a)".
 2.0.0-f: `503 server_busy` on picture uploads when the server is decoding as many pictures as it allows.
 2.0.0-e: meeting assets (v1.8 P4): screens' `file_name` and `said`, near-duplicates, 120 an hour, 320 px thumbnails,
 the pack's `text` format, `screens/` in the ZIP, parts of the printed pack.
@@ -726,6 +730,148 @@ and never decide them on the device.
   `ui_classic`. The web console uses the same setting for the signed-in person.
 - The apps re-read `GET /api/config` at start, on resume after 15 minutes, and right after `PUT /api/account/ui`;
   a change applies on the next screen the person opens, never in the middle of a recording.
+
+### Call rules and audio clean-up (since 2.1.0-a)
+
+Most calls are with family and friends and need no transcript. The person decides once (a rule) or per call (a quiet
+card), and audio nobody asked to transcribe is cleaned up on its own. Today's behaviour does not change for anyone
+until a rule or a retention is set: a person with no stored default keeps the **legacy** behaviour (every recording
+is transcribed on upload) and no existing recording is ever "audio only".
+
+**The four choices** (the same words on every screen; this is the one source of truth, `choice` in the API):
+
+| `choice` | Words | What it is | Where it can be stored |
+|---|---|---|---|
+| `transcribe` | Transcribe | keep the audio and transcribe it (uses minutes) | rule, default, per recording |
+| `keep_audio` | Keep audio | save the recording only: no transcript, no cost; can be transcribed later | rule, default, per recording |
+| `delete` | Delete | remove this recording now (Trash, with undo, for `trash.keep_hours`) | per recording only (it is an action: `DELETE /api/sessions/{id}`) |
+| `dont_record` | Don't record | capture never starts; nothing is written to disk | rule or default only |
+
+A rule's `action` is one of `transcribe`, `keep_audio`, `dont_record` or `ask` (show the after-call card even where the
+default would not). "Use my default" is no rule at all: `DELETE` the rule. **Which rule wins: contact > group > source >
+the default** (a group is a class of contacts, see below). **Don't record is decided on the device, before capture
+starts**, from the rules it holds; the server only stores and serves them, and never receives a recording it was told
+not to make. A device that cannot reach the server uses the last rules it fetched.
+
+**Rules** belong to the person (not the workspace) and are shared by all their devices. Every write bumps the
+person's `revision` (a counter), which `GET /api/config` carries as `call_rules.revision`: a device fetches the rules
+again when its copy is older.
+- `GET /api/call-rules` — `config:read` →
+  ```json
+  {"revision": 7,
+   "default": {"action": "ask", "stored": true},
+   "short_calls": {"keep": false, "seconds": 30},
+   "groups": {"saved_contacts": null, "unknown_numbers": "ask", "favourites": "dont_record"},
+   "sources": {"zoom": "transcribe", "google_meet": null, "microsoft_teams": null, "slack": null, "whatsapp_desktop": null},
+   "contacts": [{"key": "tel:+923001234567", "name": "Ahmed", "action": "keep_audio", "updated_at": "…"}]}
+  ```
+  `default.action` is `ask` | `keep_audio` | `transcribe` | `dont_record`; `stored: false` means the person never chose
+  one and the **legacy** behaviour applies (`action` then reads `transcribe`); an account made from 2.1.0-a on starts
+  with `ask`. `groups` and `sources` hold an action or `null` (no rule). `short_calls.keep: false` (the default for
+  new accounts; `true` = legacy for existing ones): calls under `seconds` (30) and missed calls are not kept; the
+  device discards them, nothing is uploaded.
+- `PUT /api/call-rules/default` `{"action": "ask|keep_audio|transcribe|dont_record"}`;
+  `PUT /api/call-rules/short-calls` `{"keep": true|false}`;
+  `PUT /api/call-rules/groups/{saved_contacts|unknown_numbers|favourites}` and
+  `PUT /api/call-rules/sources/{zoom|google_meet|microsoft_teams|slack|whatsapp_desktop}` `{"action": "…"}` (the four
+  actions; `DELETE` on the same path removes the rule);
+  `PUT /api/call-rules/contacts` `{"key": "tel:+923001234567", "name": "Ahmed", "action": "…"}` (create or change; `key`
+  is what the device calls this person: `tel:` plus the number in E.164, `wa:` plus the number, or `app:` plus a stable
+  id of the device's contacts; lowercase, 3–120 characters; `name` ≤ 120) and `DELETE /api/call-rules/contacts?key=…`.
+  All `config:read`, answer `200` with the whole document above. At most 1,000 contacts per person (`422
+  too_many_rules`). `403 feature_not_in_plan` (`auto_transcribe`, `lowest_plan`) for `transcribe` as a default, group,
+  source or contact action on a plan without that feature (Free); `422 invalid_action`; `422 invalid_key`.
+- `GET /api/call-rules/resolve?source=zoom&key=tel:…&group=unknown_numbers` — `config:read` → `{"action": "ask",
+  "by": "contact" | "group" | "source" | "default" | "legacy"}`: what the server's own precedence says. `group` is
+  optional: the device says which group (if any) it put this caller in (Android: saved, unknown, favourite). A
+  `transcribe` result on a plan without `auto_transcribe` reads `ask` with `"by"` unchanged.
+
+**The choice for one recording.** A recording made with a rule or after the card carries its choice:
+- `POST /api/sessions` and `POST /api/sessions/{id}/finish` accept `"choice": "transcribe" | "keep_audio"` and
+  `"choice_by": "rule" | "user" | "timeout" | "default"` (a device applying a rule or the 10-second countdown sends
+  them with the call it makes anyway). Without `choice` the server decides when the upload completes: no stored
+  default or `transcribe` → it transcribes (legacy, as today); `ask` or `keep_audio` → it keeps audio only (`choice_by`
+  `default`; an old app on a new account therefore stops costing minutes by itself); `dont_record` → audio only.
+- `POST /api/sessions/{id}/choice` — `sessions:write` `{"choice": "transcribe" | "keep_audio" | "delete", "choice_by":
+  "user" | "timeout"}` → `200 {"data": <library item>}`. `transcribe` starts the final transcript (idempotent; the
+  plan's minutes apply: `403 limit_reached` / `403 budget_exceeded` as for any transcript); `keep_audio` marks the
+  recording audio only, `409 already_transcribed` once a transcript exists; `delete` is `DELETE /api/sessions/{id}`.
+  `404 session_not_found`; `422 invalid_choice` (`dont_record` is never a recording's choice).
+- The device decides "Don't record" *before* a session exists: there is no session and no upload.
+
+**Library items** (`GET /api/library`, `GET /api/sessions/{id}`) gain:
+```json
+"choice": {"value": "keep_audio", "by": "rule", "needs_action": false, "at": "…"},
+"retention": {"audio_only": true, "days_left": 18, "delete_on": "2026-12-05T00:00:00+00:00",
+              "starred": false, "workspace": false, "kept": false, "protected": false}
+```
+`choice` is `null` for recordings made before 2.1.0-a. `needs_action: true` is a recording kept as audio by default or
+timeout that the person has not looked at yet (Home › Needs action counts these, never lists them; opening it or choosing
+clears it). `retention`: `audio_only` = `choice.value` is `keep_audio` and no transcript exists; `starred` = `pinned`;
+`workspace` = the recording is in a shared workspace (one with other members); `kept` = `keep`; `protected` = any of
+those three, or a transcript exists. `days_left` and `delete_on` are `null` when `protected`, when `audio_only` is false,
+or when the person's retention is Never; otherwise whole days left (rounded up, `0` = today) counted from `choice.at`.
+They follow the retention in force now, so a change by the admin or the person applies to existing items too.
+
+`GET /api/library` gains `view=audio_only` (audio only, not protected), `view=transcribed` (a final transcript exists)
+and `view=starred` (the same as `pinned=1`); `GET /api/library/views` gains `"audio_only"`, `"transcribed"`, `"starred"`,
+`"needs_action"` and `"cleanup_soon": {"count": 12, "on": "2026-11-21T00:00:00+00:00"}` (items that will be removed
+within 3 days and the earliest day; `count` 0 and `on` null when none). Home shows these as one quiet line, never a list.
+
+**Transcribe many.** `POST /api/sessions/transcribe/estimate` `{"ids": ["01JB…"]}` (1–100) → `200 {"count": 5, "minutes":
+84.5, "minutes_left": 300.0 | null, "enough": true, "items": [{"id": "…", "minutes": 12.0}]}` (`null` = no monthly
+limit; ids that are not audio only, or not the person's, are left out of `items`). `POST /api/sessions/transcribe`
+`{"ids": […], "max_minutes": 84.5}` starts them: `409 estimate_changed` when the minutes now exceed `max_minutes`
+(show the new number and ask again), `403 limit_reached` when they do not fit (nothing starts: all or nothing),
+`200 {"started": 5}`. The apps always show the estimate and `minutes_left` before the button.
+
+**Audio clean-up.** Once a day (the existing queue and cron) every recording that is **audio only**, **not starred**
+(`pinned`), **not kept** and **not in a shared workspace**, and whose `choice.at` is older than the person's retention
+in days, goes to Trash and then follows the Trash rule (`trash.keep_hours`, the owner's setting, 48 hours unless
+changed): erased for good with its audio files, waveforms, pictures and the engines' copies. Transcribed, starred, kept
+and workspace recordings are never removed by it, and only the person deletes them. Starring, keeping or transcribing
+an item takes it out of the clean-up at once. A recording that was cleaned up is a tombstone in `GET /api/library`
+like any deletion. The retention in days:
+- **allowance** = the person's override (admin) if set, else their plan's `audio_retention_days`; `null` = Never.
+  Choices: 7, 14, 30, 60, 90, 180, 365 days or Never. New plans start at 30 days (Free: 7, and Free can never be
+  Never). Existing plans get the same defaults, which touch no existing recording (none is audio only).
+- the person's own choice (`GET/PUT /api/account/privacy`) can only shorten it: effective = the shorter of the two, and
+  Never only where the allowance is Never. An override above the plan is refused (`422 above_plan`).
+- This does not replace the retention of 1.5 (`retention_days`, "Recordings older than…", B17), which moves *every*
+  recording that is not kept to the bin: it keeps working as it does today (see the lead's decision D1 below).
+- Warning: three days before, `cleanup_soon` (above) shows on Home and the console's Home line; once a week (Monday)
+  one Activity entry says how many will go and on which day. No push for any item, ever.
+
+- `GET /api/account/privacy` — `config:read` → `200 {"audio_retention": {"choice": "plan" | 7 | 14 | 30 | 60 | 90 | 180 | 365 |
+  "never", "days": 30 | null, "allowance_days": 30 | null, "options": [7, 14, 30, 60, 90, 180, 365], "never_allowed":
+  false}, "storage": {"used_bytes": 2254857830, "audio_only_bytes": 1181116006, "limit_bytes": 10737418240 | null}}`.
+  `days` is the effective retention (`null` = Never). `PUT` the same path with `{"audio_retention_choice": "plan" | 7 | … |
+  "never"}` → the same document; `422 above_plan` for a choice longer than the allowance, `422 never_not_allowed`.
+- `GET /api/me/entitlements`: `limits` gains `"audio_retention_days": {"limit": 30 | null}` (`null` = Never) and the feature
+  `auto_transcribe` (paid; Free has none). `GET /api/storage` gains `"audio_only_bytes"` and `"audio_retention_days"`.
+- `GET /api/config` gains `"call_rules": {"revision": 7, "default": "ask", "short_calls_keep": false}`; missing on an
+  older server: the device uses no rules (legacy).
+
+**Admin** (console only, no device API): Plans & limits › Retention sets `audio_retention_days` per plan and per person
+(an override within the plan, with the Free cap), and an admin page counts, per plan and month, the calls *transcribed*,
+*kept as audio*, *deleted by the person* and *removed by clean-up*. The counts come from a small log of choices
+(plan key, workspace, choice, who decided, date: no content, no names, no numbers) that outlives the recordings.
+
+**Flags.** Every new field and route is additive. The console's screens (the card in Home › Needs action, saved views,
+Transcribe all, the storage line, the rules pages) show under `ui_v2.after_call`, `ui_v2.library`, `ui_v2.home` and
+`ui_v2.settings`; the admin Retention numbers under `ui_v2.admin`. The server's behaviour (rules, the daily clean-up)
+needs no flag: it acts only on recordings whose choice is `keep_audio`, which exist only after a rule or a choice.
+
+**Decisions for the lead before this is frozen.**
+- D1. Since 1.5 (B17) the hourly retention moves **every** recording that is not kept (transcribed ones too) to the bin after
+  the general `retention_days` (30 by default) or the plan's days. docs/PLAN_CALL_RULES.md says transcribed recordings are
+  never deleted automatically. This contract leaves 1.5's rule untouched (no behaviour change) and adds the new clean-up
+  beside it. If the owner wants transcribed recordings exempt, say so: it changes today's behaviour and needs its own entry.
+- D2. "Ask me (follow the default)" is two things here: *Use my default* = no rule; *Ask me* = the stored action `ask`.
+- D3. Groups (saved, unknown, favourites) sit between a contact and a source in the precedence; the plan lists only contact
+  > source > default.
+- D4. A person with no stored default keeps transcribing every recording (legacy); only new accounts start on `ask`.
+- D5. "Workspace" means a workspace with other members; a person's own one-member workspace is not protected.
 
 ### `GET /api/clients` — `library:read`
 `200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "retention_days": null, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`
