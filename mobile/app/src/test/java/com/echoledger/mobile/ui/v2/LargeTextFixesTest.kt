@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalConfiguration
@@ -13,14 +14,19 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.SemanticsNodeInteraction
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.components.EchoListRow
+import com.echoledger.mobile.ui.v2.shell.Profile
+import com.echoledger.mobile.ui.v2.shell.ProfileCardSlot
+import com.echoledger.mobile.ui.v2.shell.ProfileState
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -40,9 +46,10 @@ class LargeTextFixesTest {
     val compose = createComposeRule()
 
     private var scale by mutableFloatStateOf(1f)
+    private var language by mutableStateOf(EchoLanguage.English)
 
     /** As the phone draws at [scale] text: the configuration's font scale and its density (Android 14's scaling). */
-    private fun show(language: EchoLanguage = EchoLanguage.English, content: @Composable () -> Unit) = compose.setContent {
+    private fun show(content: @Composable () -> Unit) = compose.setContent {
         val base = LocalContext.current
         val config = LocalConfiguration.current
         val scaled = remember(scale) { base.createConfigurationContext(Configuration(config).apply { fontScale = scale }) }
@@ -71,5 +78,26 @@ class LargeTextFixesTest {
         // P-085: at 200 % the title has a second line instead of stopping after a dozen letters.
         at(2f)
         assertEquals(2, compose.onNodeWithText(title, useUnmergedTree = true).layout().lineCount)
+    }
+
+    @Test
+    fun upgradeGoesUnderTheUsageLinesAtLargeText() {
+        val profile = Profile("Ayesha Siddiqui", "ayesha@bilaltraders.pk", "Starter", 212, 300, 1_240_000_000, 318)
+        show { ProfileCardSlot(ProfileState.Ready(profile), {}, {}) }
+        for (l in EchoLanguage.entries) {
+            language = l
+            at(1f)
+            val res = V2Testing.resources(l)
+            val minutes = res.getString(com.echoledger.mobile.R.string.v2_minutes_used, 212L, 300L)
+            val upgrade = res.getString(com.echoledger.mobile.R.string.v2_upgrade)
+            fun usageBottom() = compose.onNodeWithText(minutes, useUnmergedTree = true).getUnclippedBoundsInRoot().bottom
+            fun buttonTop() = compose.onNodeWithText(upgrade, useUnmergedTree = true).getUnclippedBoundsInRoot().top
+            // At 100 % Upgrade sits beside the usage lines.
+            assertTrue("$l: beside", buttonTop() < usageBottom())
+            // P-086: at 200 % it goes under them, so they keep the card's width.
+            at(2f)
+            assertTrue("$l: under", buttonTop() >= usageBottom())
+            assertTrue("$l: a line or two", compose.onNodeWithText(minutes, useUnmergedTree = true).layout().lineCount <= 2)
+        }
     }
 }
