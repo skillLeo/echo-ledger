@@ -21,7 +21,10 @@ use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistStt;
 use App\Services\Assist\AssistTransport;
+use App\Services\Assist\Http\Card;
 use App\Services\Assist\Http\HttpBlock;
+use App\Services\Assist\Http\LiveContext;
+use App\Services\Assist\Http\LiveState;
 use App\Services\Assist\RelayToken;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -282,6 +285,10 @@ final class AssistSessionController extends Controller
             'seconds_used' => max(0, (int) $session->started_at->diffInSeconds($at, true)),
             'report_status' => 'queued',
         ])->save();
+        // HTTP mode keeps the call's context and the card in the cache while it runs: gone with it.
+        app(LiveContext::class)->forget($session);
+        app(LiveState::class)->forget($session);
+        app(Card::class)->forget($session);
     }
 
     /**

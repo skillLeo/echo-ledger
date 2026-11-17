@@ -2,17 +2,24 @@
 
 declare(strict_types=1);
 
+use App\Models\AssistSession;
+use App\Models\AssistUsage;
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Assist\AssistAskAi;
+use App\Services\Assist\AssistBudget;
+use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistReportAi;
+use App\Services\Assist\Http\Ai\ModelGateway;
 use App\Services\Assist\RelayHealth;
 use App\Services\Assist\RelaySecret;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Testing\TestResponse;
+use Tests\Feature\Assist\Support\FakeModels;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
@@ -163,4 +170,79 @@ function fakeAssistAskAi(?array $data = null, ?Throwable $fails = null): object
     app()->instance(AssistAskAi::class, $fake);
 
     return $fake;
+}
+
+/** @return array{0: TestResponse, 1: string} a started HTTP-mode session's API client and id */
+function httpSession(object $test, string $plan = 'pro', array $extra = []): array
+{
+    $api = (fn () => $this->api(Fx::token(assistPerson($plan))))->call($test);
+    $start = $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'balanced', 'transports' => ['http'], ...$extra])->assertCreated();
+
+    return [$api, (string) $start->json('session.id')];
+}
+
+/** The events of a streamed answer: [['event' => 'error', 'data' => [...]], …], keep-alive comments left out. */
+function events(string $body): array
+{
+    $events = [];
+    foreach (preg_split("/\n\n/", trim($body)) as $block) {
+        if (! preg_match('/^event: (\S+)\ndata: (.*)$/s', $block, $m)) {
+            continue;
+        }
+        $events[] = ['event' => $m[1], 'data' => json_decode($m[2], true)];
+    }
+
+    return $events;
+}
+
+/**
+ * One message of HTTP mode posted, and the events its stream gave.
+ *
+ * @param  array<string, mixed>  $message
+ * @return list<array{event: string, data: array<string, mixed>}>
+ */
+function assistLive(object $api, string $id, array $message): array
+{
+    return events($api->postJson("/api/assist/sessions/{$id}/live", $message)->assertOk()->streamedContent());
+}
+
+/** The names of the events, in order: ['suggestion_start', 'token', 'suggestion_end', 'end']. */
+function assistNames(array $events): array
+{
+    return array_column($events, 'event');
+}
+
+/** The models of HTTP mode, scripted (Tests\Feature\Assist\Support\FakeModels): no network, no keys. */
+function fakeAssistModels(): FakeModels
+{
+    $fake = new FakeModels;
+    app()->instance(ModelGateway::class, $fake);
+
+    return $fake;
+}
+
+/** The session row of an HTTP-mode session. */
+function assistSessionOf(string $id): AssistSession
+{
+    return AssistSession::query()->withoutGlobalScopes()->findOrFail($id);
+}
+
+/** Spends [$usd] of the person's month already, so that little is left. */
+function assistSpend(string $id, float $usd): void
+{
+    $session = assistSessionOf($id);
+    AssistUsage::query()->create([
+        'assist_session_id' => $id, 'workspace_id' => $session->workspace_id, 'user_id' => $session->user_id, 'suggestion_id' => 'spent-'.uniqid(),
+        'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'balanced', 'kind' => 'answer', 'outcome' => 'done', 'cost_usd' => $usd, 'occurred_at' => now(),
+    ]);
+}
+
+/** Reserves all of the month's budget as a call in flight would (a pending row), so that the gate has nothing free. */
+function assistHoldAllBudget(string $id): AssistUsage
+{
+    $session = assistSessionOf($id);
+
+    $left = app(AssistPlans::class)->left($session->workspace_id, $session->user_id, false)['cents_left'];
+
+    return app(AssistBudget::class)->reserve($session, 'answer', 'claude-haiku-5-5', $left, 'in-flight-'.uniqid()) ?? throw new RuntimeException('could not reserve');
 }

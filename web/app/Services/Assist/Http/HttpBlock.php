@@ -32,12 +32,15 @@ final class HttpBlock
     public function ready(AssistSession $session): array
     {
         $allowed = array_reverse($this->plans->modes($session->workspace_id, $session->practice));
+        $mode = $this->modes->effective($session);
+        // What the app is told here is what `mode_changed` is measured from.
+        $this->modes->announce($session, $mode);
 
         return [
             'protocol' => self::PROTOCOL,
             'session_id' => $session->id,
-            'mode' => $this->modes->effective($session),
-            'requested_mode' => $session->mode,
+            'mode' => $mode,
+            'requested_mode' => $this->modes->requested($session),
             'allowed_modes' => $allowed,
             'resumed' => false,
             'practice' => $session->practice,

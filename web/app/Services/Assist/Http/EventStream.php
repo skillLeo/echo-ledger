@@ -21,6 +21,8 @@ final class EventStream
 
     private float $startedAt;
 
+    private bool $aborted = false;
+
     private function __construct()
     {
         $this->startedAt = microtime(true);
@@ -34,6 +36,9 @@ final class EventStream
             @ini_set('output_buffering', '0');
             @ini_set('implicit_flush', '1');
             @set_time_limit(self::MAX_SECONDS + 15);
+            // The work (a model call that is billed) ends and is settled even when the app has gone: PHP would otherwise
+            // stop the script at the next write, with the call's reservation still open. `aborted()` says when to stop.
+            ignore_user_abort(true);
             // Under the test runner the buffers are the runner's: leave them alone.
             if (! app()->runningUnitTests()) {
                 while (ob_get_level() > 0) {
@@ -77,16 +82,38 @@ final class EventStream
         $this->send('error', ['code' => $code, 'message' => $message, 'retry' => $retry, 'suggestion_id' => $suggestionId, 'in_reply_to' => null, 'fatal' => $fatal]);
     }
 
-    /** True once the stream has run its allowed time. */
+    /**
+     * True once the stream has run its allowed time.
+     *
+     * @phpstan-impure
+     */
     public function expired(): bool
     {
         return microtime(true) - $this->startedAt >= self::MAX_SECONDS;
+    }
+
+    /**
+     * True once the app has closed the connection: nobody is reading, so the work stops.
+     *
+     * @phpstan-impure
+     */
+    public function aborted(): bool
+    {
+        return $this->aborted || ($this->aborted = connection_aborted() === 1);
+    }
+
+    /** Seconds since the stream started. */
+    public function elapsed(): float
+    {
+        return microtime(true) - $this->startedAt;
     }
 
     private function flush(): void
     {
         if (! app()->runningUnitTests()) {
             @flush();
+            // The app going away shows on a write, not before.
+            $this->aborted = $this->aborted || connection_aborted() === 1;
         }
     }
 }

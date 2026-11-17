@@ -36,8 +36,10 @@ class LiveContext
     {
         $stored = Cache::get(self::key($session));
         $data = is_string($stored) ? json_decode(Crypt::decryptString($stored), true) : null;
+        $data = is_array($data) ? $data : ['brief' => [], 'settings' => [], 'documents' => [], 'memory' => '', 'facts' => [], 'summary' => ''];
+        $me = Cache::get(self::meKey($session));
 
-        return is_array($data) ? $data : ['brief' => [], 'settings' => [], 'documents' => [], 'memory' => '', 'facts' => [], 'summary' => '', 'last_me_ms' => null];
+        return [...$data, 'last_me_ms' => is_int($me) ? $me : null];
     }
 
     /**
@@ -109,26 +111,48 @@ class LiveContext
                 }
             }
         }
+        // A settings update changes only the settings it names (the hint level stays when only the mode is sent).
+        if (array_key_exists('settings', $new)) {
+            $new['settings'] = [...(array) ($context['settings'] ?? []), ...(array) $new['settings']];
+        }
         $this->put($session, [...$context, ...$new]);
 
         return null;
     }
 
-    /** Remembers that Me spoke at [$ms] (a wall-clock millisecond stamp). */
+    /** When Me last spoke (a wall-clock millisecond stamp), or null: only this, without reading the whole context. */
+    public function lastMe(AssistSession $session): ?int
+    {
+        $me = Cache::get(self::meKey($session));
+
+        return is_int($me) ? $me : null;
+    }
+
+    /**
+     * Remembers that Me spoke at [$ms] (a wall-clock millisecond stamp), apart from the rest of the context: several
+     * requests of one session run at once, and this is the one thing they all write.
+     */
     public function meSpoke(AssistSession $session, int $ms): void
     {
-        $this->put($session, [...$this->get($session), 'last_me_ms' => $ms]);
+        Cache::put(self::meKey($session), $ms, self::TTL_SECONDS);
     }
 
     /** @param  array<string, mixed>  $context */
     public function put(AssistSession $session, array $context): void
     {
+        unset($context['last_me_ms']);
         Cache::put(self::key($session), Crypt::encryptString((string) json_encode($context, JSON_UNESCAPED_UNICODE)), self::TTL_SECONDS);
     }
 
     public function forget(AssistSession $session): void
     {
         Cache::forget(self::key($session));
+        Cache::forget(self::meKey($session));
+    }
+
+    private static function meKey(AssistSession $session): string
+    {
+        return 'assist.live.me.'.$session->id;
     }
 
     private static function key(AssistSession $session): string

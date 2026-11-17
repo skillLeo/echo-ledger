@@ -8,9 +8,7 @@ use App\Services\Assist\AssistTransport;
 use App\Services\Assist\Http\LiveContext;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Cache;
-use Illuminate\Testing\TestResponse;
 use Tests\Feature\Security\Support\ApiClient;
-use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 require_once __DIR__.'/Support/assist_helpers.php';
 
@@ -24,29 +22,6 @@ beforeEach(function () {
     assistRelaySetUp();
     app(SettingsRepository::class)->set('assist.connection', AssistTransport::SHARED);
 });
-
-/** @return array{0: TestResponse, 1: string} a started HTTP-mode session's API client and id */
-function httpSession(object $test, string $plan = 'pro', array $extra = []): array
-{
-    $api = (fn () => $this->api(Fx::token(assistPerson($plan))))->call($test);
-    $start = $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'balanced', 'transports' => ['http'], ...$extra])->assertCreated();
-
-    return [$api, (string) $start->json('session.id')];
-}
-
-/** The events of a streamed answer: [['event' => 'error', 'data' => [...]], …], keep-alive comments left out. */
-function events(string $body): array
-{
-    $events = [];
-    foreach (preg_split("/\n\n/", trim($body)) as $block) {
-        if (! preg_match('/^event: (\S+)\ndata: (.*)$/s', $block, $m)) {
-            continue;
-        }
-        $events[] = ['event' => $m[1], 'data' => json_decode($m[2], true)];
-    }
-
-    return $events;
-}
 
 it('streams with the headers that keep the CDN from holding it, and ends with an end event', function () {
     [$api, $id] = httpSession($this);

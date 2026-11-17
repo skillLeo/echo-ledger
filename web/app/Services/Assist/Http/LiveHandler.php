@@ -15,7 +15,12 @@ class LiveHandler
 {
     public const TYPES = ['context_update', 'turn_final', 'turn_partial', 'help_now', 'regenerate', 'shorter', 'formal', 'translate', 'cancel', 'practice_next'];
 
-    public function __construct(private readonly LiveContext $context) {}
+    public function __construct(
+        private readonly LiveContext $context,
+        private readonly LiveState $state,
+        private readonly ModeChoice $modes,
+        private readonly SuggestionEngine $engine,
+    ) {}
 
     /** @param  array<string, mixed>  $message */
     public function handle(AssistSession $session, array $message, EventStream $stream): void
@@ -24,6 +29,8 @@ class LiveHandler
             'context_update' => $this->contextUpdate($session, $message, $stream),
             'turn_final' => $this->turnFinal($session, $message, $stream),
             'turn_partial' => $this->turnPartial($session, $message, $stream),
+            'help_now' => $this->engine->helpNow($session, self::turnId($message), $stream),
+            'cancel' => $this->engine->cancel($session, self::turnId($message, 'suggestion_id'), $stream),
             default => $stream->error('bad_message', 'That message is not supported.'),
         };
     }
@@ -36,6 +43,15 @@ class LiveHandler
             $stream->error('documents_too_large', 'Those documents are too large. Send the parts that matter.');
         } elseif ($error !== null) {
             $stream->error('bad_message', 'That update could not be read.');
+        } elseif (is_array($message['settings'] ?? null)) {
+            $settings = $message['settings'];
+            if (($settings['assist'] ?? null) === 'paused') {
+                // No suggestion on the card while they are paused.
+                $this->engine->cancel($session, null, $stream);
+            }
+            if (array_key_exists('mode', $settings)) {
+                $this->modes->evaluate($session, $stream, 'settings');
+            }
         }
     }
 
@@ -48,13 +64,32 @@ class LiveHandler
 
             return;
         }
-        AssistTurn::query()->firstOrCreate(
+        $stored = AssistTurn::query()->firstOrCreate(
             ['assist_session_id' => $session->id, 'client_ref' => $turn['id']],
             ['channel' => $turn['channel'], 'start_ms' => $turn['start_ms'], 'end_ms' => $turn['end_ms'], 'text' => $turn['text'], 'language' => $turn['language'], 'is_question' => false],
         );
         if ($turn['channel'] === 'me') {
             $this->context->meSpoke($session, (int) floor(microtime(true) * 1000));
+
+            return;
         }
+        // A turn sent twice (the app's retry) is stored once and answered once. Whatever the other side says, a
+        // question or not, ends the wait of a question held for budget.
+        if ($stored->wasRecentlyCreated) {
+            $this->engine->answer($session, $turn['id'], $turn['text'], $this->state->otherFinalSent($session), $stream);
+        }
+    }
+
+    /**
+     * An id field of a message (`turn_id`, `suggestion_id`), or null when absent.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    private static function turnId(array $message, string $field = 'turn_id'): ?string
+    {
+        $id = $message[$field] ?? null;
+
+        return is_string($id) && $id !== '' && mb_strlen($id) <= 64 ? $id : null;
     }
 
     /**
