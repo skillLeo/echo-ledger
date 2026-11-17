@@ -636,7 +636,7 @@ fn running(handle: client::AssistHandle) -> desktop_lib::assist::Running {
         card: Card::new(Some("interview".into()), None),
         batch: TurnBatch::new(std::time::Instant::now()),
         budget: Budget { left_at_start: None, total: None, started: std::time::Instant::now() },
-        language_help: "off".into(),
+        translate_to: "roman_urdu".into(),
         started_recording: None,
         captions_were_on: true,
     }

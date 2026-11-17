@@ -160,24 +160,27 @@ fn checked(id: &str) -> AppResult<&str> {
     if valid_id(id) { Ok(id) } else { Err(AppError::msg("That Live Assist item can't be found.")) }
 }
 
-/// The language a `translate` asks for: the prep's language help, or Roman Urdu when it is off (pure).
-pub fn translate_language(language_help: &str) -> &'static str {
+/// The language a `translate` asks for (pure): the prep's language help; when it is off, Urdu if the app's language
+/// (the recording's, else Settings' transcription language) is Urdu, otherwise Roman Urdu.
+pub fn translate_language(language_help: &str, app_language: Option<&str>) -> &'static str {
     match language_help {
         "urdu" => "urdu",
         "arabic" => "arabic",
+        "roman_urdu" => "roman_urdu",
+        _ if app_language == Some("ur") => "urdu",
         _ => "roman_urdu",
     }
 }
 
 /// The relay message for a button on the card (pure): `help_now`, `regenerate`, `shorter`, `formal`, `translate`
-/// (latest suggestion) or `cancel` (every shown one).
-pub fn send_message(kind: &str, language_help: &str) -> Option<ClientMessage> {
+/// (latest suggestion, into `translate_to`) or `cancel` (every shown one).
+pub fn send_message(kind: &str, translate_to: &str) -> Option<ClientMessage> {
     Some(match kind {
         "help_now" => ClientMessage::HelpNow { turn_id: None },
         "regenerate" => ClientMessage::Regenerate { suggestion_id: None },
         "shorter" => ClientMessage::Shorter { suggestion_id: None },
         "formal" => ClientMessage::Formal { suggestion_id: None },
-        "translate" => ClientMessage::Translate { suggestion_id: None, language: translate_language(language_help).into() },
+        "translate" => ClientMessage::Translate { suggestion_id: None, language: translate_to.into() },
         "cancel" => ClientMessage::Cancel { suggestion_id: None },
         _ => return None,
     })
@@ -290,6 +293,7 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
     };
     let mode = mode.filter(|m| !m.is_empty()).or_else(|| prep.as_ref().map(|p| p.mode.clone())).unwrap_or_else(|| "balanced".into());
     let captions_were_on = state.live.is_live();
+    let app_language = state.capture.info().map_or_else(|| state.settings().transcription_language.clone(), |i| state.recording_language(&i.client_ref));
     let (recording_session_id, started_recording) = if practice { (None, None) } else {
         let (id, started) = recording_session(app).await?;
         (Some(id), started)
@@ -319,7 +323,7 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
         card: Card::new(meeting_type.clone(), prep.as_ref().map(|p| p.hint_level.clone())),
         batch: TurnBatch::new(Instant::now()),
         budget,
-        language_help: prep.as_ref().map(|p| p.language_help.clone()).unwrap_or_else(|| "off".into()),
+        translate_to: translate_language(prep.as_ref().map_or("off", |p| p.language_help.as_str()), app_language.as_deref()).into(),
         started_recording,
         captions_were_on,
     });
@@ -471,7 +475,7 @@ pub fn send(app: &AppHandle, kind: &str) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     let message = state
         .assist
-        .with_current(|r| send_message(kind, &r.language_help).map(|m| r.handle.send(m)))
+        .with_current(|r| send_message(kind, &r.translate_to).map(|m| r.handle.send(m)))
         .ok_or_else(|| AppError::msg("Live Assist isn't running."))?;
     message.map(|_| ()).ok_or_else(|| AppError::msg("That isn't something Live Assist can do."))
 }
@@ -724,13 +728,17 @@ mod tests {
 
     #[test]
     fn the_card_s_buttons_become_the_relay_s_messages() {
-        assert_eq!(frame(send_message("help_now", "off").unwrap()), json!({"type": "help_now", "seq": 1}));
+        assert_eq!(frame(send_message("help_now", "roman_urdu").unwrap()), json!({"type": "help_now", "seq": 1}));
         for kind in ["regenerate", "shorter", "formal", "cancel"] {
-            assert_eq!(frame(send_message(kind, "off").unwrap()), json!({"type": kind, "seq": 1}), "the latest suggestion");
+            assert_eq!(frame(send_message(kind, "roman_urdu").unwrap()), json!({"type": kind, "seq": 1}), "the latest suggestion");
         }
-        assert_eq!(frame(send_message("translate", "arabic").unwrap())["language"], "arabic", "the prep's language help");
-        assert_eq!(frame(send_message("translate", "off").unwrap())["language"], "roman_urdu");
-        assert!(send_message("token_refresh", "off").is_none(), "only the card's buttons");
+        assert_eq!(frame(send_message("translate", "arabic").unwrap())["language"], "arabic");
+        assert!(send_message("token_refresh", "urdu").is_none(), "only the card's buttons");
+        assert_eq!(translate_language("arabic", Some("ur")), "arabic", "the prep's language help first");
+        assert_eq!(translate_language("roman_urdu", Some("ur")), "roman_urdu");
+        assert_eq!(translate_language("off", Some("ur")), "urdu", "off, and the app speaks Urdu");
+        assert_eq!(translate_language("off", Some("en")), "roman_urdu");
+        assert_eq!(translate_language("off", None), "roman_urdu");
         assert_eq!(feedback_action("used"), Some("used"));
         assert_eq!(feedback_action("dismissed"), Some("dismissed"));
         assert_eq!(feedback_action("deleted"), None);

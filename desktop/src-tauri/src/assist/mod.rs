@@ -51,8 +51,9 @@ pub struct Running {
     pub card: card::Card,
     pub batch: card::TurnBatch,
     pub budget: card::Budget,
-    /// The prep's `language_help` (`off` | `urdu` | `roman_urdu` | `arabic`), for `translate`.
-    pub language_help: String,
+    /// What `translate` asks for (`urdu` | `roman_urdu` | `arabic`): the prep's language help, else from the app's
+    /// language ([`live::translate_language`]).
+    pub translate_to: String,
     /// The recording this session started (its `client_ref`); none when the person's own recording was running.
     pub started_recording: Option<String>,
     /// Live captions were on before the session turned them on.
