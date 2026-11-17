@@ -13,7 +13,7 @@ import { prettyShortcut } from "../../../lib/format";
 import { useCopied } from "../../../views/main/SettingsControls";
 import { PrivacyBadgeView } from "../../../components/PrivacyBadge";
 import {
-  GUIDED_ALONE, HIDDEN_WHILE_SHARING, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
+  GUIDED_ALONE, HIDDEN_WHILE_SHARING, SHARE_PRIVACY_INTRO, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
   displaysValue, hiddenReason, hiddenValue, lastCheckValue, statusValue, useCountdown, versionLine,
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
@@ -60,10 +60,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
 
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
-      <p className="el-secondary">
-        Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not
-        EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
-      </p>
+      <p className="el-secondary">{SHARE_PRIVACY_INTRO}</p>
       <Group footer={notes.length || lines.length ? <>
         {notes.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (

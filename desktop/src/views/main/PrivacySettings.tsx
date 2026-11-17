@@ -16,6 +16,9 @@ import { AlertIcon } from "../../components/Icons";
 type Patch = (p: SettingsPatch) => Promise<boolean>;
 const options = <T extends string>(id: string) => (setting(id).options ?? []).map((o) => [o.value as T, o.label] as const);
 
+/** What the page says first: what EchoLedger does and that the last check is the truth, never a promise beyond it. */
+export const SHARE_PRIVACY_INTRO = "EchoLedger keeps its windows out of screen shares in Zoom, Meet and Teams, checks this on your computer, and tells you what the last check saw.";
+
 /** The one-window tip and the limits, in the words the plan gives them. */
 export const ONE_WINDOW_TIP = "Share one window or a tab for the strongest privacy.";
 export const LIMITS = "Not hidden from cameras, projectors, Remote Desktop, or monitoring software on your computer.";
@@ -149,10 +152,7 @@ export function SharePrivacyPage({ settings, patch, onCheck }: { settings: Setti
   };
   return (
     <div data-testid="share-privacy">
-      <p className="set-intro">
-        Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not
-        EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
-      </p>
+      <p className="set-intro">{SHARE_PRIVACY_INTRO}</p>
       <Section footer={footer.length || lines.length ? <>
         {footer.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (
@@ -402,7 +402,7 @@ export function OnboardingShareCheck({ platform }: { platform: string }) {
   return (
     <div className="onboarding-privacy" data-testid="onboarding-share-check">
       <h2 className="settings-group-title">Private notes</h2>
-      <p className="small muted">Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not EchoLedger. EchoLedger checks this on your computer and tells you if it can't.</p>
+      <p className="small muted">{SHARE_PRIVACY_INTRO}</p>
       <p className="small muted">{PATTERN_FLASH}</p>
       <button type="button" className="btn" onClick={() => void run()} disabled={busy}>{busy ? "Checking…" : view ? "Check again" : "Check screen-share privacy"}</button>
       {line && (
