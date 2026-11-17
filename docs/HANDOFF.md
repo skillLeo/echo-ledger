@@ -1048,3 +1048,6 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   side (ui_flags, ui_classic, trash.keep_hours read leniently; setClassicUi; binOrError; deleteAwait) and a discarded
   call never reaching the server. Next: Undo after a server-side discard (restore), batches 4–6, then the v2 activity
   hook once b-phone-ui is approved.
+- Merged b-phone-ui at the reviewed 4c3e96ab: phone v2 (components, shell, Home, Library, Trash, Settings, Setup &
+  health, pill and after-call card, Urdu strings) behind the ui_v2 flags. The activity hook that shows it is the
+  phone core's next step; until then nothing of v2 is reachable in the app.
