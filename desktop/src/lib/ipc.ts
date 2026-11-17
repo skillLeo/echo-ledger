@@ -264,13 +264,15 @@ export interface OfferedPlan {
 
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
 export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
-  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection";
+  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection" | "open_shortcuts" | "open_share_privacy";
 export interface ReadyCheck {
-  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection";
+  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection" | "shortcuts" | "overlay_protection";
   label: string;
   ok: boolean;
   detail: string | null;
   fix: { label: string; action: ReadyFixAction } | null;
+  /** Shown with its state and fix, but never makes the computer "Not ready" (shortcuts, screen sharing; since v2.0). */
+  advisory: boolean;
 }
 export interface ReadyReport {
   ready: boolean;

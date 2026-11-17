@@ -50,6 +50,23 @@ impl Action {
     /// or system key uses it; not ⌘⌥H (Hide Others on a Mac, one slip from hiding every other app) and not Ctrl+Shift+H
     /// (Live Translate's Hide while it runs). Capture screen now is Ctrl / ⌘ + Alt + S (v1.8 P0.1), clear of every other
     /// default here; it can be changed or cleared in Settings.
+    /// Its name, as Settings › Keyboard shortcuts says it (`settingsRegistry.ts` SHORTCUT_ACTIONS).
+    pub fn title(self) -> &'static str {
+        match self {
+            Action::RecordNow => "Record now",
+            Action::ToggleCaptions => "Show or hide captions",
+            Action::ToggleSaving => "Start or stop saving",
+            Action::CopyLast2Min => "Copy the last 2 minutes",
+            Action::Dictation => "Dictation",
+            Action::VoiceNote => "Capture a voice note",
+            Action::Mark => "Bookmark this moment",
+            Action::HideAll => "Hide EchoLedger windows",
+            Action::CaptureScreen => "Capture screen now",
+            Action::TranslateLock => "Lock or move Live Translate",
+            Action::TranslateHide => "Hide Live Translate",
+        }
+    }
+
     pub fn default_accelerator(self) -> Option<&'static str> {
         match self {
             Action::ToggleCaptions => Some("CommandOrControl+Shift+Space"),

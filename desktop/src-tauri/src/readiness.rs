@@ -41,6 +41,10 @@ pub enum FixAction {
     TurnOnAutoMode,
     TurnOnApps,
     RestartDetection,
+    /// Settings › Keyboard shortcuts.
+    OpenShortcuts,
+    /// Settings › Share privacy.
+    OpenSharePrivacy,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -56,6 +60,8 @@ pub struct ReadyCheck {
     /// Broke by itself (not a choice the person made): its breaking is a Critical notification.
     #[serde(skip)]
     pub critical: bool,
+    /// Shown with its state and fix, but calls are recorded whatever it says: it never makes the computer "Not ready".
+    pub advisory: bool,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
@@ -67,8 +73,9 @@ pub struct ReadyReport {
 }
 
 impl ReadyReport {
+    /// What keeps the computer from being ready (an advisory check never does).
     pub fn problems(&self) -> impl Iterator<Item = &ReadyCheck> {
-        self.checks.iter().filter(|c| !c.ok)
+        self.checks.iter().filter(|c| !c.ok && !c.advisory)
     }
 }
 
@@ -94,14 +101,38 @@ pub struct ReadyInputs {
     pub apps_off: Vec<String>,
     /// Meeting detection looked at the microphone recently.
     pub detection_alive: bool,
+    /// The shortcuts another app holds, by their Settings names.
+    pub shortcuts_taken: Vec<&'static str>,
+    /// Whether EchoLedger's windows stay out of a screen share here; none on a system without them.
+    pub protection: Option<Protection>,
+}
+
+/// Whether EchoLedger's windows stay out of a screen share on this computer (the privacy badge, and the setting).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Protection {
+    /// Checked: left out of a share.
+    Private,
+    /// Windows before 2004: a black box where EchoLedger is; its text stays private.
+    BlackBox,
+    /// Not checked on this system and app version yet (the Share Check runs by itself).
+    NotChecked,
+    /// The last check saw them in a share.
+    Visible,
+    /// Hide from screen sharing is off.
+    Off,
 }
 
 fn ok(id: &'static str, label: &'static str, detail: Option<String>) -> ReadyCheck {
-    ReadyCheck { id, label, ok: true, detail, fix: None, critical: false }
+    ReadyCheck { id, label, ok: true, detail, fix: None, critical: false, advisory: false }
 }
 
 fn problem(id: &'static str, label: &'static str, detail: impl Into<String>, fix: Option<Fix>, critical: bool) -> ReadyCheck {
-    ReadyCheck { id, label, ok: false, detail: Some(detail.into()), fix, critical }
+    ReadyCheck { id, label, ok: false, detail: Some(detail.into()), fix, critical, advisory: false }
+}
+
+/// A check that never makes the computer "Not ready" (calls are recorded whatever it says).
+fn advisory(check: ReadyCheck) -> ReadyCheck {
+    ReadyCheck { advisory: true, critical: false, ..check }
 }
 
 /// The checks for these inputs (pure).
@@ -185,7 +216,26 @@ pub fn evaluate(inputs: &ReadyInputs, now: chrono::DateTime<chrono::Utc>) -> Rea
         ok("detection", "Meetings recorded by themselves", None)
     });
 
-    let ready = checks.iter().all(|c| c.ok);
+    let shortcuts = Fix { label: "Change shortcuts", action: FixAction::OpenShortcuts };
+    checks.push(advisory(if inputs.shortcuts_taken.is_empty() {
+        ok("shortcuts", "Shortcuts", None)
+    } else {
+        problem("shortcuts", "Shortcuts", format!("Another app holds the keys of: {}. Choose other keys for them.", inputs.shortcuts_taken.join(", ")), Some(shortcuts), false)
+    }));
+
+    if let Some(protection) = inputs.protection {
+        const LABEL: &str = "Hidden from screen sharing";
+        let privacy = Fix { label: "Open Share privacy", action: FixAction::OpenSharePrivacy };
+        checks.push(advisory(match protection {
+            Protection::Private => ok("overlay_protection", LABEL, None),
+            Protection::BlackBox => ok("overlay_protection", LABEL, Some("This Windows version shows a black box where EchoLedger is: its text stays private.".into())),
+            Protection::NotChecked => ok("overlay_protection", LABEL, Some("Not checked on this computer yet: EchoLedger checks it by itself.".into())),
+            Protection::Visible => problem("overlay_protection", LABEL, "The last check saw EchoLedger's windows in a screen share on this computer.", Some(privacy), false),
+            Protection::Off => problem("overlay_protection", LABEL, "Hide from screen sharing is off: EchoLedger's windows show in a screen share.", Some(Fix { label: "Turn it on", ..privacy }), false),
+        }));
+    }
+
+    let ready = checks.iter().all(|c| c.ok || c.advisory);
     ReadyReport { ready, checks, checked_at: now }
 }
 
@@ -242,7 +292,26 @@ pub fn gather(app: &AppHandle) -> ReadyInputs {
         auto_mode: settings.auto_mode,
         apps_off,
         detection_alive: state.detect.looked_within(DETECTION_STALE),
+        shortcuts_taken: state.shortcut_errors.lock().unwrap_or_else(|p| p.into_inner()).iter().map(|(action, _)| action.title()).collect(),
+        protection: protection_now(app, &settings),
     }
+}
+
+/// The privacy badge as the Ready check says it; none on a system without hiding.
+fn protection_now(app: &AppHandle, settings: &crate::settings::Settings) -> Option<Protection> {
+    use crate::privacy::status::Badge;
+    if !(cfg!(windows) || cfg!(target_os = "macos")) {
+        return None;
+    }
+    if settings.hide_from_sharing == crate::settings::ShareHiding::Off {
+        return Some(Protection::Off);
+    }
+    Some(match crate::privacy::check::badge_now(app) {
+        Badge::Private => Protection::Private,
+        Badge::BlackBox => Protection::BlackBox,
+        Badge::NotChecked => Protection::NotChecked,
+        Badge::Visible => Protection::Visible,
+    })
 }
 
 /// Runs the check now: keeps the report, tells the windows (`ready:changed`) and the tray, and sends the Critical
@@ -325,6 +394,14 @@ pub fn apply_fix(app: &AppHandle, action: FixAction) -> AppResult<()> {
             let _ = app.emit("settings:changed", &settings);
             Ok(())
         }
+        FixAction::OpenShortcuts => {
+            crate::actions::open_settings(app, "shortcuts");
+            Ok(())
+        }
+        FixAction::OpenSharePrivacy => {
+            crate::actions::open_settings(app, "share_privacy");
+            Ok(())
+        }
         FixAction::RestartDetection => {
             if !state.detect.looked_within(DETECTION_STALE) {
                 crate::detect::spawn_auto_mode(app.clone());
@@ -368,6 +445,8 @@ mod tests {
             auto_mode: true,
             apps_off: Vec::new(),
             detection_alive: true,
+            shortcuts_taken: Vec::new(),
+            protection: Some(Protection::Private),
         }
     }
 
@@ -384,8 +463,39 @@ mod tests {
         for macos in [true, false] {
             let report = evaluate(&good(macos), at());
             assert!(report.ready);
-            assert_eq!(report.checks.iter().map(|c| c.id).collect::<Vec<_>>(), ["account", "microphone", "microphone_permission", "other_side", "detection"]);
+            assert_eq!(report.checks.iter().map(|c| c.id).collect::<Vec<_>>(), ["account", "microphone", "microphone_permission", "other_side", "detection", "shortcuts", "overlay_protection"]);
         }
+    }
+
+    #[test]
+    fn taken_shortcuts_and_screen_sharing_are_said_but_never_make_the_computer_not_ready() {
+        let taken = ReadyInputs { shortcuts_taken: vec!["Record now", "Bookmark this moment"], ..good(false) };
+        let report = evaluate(&taken, at());
+        assert!(report.ready, "calls are recorded whatever the shortcuts");
+        let check = report.checks.iter().find(|c| c.id == "shortcuts").unwrap();
+        assert!(!check.ok && check.advisory && !check.critical);
+        assert_eq!(check.detail.as_deref(), Some("Another app holds the keys of: Record now, Bookmark this moment. Choose other keys for them."));
+        assert_eq!(check.fix.map(|f| f.action), Some(FixAction::OpenShortcuts));
+
+        let protection = |p| {
+            let report = evaluate(&ReadyInputs { protection: Some(p), ..good(true) }, at());
+            assert!(report.ready, "{p:?}");
+            let c = report.checks.into_iter().find(|c| c.id == "overlay_protection").unwrap();
+            (c.ok, c.fix.map(|f| f.action), c.advisory)
+        };
+        assert_eq!(protection(Protection::Private), (true, None, true));
+        assert_eq!(protection(Protection::BlackBox), (true, None, true));
+        assert_eq!(protection(Protection::NotChecked), (true, None, true), "it checks by itself: nothing to do yet");
+        assert_eq!(protection(Protection::Visible), (false, Some(FixAction::OpenSharePrivacy), true));
+        assert_eq!(protection(Protection::Off), (false, Some(FixAction::OpenSharePrivacy), true));
+        assert!(!evaluate(&ReadyInputs { protection: None, ..good(false) }, at()).checks.iter().any(|c| c.id == "overlay_protection"), "none on a system without hiding");
+
+        // An advisory check never sends the Critical notification.
+        let mut watch = ReadyWatch::default();
+        assert_eq!(watch.observe(&evaluate(&good(false), at())), None);
+        assert_eq!(watch.observe(&evaluate(&taken, at())), None);
+        // A real problem still makes it not ready.
+        assert!(!evaluate(&ReadyInputs { microphones: 0, ..taken }, at()).ready);
     }
 
     #[test]

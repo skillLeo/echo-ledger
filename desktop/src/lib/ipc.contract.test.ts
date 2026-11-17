@@ -22,6 +22,7 @@ import audioTypesRs from "../../src-tauri/src/audio/types.rs?raw";
 import detectRs from "../../src-tauri/src/detect/mod.rs?raw";
 import geometryRs from "../../src-tauri/src/overlay/geometry.rs?raw";
 import shortcutsRs from "../../src-tauri/src/shortcuts.rs?raw";
+import { SHORTCUT_ACTIONS } from "./settingsRegistry";
 import modelsRs from "../../src-tauri/src/net/models.rs?raw";
 import captionsRs from "../../src-tauri/src/stt/captions.rs?raw";
 
@@ -331,6 +332,18 @@ describe("wire types", () => {
     const source = rustSourceDeclaring("struct", "Availability");
     expect(sorted(tsInterfaceKeys("LiveTranslateStatus"))).toEqual(sorted(rustFields(source, "Availability", false)));
     expect(sorted(tsUnionValues("LiveTranslateUnavailable"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "Unavailable"), "Unavailable")));
+  });
+
+  it("the Ready check's fixes and fields are the ones Rust sends", () => {
+    expect(sorted(tsUnionValues("ReadyFixAction"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "FixAction"), "FixAction")));
+    expect(sorted(tsInterfaceKeys("ReadyCheck"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ReadyCheck"), "ReadyCheck").filter((f) => f !== "critical")));
+  });
+
+  it("the shortcut names the Ready check says are the ones Settings shows", () => {
+    for (const [action, title] of SHORTCUT_ACTIONS) {
+      const variant = action.split("_").map((w) => w[0].toUpperCase() + w.slice(1)).join("");
+      expect(shortcutsRs, `${action} is "${title}" in Rust too`).toContain(`Action::${variant} => "${title}"`);
+    }
   });
 
   it("screen hold reasons match the serde names of the Rust enum", () => {

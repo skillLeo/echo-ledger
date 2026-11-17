@@ -9,7 +9,7 @@ import type { ReadyCheck, ReadyReport } from "../../lib/ipc";
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
-const check = (id: ReadyCheck["id"], ok: boolean, extra: Partial<ReadyCheck> = {}): ReadyCheck => ({ id, label: id, ok, detail: null, fix: null, ...extra });
+const check = (id: ReadyCheck["id"], ok: boolean, extra: Partial<ReadyCheck> = {}): ReadyCheck => ({ id, label: id, ok, detail: null, fix: null, advisory: false, ...extra });
 const READY: ReadyReport = {
   ready: true,
   checks: [check("account", true), check("microphone", true), check("microphone_permission", true), check("other_side", true), check("detection", true)],
@@ -35,6 +35,10 @@ describe("the Ready check", () => {
   it("says it in one line: ready, or how many things to fix", () => {
     expect(readyHeadline(READY)).toBe("✓ Ready to record calls");
     expect(readyHeadline(BROKEN)).toBe("2 things to fix before calls are recorded");
+    // Taken shortcuts are said with their fix, but they are not a thing to fix before calls are recorded.
+    const shortcuts = check("shortcuts", false, { advisory: true, fix: { label: "Change shortcuts", action: "open_shortcuts" } });
+    expect(readyHeadline({ ...BROKEN, checks: [...BROKEN.checks, shortcuts] })).toBe("2 things to fix before calls are recorded");
+    expect(readyHeadline({ ready: true, checks: [check("account", true), shortcuts] })).toBe("✓ Ready to record calls");
     expect(readyHeadline({ ready: false, checks: [check("microphone", false)] })).toBe("1 thing to fix before calls are recorded");
     expect(chipText(true)).toBe("Calls: Ready");
     expect(chipText(false)).toBe("Not ready — Fix");
