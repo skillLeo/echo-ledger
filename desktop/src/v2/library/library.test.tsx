@@ -12,6 +12,8 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).c
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
 
 const NOW = new Date(2026, 10, 17, 15, 0);
+/** The rows' own buttons (each row also has its ⋮). */
+const rowButtons = (list: HTMLElement) => [...list.querySelectorAll<HTMLElement>("button[data-row-id]")];
 const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
 
 const ITEMS: LibraryItem[] = [
@@ -105,9 +107,9 @@ describe("LibraryV2", () => {
     await show();
     fireEvent.click(screen.getByRole("button", { name: "Untranscribed 2" }));
     const list = screen.getByRole("list", { name: "Recordings" });
-    expect(within(list).getAllByRole("button").map((b) => b.getAttribute("aria-labelledby") && b.textContent)).toHaveLength(2);
+    expect(rowButtons(list)).toHaveLength(2);
     fireEvent.click(screen.getByRole("button", { name: "Today 3" }));
-    expect(within(screen.getByRole("list", { name: "Recordings" })).getAllByRole("button")).toHaveLength(3);
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 
   it("loading, then an error with its one fix", async () => {
@@ -137,7 +139,7 @@ describe("LibraryV2", () => {
     respond("library_list", ITEMS.slice(0, 1));
     await act(() => emitEvent("library:updated"));
     await act(flushAsync);
-    expect(within(screen.getByRole("list", { name: "Recordings" })).getAllByRole("button")).toHaveLength(1);
+    expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(1);
   });
 
   describe("its screens (meeting assets)", () => {

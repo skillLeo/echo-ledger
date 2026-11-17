@@ -1,0 +1,344 @@
+// Selection mode and the one recording menu in the v2 Library (PLAN_V2_PARITY 3 and 7; docs/v2/audit/parity.csv
+// DT-LIB-075..107): Select, a Cmd/Ctrl- or Shift-click, Cmd/Ctrl+A, the bar's four actions and ⋮, the row ⋮, a
+// right-click, Delete with Undo, Export ▸ every format, Copy for AI and Transcribe with its minutes first.
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import type { LibraryItem } from "../../lib/ipc";
+import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
+import { makeItem, makeTranscript } from "../../test/fixtures";
+import { LibraryV2 } from "./LibraryV2";
+import { aiHeader, EXPORT_FORMATS } from "./organise";
+
+vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
+vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
+
+const NOW = new Date(2026, 10, 17, 15, 0);
+const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, hour, minute).toISOString();
+const done = (preview: string, id: string) => ({ final_status: "completed", final_transcript_id: id, live_available: false, preview });
+
+const ITEMS: LibraryItem[] = [
+  makeItem("bilal", { title: "Bilal Qureshi", source_app: "whatsapp", source_app_label: "WhatsApp", started_at: at(17, 11, 42), duration_ms: 1_104_000, transcript: done("Payment terms", "tr-bilal") }),
+  makeItem("voice", { title: "Voice note", source_app: "voice_note", started_at: at(17, 9, 18), duration_ms: 134_000, status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } }),
+  makeItem("usman", { title: "Usman Chaudhry", source_app: "phone_call", started_at: at(17, 8, 47), duration_ms: 452_000, pinned: true, transcript: done("Steel prices", "tr-usman") }),
+  makeItem("habib", { title: "Habib & Co.", source_app: "zoom", started_at: at(16, 16, 30), duration_ms: 2_282_000, labels: ["Audit"], transcript: done("Sales tax", "tr-habib") }),
+];
+
+const rows = () => [...screen.getByRole("list", { name: "Recordings" }).querySelectorAll<HTMLButtonElement>("button[data-row-id]")];
+const row = (title: string) => within(screen.getByRole("list", { name: "Recordings" })).getByRole("button", { name: title });
+const bar = () => screen.getByRole("toolbar", { name: "Selected recordings" });
+const menuItem = (name: string | RegExp) => screen.getByRole("menuitem", { name });
+
+describe("selection mode", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("bin_list", { data: [] });
+    respondWith("sessions_bulk", (args) => ((args as { ids: string[] }).ids.length));
+  });
+  const show = async () => {
+    render(<LibraryV2 />);
+    await act(flushAsync);
+  };
+
+  it("Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    expect(bar()).toHaveTextContent("Select recordings");
+    expect(screen.getByRole("button", { name: "Move to project" })).toBeDisabled();
+    fireEvent.click(row("Bilal Qureshi"));
+    expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "true");
+    expect(row("Voice note")).toHaveAttribute("aria-pressed", "false");
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    fireEvent.click(within(bar()).getByRole("button", { name: "Select all" }));
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("4 selected");
+    fireEvent.click(within(bar()).getByRole("button", { name: "Unselect all" }));
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("Select recordings");
+    fireEvent.click(row("Bilal Qureshi"));
+    fireEvent.click(row("Bilal Qureshi"));
+    expect(row("Bilal Qureshi")).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Cancel selection" }));
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+    expect(row("Bilal Qureshi")).not.toHaveAttribute("aria-pressed");
+    // Out of selection mode a click opens the recording again.
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
+    fireEvent.click(row("Bilal Qureshi"));
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Bilal Qureshi" })).toBeInTheDocument();
+  });
+
+  it("Cmd/Ctrl-click starts it on that row; Shift-click adds the range; Cmd/Ctrl+A picks every row shown; Esc ends it", async () => {
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    fireEvent.click(row("Usman Chaudhry"), { shiftKey: true });
+    expect(rows().map((r) => r.getAttribute("aria-pressed"))).toEqual(["true", "true", "true", "false"]);
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+    fireEvent.keyDown(document.body, { key: "a", ctrlKey: true });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("4 selected");
+    // Typing in search is left alone.
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    const search = screen.getByRole("searchbox", { name: "Search recordings" });
+    fireEvent.keyDown(search, { key: "a", metaKey: true });
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+  });
+
+  it("J and K move between rows, X ticks the focused one", async () => {
+    await show();
+    act(() => rows()[0].focus());
+    fireEvent.keyDown(rows()[0], { key: "j" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "j" });
+    fireEvent.keyDown(row("Usman Chaudhry"), { key: "k" });
+    expect(row("Voice note")).toHaveFocus();
+    fireEvent.keyDown(row("Voice note"), { key: "x" });
+    expect(within(bar()).getByRole("heading")).toHaveTextContent("1 selected");
+    expect(row("Voice note")).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("Delete, from the bar or the Delete key, sends the picked ones to Trash at once, and one Undo brings them all back", async () => {
+    respondWith("session_restore", () => ({ data: ITEMS[0] }));
+    await show();
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    fireEvent.click(row("Habib & Co."));
+    fireEvent.click(row("Voice note"));
+    respond("library_list", [ITEMS[1], ITEMS[3]]);
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "usman"], action: "delete", clientId: null, label: null }]);
+    expect(screen.queryByRole("toolbar", { name: "Selected recordings" })).toBeNull();
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent("2 recordings moved to Trash");
+    respond("library_list", ITEMS);
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "bilal" }, { id: "usman" }]);
+    expect(rows()).toHaveLength(4);
+
+    // The Delete key on picked rows does the same.
+    fireEvent.click(row("Habib & Co."), { ctrlKey: true });
+    fireEvent.click(row("Voice note"), { ctrlKey: true });
+    fireEvent.keyDown(row("Voice note"), { key: "Delete" });
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toMatchObject({ ids: ["voice", "habib"], action: "delete" });
+  });
+
+  it("the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format", async () => {
+    respond("sessions_export", "/Users/me/Downloads/EchoLedger transcripts.zip");
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    const menu = screen.getByRole("menu", { name: "More actions" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Pin", "Unpin", "Keep forever", "Transcribe…", "Export"]);
+    expect(within(menu).getByText("Organise")).toBeInTheDocument();
+    fireEvent.click(menuItem("Pin"));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "usman"], action: "pin", clientId: null, label: null }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Pinned · 2 recordings");
+
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    fireEvent.click(menuItem("Export"));
+    const formats = screen.getByRole("menu", { name: "Export" });
+    expect(within(formats).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(EXPORT_FORMATS.map((f) => f.label));
+    expect(EXPORT_FORMATS.map((f) => f.format)).toEqual(["docx", "txt", "md", "srt", "vtt", "json"]);
+    fireEvent.click(within(formats).getByRole("menuitem", { name: "Subtitles (.srt)" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_export")).toEqual([{ ids: ["bilal", "usman"], format: "srt", view: undefined }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Saved /Users/me/Downloads/EchoLedger transcripts.zip");
+  });
+
+  it("Export ▸ opens from the keyboard: ArrowRight in, ArrowLeft back, Esc closes one level", async () => {
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Habib & Co."));
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    const menu = screen.getByRole("menu", { name: "More actions" });
+    fireEvent.keyDown(menu, { key: "End" });
+    expect(menuItem("Export")).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "ArrowRight" });
+    expect(screen.getByRole("menuitem", { name: "Word (.docx)" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Export" }), { key: "ArrowLeft" });
+    expect(screen.queryByRole("menu", { name: "Export" })).toBeNull();
+    expect(menuItem("Export")).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu", { name: "More actions" })).toBeNull();
+    expect(within(bar()).getByRole("button", { name: "More actions" })).toHaveFocus();
+  });
+
+  it("Transcribe says the minutes and the minutes left before it starts, and won't start what the month can't cover", async () => {
+    respond("sessions_transcribe_estimate", { minutes: 40, minutes_left: 310, items: [] });
+    respond("sessions_transcribe", { started: ["voice"], skipped: [{ id: "bilal", code: "already_transcribed" }], minutes: 3 });
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Voice note"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    fireEvent.click(menuItem("Transcribe…"));
+    await act(flushAsync);
+    const dialog = screen.getByRole("dialog", { name: "Transcribe 2 recordings?" });
+    expect(dialog).toHaveAccessibleDescription("About 40 minutes of the 310 minutes left this month.");
+    expect(callsOf("sessions_transcribe")).toEqual([]);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_transcribe")).toEqual([{ ids: ["bilal", "voice"] }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing 1 recording · 1 skipped");
+
+    respond("sessions_transcribe_estimate", { minutes: 400, minutes_left: 310, items: [] });
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    fireEvent.click(menuItem("Transcribe…"));
+    await act(flushAsync);
+    const over = screen.getByRole("dialog", { name: "Transcribe 2 recordings?" });
+    expect(over).toHaveAccessibleDescription(/more than is left, so nothing will start/);
+    expect(within(over).getByRole("button", { name: "Transcribe" })).toBeDisabled();
+  });
+
+  it("Move to project and Label from the bar", async () => {
+    respond("list_clients", { data: [{ id: "c1", name: "Qureshi Textiles" }] });
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Habib & Co."));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Move to project" }));
+    await act(flushAsync);
+    const move = screen.getByRole("dialog", { name: "Move 2 recordings" });
+    fireEvent.click(within(move).getByRole("combobox", { name: /^Move to/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Qureshi Textiles" }));
+    fireEvent.click(within(move).getByRole("button", { name: "Move" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "habib"], action: "move", clientId: "c1", label: null }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Moved 2 recordings to Qureshi Textiles");
+
+    fireEvent.click(within(bar()).getByRole("button", { name: "Label" }));
+    const label = screen.getByRole("dialog", { name: "Label 2 recordings" });
+    expect(label).toHaveTextContent("In use: Audit");
+    fireEvent.change(within(label).getByRole("combobox", { name: "Label" }), { target: { value: "Q4" } });
+    fireEvent.click(within(label).getByRole("button", { name: "Add label" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk").at(-1)).toEqual({ ids: ["bilal", "habib"], action: "label", clientId: null, label: "Q4" });
+  });
+
+  it("Share or export: every format and Copy for AI, with a short header per recording", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    respondWith("session_detail", () => ({ playback_url: null, speaker_names: { S1: "Bilal" } }));
+    respondWith("transcript_detail", (args) => makeTranscript({ id: (args as { id: string }).id }));
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Voice note"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
+    const menu = screen.getByRole("menu", { name: "Share or export" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([...EXPORT_FORMATS.map((f) => f.label), "Copy for AI"]);
+    fireEvent.click(menuItem("Copy for AI"));
+    await act(flushAsync);
+    const text = (writeText.mock.calls[0] as unknown as [string])[0];
+    expect(text).toMatch(/^Note: \[\?word\]/);
+    expect(text).toContain("# Bilal Qureshi\n17 November 2026, 11:42 am · WhatsApp · 18:24");
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Copied 1 for AI · 1 without a transcript left out");
+  });
+});
+
+describe("the row ⋮ and the right-click menu", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respondWith("sessions_bulk", (args) => ((args as { ids: string[] }).ids.length));
+  });
+  const show = async () => {
+    render(<LibraryV2 />);
+    await act(flushAsync);
+  };
+
+  it("a row's ⋮: Open, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
+    const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
+      "Open", "Rename…", "Move to project…", "Label…", "Unpin", "Keep forever", "Export", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
+    ]);
+    expect([...menu.querySelectorAll(".el-menu__group")].map((g) => g.textContent)).toEqual(["Organise", "Export", "Danger"]);
+    expect(menuItem("Delete")).toHaveClass("el-menu__option--danger");
+    expect(menuItem("Delete")).toHaveAttribute("aria-keyshortcuts", "Delete");
+    fireEvent.click(menuItem("Unpin"));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["usman"], action: "unpin", clientId: null, label: null }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Unpinned");
+    // An untranscribed recording offers Transcribe; a transcribed one doesn't.
+    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
+    expect(menuItem("Transcribe…")).toBeInTheDocument();
+  });
+
+  it("Rename: a new title, or empty for the automatic one", async () => {
+    respondWith("session_organise", (args) => ({ data: { ...ITEMS[0], title: (args as { patch: { title: string | null } }).patch.title ?? "Payment terms call" } }));
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+    fireEvent.click(menuItem("Rename…"));
+    const dialog = screen.getByRole("dialog", { name: "Rename" });
+    const field = within(dialog).getByRole("textbox", { name: "Title" });
+    expect(field).toHaveFocus();
+    fireEvent.change(field, { target: { value: "Bilal · March shipment" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("session_organise")).toEqual([{ id: "bilal", patch: { title: "Bilal · March shipment" } }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
+  });
+
+  it("Send to WhatsApp sends the transcript's text", async () => {
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
+    respond("whatsapp_open", true);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
+    fireEvent.click(menuItem("Send to WhatsApp…"));
+    await act(flushAsync);
+    expect(callsOf("whatsapp_open")).toHaveLength(1);
+    expect((callsOf("whatsapp_open")[0] as { text: string }).text.length).toBeGreaterThan(0);
+  });
+
+  it("a right-click opens the same menu at the pointer; on a picked row it acts on every picked one", async () => {
+    await show();
+    fireEvent.contextMenu(row("Habib & Co."), { clientX: 120, clientY: 300 });
+    const menu = screen.getByRole("menu", { name: "Recording actions" });
+    expect(menu).toHaveStyle({ left: "120px", top: "300px" });
+    expect(within(menu).getAllByRole("menuitem")[0]).toHaveFocus();
+    fireEvent.keyDown(menu, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Voice note"));
+    fireEvent.contextMenu(row("Voice note"), { clientX: 10, clientY: 10 });
+    const many = screen.getByRole("menu", { name: "Actions for 2 recordings" });
+    fireEvent.click(within(many).getByRole("menuitem", { name: /^Delete 2/ }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "voice"], action: "delete", clientId: null, label: null }]);
+  });
+
+  it("Shift+F10 on a focused row opens its menu from the keyboard", async () => {
+    await show();
+    act(() => row("Habib & Co.").focus());
+    fireEvent.keyDown(row("Habib & Co."), { key: "F10", shiftKey: true });
+    expect(screen.getByRole("menu", { name: "Recording actions" })).toBeInTheDocument();
+  });
+
+  it("the Delete key on a focused row sends it to Trash with Undo", async () => {
+    respond("delete_session", null);
+    await show();
+    act(() => row("Habib & Co.").focus());
+    fireEvent.keyDown(row("Habib & Co."), { key: "Delete" });
+    await act(flushAsync);
+    expect(callsOf("delete_session")).toEqual([{ id: "habib" }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent('"Habib & Co." moved to Trash');
+  });
+});
+
+describe("Copy for AI's header", () => {
+  it("title, then date · source · length, the people and the language", () => {
+    const item = makeItem("x", { title: "Kick-off", source_app: "zoom", source_app_label: "Zoom", started_at: at(16, 16, 30), duration_ms: 60_000, language_chip: "UR+EN" });
+    expect(aiHeader(item, ["Me", "Habib"])).toBe("# Kick-off\n16 November 2026, 4:30 pm · Zoom · 1:00\nPeople: Me, Habib\nLanguage: UR+EN");
+  });
+});

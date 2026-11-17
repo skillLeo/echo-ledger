@@ -72,39 +72,39 @@ DT-LIB-071,desktop,Library,"Row status ""Transcription failed""",Row of a failed
 DT-LIB-072,desktop,Library,"Row status ""No audio""",Row where nothing was heard,"Badge ""No audio""",done,"src/v2/library/library.test.tsx › ""a recording where nothing was heard says No audio in its row and Nothing was heard when opened (DT-LIB-072, DT-REC-055)"""
 DT-LIB-073,desktop,Library,Row label chips,Under the row,None,missing,none
 DT-LIB-074,desktop,Library,The list re-syncs every 5 s while something uploads or transcribes,Automatic,Only library:updated reloads,partial,"src/v2/library/library.test.tsx › ""reloads when the core says the library changed"""
-DT-LIB-075,desktop,Library,"Row ""⋯"" menu (""More for <title>"")",Hover a row › ⋯,None,missing,none
-DT-LIB-076,desktop,Library,"Row menu › ""Rename"" (inline; empty = automatic title)",Row ⋯ › Rename,None,missing,none
-DT-LIB-077,desktop,Library,"Row menu › ""Move to…""",Row ⋯ › Move to…,None,missing,none
-DT-LIB-078,desktop,Library,"Row menu › ""Send to WhatsApp…""",Row ⋯ › Send to WhatsApp…,"Only on the recording page, text only",partial,none
-DT-LIB-079,desktop,Library,"Row menu › ""Pin"" / ""Unpin""",Row ⋯ › Pin,None,missing,none
-DT-LIB-080,desktop,Library,"Row menu › ""Delete""",Row ⋯ › Delete,Only on the recording page (Undo toast),partial,"src/v2/library/library.test.tsx › ""Delete moves the recording to Trash and Undo brings it back"""
+DT-LIB-075,desktop,Library,"Row ""⋯"" menu (""More for <title>"")",Hover a row › ⋯,"Row ⋮ (""More for <title>""), shown on hover and focus; the same menu as a right-click",done,"src/v2/library/selection.test.tsx › ""a row's ⋮: Open, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red"""
+DT-LIB-076,desktop,Library,"Row menu › ""Rename"" (inline; empty = automatic title)",Row ⋯ › Rename,Row ⋮ › Rename… (dialog; empty = automatic title),done,"src/v2/library/selection.test.tsx › ""Rename: a new title, or empty for the automatic one"""
+DT-LIB-077,desktop,Library,"Row menu › ""Move to…""",Row ⋯ › Move to…,"Row ⋮ › Move to project… (Inbox, any project, or a new one)",done,"src/v2/library/selection.test.tsx › ""Move to project and Label from the bar"""
+DT-LIB-078,desktop,Library,"Row menu › ""Send to WhatsApp…""",Row ⋯ › Send to WhatsApp…,Row ⋮ › Send to WhatsApp… (the transcript's text),done,"src/v2/library/selection.test.tsx › ""Send to WhatsApp sends the transcript's text"""
+DT-LIB-079,desktop,Library,"Row menu › ""Pin"" / ""Unpin""",Row ⋯ › Pin,Row ⋮ › Pin / Unpin,done,"src/v2/library/selection.test.tsx › ""a row's ⋮: Open, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red"""
+DT-LIB-080,desktop,Library,"Row menu › ""Delete""",Row ⋯ › Delete,"Row ⋮ › Delete (last, red, Del) with Undo; the Delete key on a focused row",done,"src/v2/library/selection.test.tsx › ""the Delete key on a focused row sends it to Trash with Undo"""
 DT-LIB-081,desktop,Library,Keyboard focus after Delete moves to the next row,After deleting,Focus to the next row; back after Undo,done,"src/v2/library/library.test.tsx › ""moves focus once after Delete: a later reload never takes it from where it was put"""
 DT-LIB-082,desktop,Library,Drag a row onto a project or the Inbox in the sidebar to move it,Press and drag a row,"None (no drag, no drop targets)",missing,none
 DT-LIB-083,desktop,Library,Drag several selected rows at once,Select › drag a picked row,None,missing,none
 DT-LIB-084,desktop,Library,Drop audio or video files anywhere to import,Drag files onto the window,Same window-wide handler,done,"src/views/main/ImportSheet.test.tsx › ""shows where to drop while files are dragged over, and hides it when they leave"" (the same window-wide handler under the new design)"
-DT-LIB-085,desktop,Library,"""Select"" / ""Cancel selection"" (selection mode)",Library toolbar › Select,None,missing,none
-DT-LIB-086,desktop,Library,In selection mode a row click ticks or unticks it,Select › click rows,None,missing,none
-DT-LIB-087,desktop,Library,"Bulk bar count (""N selected"")",Select mode › bulk bar,None,missing,none
-DT-LIB-088,desktop,Library,"Bulk ""Select all""",Bulk bar › Select all,None,missing,none
-DT-LIB-089,desktop,Library,"Bulk ""Move…""",Bulk bar › Move…,None,missing,none
-DT-LIB-090,desktop,Library,"Bulk ""Label ▾"": add label, remove label",Bulk bar › Label,None,missing,none
-DT-LIB-091,desktop,Library,"Bulk ""Pin""",Bulk bar › Pin,None,missing,none
-DT-LIB-092,desktop,Library,"Bulk More › ""Unpin""",Bulk bar › More › Unpin,None,missing,none
-DT-LIB-093,desktop,Library,"Bulk More › ""Keep forever""",Bulk bar › More › Keep forever,None,missing,none
-DT-LIB-094,desktop,Library,"Bulk More › ""Stop keeping""",Bulk bar › More › Stop keeping,None,missing,none
-DT-LIB-095,desktop,Library,"Bulk More › ""Export transcripts"" as one zip, with ""Export format""",Bulk bar › More › Export transcripts,None,missing,none
-DT-LIB-096,desktop,Library,"Bulk export ""Word (.docx)""",Bulk › More › format,None,missing,none
-DT-LIB-097,desktop,Library,"Bulk export ""Text (.txt)""",Bulk › More › format,None,missing,none
-DT-LIB-098,desktop,Library,"Bulk export ""Markdown (.md)""",Bulk › More › format,None,missing,none
-DT-LIB-099,desktop,Library,"Bulk export ""Subtitles (.srt)""",Bulk › More › format,None,missing,none
-DT-LIB-100,desktop,Library,"Bulk export ""Web subtitles (.vtt)""",Bulk › More › format,None,missing,none
-DT-LIB-101,desktop,Library,"Bulk export ""JSON""",Bulk › More › format,None,missing,none
-DT-LIB-102,desktop,Library,"Bulk ""Delete"" in two steps (restorable for 48 hours)",Bulk bar › Delete › confirm,None,missing,none
-DT-LIB-103,desktop,Library,"Bulk ""Done"" (ends selection)",Bulk bar › Done,None,missing,none
-DT-LIB-104,desktop,Library,Keyboard J / K: next / previous row,Press J or K,None,missing,none
-DT-LIB-105,desktop,Library,Keyboard Enter opens the cursor row,J/K then Enter,Enter on a focused row opens it,partial,none
-DT-LIB-106,desktop,Library,Keyboard X ticks the cursor row (starts selection),Press X on a row,None,missing,none
-DT-LIB-107,desktop,Library,"Keyboard Esc closes the open recording, else ends selection",Press Esc,None (only the back button),missing,none
+DT-LIB-085,desktop,Library,"""Select"" / ""Cancel selection"" (selection mode)",Library toolbar › Select,"Header ""Select""; × ""Cancel selection"" in the selection bar",done,"src/v2/library/selection.test.tsx › ""Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it"""
+DT-LIB-086,desktop,Library,In selection mode a row click ticks or unticks it,Select › click rows,"In selection mode a row click ticks it (aria-pressed, tick circle)",done,"src/v2/library/selection.test.tsx › ""Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it"""
+DT-LIB-087,desktop,Library,"Bulk bar count (""N selected"")",Select mode › bulk bar,"Selection bar ""N selected""",done,"src/v2/library/selection.test.tsx › ""Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it"""
+DT-LIB-088,desktop,Library,"Bulk ""Select all""",Bulk bar › Select all,"Selection bar ""Select all"" / ""Unselect all""; Cmd/Ctrl+A",done,"src/v2/library/selection.test.tsx › ""Cmd/Ctrl-click starts it on that row; Shift-click adds the range; Cmd/Ctrl+A picks every row shown; Esc ends it"""
+DT-LIB-089,desktop,Library,"Bulk ""Move…""",Bulk bar › Move…,Selection bar › Move to project,done,"src/v2/library/selection.test.tsx › ""Move to project and Label from the bar"""
+DT-LIB-090,desktop,Library,"Bulk ""Label ▾"": add label, remove label",Bulk bar › Label,"Selection bar › Label (Add label / Remove label, labels in use offered)",done,"src/v2/library/selection.test.tsx › ""Move to project and Label from the bar"""
+DT-LIB-091,desktop,Library,"Bulk ""Pin""",Bulk bar › Pin,Selection bar ⋮ › Pin,done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-092,desktop,Library,"Bulk More › ""Unpin""",Bulk bar › More › Unpin,Selection bar ⋮ › Unpin,done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-093,desktop,Library,"Bulk More › ""Keep forever""",Bulk bar › More › Keep forever,Selection bar ⋮ › Keep forever,done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-094,desktop,Library,"Bulk More › ""Stop keeping""",Bulk bar › More › Stop keeping,Selection bar ⋮ › Allow auto clean-up (classic: Stop keeping),done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-095,desktop,Library,"Bulk More › ""Export transcripts"" as one zip, with ""Export format""",Bulk bar › More › Export transcripts,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-096,desktop,Library,"Bulk export ""Word (.docx)""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-097,desktop,Library,"Bulk export ""Text (.txt)""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-098,desktop,Library,"Bulk export ""Markdown (.md)""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-099,desktop,Library,"Bulk export ""Subtitles (.srt)""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-100,desktop,Library,"Bulk export ""Web subtitles (.vtt)""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-101,desktop,Library,"Bulk export ""JSON""",Bulk › More › format,"Selection bar › Share or export, and ⋮ › Export ▸ <format> (one zip)",done,"src/v2/library/selection.test.tsx › ""the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format"""
+DT-LIB-102,desktop,Library,"Bulk ""Delete"" in two steps (restorable for 48 hours)",Bulk bar › Delete › confirm,Selection bar › Delete: one step with one Undo for all (Trash keeps them for its hours),done,"src/v2/library/selection.test.tsx › ""Delete, from the bar or the Delete key, sends the picked ones to Trash at once, and one Undo brings them all back"""
+DT-LIB-103,desktop,Library,"Bulk ""Done"" (ends selection)",Bulk bar › Done,"Selection bar × ""Cancel selection"" (and Esc)",done,"src/v2/library/selection.test.tsx › ""Select starts it: a click ticks a row, the bar counts, Select all and Unselect all, × ends it"""
+DT-LIB-104,desktop,Library,Keyboard J / K: next / previous row,Press J or K,J / K move focus between rows,done,"src/v2/library/selection.test.tsx › ""J and K move between rows, X ticks the focused one"""
+DT-LIB-105,desktop,Library,Keyboard Enter opens the cursor row,J/K then Enter,J/K then Enter opens the focused row (the row is a button),done,"src/v2/library/selection.test.tsx › ""J and K move between rows, X ticks the focused one"""
+DT-LIB-106,desktop,Library,Keyboard X ticks the cursor row (starts selection),Press X on a row,X ticks the focused row and starts selection,done,"src/v2/library/selection.test.tsx › ""J and K move between rows, X ticks the focused one"""
+DT-LIB-107,desktop,Library,"Keyboard Esc closes the open recording, else ends selection",Press Esc,Esc ends selection; the open recording closes with its Library back button only,partial,"src/v2/library/selection.test.tsx › ""Cmd/Ctrl-click starts it on that row; Shift-click adds the range; Cmd/Ctrl+A picks every row shown; Esc ends it"""
 DT-LIB-108,desktop,Library,"Recently deleted: explanation, loading, empty state",Recently deleted,"Trash view: explanation, loading, ""Trash is empty""",done,"src/v2/library/library.test.tsx › ""Trash lists deleted recordings to restore or delete forever after a confirmation"""
 DT-LIB-109,desktop,Library,"Recently deleted row: title, date · project · ""erased in N hours""",Recently deleted list,"""Deleted <date> · erased in N hours""; no project",done,"src/v2/library/library.test.tsx › ""Trash lists deleted recordings to restore or delete forever after a confirmation"""
 DT-LIB-110,desktop,Library,"Recently deleted › ""Restore""",Recently deleted › Restore,Trash › Restore,done,"src/v2/library/library.test.tsx › ""Restore from Trash says so and offers to open it"""

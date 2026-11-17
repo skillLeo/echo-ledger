@@ -22,6 +22,12 @@ const click = (name) => async (page) => {
   await page.getByRole("button", { name, exact: true }).first().click();
   await page.waitForTimeout(900);
 };
+/** Ticks the first `n` recordings in selection mode (classic's list or the new design's rows). */
+const pickRows = (n) => async (page) => {
+  const rows = page.locator("button[data-row-id], .list .item, [role=listitem] button").filter({ visible: true });
+  for (let i = 0; i < n; i++) await rows.nth(i).click();
+  await page.waitForTimeout(400);
+};
 const steps = (...all) => async (page) => {
   for (const s of all) await s(page);
 };
@@ -40,6 +46,25 @@ export const PAIRS = [
     [v2("library"), steps(async (page) => {
       await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click();
       await page.waitForTimeout(1500);
+    })]],
+  ["selection", "Library selection: classic's bulk bar with More open | the new design's bar (× · count · Select all · Move, Label, Share, Delete · ⋮) with ⋮ › Export ▸ open",
+    [classic("library"), steps(click("Select"), pickRows(2), async (page) => {
+      await page.locator(".bulk-bar summary", { hasText: "More" }).click();
+      await page.waitForTimeout(400);
+    })],
+    [v2("library"), steps(click("Select"), pickRows(2), async (page) => {
+      await page.getByRole("button", { name: "More actions" }).click();
+      await page.getByRole("menuitem", { name: "Export" }).hover();
+      await page.waitForTimeout(400);
+    })]],
+  ["row-menu", "A recording's menu: classic's row ⋯ | the new design's row ⋮ (Organise · Export · Danger, the same menu as a right-click)",
+    [classic("library"), steps(async (page) => {
+      await page.getByRole("button", { name: /^More for / }).first().click({ force: true });
+      await page.waitForTimeout(400);
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: /^More for / }).first().click({ force: true });
+      await page.waitForTimeout(400);
     })]],
 ];
 
