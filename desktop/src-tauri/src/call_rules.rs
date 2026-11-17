@@ -115,10 +115,10 @@ pub fn records(choice: CallChoice, auto: bool) -> bool {
     !(auto && choice == CallChoice::DontRecord)
 }
 
-/// Rule maps as they come from the window: only known keys, only the four choices; Ask me on a contact means "follow
-/// the default", so it removes the rule (plan 2), and the same on a source.
-pub fn cleaned(rules: &HashMap<String, CallChoice>, known: impl Fn(&str) -> bool) -> HashMap<String, CallChoice> {
-    rules.iter().filter(|(key, choice)| known(key) && **choice != CallChoice::Ask).map(|(k, c)| (k.clone(), *c)).collect()
+/// Rule maps as they come from the window: only known keys. On a contact, Ask me means "follow the default" (plan 2),
+/// so `ask_follows_default` removes it; a source can say Ask me against another default.
+pub fn cleaned(rules: &HashMap<String, CallChoice>, known: impl Fn(&str) -> bool, ask_follows_default: bool) -> HashMap<String, CallChoice> {
+    rules.iter().filter(|(key, choice)| known(key) && !(ask_follows_default && **choice == CallChoice::Ask)).map(|(k, c)| (k.clone(), *c)).collect()
 }
 
 #[cfg(test)]
@@ -168,8 +168,8 @@ mod tests {
     #[test]
     fn rules_from_the_window_keep_only_known_keys_and_drop_ask_me() {
         let sent = map(&[("zoom", CallChoice::Transcribe), ("meet", CallChoice::Ask), ("bogus", CallChoice::KeepAudio)]);
-        let kept = cleaned(&sent, source_key_known);
-        assert_eq!(kept, map(&[("zoom", CallChoice::Transcribe)]));
+        assert_eq!(cleaned(&sent, source_key_known, false), map(&[("zoom", CallChoice::Transcribe), ("meet", CallChoice::Ask)]), "a source can ask against another default");
+        assert_eq!(cleaned(&sent, source_key_known, true), map(&[("zoom", CallChoice::Transcribe)]), "a contact's Ask me follows the default");
     }
 
     fn source_key_known(key: &str) -> bool {

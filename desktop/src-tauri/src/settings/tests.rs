@@ -111,7 +111,7 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
     assert_eq!(s.after_call, AfterCall::Ask, "permission first: the card asks (contract 1.8.0-e)");
-    assert_eq!(s.skip_calls_shorter_than_s, 10, "automatic calls under 10 s are skipped");
+    assert_eq!(s.skip_calls_shorter_than_s, 30, "a new install keeps no automatic call under 30 s (D4)");
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
     assert!(s.auto_record_apps.is_empty(), "every call app records automatically");
@@ -757,4 +757,20 @@ fn installs_paired_before_the_wizard_count_as_set_up() {
     assert!(!Settings::from_value(json!({"deviceId": null})).onboarding_done);
     assert!(!Settings::from_value(json!({"deviceId": "01JB8Q3R0Z5V1K7M9N2P4S6T8W", "onboardingDone": false})).onboarding_done, "an explicit value wins");
     assert!(!Settings::default().onboarding_done);
+}
+
+#[test]
+fn short_calls_default_to_30_s_only_on_a_new_install() {
+    // D4: a new install keeps no automatic call under 30 s; an existing person's value never changes under them.
+    let dir = tempfile::tempdir().unwrap();
+    let fresh = Settings::load(&dir.path().join("settings.json"));
+    assert_eq!(fresh.skip_calls_shorter_than_s, 30, "no file yet: the new default");
+    for kept in [0, 5, 10, 20, 30] {
+        assert_eq!(Settings::from_value(json!({"skipCallsShorterThanS": kept})).skip_calls_shorter_than_s, kept, "kept as set");
+    }
+    assert_eq!(Settings::from_value(json!({"serverUrl": "https://ledger.example.com"})).skip_calls_shorter_than_s, 10, "a file without it meant 10 s");
+    // Saved once by a new install, it stays 30 s.
+    let path = dir.path().join("settings.json");
+    fresh.save(&path).unwrap();
+    assert_eq!(Settings::load(&path).skip_calls_shorter_than_s, 30);
 }

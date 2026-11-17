@@ -852,6 +852,7 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-swatch[aria-checked="true"] { outline: var(--el-focus-width) solid var(--el-role-accent-default); outline-offset: var(--el-focus-offset); }
 .el-settings-v2__pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3), 1fr)); gap: var(--el-space-12); }
 .el-settings-v2__reset { display: flex; justify-content: flex-start; }
+.el-row__controls { display: flex; align-items: center; gap: var(--el-space-8); }
 .el-settings-v2 .set-preview { margin: 0; }
 .el-why { display: grid; gap: var(--el-space-8); padding: var(--el-space-16); }
 .el-why > p { margin: 0; }

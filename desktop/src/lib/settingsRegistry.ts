@@ -124,9 +124,9 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "calls.browser_tabs", title: "Read browser tab addresses", page: "calls", section: "Record automatically", kind: "switch", requires: { os: "macos" }, resettable: true,
     keywords: ["google meet browser", "tab", "url"] },
   { id: "calls.after", title: "After a call", page: "calls", section: "After a call", kind: "choice", resettable: true,
-    options: opts(["ask", "Ask me", true], ["always_transcribe", "Always transcribe"], ["always_audio", "Always save audio"]), keywords: ["keep", "save", "save audio", "transcribe", "discard", "ask before saving"], ru: ["baad mein", "save karo"], ur: ["کال کے بعد"] },
-  { id: "calls.skip_short", title: "Skip calls shorter than", page: "calls", section: "After a call", kind: "choice", resettable: true,
-    options: opts(["0", "Never"], ["5", "5 seconds"], ["10", "10 seconds", true], ["20", "20 seconds"], ["30", "30 seconds"]),
+    options: opts(["ask", "Ask me", true], ["always_audio", "Keep audio"], ["always_transcribe", "Transcribe"], ["dont_record", "Don't record"]), keywords: ["keep", "save", "save audio", "transcribe", "discard", "ask before saving"], ru: ["baad mein", "save karo"], ur: ["کال کے بعد"] },
+  { id: "calls.skip_short", title: "Short calls", page: "calls", section: "After a call", kind: "choice", resettable: true,
+    options: opts(["0", "Keep them"], ["5", "Don't keep under 5 s"], ["10", "Don't keep under 10 s"], ["20", "Don't keep under 20 s"], ["30", "Don't keep under 30 s", true]),
     keywords: ["short calls", "skip", "minimum length"], ru: ["chhoti call"], ur: ["مختصر کال"] },
   { id: "calls.sites", title: "Call sites", page: "calls", section: "Websites", kind: "page", keywords: ["never record", "website rules", "browser"] },
 

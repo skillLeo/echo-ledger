@@ -208,8 +208,8 @@ describe("Calls & meetings v2", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("switch", { name: "Auto-record Zoom" }));
     fireEvent.click(screen.getByRole("switch", { name: "Ask about unknown apps" }));
-    fireEvent.click(screen.getByRole("combobox", { name: /^Skip calls shorter than/ }));
-    fireEvent.click(screen.getByRole("option", { name: "30 s" }));
+    fireEvent.click(screen.getByRole("combobox", { name: /^Short calls/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Don't keep under 30 s" }));
     await act(flushAsync);
     expect(patches()).toEqual([{ autoRecordApps: { zoom: false } }, { askUnknownApps: !SETTINGS.askUnknownApps }, { skipCallsShorterThanS: 30 }]);
     expect(screen.queryByRole("switch", { name: "Read browser tab addresses" })).toBeNull();
@@ -1002,7 +1002,7 @@ describe("parity with today's Settings pages, in every state", () => {
     ...(["windows", "macos"] as const).flatMap((platform) => [true, false].map((autoMode): Page => ({
       name: `Calls & meetings, ${platform}, auto-record ${autoMode ? "on" : "off"}`, section: "calls", platform, settings: { autoMode },
       today: (st) => <CallsPage settings={st} patch={patch} platform={platform} onSites={() => undefined} consentRead={false} onConsent={() => undefined} />, steps: [reset],
-      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
+      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Short calls": ["combobox", /^Short calls/], "button: Call sites0 rules": ["button", "Call sites"] },
     }))),
     { name: "Call sites", section: "calls.sites", today: (st) => <CallSitesPage rules={st.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] },
       steps: [{ name: "a site typed", today: type("Address or title contains", "meet.jit.si") }] },

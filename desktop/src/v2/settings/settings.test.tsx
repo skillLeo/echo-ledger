@@ -64,7 +64,7 @@ describe("SettingsV2", () => {
     await show();
     fireEvent.change(screen.getByRole("searchbox", { name: "Search settings" }), { target: { value: "skip short calls" } });
     const results = screen.getByRole("list", { name: "Results" });
-    fireEvent.click(within(results).getByRole("button", { name: "Skip calls shorter than" }));
+    fireEvent.click(within(results).getByRole("button", { name: "Short calls" }));
     expect(screen.getByText("page calls#calls.skip_short")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Back to Settings" }));
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();

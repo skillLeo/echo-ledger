@@ -21,7 +21,11 @@ use crate::pending::PendingDecision;
 pub const KEEP_HOURS: i64 = 24;
 /// The "Skip calls shorter than" choices in seconds (0 = never skip a short call).
 pub const SHORTER_THAN_CHOICES: [u32; 5] = [0, 5, 10, 20, 30];
-pub const DEFAULT_SHORTER_THAN_S: u32 = 10;
+/// A new install keeps no call under 30 s (call rules, D4: "Don't keep" short calls).
+pub const DEFAULT_SHORTER_THAN_S: u32 = 30;
+/// What a settings file from before the 30 s default meant when it said nothing, or something unknown: 10 s. An
+/// existing person's setting never changes under them.
+pub const EARLIER_SHORTER_THAN_S: u32 = 10;
 /// Less speech than this on each side counts as nobody speaking.
 pub const MIN_SPEECH_MS: u64 = 1_000;
 /// `skipped_restore` answers this when the call is not (or no longer) in the list.

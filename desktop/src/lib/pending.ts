@@ -102,7 +102,7 @@ export function importProgressText(item: UploadItem): string {
 }
 
 /** "Skip calls shorter than" (v1.5): the choices in seconds, 0 = never; 10 by default (same as the phone). */
-export const SKIP_SHORTER_THAN: readonly (readonly [number, string])[] = [[0, "Never"], [5, "5 s"], [10, "10 s (default)"], [20, "20 s"], [30, "30 s"]];
+export const SKIP_SHORTER_THAN: readonly (readonly [number, string])[] = [[0, "Keep them"], [5, "Don't keep under 5 s"], [10, "Don't keep under 10 s"], [20, "Don't keep under 20 s"], [30, "Don't keep under 30 s"]];
 
 export const SKIP_REASON_LABELS: Record<SkipReason, string> = { too_short: "Too short", no_speech: "No speech" };
 

@@ -842,10 +842,10 @@ impl SettingsPatch {
         // Choosing After a call answers the one-time notice about it.
         if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
-        if let Some(v) = &self.source_rules { s.source_rules = crate::call_rules::cleaned(v, |k| crate::call_rules::SOURCES.iter().any(|(key, _, _)| *key == k)); }
+        if let Some(v) = &self.source_rules { s.source_rules = crate::call_rules::cleaned(v, |k| crate::call_rules::SOURCES.iter().any(|(key, _, _)| *key == k), false); }
         if let Some(v) = &self.contact_rules {
             let keyed: HashMap<String, crate::call_rules::CallChoice> = v.iter().map(|(name, c)| (crate::call_rules::contact_key(name), *c)).collect();
-            s.contact_rules = crate::call_rules::cleaned(&keyed, |k| !k.is_empty() && k.chars().count() <= 120);
+            s.contact_rules = crate::call_rules::cleaned(&keyed, |k| !k.is_empty() && k.chars().count() <= 120, true);
         }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }

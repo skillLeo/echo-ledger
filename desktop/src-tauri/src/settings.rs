@@ -434,6 +434,8 @@ impl Settings {
         let showed_in_shares = !file.contains_key("hideFromSharing") && file.get("contentProtection") == Some(&Value::Bool(false));
         // v1.5's "Keep automatically" reads as Ask me: the person is told once.
         let kept_automatically = file.get("afterCall").and_then(Value::as_str) == Some("keep");
+        // Short calls: only a new install (no file) gets the 30 s default; a file without the key keeps what it meant.
+        let short_calls_unset = !file.contains_key("skipCallsShorterThanS");
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
         for (key, value) in file {
             let value = match key.as_str() {
@@ -450,7 +452,7 @@ impl Settings {
                 "quietFrom" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("22:00")),
                 "quietTo" => Value::from(value.as_str().filter(|t| crate::activity::parse_hhmm(t).is_some()).unwrap_or("07:00")),
                 "skipCallsShorterThanS" => Value::from(
-                    value.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| crate::skipped::SHORTER_THAN_CHOICES.contains(v)).unwrap_or(crate::skipped::DEFAULT_SHORTER_THAN_S),
+                    value.as_u64().and_then(|v| u32::try_from(v).ok()).filter(|v| crate::skipped::SHORTER_THAN_CHOICES.contains(v)).unwrap_or(crate::skipped::EARLIER_SHORTER_THAN_S),
                 ),
                 "lockAfterMinutes" => Value::from(value.as_u64().and_then(|m| u32::try_from(m).ok()).filter(|m| crate::lock::LOCK_AFTER_CHOICES.contains(m)).unwrap_or(5)),
                 "screenTarget" => Value::from(screen_target_or_default(value.as_str())),
@@ -471,6 +473,9 @@ impl Settings {
         let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
         settings.onboarding_done |= set_up_before;
         settings.after_call_notice |= kept_automatically;
+        if short_calls_unset {
+            settings.skip_calls_shorter_than_s = crate::skipped::EARLIER_SHORTER_THAN_S;
+        }
         if showed_in_shares {
             settings.hide_from_sharing = ShareHiding::Off;
         }

@@ -25,9 +25,10 @@ describe("Calls & meetings", () => {
     expect(afterCallHint("ask", "macos")).toContain("in the corner of the screen");
   });
 
-  it("offers Ask me (the default), Always transcribe and Always save audio", () => {
+  it("offers the four choices with the call rules' words: Ask me (the default), Keep audio, Transcribe, Don't record", () => {
     const entry = SETTINGS.find((e) => e.id === "calls.after")!;
-    expect(entry.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([["ask", "Ask me", true], ["always_transcribe", "Always transcribe", false], ["always_audio", "Always save audio", false]]);
+    expect(entry.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([["ask", "Ask me", true], ["always_audio", "Keep audio", false], ["always_transcribe", "Transcribe", false], ["dont_record", "Don't record", false]]);
+    expect(afterCallHint("dont_record", "windows")).toContain("not recorded");
     expect(afterCallHint("always_audio", "windows")).toContain("audio only (not transcribed");
     expect(afterCallHint("always_transcribe", "windows")).toContain("saved and transcribed at once");
   });
@@ -61,12 +62,12 @@ describe("Calls & meetings", () => {
   it("sends the seconds to skip as a number and resets only this page", async () => {
     const patch = vi.fn(async () => true);
     render(<CallsPage settings={makeSettings()} patch={patch} platform="windows" onSites={vi.fn()} consentRead onConsent={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText("Skip calls shorter than"), { target: { value: "30" } });
-    expect(patch).toHaveBeenLastCalledWith({ skipCallsShorterThanS: 30 });
+    fireEvent.change(screen.getByLabelText("Short calls"), { target: { value: "5" } });
+    expect(patch).toHaveBeenLastCalledWith({ skipCallsShorterThanS: 5 });
     answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     expect(confirmAsked).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
-    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "ask", skipCallsShorterThanS: 10 })));
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "ask", skipCallsShorterThanS: 30 })));
   });
 });
 

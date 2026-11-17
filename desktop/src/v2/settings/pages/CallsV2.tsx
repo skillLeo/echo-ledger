@@ -2,7 +2,8 @@
 // each call app, unknown apps, browser tabs on a Mac; what happens after a call and which short calls are skipped; the
 // call sites (built-in rules, the person's own, never-record); and why a call wasn't recorded, read while on screen.
 import { useEffect, useState } from "react";
-import { api, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
+import { api, type CallChoice, type MicUser, type NotRecordedMic, type Settings, type SiteRule } from "../../../lib/ipc";
+import { CHOICE_HINTS, AFTER_CALL_CHOICE, CONTACT_OPTIONS, RULE_SOURCES, SOURCE_OPTIONS, contactLabel, withContactRule, withSourceRule } from "../../../lib/callRules";
 import { CALL_APPS, setting } from "../../../lib/settingsRegistry";
 import { SKIP_SHORTER_THAN } from "../../../lib/pending";
 import { decisionText, lastNotRecordedLine, micTone, micUserName, sameMicApp } from "../../../lib/explainer";
@@ -43,6 +44,7 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
         <SelectSetting id="calls.skip_short" value={String(settings.skipCallsShorterThanS)} options={SKIP_SHORTER_THAN.map(([s, label]) => ({ value: String(s), label }))}
           onChange={(v) => void patch({ skipCallsShorterThanS: Number(v) })} />
       </Group>
+      <CallRulesV2 settings={settings} patch={patch} />
       <Group title="Websites">
         <LinkSetting id="calls.sites" value={sites === 1 ? "1 rule" : `${sites} rules`} onOpen={onSites} />
       </Group>
@@ -53,7 +55,67 @@ export function CallsPageV2({ settings, patch, platform, onSites, onConsent }: {
       <ResetDefaults page="Calls & meetings" onReset={() => void patch({
         autoMode: true, askUnknownApps: false, browserAutomation: false, afterCall: optionDefault("calls.after") as Settings["afterCall"],
         skipCallsShorterThanS: Number(optionDefault("calls.skip_short")), autoRecordApps: Object.fromEntries(AUTO_RECORD_APPS.map((a) => [a, true])),
+        sourceRules: {},
       })} />
+    </>
+  );
+}
+
+/**
+ * Call rules (docs/PLAN_CALL_RULES.md 2): a rule per app and per person, so most calls need no question. A person's
+ * rule beats the app's, which beats After a call.
+ */
+export function CallRulesV2({ settings, patch }: { settings: Settings; patch: Patch }) {
+  const [name, setName] = useState("");
+  const [choice, setChoice] = useState<CallChoice>("dont_record");
+  const sources = settings.sourceRules ?? {};
+  const contacts = settings.contactRules ?? {};
+  const fallback = CHOICE_HINTS[AFTER_CALL_CHOICE[settings.afterCall]];
+  const add = () => {
+    if (!name.trim()) return;
+    void patch({ contactRules: withContactRule(contacts, name, choice) });
+    setName("");
+  };
+  const people = Object.entries(contacts).sort(([a], [b]) => a.localeCompare(b));
+  return (
+    <>
+      <Group title="Rules by app" footer={<p>An app set to Same as the default follows After a call: {fallback}</p>}>
+        {RULE_SOURCES.map(([key, label, app]) => (
+          <ListRow key={key} compact anchor={`calls.rule.${key}`} iconStyle="plain" icon={(p) => <Icons.SourceAppIcon app={app} {...p} />} title={label}
+            control={<Select label={`Rule for ${label}`} hideLabel value={sources[key] ?? ""} className="el-setting__select"
+              options={SOURCE_OPTIONS.map(([value, words]) => ({ value, label: words }))}
+              onChange={(v) => void patch({ sourceRules: withSourceRule(sources, key, v as CallChoice | "") })} />} />
+        ))}
+      </Group>
+      <section className="el-group" aria-label="Rules for people">
+        <h2 className="el-caption el-body-strong el-group__title">Rules for people</h2>
+        <Card>
+          <List label="Rules for people" className="el-group__rows">
+            {people.length === 0 && <ListRow compact title="No rules for people yet" meta="Add one below, for example Don't record for family." />}
+            {people.map(([key, value]) => (
+              <ListRow key={key} compact title={<span dir="auto">{contactLabel(key)}</span>}
+                control={<div className="el-row__controls">
+                  <Select label={`Rule for ${contactLabel(key)}`} hideLabel value={value} className="el-setting__select"
+                    options={CONTACT_OPTIONS.map(([v, words]) => ({ value: v, label: words }))}
+                    onChange={(v) => void patch({ contactRules: withContactRule(contacts, key, v as CallChoice) })} />
+                  <Button size="sm" variant="quiet" aria-label={`Remove the rule for ${contactLabel(key)}`}
+                    onClick={() => void patch({ contactRules: withContactRule(contacts, key, "ask") })}>Remove</Button>
+                </div>} />
+            ))}
+          </List>
+        </Card>
+        <p className="el-group__note el-caption el-secondary">A person's rule beats the app's. The name is the one the call app shows for the call.</p>
+      </section>
+      <Card label="Add a rule for a person">
+        <form className="el-form" onSubmit={(e) => { e.preventDefault(); add(); }}>
+          <div className="el-settings-v2__pair">
+            <TextField label="Name" value={name} dir="auto" onChange={(e) => setName(e.target.value)} />
+            <Select label="Rule" value={choice} onChange={(v) => setChoice(v as CallChoice)}
+              options={CONTACT_OPTIONS.filter(([v]) => v !== "ask").map(([v, words]) => ({ value: v, label: words }))} />
+          </div>
+          <div className="el-page__actions"><Button type="submit" disabled={!name.trim()}>Add rule</Button></div>
+        </form>
+      </Card>
     </>
   );
 }
