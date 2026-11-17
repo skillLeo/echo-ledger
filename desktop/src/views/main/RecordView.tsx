@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api, listenTo, type AppStatus, type InputDevice } from "../../lib/ipc";
 import { sourceAppLabel } from "../../lib/format";
 import { DISCARD_QUESTION } from "../../lib/pending";
@@ -14,6 +14,10 @@ import { PermissionBanner } from "./Permissions";
 import { isViewer, viewerSentence } from "../../lib/plan";
 import { ReadyCheckCard } from "./ReadyCheck";
 import { confirmAction } from "../../lib/confirm";
+
+// Live Assist has no classic counterpart and is on for everyone: classic reaches the same prep screen, window and card
+// from here, where classic starts things (its section lives with the new design's code, loaded on first use).
+const LiveAssistClassic = lazy(() => import("../../v2/app").then((m) => ({ default: m.LiveAssistClassic })));
 
 /**
  * The Bluetooth microphone a recording would use (v1.5), or null. Read when the page shows and again when a recording
@@ -41,11 +45,15 @@ function useBluetoothMic(recordingRef: string | null): InputDevice | null {
   return bluetoothMic(devices, chosen);
 }
 
-export function RecordView({ status, run, onImport }: {
+export function RecordView({ status, run, onImport, assistOn = false, projects = [] }: {
   status: AppStatus;
   run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
   /** Opens the file picker and then the import sheet. */
   onImport?: () => void;
+  /** Live Assist is on for this person (the server's live_assist): its section shows here. */
+  assistOn?: boolean;
+  /** The projects a Live Assist session can be linked to. */
+  projects?: { id: string; name: string }[];
 }) {
   const recording = status.recording;
   const liveTranslateLocked = useLocked("live_translate");
@@ -153,6 +161,11 @@ export function RecordView({ status, run, onImport }: {
           </div>
         </div>
       </div>
+      {assistOn && !isViewer(status) && (
+        <div className="record-assist">
+          <Suspense fallback={null}><LiveAssistClassic projects={projects} /></Suspense>
+        </div>
+      )}
       {/* Live Translate when the plan has it; its badge when the entitlements (v1.6) leave it out; hidden by an older plan. */}
       {translateCard}
       <div className="card dropzone" style={{ marginTop: 14 }}>

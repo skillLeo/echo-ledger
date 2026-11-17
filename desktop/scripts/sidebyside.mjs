@@ -31,6 +31,16 @@ export const PAIRS = [
   ["appearance", "Settings › Appearance: the design switch both ways",
     [classic("settings"), steps(click("Appearance"))],
     [v2("settings"), steps(click("Appearance"))]],
+  ["live-assist", "Live Assist: classic's Home (where classic starts things) and the new design's Live tab",
+    [`${classic("library")}&uiflags=live_assist`, steps(async (page) => {
+      await page.locator(".sidebar").getByRole("button", { name: /^Home/ }).click();
+      await page.waitForTimeout(1500);
+      await page.getByRole("region", { name: "Live Assist" }).scrollIntoViewIfNeeded();
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click();
+      await page.waitForTimeout(1500);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });

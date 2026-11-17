@@ -35,7 +35,7 @@ describe("the words the apps share", () => {
     // The new screens (v2/) talk about the Live Assist card and the overlays: "private" and "hidden from screen share".
     const found = sources.filter(([name, text]) => /^v2[/\\]/.test(name) && /only you can see|invisible/i.test(text)).map(([name]) => name);
     expect(found).toEqual([]);
-    const live = sources.find(([name]) => name.endsWith("LiveV2.tsx"))![1];
+    const live = sources.find(([name]) => name.endsWith("LiveAssistSection.tsx"))![1];
     expect(live).toContain("Suggestions appear on a private card, hidden from screen share.");
   });
 

@@ -3,11 +3,12 @@
 // Dictation and Captions; each opens its feature or its one settings home.
 import { useEffect, useState } from "react";
 import { api, type AppStatus, type Settings } from "../../lib/ipc";
-import { prettyShortcut, formatWhen } from "../../lib/format";
-import { Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Status } from "../components";
+import { prettyShortcut } from "../../lib/format";
+import { Button, Card, Icons, List, ListRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
-import { assist, type Prep } from "../assist/adapter";
-import { MEETING_TYPES, PrepScreen } from "../assist/PrepScreen";
+import type { Prep } from "../assist/adapter";
+import { PrepScreen } from "../assist/PrepScreen";
+import { LiveAssistSection } from "./LiveAssistSection";
 import { PlanBadge, useLocked } from "../../views/main/Upgrade";
 import { LiveTranslateV2 } from "./LiveTranslateV2";
 import { UNAVAILABLE_WORDS, translateAvailability, useTranslateAvailability } from "../../lib/translate";
@@ -28,9 +29,6 @@ export type LiveV2Props = {
 
 export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, run }: LiveV2Props) {
   const [prep, setPrep] = useState<Prep | "new" | null>(null);
-  const [upcoming, setUpcoming] = useState<Prep[] | null>(null);
-  const [upcomingFailed, setUpcomingFailed] = useState(false);
-  const [attempt, setAttempt] = useState(0);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   // As today's Record page: a plan without Live Translate shows it locked, with the plan that has it; a server without
@@ -45,11 +43,6 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
   useEffect(() => {
     api.settings().then(setSettings, () => undefined);
   }, []);
-  useEffect(() => {
-    if (!assistOn || prep) return;
-    setUpcomingFailed(false);
-    assist.preps("scheduled").then((p) => setUpcoming(Array.isArray(p) ? p : []), () => setUpcomingFailed(true));
-  }, [assistOn, prep, attempt]);
 
   if (prep) {
     return <PrepScreen prep={prep === "new" ? null : prep} projects={projects} onBack={() => setPrep(null)} onStarted={() => setPrep(null)} />;
@@ -60,7 +53,6 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
     const k = settings?.shortcuts?.[action];
     return k ? prettyShortcut(k, status.platform) : null;
   };
-  const typeLabel = (t: Prep["meeting_type"]) => MEETING_TYPES.find((m) => m.value === t)?.label ?? "Meeting";
 
   return (
     <div className="el-page el-page--narrow" data-v2="live">
@@ -83,33 +75,7 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
         </Card>
       </section>
 
-      {assistOn && (
-        <section className="el-group" aria-label="Live Assist">
-          <div className="el-group__head">
-            <h2 className="el-caption el-body-strong el-group__title">Live Assist</h2>
-            <Button size="sm" variant="primary" onClick={() => setPrep("new")}>New session</Button>
-          </div>
-          <Card>
-            {upcomingFailed && !upcoming ? (
-              <EmptyState tone="error" icon={Icons.ErrorIcon} title="Sessions didn't load"
-                body="EchoLedger couldn't reach the server. You can still start a new session." action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
-            ) : !upcoming ? (
-              <Loading label="Loading sessions"><div className="el-group__rows"><SkeletonRow end={false} /><SkeletonRow end={false} /></div></Loading>
-            ) : (
-            <List label="Upcoming sessions" className="el-group__rows">
-              {upcoming.length === 0 ? (
-                <ListRow compact icon={Icons.CalendarIcon} iconStyle="plain" title="No sessions scheduled"
-                  meta="Prepare a call: who it's with, your goals and documents. Suggestions appear on a private card, hidden from screen share." onClick={() => setPrep("new")} />
-              ) : upcoming.map((p) => (
-                <ListRow key={p.id} compact icon={Icons.ClockIcon} iconStyle="plain" title={p.title || typeLabel(p.meeting_type)}
-                  meta={[typeLabel(p.meeting_type), p.counterpart, p.scheduled_at ? formatWhen(p.scheduled_at) : null].filter(Boolean).join(" · ")}
-                  badge={p.status === "armed" ? <Badge tone="accent">Ready</Badge> : undefined} chevron onClick={() => setPrep(p)} />
-              ))}
-            </List>
-            )}
-          </Card>
-        </section>
-      )}
+      {assistOn && <LiveAssistSection onPrep={setPrep} />}
 
       <section className="el-group" aria-label="During a call">
         <h2 className="el-caption el-body-strong el-group__title">During a call</h2>

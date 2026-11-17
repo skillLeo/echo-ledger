@@ -8,6 +8,7 @@ export { HelpV2 } from "./help/HelpV2";
 export { SettingsPagesV2 } from "./settings/pages/SettingsPagesV2";
 export { HomeV2 } from "./home/HomeV2";
 export { LiveV2 } from "./live/LiveV2";
+export { LiveAssistClassic } from "./live/LiveAssistSection";
 export { AskV2 } from "./ask/AskV2";
 export { WorkspaceV2 } from "./workspace/WorkspaceV2";
 export { AfterCallNoticeV2 } from "./shell/AfterCallNotice";

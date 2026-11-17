@@ -1800,3 +1800,4 @@ html[data-window="share-check-control"], html[data-window="share-check-control"]
 .boot--error > div { max-width: 420px; text-align: center; color: var(--text); }
 .boot--error p { margin: 0 0 8px; }
 .boot__detail { font-size: 12px; color: var(--text-muted); word-break: break-word; }
+.record-assist { margin-top: 14px; }

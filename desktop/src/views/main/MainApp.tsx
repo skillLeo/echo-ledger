@@ -794,7 +794,8 @@ export default function MainApp() {
       {tab === "record" && !ui.flags["ui_v2.home"] && (
         <HomeView status={status} run={run} onImport={canRecord ? () => void pickImport() : undefined} needsYou={activityItems}
           onReview={() => openLibraryView("waiting")} onFailed={() => openLibraryView("failed")} onActivity={() => goTo("activity")}
-          onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)} />
+          onOpenRecording={(id) => openRecording(id)} onLibrary={() => openFolder(null)}
+          assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} />
       )}
       {tab === "activity" && (
         <ActivityView status={status} notify={notify} onItems={setActivityItems} onOpenRecording={(id) => openRecording(id)}
