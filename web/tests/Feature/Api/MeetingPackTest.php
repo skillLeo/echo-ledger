@@ -240,3 +240,43 @@ describe('text', function () {
             ->and($text)->toContain("[Screen 1 at 0:30]\n");
     });
 });
+
+describe('parts', function () {
+    it('prints a long meeting in parts of about 100 pages, each with its title page; the folder and Copy for AI stay whole', function () {
+        $segments = [];
+        foreach (range(0, 3999) as $i) {
+            $segments[] = ['channel' => 1, 'speaker' => 'Me', 'start_ms' => $i * 1000, 'end_ms' => $i * 1000 + 900, 'text' => "Line {$i} ".str_repeat('words ', 14)];
+        }
+        $this->transcript->update(['segments' => $segments]);
+
+        $first = meetingPack($this, 'format=html')->assertOk()->assertHeader('X-Pack-Part', '1');
+        $parts = (int) $first->headers->get('X-Pack-Parts');
+        expect($parts)->toBeGreaterThan(1)
+            ->and($first->headers->get('Content-Disposition'))->toContain('part 1 of '.$parts.'.html');
+        $html1 = (string) file_get_contents($first->baseResponse->getFile()->getPathname());
+        expect($html1)->toContain('Meeting pack · Part 1 of '.$parts)->toContain('Line 0 ')->not->toContain('Line 3999 ');
+
+        $last = meetingPack($this, 'format=html&part='.$parts)->assertOk()->assertHeader('X-Pack-Part', (string) $parts);
+        $htmlLast = (string) file_get_contents($last->baseResponse->getFile()->getPathname());
+        expect($htmlLast)->toContain('Part '.$parts.' of '.$parts)->toContain('Line 3999 ')->not->toContain('>Line 0 ');
+        meetingPack($this, 'format=html&part='.($parts + 1))->assertNotFound();
+
+        meetingPack($this, 'format=text')->assertOk()->assertHeader('X-Pack-Parts', '1');
+        meetingPack($this, 'format=zip')->assertOk()->assertHeader('X-Pack-Parts', '1');
+    });
+
+    it('keeps each part under about 100 pages and every item in exactly one part, in order', function () {
+        $timeline = [];
+        foreach (range(1, 3000) as $i) {
+            $timeline[] = ['line', ['speaker' => 'Me', 'text' => str_repeat('x', 170), 'start_ms' => $i]];
+        }
+        $parts = MeetingPack::parts($timeline);
+        expect(count($parts))->toBeGreaterThan(1)->and(array_sum(array_map('count', $parts)))->toBe(3000)
+            ->and(array_merge(...$parts))->toBe($timeline);
+        // 170 characters: 2 printed lines and spacing, 45 a page, plus the title page.
+        foreach ($parts as $part) {
+            expect(1 + count($part) * 2.4 / 45)->toBeLessThanOrEqual(MeetingPack::PAGES_PER_PART);
+        }
+        expect(MeetingPack::parts([]))->toBe([[]]);
+    });
+});

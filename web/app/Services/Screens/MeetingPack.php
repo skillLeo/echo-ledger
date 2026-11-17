@@ -38,6 +38,18 @@ final class MeetingPack
 
     public const VIEWS = ['roman', 'english', 'urdu', 'original'];
 
+    /**
+     * A printed pack stays under about this many pages (since v1.8 P4.4): a longer meeting comes in parts (`part=`),
+     * each with its own title page. Pages are estimated: 45 lines of about 90 characters a page, half a page a screen.
+     */
+    public const PAGES_PER_PART = 100;
+
+    private const LINES_PER_PAGE = 45;
+
+    private const CHARS_PER_LINE = 90;
+
+    private const PAGES_PER_SCREEN = 0.5;
+
     /** Up to this many bytes of pictures the page embeds them as they were sent; past it, every screen as its thumbnail. */
     public const FULL_PICTURES_BYTES = 20 * 1024 * 1024;
 
@@ -59,9 +71,9 @@ final class MeetingPack
      * Writes the pack. `409 nothing_to_export` while the recording has no finished final transcript. `$printBar`
      * (the console) puts a Print button above the page.
      *
-     * @return array{path: string, name: string, mime: string}
+     * @return array{path: string, name: string, mime: string, part: int, parts: int}
      */
-    public function build(CaptureSession $session, string $format, ?string $view = null, bool $withAudio = false, bool $printBar = false): array
+    public function build(CaptureSession $session, string $format, ?string $view = null, bool $withAudio = false, bool $printBar = false, int $part = 1): array
     {
         if (! in_array($format, self::FORMATS, true)) {
             throw new RuntimeException("Unknown meeting pack format {$format}.");
@@ -76,10 +88,15 @@ final class MeetingPack
         // A view that is not made yet shows the original words.
         $shown = $view !== null && app(TranscriptViews::class)->textsFor($transcript, $view) !== null ? $view : null;
         $screens = ScreenStore::ordered($session->id)->get()->values();
+        // The printed pack in parts of about 100 pages (the folder and Copy for AI are whole).
+        $parts = $format === 'html' ? self::parts(self::timeline($lines, $screens)) : [self::timeline($lines, $screens)];
+        if ($part < 1 || $part > count($parts)) {
+            throw new ApiError(404, 'not_found', 'This meeting pack has '.count($parts).(count($parts) === 1 ? ' part.' : ' parts.'));
+        }
         $path = $this->uploads->tempPath('meeting-pack');
         try {
             match ($format) {
-                'html' => $this->writeHtml($path, $session, $transcript, $shown, $lines, $screens, $printBar),
+                'html' => $this->writeHtml($path, $session, $transcript, $shown, $lines, $screens, $printBar, $parts[$part - 1], $part, count($parts)),
                 'text' => $this->writeText($path, $session, $lines, $screens),
                 default => $this->writeZip($path, $session, $lines, $screens, $withAudio),
             };
@@ -88,9 +105,16 @@ final class MeetingPack
             throw $e;
         }
 
+        $name = TranscriptExporter::filename($session, $format === 'text' ? 'txt' : $format);
+        if (count($parts) > 1) {
+            $name = (string) preg_replace('/\.html$/', ' (part '.$part.' of '.count($parts).').html', $name);
+        }
+
         return [
+            'part' => $part,
+            'parts' => count($parts),
             'path' => $path,
-            'name' => TranscriptExporter::filename($session, $format === 'text' ? 'txt' : $format),
+            'name' => $name,
             'mime' => match ($format) {
                 'html' => 'text/html; charset=utf-8',
                 'text' => 'text/plain; charset=utf-8',
@@ -145,12 +169,54 @@ final class MeetingPack
         return $out;
     }
 
+    /** The console's bar (hidden in print): Print, and since v1.8 P4.4 the other parts of a long meeting. */
+    private static function printBar(CaptureSession $session, ?string $view, int $part, int $parts): string
+    {
+        if ($parts === 1) {
+            return self::PRINT_BAR;
+        }
+        $link = fn (int $n, string $label): string => '<a href="'.htmlspecialchars(route('admin.sessions.pack', array_filter(['session' => $session->id, 'format' => 'html', 'view' => $view, 'part' => $n])), ENT_QUOTES).'" style="color:#3e63dd">'.$label.'</a>';
+        $nav = '<span style="display:flex;gap:12px;align-items:center">Part '.$part.' of '.$parts
+            .($part > 1 ? ' · '.$link($part - 1, '← Part '.($part - 1)) : '').($part < $parts ? ' · '.$link($part + 1, 'Part '.($part + 1).' →') : '').'</span>';
+
+        return str_replace('<span>To keep a PDF', $nav.'<span>To keep a PDF', self::PRINT_BAR);
+    }
+
+    /**
+     * The timeline in parts of about 100 printed pages, at an item's edge (a screen stays with its moment).
+     *
+     * @param  list<array{0: 'line', 1: array<string, mixed>}|array{0: 'screen', 1: Screen, 2: int}>  $timeline
+     * @return non-empty-list<list<array{0: 'line', 1: array<string, mixed>}|array{0: 'screen', 1: Screen, 2: int}>>
+     */
+    public static function parts(array $timeline): array
+    {
+        $parts = [];
+        $current = [];
+        $pages = 1.0; // the title page
+        foreach ($timeline as $item) {
+            $size = $item[0] === 'screen'
+                ? self::PAGES_PER_SCREEN
+                : (ceil(max(1, mb_strlen((string) $item[1]['text']) + mb_strlen((string) $item[1]['speaker']) + 8) / self::CHARS_PER_LINE) + 0.4) / self::LINES_PER_PAGE;
+            if ($current !== [] && $pages + $size > self::PAGES_PER_PART) {
+                $parts[] = $current;
+                $current = [];
+                $pages = 1.0;
+            }
+            $current[] = $item;
+            $pages += $size;
+        }
+        $parts[] = $current;
+
+        return $parts;
+    }
+
     /**
      * @param  string|null  $view  the Show as view the lines are in, null for the original words
      * @param  list<array{index: int, speaker: string, label: string, channel: int, start_ms: int, end_ms: int, text: string}>  $lines
      * @param  Collection<int, Screen>  $screens
+     * @param  list<array{0: 'line', 1: array<string, mixed>}|array{0: 'screen', 1: Screen, 2: int}>  $items  this part's
      */
-    private function writeHtml(string $path, CaptureSession $session, Transcript $transcript, ?string $view, array $lines, Collection $screens, bool $printBar): void
+    private function writeHtml(string $path, CaptureSession $session, Transcript $transcript, ?string $view, array $lines, Collection $screens, bool $printBar, array $items, int $part, int $parts): void
     {
         $e = static fn (string $s): string => htmlspecialchars($s, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $out = fopen($path, 'wb');
@@ -185,17 +251,17 @@ final class MeetingPack
                 .'figure.screen img{display:block;max-width:100%;height:auto;border:1px solid #ddd;border-radius:8px}'
                 .'figcaption{font-size:13px;color:#444;margin:0 0 8px}.label{font-weight:600;color:#111}'
                 .'@page{margin:16mm}@media print{body{margin:0;max-width:none}.noprint{display:none}.cover{min-height:calc(100vh - 32mm)}}'
-                .'</style></head><body>'.($printBar ? self::PRINT_BAR : ''));
+                .'</style></head><body>'.($printBar ? self::printBar($session, $view, $part, $parts) : ''));
 
             $facts = $this->facts($session, $lines, $screens->count());
-            fwrite($out, '<section class="cover"><p class="kicker">Meeting pack</p><h1 dir="auto">'.$e($title).'</h1><dl class="facts">');
+            fwrite($out, '<section class="cover"><p class="kicker">Meeting pack'.($parts > 1 ? ' · Part '.$part.' of '.$parts : '').'</p><h1 dir="auto">'.$e($title).'</h1><dl class="facts">');
             foreach ($facts as $name => $value) {
                 fwrite($out, '<dt>'.$e($name).'</dt><dd dir="auto">'.$e($value).'</dd>');
             }
             fwrite($out, '</dl>'.(($note = $this->noteLine($lines)) !== null ? '<p class="note">'.$e($note).'</p>' : '').'</section><main>'."\n");
 
             $thumbs = (int) $screens->sum('bytes') > self::FULL_PICTURES_BYTES;
-            foreach (self::timeline($lines, $screens) as $item) {
+            foreach ($items as $item) {
                 if ($item[0] === 'line') {
                     $l = $item[1];
                     fwrite($out, '<p class="line" dir="'.(TranscriptExporter::isRtl($l['text']) ? 'rtl' : 'auto').'">'
