@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import ipcTs from "./ipc.ts?raw";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
-import { AWAITING_CORE } from "./awaitingCore";
+import { awaitedNames } from "./awaitingCore";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
 import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
@@ -184,7 +184,7 @@ describe("command names and arguments", () => {
   });
 
   it.each(calls.map((c) => [c.command, c] as const))("%s exists in Rust and is registered in the invoke handler", (name) => {
-    if (AWAITING_CORE.commands.includes(name)) {
+    if (awaitedNames().includes(name)) {
       // Fails the day the core has it: take it off AWAITING_CORE, and the checks below then hold it to Rust's arguments.
       expect(commands.has(name), `${name} is in the core now: remove it from AWAITING_CORE (lib/awaitingCore.ts)`).toBe(false);
       return;

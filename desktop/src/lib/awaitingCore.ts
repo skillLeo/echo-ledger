@@ -1,16 +1,29 @@
 // Commands the interface wraps before the core has them. The list is short-lived by design:
 // - ipc.contract.test.ts fails the day the core adds one, so it comes off the list and its arguments are checked;
-// - releaseGate.test.ts fails a release build while a screen the release can reach still needs one, and fails every
-//   run once the app's version reaches `removeBy`.
-export const AWAITING_CORE = {
+// - releaseGate.test.ts fails a release build while the list has a command without a declared safe fallback (what the
+//   app does without it, and why that is safe), and fails every run once the app's version reaches `removeBy`.
+
+/** A command the core doesn't have yet; `fallback` says why the app is safe without it (none: a release waits for it). */
+export type AwaitedCommand = { name: string; fallback?: string };
+
+export const AWAITING_CORE: { removeBy: string; commands: readonly AwaitedCommand[] } = {
   /** The app version by which the list must be empty. */
   removeBy: "2.0.0",
-  /**
-   * Live Translate's availability here (until the core says it, the Live tab works it out from the system and the plan).
-   * The help commands (docs/API.md 2.0.0-d) and last_device_report are in the core.
-   */
-  commands: ["live_translate_status"] as readonly string[],
-} as const;
+  /** Core batch 4 (the checks' advisory rows are a field of ready_check, not a command). */
+  commands: [
+    {
+      name: "live_translate_status",
+      fallback: "Without it the Live tab works the answer out from the system and the plan, and shows Live Translate as unavailable where it can't run.",
+    },
+    {
+      name: "diagnostic_report_copy",
+      fallback: "Nothing in the app calls it yet: Setup & health shows no Copy the report button until the core has it.",
+    },
+  ],
+};
+
+/** The names on the list. */
+export const awaitedNames = (list: readonly AwaitedCommand[] = AWAITING_CORE.commands): string[] => list.map((c) => c.name);
 
 /** "1.10.2" ≥ "1.9.0", by number. */
 export function versionAtLeast(version: string, floor: string): boolean {
@@ -21,21 +34,18 @@ export function versionAtLeast(version: string, floor: string): boolean {
 }
 
 /** Why a build can't ship as it is (empty: it can). */
-export function releaseBlockers({ release, version, awaiting, helpReachable }: {
+export function releaseBlockers({ release, version, awaiting, removeBy = AWAITING_CORE.removeBy }: {
   release: boolean;
   version: string;
-  awaiting: readonly string[];
-  /** Settings › Help opens the page that needs the help commands (with ui_v2.settings on). */
-  helpReachable: boolean;
+  awaiting: readonly AwaitedCommand[];
+  removeBy?: string;
 }): string[] {
   const out: string[] = [];
   if (awaiting.length === 0) return out;
-  if (versionAtLeast(version, AWAITING_CORE.removeBy)) {
-    out.push(`version ${version} has reached ${AWAITING_CORE.removeBy}: the core must have ${awaiting.join(", ")}, and AWAITING_CORE must be empty`);
+  if (versionAtLeast(version, removeBy)) {
+    out.push(`version ${version} has reached ${removeBy}: the core must have ${awaitedNames(awaiting).join(", ")}, and AWAITING_CORE must be empty`);
   }
-  const help = awaiting.filter((c) => c.startsWith("help_") || c === "support_send" || c === "last_device_report");
-  if (release && helpReachable && help.length > 0) {
-    out.push(`a release can open Help v2 but the core lacks ${help.join(", ")}`);
-  }
+  const unsafe = awaiting.filter((c) => !c.fallback?.trim());
+  if (release && unsafe.length > 0) out.push(`a release needs ${awaitedNames(unsafe).join(", ")} from the core: no safe fallback is declared`);
   return out;
 }
