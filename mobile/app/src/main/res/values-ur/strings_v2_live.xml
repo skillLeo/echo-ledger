@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (live). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_live_pill_recording">ریکارڈنگ %1$s۔ کنٹرولز کے لیے ٹیپ کریں۔</string>
+    <string name="v2_live_pill_paused">رکی ہوئی</string>
+    <string name="v2_live_pill_on_hold">ہولڈ پر</string>
+    <string name="v2_live_pill_captions">کیپشنز</string>
+    <string name="v2_live_pill_captions_off">کیپشنز بند</string>
+    <string name="v2_live_pill_pause">روکیں</string>
+    <string name="v2_live_pill_resume">جاری رکھیں</string>
+    <string name="v2_live_pill_stop">بند کریں</string>
+    <string name="v2_live_pill_stop_again">بند کرنے کے لیے دوبارہ ٹیپ کریں</string>
+    <string name="v2_live_pill_language">زبان: %1$s</string>
+    <string name="v2_live_pill_discard">ضائع کریں</string>
+    <string name="v2_live_pill_discarded">ضائع کر دی گئی</string>
+    <string name="v2_live_pill_undo">واپس لیں %1$d</string>
+    <string name="v2_live_pill_hide">کنٹرولز چھپائیں</string>
+    <string name="v2_live_card_saved">محفوظ ہو گئی</string>
+    <string name="v2_live_card_save">آڈیو محفوظ کریں</string>
+    <string name="v2_live_card_transcribe">ٹرانسکرپٹ بنائیں</string>
+    <string name="v2_live_card_discard">حذف کریں</string>
+    <string name="v2_live_card_discarded">حذف ہو گئی</string>
+    <string name="v2_live_card_rename">نام بدلیں یا پروجیکٹ چنیں</string>
+    <string name="v2_live_card_ask">%1$s رکھیں؟</string>
+    <string name="v2_live_card_time_left">فیصلے کے لیے %1$d سیکنڈ</string>
+    <string name="v2_live_call_with">%1$s سے کال</string>
+</resources>
