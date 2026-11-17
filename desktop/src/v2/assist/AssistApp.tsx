@@ -1,5 +1,5 @@
 // The `assist` window (the core opens it per L4: top-centre under the webcam, hidden from screen sharing, click-through
-// outside the card). Shown only while live_assist and ui_v2.live are on for this person. In a development build
+// outside the card). Shown while live_assist is on for this person, in classic and the new design alike. In a development build
 // `?assistfixture` plays the fixture session instead of listening to the core.
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHitRegions } from "../../lib/hitRegions";
@@ -76,7 +76,8 @@ export default function AssistApp() {
   const [state, dispatch, local] = useAssistCard(fixture);
   const [now, setNow] = useState(() => Date.now());
   const concealed = useConcealed();
-  const on = fixture || (ui.flags.live_assist && ui.flags["ui_v2.live"]);
+  // live_assist alone: the card is the same in classic and the new design (classic reaches it from its Record page).
+  const on = fixture || ui.flags.live_assist;
   useHitRegions([on, state.shownId, state.captions.length, state.modeNote, concealed]);
   useEffect(() => {
     if (local.mutedUntil <= now) return;

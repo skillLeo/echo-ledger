@@ -163,7 +163,7 @@
   inset-block-start: calc(100% + var(--el-space-4));
   inset-inline-start: 0;
   min-inline-size: 100%;
-  max-block-size: calc(var(--el-space-64) * 5);
+  max-block-size: calc(var(--el-space-64) * 9);
   overflow-y: auto;
   padding: var(--el-space-4);
   background: var(--el-role-bg-overlay);
@@ -183,8 +183,23 @@
 .el-menu__option[aria-selected="true"] { font-weight: var(--el-text-body-strong-weight); }
 .el-menu-anchor { position: relative; }
 .el-menu--end { inset-inline-start: auto; inset-inline-end: 0; min-inline-size: calc(var(--el-space-64) * 3.5); }
+.el-menu--start { min-inline-size: calc(var(--el-space-64) * 3.5); }
 .el-menu__option--danger { color: var(--el-role-danger-default); }
 .el-menu__check { inline-size: var(--el-space-16); color: var(--el-role-accent-text); }
+/* Grouped menus with icons, shortcuts and sub-menus (a recording's ⋮, Export ▸), and the same menu at the pointer. */
+.el-menu__item { position: relative; list-style: none; }
+.el-menu__group { padding: var(--el-space-8) var(--el-space-8) var(--el-space-4); color: var(--el-role-text-secondary); }
+.el-menu__group:first-child { padding-block-start: var(--el-space-4); }
+.el-menu__label { flex: 1; }
+.el-menu__icon-space { inline-size: var(--el-space-16); flex: none; }
+.el-menu__shortcut { font-family: inherit; color: var(--el-role-text-secondary); padding-inline-start: var(--el-space-16); }
+.el-menu__option[aria-disabled="true"] { color: var(--el-role-text-disabled); cursor: default; }
+.el-menu--has-sub { overflow: visible; max-block-size: none; }
+.el-menu--sub { inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-start: calc(100% - var(--el-space-4)); min-inline-size: calc(var(--el-space-64) * 3); }
+.el-menu--sub[data-flip] { inset-inline-start: auto; inset-inline-end: calc(100% - var(--el-space-4)); }
+.el-menu--inline { position: static; inset: auto; transform: none; min-inline-size: 0; border: 0; box-shadow: none; padding: 0; padding-inline-start: var(--el-space-16); background: transparent; }
+.el-menu[data-up] { inset-block-start: auto; inset-block-end: calc(100% + var(--el-space-4)); }
+.el-menu--context { position: fixed; inset: auto; min-inline-size: calc(var(--el-space-64) * 3.5); }
 
 /* ---- ListRow ------------------------------------------------------------------------------------------------ */
 .el-list { display: flex; flex-direction: column; }
@@ -232,6 +247,15 @@
 .el-row__control { position: relative; flex: none; display: flex; align-items: center; }
 .el-row__error { color: var(--el-role-danger-default); white-space: normal; }
 .el-row__chevron { display: flex; color: var(--el-role-text-secondary); }
+.el-row__leading--tick { inline-size: var(--el-space-40); block-size: var(--el-space-40); }
+.el-row__tick {
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); border-radius: var(--el-radius-full);
+  border: var(--el-border-strong) solid var(--el-role-border-strong); color: var(--el-role-text-on-accent);
+}
+.el-row__tick--on { background: var(--el-role-accent-default); border-color: var(--el-role-accent-default); }
+.el-row__actions { position: relative; flex: none; display: flex; align-items: center; opacity: 0; }
+.el-row--actions:hover .el-row__actions, .el-row--actions:focus-within .el-row__actions, .el-row__actions:has([aria-expanded="true"]) { opacity: 1; }
 
 /* ---- Chip and FilterBar ------------------------------------------------------------------------------------- */
 .el-filterbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
@@ -253,6 +277,17 @@
   color: var(--el-role-accent-text);
   font-weight: var(--el-text-body-strong-weight);
 }
+.el-chip--menu { padding-inline-end: var(--el-space-8); }
+.el-chip--on { background: var(--el-role-accent-soft); border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
+.el-chip-group { display: inline-flex; align-items: center; }
+.el-chip-clear { margin-inline-start: calc(-1 * var(--el-space-4)); }
+.el-list-section__button { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.el-list-section__button .el-icon { transition: transform var(--el-motion-fast); }
+.el-list-section__button[aria-expanded="false"] .el-icon { transform: rotate(-90deg); }
+.el-list-section__count { color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
+.el-list-section--pick { display: flex; align-items: center; gap: var(--el-space-8); }
+.el-search-row { display: flex; gap: var(--el-space-8); align-items: center; }
+.el-search-row > .el-search, .el-search-row > :first-child { flex: 1; }
 .el-chip__count { color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
 .el-chip--removable { padding-inline-end: var(--el-space-4); cursor: default; background: var(--el-role-bg-subtle); border-color: transparent; }
 .el-chip__remove {
@@ -524,6 +559,14 @@
 .el-segment__time.el-num { font-size: var(--el-text-caption-size); }
 .el-segment--active { background: var(--el-role-accent-soft); margin-inline: calc(var(--el-space-12) * -1); padding-inline: var(--el-space-12); border-radius: var(--el-radius-sm); border-block-end-color: transparent; }
 .el-segment__text { min-inline-size: 0; overflow-wrap: anywhere; }
+.el-segment__play { border: 0; padding: 0; background: transparent; cursor: pointer; text-align: start; }
+.el-segment__play:hover { color: var(--el-role-accent-text); text-decoration: underline; }
+.el-transcript--play .el-segment__text { cursor: pointer; }
+.el-segment__note { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); margin-inline-start: var(--el-space-8); }
+/* The recording page's tools: Show as above the transcript, the action row under the player. */
+.el-recording__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-recording__viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); margin-block-end: var(--el-space-8); }
+.el-recording__toggles { display: flex; flex-wrap: wrap; gap: var(--el-space-16); padding: 0 var(--el-space-16) var(--el-space-12); }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
 
 /* ---- The app shell (ui_v2.shell) -------------------------------------------------------------------------- */
@@ -693,6 +736,12 @@ button.el-step__head { cursor: pointer; }
 .el-page__titles { display: flex; flex-direction: column; gap: var(--el-space-4); min-inline-size: 0; flex: 1 1 calc(var(--el-space-64) * 6); }
 .el-page__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
 .el-page__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-choices { display: grid; gap: var(--el-space-4); justify-items: start; }
+.el-choices > .el-button:not(:first-child) { margin-block-start: var(--el-space-8); }
+/* Selection mode: × · "3 selected" · Select all on the start side, the four actions and ⋮ on the end side. */
+.el-selectbar { position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas); padding-block: var(--el-space-4); }
+.el-selectbar__start { display: flex; align-items: center; gap: var(--el-space-8); }
+.el-selectbar .el-page__actions { gap: var(--el-space-4); }
 .el-page__back { align-self: flex-start; margin-inline-start: calc(var(--el-space-8) * -1); margin-block-end: calc(var(--el-space-8) * -1); }
 .el-page__tools { display: flex; flex-direction: column; gap: var(--el-space-12); }
 .el-page__tools > .el-search { max-inline-size: calc(var(--el-space-64) * 8); }

@@ -5,6 +5,7 @@ import "./styles.css";
 import { applyTheme, getThemeChoice, watchSystemTheme } from "./lib/theme";
 import { applyPreferences, loadPreferences } from "./lib/shell";
 import { api } from "./lib/ipc";
+import { WindowErrorBoundary } from "./components/WindowErrorBoundary";
 
 // One index.html for every window; the view is chosen from the window label.
 const MainApp = lazy(() => import("./views/main/MainApp"));
@@ -71,9 +72,12 @@ if (import.meta.env.DEV && new URLSearchParams(location.search).has("v2gallery")
 } else {
   ReactDOM.createRoot(root).render(
     <React.StrictMode>
-      <Suspense fallback={null}>
-        <View />
-      </Suspense>
+      <WindowErrorBoundary label={label}>
+        {/* While the window's code loads, index.html's "Starting EchoLedger…" stays (the main window), never nothing. */}
+        <Suspense fallback={label === "main" ? <div className="boot" role="status">Starting EchoLedger…</div> : null}>
+          <View />
+        </Suspense>
+      </WindowErrorBoundary>
     </React.StrictMode>,
   );
 }

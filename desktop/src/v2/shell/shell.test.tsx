@@ -9,7 +9,6 @@ import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { Shell, moduleOf } from "./Shell";
 import { shellStatus } from "./status";
 import { AccountCard, ClassicSwitch, StorageCard, initials, minutesLine } from "../settings/AccountCard";
-import { ALL_OFF, parseUiState } from "../flags";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -161,25 +160,23 @@ describe("Settings' account card", () => {
   });
 });
 
-describe("Switch back to classic", () => {
-  it("is hidden while no redesigned screen is on", () => {
-    const { container } = render(<ClassicSwitch state={ALL_OFF} onState={() => undefined} />);
+describe("Switch back to classic (the foot of the new design's Settings)", () => {
+  it("is hidden while no redesigned screen is on", async () => {
+    respond("ui_flags", { ui_flags: {}, ui_classic: false });
+    const { container } = render(<ClassicSwitch />);
+    await act(flushAsync);
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("sends the choice and hands back the server's answer", async () => {
-    respond("ui_classic_set", { ui_flags: {}, ui_classic: true });
-    const onState = vi.fn();
-    render(<ClassicSwitch state={parseUiState({ ui_flags: { "ui_v2.shell": true } })} onState={onState} />);
+  it("an older server: goes back to classic on this computer and is then gone", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true }, ui_classic: false });
+    render(<ClassicSwitch />);
+    await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "Switch back to classic" }));
     await act(flushAsync);
-    expect(callsOf("ui_classic_set")).toEqual([{ classic: true }]);
-    expect(onState).toHaveBeenCalledWith(expect.objectContaining({ classic: true }));
-  });
-
-  it("offers the new look again once the person went back", () => {
-    render(<ClassicSwitch state={parseUiState({ ui_flags: {}, ui_classic: true })} onState={() => undefined} />);
-    expect(screen.getByRole("button", { name: "Use the new look" })).toBeInTheDocument();
+    expect(localStorage.getItem("echoledger-design")).toBe("classic");
+    expect(callsOf("ui_design_set")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Switch back to classic" })).toBeNull();
   });
 });
 
@@ -215,10 +212,9 @@ describe("the app with the flags", () => {
     expect(within(nav).getByRole("button", { name: "Library" })).toHaveAttribute("aria-current", "page");
   });
 
-  it("the profile sits at the sidebar's foot and opens Settings, with the storage numbers and the switch on top", async () => {
+  it("the profile sits at the sidebar's foot and opens Settings; with only part of the new design on, classic Appearance offers the way back", async () => {
     backend({ "ui_v2.shell": true });
     respond("account_get", { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });
-    respond("storage_info", { recordings_bytes: 1_000_000, recordings_count: 3, disk_free_bytes: 5_000_000_000, disk_total_bytes: null, retention_days: 30 });
     render(<MainApp />);
     await act(flushAsync);
     await act(flushAsync);
@@ -227,8 +223,10 @@ describe("the app with the flags", () => {
     fireEvent.click(me);
     await act(flushAsync);
     await act(flushAsync);
-    expect(await screen.findByRole("list", { name: "Storage" })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /^Appearance/ }));
+    await act(flushAsync);
     expect(screen.getByRole("button", { name: "Switch back to classic" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try the new design" })).toBeNull();
   });
 
   it("ui_v2.library shows the new Library on the real list", async () => {

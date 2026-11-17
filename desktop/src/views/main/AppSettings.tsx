@@ -12,6 +12,7 @@ import { firstSentence } from "../../lib/settingsIndex";
 import { getVersion } from "@tauri-apps/api/app";
 import { UpdatesPanel } from "./UpdateSettings";
 import { ActionRow, InfoRow, LinkRow, ResetRow, Section, SegmentedRow, SelectRow, rowAttrs } from "./SettingsControls";
+import { useDesignSwitch } from "../../v2/flags";
 
 type Run = <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 type Patch = (p: SettingsPatch) => Promise<boolean>;
@@ -67,8 +68,31 @@ export function AppearancePage({ theme, onTheme, prefs, setPref }: { theme: Them
         <SegmentedRow id="appearance.density" value={prefs.density} options={opts<Preferences["density"]>("appearance.density")} onChange={(v) => setPref({ density: v })} />
         <SegmentedRow id="appearance.clock" value={prefs.clock} options={opts<Preferences["clock"]>("appearance.clock")} onChange={(v) => setPref({ clock: v })} />
       </Section>
+      <DesignRow />
       <ResetRow page="Appearance" onReset={() => { onTheme("system"); setPref({ sidebarStyle: "light", density: "comfortable", clock: "12" }); }} />
     </>
+  );
+}
+
+/**
+ * The new design is opt-in (docs/PLAN_V2_PARITY.md 0): "Try the new design" while there is one to try (the server's
+ * `can_try`); its own Appearance has "Switch back to classic". With some new screens on but classic Settings (a
+ * server that turned on part of the design), the way back is offered here too.
+ */
+function DesignRow() {
+  const design = useDesignSwitch();
+  if (!design.canTry && !design.canSwitchBack) return null;
+  const to = design.canTry ? "v2" : "classic";
+  return (
+    <Section footer={<>{design.error && <p className="error-text" role="alert">{design.error}</p>}<p>{to === "v2"
+      ? "The new design is being finished. Try it, and come back to classic from its Settings › Appearance whenever you like."
+      : "Some screens use the new design. Classic stays available while it is finished."}</p></>}>
+      <InfoRow id="appearance.design" value={to === "v2" ? "Classic" : "New design"}>
+        <button type="button" className="btn compact" disabled={design.busy} onClick={() => void design.choose(to)}>
+          {design.busy ? "Switching…" : to === "v2" ? "Try the new design" : "Switch back to classic"}
+        </button>
+      </InfoRow>
+    </Section>
   );
 }
 

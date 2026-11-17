@@ -1,15 +1,27 @@
 // The v2 recording page (ui_v2.library): title, the one player, the transcript with speakers, and the actions. The
-// data are today's: session_detail for the audio and speaker names, transcript_detail for the text.
+// data are today's: session_detail for the audio and speaker names, transcript_detail for the text. Its ⋮ is the
+// Library's one menu (organise.tsx) with this page's parts: Change language, the Export ▸ in the view on screen with
+// PDF and the meeting packs, and Save audio. Under the player: Send to WhatsApp · Copy ▾ · Export ▾; over the
+// transcript: Show as (Roman Urdu · اردو · English · Original), as classic.
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, errorMessage, type LibraryItem, type ScreenMoment, type TranscriptDetail } from "../../lib/ipc";
+import {
+  api, errorMessage, type ExportFormat, type LibraryItem, type MeetingPackFormat, type ScreenMoment, type TranscriptDetail, type TranscriptView,
+  type TranscriptViewsState,
+} from "../../lib/ipc";
 import { confirmAction } from "../../lib/confirm";
 import { screenSaid, screensByLine } from "../../lib/screens";
 import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
-import { formatDuration, formatWhen, sourceAppLabel, transcriptText } from "../../lib/format";
-import { activeIndex, speakerName } from "../../lib/player";
-import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Select, Skeleton, Tabs, Transcript, type Segment } from "../components";
+import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, type UnsureMarkers } from "../../lib/format";
+import { activeIndex, KEY_SECONDS, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
+import { normalizeLanguage } from "../../lib/languages";
+import { PDF_HINT } from "../../views/main/TranscriptTools";
+import { screenMarker } from "../../lib/screens";
+import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
+import { Menu, type MenuItem } from "../components/Menu";
+import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
+import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "details";
 type Load<T> = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; value: T };
@@ -17,15 +29,24 @@ type Load<T> = { state: "loading" } | { state: "error"; message: string } | { st
 export type RecordingPageProps = {
   item: LibraryItem;
   onBack: () => void;
-  /** Delete: the Library moves it to Trash and offers Undo. */
-  onDelete: (item: LibraryItem) => void;
   /** One message at a time, with at most one action (the Library's Toast). */
   onMessage: (message: string) => void;
+  /** The Library's one menu for this recording, with this page's parts in their places (Delete stays last). */
+  menu: (own: RecordingMenuParts) => MenuItem[];
 };
 
-const SPEEDS = ["1", "1.25", "1.5", "2"];
+const SPEEDS = ["0.5", "0.75", "1", "1.25", "1.5", "1.75", "2"];
+/** Show as: the views in classic's order, the original words last, and their names. */
+const VIEW_ORDER: TranscriptView[] = ["roman", "urdu", "english"];
+const VIEW_LABELS: Record<TranscriptView, string> = { roman: "Roman Urdu", english: "English", urdu: "اردو" };
+const VIEWS_POLL_MS = 5_000;
+type ShowAs = "original" | TranscriptView;
 
-export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPageProps) {
+/** Keys the page leaves alone: typing, and anything inside a dialog or a menu. */
+const inField = (target: EventTarget | null) =>
+  target instanceof HTMLElement && (target.isContentEditable || !!target.closest('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"]'));
+
+export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPageProps) {
   const [tab, setTab] = useState<Tab>("transcript");
   const [detail, setDetail] = useState<Load<{ url: string | null; names: Record<string, string> }>>({ state: "loading" });
   const [transcript, setTranscript] = useState<Load<TranscriptDetail | null>>({ state: "loading" });
@@ -34,6 +55,17 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   const [position, setPosition] = useState(0);
   const [speed, setSpeed] = useState("1");
   const [busy, setBusy] = useState(false);
+  const [skipSilence, setSkipSilence] = useState(false);
+  const [mediaSeconds, setMediaSeconds] = useState<number | null>(null);
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
+  const [follow, setFollow] = useState(true);
+  const [showAs, setShowAs] = useState<ShowAs>("original");
+  const [views, setViews] = useState<TranscriptViewsState | null>(null);
+  const [languageOpen, setLanguageOpen] = useState(false);
+  const [unsure, setUnsure] = useState<UnsureMarkers>(DEFAULT_UNSURE);
+  const viewPress = useRef(0);
+  const viewPicked = useRef(false);
+  const page = useRef<HTMLDivElement>(null);
   const audio = useRef<HTMLAudioElement>(null);
   const [screenOpen, setScreenOpen] = useState<number | null>(null);
   const { screens, reload: reloadScreens } = useSessionScreens(item.id, item.screen_count);
@@ -67,16 +99,60 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   useEffect(() => {
     if (audio.current) audio.current.playbackRate = Number(speed);
   }, [speed]);
+  useEffect(() => {
+    api.unsureMarkers().then((m) => { if (m) setUnsure({ ...DEFAULT_UNSURE, ...m }); }).catch(() => undefined);
+  }, []);
 
-  const durationS = Math.max(1, Math.round((item.duration_ms ?? 0) / 1000));
+  // Show as: a view is made on the server the first time it is asked for; while it is being written the page asks again
+  // every few seconds. A recording that opens with a default view the console chose shows it once it is ready.
+  const tDetail = transcript.state === "ready" ? transcript.value : null;
+  const viewsInfo = tDetail?.views ?? null;
+  useEffect(() => {
+    setShowAs("original");
+    setViews(null);
+    viewPicked.current = false;
+  }, [transcriptId]);
+  useEffect(() => {
+    const preferred = viewsInfo?.default;
+    if (!tDetail || viewPicked.current || !preferred || preferred === "original" || viewsInfo?.status !== "ready") return;
+    void chooseView(preferred, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tDetail?.id, viewsInfo?.status]);
+  useEffect(() => {
+    if (!transcriptId || views?.status !== "making") return;
+    const timer = window.setTimeout(() => {
+      api.transcriptViews(transcriptId).then(setViews).catch(() => undefined);
+    }, VIEWS_POLL_MS);
+    return () => window.clearTimeout(timer);
+  }, [transcriptId, views]);
+  const chooseView = async (view: ShowAs, picked = true) => {
+    const press = ++viewPress.current;
+    if (picked) viewPicked.current = true;
+    setShowAs(view);
+    const id = tDetail?.id;
+    if (view === "original" || !id || views?.status === "ready") return;
+    try {
+      let state = await api.transcriptViews(id);
+      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(id);
+      setViews(state);
+    } catch (e) {
+      onMessage(errorMessage(e));
+      if (viewPress.current === press) setShowAs("original");
+    }
+  };
+  const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
+  const exportView = showAs !== "original" && views?.status === "ready" ? showAs : null;
+
   const names = detail.state === "ready" ? detail.value.names : {};
   const segments: Segment[] = transcript.state === "ready" && transcript.value
-    ? transcript.value.segments.map((s) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: s.text }))
+    ? transcript.value.segments.map((s, i) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: viewText(i) ?? s.text }))
     : [];
   // The line being played is marked once playing has started, not on a page just opened.
   const active = transcript.state === "ready" && transcript.value && (playing || position > 0) ? activeIndex(transcript.value.segments, position * 1000) : -1;
   // The screens at their moments: after the line that started at or before each one (the phone's rule).
   const rawSegments = transcript.state === "ready" && transcript.value ? transcript.value.segments : null;
+  // The player's length: the server's, else the audio file's own (on loadedmetadata), else the last line's end.
+  const durationS = Math.max(1, Math.round(playerLength(item.duration_ms, rawSegments, mediaSeconds) / 1000));
   const screensAfter = useMemo(() => screensByLine(rawSegments ?? [], screens ?? []), [rawSegments, screens]);
   const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
@@ -94,6 +170,61 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   const meta = [source, item.client?.name, formatWhen(item.started_at)].filter(Boolean).join(" · ");
 
+  // Copy: the lines in the view on screen, with unsure words marked as the console says; Copy for AI starts with a short
+  // header (title, date, people, language) and the note on the marks, and puts each screen after the line of its moment.
+  const copy = async (withTimestamps: boolean, forAi = false) => {
+    if (!lines.length) return;
+    try {
+      const after = (i: number) => (screensAfter.get(i) ?? []).map(screenMarker);
+      const body = copiedTranscript(lines, viewText, withTimestamps, unsure, forAi, after);
+      const people = [...new Set(lines.map((l) => l.speaker))];
+      await navigator.clipboard.writeText(forAi ? `${aiHeader(item, people)}\n\n${body}` : body);
+      onMessage(forAi ? "Copied for AI, with the note on unsure words" : withTimestamps ? "Copied with timestamps" : "Copied");
+    } catch {
+      onMessage("Could not access the clipboard");
+    }
+  };
+  const exportAs = async (format: ExportFormat) => {
+    if (!tDetail) return;
+    try {
+      const path = await api.exportTranscript(tDetail.id, format, true, true, exportView);
+      if (format === "html") onMessage("Opened the print page in your browser: choose Save as PDF there");
+      else if (path) onMessage(`Saved to ${path}`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const packAs = async (format: MeetingPackFormat, withAudio: boolean) => {
+    try {
+      const path = await api.meetingPack(item.id, format, exportView, withAudio);
+      if (format === "pdf") onMessage("Opened the meeting pack in your browser: choose Save as PDF there");
+      else if (path) onMessage(`Saved to ${path}`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
+  const canExport = !!tDetail && tDetail.segments.length > 0;
+  // Classic offers Re-transcribe only on a recording that has a final transcript and some audio (LibraryView 1452).
+  const canChangeLanguage = item.transcript?.final_error_code !== "no_audio" && !!item.transcript?.final_status;
+  const [whatsApp, setWhatsApp] = useState(false);
+  // The menus are made once per recording, view and transcript: never on the player's position.
+  const exportsRef = useRef({ exportAs, packAs });
+  exportsRef.current = { exportAs, packAs };
+  const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
+    exportAs: (f) => void exportsRef.current.exportAs(f),
+    packAs: (item.screen_count ?? 0) > 0 ? (f, a) => void exportsRef.current.packAs(f, a) : undefined,
+    view: exportView ? VIEW_LABELS[exportView] : null,
+  }), [exportView, item.screen_count]);
+  const recordingMenu = useMemo(() => menu({
+    organise: canChangeLanguage ? [{ label: CHANGE_LANGUAGE, icon: Icons.LanguagesIcon, onPick: () => setLanguageOpen(true) }] : [],
+    export: canExport ? { label: "Export", icon: Icons.DownloadIcon, group: "Export", items: exportItems } : undefined,
+    export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); }) }],
+    whatsapp: () => setWhatsApp(true),
+  }).filter((i) => canExport || i.label !== "Export"),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [menu, canChangeLanguage, canExport, exportItems, item.id]);
+  const sendToWhatsApp = () => setWhatsApp(true);
+
   const toggle = () => {
     const a = audio.current;
     if (!a) return;
@@ -101,8 +232,44 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
     else a.pause();
   };
   const seek = (s: number) => {
-    setPosition(s);
-    if (audio.current) audio.current.currentTime = s;
+    const to = Math.max(0, Math.min(durationS, s));
+    setPosition(to);
+    if (audio.current) audio.current.currentTime = to;
+  };
+  const playFrom = (i: number) => {
+    seek(segments[i]?.start ?? 0);
+    void audio.current?.play().catch(() => undefined);
+  };
+  // Space plays or pauses, the arrows jump 5 s and Shift with an arrow 10 s, as classic; never while typing.
+  const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
+  keys.current = (e: KeyboardEvent) => {
+    if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || inField(e.target)) return;
+    const target = e.target as HTMLElement | null;
+    const key = playerKey(e.key, target?.tagName ?? "", !!target?.isContentEditable, e.shiftKey);
+    if (!key || !audio.current) return;
+    e.preventDefault();
+    if (key === "toggle") toggle();
+    else seek(position + KEY_SECONDS[key]);
+  };
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => keys.current(e);
+    document.addEventListener("keydown", on);
+    return () => document.removeEventListener("keydown", on);
+  }, []);
+  // Follow: the line being played stays in view.
+  useEffect(() => {
+    if (!follow || active < 0 || !playing) return;
+    page.current?.querySelector(".el-segment--active")?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [active, follow, playing]);
+  const timeUpdate = (a: HTMLAudioElement) => {
+    if (skipSilence && !a.paused && rawSegments) {
+      const to = skipTarget(rawSegments, a.currentTime * 1000);
+      if (to !== null) {
+        a.currentTime = to / 1000;
+        return;
+      }
+    }
+    setPosition(a.currentTime);
   };
   const act = async (fn: () => Promise<unknown>, done?: string) => {
     setBusy(true);
@@ -127,8 +294,8 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   }
 
   return (
-    <div className="el-page">
-      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack}>Library</Button>
+    <div className="el-page" ref={page}>
+      <Button variant="quiet" size="sm" icon={Icons.ChevronStartIcon} directional className="el-page__back" onClick={onBack} aria-keyshortcuts="Escape">Library</Button>
       <header className="el-page__head el-page__head--top">
         <div className="el-page__titles">
           <h1 className="el-title-l" dir="auto">{item.title?.trim() || "Recording"}</h1>
@@ -141,13 +308,7 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
           </p>
         </div>
         <div className="el-page__actions">
-          {segments.length > 0 && (
-            <Button icon={Icons.ShareIcon} disabled={busy} onClick={() => void act(() => api.whatsappOpen(transcriptText(segments.map((s) => ({ speaker: s.speaker, start_ms: s.start * 1000, text: s.text })), false)))}>
-              Send to WhatsApp
-            </Button>
-          )}
-          <Button icon={Icons.StorageIcon} disabled={busy} onClick={() => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); })}>Save audio</Button>
-          <Button variant="danger" icon={Icons.TrashIcon} disabled={busy} onClick={() => onDelete(item)}>Delete</Button>
+          <Menu label="Recording actions" items={recordingMenu} button={{ variant: "quiet", icon: Icons.MoreIcon, title: "More" }} />
         </div>
       </header>
       {screens && screens.length > 0 && <ScreensStrip screens={screens} onOpen={setScreenOpen} />}
@@ -158,14 +319,32 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
           <>
             {detail.state === "ready" && detail.value.url && (
               <audio ref={audio} src={detail.value.url} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
-                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => setPosition(e.currentTarget.currentTime)} />
+                onLoadedMetadata={(e) => setMediaSeconds(e.currentTarget.duration)}
+                onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} />
             )}
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
+              onSkip={(s) => seek(position + s)}
               end={<Select label="Playback speed" hideLabel value={speed} onChange={setSpeed} className="el-page__speed"
                 options={SPEEDS.map((v) => ({ value: v, label: `${v}×`, dir: "ltr" as const }))} />} />
+            <div className="el-recording__toggles">
+              <Toggle label="Skip silence" checked={skipSilence} onChange={setSkipSilence} />
+              <Toggle label="Follow" checked={follow} onChange={setFollow} />
+            </div>
           </>
         )}
       </Card>
+      {canExport && (
+        <div className="el-recording__actions" role="toolbar" aria-label="Share, copy and export">
+          <Button icon={Icons.SendIcon} disabled={busy} onClick={sendToWhatsApp}>Send to WhatsApp…</Button>
+          <Menu label="Copy" button={{ icon: Icons.CopyIcon, iconEnd: Icons.ChevronDownIcon, text: "Copy" }} items={[
+            { label: "Copy text", icon: Icons.CopyIcon, onPick: () => void copy(false) },
+            { label: "Copy with timestamps", icon: Icons.ClockIcon, onPick: () => void copy(true) },
+            { label: "Copy for AI", icon: Icons.SparkleIcon, onPick: () => void copy(false, true) },
+          ]} />
+          <Menu label={exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export"} items={exportItems}
+            button={{ icon: Icons.DownloadIcon, iconEnd: Icons.ChevronDownIcon, text: exportView ? `Export as ${VIEW_LABELS[exportView]}` : "Export", title: PDF_HINT }} />
+        </div>
+      )}
       <Tabs label="Recording" value={tab} onChange={setTab} tabs={[{ value: "transcript", label: "Transcript" }, { value: "details", label: "Details" }]}>
         {tab === "transcript" ? (
           transcript.state === "loading" ? (
@@ -176,8 +355,26 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
             <EmptyState tone="error" icon={Icons.ErrorIcon} title="The transcript didn't load" body={transcript.message}
               action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
           ) : segments.length > 0 ? (
-            <Transcript label="Transcript" segments={segments} activeIndex={active >= 0 ? active : undefined}
-              after={(i) => { const at = screensAfter.get(i); return at ? <LineScreens screens={at} onOpen={openScreen} /> : null; }} />
+            <>
+              {(viewsInfo?.available.length ?? 0) > 0 && tDetail?.kind === "final" && (
+                <div className="el-recording__viewbar">
+                  <Segmented label="Show as" value={showAs} onChange={(v) => void chooseView(v)}
+                    options={[...VIEW_ORDER.filter((v) => viewsInfo!.available.includes(v)).map((v) => ({ value: v as ShowAs, label: VIEW_LABELS[v] })),
+                      { value: "original" as ShowAs, label: "Original" }]} />
+                  {showAs !== "original" && (
+                    <span className="el-caption el-secondary" role="status">
+                      {views?.status === "ready" ? `${VIEW_LABELS[showAs]} view. The transcript itself is unchanged.`
+                        : views?.status === "failed" ? `The view could not be made: ${views.error ?? "try again later."}`
+                          : `Writing the ${VIEW_LABELS[showAs]} view… this takes a minute or two.`}
+                    </span>
+                  )}
+                </div>
+              )}
+              <Transcript label="Transcript" segments={segments} activeIndex={active >= 0 ? active : undefined} onPlayLine={detail.state === "ready" && detail.value.url ? playFrom : undefined}
+                lang={showAs === "urdu" ? "ur" : showAs === "original" ? normalizeLanguage(tDetail?.language) ?? undefined : undefined}
+                note={(i) => (showAs !== "original" && views?.kept?.[showAs]?.includes(i) ? <span className="el-segment__note">· original words</span> : null)}
+                after={(i) => { const at = screensAfter.get(i); return at ? <LineScreens screens={at} onOpen={openScreen} /> : null; }} />
+            </>
           ) : state === "processing" && item.transcript?.final_status ? (
             <EmptyState icon={Icons.TranscriptIcon} title="Transcribing" body="The transcript appears here when it is ready. You can keep working meanwhile." />
           ) : state === "no_audio" ? (
@@ -186,7 +383,7 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
               body={`Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
               action={<Button variant="primary" loading={busy} loadingLabel="Starting…"
-                onClick={() => void act(() => api.retranscribe(item.id, null), "Transcription started")}>Transcribe</Button>} />
+                onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )
         ) : (
           <dl className="el-details">
@@ -199,6 +396,10 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
           </dl>
         )}
       </Tabs>
+      {whatsApp && <WhatsAppDialog item={item} onClose={() => setWhatsApp(false)} say={onMessage}
+        text={lines.length ? copiedTranscript(lines, viewText, false, unsure) : null} hasAudio={detail.state === "ready" && !!detail.value.url} />}
+      {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
+      {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}
       {screenOpen !== null && screens?.[screenOpen] && (
         <ScreenViewerV2 screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}
           said={(s) => screenSaid(s, lines)}

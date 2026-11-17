@@ -145,12 +145,20 @@ describe("the assist window", () => {
     respond("set_hit_regions", null);
   });
 
-  it("draws nothing unless live_assist and ui_v2.live are both on", async () => {
-    respond("ui_flags", { ui_flags: { live_assist: true } });
-    render(<AssistApp />);
+  it("draws nothing without live_assist; with it, the card shows in classic too (no ui_v2 flag)", async () => {
+    respond("ui_flags", { ui_flags: { "ui_v2.live": true } });
+    const first = render(<AssistApp />);
     await act(flushAsync);
     await act(() => emitEvent("assist:message", READY));
+    await act(() => emitEvent("assist:message", start("s1")));
     expect(screen.queryByTestId("assist-card")).toBeNull();
+    first.unmount();
+    // Classic: live_assist on, no new-design flag at all.
+    respond("ui_flags", { ui_flags: { live_assist: true }, ui_classic: true });
+    render(<AssistApp />);
+    await act(flushAsync);
+    for (const m of [READY, start("s1"), token("s1", "Confirm the March date.")]) await act(() => emitEvent("assist:message", m));
+    expect(await screen.findByText("Confirm the March date.")).toBeInTheDocument();
   });
 
   it("follows the core's messages and sends the person's actions", async () => {

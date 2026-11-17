@@ -85,6 +85,9 @@ pub struct ServerConfig {
     /// The person chose "Switch back to classic" (contract 2.0.0-a); anything but `true` is off.
     #[serde(default, deserialize_with = "lenient_bool")]
     pub ui_classic: bool,
+    /// The design switch (contract 2.0.0-g), as sent: `ui_flags::UiDesign::read` makes it safe.
+    #[serde(default)]
+    pub ui_design: Option<serde_json::Value>,
     /// `{"keep_hours": 48}` (contract 2.0.0-b): how long a deleted recording can be restored; read with
     /// [`ServerConfig::trash_keep_hours`].
     #[serde(default)]
@@ -97,7 +100,7 @@ pub const TRASH_KEEP_HOURS: u64 = 48;
 impl ServerConfig {
     /// The interface flags of this config (contract 2.0.0-a).
     pub fn ui(&self) -> crate::ui_flags::UiFlags {
-        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic)
+        crate::ui_flags::UiFlags::read(self.ui_flags.as_ref(), self.ui_classic).with_design(self.ui_design.as_ref())
     }
 
     /// How many hours a deleted recording can be restored (contract 2.0.0-b): 48 when the server is older or sends no
@@ -114,6 +117,9 @@ pub struct UiAnswer {
     pub ui_flags: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "lenient_bool")]
     pub ui_classic: bool,
+    /// Since 2.0.0-g.
+    #[serde(default)]
+    pub ui_design: Option<serde_json::Value>,
 }
 
 /// `config.app_update` (docs/API.md "Updates, announcements and maintenance"). `refused`: the server answers this

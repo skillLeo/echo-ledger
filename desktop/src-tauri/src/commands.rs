@@ -1781,7 +1781,8 @@ fn main_window_handle(app: &AppHandle) -> isize {
     }
 }
 /// Fields a recording or client-folder change may carry; anything else from the UI is dropped.
-pub const SESSION_PATCH_KEYS: [&str; 5] = ["title", "client_id", "pinned", "keep", "labels"];
+/// `language` (since v1.2) changes the recording's language without re-transcribing it.
+pub const SESSION_PATCH_KEYS: [&str; 6] = ["title", "client_id", "pinned", "keep", "labels", "language"];
 pub const CLIENT_PATCH_KEYS: [&str; 8] = ["name", "color", "avatar", "pinned", "language", "ai_notes", "parent_id", "screens"];
 pub const BULK_ACTIONS: [&str; 8] = ["move", "label", "unlabel", "pin", "unpin", "keep", "unkeep", "delete"];
 pub const BULK_EXPORT_FORMATS: [&str; 6] = ["txt", "md", "srt", "vtt", "json", "docx"];
@@ -1831,8 +1832,10 @@ pub async fn sessions_bulk(app: AppHandle, ids: Vec<String>, action: String, cli
 /// Saves the finished transcripts of the selected recordings as one zip file where the person chooses; returns its
 /// path, or `None` when they cancel.
 #[tauri::command]
-pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -> AppResult<Option<String>> {
+pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String, view: Option<String>) -> AppResult<Option<String>> {
     ensure_unlocked(&app.state::<AppState>())?;
+    // Show as: each transcript in the view on screen where it is ready (anything else: their own words).
+    let view = view.filter(|v| EXPORT_VIEWS.contains(&v.as_str()));
     if !BULK_EXPORT_FORMATS.contains(&format.as_str()) {
         return Err(AppError::msg("That export format is not available."));
     }
@@ -1840,10 +1843,46 @@ pub async fn sessions_export(app: AppHandle, ids: Vec<String>, format: String) -
         return Err(AppError::msg(format!("Choose between 1 and {MAX_BULK} recordings.")));
     }
     let state = app.state::<AppState>();
-    let (bytes, filename) = state.api()?.export_sessions(&ids, &format).await?;
+    let (bytes, filename) = state.api()?.export_sessions_as(&ids, &format, view.as_deref()).await?;
     let Some(path) = crate::files::ask_save_path(&app, &filename, "Zip archive").await else { return Ok(None) };
     std::fs::write(&path, bytes)?;
     Ok(Some(path.to_string_lossy().into_owned()))
+}
+
+/// The most recordings one Transcribe selected or estimate takes (the server's limit).
+pub const MAX_TRANSCRIBE: usize = 50;
+
+/// Checks a selection to transcribe or estimate before anything is sent (pure).
+pub fn check_transcribe(ids: &[String]) -> AppResult<()> {
+    if ids.is_empty() || ids.len() > MAX_TRANSCRIBE {
+        return Err(AppError::msg(format!("Choose between 1 and {MAX_TRANSCRIBE} recordings.")));
+    }
+    Ok(())
+}
+
+/// Transcribe on an audio-only recording (since v1.8): its transcript starts now; the library shows it processing.
+#[tauri::command]
+pub async fn session_transcribe(app: AppHandle, id: String) -> AppResult<serde_json::Value> {
+    let answer = app.state::<AppState>().api()?.transcribe_session(&id).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// Transcribe selected (since v1.8): `{started, skipped, minutes}`; nothing starts when the minutes left can't cover
+/// them all.
+#[tauri::command]
+pub async fn sessions_transcribe(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    let answer = app.state::<AppState>().api()?.transcribe_sessions(&ids).await?;
+    let _ = refresh_library_inner(&app).await;
+    Ok(answer)
+}
+
+/// What Transcribe selected would use, shown before it starts: `{minutes, minutes_left, items}`.
+#[tauri::command]
+pub async fn sessions_transcribe_estimate(app: AppHandle, ids: Vec<String>) -> AppResult<serde_json::Value> {
+    check_transcribe(&ids)?;
+    app.state::<AppState>().api()?.transcribe_estimate(&ids).await
 }
 
 /// The body of `POST /api/clients`: a trimmed name, and `parent_id` only for a subfolder (a top-level project sends
@@ -2600,11 +2639,33 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     let state = app.state::<AppState>();
     let api = state.api()?;
     let answer = api.set_ui_classic(classic).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// The design switch (contract 2.0.0-g): `v2` is Try the new design, `classic` is Switch back to classic, none is the
+/// default. `PUT /api/account/ui`, its answer kept in the cached config and returned in the `ui_flags` shape; the config
+/// is then read again in the background. `422 design_not_available` comes back as it is (nothing open to try).
+#[tauri::command]
+pub async fn ui_design_set(app: AppHandle, design: Option<String>) -> AppResult<crate::ui_flags::UiFlags> {
+    if design.as_deref().is_some_and(|d| !matches!(d, "v2" | "classic")) {
+        return Err(AppError::msg("That design is not one of the choices."));
+    }
+    let answer = app.state::<AppState>().api()?.set_ui_design(design.as_deref()).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// A `PUT /api/account/ui` answer: kept in the cached config, the window told, the config read again in the background
+/// (the contract asks for it right after the PUT); the flags as the window reads them.
+fn took_ui_answer(app: &AppHandle, answer: crate::net::models::UiAnswer) -> crate::ui_flags::UiFlags {
+    let state = app.state::<AppState>();
     if let Some(config) = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
         config.ui_flags = answer.ui_flags.clone();
         config.ui_classic = answer.ui_classic;
+        if answer.ui_design.is_some() {
+            config.ui_design = answer.ui_design.clone();
+        }
     }
-    crate::actions::emit_status(&app);
+    crate::actions::emit_status(app);
     let reader = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = reader.state::<AppState>();
@@ -2615,7 +2676,7 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
             crate::actions::emit_status(&reader);
         }
     });
-    Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
+    crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic).with_design(answer.ui_design.as_ref())
 }
 
 // ---- Live Assist (docs/API_ASSIST.md 1.9.0-g; the card's commands, desktop/src/v2/assist/adapter.ts) ----------------
