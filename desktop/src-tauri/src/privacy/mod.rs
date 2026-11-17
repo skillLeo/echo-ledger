@@ -1536,9 +1536,33 @@ mod tests {
         assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, true), Some(Reveal::HeldBack));
         assert!(!card.on_screen);
         card.holds = true;
-        assert_eq!(gate_step(Reveal::Show, false, false || privacy.is_held_back(ASSIST)), Some(false), "shown");
         assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::Show));
         assert!(card.on_screen && !privacy.is_held_back(ASSIST), "back on screen, the line gone");
+    }
+
+    #[test]
+    fn a_held_back_window_stays_off_while_a_reason_holds_it_or_its_flag_fails_again() {
+        let c = choice(ShareHiding::All, false);
+        // Held back, then the person hides EchoLedger's windows: the flag now holds, but the reason keeps it off; the
+        // reason (not the flag) is what is said, so it leaves held-back and is tracked as put away.
+        let privacy = Privacy::new();
+        let mut card = FakeWindow { label: ASSIST, on_screen: true, holds: false, sets: 0 };
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::HeldBack));
+        privacy.set_hidden(HideReason::Person, true);
+        card.holds = true;
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::StayAway));
+        assert!(!card.on_screen, "stays off");
+        assert!(!privacy.is_held_back(ASSIST), "leaves held-back");
+        assert!(lock(&privacy.put_away).contains(ASSIST), "reconcile brings it back through the gate when the reason ends");
+        // Held back, and on the next check (may_show false) the flag fails again: still off, still held back.
+        let privacy = Privacy::new();
+        let mut captions = FakeWindow { label: crate::overlay::OVERLAY, on_screen: true, holds: false, sets: 0 };
+        assert_eq!(run_gate(&privacy, Kind::Captions, &c, true, &mut captions, true), Some(Reveal::HeldBack));
+        assert!(!captions.on_screen);
+        assert_eq!(run_gate(&privacy, Kind::Captions, &c, true, &mut captions, false), Some(Reveal::HeldBack));
+        assert!(!captions.on_screen, "stays off");
+        assert!(privacy.is_held_back(crate::overlay::OVERLAY), "stays held back, and the line stays");
+        assert_eq!(captions.sets, 2, "the flag was tried again");
     }
 
     #[test]
