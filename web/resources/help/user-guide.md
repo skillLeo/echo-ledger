@@ -432,7 +432,7 @@ Captions show what you and the other person say, while you talk.
 
 ### Private notes (since v1.8.1)
 
-EchoLedger hides its windows from screen sharing, checks on this computer whether that works, and tells you what the
+EchoLedger hides its windows from screen sharing and checks on this computer whether it works. It tells you what the
 last check saw.
 
 - **Settings → Screen-share privacy → Hide from screen sharing:** *All EchoLedger windows* (the default), *Only floating
