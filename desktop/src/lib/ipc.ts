@@ -920,7 +920,7 @@ export interface SessionOrganisePatch {
   keep?: boolean;
 }
 export type BulkAction = "move" | "label" | "unlabel" | "pin" | "unpin" | "keep" | "unkeep" | "delete";
-/** A recording in the 48-hour undo bin (B17). */
+/** A recording in the undo bin (B17; 48 hours unless the server says otherwise, lib/trash.ts). */
 export interface BinItem {
   id: string;
   title: string;

@@ -50,3 +50,4 @@ html:has(.g-body), .g-body { margin: 0; block-size: 100%; background: var(--el-r
 .g-segment-skeleton > .el-skeleton { inline-size: 60%; }
 .g-settings-loading { gap: var(--el-space-16); }
 .g-profile-error > .el-empty { padding: var(--el-space-24); }
+.g-assist { display: flex; justify-content: center; padding-block-start: var(--el-space-48); }
