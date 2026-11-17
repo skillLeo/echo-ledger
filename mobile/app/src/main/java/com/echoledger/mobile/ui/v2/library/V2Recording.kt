@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -35,14 +36,18 @@ import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.ScreenDto
 import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.data.TranscriptDto
+import com.echoledger.mobile.data.TranscriptViewsDto
 import com.echoledger.mobile.ui.MainViewModel
 import com.echoledger.mobile.ui.RecordingPlayerState
+import com.echoledger.mobile.ui.ShowAs
+import com.echoledger.mobile.ui.TranscriptVersion
 import com.echoledger.mobile.ui.printHtml
 import com.echoledger.mobile.ui.rememberRecordingPlayer
 import com.echoledger.mobile.ui.shareFile
 import com.echoledger.mobile.ui.v2.components.EchoActionItem
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoErrorState
+import com.echoledger.mobile.ui.v2.components.EchoIconButton
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoPlayer
 import com.echoledger.mobile.ui.v2.components.EchoPlayerLabels
@@ -305,6 +310,62 @@ private fun V2RecordingPage(
 
         null -> Unit
     }
+    // Find in transcript: matches in the view on screen; the current one is tinted and scrolled to.
+    var finding by remember(item.id) { mutableStateOf(false) }
+    var findQuery by remember(item.id) { mutableStateOf("") }
+    var findAt by remember(item.id) { mutableIntStateOf(0) }
+    val t = page.transcript
+    val segments = t?.segments.orEmpty()
+    val shown = page.shown
+    val findHits = remember(findQuery, shown, segments) {
+        com.echoledger.mobile.ui.TranscriptFind.matches(segments.mapIndexed { i, s -> shown?.getOrNull(i) ?: s.text }, findQuery)
+    }
+    val found = if (finding) findHits.getOrNull(findAt.coerceIn(0, (findHits.size - 1).coerceAtLeast(0))) else null
+    var lineActions by remember(item.id) { mutableStateOf<LineUi?>(null) }
+    lineActions?.let { line ->
+        LineActionsSheet(line, player.ready, onCopy = { words ->
+            copyToClipboard(context, "EchoLedger line", words)
+            say(res.getString(R.string.v2_rec_line_copied))
+        }, onPlay = { page.playFrom(it) }, onDismiss = { lineActions = null })
+    }
+    // Views not in the plan: said, with the plans one tap away (classic's plan badge).
+    val viewsLock = settings.plan.lockFor("views")
+    var upgrading by remember { mutableStateOf(false) }
+    if (upgrading && viewsLock != null) com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, viewsLock) { upgrading = false }
+    val finalReady = t?.kind == "final" && t.status == "completed"
+    val tools = TranscriptTools(
+        names = page.speakerNames,
+        shown = shown,
+        kept = page.views?.kept?.get(page.showAs.key).orEmpty().toSet(),
+        available = if (finalReady && viewsLock == null) t?.views?.available.orEmpty() else emptyList(),
+        viewsLocked = finalReady && viewsLock != null,
+        showAs = page.showAs,
+        views = page.views,
+        onView = page::chooseView,
+        onPlans = { upgrading = true },
+        version = page.version to { v: TranscriptVersion -> page.version = v },
+        final = t?.let { it.kind == "final" },
+        activeIndex = page.activeIndex,
+        canPlay = player.ready,
+        onPlay = { player.seekTo(it) },
+        onLineActions = { lineActions = it },
+        onFind = if (page.canCopy) ({ finding = true }) else null,
+        finding = finding && page.canCopy,
+        findQuery = findQuery,
+        findAt = findAt,
+        findTotal = findHits.size,
+        foundIndex = found,
+        onFindQuery = {
+            findQuery = it
+            findAt = 0
+        },
+        onFindStep = { step -> if (findHits.isNotEmpty()) findAt = Math.floorMod(findAt + step, findHits.size) },
+        onFindClose = {
+            finding = false
+            findQuery = ""
+        }
+    )
+
     // The page keeps showing the recording as the Library has it now (its labels, pin and project change here).
     val live = library.firstOrNull { it.id == item.id } ?: item
     V2RecordingContent(
@@ -326,7 +387,8 @@ private fun V2RecordingPage(
         onOpenScreen = onOpenScreen,
         onCopy = if (page.canCopy) ({ sheet = RecordingSheet.Copy }) else null,
         onMore = { sheet = RecordingSheet.Menu },
-        onRename = { sheet = RecordingSheet.Rename }
+        onRename = { sheet = RecordingSheet.Rename },
+        tools = tools
     )
 }
 
@@ -336,6 +398,38 @@ private val SPEEDS = listOf(1f, 1.25f, 1.5f, 2f)
 fun nextSpeed(current: Float): Float = SPEEDS.firstOrNull { it > current + 0.01f } ?: SPEEDS.first()
 
 fun speedLabel(speed: Float): String = java.math.BigDecimal(speed.toString()).stripTrailingZeros().toPlainString() + "×"
+
+/**
+ * The transcript's toolbar and lines on the recording page: the view switch (or the views locked on this plan), Current /
+ * Previous, Final or Live captions, the find bar's state, the line playing and the found one, speaker names, and what
+ * a tap or a long press on a line does. The defaults draw plain lines with nothing to switch.
+ */
+data class TranscriptTools(
+    val names: Map<String, String> = emptyMap(),
+    val shown: List<String?>? = null,
+    val kept: Set<Int> = emptySet(),
+    val available: List<String> = emptyList(),
+    val viewsLocked: Boolean = false,
+    val showAs: ShowAs = ShowAs.ORIGINAL,
+    val views: TranscriptViewsDto? = null,
+    val onView: (ShowAs) -> Unit = {},
+    val onPlans: () -> Unit = {},
+    val version: Pair<TranscriptVersion, (TranscriptVersion) -> Unit>? = null,
+    val final: Boolean? = null,
+    val activeIndex: Int = -1,
+    val canPlay: Boolean = false,
+    val onPlay: (Long) -> Unit = {},
+    val onLineActions: (LineUi) -> Unit = {},
+    val onFind: (() -> Unit)? = null,
+    val finding: Boolean = false,
+    val findQuery: String = "",
+    val findAt: Int = 0,
+    val findTotal: Int = 0,
+    val foundIndex: Int? = null,
+    val onFindQuery: (String) -> Unit = {},
+    val onFindStep: (Int) -> Unit = {},
+    val onFindClose: () -> Unit = {}
+)
 
 /** The recording page without the view model or the player (tests). */
 @Composable
@@ -361,7 +455,9 @@ fun V2RecordingContent(
     /** The ⋮ menu; without it Delete stays in the action row. */
     onMore: (() -> Unit)? = null,
     /** A tap on the title (Rename); null: the title is plain text. */
-    onRename: (() -> Unit)? = null
+    onRename: (() -> Unit)? = null,
+    /** The transcript's toolbar and lines (views, find, playing from a line, speaker names); defaults draw plain lines. */
+    tools: TranscriptTools = TranscriptTools()
 ) {
     val c = EchoV2.colors
     val text = v2Text
@@ -369,8 +465,20 @@ fun V2RecordingContent(
     val row = remember(item, text, locale) { LibraryModel.row(item, ZonedDateTime.now(), text, locale) }
     var tab by remember { mutableIntStateOf(0) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        EchoTopBar(title = "", onBack = onBack)
-        LazyColumn(Modifier.weight(1f)) {
+        val list = rememberLazyListState()
+        EchoTopBar(title = "", onBack = onBack) {
+            tools.onFind?.takeIf { !tools.finding }?.let { EchoIconButton(EchoIcons.Search, stringResource(R.string.v2_rec_find), it) }
+        }
+        if (tools.finding) {
+            FindBar(tools.findQuery, tools.onFindQuery, tools.findAt, tools.findTotal, tools.onFindStep, tools.onFindClose)
+        }
+        // The find match in view: the lines come after the head, the actions, the screens, the tabs and the toolbar.
+        val firstLine = 4 + (if (screens.isNotEmpty()) 1 else 0)
+        LaunchedEffect(tools.foundIndex, tab) {
+            val found = tools.foundIndex
+            if (found != null && tab == 0) list.animateScrollToItem(firstLine + found)
+        }
+        LazyColumn(Modifier.weight(1f), state = list) {
             item {
                 Column(
                     Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
@@ -459,17 +567,34 @@ fun V2RecordingContent(
                     }
 
                     is TranscriptState.Lines -> {
+                        item {
+                            Column(
+                                Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s8),
+                                verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+                            ) {
+                                tools.version?.let { (version, onVersion) -> VersionSwitch(item, version, onVersion) }
+                                when {
+                                    tools.viewsLocked -> ViewsLocked(tools.onPlans)
+                                    tools.available.isNotEmpty() -> ViewSwitch(tools.available, tools.showAs, tools.views, tools.onView)
+                                }
+                                tools.final?.let { TranscriptKind(it) }
+                            }
+                        }
                         // Each screen sits after the last line that started at or before its moment.
                         val after = ScreenAssets.byLine(transcript.segments, screens)
-                        itemsIndexed(transcript.segments) { i, s ->
+                        val shownLines = lines(
+                            transcript.segments,
+                            tools.shown,
+                            tools.names,
+                            text,
+                            tools.activeIndex,
+                            positionMs,
+                            tools.foundIndex,
+                            tools.kept
+                        )
+                        itemsIndexed(shownLines, key = { i, _ -> "line-$i" }) { i, line ->
                             Column {
-                                EchoTranscriptLine(
-                                    speakerName(s.speaker, text),
-                                    formatClock(s.startMs),
-                                    s.text,
-                                    isMe =
-                                        s.speaker == Speakers.ME
-                                )
+                                TranscriptRow(line, tools.canPlay, tools.onPlay, onActions = { tools.onLineActions(line) })
                                 after[i].orEmpty().forEach { screen ->
                                     ScreenInline(screen, onOpen = { onOpenScreen(screens.indexOf(screen)) })
                                 }

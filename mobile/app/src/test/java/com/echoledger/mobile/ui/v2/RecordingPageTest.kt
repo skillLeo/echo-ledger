@@ -2,16 +2,19 @@ package com.echoledger.mobile.ui.v2
 
 import android.content.ClipboardManager
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.test.performTouchInput
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.NamedRef
 import com.echoledger.mobile.data.TranscriptSummary
@@ -284,5 +287,125 @@ class RecordingPageTest : ScreenTest() {
         assertTrue(forAi, forAi.contains("Date: 20 Oct 2026"))
         assertTrue(forAi, forAi.contains("Language: English"))
         assertTrue(forAi, forAi.contains("Hi, thanks for calling."))
+    }
+
+    /** A transcript whose Roman Urdu and English views are made. */
+    private fun withViews() {
+        val withViews = ServerFixtures.transcript().trimEnd().removeSuffix("}") +
+            ""","views":{"available":["roman","english"],"status":"ready","default":"original"}}"""
+        server.on("GET", "/api/transcripts/${ServerFixtures.TRANSCRIPT_ID}", FakeServer.json(200, withViews))
+        server.on(
+            "GET",
+            "/api/transcripts/.+/views",
+            FakeServer.json(
+                200,
+                """{"status":"ready","available":["roman","english"],"roman":["Hello ji.","Shukriya call karne ka."],"english":null}"""
+            )
+        )
+    }
+
+    @Test
+    fun theViewSwitchShowsRomanUrduAtOnceAndCopyFollowsIt() {
+        withViews()
+        open()
+        awaitText("Hi, thanks for calling.")
+        compose.onNodeWithText("Original").assertExists()
+        compose.onNodeWithText("English").assertExists()
+        press("Roman Urdu")
+        awaitText("Shukriya call karne ka.")
+        compose.onNodeWithText("Roman Urdu view. The transcript itself is unchanged.").assertExists()
+        press("Copy")
+        press("Copy text")
+        pumpUntil("copied in the view") { clipboard()?.contains("Shukriya call karne ka.") == true }
+        press("Original")
+        awaitText("Hi, thanks for calling.")
+    }
+
+    @Test
+    fun findCountsTheMatchingLinesAndStepsThroughThem() {
+        open()
+        awaitText("Hi, thanks for calling.")
+        press("Find in transcript")
+        compose.onNode(hasSetTextAction()).performTextReplacement("h")
+        awaitText("1 of 2")
+        press("Next match")
+        awaitText("2 of 2")
+        compose.onNode(hasSetTextAction()).performTextReplacement("zebra")
+        awaitText("No matches")
+        press("Close find")
+        compose.onAllNodes(hasSetTextAction()).assertCountEquals(0)
+    }
+
+    @Test
+    fun aLineIsCopiedFromItsLongPressMenuWithTheNameTheServerGaveTheSpeaker() {
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(
+                200,
+                ServerFixtures.sessionDetail(playbackUrl = null).trimEnd().removeSuffix("}") + ""","speaker_names":{"Client":"Omar"}}"""
+            )
+        )
+        open()
+        awaitText("Omar")
+        compose.onNodeWithText("Hi, thanks for calling.").performTouchInput { longClick() }
+        compose.waitForIdle()
+        press("Copy line")
+        pumpUntil("line copied") { clipboard() == "Omar: Hi, thanks for calling." }
+        awaitText("Line copied")
+    }
+
+    @Test
+    fun theOldVersionIsOneTapAwayAfterARetranscribe() {
+        server.on(
+            "GET",
+            "/api/transcripts/01JTRANSCRIPT0000000000OLD",
+            FakeServer.json(200, ServerFixtures.transcript(text = null).replace("Hi, thanks for calling.", "The older words."))
+        )
+        open(
+            item().let {
+                it.copy(
+                    transcript = it.transcript!!.copy(
+                        alternateTranscriptId = "01JTRANSCRIPT0000000000OLD",
+                        alternateStatus = "completed",
+                        alternateLanguage = "ur"
+                    )
+                )
+            }
+        )
+        awaitText("Hi, thanks for calling.")
+        press("Previous (Urdu)")
+        awaitText("The older words.")
+        press("Current")
+        awaitText("Hi, thanks for calling.")
+    }
+
+    @Test
+    fun aTapOnALinePlaysFromItWhenTheRecordingCanPlay() {
+        val played = mutableListOf<Long>()
+        val segments = Json { ignoreUnknownKeys = true }
+            .decodeFromString(com.echoledger.mobile.data.TranscriptDto.serializer(), ServerFixtures.transcript()).segments
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                com.echoledger.mobile.ui.v2.library.V2RecordingContent(
+                    item = item(),
+                    transcript = com.echoledger.mobile.ui.v2.library.TranscriptState.Lines(segments),
+                    positionMs = 0,
+                    durationMs = 2_530_000,
+                    playing = false,
+                    speed = 1f,
+                    onPlayPause = {},
+                    onSeek = {},
+                    onSpeed = {},
+                    onShare = {},
+                    onDelete = {},
+                    onRetry = {},
+                    onBack = {},
+                    tools = com.echoledger.mobile.ui.v2.library.TranscriptTools(canPlay = true, onPlay = { played += it })
+                )
+            }
+        }
+        compose.onNodeWithText("Hi, thanks for calling.").performClick()
+        assertEquals(listOf(12_400L), played)
     }
 }
