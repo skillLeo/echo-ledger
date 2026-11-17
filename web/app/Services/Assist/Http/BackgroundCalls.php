@@ -26,11 +26,12 @@ class BackgroundCalls
     /**
      * @param  string  $kind  the usage kind: practice_question, facts or summary
      * @param  string  $id  the usage row's id (unique: `pq-…`, `facts-…`, `summary-…`)
+     * @param  int  $keepCents  what must stay free beside it (the suggestions' reserve)
      * @return array{text: string, model: string}|null null when the budget cannot take the call now
      *
      * @throws ModelFailure when every model failed (what was billed on the way is settled)
      */
-    public function run(AssistSession $session, string $kind, string $id, Prompt $prompt, int $max, ?EventStream $stream = null): ?array
+    public function run(AssistSession $session, string $kind, string $id, Prompt $prompt, int $max, ?EventStream $stream = null, int $keepCents = 0): ?array
     {
         $fast = (array) config('assist.modes.fast', []);
         $models = array_values(array_filter([$fast['primary'] ?? null, $fast['fallback'] ?? null], fn (mixed $m): bool => is_string($m) && self::enabled($m)));
@@ -41,7 +42,7 @@ class BackgroundCalls
         foreach ($models as $model) {
             $micros += Pricing::bound($model, $prompt->upperTokens(), $prompt->upperCacheableTokens(), $max);
         }
-        $reservation = $this->budget->reserve($session, $kind, $models[0], (int) ceil($micros / 10_000), $id, 'fast');
+        $reservation = $this->budget->reserve($session, $kind, $models[0], (int) ceil($micros / 10_000), $id, 'fast', $keepCents);
         if ($reservation === null) {
             return null;
         }

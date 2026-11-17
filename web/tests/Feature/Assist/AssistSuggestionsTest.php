@@ -14,6 +14,7 @@ use App\Services\SettingsRepository;
 use Illuminate\Cache\Events\CacheHit;
 use Illuminate\Cache\Events\CacheMissed;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Queue;
 use Tests\Feature\Security\Support\ApiClient;
 
 require_once __DIR__.'/Support/assist_helpers.php';
@@ -75,6 +76,8 @@ it('bills the suggestion to the usage ledger as live_assist and keeps its words 
 });
 
 it('starts nothing for a reply that needs no answer, for Me, or while suggestions are paused', function () {
+    // The facts call that the third line starts is another test's (AssistNotesTest): the queue is not run here.
+    Queue::fake();
     $models = fakeAssistModels();
     [$api, $id] = httpSession($this);
 

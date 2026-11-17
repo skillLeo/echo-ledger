@@ -21,6 +21,7 @@ class LiveHandler
         private readonly ModeChoice $modes,
         private readonly SuggestionEngine $engine,
         private readonly PracticeEngine $practice,
+        private readonly CallNotes $notes,
     ) {}
 
     /** @param  array<string, mixed>  $message */
@@ -72,6 +73,10 @@ class LiveHandler
             ['assist_session_id' => $session->id, 'client_ref' => $turn['id']],
             ['channel' => $turn['channel'], 'start_ms' => $turn['start_ms'], 'end_ms' => $turn['end_ms'], 'text' => $turn['text'], 'language' => $turn['language'], 'is_question' => false],
         );
+        if ($stored->wasRecentlyCreated && ! Text::isBackchannel($turn['text'])) {
+            // The facts ledger and the running summary: in the background, on the queue.
+            $this->notes->lineSeen($session);
+        }
         if ($turn['channel'] === 'me') {
             $this->context->meSpoke($session, (int) floor(microtime(true) * 1000));
 

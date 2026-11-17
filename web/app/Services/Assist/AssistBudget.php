@@ -31,14 +31,15 @@ final class AssistBudget
 
     /**
      * Reserves [$cents] (the call's worst case) for a [$kind] call of [$session], as usage row [$id] (in [$mode], the
-     * session's when not given); null when it does not fit what is left.
+     * session's when not given); null when it does not fit what is left, leaving [$keepCents] for what must still fit
+     * beside it (a background call leaves the suggestions' reserve).
      */
-    public function reserve(AssistSession $session, string $kind, string $model, int $cents, string $id, ?string $mode = null): ?AssistUsage
+    public function reserve(AssistSession $session, string $kind, string $model, int $cents, string $id, ?string $mode = null, int $keepCents = 0): ?AssistUsage
     {
-        return DB::transaction(function () use ($session, $kind, $model, $cents, $id, $mode): ?AssistUsage {
+        return DB::transaction(function () use ($session, $kind, $model, $cents, $id, $mode, $keepCents): ?AssistUsage {
             // One person's reservations one at a time, whichever device or job asks.
             User::query()->whereKey($session->user_id)->lockForUpdate()->first();
-            if ($cents > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
+            if ($cents + $keepCents > $this->plans->left($session->workspace_id, $session->user_id, $session->practice)['cents_left']) {
                 return null;
             }
 

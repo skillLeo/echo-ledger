@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services\Assist\Http;
 
 use App\Models\AssistSession;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 
@@ -49,6 +50,14 @@ class LiveContext
      * @return string|null an error code (`documents_too_large`, `bad_message`) with nothing changed, or null
      */
     public function update(AssistSession $session, array $message): ?string
+    {
+        return $this->locked($session, fn (): ?string => $this->apply($session, $message));
+    }
+
+    /**
+     * @param  array<string, mixed>  $message
+     */
+    private function apply(AssistSession $session, array $message): ?string
     {
         $context = $this->get($session);
         $new = [];
@@ -120,6 +129,38 @@ class LiveContext
         return null;
     }
 
+    /**
+     * Adds the facts the facts call found to the ledger the suggestions read: those already there (ignoring case and
+     * spacing) are left out, and at most MAX_FACTS are kept, the oldest dropped first.
+     *
+     * @param  list<string>  $new
+     * @return list<string> the whole ledger
+     */
+    public function addFacts(AssistSession $session, array $new): array
+    {
+        return $this->locked($session, function () use ($session, $new): array {
+            $context = $this->get($session);
+            $facts = array_values(array_map('strval', (array) ($context['facts'] ?? [])));
+            $known = array_map(Text::normalize(...), $facts);
+            foreach ($new as $fact) {
+                if (! in_array(Text::normalize($fact), $known, true)) {
+                    $facts[] = $fact;
+                    $known[] = Text::normalize($fact);
+                }
+            }
+            $facts = array_slice($facts, -self::MAX_FACTS);
+            $this->put($session, [...$context, 'facts' => $facts]);
+
+            return $facts;
+        });
+    }
+
+    /** The running summary the summary call wrote: it replaces the one the suggestions read. */
+    public function setSummary(AssistSession $session, string $summary): void
+    {
+        $this->locked($session, fn () => $this->put($session, [...$this->get($session), 'summary' => $summary]));
+    }
+
     /** When Me last spoke (a wall-clock millisecond stamp), or null: only this, without reading the whole context. */
     public function lastMe(AssistSession $session): ?int
     {
@@ -148,6 +189,21 @@ class LiveContext
     {
         Cache::forget(self::key($session));
         Cache::forget(self::meKey($session));
+    }
+
+    /**
+     * @template T
+     *
+     * @param  \Closure(): T  $change
+     * @return T
+     */
+    private function locked(AssistSession $session, \Closure $change): mixed
+    {
+        try {
+            return Cache::lock('assist.live.context.lock.'.$session->id, 10)->block(3, $change);
+        } catch (LockTimeoutException) {
+            return $change();
+        }
     }
 
     private static function meKey(AssistSession $session): string
