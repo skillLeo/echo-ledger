@@ -124,7 +124,7 @@ final class AssistRecords
     }
 
     /** Several lines of free text as escaped paragraphs, one a line. */
-    private static function paragraphs(string $text): string
+    public static function paragraphs(string $text): string
     {
         $lines = array_values(array_filter(array_map('trim', preg_split('/\R/u', $text) ?: []), fn (string $l): bool => $l !== ''));
 

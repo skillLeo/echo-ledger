@@ -1075,3 +1075,5 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   removed (b-web-181, b-web-fix, b-desktop, b-desktop-reopen, b-web, review-a, -dock, -sign, -desk2). Their branches
   stay in git; `git worktree add .claude/worktrees/<name> <branch>` brings any of them back. Nothing tracked was
   deleted.
+- Owner decision 2026-11-17: v2.1 (the name and the public launch) is out of scope; focus on v1.9 (Live Assist) and v2.0
+  (the redesign). v1.8.1 is finished and released as planned; v1.8.0 items continue only where v1.9/v2.0 need them.

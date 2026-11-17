@@ -1,7 +1,7 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
-import { makeItem, makeTranscript } from "../../src/test/fixtures";
+import type { ScreenMoment, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
+import { makeItem, makeScreen, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
 const at = (daysAgo: number, hour: number, minute = 0): string => {
@@ -29,7 +29,7 @@ const ready = (id: string, preview: string) => ({
 
 export const ITEMS: LibraryItem[] = [
   makeItem("r1", { title: "Weekly sync with Northwind", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
-    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
+    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
   // v1.5: an Urdu call a backup engine transcribed ("Backup engine — Re-transcribe?").
   makeItem("r2", { title: "Invoice questions", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", pinned: true,
     client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", language: "ur", language_chip: "UR",
@@ -233,3 +233,41 @@ export const ACCOUNT = {
   super_admin: true,
   workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }],
 };
+
+/** The Northwind call's screens (meeting assets, v1.8 P4): the first two with the server's name and what was said. */
+export const SCREENS_R1: ScreenMoment[] = [
+  makeScreen(1, 12_000, { id: "r1-s1", description: "Roadmap slide, Q1 priorities", ocr_text: "Q1 ROADMAP\n1. Billing page\n2. Team invites\n3. Mobile sign-in",
+    file_name: "S01_0-12_roadmap-slide-q1-priorities.webp", said: "Sara (Acme): Let me share the roadmap.\nYou: The billing page comes first?" }),
+  makeScreen(2, 95_000, { id: "r1-s2", description: "The billing page, Pay button highlighted", file_name: "S02_1-35_the-billing-page-pay-button-highlighted.webp", said: null }),
+  makeScreen(3, 610_000, { id: "r1-s3", description: "Budget table for phase one" }),
+];
+
+/** A plain picture for a screen in fixture mode: a grey page with its title, as an SVG data URL. */
+export function screenPictureFor(url: string): string {
+  const n = /screens\/(\d+)/.exec(url)?.[1] ?? "1";
+  const title = SCREENS_R1[Number(n) - 1]?.description ?? "Screen";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#F4F4F2"/>`
+    + `<rect x="0" y="0" width="1280" height="64" fill="#E4E4E0"/><rect x="64" y="128" width="720" height="40" fill="#C9C9C4"/>`
+    + `<rect x="64" y="200" width="1100" height="20" fill="#DCDCD7"/><rect x="64" y="240" width="980" height="20" fill="#DCDCD7"/><rect x="64" y="280" width="1040" height="20" fill="#DCDCD7"/>`
+    + `<text x="64" y="420" font-family="sans-serif" font-size="48" fill="#3A3A36">${title}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** Help (2.0.0-d): a few of the user guide's sections, one to read, and the Windows release notes. */
+export const HELP_GUIDES = [
+  { id: "after-a-call", title: "After a call", excerpt: "When a call ends, EchoLedger asks what to keep: the transcript, the audio only, or nothing." },
+  { id: "record-automatically", title: "Record automatically", excerpt: "Calls in WhatsApp, Google Meet, Zoom and Teams start recording on their own." },
+  { id: "live-captions", title: "Live captions", excerpt: "Captions of both sides of a call, as people speak." },
+  { id: "screen-moments", title: "Screens from your meetings", excerpt: "What a meeting showed, kept at its moments, with what was said around it." },
+];
+export const HELP_GUIDE = {
+  id: "after-a-call", title: "After a call",
+  markdown: "## After a call\n\nWhen a call ends, **EchoLedger** asks what to keep. The card stays on screen until you choose.\n\n"
+    + "1. **Transcribe** writes the words and keeps the audio.\n2. **Save audio** keeps only the sound; you can transcribe it later.\n3. **Delete** removes it. You can undo for a few seconds.\n\n"
+    + "| Choice | What it keeps |\n|---|---|\n| Transcribe | The audio and the transcript |\n| Save audio | The audio |\n| Delete | Nothing |\n\n"
+    + "To skip the question for every call, open Settings › After a call and choose `Transcribe every call`.",
+};
+export const WHATS_NEW = [
+  { version: "2.0.1", platform: "windows", released_at: "2026-11-15T10:00:00Z", notes: "- Screens from a meeting on the recording page, with what was said around each one\n- Help inside the app: guides, what's new and Contact support\n- Undo with Ctrl+Z after deleting a recording" },
+  { version: "2.0.0", platform: "windows", released_at: "2026-11-01T10:00:00Z", notes: "The new look: Home, Library, Live and Ask in one sidebar, and Settings you can search." },
+];

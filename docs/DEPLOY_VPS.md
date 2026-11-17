@@ -115,6 +115,30 @@ Back up the bucket as well: `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` never go t
 bucket itself, and useless without those two keys. A copy holds erased files for as long as it is kept: 30 days at most,
 as with the rule above.
 
+## PHP-FPM workers and pictures
+
+A screen or a payment receipt is decoded on the request that sends it: up to about 200 MB of memory for the largest
+picture taken (25 megapixels), for a moment. The server raises PHP's memory limit to 512M for that step only and puts
+it back after, and decodes **at most 2 pictures at a time** (a cache lock per slot, so it holds for every FPM process;
+`ECHOLEDGER_PICTURE_DECODE_SLOTS`). A third waits up to 20 seconds (`ECHOLEDGER_PICTURE_DECODE_WAIT`), then answers
+`503 server_busy`; the apps send it again later.
+
+Size the pool with that in mind, in `/etc/php/8.4/fpm/pool.d/www.conf`:
+
+```
+pm = dynamic
+; (RAM for PHP) / (about 60 MB an ordinary request), less 2 × 200 MB for the pictures being decoded.
+; 4 GB VPS, about 2.5 GB for PHP: (2500 - 400) / 60 ≈ 35.
+pm.max_children = 35
+pm.start_servers = 6
+pm.min_spare_servers = 4
+pm.max_spare_servers = 10
+pm.max_requests = 500
+```
+
+Keep `memory_limit` at 256M in `php.ini`: the server raises it only around a decode. If uploads often get
+`server_busy`, add a slot and 200 MB of memory for it, rather than more children.
+
 ## Claude and ChatGPT connector
 
 The connector signs its tokens with a key pair in `storage/` (web/DEPLOY.md, "Claude and ChatGPT connector"). They do
@@ -180,6 +204,36 @@ but no longer starts workers.
 
 ## Nginx
 
+Since v1.8 P6.3 an invite link (`/join/<token>`), an email invitation (`/invitations/<token>?…signature=…`) and the
+sign-up page opened with one (`/app/register?invite=…`) carry a secret in their address: the access log keeps them
+masked. Put this in the `http {}` block (`/etc/nginx/conf.d/echoledger-log.conf`):
+
+```
+map $request_uri $echoledger_uri {
+    ~^/join/[^/?]+(?<rest>.*)$          /join/***$rest;
+    ~^/invitations/[^/?]+                /invitations/***;
+    ~^(?<path>/app/register)\?.*        $path?***;
+    default                              $request_uri;
+}
+log_format echoledger '$remote_addr - $remote_user [$time_local] "$request_method $echoledger_uri $server_protocol" $status $body_bytes_sent "$http_user_agent"';
+```
+
+and in the console's `server {}` block below: `access_log /var/log/nginx/echoledger.access.log echoledger;` (the format
+leaves out `$http_referer`, which can carry the same addresses). The app itself sends `Referrer-Policy: no-referrer`
+from those pages; so that nginx adds no second, weaker one there, its own header comes from a map that is empty for
+them (nginx sends no header with an empty value), in the same `http {}` file:
+
+```
+map $request_uri $echoledger_referrer {
+    ~^/join(/|\?|$)                "";
+    ~^/invitations/                 "";
+    ~^/app/register(\?|$)           "";
+    default                         "strict-origin-when-cross-origin";
+}
+```
+
+`$request_uri` is the address as asked, so the map holds after the request goes on to `index.php`.
+
 The first block closes the connection for any address that is not yours, so a made-up `Host` header never reaches the
 app (the app refuses one too, and `APP_URL` must be the address in `server_name`: see `web/DEPLOY.md`).
 
@@ -204,8 +258,9 @@ server {
     root /var/www/echoledger/web/public;
     index index.php;
     client_max_body_size 8m;          # upload chunks are at most 5 MiB
+    access_log /var/log/nginx/echoledger.access.log echoledger;   # invitation tokens masked (above)
     add_header X-Content-Type-Options nosniff always;
-    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Referrer-Policy $echoledger_referrer always;   # none on invitation pages: the app's no-referrer stands
     location / { try_files $uri $uri/ /index.php?$query_string; }
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;

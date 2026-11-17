@@ -576,6 +576,8 @@ class ViewCaptureSession extends ViewRecord
             $pack[$view] = [
                 ['label' => 'Meeting pack (print)', 'print' => true, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'html'])],
                 ['label' => 'Meeting pack (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip'])],
+                // Since v1.8 P4.4: the transcript with the screens' markers, to paste into an AI.
+                ['label' => 'For AI (.txt)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'text'])],
             ];
             if ($recording?->isReady() === true) {
                 $pack[$view][] = ['label' => 'Meeting pack with audio (.zip)', 'print' => false, 'url' => route('admin.sessions.pack', [...$at, 'format' => 'zip', 'include_audio' => 1])];

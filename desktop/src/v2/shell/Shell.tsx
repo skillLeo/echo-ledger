@@ -72,13 +72,13 @@ export function Shell({ tab, onGo, status, me, live, ask, notices, banners, chil
         footer={
           <div className="el-shell__foot">
             {me && (
-              <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email}
-                aria-label={`${me.name}${me.plan ? `, ${me.plan} plan` : ""}. Opens Settings.`}>
+              <button type="button" className="el-shell__me" onClick={() => go("settings")} title={me.email} aria-describedby="el-shell-me-hint">
                 <Avatar initials={initials(me.name, me.email)} size="sm" />
                 <span className="el-shell__me-text">
                   <span className="el-shell__me-name">{me.name}</span>
                   {me.plan && <Badge>{me.plan}</Badge>}
                 </span>
+                <span className="el-visually-hidden" id="el-shell-me-hint">Opens Settings</span>
               </button>
             )}
             <div className="el-shell__status el-caption"><Status kind={status.kind} live>{status.text}</Status></div>

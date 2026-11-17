@@ -21,7 +21,7 @@ uses(InteractsWithDeviceApi::class);
 require_once __DIR__.'/Support/screen_helpers.php';
 
 /*
- * Screen moments on disk (v1.5, docs/API.md "Screen moments"): encrypted like recordings, a 480 px WebP thumbnail made
+ * Screen moments on disk (v1.5, docs/API.md "Screen moments"): encrypted like recordings, a 320 px (480 before v1.8) WebP thumbnail made
  * at upload, erased with the recording (retention, the undo bin, an erase now) and copied with "Save to my library".
  */
 
@@ -37,7 +37,7 @@ function screenFiles(): array
     return Storage::disk('recordings')->allFiles('screens');
 }
 
-it('keeps each picture and a 480 px WebP thumbnail encrypted at rest, each bound to its screen', function () {
+it('keeps each picture and a 320 px WebP thumbnail encrypted at rest, each bound to its screen', function () {
     $png = screenPicture('png', 1920, 1080);
     $screen = keepScreen($this->session, $png);
 
@@ -54,17 +54,17 @@ it('keeps each picture and a 480 px WebP thumbnail encrypted at rest, each bound
     expect($store->picture($screen))->toBe($png);
     $thumb = (string) $store->picture($screen, thumb: true);
     $size = getimagesizefromstring($thumb);
-    expect($size[0])->toBe(480)->and($size[1])->toBe(270)->and($size['mime'])->toBe('image/webp');
+    expect($size[0])->toBe(320)->and($size[1])->toBe(180)->and($size['mime'])->toBe('image/webp');
     // The thumbnail's file cannot pass for the picture (nor another screen's file for this one).
     expect(fn () => app(RecordingCipher::class)->decryptToMemory(Storage::disk('recordings')->path((string) $screen->thumb_path), $screen->id))
         ->toThrow(RuntimeException::class);
 });
 
-it('keeps a picture narrower than 480 px at its own width in the thumbnail', function () {
-    $screen = keepScreen($this->session, screenPicture('jpeg', 320, 200));
+it('keeps a picture narrower than 320 px at its own width in the thumbnail', function () {
+    $screen = keepScreen($this->session, screenPicture('jpeg', 300, 200));
 
     $size = getimagesizefromstring((string) app(ScreenStore::class)->picture($screen, thumb: true));
-    expect($size[0])->toBe(320)->and($size[1])->toBe(200)->and($size['mime'])->toBe('image/webp');
+    expect($size[0])->toBe(300)->and($size[1])->toBe(200)->and($size['mime'])->toBe('image/webp');
 });
 
 it('erases the screens at once with a recording deleted while it is still recording', function () {
@@ -137,7 +137,7 @@ it('copies the screens with "Save to my library", encrypted again and independen
     $store = app(ScreenStore::class);
     expect(screenFiles())->toHaveCount(4)
         ->and($store->picture($copies[0]))->toBe(screenPicture('png', seed: 5))
-        ->and(getimagesizefromstring((string) $store->picture($copies[1], thumb: true))[0])->toBe(480);
+        ->and(getimagesizefromstring((string) $store->picture($copies[1], thumb: true))[0])->toBe(320);
 });
 
 it('leaves no file of a screen behind when "Save to my library" fails while copying it', function () {

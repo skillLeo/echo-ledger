@@ -134,6 +134,17 @@ function secDeviceGuardedRoutes(): array
         'DELETE assist/sessions/{id}' => ['DELETE', '/api/assist/sessions/'.Fx::MISSING_ID, 'sessions:write'],
         'POST assist/sessions/{id}/suggestions/{s}/action' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/suggestions/s1/action', 'sessions:write'],
         'POST assist/sessions/{id}/ask' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/ask', 'sessions:write'],
+        // Since v1.8 P6.3: inviting people.
+        'GET workspace/invitations' => ['GET', '/api/workspace/invitations', 'config:read'],
+        'POST workspace/invitations' => ['POST', '/api/workspace/invitations', 'sessions:write'],
+        'DELETE workspace/invitations/{id}' => ['DELETE', '/api/workspace/invitations/999999', 'sessions:write'],
+        'POST workspace/invite-links' => ['POST', '/api/workspace/invite-links', 'sessions:write'],
+        'DELETE workspace/invite-links/{id}' => ['DELETE', '/api/workspace/invite-links/999999', 'sessions:write'],
+        // Since v1.8 P6.4: help and Contact support.
+        'GET help/guides' => ['GET', '/api/help/guides', 'config:read'],
+        'GET help/guides/{id}' => ['GET', '/api/help/guides/after-a-call', 'config:read'],
+        'GET help/whats-new' => ['GET', '/api/help/whats-new', 'config:read'],
+        'POST support/messages' => ['POST', '/api/support/messages', 'sessions:write'],
         'POST assist/sessions' => ['POST', '/api/assist/sessions', 'stt:token'],
         'POST assist/sessions/{id}/token' => ['POST', '/api/assist/sessions/'.Fx::MISSING_ID.'/token', 'stt:token'],
     ];
@@ -204,7 +215,7 @@ it('exposes exactly the documented public API routes and guards every other one'
         'POST api/webhooks/stt/{provider}',
     ]);
     // A new guarded route must be added to the dataset above so it is covered by every case in this file.
-    expect($guarded)->toBe(125);
+    expect($guarded)->toBe(134);
 });
 
 it('rejects a missing token with 401 JSON, not a redirect', function (string $method, string $uri) {

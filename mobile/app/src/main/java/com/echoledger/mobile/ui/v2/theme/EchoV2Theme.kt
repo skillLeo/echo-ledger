@@ -20,12 +20,15 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.TextUnit
+import androidx.core.os.ConfigurationCompat
 import com.echoledger.mobile.R
 import com.echoledger.mobile.ui.design.UrduNastaliq
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
@@ -215,6 +218,26 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     val contentStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight, fontFamily = FontFamily.Default)
     val contentCaption = EchoTokens.Type.caption.copy(fontFamily = FontFamily.Default)
 
+    /**
+     * People's own words (a recording's title and preview, an answer, a quote) in [style] ([body], [bodyStrong] or
+     * [meta]): the line takes its direction from its words, so an English sentence keeps its full stop at the end in
+     * the Urdu screens, and Latin words keep the system face there rather than the Nastaliq font's Latin letters.
+     */
+    fun content(text: String, style: TextStyle): TextStyle {
+        val latinInUrdu = urdu && text.none { Character.UnicodeScript.of(it.code) == Character.UnicodeScript.ARABIC }
+        val base = if (latinInUrdu) {
+            when (style) {
+                bodyStrong -> contentStrong
+                meta -> metaLatin
+                caption -> contentCaption
+                else -> EchoTokens.Type.bodyMobile.copy(fontFamily = FontFamily.Default)
+            }
+        } else {
+            style
+        }
+        return base.copy(textDirection = TextDirection.Content)
+    }
+
     /** Transcript text in Urdu (urdu.body). */
     val urduBody = EchoTokens.Type.urduBody.copy(fontFamily = UrduNastaliq)
 
@@ -366,3 +389,11 @@ private val EchoV2Shapes = Shapes(
     large = RoundedCornerShape(PhoneDialogRadius),
     extraLarge = RoundedCornerShape(EchoTokens.Component.sheetRadius)
 )
+
+/** The screen's locale, read from the (observable) configuration so dates and numbers follow a language change. */
+@Composable
+fun screenLocale(): Locale = ConfigurationCompat.getLocales(LocalConfiguration.current)[0] ?: Locale.ROOT
+
+/** Android's text size is 150 % or more: components drop decoration and give text more lines to keep words whole. */
+@Composable
+fun largeText(): Boolean = LocalDensity.current.fontScale >= 1.5f

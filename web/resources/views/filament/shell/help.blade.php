@@ -47,6 +47,13 @@
                 @endforeach
                 @if ($inApp)
                     <footer class="el-help-foot">
+                        {{-- Since v1.8 P6.4: the guide, What's new and Contact support. --}}
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}" class="el-text-btn">Search the guide</a>
+                        <span aria-hidden="true">·</span>
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}#whats-new" class="el-text-btn">What's new</a>
+                        <span aria-hidden="true">·</span>
+                        <a href="{{ \App\Filament\Pages\Help::getUrl() }}?contact=1" class="el-text-btn">Contact support</a>
+                        <span aria-hidden="true">·</span>
                         <a href="{{ \App\Filament\Pages\GetTheApps::getUrl() }}" class="el-text-btn">Get the apps</a>
                         <span aria-hidden="true">·</span>
                         <a href="{{ \App\Filament\Auth\EditProfile::settingsUrl() }}" class="el-text-btn">Settings</a>

@@ -58,6 +58,7 @@ final class SettingsTransfer
         'mail.encryption',
         'mail.username',
         'mail.from_address',
+        'support.email',
         'mail.from_name',
         'vocabulary.keyterms',
         'vocabulary.replacements',

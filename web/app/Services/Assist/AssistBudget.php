@@ -60,8 +60,13 @@ final class AssistBudget
      */
     public function settle(AssistUsage $reservation, string $catalogModel, string $model, array $tokens, bool $lost = false): void
     {
-        $cost = $lost ? (float) $reservation->cost_usd : AssistReport::costUsd($catalogModel, $tokens);
-        DB::transaction(function () use ($reservation, $model, $tokens, $cost, $lost): void {
+        DB::transaction(function () use ($reservation, $catalogModel, $model, $tokens, $lost): void {
+            // Settled once: the call's own settle and the sweep may meet; whoever comes second finds it done.
+            $reservation = AssistUsage::query()->whereKey($reservation->id)->lockForUpdate()->first();
+            if (! $reservation instanceof AssistUsage || $reservation->outcome !== self::PENDING) {
+                return;
+            }
+            $cost = $lost ? (float) $reservation->cost_usd : AssistReport::costUsd($catalogModel, $tokens);
             $reservation->forceFill([
                 'model' => $model, 'outcome' => $lost ? 'lost' : 'done', 'estimated' => $lost,
                 'input_tokens' => $tokens['input'], 'cached_tokens' => $tokens['cached'], 'written_tokens' => $tokens['written'], 'output_tokens' => $tokens['output'],

@@ -13,6 +13,7 @@ use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\Screen;
 use App\Services\Projects\ProjectTree;
+use App\Services\Screens\ScreenAssets;
 use App\Services\Screens\ScreenStore;
 use App\Services\Screens\UnreadablePicture;
 use App\Services\Sharing\Teammates;
@@ -85,7 +86,7 @@ final class ScreenController extends Controller
             throw ValidationException::withMessages(['image' => 'The picture could not be read.']);
         }
 
-        return response()->json(['data' => self::payload($screen, ScreenStore::indexOf($screen))], $created ? 201 : 200);
+        return response()->json(['data' => self::payload($screen, ScreenStore::indexOf($screen), ScreenStore::ordered($session->id)->count(), ScreenAssets::lines($session))], $created ? 201 : 200);
     }
 
     /** GET /api/sessions/{id}/screens — in time order, numbered from 1; also for a recording a teammate sent. */
@@ -93,8 +94,9 @@ final class ScreenController extends Controller
     {
         $session = $this->readableSession($request, $id);
         $screens = ScreenStore::ordered($session->id)->get();
+        $lines = ScreenAssets::lines($session);
 
-        return response()->json(['data' => $screens->values()->map(fn (Screen $s, int $i): array => self::payload($s, $i + 1))->all()]);
+        return response()->json(['data' => $screens->values()->map(fn (Screen $s, int $i): array => self::payload($s, $i + 1, $screens->count(), $lines))->all()]);
     }
 
     /** DELETE /api/sessions/{id}/screens/{screen} — the picture and its thumbnail are erased at once. */
@@ -158,13 +160,15 @@ final class ScreenController extends Controller
             $indexes[$row->id] = $counter[$row->capture_session_id] = ($counter[$row->capture_session_id] ?? 0) + 1;
         }
         $last = $page->last();
+        // Each recording's lines once, for what was said around its screens.
+        $lines = $sessions->map(fn (CaptureSession $s): array => ScreenAssets::lines($s));
 
         return response()->json([
-            'data' => $page->map(function (Screen $screen) use ($sessions, $indexes): array {
+            'data' => $page->map(function (Screen $screen) use ($sessions, $indexes, $counter, $lines): array {
                 /** @var CaptureSession $session */
                 $session = $sessions[$screen->capture_session_id];
 
-                return self::payload($screen, $indexes[$screen->id] ?? 1) + [
+                return self::payload($screen, $indexes[$screen->id] ?? 1, $counter[$screen->capture_session_id] ?? 1, $lines[$session->id] ?? []) + [
                     'session_id' => $session->id,
                     'session_title' => $session->displayTitle(),
                     'session_started_at' => $session->started_at->toAtomString(),
@@ -175,11 +179,13 @@ final class ScreenController extends Controller
     }
 
     /**
-     * A screen as the API shows it; the picture links are signed for 30 minutes and need no token.
+     * A screen as the API shows it; the picture links are signed for 30 minutes and need no token. [$count] is how many
+     * the recording has (the file name's digits), [$lines] its transcript's lines (ScreenAssets::lines) for `said`.
      *
+     * @param  list<array{speaker: string, start_ms: int, end_ms: int, text: string}>|null  $lines
      * @return array<string, mixed>
      */
-    public static function payload(Screen $screen, int $index): array
+    public static function payload(Screen $screen, int $index, int $count, ?array $lines = null): array
     {
         $until = now()->addMinutes(self::LINK_MINUTES);
 
@@ -195,6 +201,9 @@ final class ScreenController extends Controller
             'image_url' => URL::temporarySignedRoute('screens.media', $until, ['screen' => $screen->id, 'variant' => 'image']),
             'thumb_url' => URL::temporarySignedRoute('screens.media', $until, ['screen' => $screen->id, 'variant' => 'thumb']),
             'created_at' => $screen->created_at->toAtomString(),
+            // Since v1.8 P4.2 (docs/API.md 2.0.0-e): its file name in the meeting folder and what was said around it.
+            'file_name' => ScreenAssets::fileName($screen, $index, $count),
+            'said' => $lines !== null ? ScreenAssets::said($screen, $lines) : null,
         ];
     }
 

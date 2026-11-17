@@ -3,7 +3,10 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-d (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-f (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-f: `503 server_busy` on picture uploads when the server is decoding as many pictures as it allows.
+2.0.0-e: meeting assets (v1.8 P4): screens' `file_name` and `said`, near-duplicates, 120 an hour, 320 px thumbnails,
+the pack's `text` format, `screens/` in the ZIP, parts of the printed pack.
 2.0.0-d: inviting people (email invitations with 1/7/30 days, invite links, seats) and help (guides, what's new,
 support messages), v1.8 P6.3 and P6.4.
 2.0.0-c: the account export includes Live Assist; deleting the account erases it.
@@ -525,7 +528,7 @@ someone joins with it. `403 seat_limit_reached` when a seat is needed and none i
 
 ### Help (since 2.0.0-d, v1.8 P6.4)
 - `GET /api/help/guides?q=` — `config:read` → `{"data": [{"id": "after-a-call", "title": "After a call", "excerpt"}]}`:
-  the user guide's sections; with `q`, those that match, best first (at most 20).
+  the user guide's sections: without `q`, all of them; with `q`, those that match, best first (at most 20).
 - `GET /api/help/guides/{id}` — `config:read` → `{"id", "title", "markdown"}`; `404` for an unknown id.
 - `GET /api/help/whats-new?platform=android|windows|mac` — `config:read` → `{"data": [{"version", "platform",
   "released_at", "notes"}]}`: the platform's last 10 releases that have notes, newest first.
@@ -1203,6 +1206,30 @@ unless a share link of the recording allows downloads.
 - Library items and `GET /api/sessions/{id}` gain `screen_count`.
 - Projects (client objects) gain `screens` (bool, default `true`): `false` = the desktop does not capture screens for
   meetings filed under that project. `PATCH /api/clients/{id}` accepts it.
+
+### Meeting assets (since 2.0.0-e, v1.8 P4)
+- Every screen (`POST /sessions/{id}/screens`, `GET /sessions/{id}/screens`, project screens) gains `file_name` (e.g.
+  `S07_14-32_invoice-page.webp`: `S<number, at least 2 digits>_<mm-ss or h-mm-ss>_<slug of the description, up to 40
+  characters, or "screen">.<ext>`, its name in the ZIP's `screens/` folder) and `said` (the transcript lines within 15 s
+  of the screen as `Speaker: text`, one per line, at most 600 characters ending in `…` when cut; the final transcript
+  when there is one, else the latest live one; `null` without a transcript).
+- Near-duplicates: a picture that matches the previous or next screen of the same recording (same claimed size, within
+  5 minutes, at most 2 pixels differing by more than 12 shades of grey at 640 px) is that screen: `200` with the
+  existing screen, as for a byte-identical picture. A picture not the size it claims, above 25 MP or longer than 4 to 1
+  is never compared and is kept as its own screen.
+- `503 server_busy` (since 2.0.0-f): `POST /sessions/{id}/screens` and `POST /upgrade-requests/{id}/proofs` when the
+  server is already decoding as many pictures as it allows. Nothing is kept; `Retry-After: 5`. Apps send the same picture
+  again later; it is not a failure of the picture.
+- At most 400 screens a recording and at most 120 in any hour of it; both answer `409 too_many_screens` ("This
+  recording already keeps 120 screens in an hour."). Thumbnails are 320 px wide WebP from v1.8 (480 before; payment
+  receipts stay 480).
+- `GET /sessions/{id}/pack?format=html|zip|text`. `text`: a plain-text file for an AI (a one-line note, the title and
+  facts, then `[mm:ss] Speaker: text` lines with `[Screen N at mm:ss — description]` lines in time order). `zip`: the
+  pictures in `screens/` (was `images/`) under their `file_name`, a `screens.md` table (`# | Time | File | Description |
+  What was said`), and in `transcript.md` each screen as `**[Screen N at t — description]**` followed by its image.
+  `html`: parts of about 100 printed pages; `part` (from 1, default 1) picks one, out of range `404`; every answer has
+  `X-Pack-Part` and `X-Pack-Parts`; a file with more parts is named `… (part k of n).html`.
+- Labels everywhere (pack, ZIP, text, connector): `Screen N at t — description`, or `Screen N at t` without one.
 
 ### Meeting pack (since v1.5)
 - `GET /api/sessions/{id}/pack?format=html|zip&view=roman|english|urdu|original&include_audio=0|1` — `library:read`:

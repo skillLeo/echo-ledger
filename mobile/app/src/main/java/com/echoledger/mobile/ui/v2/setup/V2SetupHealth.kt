@@ -43,6 +43,7 @@ import androidx.lifecycle.compose.LifecycleEventEffect
 import com.echoledger.mobile.EchoLedgerApp
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.ReadyFix
+import com.echoledger.mobile.privilege.HelperMethod
 import com.echoledger.mobile.recording.ReadinessWatch
 import com.echoledger.mobile.recording.RecordingService
 import com.echoledger.mobile.ui.MainViewModel
@@ -81,8 +82,7 @@ fun rememberSetupFacts(vm: MainViewModel, recheck: Int): SetupFacts {
         SetupFacts(
             ready = ReadinessWatch.facts(context, settings, app.graph.helper),
             developerOptions = globalOn(context, Settings.Global.DEVELOPMENT_SETTINGS_ENABLED),
-            wirelessDebugging = globalOn(context, "adb_wifi_enabled"),
-            method = HelperMethodMemory.method(helper.source.takeIf { helper.connected }) ?: HelperMethodMemory.last(context)
+            wirelessDebugging = globalOn(context, "adb_wifi_enabled")
         )
     }
 }

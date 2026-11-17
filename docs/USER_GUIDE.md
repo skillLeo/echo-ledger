@@ -474,8 +474,6 @@ them (**Show EchoLedger windows**). They stay hidden until you show them again o
 box)**, on Android 15 and later, while one of EchoLedger's own screens is in a screen share or recording, the floating
 windows also shrink to the grey dot until it ends.
 
-What we measured on each system and meeting app, and what is not tested yet: [screen-share results](SCREEN_SHARE_MATRIX.md).
-
 ## 6. After a call
 
 Since v1.5 EchoLedger records a call from the moment it is **answered**, not while it rings, and it does not interrupt
@@ -940,7 +938,7 @@ Add EchoLedger as a connector in Claude or ChatGPT, and you can ask them things 
 call?". They read what you can open in the apps, and nothing else: they cannot record, change, share or delete
 anything. You disconnect them under **Profile → Connected apps**.
 
-How to add it, what the AI can and cannot see, and example questions: [Claude and ChatGPT connector](CONNECTOR.md).
+The connector shows how to add it, what the AI can and cannot see, and example questions when you set it up.
 
 ## 16. Live Translate: games and videos
 

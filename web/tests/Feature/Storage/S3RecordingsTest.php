@@ -581,7 +581,9 @@ describe('screens', function () {
         }
         expect(collect($names)->contains(fn (string $name): bool => str_ends_with($name, '.png')))->toBeTrue()
             ->and(collect($names)->contains('transcript.md'))->toBeTrue()
-            ->and($zip->numFiles)->toBe(3);
+            // Since v1.8 P4.4 screens.md too.
+            ->and(collect($names)->contains('screens.md'))->toBeTrue()
+            ->and($zip->numFiles)->toBe(4);
         $zip->close();
     });
 });

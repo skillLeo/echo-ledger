@@ -117,6 +117,20 @@ class V2LiveTest {
         )
         assertEquals("عمر خان سے کال", afterCallTitle(V2Testing.resources(EchoLanguage.Urdu), rec))
         assertEquals("WhatsApp", afterCallTitle(V2Testing.resources(EchoLanguage.English), rec.copy(callerName = null)))
+        // A number stays left to right inside the Urdu sentence: wrapped in direction marks, never mirrored.
+        val number = afterCallTitle(V2Testing.resources(EchoLanguage.Urdu), rec.copy(callerName = null, callerNumber = "+92 300 1234567"))
+        assertTrue(number, number.contains("+92 300 1234567") && number.endsWith("سے کال"))
+        assertTrue(number, number.contains("\u202A+92 300 1234567\u202C"))
+        assertEquals(
+            "Call with +92 300 1234567",
+            afterCallTitle(
+                V2Testing.resources(EchoLanguage.English),
+                rec.copy(callerName = null, callerNumber = "+92 300 1234567")
+            ).filter {
+                it.code !in
+                    0x200E..0x202E
+            }
+        )
     }
 
     @Composable

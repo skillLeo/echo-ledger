@@ -74,7 +74,7 @@ describe('sending a screen', function () {
 
         $response = sendScreen($this, $this->session->id, $webp)->assertCreated();
 
-        expect(array_keys($response->json('data')))->toBe(['id', 'index', 'at_ms', 'width', 'height', 'trigger', 'ocr_text', 'description', 'image_url', 'thumb_url', 'created_at'])
+        expect(array_keys($response->json('data')))->toBe(['id', 'index', 'at_ms', 'width', 'height', 'trigger', 'ocr_text', 'description', 'image_url', 'thumb_url', 'created_at', 'file_name', 'said'])
             ->and($response->json('data'))->toMatchArray(['index' => 1, 'at_ms' => 872000, 'width' => 1920, 'height' => 1080, 'trigger' => 'change', 'ocr_text' => null, 'description' => null]);
         parse_str((string) parse_url((string) $response->json('data.image_url'), PHP_URL_QUERY), $query);
         expect($query)->toHaveKeys(['expires', 'signature'])
@@ -246,7 +246,7 @@ describe('the signed picture links', function () {
             ->and($image->headers->get('Content-Type'))->toBe('image/png')
             ->and($image->headers->get('Cache-Control'))->toContain('private')->not->toContain('public')
             ->and($thumb->headers->get('Content-Type'))->toBe('image/webp')
-            ->and(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(480);
+            ->and(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(320);
     });
 
     it('refuse a changed signature, another screen or picture in the same link, and an expired link', function () {

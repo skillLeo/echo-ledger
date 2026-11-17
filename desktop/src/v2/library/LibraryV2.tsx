@@ -11,6 +11,7 @@ import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
 } from "../components";
+import { ScreensMark } from "./screens";
 import { binHours, binSentence, dayGroups, rowModel, viewCounts, viewItems, type SavedView } from "./model";
 import { RecordingPage } from "./RecordingPage";
 
@@ -36,6 +37,20 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const [erase, setErase] = useState<BinItem | null>(null);
   const [message, setMessage] = useState<Message | null>(null);
   const seq = useRef(0);
+  // Keyboard focus after a change that takes away the focused control: the next row after a delete, the recording
+  // again after Undo, else the search field. Applied once, when the list has been drawn, and only if focus was lost
+  // (on nothing or the page): never taken from where the person has moved it since.
+  const [focusAfter, setFocusAfter] = useState<{ rowId: string | null; seq: number } | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!focusAfter) return;
+    setFocusAfter(null);
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    const el = root.current;
+    const row = focusAfter.rowId ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusAfter.rowId)}"]`) : null;
+    (row ?? el?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
+  }, [focusAfter]);
   const keepHours = useTrashKeepHours();
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
@@ -84,11 +99,18 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     const title = item.title?.trim() || "Recording";
     try {
       await api.deleteSession(item.id);
+      const order = items ? viewItems(items, view === "trash" ? "all" : view, query) : [];
+      const at = order.findIndex((i) => i.id === item.id);
+      const next = order[at + 1] ?? order[at - 1] ?? null;
       setItems((list) => list?.filter((i) => i.id !== item.id) ?? list);
       setOpenId(null);
+      setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
       say(`"${title}" moved to Trash`, {
         label: "Undo",
-        run: () => void api.restoreSession(item.id).then(() => load()).catch((e) => say(errorMessage(e))),
+        run: () => void api.restoreSession(item.id).then(async () => {
+          await load();
+          setFocusAfter({ rowId: item.id, seq: ++seq.current });
+        }).catch((e) => say(errorMessage(e))),
       });
     } catch (e) {
       say(errorMessage(e));
@@ -127,7 +149,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
 
   if (open) {
     return (
-      <div className="el-root el-embedded" data-v2="library">
+      <div className="el-root el-embedded" data-v2="library" ref={root}>
         <RecordingPage item={open} onBack={() => setOpenId(null)} onDelete={(i) => void remove(i)} onMessage={(t) => say(t)} />
         {toasts}
       </div>
@@ -142,7 +164,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   );
 
   return (
-    <div className="el-root el-embedded" data-v2="library">
+    <div className="el-root el-embedded" data-v2="library" ref={root}>
       <div className="el-page el-page--wide">
         <header className="el-page__head">
           <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
@@ -206,9 +228,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
                 const r = rowModel(item);
                 return (
                   <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
-                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined}
+                    badge={r.badge ? <Badge tone={r.badge.tone}>{r.badge.text}</Badge> : undefined} mark={r.screens ? <ScreensMark count={r.screens} /> : undefined}
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
-                    onClick={() => setOpenId(item.id)} />
+                    rowId={item.id} onClick={() => setOpenId(item.id)} />
                 );
               }),
             ])}

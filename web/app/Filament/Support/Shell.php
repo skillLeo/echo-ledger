@@ -9,6 +9,7 @@ use App\Filament\Auth\EditProfile;
 use App\Filament\Pages\Activity;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Pages\GetTheApps;
+use App\Filament\Pages\Help;
 use App\Filament\Pages\LiveAssist\AssistPreps;
 use App\Filament\Pages\LiveAssist\AssistSessions;
 use App\Filament\Pages\LiveAssist\AssistSettings;
@@ -324,6 +325,7 @@ final class Shell
             ['assist-sessions', 'Sessions', 'Live Assist', AssistSessions::getUrl(panel: 'app'), 'live assist practice reports coach interview', AssistSessions::canAccess()],
             ['assist-preps', 'Preps', 'Live Assist', AssistPreps::getUrl(panel: 'app'), 'live assist prepare meeting interview schedule', AssistPreps::canAccess()],
             ['assist-settings', 'Live Assist settings', 'Live Assist', AssistSettings::getUrl(panel: 'app'), 'live assist defaults mode hints language', AssistSettings::canAccess()],
+            ['help', 'Help', '', Help::getUrl(panel: 'app'), 'guide support contact whats new questions', Help::canAccess()],
             ['get-the-apps', 'Get the apps', '', GetTheApps::getUrl(panel: 'app'), 'download install phone computer record', true],
             ['usage', 'Usage details', 'Settings', Usage::getUrl(panel: 'app'), 'minutes cost budget usage', Usage::canAccess()],
             ['security-activity', 'Sign-in activity', 'Settings', Security::getUrl(panel: 'app'), 'audit log sign ins history', Security::canAccess()],

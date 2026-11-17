@@ -86,7 +86,7 @@ describe('html', function () {
             ->and($html)->toContain('<dt>Project</dt><dd dir="auto">Acme</dd>')
             ->and($html)->toContain('<dt>Screens</dt><dd dir="auto">2</dd>')
             ->and($html)->toContain('[Screen 1 at 0:30]')
-            ->and($html)->toContain('[Screen 2 at 14:32]</span> <span dir="auto">The client&#039;s invoice page with the Pay button</span>')
+            ->and($html)->toContain('<span class="label" dir="auto">[Screen 2 at 14:32 — The client&#039;s invoice page with the Pay button]</span>')
             ->and($html)->toContain('src="data:image/png;base64,'.base64_encode($this->png).'"')
             ->and($html)->toContain('src="data:image/webp;base64,'.base64_encode($this->webp).'"')
             ->and($html)->toContain('@media print')->toContain('page-break-after:always')->toContain('break-inside:avoid')
@@ -98,8 +98,8 @@ describe('html', function () {
         $at = fn (string $needle): int => (int) strpos($html, $needle);
         expect($at('Let me share my screen'))->toBeLessThan($at('[Screen 1 at 0:30]'))
             ->and($at('[Screen 1 at 0:30]'))->toBeLessThan($at('I see the invoice now'))
-            ->and($at('I see the invoice now'))->toBeLessThan($at('[Screen 2 at 14:32]'))
-            ->and($at('[Screen 2 at 14:32]'))->toBeLessThan($at('Click here to pay'));
+            ->and($at('I see the invoice now'))->toBeLessThan($at('[Screen 2 at 14:32 —'))
+            ->and($at('[Screen 2 at 14:32 —'))->toBeLessThan($at('Click here to pay'));
         // Only the pack itself, which is deleted once it is sent.
         expect($this->workFiles())->toBe([$response->baseResponse->getFile()->getPathname()]);
     });
@@ -161,23 +161,29 @@ describe('html', function () {
 });
 
 describe('zip', function () {
-    it('holds transcript.md with each screen as a Markdown image and its description, and the images folder', function () {
+    it('holds transcript.md with each screen\'s marker and picture, the screens folder by name, and screens.md', function () {
         $response = meetingPack($this, 'format=zip')->assertOk();
         $entries = packEntries($response);
+        $first = 'screens/S01_0-30_screen.png';
+        $second = 'screens/S02_14-32_the-clients-invoice-page-with-the-pay.webp';
 
         expect($response->headers->get('Content-Type'))->toBe('application/zip')
             ->and($response->headers->get('Content-Disposition'))->toContain('Acme kickoff '.$this->session->started_at->format('Y-m-d').'.zip')
-            ->and(array_keys($entries))->toEqualCanonicalizing(['transcript.md', 'images/screen-01.png', 'images/screen-02.webp'])
-            ->and($entries['images/screen-01.png']['body'])->toBe($this->png)
-            ->and($entries['images/screen-02.webp']['body'])->toBe($this->webp)
-            ->and($entries['images/screen-02.webp']['comp_method'])->toBe(ZipArchive::CM_STORE);
+            ->and(array_keys($entries))->toEqualCanonicalizing(['transcript.md', 'screens.md', $first, $second])
+            ->and($entries[$first]['body'])->toBe($this->png)
+            ->and($entries[$second]['body'])->toBe($this->webp)
+            ->and($entries[$second]['comp_method'])->toBe(ZipArchive::CM_STORE);
         $md = (string) $entries['transcript.md']['body'];
         expect($md)->toStartWith("# Acme kickoff\n")
             ->and($md)->toContain('- **People:** Me, Client, Omar Khan')
-            ->and($md)->toContain("![Screen 2 at 14:32](images/screen-02.webp \"Screen 2 at 14:32\")\n*The client's invoice page with the Pay button*")
-            ->and($md)->toContain('![Screen 1 at 0:30](images/screen-01.png "Screen 1 at 0:30")')
+            ->and($md)->toContain("**\\[Screen 2 at 14:32 — The client's invoice page with the Pay button\\]**\n![Screen 2 at 14:32](<{$second}> \"Screen 2 at 14:32\")")
+            ->and($md)->toContain("**\\[Screen 1 at 0:30\\]**\n![Screen 1 at 0:30](<{$first}> \"Screen 1 at 0:30\")")
             ->and(strpos($md, 'Screen 2 at 14:32'))->toBeLessThan(strpos($md, 'Click here to pay'))
             ->and(strpos($md, 'I see the invoice now'))->toBeLessThan(strpos($md, 'Screen 2 at 14:32'));
+        $table = (string) $entries['screens.md']['body'];
+        expect($table)->toContain('| # | Time | File | Description | What was said |')
+            ->and($table)->toContain("| 2 | 14:32 | [`S02_14-32_the-clients-invoice-page-with-the-pay.webp`](<{$second}>) | The client's invoice page with the Pay button |")
+            ->and($table)->toContain('| 1 | 0:30 | [`S01_0-30_screen.png`](<'.$first.'>) | — |');
         // The pictures written for the zip are gone; only the zip is left, deleted once it is sent.
         expect($this->workFiles())->toBe([$response->baseResponse->getFile()->getPathname()]);
     });
@@ -218,5 +224,59 @@ describe('refusals', function () {
         $this->asToken($this->token)->deleteJson("/api/sessions/{$this->session->id}")->assertNoContent();
         $this->getJson("/api/sessions/{$this->session->id}/pack?format=html")->assertNotFound()->assertJsonPath('code', 'session_not_found');
         expect(unscoped(fn () => CaptureSession::onlyTrashed()->count()))->toBe(1);
+    });
+});
+
+describe('text', function () {
+    it('gives Copy for AI: what the markers mean, the facts, then the transcript with each screen at its moment', function () {
+        $response = meetingPack($this, 'format=text')->assertOk();
+        $text = (string) file_get_contents($response->baseResponse->getFile()->getPathname());
+
+        expect($response->headers->get('Content-Type'))->toBe('text/plain; charset=utf-8')
+            ->and($response->headers->get('Content-Disposition'))->toContain('Acme kickoff '.$this->session->started_at->format('Y-m-d').'.txt')
+            ->and($text)->toStartWith(MeetingPack::AI_NOTE."\n\nAcme kickoff\n")
+            ->and($text)->toContain("People: Me, Client, Omar Khan\n")
+            ->and($text)->toContain("I see the invoice now\n[Screen 2 at 14:32 — The client's invoice page with the Pay button]\n[15:00] ")
+            ->and($text)->toContain("[Screen 1 at 0:30]\n");
+    });
+});
+
+describe('parts', function () {
+    it('prints a long meeting in parts of about 100 pages, each with its title page; the folder and Copy for AI stay whole', function () {
+        $segments = [];
+        foreach (range(0, 3999) as $i) {
+            $segments[] = ['channel' => 1, 'speaker' => 'Me', 'start_ms' => $i * 1000, 'end_ms' => $i * 1000 + 900, 'text' => "Line {$i} ".str_repeat('words ', 14)];
+        }
+        $this->transcript->update(['segments' => $segments]);
+
+        $first = meetingPack($this, 'format=html')->assertOk()->assertHeader('X-Pack-Part', '1');
+        $parts = (int) $first->headers->get('X-Pack-Parts');
+        expect($parts)->toBeGreaterThan(1)
+            ->and($first->headers->get('Content-Disposition'))->toContain('part 1 of '.$parts.'.html');
+        $html1 = (string) file_get_contents($first->baseResponse->getFile()->getPathname());
+        expect($html1)->toContain('Meeting pack · Part 1 of '.$parts)->toContain('Line 0 ')->not->toContain('Line 3999 ');
+
+        $last = meetingPack($this, 'format=html&part='.$parts)->assertOk()->assertHeader('X-Pack-Part', (string) $parts);
+        $htmlLast = (string) file_get_contents($last->baseResponse->getFile()->getPathname());
+        expect($htmlLast)->toContain('Part '.$parts.' of '.$parts)->toContain('Line 3999 ')->not->toContain('>Line 0 ');
+        meetingPack($this, 'format=html&part='.($parts + 1))->assertNotFound();
+
+        meetingPack($this, 'format=text')->assertOk()->assertHeader('X-Pack-Parts', '1');
+        meetingPack($this, 'format=zip')->assertOk()->assertHeader('X-Pack-Parts', '1');
+    });
+
+    it('keeps each part under about 100 pages and every item in exactly one part, in order', function () {
+        $timeline = [];
+        foreach (range(1, 3000) as $i) {
+            $timeline[] = ['line', ['speaker' => 'Me', 'text' => str_repeat('x', 170), 'start_ms' => $i]];
+        }
+        $parts = MeetingPack::parts($timeline);
+        expect(count($parts))->toBeGreaterThan(1)->and(array_sum(array_map('count', $parts)))->toBe(3000)
+            ->and(array_merge(...$parts))->toBe($timeline);
+        // 170 characters: 2 printed lines and spacing, 45 a page, plus the title page.
+        foreach ($parts as $part) {
+            expect(1 + count($part) * 2.4 / 45)->toBeLessThanOrEqual(MeetingPack::PAGES_PER_PART);
+        }
+        expect(MeetingPack::parts([]))->toBe([[]]);
     });
 });

@@ -38,7 +38,6 @@ import com.echoledger.mobile.ui.v2.library.V2TrashScreen
 import com.echoledger.mobile.ui.v2.live.LiveEntry
 import com.echoledger.mobile.ui.v2.live.V2LiveTab
 import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
-import com.echoledger.mobile.ui.v2.setup.HelperMethodMemory
 import com.echoledger.mobile.ui.v2.setup.V2SetupHealthScreen
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2

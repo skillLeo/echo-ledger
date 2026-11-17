@@ -61,17 +61,19 @@ export type DialogProps = {
   initialFocus?: RefObject<HTMLElement | null>;
   /** A role="alertdialog" for a destructive confirmation. */
   alert?: boolean;
+  /** As wide as the window allows (a picture viewer). */
+  wide?: boolean;
 };
 
-function Overlay({ kind, open, title, description, onClose, closeLabel = "Close", actions, children, initialFocus, alert }: DialogProps & { kind: "dialog" | "sheet" }) {
+function Overlay({ kind, open, title, description, onClose, closeLabel = "Close", actions, children, initialFocus, alert, wide }: DialogProps & { kind: "dialog" | "sheet" }) {
   if (!open) return null;
   return (
     <Panel kind={kind} title={title} description={description} onClose={onClose} closeLabel={closeLabel} actions={actions}
-      initialFocus={initialFocus} alert={alert} open>{children}</Panel>
+      initialFocus={initialFocus} alert={alert} wide={wide} open>{children}</Panel>
   );
 }
 
-function Panel({ kind, title, description, onClose, closeLabel, actions, children, initialFocus, alert }: DialogProps & { kind: "dialog" | "sheet" }) {
+function Panel({ kind, title, description, onClose, closeLabel, actions, children, initialFocus, alert, wide }: DialogProps & { kind: "dialog" | "sheet" }) {
   const id = useId();
   const panel = useRef<HTMLDivElement>(null);
   const trap = useFocusTrap(panel, initialFocus);
@@ -85,7 +87,7 @@ function Panel({ kind, title, description, onClose, closeLabel, actions, childre
   };
   return (
     <div className={`el-scrim${kind === "sheet" ? " el-scrim--sheet" : ""}`} onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={panel} className={kind === "sheet" ? "el-sheet" : "el-dialog"} role={alert ? "alertdialog" : "dialog"} aria-modal="true"
+      <div ref={panel} className={kind === "sheet" ? "el-sheet" : `el-dialog${wide ? " el-dialog--wide" : ""}`} role={alert ? "alertdialog" : "dialog"} aria-modal="true"
         aria-labelledby={`${id}-title`} aria-describedby={description ? `${id}-desc` : undefined} tabIndex={-1} onKeyDown={keyDown}>
         <div className="el-dialog__head">
           <div className="el-dialog__titles">

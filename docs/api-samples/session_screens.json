@@ -11,7 +11,9 @@
             "description": "A slide with a price.",
             "image_url": "https://echoledger.test/screen-media/01m6s1x7zebtsxsdnhrm16wbxx/image?expires=sample&signature=sample",
             "thumb_url": "https://echoledger.test/screen-media/01m6s1x7zebtsxsdnhrm16wbxx/thumb?expires=sample&signature=sample",
-            "created_at": "2026-11-06T18:28:33+00:00"
+            "created_at": "2026-11-06T18:28:33+00:00",
+            "file_name": "S01_0-05_a-slide-with-a-price.webp",
+            "said": "Me: Here is the price."
         }
     ]
 }
