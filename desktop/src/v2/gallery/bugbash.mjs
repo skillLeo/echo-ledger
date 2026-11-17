@@ -9,6 +9,7 @@ import { chromium } from "playwright";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { CASES } from "./cases.mjs";
 
 const desktop = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 const arg = (name) => process.argv.find((a) => a.startsWith(`--${name}=`))?.split("=")[1];
@@ -17,77 +18,6 @@ const only = arg("only");
 const onlyCase = arg("case");
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 
-const FLAGS = "ui_v2.ask,ui_v2.shell,ui_v2.library,ui_v2.settings,ui_v2.setup_health,ui_v2.home,ui_v2.live,live_assist,ui_v2.recording_controls,ui_v2.after_call";
-const app = (screen) => `scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS}`;
-const nav = (name) => async (page) => {
-  await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name, exact: true }).click();
-  await page.waitForTimeout(1200);
-};
-
-/** [name, kind, path (theme added), languages, steps] */
-const CASES = [
-  ["g-library", "gallery", "?v2gallery&screen=library", ["en", "ur"]],
-  ["g-recording", "gallery", "?v2gallery&screen=recording", ["en", "ur"]],
-  ["g-settings", "gallery", "?v2gallery&screen=settings", ["en", "ur"]],
-  ["g-library-error", "gallery", "?v2gallery&screen=library&state=error", ["en", "ur"]],
-  ["g-assist", "gallery", "?v2gallery&screen=assist", ["en"]],
-  ["a-library", "app", app("library"), ["en"]],
-  ["a-recording", "app", app("library"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
-  ["a-recording-screens", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
-  ["a-screen-viewer", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); await page.getByRole("region", { name: /screens?$/ }).getByRole("button").first().click(); await page.waitForTimeout(800); }],
-  ["a-trash", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
-  ["a-home", "app", app("library"), ["en"], nav("Home")],
-  ["a-live", "app", app("library"), ["en"], nav("Live")],
-  ["a-live-translate", "app", app("library"), ["en"], async (page) => { await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name: "Live", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "Live Translate", exact: true }).click(); await page.waitForTimeout(800); }],
-  ["a-ask", "app", app("library"), ["en"], nav("Ask")],
-  ["a-workspace", "app", app("project"), ["en"], async (page) => {
-    await page.getByRole("button", { name: "Acme Holdings", exact: true }).first().click();
-    await page.waitForTimeout(1200);
-    await page.getByRole("tab", { name: "Memory & instructions" }).click();
-    await page.waitForTimeout(800);
-  }],
-  ["a-workspace-menu", "app", app("project"), ["en"], async (page) => {
-    await page.getByRole("button", { name: "Acme Holdings", exact: true }).first().click();
-    await page.waitForTimeout(1200);
-    await page.getByRole("button", { name: "Project menu" }).click();
-    await page.waitForTimeout(300);
-  }],
-  ["a-prep", "app", app("library"), ["en"], async (page) => { await nav("Live")(page); await page.getByRole("button", { name: "New session" }).click(); await page.waitForTimeout(800); }],
-  ["a-settings", "app", app("settings"), ["en"]],
-  ["a-settings-page", "app", app("settings"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
-  ["a-setup", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Setup & health" }).click(); await page.waitForTimeout(1500); }],
-  ["a-help", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); }],
-  ["a-help-guide", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "After a call", exact: true }).click(); await page.waitForTimeout(800); }],
-  ["a-whats-new", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "What's new" }).click(); await page.waitForTimeout(800); }],
-  ["a-contact", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "Contact support" }).click(); await page.waitForTimeout(500); }],
-  ["a-set-voice", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-replacements", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Replacements", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-history", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Voice notes & dictation", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Recent dictations", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-captions", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-caption-style", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Captions", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Style", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-calls", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Calls & meetings", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-call-sites", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Calls & meetings", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Call sites", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-language", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Language", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-words", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Custom words", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-key", "app", `${app("settings")}&plan=free`, ["en"], async (page) => { await page.getByRole("button", { name: "Transcription key", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-privacy", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-consent", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Recording consent", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-delete", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Privacy & data", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Delete my account", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-lock", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "App lock", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-pin", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "App lock", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "PIN", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-security", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Sign-in & security", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-activity", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Sign-in & security", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Sign-in activity", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-share", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-share-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-share-check", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Check screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-notifications", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Notifications", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-mic", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Microphone & audio", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-mic-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Microphone & audio", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-screen", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-excluded", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Never capture these apps", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-set-storage", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Storage", exact: true }).click(); await page.waitForTimeout(900); }],
-  ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
-];
 const THEMES = ["light", "dark"];
 const TEXT = [100, 130, 200];
 const WIDTHS = [1280, 720];

@@ -14,6 +14,10 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "notifications",
   "mic", "screen", "screen.excluded",
   "storage",
+  "appearance", "shortcuts",
+  "profile", "plan",
+  "devices", "about", "about.technical",
+  "help.mac_check",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */

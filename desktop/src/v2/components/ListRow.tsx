@@ -86,8 +86,9 @@ export function ListRow({
       </span>
       {(endTop || endBottom) && (
         <span className="el-row__end el-caption" id={`${id}-end`}>
-          {endTop && <span>{endTop}</span>}
-          {endBottom && <span>{endBottom}</span>}
+          {/* A time ("9:00 am") or a length keeps its own order inside a right-to-left row. */}
+          {endTop && <span dir="auto">{endTop}</span>}
+          {endBottom && <span dir="auto">{endBottom}</span>}
         </span>
       )}
       {value && <span className="el-row__value" id={`${id}-value`}><span className="el-row__value-text" dir="auto">{value}</span></span>}

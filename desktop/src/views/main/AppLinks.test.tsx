@@ -56,13 +56,13 @@ describe("app links", () => {
 
   it("opens a recording a teammate sent read-only in Shared with me", async () => {
     respond("links_resolve", { kind: "session", session_id: "other-1" });
-    respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Hassam" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
+    respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Imran" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
       session: makeItem("other-1", { title: "Call with Omar" }) }] });
     await renderApp();
     await open();
     expect(await screen.findByRole("heading", { name: "Shared with me" })).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Call with Omar" })).toBeInTheDocument();
-    expect(screen.getByTestId("shared-banner")).toHaveTextContent("From Hassam");
+    expect(screen.getByTestId("shared-banner")).toHaveTextContent("From Imran");
     expect(callsOf("link_open")).toHaveLength(0);
   });
 
@@ -104,7 +104,7 @@ describe("app links", () => {
 
   it("opens an item of Shared with me", async () => {
     respond("links_resolve", { kind: "shared", shared_id: "01JDSHARE1" });
-    respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Hassam" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
+    respond("shared_with_me", { data: [{ id: "01JDSHARE1", kind: "session", from: { name: "Imran" }, note: null, title: "Call with Omar", sent_at: null, saved_at: null, client: null,
       session: makeItem("other-1", { title: "Call with Omar" }) }] });
     await renderApp();
     await open();

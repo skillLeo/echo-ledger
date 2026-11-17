@@ -125,6 +125,8 @@ export function ScreenMomentsPageV2({ settings, patch, onExcluded }: { settings:
   };
   const notes = [
     blocked,
+    // The switch row says what screen moments are; the plan's row in its place doesn't, so the line goes here.
+    locked ? setting("screen.enabled").description : null,
     on ? TARGET_HINT[settings.screenTarget] + (settings.screenTarget === "whole_screen" && status?.platform === "windows" ? WINDOWS_WHOLE_SCREEN : "") : null,
     on && status?.platform === "windows" ? (status.borderless
       ? "Windows 11 captures without the yellow border. If it still shows, allow borderless capture for EchoLedger in Windows Settings."

@@ -380,3 +380,46 @@ describe("RecordView Bluetooth microphone (v1.5)", () => {
     expect(await screen.findByTestId("bluetooth-note")).toBeInTheDocument();
   });
 });
+
+describe("Live Translate on the Live tab (live_translate_status)", () => {
+  const plan = (liveTranslate: boolean) => ({ ...makeStatus().plan, liveTranslate });
+
+  it("a Mac: says it isn't on the Mac yet, Start stays off, and nothing is asked of the capture", async () => {
+    respond("live_translate_status", { available: false, reason: "platform" });
+    await setup({ platform: "macos" });
+    await act(async () => undefined);
+    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate isn't on the Mac yet");
+    expect(within(screen.getByTestId("translate-unavailable")).getByRole("button", { name: "Start" })).toBeDisabled();
+    expect(callsOf("translate_apps")).toHaveLength(0);
+  });
+
+  it("the core says the plan leaves it out: Not in your plan", async () => {
+    respond("live_translate_status", { available: false, reason: "plan" });
+    await setup({ plan: plan(false) });
+    await act(async () => undefined);
+    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Not in your plan");
+  });
+
+  it("available: the form to start it", async () => {
+    respond("live_translate_status", { available: true, reason: null });
+    respond("translate_apps", [{ pid: 4242, name: "Valorant" }]);
+    respond("translate_status", null);
+    await setup();
+    await act(async () => undefined);
+    expect(screen.queryByTestId("translate-unavailable")).toBeNull();
+    expect(await screen.findByRole("option", { name: "Valorant" })).toBeInTheDocument();
+  });
+
+  it("a core that doesn't answer: the plan decides, as before, and a Mac is told it isn't there yet", async () => {
+    fail("live_translate_status", "unknown command");
+    respond("translate_apps", []);
+    respond("translate_status", null);
+    await setup({ plan: plan(false) });
+    await act(async () => undefined);
+    expect(screen.queryByText("Live Translate")).toBeNull();
+    cleanup();
+    await setup({ platform: "macos" });
+    await act(async () => undefined);
+    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate isn't on the Mac yet");
+  });
+});

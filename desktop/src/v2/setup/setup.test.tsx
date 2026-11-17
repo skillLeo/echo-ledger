@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { CheckReport, PermissionsStatus, ReadyReport } from "../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { SetupHealth, currentStep, permissionKinds } from "./SetupHealth";
 import { ALLOWED_BEFORE, CANNOT_TELL, SWITCH_OFF_ON, WINDOWS_CANNOT_TELL, WINDOWS_OFF, stepPlan } from "../../views/main/Permissions";
 import MainApp from "../../views/main/MainApp";
@@ -157,6 +157,24 @@ describe("the health checks", () => {
     await act(flushAsync);
     expect(callsOf("mac_check_run")).toHaveLength(1);
     expect(within(screen.getByRole("list", { name: "Mac check" })).queryByRole("button")).toBeNull();
+  });
+
+  it("Copy the report copies the diagnostic report on a Mac and on Windows, says so, and says why when it can't", async () => {
+    respond("diagnostic_report_copy", null);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Copy the report" }));
+    await act(flushAsync);
+    expect(callsOf("diagnostic_report_copy")).toHaveLength(1);
+    expect(within(screen.getByRole("region", { name: "Report for support" })).getByRole("status")).toHaveTextContent("Copied");
+    expect(screen.getByRole("button", { name: "Copy the Mac check" })).toBeInTheDocument();
+    document.body.innerHTML = "";
+    respond("permissions_status", { ...MAC_PERMS, platform: "windows" });
+    fail("diagnostic_report_copy", "The clipboard is busy.");
+    await show("windows");
+    fireEvent.click(screen.getByRole("button", { name: "Copy the report" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("The clipboard is busy.");
+    expect(screen.queryByRole("button", { name: "Copy the Mac check" })).toBeNull();
   });
 
   it("without a Mac check yet it offers to run one; Windows has none", async () => {

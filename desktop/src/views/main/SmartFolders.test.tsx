@@ -20,7 +20,7 @@ const ITEMS: LibraryItem[] = [
 ];
 const SHARED: SharedItem[] = [
   {
-    id: "01JDSHARE1", kind: "session", from: { name: "Hassam", email: "h@example.com" }, note: "for tomorrow", title: "Call with Omar",
+    id: "01JDSHARE1", kind: "session", from: { name: "Imran", email: "i@example.com" }, note: "for tomorrow", title: "Call with Omar",
     sent_at: "2026-10-30T11:00:00Z", saved_at: null, client: null,
     session: makeItem("other-1", { title: "Call with Omar", client: { id: "x9", name: "Their project" }, transcript: { final_status: "completed", final_transcript_id: "tr-o", live_available: false, preview: null } }),
   },
@@ -104,7 +104,7 @@ describe("Shared with me", () => {
     await renderShared();
     const list = screen.getByRole("list", { name: "Shared with me" });
     expect(within(list).getByText("Call with Omar")).toBeInTheDocument();
-    expect(within(list).getByText(/From Hassam/)).toBeInTheDocument();
+    expect(within(list).getByText(/From Imran/)).toBeInTheDocument();
     expect(within(list).getByText("“for tomorrow”")).toBeInTheDocument();
     expect(within(list).getByText("Project")).toBeInTheDocument();
     expect(within(list).getByText(/From ana@example\.com/)).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("Shared with me", () => {
     await renderShared();
     fireEvent.click(within(screen.getByRole("list", { name: "Shared with me" })).getByRole("button", { name: "Open" }));
     expect(await screen.findByRole("heading", { name: "Call with Omar" })).toBeInTheDocument();
-    expect(screen.getByTestId("shared-banner")).toHaveTextContent("From Hassam");
+    expect(screen.getByTestId("shared-banner")).toHaveTextContent("From Imran");
     expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Share" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Click to rename" })).not.toBeInTheDocument();
@@ -204,7 +204,7 @@ describe("Shared with me", () => {
   });
 
   it("writes who sent it and when", () => {
-    expect(sentLine({ from: { name: "Hassam", email: "h@x.org" }, sent_at: null })).toBe("From Hassam");
+    expect(sentLine({ from: { name: "Imran", email: "i@x.org" }, sent_at: null })).toBe("From Imran");
     expect(sentLine({ from: null, sent_at: null })).toBe("From A teammate");
   });
 });

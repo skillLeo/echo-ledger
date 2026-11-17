@@ -35,6 +35,69 @@ const choose = (label: string, option: string) => {
   fireEvent.click(screen.getByRole("option", { name: option }));
 };
 
+describe("Live Translate v2: running, ended, stopped", () => {
+  it("running: the app and what it does as a live status, Move and Stop", async () => {
+    render(<LiveTranslateV2 run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "reconnecting" })));
+    expect(screen.getByText("Valorant · Reconnecting")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+  });
+
+  it("ended: the reason in plain words, Close instead of Stop, no live status; Close brings the form back", async () => {
+    render(<LiveTranslateV2 run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "live" })));
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", notice: "Something went wrong with the translation. Start it again." })));
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Something went wrong with the translation. Start it again.");
+    expect(screen.getByText("Valorant · Ended")).toBeInTheDocument();
+    expect(screen.queryByText(/Translating/)).toBeNull();
+    expect(document.querySelector(".el-status--recording")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Move Live Translate|Lock Live Translate/ })).toBeNull();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(callsOf("translate_stop")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByTestId("translate-ended")).toBeNull();
+  });
+
+  it("opened on a session that already ended (status() keeps its feed): the reason, Close, and Close stops it", async () => {
+    respond("translate_status", feed({ status: "ended", notice: "Valorant stopped playing sound, so Live Translate ended." }));
+    render(<LiveTranslateV2 run={run} />);
+    await act(flushAsync);
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Valorant stopped playing sound, so Live Translate ended.");
+    expect(screen.getByText("Valorant · Ended")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(callsOf("translate_stop")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
+  it("a status it doesn't know is never shown as running", async () => {
+    respond("translate_status", feed({ status: "warming_up_v9" }));
+    render(<LiveTranslateV2 run={run} />);
+    await act(flushAsync);
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(document.querySelector(".el-status--recording")).toBeNull();
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
+  });
+
+  it("stopped: the form and Start, and no status", async () => {
+    render(<LiveTranslateV2 run={run} />);
+    await subscribed();
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "live" })));
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "stopped" })));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Close" })).toBeNull();
+    expect(screen.queryByText(/Valorant ·/)).toBeNull();
+  });
+});
+
 describe("Live Translate v2", () => {
   it("starts the chosen app in the chosen mode, language and speed", async () => {
     render(<LiveTranslateV2 run={run} />);
@@ -135,7 +198,7 @@ describe("Live Translate in the Live tab follows the plan", () => {
 
 /** Parity with today's panel (LiveTranslateCard): every control it shows, idle and running, is on the new one. */
 describe("parity with today's Live Translate panel", () => {
-  type State = "idle" | "running";
+  type State = "idle" | "running" | "ended";
   const WHERE: [today: string, role: ControlRole, name: string | RegExp, state: State][] = [
     ["combobox: App to translate", "combobox", /^App to translate/, "idle"],
     ["combobox: Mode", "combobox", /^Mode/, "idle"],
@@ -145,10 +208,12 @@ describe("parity with today's Live Translate panel", () => {
     ["button: Start", "button", "Start", "idle"],
     ["button: Move Live Translate", "button", "Move Live Translate", "running"],
     ["button: Stop", "button", "Stop", "running"],
+    ["button: Close", "button", "Close", "ended"],
   ];
   const go = async (state: State) => {
     await subscribed();
     if (state === "running") await act(async () => emitEvent(TRANSLATE_FEED, feed()));
+    if (state === "ended") await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended" })));
     await act(flushAsync);
   };
 
@@ -158,6 +223,8 @@ describe("parity with today's Live Translate panel", () => {
     await go("idle");
     collectControls(seen);
     await go("running");
+    collectControls(seen);
+    await go("ended");
     collectControls(seen);
     first.unmount();
     const today = [...seen];
