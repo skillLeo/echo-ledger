@@ -36,7 +36,7 @@ class ContrastAndRtlTest {
     }
 
     @Test
-    fun `dark mode's text buttons and focused labels reach 7 to 1, while the scheme's primary stays the brand fill`() {
+    fun `dark mode's text buttons and focused labels reach about 7 to 1, while the scheme's primary stays the brand fill`() {
         // Filled buttons, switches, checkboxes, radios, sliders and progress keep the brand colour in both themes.
         assertEquals(DarkColors.accentStrong, DarkColors.toScheme().primary)
         assertEquals(DarkColors.onAccent, DarkColors.toScheme().onPrimary)
@@ -45,15 +45,36 @@ class ContrastAndRtlTest {
 
         val words = ReadableAccent.of(DarkColors)
         listOf(DarkColors.bg, DarkColors.surface, DarkColors.surface2, DarkColors.surface3).forEach { under ->
-            // As contrast checkers report it, to one decimal: 7.0:1 on the lightest dark surface, more on the others.
-            val ratio = kotlin.math.round(contrast(words, under) * 10) / 10
-            assertTrue("text button words on $under: $ratio", ratio >= 7f)
+            // The DESIGN_SYSTEM rule for words: 4.5:1 or more. These reach about 7:1 (6.99 on the lightest dark surface).
+            val ratio = contrast(words, under)
+            assertTrue("text button words on $under: $ratio", ratio >= 4.5f)
+            assertTrue("about 7:1 on $under: $ratio", ratio >= 6.99f)
         }
         // The brand fill as words was the bug: under 4.5 to 1 on the dark page.
         assertTrue(contrast(DarkColors.accentStrong, DarkColors.bg) < 4.5f)
         // Light mode keeps its brand colour, which passes on white.
         assertEquals(LightColors.accentStrong, ReadableAccent.of(LightColors))
         assertTrue(contrast(ReadableAccent.of(LightColors), LightColors.surface) >= 4.5f)
+    }
+
+    @Test
+    fun `Material's outlined buttons draw their words in our muted text, readable in both themes, never the brand fill`() {
+        val seen = mutableMapOf<String, Color>()
+        compose.setContent {
+            EchoLedgerTheme("dark") { seen["dark"] = androidx.compose.material3.ButtonDefaults.outlinedButtonColors().contentColor }
+            EchoLedgerTheme("light") { seen["light"] = androidx.compose.material3.ButtonDefaults.outlinedButtonColors().contentColor }
+        }
+        compose.waitForIdle()
+        val dark = seen.getValue("dark")
+        val light = seen.getValue("light")
+        // If Material ever took them to the primary (the brand fill), dark mode would fall to about 3.6:1: this fails then.
+        assertTrue("dark outlined words are not the brand fill", dark != DarkColors.accentStrong)
+        listOf(DarkColors.bg, DarkColors.surface, DarkColors.surface2, DarkColors.surface3).forEach { under ->
+            assertTrue("dark outlined words on $under: ${contrast(dark, under)}", contrast(dark, under) >= 4.5f)
+        }
+        listOf(LightColors.bg, LightColors.surface, LightColors.surface2).forEach { under ->
+            assertTrue("light outlined words on $under: ${contrast(light, under)}", contrast(light, under) >= 4.5f)
+        }
     }
 
     @Test

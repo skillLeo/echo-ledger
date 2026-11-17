@@ -23,7 +23,8 @@ import com.echoledger.mobile.ui.LocalEchoColors
 /**
  * Accent-coloured words that people must read (since v1.8.1, bug P-014). Dark mode's brand fill (#3E63DD) reads only
  * 3.0 to 3.6:1 as text on the dark page, so the words of a text button and a focused field's label take the light
- * accent text colour there (over 7:1). The colour scheme's primary stays the brand fill, so filled buttons, switches,
+ * accent text colour there (about 7:1: 6.99 on the lightest dark surface). Material's outlined buttons draw their words
+ * in onSurfaceVariant, our muted text (8.4:1 dark, 5.9:1 light), so they need nothing. The colour scheme's primary stays the brand fill, so filled buttons, switches,
  * checkboxes, radios, sliders and progress look as they always did. Light mode keeps the brand colour, which passes.
  */
 object ReadableAccent {

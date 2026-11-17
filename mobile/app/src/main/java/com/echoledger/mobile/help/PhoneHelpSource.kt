@@ -1,9 +1,12 @@
 package com.echoledger.mobile.help
 
 import android.content.Context
+import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Problems
 import com.echoledger.mobile.net.ApiClient
 import com.echoledger.mobile.net.ApiException
+import com.echoledger.mobile.net.EMPTY_ANSWER
+import com.echoledger.mobile.net.UNREADABLE_ANSWER
 import com.echoledger.mobile.ui.v2.help.Guide
 import com.echoledger.mobile.ui.v2.help.GuideHit
 import com.echoledger.mobile.ui.v2.help.HelpResult
@@ -12,66 +15,98 @@ import com.echoledger.mobile.ui.v2.help.ReleaseNotes
 import kotlinx.coroutines.CancellationException
 
 /**
- * Help v2 on the phone's own API client (contract 2.0.0-d): the user guide's sections, Android's release notes, a
+ * Help v2 on the phone's API client (contract 2.0.0-d): the user guide's sections, Android's release notes, a
  * message to support, and when this phone last sent its device report. A failure is [HelpResult.Failed]: `offline`
- * when the server can't be reached, else plain words (the server's own when written for people, never a status code).
+ * when the server can't be reached, else words for people in the phone's language ([words] reads the string
+ * resources): ours for each refusal, or the server's own when written for people; never a status code.
  */
-class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val reports: DeviceReports) : HelpSource {
-    override suspend fun guides(query: String): HelpResult<List<GuideHit>> = help(GUIDES_FAILED) { client ->
+class PhoneHelpSource(private val api: suspend () -> ApiClient?, private val reports: DeviceReports, private val words: (Int) -> String) :
+    HelpSource {
+    constructor(context: Context, api: suspend () -> ApiClient?, reports: DeviceReports) :
+        this(api, reports, context.applicationContext::getString)
+
+    /** Which call failed: a 429 and a 404 mean something different for each. */
+    enum class Call(val failed: Int) {
+        GUIDES(R.string.v2_help_core_guides_failed),
+        GUIDE(R.string.v2_help_core_guide_failed),
+        WHATS_NEW(R.string.v2_help_core_whats_new_failed),
+        SEND(R.string.v2_help_core_send_failed)
+    }
+
+    override suspend fun guides(query: String): HelpResult<List<GuideHit>> = help(Call.GUIDES) { client ->
         client.helpGuides(query.trim().ifBlank { null }).data.map { GuideHit(it.id, it.title, it.excerpt?.ifBlank { null }) }
     }
 
-    override suspend fun guide(id: String): HelpResult<Guide> = help(GUIDE_FAILED) { client ->
+    override suspend fun guide(id: String): HelpResult<Guide> = help(Call.GUIDE) { client ->
         client.helpGuide(id).let { Guide(it.id, it.title, it.markdown) }
     }
 
-    override suspend fun whatsNew(): HelpResult<List<ReleaseNotes>> = help(WHATS_NEW_FAILED) { client ->
+    override suspend fun whatsNew(): HelpResult<List<ReleaseNotes>> = help(Call.WHATS_NEW) { client ->
         client.whatsNew("android").data.map { ReleaseNotes(it.version, it.releasedAt, it.notes) }
     }
 
-    override suspend fun send(subject: String, message: String, includeReport: Boolean): HelpResult<Unit> = help(SEND_FAILED) { client ->
+    override suspend fun send(subject: String, message: String, includeReport: Boolean): HelpResult<Unit> = help(Call.SEND) { client ->
         client.sendSupportMessage(subject, message, includeReport && reports.lastAt() != null)
     }
 
     override fun lastReportAt(): String? = reports.lastAt()
 
-    private suspend fun <T> help(failed: String, block: suspend (ApiClient) -> T): HelpResult<T> = try {
-        HelpResult.Ok(block(api() ?: return HelpResult.Failed(offline = false, words = Problems.SIGN_IN)))
+    private suspend fun <T> help(call: Call, block: suspend (ApiClient) -> T): HelpResult<T> = try {
+        HelpResult.Ok(block(api() ?: return HelpResult.Failed(offline = false, words = words(R.string.v2_help_core_sign_in))))
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        failure(e, failed)
+        failure(e, call)
     }
 
-    companion object {
-        const val GUIDES_FAILED = "The guides could not be loaded. Try again in a minute."
-        const val GUIDE_FAILED = "This guide could not be opened. Try again in a minute."
-        const val WHATS_NEW_FAILED = "What's new could not be loaded. Try again in a minute."
-        const val SEND_FAILED = "Your message could not be sent. Try again in a minute."
-        const val TOO_MANY = "You have sent 5 messages in the last hour. Try again later, or write to support by email."
-        const val NOT_VERIFIED = "Confirm your email address first: the link is in the email we sent you. Then send your message."
-        const val BUSY = "The server is busy right now. Try again in a minute."
-        const val NOT_FOUND = "This guide is no longer there."
+    /** Offline, or the words for people: by the server's code and the call first, then [Problems] in the phone's language. */
+    internal fun <T> failure(e: Throwable, call: Call): HelpResult<T> {
+        val refused = e as? ApiException
+        val key: Int? = when {
+            refused == null -> null
 
-        /** Offline, or the words for people: by the server's code first, then [Problems]. */
-        internal fun <T> failure(e: Throwable, failed: String): HelpResult<T> {
-            val refused = e as? ApiException
-            val words = when {
-                refused == null -> Problems.text(e, failed)
-                refused.status == 429 -> TOO_MANY
-                refused.code == "email_not_verified" -> NOT_VERIFIED
-                refused.code == "server_busy" || refused.status == 503 -> BUSY
-                refused.status == 404 -> NOT_FOUND
-                else -> Problems.text(e, failed)
+            refused.status == 429 -> if (call ==
+                Call.SEND
+            ) {
+                R.string.v2_help_core_too_many_messages
+            } else {
+                R.string.v2_help_core_too_many_tries
             }
-            return HelpResult.Failed(offline = refused == null && words == Problems.OFFLINE, words = words)
+
+            refused.code == "email_not_verified" -> R.string.v2_help_core_not_verified
+
+            refused.code == "server_busy" || refused.status == 503 -> R.string.v2_help_core_busy
+
+            refused.status == 404 -> if (call == Call.GUIDE) R.string.v2_help_core_guide_gone else call.failed
+
+            else -> null
         }
+        if (key != null) return HelpResult.Failed(offline = false, words = words(key))
+        val english = Problems.text(e, FAILED_ENGLISH)
+        val offline = refused == null && english == Problems.OFFLINE
+        val said = PROBLEM_KEYS[english]?.let(words) ?: if (english == FAILED_ENGLISH) words(call.failed) else english
+        return HelpResult.Failed(offline = offline, words = said)
+    }
+
+    private companion object {
+        /** Problems' fallback, only to tell "no better words" apart; it never reaches the screen. */
+        const val FAILED_ENGLISH = "\u0000help call failed"
+
+        /** Problems' own sentences in the phone's language. */
+        val PROBLEM_KEYS = mapOf(
+            Problems.OFFLINE to R.string.v2_help_core_offline,
+            Problems.SERVER to R.string.v2_help_core_server,
+            Problems.SIGN_IN to R.string.v2_help_core_sign_in,
+            Problems.CERTIFICATE to R.string.v2_help_core_certificate,
+            EMPTY_ANSWER to R.string.v2_help_core_empty_answer,
+            UNREADABLE_ANSWER to R.string.v2_help_core_unreadable_answer
+        )
     }
 }
 
 /** When this phone last sent its device report (`POST /api/devices/report`), kept across restarts, as an ISO time. */
 class DeviceReports(context: Context, private val now: () -> java.time.Instant = java.time.Instant::now) {
-    private val prefs = context.applicationContext.getSharedPreferences("device_reports", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext.getSharedPreferences(FILE, Context.MODE_PRIVATE)
 
     fun lastAt(): String? = prefs.getString(KEY, null)
 
@@ -80,7 +115,13 @@ class DeviceReports(context: Context, private val now: () -> java.time.Instant =
         prefs.edit().putString(KEY, now().toString()).apply()
     }
 
+    /** Signed out: a report sent for this account is never offered with another's message. */
+    fun clear() {
+        prefs.edit().remove(KEY).commit()
+    }
+
     private companion object {
+        const val FILE = "device_reports"
         const val KEY = "last_sent_at"
     }
 }
