@@ -6,6 +6,7 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.BookmarkBorder
 import androidx.compose.material.icons.outlined.Call
 import androidx.compose.material.icons.outlined.Check
@@ -26,6 +27,7 @@ import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Pause
 import androidx.compose.material.icons.outlined.PlayArrow
+import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.QuestionAnswer
 import androidx.compose.material.icons.outlined.RadioButtonChecked
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -82,6 +84,8 @@ object EchoIcons {
     val Screens: ImageVector get() = Icons.Outlined.Image
     val Previous: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowLeft
     val Next: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowRight
+    val Add: ImageVector get() = Icons.Outlined.Add
+    val Pin: ImageVector get() = Icons.Outlined.PushPin
     val Todo: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 

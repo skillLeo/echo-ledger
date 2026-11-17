@@ -79,8 +79,15 @@ enum class AskLanguage(val wire: String) {
  * view model's Ask and project list.
  */
 @Composable
-fun V2AskScreen(vm: MainViewModel, onOpenAt: (sessionId: String, atMs: Long) -> Unit, modifier: Modifier = Modifier) {
-    val projects by vm.clients.collectAsState()
+fun V2AskScreen(
+    vm: MainViewModel,
+    onOpenAt: (sessionId: String, atMs: Long) -> Unit,
+    modifier: Modifier = Modifier,
+    /** Ask inside a project's page: the scope is that project, with no picker and no page title. */
+    fixedProject: ClientDto? = null
+) {
+    val all by vm.clients.collectAsState()
+    val projects = fixedProject?.let { listOf(it) } ?: all
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var question by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<AskState>(AskState.Idle) }
@@ -116,7 +123,8 @@ fun V2AskScreen(vm: MainViewModel, onOpenAt: (sessionId: String, atMs: Long) -> 
         onOpenAt = onOpenAt,
         answerIn = answerIn,
         onAnswerIn = { answerIn = it },
-        modifier = modifier
+        modifier = modifier,
+        inProject = fixedProject != null
     )
 }
 
@@ -133,11 +141,13 @@ fun V2AskContent(
     onOpenAt: (sessionId: String, atMs: Long) -> Unit,
     answerIn: AskLanguage = AskLanguage.English,
     onAnswerIn: (AskLanguage) -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Inside a project's page: no title, no scope picker (the project is the scope), and what answers use. */
+    inProject: Boolean = false
 ) {
     val c = EchoV2.colors
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
-        EchoTopBar(stringResource(R.string.v2_ask_title), large = true)
+        if (!inProject) EchoTopBar(stringResource(R.string.v2_ask_title), large = true)
         if (projects.isEmpty()) {
             EchoEmptyState(
                 stringResource(R.string.v2_ask_no_projects_title),
@@ -152,14 +162,23 @@ fun V2AskContent(
                 verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)
             ) {
                 val chosen = projects.firstOrNull { it.id == selectedId } ?: projects.first()
-                EchoSelect(
-                    label = stringResource(R.string.v2_ask_scope),
-                    options = projects,
-                    selected = chosen,
-                    onSelect = { onSelect(it.id) },
-                    optionLabel = { it.name }
-                )
-                Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
+                if (inProject) {
+                    Text(
+                        stringResource(R.string.v2_ws_ask_footer, chosen.name),
+                        style = EchoV2.type.caption,
+                        color = c.textSecondary,
+                        modifier = Modifier.padding(top = EchoTokens.Space.s12)
+                    )
+                } else {
+                    EchoSelect(
+                        label = stringResource(R.string.v2_ask_scope),
+                        options = projects,
+                        selected = chosen,
+                        onSelect = { onSelect(it.id) },
+                        optionLabel = { it.name }
+                    )
+                    Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
+                }
                 EchoTextField(
                     value = question,
                     onValueChange = onQuestion,

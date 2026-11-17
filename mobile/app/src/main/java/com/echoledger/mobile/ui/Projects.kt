@@ -387,14 +387,31 @@ private fun ProjectPage(
         onNested = { nested = it },
         onMenu = { sheet = it }
     )
-    when (sheet) {
-        "subfolder" -> ProjectNameDialog("New folder in ${project.name}", "", onDismiss = { sheet = null }) { name ->
-            sheet = null
+    sheet?.let { key -> ProjectMenuDialogs(vm, project, all, key, onClose = { sheet = null }, onOpenProject = onOpenProject) }
+}
+
+/**
+ * What the project menu's items open ([PROJECT_MENU] keys): name, move, share, send, filing rules and delete dialogs.
+ * Today's project page and the v2 one (behind `ui_v2.ask`) both use these.
+ */
+@Composable
+internal fun ProjectMenuDialogs(
+    vm: MainViewModel,
+    project: ClientDto,
+    all: List<ClientDto>,
+    key: String,
+    onClose: () -> Unit,
+    onOpenProject: (String?) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    when (key) {
+        "subfolder" -> ProjectNameDialog("New folder in ${project.name}", "", onDismiss = { onClose() }) { name ->
+            onClose()
             scope.launch { vm.createProject(name, project.id)?.let { onOpenProject(it.id) } }
         }
 
-        "rename" -> ProjectNameDialog("Rename project", project.name, onDismiss = { sheet = null }) { name ->
-            sheet = null
+        "rename" -> ProjectNameDialog("Rename project", project.name, onDismiss = { onClose() }) { name ->
+            onClose()
             scope.launch { vm.renameProject(project.id, name) }
         }
 
@@ -403,20 +420,20 @@ private fun ProjectPage(
             all = all,
             allow = { target -> ProjectTree.canMove(all, project.id, target) },
             topLabel = "Top level",
-            onDismiss = { sheet = null }
+            onDismiss = { onClose() }
         ) { target ->
-            sheet = null
+            onClose()
             scope.launch { vm.moveProject(project.id, target) }
         }
 
-        "share" -> ShareSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { sheet = null })
+        "share" -> ShareSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { onClose() })
 
-        "send" -> SendSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { sheet = null })
+        "send" -> SendSheet(vm, sessionId = null, clientId = project.id, title = project.name, onDismiss = { onClose() })
 
-        "rules" -> FilingRulesSheet(vm, project, onDismiss = { sheet = null })
+        "rules" -> FilingRulesSheet(vm, project, onDismiss = { onClose() })
 
         "delete" -> AlertDialog(
-            onDismissRequest = { sheet = null },
+            onDismissRequest = { onClose() },
             title = { Text("Delete ${project.name}?") },
             text = {
                 Text(
@@ -425,11 +442,11 @@ private fun ProjectPage(
             },
             confirmButton = {
                 TextButton(onClick = {
-                    sheet = null
+                    onClose()
                     scope.launch { if (vm.deleteProject(project.id)) onOpenProject(project.parentId) }
                 }) { Text("Delete", color = Brand.Danger) }
             },
-            dismissButton = { TextButton(onClick = { sheet = null }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { onClose() }) { Text("Cancel") } }
         )
     }
 }

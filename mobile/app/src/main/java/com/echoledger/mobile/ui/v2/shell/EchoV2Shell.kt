@@ -43,6 +43,8 @@ import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.echoledger.mobile.ui.v2.theme.systemEchoLanguage
+import com.echoledger.mobile.ui.v2.workspace.V2WorkspaceScreen
+import com.echoledger.mobile.ui.v2.workspace.V2WorkspacesScreen
 import kotlinx.coroutines.launch
 
 /** The one feedback system of the v2 screens: every message and Undo goes through this toast host. */
@@ -60,7 +62,12 @@ sealed interface V2Route {
     data object Setup : V2Route
     data class ClassicPage(val id: String) : V2Route
     data class Live(val entry: LiveEntry) : V2Route
-    data class Recording(val id: String) : V2Route
+
+    /** A recording; Back goes to [from] (the tabs, or the project page it was opened from). */
+    data class Recording(val id: String, val from: V2Route = Tabs) : V2Route
+    data object Projects : V2Route
+    data class Project(val id: String) : V2Route
+    data object ClassicProjects : V2Route
 }
 
 /**
@@ -137,8 +144,11 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
     val library by vm.library.collectAsState()
     val settings by vm.settings.collectAsState()
     BackHandler(enabled = route != V2Route.Tabs) {
-        route = when (route) {
+        route = when (val r = route) {
             V2Route.ClassicSettings -> V2Route.Settings
+            is V2Route.Recording -> r.from
+            is V2Route.Project -> V2Route.Projects
+            V2Route.ClassicProjects -> V2Route.Projects
             else -> V2Route.Tabs
         }
     }
@@ -177,6 +187,28 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                 is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
 
                 // The server's Trash time (contract 2.0.0-b, trash.keep_hours; 48 on an older server).
+                V2Route.Projects -> V2WorkspacesScreen(
+                    vm,
+                    onOpen = { route = V2Route.Project(it) },
+                    onSharedAndImported = { route = V2Route.ClassicProjects },
+                    onBack = { route = V2Route.Tabs }
+                )
+
+                // Shared with me, imported and requests stay on today's Projects page.
+                V2Route.ClassicProjects -> classic.ask()
+
+                is V2Route.Project -> V2WorkspaceScreen(
+                    vm,
+                    r.id,
+                    onBack = {
+                        val parent = vm.clients.value.firstOrNull { it.id == r.id }?.parentId
+                        route = parent?.let { V2Route.Project(it) } ?: V2Route.Projects
+                    },
+                    onOpenProject = { id -> route = id?.let { V2Route.Project(it) } ?: V2Route.Projects },
+                    onOpenRecording = { route = V2Route.Recording(it.id, from = r) },
+                    onOpenAt = { id, _ -> route = V2Route.Recording(id, from = r) }
+                )
+
                 V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
                 is V2Route.Recording -> {
@@ -184,7 +216,7 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                     if (item == null) {
                         LaunchedEffect(r.id) { route = V2Route.Tabs }
                     } else {
-                        V2RecordingScreen(vm, item, onBack = { route = V2Route.Tabs })
+                        V2RecordingScreen(vm, item, onBack = { route = r.from })
                     }
                 }
 
@@ -222,7 +254,8 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                             onOpen = { route = V2Route.Recording(it.id) },
                             onTrash = { route = V2Route.Trash },
                             onAccount = { route = V2Route.Settings },
-                            initialViews = libraryViews
+                            initialViews = libraryViews,
+                            onProjects = if (flags.isOn(UiFlags.ASK)) ({ route = V2Route.Projects }) else null
                         )
                     } else {
                         classic.library()

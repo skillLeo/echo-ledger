@@ -218,7 +218,13 @@ fun V2RecordingContent(
                     Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile),
                     verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
                 ) {
-                    Text(row.title, style = EchoV2.type.titleL, color = c.textPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        row.title,
+                        style = EchoV2.type.content(row.title, EchoV2.type.titleL),
+                        color = c.textPrimary,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                         Text(
                             listOf(row.source, row.time).filter { it.isNotBlank() }.joinToString(" · "),
