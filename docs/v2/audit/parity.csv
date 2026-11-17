@@ -86,13 +86,13 @@ PH-REC-003,phone,Recording page,⋮ Back to <app> for a voice note shared from a
 PH-REC-004,phone,Recording page,⋮ Copy for AI,Recording page ⋮ › Copy for AI,"Copy ▾ in the action row › Copy for AI (with a title, date, people and language header)",done,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader
 PH-REC-005,phone,Recording page,⋮ Pin / Unpin,Recording page ⋮ › Pin,⋮ › Organise › Pin / Unpin,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic; RecordingPageTest.aPinnedAndKeptRecordingOffersUnpinAndStopKeeping
 PH-REC-006,phone,Recording page,⋮ Keep forever / Stop keeping,Recording page ⋮ › Keep forever,⋮ › Organise › Keep forever / Stop keeping,done,RecordingPageTest.pinKeepAndUnpinSendTheSameChangesAsClassic
-PH-REC-007,phone,Recording page,⋮ Skip silences / Play silences,Recording page ⋮ › Skip silences,⋮ › Transcript › Skip silences / Play silences,partial,none yet
+PH-REC-007,phone,Recording page,⋮ Skip silences / Play silences,Recording page ⋮ › Skip silences,"⋮ › Transcript › Skip silences / Play silences, and the switch under the player",done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
 PH-REC-008,phone,Recording page,"⋮ Delete, asked first: ""You can restore it from Recently deleted for 48 hours""",Recording page ⋮ › Delete,"⋮ › Delete (last, red): asked first, then Undo",done,RecordingPageTest.deleteAsksFirstThenGoesToTrashWithUndo
 PH-REC-009,phone,Recording page,The title moves into the bar when the page scrolls,Recording page,None,missing,none
 PH-REC-010,phone,Recording page,Tap the title to rename the recording,Recording page › title,"Tap the title, or ⋮ › Rename",done,RecordingPageTest.renameFromTheMenuOrTheTitle
-PH-REC-011,phone,Recording page,"Source app tile, app name and device name (""WhatsApp · Phone"")",Recording page head,Source and status; no device,partial,none
-PH-REC-012,phone,Recording page,"Date, length and project line (""Oct 20 · 10:00 AM · 42:10 · Acme"")",Recording page head,Source and time in the head; length and project in the Details tab,partial,none
-PH-REC-013,phone,Recording page,Bookmark chips (time and tag); a tap plays from there,Recording page head,None,missing,none
+PH-REC-011,phone,Recording page,"Source app tile, app name and device name (""WhatsApp · Phone"")",Recording page head,Head: source · device · time · length · project,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-012,phone,Recording page,"Date, length and project line (""Oct 20 · 10:00 AM · 42:10 · Acme"")",Recording page head,Head: source · device · time · length · project,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-013,phone,Recording page,Bookmark chips (time and tag); a tap plays from there,Recording page head,Under the title: a chip per bookmark (time and tag); a tap plays from it,done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
 PH-REC-014,phone,Recording page,Opening a recording marks it opened (the Library's unread dot goes),Open a recording,Not marked opened,missing,none
 PH-REC-015,phone,Recording page,Opened from a search match: plays from that moment,Library search › a transcript match,None,missing,none
 PH-REC-016,phone,Recording page,"No audio card: ""Nothing was heard…"" with Run capture test and Delete",A recording with no sound,None,missing,none
@@ -144,12 +144,12 @@ PH-REC-061,phone,Recording page,"Organise › Folder: move to a project, or New 
 PH-REC-062,phone,Recording page,"Organise › Labels: add a label, remove one",Recording page › Organise,"⋮ › Organise › Labels (add, remove, pick a known one)",done,RecordingPageTest.labelsAreAddedAndRemoved
 PH-REC-063,phone,Recording page,Play and pause,Docked player,Player,done,none
 PH-REC-064,phone,Recording page,Back 10 s and forward 10 s,Docked player,Player,done,none
-PH-REC-065,phone,Recording page,"Speed: 0.75×, 1×, 1.25×, 1.5×, 2× (one chip steps through)",Docked player › speed chip,"Speed chip steps 1×, 1.25×, 1.5×, 2×; no 0.75×",partial,none
+PH-REC-065,phone,Recording page,"Speed: 0.75×, 1×, 1.25×, 1.5×, 2× (one chip steps through)",Docked player › speed chip,"The speed chip steps 0.75×, 1×, 1.25×, 1.5×, 2×",done,RecordingPageTest.theSpeedStepsThroughClassicsSpeeds
 PH-REC-066,phone,Recording page,"Scrubber: tap or drag to move, right to left in Urdu",Docked player,Position slider,partial,none
-PH-REC-067,phone,Recording page,Skip silence switch,Player options,None,missing,none
-PH-REC-068,phone,Recording page,Moment markers on the track (plan 4),Not in classic,None,missing,none
-PH-REC-069,phone,Recording page,"Details: source, length, project, language",Classic: in the page head,"Details tab: source, length, project, language",done,none
-PH-REC-070,phone,Recording page,"Details: device, created, file size, transcription engine, retention, labels (plan 4)",Not in classic,None,missing,none
+PH-REC-067,phone,Recording page,Skip silence switch,Player options,Skip silence switch under the player (and in ⋮),done,RecordingPageTest.skipSilenceAndTheBookmarksAreUnderThePlayer
+PH-REC-068,phone,Recording page,Moment markers on the track (plan 4),Not in classic,The player's track marks each bookmark,partial,none yet (drawn; no test reads the canvas)
+PH-REC-069,phone,Recording page,"Details: source, length, project, language",Classic: in the page head,Details tab,done,RecordingPageTest.detailsHaveTheDeviceDateLanguageProjectLabelsAndKeeping
+PH-REC-070,phone,Recording page,"Details: device, created, file size, transcription engine, retention, labels (plan 4)",Not in classic,"Details: device, recorded, labels, kept (forever or the plan's rules), pinned, bookmarks; no file size or engine (the phone never names the engine, P-001)",partial,RecordingPageTest.detailsHaveTheDeviceDateLanguageProjectLabelsAndKeeping
 PH-REC-071,phone,Recording page,Tabs Transcript · Summary · Ask · Moments · Details (plan 4),Not in classic as tabs,Tabs Transcript and Details,partial,none
 PH-REC-072,phone,Recording page,"⋮ Move to project, Labels, Mark important, Change language & re-transcribe, Export ▸ (plan 4)","Classic: spread over Organise, Re-transcribe and Export","⋮: Organise, Transcript, Export ▸, Delete; no Mark important (not in classic)",partial,RecordingPageTest.theMenuHasOrganiseTranscriptAndExportGroupsAndDeleteLast
 PH-REC-073,phone,Recording page,Action row: Share · Copy ▾ · Ask · ⋮ (plan 4),Not in classic,Share · Copy ▾ · More (⋮); no Ask yet,partial,RecordingPageTest.copyMenuPutsTextWithAndWithoutTimesAndForAiWithItsHeader

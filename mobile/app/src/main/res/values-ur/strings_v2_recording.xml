@@ -105,4 +105,15 @@
     <string name="v2_rec_version_previous_in">پچھلا (%1$s)</string>
     <string name="v2_rec_final">حتمی ٹرانسکرپٹ</string>
     <string name="v2_rec_live">لائیو کیپشنز (حتمی ابھی باقی)</string>
+    <string name="v2_rec_skip_silence">خاموشی چھوڑ دیں</string>
+    <string name="v2_rec_bookmark_at">%1$s پر بک مارک</string>
+    <string name="v2_rec_detail_device">ڈیوائس</string>
+    <string name="v2_rec_detail_created">ریکارڈ ہوئی</string>
+    <string name="v2_rec_detail_labels">لیبل</string>
+    <string name="v2_rec_detail_kept">رکھی گئی</string>
+    <string name="v2_rec_detail_kept_forever">ہمیشہ کے لیے</string>
+    <string name="v2_rec_detail_kept_rules">آپ کے پلان کے اصولوں کے مطابق</string>
+    <string name="v2_rec_detail_pinned">پن</string>
+    <string name="v2_rec_detail_yes">ہاں</string>
+    <string name="v2_rec_detail_bookmarks">بک مارکس</string>
 </resources>

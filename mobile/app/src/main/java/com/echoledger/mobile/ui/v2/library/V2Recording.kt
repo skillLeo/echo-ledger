@@ -2,6 +2,7 @@ package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -29,6 +31,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Speakers
@@ -388,13 +392,21 @@ private fun V2RecordingPage(
         onCopy = if (page.canCopy) ({ sheet = RecordingSheet.Copy }) else null,
         onMore = { sheet = RecordingSheet.Menu },
         onRename = { sheet = RecordingSheet.Rename },
-        tools = tools
+        tools = tools,
+        head = RecordingHead(
+            device = item.sourceDeviceLabel ?: item.device?.name,
+            bookmarks = page.bookmarks,
+            onBookmark = { page.playFrom(it) },
+            skipSilence = player.skipSilence,
+            onSkipSilence = if (hasAudio) ({ player.changeSkipSilence(it) }) else null
+        )
     )
 }
 
-private val SPEEDS = listOf(1f, 1.25f, 1.5f, 2f)
+/** Classic's speeds (PLAYER_SPEEDS): 0.75× to 2×. */
+private val SPEEDS = com.echoledger.mobile.ui.PLAYER_SPEEDS
 
-/** The next playback speed: 1×, 1.25×, 1.5×, 2×, then 1× again. */
+/** The next playback speed: 0.75×, 1×, 1.25×, 1.5×, 2×, then 0.75× again. */
 fun nextSpeed(current: Float): Float = SPEEDS.firstOrNull { it > current + 0.01f } ?: SPEEDS.first()
 
 fun speedLabel(speed: Float): String = java.math.BigDecimal(speed.toString()).stripTrailingZeros().toPlainString() + "×"
@@ -457,8 +469,11 @@ fun V2RecordingContent(
     /** A tap on the title (Rename); null: the title is plain text. */
     onRename: (() -> Unit)? = null,
     /** The transcript's toolbar and lines (views, find, playing from a line, speaker names); defaults draw plain lines. */
-    tools: TranscriptTools = TranscriptTools()
+    tools: TranscriptTools = TranscriptTools(),
+    /** The head's extras: the device, bookmarks, skip silence. */
+    head: RecordingHead = RecordingHead()
 ) {
+    val res = LocalContext.current.resources
     val c = EchoV2.colors
     val text = v2Text
     val locale = screenLocale()
@@ -496,7 +511,8 @@ fun V2RecordingContent(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                         Text(
-                            listOf(row.source, row.time).filter { it.isNotBlank() }.joinToString(" · "),
+                            listOfNotNull(row.source, head.device, row.time, row.duration, item.client?.name)
+                                .filter { it.isNotBlank() }.joinToString(" · "),
                             style = EchoV2.type.meta,
                             color = c.textSecondary,
                             modifier = Modifier.weight(1f, fill = false)
@@ -508,6 +524,22 @@ fun V2RecordingContent(
                             RowStatus.Failed -> EchoStatus(text.failed, EchoStatusKind.Danger)
                         }
                     }
+                    if (head.bookmarks.isNotEmpty()) {
+                        Row(
+                            Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+                        ) {
+                            head.bookmarks.forEach { b ->
+                                val at = formatClock(b.atMs)
+                                com.echoledger.mobile.ui.v2.components.EchoChip(
+                                    listOfNotNull(at, b.tag).joinToString(" "),
+                                    selected = false,
+                                    onClick = { head.onBookmark(b.atMs) },
+                                    modifier = Modifier.semantics { contentDescription = res.getString(R.string.v2_rec_bookmark_at, at) }
+                                )
+                            }
+                        }
+                    }
                     EchoPlayer(
                         positionMs = positionMs,
                         durationMs = durationMs,
@@ -517,8 +549,16 @@ fun V2RecordingContent(
                         onPlayPause = onPlayPause,
                         onSeek = onSeek,
                         onSpeed = onSpeed,
-                        modifier = Modifier.padding(top = EchoTokens.Space.s8)
+                        modifier = Modifier.padding(top = EchoTokens.Space.s8),
+                        markers = head.bookmarks.map { it.atMs }
                     )
+                    head.onSkipSilence?.let { onSkip ->
+                        com.echoledger.mobile.ui.v2.components.EchoSwitch(
+                            head.skipSilence,
+                            onSkip,
+                            label = stringResource(R.string.v2_rec_skip_silence)
+                        )
+                    }
                 }
             }
             item {
@@ -549,7 +589,7 @@ fun V2RecordingContent(
             }
             item { EchoTabs(listOf(text.transcript, text.details), tab, onSelect = { tab = it }) }
             if (tab == 1) {
-                item { DetailRows(item, row, text) }
+                item { DetailRows(item, row, text, head) }
             } else {
                 when (transcript) {
                     TranscriptState.Loading -> item { EchoSkeletonList(4, avatar = false) }
@@ -609,11 +649,32 @@ fun V2RecordingContent(
 }
 
 @Composable
-private fun DetailRows(item: LibraryItem, row: V2Row, text: V2Text) {
+private fun DetailRows(item: LibraryItem, row: V2Row, text: V2Text, head: RecordingHead) {
     Column {
         EchoSettingRow(text.detailSource, value = row.source)
+        head.device?.let { EchoSettingRow(stringResource(R.string.v2_rec_detail_device), value = it) }
         if (row.duration.isNotEmpty()) EchoSettingRow(text.detailLength, value = row.duration)
-        item.client?.name?.let { EchoSettingRow(text.detailProject, value = it) }
         item.languageChip?.let { EchoSettingRow(text.detailLanguage, value = it) }
+        row.time.takeIf { it.isNotBlank() }?.let { EchoSettingRow(stringResource(R.string.v2_rec_detail_created), value = it) }
+        item.client?.name?.let { EchoSettingRow(text.detailProject, value = it) }
+        if (item.labels.isNotEmpty()) EchoSettingRow(stringResource(R.string.v2_rec_detail_labels), value = item.labels.joinToString(", "))
+        EchoSettingRow(
+            stringResource(R.string.v2_rec_detail_kept),
+            value = stringResource(if (item.keep) R.string.v2_rec_detail_kept_forever else R.string.v2_rec_detail_kept_rules)
+        )
+        if (item.pinned) EchoSettingRow(stringResource(R.string.v2_rec_detail_pinned), value = stringResource(R.string.v2_rec_detail_yes))
+        if (head.bookmarks.isNotEmpty()) {
+            EchoSettingRow(stringResource(R.string.v2_rec_detail_bookmarks), value = head.bookmarks.size.toString())
+        }
     }
 }
+
+/** The recording's device, bookmarks and skip silence for the page's head (defaults: none). */
+data class RecordingHead(
+    val device: String? = null,
+    val bookmarks: List<com.echoledger.mobile.data.SessionMarkerDto> = emptyList(),
+    val onBookmark: (Long) -> Unit = {},
+    val skipSilence: Boolean = false,
+    /** Null while there is no audio to play. */
+    val onSkipSilence: ((Boolean) -> Unit)? = null
+)

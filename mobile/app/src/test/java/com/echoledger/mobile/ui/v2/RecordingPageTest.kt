@@ -408,4 +408,65 @@ class RecordingPageTest : ScreenTest() {
         compose.onNodeWithText("Hi, thanks for calling.").performClick()
         assertEquals(listOf(12_400L), played)
     }
+
+    private fun content(
+        head: com.echoledger.mobile.ui.v2.library.RecordingHead = com.echoledger.mobile.ui.v2.library.RecordingHead(),
+        speed: Float = 1f,
+        onSpeed: () -> Unit = {}
+    ) = show {
+        val segments = Json { ignoreUnknownKeys = true }
+            .decodeFromString(com.echoledger.mobile.data.TranscriptDto.serializer(), ServerFixtures.transcript()).segments
+        EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+            com.echoledger.mobile.ui.v2.library.V2RecordingContent(
+                item = item(pinned = true, keep = true),
+                transcript = com.echoledger.mobile.ui.v2.library.TranscriptState.Lines(segments),
+                positionMs = 0,
+                durationMs = 2_530_000,
+                playing = false,
+                speed = speed,
+                onPlayPause = {},
+                onSeek = {},
+                onSpeed = onSpeed,
+                onShare = {},
+                onDelete = {},
+                onRetry = {},
+                onBack = {},
+                head = head
+            )
+        }
+    }
+
+    @Test
+    fun theSpeedStepsThroughClassicsSpeeds() {
+        val seen = generateSequence(0.75f) { com.echoledger.mobile.ui.v2.library.nextSpeed(it) }.take(6).toList()
+        assertEquals(listOf(0.75f, 1f, 1.25f, 1.5f, 2f, 0.75f), seen)
+        assertEquals("0.75×", com.echoledger.mobile.ui.v2.library.speedLabel(0.75f))
+    }
+
+    @Test
+    fun skipSilenceAndTheBookmarksAreUnderThePlayer() {
+        val skips = mutableListOf<Boolean>()
+        val bookmarks = mutableListOf<Long>()
+        content(
+            com.echoledger.mobile.ui.v2.library.RecordingHead(
+                device = "Pixel 9",
+                bookmarks = listOf(com.echoledger.mobile.data.SessionMarkerDto("m1", 83_000, "Price")),
+                onBookmark = { bookmarks += it },
+                onSkipSilence = { skips += it }
+            )
+        )
+        press("Skip silence")
+        assertEquals(listOf(true), skips)
+        press("Bookmark at 1:23")
+        assertEquals(listOf(83_000L), bookmarks)
+        compose.onNodeWithText("Pixel 9", substring = true).assertExists()
+    }
+
+    @Test
+    fun detailsHaveTheDeviceDateLanguageProjectLabelsAndKeeping() {
+        content(com.echoledger.mobile.ui.v2.library.RecordingHead(device = "Pixel 9"))
+        press("Details")
+        listOf("Device", "Pixel 9", "Length", "Recorded", "Project", "Acme Holdings", "Labels", "urgent", "Kept", "Forever", "Pinned")
+            .forEach { compose.onAllNodesWithText(it).onFirst().assertExists() }
+    }
 }

@@ -105,4 +105,15 @@
     <string name="v2_rec_version_previous_in">Previous (%1$s)</string>
     <string name="v2_rec_final">Final transcript</string>
     <string name="v2_rec_live">Live captions (final pending)</string>
+    <string name="v2_rec_skip_silence">Skip silence</string>
+    <string name="v2_rec_bookmark_at">Bookmark at %1$s</string>
+    <string name="v2_rec_detail_device">Device</string>
+    <string name="v2_rec_detail_created">Recorded</string>
+    <string name="v2_rec_detail_labels">Labels</string>
+    <string name="v2_rec_detail_kept">Kept</string>
+    <string name="v2_rec_detail_kept_forever">Forever</string>
+    <string name="v2_rec_detail_kept_rules">By your plan\'s rules</string>
+    <string name="v2_rec_detail_pinned">Pinned</string>
+    <string name="v2_rec_detail_yes">Yes</string>
+    <string name="v2_rec_detail_bookmarks">Bookmarks</string>
 </resources>
