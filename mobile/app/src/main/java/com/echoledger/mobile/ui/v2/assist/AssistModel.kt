@@ -211,7 +211,7 @@ object AssistCard {
 
         "token_missing", "token_invalid", "wrong_session", "not_practice" -> AssistProblem.Session
 
-        "relay_busy", "practice_busy" -> AssistProblem.Busy
+        "relay_busy", "practice_busy", "session_active" -> AssistProblem.Busy
 
         "provider_not_configured" -> AssistProblem.NotSetUp
 

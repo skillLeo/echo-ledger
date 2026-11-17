@@ -40,6 +40,12 @@ object AssistHub {
 
         /** Offline, the server, the certificate: words for people. */
         data class Failed(val words: String) : Start
+
+        /** `426 app_update_required` (contract 1.9.0-q): this phone's app is too old for the server's transport. */
+        data object UpdateApp : Start
+
+        /** `503 relay_unavailable` (contract 1.9.0-q): the relay is down right now. */
+        data object CantConnect : Start
     }
 
     /** Both sides of the recording under way are recorded apart (a mono recording pauses automatic suggestions). */
@@ -92,9 +98,9 @@ object AssistHub {
 
                 e.status == 409 -> return Start.Busy
 
-                e.status == 426 || e.code == "app_update_required" -> return Start.Refused(UPDATE_APP)
+                e.status == 426 || e.code == "app_update_required" -> return Start.UpdateApp
 
-                e.status == 503 && e.code == "relay_unavailable" -> return Start.Failed(RELAY_DOWN)
+                e.status == 503 && e.code == "relay_unavailable" -> return Start.CantConnect
 
                 // An older server without the route, or Live Assist not configured there.
                 e.status == 404 || e.code == "provider_not_configured" -> return Start.NotSetUp

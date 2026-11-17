@@ -334,13 +334,13 @@ class AssistTransportsTest {
 
         val old = rest(426 to """{"code":"app_update_required","message":"Live Assist needs the latest version of the app."}""", requests)
         val tooOld = AssistHub.start(ApiClient(old.url("/").toString(), emptyList(), "7|token"), pins, scope)
-        assertEquals(AssistHub.Start.Refused("Live Assist needs the latest version of the app."), tooOld)
+        assertEquals(AssistHub.Start.UpdateApp, tooOld)
         val offered = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
         assertEquals(listOf("relay", "http"), offered["transports"]!!.jsonArray.map { it.jsonPrimitive.content })
 
         // Without relay pins the phone still offers the relay first, so an app too old reads the same.
         assertEquals(
-            AssistHub.Start.Refused("Live Assist needs the latest version of the app."),
+            AssistHub.Start.UpdateApp,
             AssistHub.start(ApiClient(old.url("/").toString(), emptyList(), "7|token"), emptyList(), scope)
         )
         val again = Json.parseToJsonElement(requests.poll(5, TimeUnit.SECONDS)!!.body!!.utf8()).jsonObject
@@ -352,7 +352,7 @@ class AssistTransportsTest {
                 requests
             )
         val relayDown = AssistHub.start(ApiClient(down.url("/").toString(), emptyList(), "7|token"), pins, scope)
-        assertEquals(AssistHub.Start.Failed("Live Assist can't connect right now. Try again in a few minutes."), relayDown)
+        assertEquals(AssistHub.Start.CantConnect, relayDown)
         assertNull(AssistHub.active.value)
         assertFalse(requests.any { it.url.encodedPath.endsWith("/end") })
     }
