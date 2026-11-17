@@ -49,5 +49,6 @@ export {
   StoreIcon,
   VideoIcon,
   SkipIcon,
+  RefreshIcon,
 } from "../../components/Icons";
-export { PlayIcon, PauseIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
+export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";

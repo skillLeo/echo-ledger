@@ -828,3 +828,9 @@ button.el-step__head { cursor: pointer; }
 .el-markdown th, .el-markdown td { text-align: start; vertical-align: top; padding: var(--el-space-8); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-code { font-family: var(--el-font-family-mono); font-size: var(--el-text-caption-size); background: var(--el-role-bg-subtle); border-radius: var(--el-radius-sm); padding-inline: var(--el-space-4); }
 pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
+
+/* Live Translate in the Live tab. */
+.el-translate { margin-block-start: var(--el-space-12); }
+.el-translate__app { display: flex; align-items: flex-end; gap: var(--el-space-8); flex-wrap: wrap; }
+.el-translate__app > .el-select { flex: 1; min-inline-size: calc(var(--el-space-64) * 3); }
+.el-translate__choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 2.5), 1fr)); gap: var(--el-space-12); }

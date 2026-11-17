@@ -48,7 +48,6 @@ import { LearnMore } from "../../components/LearnMore";
 import { ERROR_MS, MESSAGE_MS, NO_TARGET, noticeOf, type NoticePayload, type NoticeTarget, type Notify } from "../../lib/notice";
 import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { anyV2, useUiFlags } from "../../v2/flags";
-import { LiveTranslateCard } from "./LiveTranslateCard";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 import { helpV2Reachable } from "../../v2/help/route";
 
@@ -861,7 +860,7 @@ export default function MainApp() {
               <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
                   onRecord={canRecord ? record : undefined} onVoiceNote={canRecord ? voiceNote : undefined}
-                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} translate={<LiveTranslateCard run={run} />} />
+                  onCaptions={() => void run(api.toggleCaptions)} onSettings={openAccount} run={run} />
               </div></Suspense>
             ) : undefined}
             banners={<div className="shell-banners">{banners}</div>}>
