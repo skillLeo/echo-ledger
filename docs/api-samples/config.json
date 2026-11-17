@@ -236,7 +236,11 @@
         "ui_v2.setup_health": false,
         "ui_v2.admin": false,
         "ui_v2.website": false,
-        "live_assist": false
+        "live_assist": true
     },
-    "ui_classic": false
+    "ui_classic": false,
+    "relay_pins": [
+        "sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=",
+        "sha256/AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI="
+    ]
 }

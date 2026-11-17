@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Enums\SessionStatus;
+use App\Filament\Admin\Pages\ApiCredentials;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
@@ -10,8 +11,10 @@ use App\Models\AssistUsage;
 use App\Models\ClientFile;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
@@ -39,6 +42,28 @@ describe('the flag', function () {
             $api->json($method, $uri, ['meeting_type' => 'general', 'platform' => 'desktop'])->assertNotFound()->assertJsonPath('code', 'not_found');
         }
         expect(AssistPrep::query()->withoutGlobalScopes()->count())->toBe(0)->and(AssistSession::query()->withoutGlobalScopes()->count())->toBe(0);
+    });
+});
+
+describe('the relay pins', function () {
+    it('sends the relay host\'s pins in the config while live_assist is on for the person, and never otherwise', function () {
+        app(SettingsRepository::class)->set('relay.pins', ['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=', 'sha256/AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=', 'not-a-pin']);
+        $on = $this->api(Fx::token(assistPerson()))->getJson('/api/config')->assertOk();
+        expect($on->json('relay_pins'))->toBe(['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=', 'sha256/AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI='])->and($on->json('ui_flags.live_assist'))->toBeTrue();
+
+        $off = $this->api(Fx::token(assistPerson(flag: false)))->getJson('/api/config')->assertOk();
+        expect($off->json())->not->toHaveKey('relay_pins')->and($off->json('ui_flags.live_assist'))->toBeFalse();
+    });
+
+    it('lets the super admin keep the relay pins next to its address, valid ones only', function () {
+        Filament::setCurrentPanel('admin');
+        $this->actingAs(Fx::superAdmin(), 'web');
+        Livewire::test(ApiCredentials::class)
+            ->set('data.relay_pins', ['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='])->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->relayPins())->toBe(['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=']);
+        Livewire::test(ApiCredentials::class)->assertSet('data.relay_pins', ['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE='])
+            ->set('data.relay_pins', ['sha256/short'])->call('save')->assertHasErrors();
+        expect(app(SettingsRepository::class)->relayPins())->toBe(['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=']);
     });
 });
 

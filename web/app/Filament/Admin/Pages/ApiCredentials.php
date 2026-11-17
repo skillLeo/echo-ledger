@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Filament\Admin\Pages;
 
 use App\Filament\Support\Notice as Notification;
+use App\Rules\CertificatePin;
 use App\Services\Accounts\GoogleSignIn;
 use App\Services\Assist\RelaySecret;
 use App\Services\Assist\RelayToken;
@@ -14,6 +15,7 @@ use App\Services\Staff\StaffAccess;
 use App\Stt\GroqPacer;
 use BackedEnum;
 use Filament\Actions\Action;
+use Filament\Forms\Components\TagsInput;
 use Filament\Forms\Components\TextInput;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
@@ -55,8 +57,9 @@ class ApiCredentials extends Page
     public function mount(): void
     {
         $this->form->fill(); // intentionally empty: secrets are write-only
-        // The relay's address is no secret: shown as it is saved.
+        // The relay's address and pins are no secret: shown as they are saved.
         $this->data['relay_url'] = app(SettingsRepository::class)->get('relay.url');
+        $this->data['relay_pins'] = app(SettingsRepository::class)->relayPins();
     }
 
     public function form(Schema $schema): Schema
@@ -138,6 +141,10 @@ class ApiCredentials extends Page
                         ->helperText(fn (?string $state): string => RelayToken::url($state) !== null
                             ? 'The apps connect to '.RelayToken::url($state).'. Empty: Live Assist cannot start.'
                             : 'The relay\'s host name; the apps connect to wss://<host>/v1/assist. Empty: Live Assist cannot start.'),
+                    // Since 1.9.0-g: the relay host's pins, sent to the apps while Live Assist is on for them.
+                    TagsInput::make('relay_pins')->label('Relay certificate pins (SPKI SHA-256)')->placeholder('sha256/…')
+                        ->nestedRecursiveRules([new CertificatePin])
+                        ->helperText('The relay host\'s current and backup key pins. Empty: the apps cannot connect to the relay.'),
                     ...$inputs,
                 ]);
                 $section->description('Signs the relay tokens and the relay\'s requests to this server. Generate one, or paste one of at least '.RelaySecret::MIN_LENGTH.' characters; the old one keeps working for 15 minutes, so the relay can be given the new one without a gap.');
@@ -205,7 +212,8 @@ class ApiCredentials extends Page
             return;
         }
         app(SettingsRepository::class)->set('relay.url', $relay === '' ? null : (string) parse_url((string) RelayToken::url($relay), PHP_URL_HOST));
-        unset($state['relay_url']);
+        app(SettingsRepository::class)->set('relay.pins', array_values(array_unique(array_filter((array) ($state['relay_pins'] ?? []), CertificatePin::isValid(...)))));
+        unset($state['relay_url'], $state['relay_pins']);
 
         $typed = [];
         foreach ($state as $field => $value) {
@@ -257,6 +265,7 @@ class ApiCredentials extends Page
         $saved = count($typed);
         $this->form->fill();
         $this->data['relay_url'] = app(SettingsRepository::class)->get('relay.url');
+        $this->data['relay_pins'] = app(SettingsRepository::class)->relayPins();
 
         Notification::make()->title($saved > 0 ? "Saved {$saved} credential(s)" : 'Nothing to save')->success()->send();
     }
