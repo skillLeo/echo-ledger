@@ -51,6 +51,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   const [question, setQuestion] = useState("");
   const [language, setLanguage] = useState<AnswerLanguage>("en");
   const [state, setState] = useState<AskState>({ kind: "idle" });
+  const [copied, setCopied] = useState(false);
   const chosen = projects.find((p) => p.id === projectId) ?? projects[0] ?? null;
   // Another project: the answer on screen was about the last one.
   const choose = (id: string) => {
@@ -72,6 +73,7 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   const ask = async () => {
     if (!chosen || !question.trim()) return;
     setState({ kind: "asking" });
+    setCopied(false);
     try {
       const r = await api.askClient(chosen.id, question.trim(), language);
       setState(r?.data ? { kind: "answer", answer: r.data } : { kind: "failed", words: TRY_AGAIN });
@@ -113,8 +115,15 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
       )}
       {state.kind === "answer" && (
         <section className="el-group" aria-label="Answer">
-          <Card className="el-form" >
+          <Card className="el-form">
             <p className="el-ask__answer" dir="auto" aria-live="polite">{state.answer.answer}</p>
+            <span>
+              <Button size="sm" variant="quiet" icon={Icons.CopyIcon}
+                onClick={() => void navigator.clipboard.writeText(state.answer.answer).then(() => setCopied(true), () => setCopied(false))}>
+                {copied ? "Copied" : "Copy answer"}
+              </Button>
+              <Button size="sm" variant="quiet" icon={Icons.CloseIcon} aria-label="Clear the answer" onClick={() => setState({ kind: "idle" })} />
+            </span>
           </Card>
           {state.answer.citations.length > 0 && (
             <Card>

@@ -48,13 +48,26 @@ export function RulesV2({ projectId, projectName, say }: {
       setBusy(false);
     }
   };
+  /** Undo: the rule back, and what happened said through the page's one message. */
+  const restore = async (rule: FilingRule) => {
+    try {
+      const { data } = await api.addClientRule(projectId, rule.kind, rule.value);
+      setRules((list) => [...(list ?? []).filter((r) => r.id !== data.id), data]);
+      say("Rule restored");
+    } catch (e) {
+      say(`The rule couldn't be restored: ${errorMessage(e)}`);
+    }
+  };
   const remove = async (rule: FilingRule) => {
     setBusy(true);
     setError(null);
     try {
       await api.deleteClientRule(projectId, String(rule.id));
       setRules((list) => (list ?? []).filter((r) => r.id !== rule.id));
-      say(`Rule removed: ${ruleText(rule)}`, { label: "Undo", run: () => void add(rule.kind, rule.value) });
+      say(`Rule removed: ${ruleText(rule)}`, {
+        label: "Undo",
+        run: () => void restore(rule),
+      });
     } catch (e) {
       setError(errorMessage(e));
     } finally {

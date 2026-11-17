@@ -748,8 +748,9 @@ export default function MainApp() {
           renderPage={ui.flags["ui_v2.ask"] ? (ctx) => (
             <Suspense fallback={null}>
               <div className="el-root el-embedded">
-                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name }} parent={ctx.parent} folders={ctx.folders}
-                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules}
+                <WorkspaceV2 key={ctx.project.id} project={{ id: ctx.project.id, name: ctx.project.name, ai_notes: ctx.project.ai_notes }} parent={ctx.parent} folders={ctx.folders}
+                  menu={ctx.menu} onShare={ctx.onShare ?? undefined} rules={ctx.rules} projects={ctx.projects} aiNotesInPlan={ctx.aiNotesInPlan}
+                  onMoveRecordings={ctx.onMoveRecordings} onProjectChanged={ctx.onProjectChanged} notify={notify}
                   onBack={() => openProject(ctx.parent?.id ?? null)} onOpenProject={(id) => openProject(id)}
                   onOpenRecording={(id, ms) => openRecording(id, ms ?? 0)} onLibrary={() => openFolder(null)} />
               </div>

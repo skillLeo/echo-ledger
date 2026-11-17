@@ -23,6 +23,13 @@ export interface ProjectPageContext {
   menu: { label: string; onPick: () => void; danger?: boolean }[];
   onShare: (() => void) | null;
   rules: boolean;
+  /** Every project, for its folders' recordings and the drag targets. */
+  projects: ClientFolder[];
+  aiNotesInPlan: boolean;
+  /** Recordings dragged onto a project (or the Inbox) in the sidebar. */
+  onMoveRecordings: (ids: string[], projectId: string | null) => void;
+  /** The project's AI notes switch changed. */
+  onProjectChanged: (change: Partial<ClientFolder> & { id: string }) => void;
 }
 
 type Dialog =
@@ -223,6 +230,10 @@ export function ProjectsView({ notify, projects, error = null, onReload, onChang
             menu: menu.filter((m): m is { label: string; onPick: () => void; danger?: boolean } => !!m),
             onShare: nested ? () => setDialog({ kind: "share", project, start: "link" }) : null,
             rules: nested,
+            projects: list,
+            aiNotesInPlan,
+            onMoveRecordings: (ids, target) => void dropMove(ids, target),
+            onProjectChanged: (next) => onChanged((all) => all.map((c) => (c.id === next.id ? { ...c, ...next } : c))),
           })}
           {dialogs}
         </>

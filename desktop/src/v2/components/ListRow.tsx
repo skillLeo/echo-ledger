@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from "react";
+import { useId, type PointerEvent, type ReactNode } from "react";
 import { Icon, type IconType } from "./Button";
 import { ChevronEndIcon } from "./icons";
 
@@ -34,6 +34,8 @@ export type ListRowProps = {
   compact?: boolean;
   /** At most one badge per row. */
   badge?: ReactNode;
+  /** A press that may start a drag (recordings dragged onto a project in the sidebar). */
+  onPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;
 };
 
 /**
@@ -41,7 +43,7 @@ export type ListRowProps = {
  * by the rest; with a control the row is a label for it.
  */
 export function ListRow({
-  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge,
+  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -53,7 +55,7 @@ export function ListRow({
     <li className={cls}>
       {interactive && (
         <button type="button" className="el-row__hit" aria-labelledby={`${id}-title`} aria-describedby={describedBy}
-          aria-current={selected || undefined} onClick={onClick} />
+          aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} />
       )}
       {leading ?? (icon && (
         <span className={`el-row__leading${iconStyle === "avatar" ? " el-row__leading--avatar" : ""}`}>
