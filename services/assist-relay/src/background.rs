@@ -56,6 +56,11 @@ impl LineBuffer {
         self.tokens
     }
 
+    /// The lines, leaving them in place (a call that may not start).
+    pub fn lines(&self) -> Vec<String> {
+        self.lines.iter().map(|(line, _)| line.clone()).collect()
+    }
+
     /// The lines, emptying the buffer.
     pub fn take(&mut self) -> Vec<String> {
         self.tokens = 0;

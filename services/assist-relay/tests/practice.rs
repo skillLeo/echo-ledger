@@ -279,3 +279,40 @@ async fn a_primary_that_fails_after_streaming_is_charged_with_the_fallback() {
     assert!(broken.cost_usd > refused.cost_usd);
     assert!(!refused.estimated, "a rate-limited request bills nothing");
 }
+
+#[tokio::test(start_paused = true)]
+async fn facts_and_summary_due_together_with_room_for_one_start_only_one() {
+    let mut config = pricey_output();
+    config.background.summary_every_secs = 1;
+    config.budget.reserve_suggestions = 0;
+    let h = harness(config);
+    let mut token = claims("s-together");
+    // 10 cents: one background call at its worst (primary and fallback, 8 cents) fits, two don't.
+    token.budget.cents_left = 10;
+    let mut s = h.connect(token);
+    ready_now(&mut s).await;
+    tokio::time::sleep(Duration::from_secs(2)).await;
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    let background = || -> Vec<Purpose> {
+        h.mock(assist_relay::domain::ProviderKind::Anthropic)
+            .requests()
+            .into_iter()
+            .map(|(_, p)| p)
+            .filter(|p| matches!(p, Purpose::Facts | Purpose::Summary))
+            .collect()
+    };
+    // The summary was due at the first line and started; the facts call, due at the third, did not fit beside it.
+    s.drain(Duration::from_secs(3)).await;
+    assert_eq!(background(), vec![Purpose::Summary], "only one call in flight at a time on this budget");
+    // Once the first is done (and charged), the next line starts the waiting call, its lines kept.
+    s.send(final_turn("m-3", "me", "And the second build in 4 weeks.")).await;
+    s.drain(Duration::from_secs(3)).await;
+    assert_eq!(background(), vec![Purpose::Summary, Purpose::Facts]);
+    let facts = h.reports.reports().into_iter().find_map(|r| match r {
+        Report::Facts(f) => Some(f),
+        _ => None,
+    });
+    assert!(facts.is_some_and(|f| f.facts.iter().any(|x| x.contains("35 dollars"))), "the lines waited for the call");
+}

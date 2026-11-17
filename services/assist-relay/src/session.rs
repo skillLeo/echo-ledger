@@ -347,6 +347,8 @@ pub(crate) struct Engine {
     budget_limited: bool,
     /// The `seq` of the app's message being handled (quoted in errors about it).
     replying_to: Option<u64>,
+    /// Background calls in flight and their worst-case cost: held back from the budget until their result arrives.
+    reserved: HashMap<String, u64>,
     feed_tx: mpsc::Sender<Feed>,
     feed_rx: mpsc::Receiver<Feed>,
     suggestions: u64,
@@ -415,6 +417,7 @@ impl Engine {
             assist_used_up: false,
             budget_limited: false,
             replying_to: None,
+            reserved: HashMap::new(),
             feed_tx,
             feed_rx,
             suggestions: 0,
@@ -1429,8 +1432,11 @@ impl Engine {
     }
 
     /// Model budget left on the current token: its `cents_left`, less what was spent since it arrived.
+    /// Background calls in flight count at their worst case until their result arrives, so calls running together
+    /// can't cross the budget between them.
     fn remaining(&self) -> u64 {
-        self.claims.budget_micros().saturating_sub(self.spent.saturating_sub(self.ledger.spend_base))
+        let reserved = self.reserved.values().fold(0u64, |sum, r| sum.saturating_add(*r));
+        self.claims.budget_micros().saturating_sub(self.spent.saturating_sub(self.ledger.spend_base)).saturating_sub(reserved)
     }
 
     /// Tokens of the fixed part (rules to memory), built once per context change.
@@ -1557,7 +1563,16 @@ impl Engine {
             .filter_map(|model| config.model(model))
             .map(|spec| estimate_micros(spec, tokens, 0, false, max_output_tokens))
             .fold(0u64, u64::saturating_add);
-        if worst > self.remaining() {
+        // Room for the suggestions too: the budget's reserve in the mode that runs (one suggestion in Fast).
+        let keep = match self.effective.mode() {
+            Some(mode) => {
+                let fixed = self.fixed_tokens();
+                let count = if mode == Mode::Fast { 1 } else { u64::from(config.budget.reserve_suggestions) };
+                self.estimate(mode, fixed).saturating_mul(count)
+            }
+            None => 0,
+        };
+        if worst.saturating_add(keep) > self.remaining() {
             self.deps.telemetry.event(&SessionEvent::Background {
                 session: self.session_id.clone(),
                 task: kind.trigger(),
@@ -1567,6 +1582,7 @@ impl Engine {
             });
             return false;
         }
+        self.reserved.insert(kind.id().to_owned(), worst);
         let (providers, config, feed) = (self.deps.providers.clone(), self.config(), self.feed_tx.clone());
         let purpose = kind.purpose();
         tokio::spawn(async move {
@@ -1590,18 +1606,25 @@ impl Engine {
             return;
         }
         let config = self.config();
+        // The lines leave their buffer only when the call starts: a call the budget can't take keeps them.
         if !self.facts_busy && self.facts_lines.len() >= config.background.facts_every_finals.max(1) as usize {
-            let lines = self.facts_lines.take();
+            let lines = self.facts_lines.lines();
             let context = background::facts_context(&self.call, &lines);
             let id = format!("facts-{}", self.next_id());
             self.facts_busy = self.spawn_task(TaskKind::Facts { id }, context, lines.join("\n"), config.background.max_output_tokens);
+            if self.facts_busy {
+                self.facts_lines.take();
+            }
         }
         if !self.summary_busy && !self.summary_lines.is_empty() && Instant::now() >= self.summary_due {
-            let lines = self.summary_lines.take();
+            let lines = self.summary_lines.lines();
             let context = background::summary_context(&self.call, &lines);
             let id = format!("summary-{}", self.next_id());
             self.summary_busy = self.spawn_task(TaskKind::Summary { id }, context, lines.join("\n"), config.background.max_output_tokens);
-            self.summary_due = Instant::now() + Duration::from_secs(config.background.summary_every_secs);
+            if self.summary_busy {
+                self.summary_lines.take();
+                self.summary_due = Instant::now() + Duration::from_secs(config.background.summary_every_secs);
+            }
         }
     }
 
@@ -1640,6 +1663,7 @@ impl Engine {
     }
 
     fn on_task(&mut self, kind: TaskKind, run: TaskRun) {
+        self.reserved.remove(kind.id());
         match &kind {
             TaskKind::PracticeQuestion { .. } => self.practice_busy = false,
             TaskKind::Facts { .. } => self.facts_busy = false,
