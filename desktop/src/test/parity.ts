@@ -6,11 +6,25 @@ import { screen, within } from "@testing-library/react";
 export const CONTROL_ROLES = ["button", "link", "checkbox", "switch", "combobox", "textbox", "searchbox", "radio", "menuitem", "tab", "slider", "spinbutton"] as const;
 export type ControlRole = (typeof CONTROL_ROLES)[number];
 
+/** A password field has no role: it is collected as "password: <its label>". */
+const passwordName = (el: HTMLInputElement): string =>
+  el.getAttribute("aria-label") ?? (el.labels?.[0]?.textContent ?? "").trim();
+
 /** Adds "role: name" for every control on the page (or inside `root`). */
 export function collectControls(into: Set<string>, root?: HTMLElement): Set<string> {
   const q = root ? within(root) : screen;
   for (const role of CONTROL_ROLES) q.queryAllByRole(role, { name: (n) => (into.add(`${role}: ${n}`), true) });
+  for (const el of (root ?? document.body).querySelectorAll<HTMLInputElement>('input[type="password"]')) into.add(`password: ${passwordName(el)}`);
   return into;
+}
+
+/** The controls with this role and name on the page ("password" finds a password field by its label). */
+export function findControls(role: ControlRole | "password", name: string | RegExp): HTMLElement[] {
+  if (role === "password") {
+    return [...document.querySelectorAll<HTMLInputElement>('input[type="password"]')]
+      .filter((el) => (typeof name === "string" ? passwordName(el) === name : name.test(passwordName(el))));
+  }
+  return screen.queryAllByRole(role, { name });
 }
 
 const matches = (key: string | RegExp, name: string) => (typeof key === "string" ? key === name : key.test(name));
