@@ -49,6 +49,8 @@
 
         @if (! $session->ended())
             <x-filament::section><p style="margin:0">This session is on now. Its report is made when it ends.</p></x-filament::section>
+        @elseif ($report === null && $session->report_status === 'failed')
+            <x-filament::section><p style="margin:0">The report could not be made. Your words and the suggestions are kept; ask about the session, or delete it.</p></x-filament::section>
         @elseif ($report === null)
             <x-filament::section><p style="margin:0" role="status">The report is being made. It shows here in a moment.</p></x-filament::section>
         @else

@@ -58,9 +58,10 @@ final class AssistSessionController extends Controller
         // Practice runs the Practice mode on every plan; a live session the mode asked for, its prep's or Balanced.
         $mode = $practice ? $this->plans->modes($device->workspace_id, true)[0] : (string) ($data['mode'] ?? ($prep !== null ? $prep->mode : 'balanced'));
         $this->plans->assertMode($device->workspace_id, $mode, $practice);
-        $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
-        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below.
+        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below. Before
+        // the budget: a session still on holds its token's budget, and the answer should name it.
         $this->assertNoneActive($device);
+        $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
         // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
         // call without a recording; a running recording has its own captions).
         $this->relay->assertReady();

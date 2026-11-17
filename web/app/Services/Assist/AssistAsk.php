@@ -75,8 +75,10 @@ final class AssistAsk
 
         $text = is_string($answer['data']['answer'] ?? null) ? trim(mb_substr($answer['data']['answer'], 0, 2000)) : '';
         $citations = [];
+        // Only lines the model was given (a long session's middle is left out of them).
+        $given = array_flip(array_column($input['lines'], 'n'));
         foreach (array_slice(is_array($answer['data']['lines'] ?? null) ? $answer['data']['lines'] : [], 0, 5) as $index) {
-            $turn = is_int($index) ? ($turns[$index - 1] ?? null) : null;
+            $turn = is_int($index) && isset($given[$index]) ? ($turns[$index - 1] ?? null) : null;
             if ($turn instanceof AssistTurn && ! isset($citations[$index])) {
                 $citations[$index] = ['at_ms' => $turn->start_ms, 'channel' => $turn->channel, 'text' => mb_substr($turn->text, 0, 300)];
             }

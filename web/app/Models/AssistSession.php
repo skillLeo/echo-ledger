@@ -31,8 +31,11 @@ use Illuminate\Support\Carbon;
  * @property Carbon $started_at
  * @property Carbon|null $last_token_at
  * @property Carbon|null $ended_at
+ * @property int|null $claimed_cents the budget the last relay token granted (AssistPlans::left holds back its unspent part)
+ * @property Carbon|null $claimed_at when that token was minted
+ * @property Carbon|null $report_requeued_at when a report stuck in the queue was queued again (once)
  * @property int|null $seconds_used
- * @property string $report_status none | queued | ready
+ * @property string $report_status none | queued | ready | failed
  * @property array<string, mixed>|null $report
  * @property string|null $summary
  * @property list<string>|null $facts
@@ -51,7 +54,7 @@ final class AssistSession extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'assist_prep_id', 'capture_session_id', 'mode', 'plan', 'practice', 'platform', 'auto_saved',
-        'status', 'started_at', 'last_token_at', 'ended_at', 'seconds_used', 'report_status', 'report', 'summary', 'facts', 'facts_at', 'summary_at', 'report_rev',
+        'status', 'started_at', 'last_token_at', 'claimed_cents', 'claimed_at', 'ended_at', 'seconds_used', 'report_status', 'report_requeued_at', 'report', 'summary', 'facts', 'facts_at', 'summary_at', 'report_rev',
     ];
 
     /** @return array<string, string> */
@@ -62,6 +65,9 @@ final class AssistSession extends Model
             'auto_saved' => 'boolean',
             'started_at' => 'datetime',
             'last_token_at' => 'datetime',
+            'claimed_cents' => 'integer',
+            'claimed_at' => 'datetime',
+            'report_requeued_at' => 'datetime',
             'ended_at' => 'datetime',
             'seconds_used' => 'integer',
             'report' => 'encrypted:array',

@@ -199,3 +199,65 @@ it('counts the Ask limit per person, whichever device asks', function () {
     $this->api(Fx::token(Fx::device($device->user, ['workspace_id' => $device->workspace_id])))->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'one more'])
         ->assertStatus(429);
 });
+
+it('holds back what a session still on was granted by its token: Asks cannot spend it too', function () {
+    config(['assist.ask.max_output_tokens' => 20000]); // a 2-cent worst case
+    fakeAssistAskAi();
+    $device = assistPerson('pro');
+    $api = $this->api(Fx::token($device));
+    $asked = askableSession($device);
+    // 5 cents of Practice's $5 left.
+    AssistUsage::query()->create(['assist_session_id' => $asked->id, 'workspace_id' => $device->workspace_id, 'user_id' => $device->user_id,
+        'suggestion_id' => 'spent', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer', 'cost_usd' => 4.95, 'occurred_at' => now()]);
+    $plans = app(AssistPlans::class);
+
+    // A Practice starts: its token grants the 5 cents, which the session keeps as its claim.
+    $live = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated();
+    $running = AssistSession::query()->withoutGlobalScopes()->find($live->json('session.id'));
+    expect(relayClaims($live->json('relay.token'))['budget']['cents_left'])->toBe(5)->and($running->claimed_cents)->toBe(5)
+        ->and($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(0);
+    // Asks from every device at once find nothing left.
+    foreach (range(1, 3) as $i) {
+        $api->postJson("/api/assist/sessions/{$asked->id}/ask", ['question' => "q{$i}"])->assertStatus(402)->assertJsonPath('code', 'budget_exhausted');
+    }
+
+    // The relay spends 3 cents of it: 2 still held, nothing left for anyone else; a refresh grants the session what is left.
+    $this->travel(5)->seconds();
+    AssistUsage::query()->create(['assist_session_id' => $running->id, 'workspace_id' => $device->workspace_id, 'user_id' => $device->user_id,
+        'suggestion_id' => 'relay-1', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer', 'cost_usd' => 0.03, 'occurred_at' => now()]);
+    expect($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(0)
+        ->and(relayClaims($api->postJson("/api/assist/sessions/{$running->id}/token")->assertOk()->json('relay.token'))['budget']['cents_left'])->toBe(2);
+    $this->travel(5)->seconds();
+    $api->postJson("/api/assist/sessions/{$asked->id}/ask", ['question' => 'now?'])->assertStatus(402);
+
+    // Once it ends, the 2 cents are free again.
+    $api->postJson("/api/assist/sessions/{$running->id}/end")->assertOk();
+    expect($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(2);
+    $api->postJson("/api/assist/sessions/{$asked->id}/ask", ['question' => 'now?'])->assertOk();
+});
+
+it('holds nothing for a token past its lifetime', function () {
+    $device = assistPerson('pro');
+    $id = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->json('session.id');
+    $plans = app(AssistPlans::class);
+    expect($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(0);
+
+    $this->travel(16)->minutes();
+    expect($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(500)
+        ->and(AssistSession::query()->withoutGlobalScopes()->find($id)->status)->toBe('active');
+});
+
+it('cites only lines the model was given', function () {
+    config(['assist.ask.transcript_chars' => 120]);
+    $device = assistPerson('pro');
+    $session = askableSession($device);
+    foreach (range(3, 12) as $n) {
+        AssistTurn::query()->create(['assist_session_id' => $session->id, 'client_ref' => "x{$n}", 'channel' => 'other', 'start_ms' => 70000 + $n * 1000, 'end_ms' => 70500 + $n * 1000, 'text' => "Line {$n} of the middle."]);
+    }
+    // The model names line 6, from the middle it was never shown, and line 1.
+    $ai = fakeAssistAskAi(['answer' => 'Somewhere.', 'lines' => [6, 1]]);
+
+    $answer = $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'x'])->assertOk()->json();
+    expect(array_column($ai->inputs[0]['lines'], 'n'))->not->toContain(6)
+        ->and($answer['citations'])->toBe([['at_ms' => 61000, 'channel' => 'other', 'text' => 'What salary do you expect?']]);
+});

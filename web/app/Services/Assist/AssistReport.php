@@ -8,6 +8,7 @@ use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
+use App\Models\AssistUsage;
 use App\Models\Client;
 use App\Models\ClientMemoryItem;
 use App\Services\SettingsRepository;
@@ -215,7 +216,8 @@ final class AssistReport
      */
     private function words(AssistSession $session, ?AssistPrep $prep, Collection $turns, array $qa, ?array $previous): array
     {
-        $runs = (int) ($previous['ai']['runs'] ?? 0);
+        // Every run reserved, settled or left behind by a job that died: counted from the usage rows, never the report.
+        $runs = self::runs($session);
         $ai = fn (string $status, ?string $reason, ?string $model = null) => ['status' => $status, 'reason' => $reason, 'model' => $model, 'runs' => $runs];
         if (! $turns->contains('channel', 'me')) {
             return [$ai('skipped', 'nothing_said'), self::empty()];
@@ -268,6 +270,12 @@ final class AssistReport
         $this->budget->settle($reservation, $model, $answer['model'], $answer['tokens']);
 
         return [['status' => 'ready', 'reason' => null, 'model' => $answer['model'], 'runs' => $runs], self::clean($answer['data'], $qa, $prep, $session->practice)];
+    }
+
+    /** The report runs of [$session] so far: its report-<id>-N usage rows (pending, settled or lost). */
+    public static function runs(AssistSession $session): int
+    {
+        return AssistUsage::query()->where('assist_session_id', $session->id)->where('suggestion_id', 'like', 'report-'.$session->id.'-%')->count();
     }
 
     /**
