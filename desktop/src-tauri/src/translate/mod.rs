@@ -7,7 +7,7 @@ pub mod gate;
 pub mod players;
 pub mod protocol;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -94,6 +94,35 @@ pub struct TranslateApp {
 struct Running {
     stop: Arc<AtomicBool>,
     feed: Arc<Mutex<Feed>>,
+    /// The window it was started with ([`window_generation`]): only that window's going ends it.
+    window: u64,
+}
+
+/// Numbers the Live Translate windows built: a session belongs to the window it started with, so a Stop then a quick
+/// Start never loses the new session when the old window is destroyed.
+static WINDOW_GEN: AtomicU64 = AtomicU64::new(0);
+/// The window Stop closed and that is not destroyed yet: a Start waits for it to go instead of using it.
+static CLOSING: AtomicU64 = AtomicU64::new(0);
+
+/// A Live Translate window was built: its number.
+pub fn window_built() -> u64 {
+    WINDOW_GEN.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+/// The number of the newest Live Translate window.
+pub fn window_generation() -> u64 {
+    WINDOW_GEN.load(Ordering::SeqCst)
+}
+
+/// The window there now is one Stop closed and is still going.
+pub fn window_closing() -> bool {
+    let current = window_generation();
+    current != 0 && CLOSING.load(Ordering::SeqCst) == current
+}
+
+/// Whether window `gone` going ends the session (pure): only the session started with it; none runs, nothing to end.
+pub fn gone_ends(session_window: Option<u64>, gone: u64) -> bool {
+    session_window == Some(gone)
 }
 
 fn running() -> &'static Mutex<Option<Running>> {
@@ -238,15 +267,38 @@ pub fn stop(app: &AppHandle) {
         },
     );
     if let Some(w) = app.get_webview_window(WINDOW) {
+        CLOSING.store(window_generation(), Ordering::SeqCst);
         let _ = w.close();
     }
 }
 
-/// The window went, however (closed, destroyed by the system): nothing is heard without it, and Ctrl+Shift+T / H go back
-/// to other apps. Run off the main thread: giving the keys back waits for it.
-pub fn window_gone(app: &AppHandle) {
-    stop_session();
+/// Before a Start builds its window: a window Stop closed is waited for (at most 2 s), so the new session gets a new
+/// window instead of the one that is going.
+pub async fn wait_closed(app: &AppHandle) -> Result<(), String> {
+    let until = Instant::now() + Duration::from_secs(2);
+    while window_closing() && app.get_webview_window(WINDOW).is_some() {
+        if Instant::now() >= until {
+            return Err("Live Translate is still closing. Try again in a moment.".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(())
+}
+
+/// Window `gone` went, however (closed, destroyed by the system): its session ends (a newer window's never), the keys go
+/// back to other apps and the main window's panel says it stopped. Blocking (giving keys back waits for the main
+/// thread): run it with `spawn_blocking`, never on the main thread.
+pub fn window_gone(app: &AppHandle, gone: u64) {
+    let ended = match running().lock() {
+        Ok(mut r) if gone_ends(r.as_ref().map(|r| r.window), gone) => r.take().inspect(|run| run.stop.store(true, Ordering::SeqCst)).is_some(),
+        _ => false,
+    };
+    if !ended {
+        return;
+    }
     unregister_hotkeys(app);
+    let _ = app.emit(FEED_EVENT, Feed { status: "stopped".into(), ..Default::default() });
+    crate::actions::emit_status(app);
 }
 
 fn stop_session() {
@@ -361,6 +413,7 @@ where
         .map_err(|_| "Live Translate is busy.".to_string())? = Some(Running {
         stop: stop_flag.clone(),
         feed: feed.clone(),
+        window: window_generation(),
     });
 
     let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
@@ -554,19 +607,29 @@ mod tests {
     #[test]
     fn a_window_gone_any_way_ends_the_session_and_its_keys() {
         let stop = Arc::new(AtomicBool::new(false));
-        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default() });
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default(), window: 1 });
         stop_session();
         assert!(stop.load(Ordering::SeqCst), "the capture is told to stop");
         assert!(running().lock().unwrap().is_none(), "nothing runs");
+        // Stop, then a quick Start in a new window: the old window's going never ends the new session.
+        assert!(gone_ends(Some(7), 7), "its own window");
+        assert!(!gone_ends(Some(8), 7), "the window before the new session's");
+        assert!(!gone_ends(None, 7), "nothing runs: nothing to end");
         // The window's destruction is handled whatever closed it, off the main thread.
         let lib = include_str!("../lib.rs");
         let destroyed = &lib[lib.find("WindowEvent::Destroyed =>").unwrap()..];
         let arm = &destroyed[..destroyed.find("\n            }").unwrap()];
-        assert!(arm.contains("translate::WINDOW") && arm.contains("translate::window_gone"), "{arm}");
-        assert!(arm.contains("async_runtime::spawn"), "never on the main thread: {arm}");
+        assert!(arm.contains("translate::WINDOW") && arm.contains("translate::window_gone(&app, gone)"), "{arm}");
+        assert!(arm.contains("window_generation()") && arm.find("window_generation()") < arm.find("spawn_blocking"), "the window's number is read when it goes: {arm}");
+        assert!(arm.contains("async_runtime::spawn_blocking"), "blocking, never on the main thread: {arm}");
         let gone = include_str!("mod.rs");
         let body = &gone[gone.find("pub fn window_gone").unwrap()..];
-        assert!(body[..body.find('}').unwrap()].contains("unregister_hotkeys(app)"));
+        let body = &body[..body.find("\n}").unwrap()];
+        assert!(body.contains("unregister_hotkeys(app)") && body.contains("status: \"stopped\""), "{body}");
+        // A Start never uses the window Stop closed.
+        let commands = include_str!("../commands.rs");
+        let start = &commands[commands.find("pub async fn translate_start").unwrap()..];
+        assert!(start[..start.find("create_translate_window").unwrap()].contains("wait_closed(&app)"));
     }
 
     #[test]

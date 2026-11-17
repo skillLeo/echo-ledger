@@ -84,7 +84,7 @@ pub fn status(app: &AppHandle) -> AppStatus {
     };
     let share_demo = (settings.hide_from_sharing != crate::settings::ShareHiding::Off).then(|| app.try_state::<crate::privacy::Privacy>().is_some_and(|p| p.demo_active(std::time::Instant::now())));
     let hidden = app.try_state::<crate::privacy::Privacy>().and_then(|p| crate::tray::hidden_line(&p));
-    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden };
+    let switches = crate::tray::Switches { captions: state.live.is_live(), auto: settings.auto_mode, calls_ready: calls_ready.filter(|_| state.is_paired()), share_demo, hidden, translate: crate::translate::is_running() };
     // Calls that will not be recorded show on the icon itself, not only in its menu (Phase 1C).
     let tray_state = crate::tray::with_readiness(tray_state, switches.calls_ready == Some(false) && state.viewer_refusal().is_none());
     crate::tray::update(app, generation, tray_state, paused, mic_note, pill_hidden, pending_decisions, switches, state.viewer_refusal());
@@ -3058,14 +3058,20 @@ pub async fn translate_start(app: AppHandle, state: State<'_, AppState>, request
         let (api, target, hints) = (api.clone(), target.clone(), hints.clone());
         async move { api.live_translate_token(mode.key(), &target, &hints).await.map_err(|e| e.to_string()) }
     };
+    // The window a Stop just closed is waited for: the new session gets its own.
+    crate::translate::wait_closed(&app).await.map_err(AppError::Message)?;
     crate::overlay::create_translate_window(&app, mode == crate::translate::Mode::Watch).map_err(|e| AppError::Message(e.to_string()))?;
     crate::translate::start(app.clone(), pid, name, mode, speed, fetch).map_err(AppError::Message)?;
-    Ok(crate::translate::register_hotkeys(&app))
+    let taken = crate::translate::register_hotkeys(&app);
+    // The tray says it is listening (with Stop) for as long as it does.
+    crate::actions::emit_status(&app);
+    Ok(taken)
 }
 
 #[tauri::command]
 pub fn translate_stop(app: AppHandle) {
     crate::translate::stop(&app);
+    crate::actions::emit_status(&app);
 }
 
 /// Edit (move the overlay with the mouse) or lock it again (click-through), like Ctrl+Shift+T.

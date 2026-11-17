@@ -502,8 +502,10 @@ pub fn run() {
                 lifecycle::on_destroyed(window.app_handle(), window.label());
                 // Live Translate's window went, however: its capture and its keys go with it (off the main thread).
                 if window.label() == translate::WINDOW {
+                    // Its number now, while no newer window can exist yet: a quick Start after Stop keeps its session.
+                    let gone = translate::window_generation();
                     let app = window.app_handle().clone();
-                    tauri::async_runtime::spawn(async move { translate::window_gone(&app) });
+                    tauri::async_runtime::spawn_blocking(move || translate::window_gone(&app, gone));
                 }
             }
             // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
