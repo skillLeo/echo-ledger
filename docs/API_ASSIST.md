@@ -1,4 +1,6 @@
-# Live Assist contract — revision 1.9.0-g (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-h (frozen 2026-11-17 for the sprint)
+
+1.9.0-h: practice messages over the relay, the facts ledger and running summary from the relay, and the usage kinds.
 
 1.9.0-g: the relay host's pins are `relay_pins` in `GET /api/config`.
 
@@ -183,6 +185,21 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   catalog) never shows refused text; the fallback answers. For a streamed model (Haiku, Groq), a refusal after words
   were shown ends that suggestion at once with `status: superseded`, and the app clears its text from the card at
   that moment, before the fallback's first token.
+
+### Practice, facts and summary (since 1.9.0-h)
+
+- Practice (a session started with `practice: true`): the client sends `practice_next` to get the next question. The
+  relay plays Them for the meeting type and answers `practice_question` (`question_id`, `turn_id` `q-N`, `number`,
+  `total`, `text`); the question counts as Them's turn, so a hint follows unless suggestions are paused, and the
+  person answers by voice. After the last question (8) the relay sends `practice_done`. Errors: `not_practice`,
+  `practice_busy` (retry), `budget_exhausted`. The app posts each question in its batched turns: channel `other`,
+  `client_ref` = `question_id`, `is_question: true`, so the report pairs each question with the answers after it.
+- The relay keeps the facts ledger (after every 3 final lines) and the running summary (at most every 5 minutes) on
+  the Fast model in the background, within the budget; a call that could cross the budget is skipped.
+  `POST /api/internal/assist/facts` `{session_id, facts: [...], at}` and `POST /api/internal/assist/summary`
+  `{session_id, summary, at}` replace what the server stored.
+- Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. Practice
+  usage is billed to the plan's Practice allowance.
 
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft
