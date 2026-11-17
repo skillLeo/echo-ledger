@@ -60,9 +60,13 @@ final class LibraryView
                 $at = $r->started_at->copy()->setTimezone($zone());
                 $now = Carbon::now($zone());
 
+                // Since v2.0 the day in the console's language (English stays exactly as before).
+                $v2 = ConsoleV2::library();
+
                 return match (true) {
-                    $at->isSameDay($now) => 'Today',
-                    $at->isSameDay($now->copy()->subDay()) => 'Yesterday',
+                    $at->isSameDay($now) => $v2 ? __('Today') : 'Today',
+                    $at->isSameDay($now->copy()->subDay()) => $v2 ? __('Yesterday') : 'Yesterday',
+                    $v2 => $at->locale(app()->getLocale())->translatedFormat($at->year === $now->year ? 'l, j F' : 'l, j F Y'),
                     $at->year === $now->year => $at->format('l, M j'),
                     default => $at->format('l, M j, Y'),
                 };
@@ -109,12 +113,18 @@ final class LibraryView
     {
         return Group::make($id)
             ->label(self::GROUPS[$id])
+            // Since v2.0 the v2.0 Library's group headers are the day alone ("Today"), as in the apps.
+            ->titlePrefixedWithLabel(! ConsoleV2::library())
             ->collapsible()
             ->getKeyFromRecordUsing(fn (CaptureSession $record): string => $key($record))
             ->getTitleFromRecordUsing(fn (CaptureSession $record): string => $title($record))
             // The count of the whole group (every page), as the select box selects it: one query for all the groups.
             ->getDescriptionFromRecordUsing(function (CaptureSession $record, HasTable $livewire) use ($id, $key): string {
                 $count = count(self::buckets($id, $livewire)[$key($record)] ?? []);
+
+                if (ConsoleV2::library()) {
+                    return trans_choice(':count recording|:count recordings', $count, ['count' => number_format($count)]);
+                }
 
                 return $count === 1 ? '1 recording' : number_format($count).' recordings';
             })

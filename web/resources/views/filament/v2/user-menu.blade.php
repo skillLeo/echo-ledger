@@ -1,0 +1,61 @@
+{{--
+    The v2.0 avatar menu: who you are (opens Settings), Upgrade or Plan & usage, Settings, the theme, the admin panel
+    for staff, Help, and Sign out last, apart from the rest.
+--}}
+@php
+    use App\Filament\Auth\EditProfile;
+    use App\Filament\Support\InitialsAvatarProvider;
+    use App\Filament\Support\SettingsContext;
+    use App\Filament\Support\UpgradeFlow;
+
+    $context = SettingsContext::current();
+    $user = $context?->user;
+    $name = $user !== null ? (filled($user->name) ? $user->name : \Illuminate\Support\Str::before((string) $user->email, '@')) : '';
+    $upgrade = $context !== null && $context->flag('can_upgrade') && ! $context->flag('member');
+@endphp
+@if ($context !== null)
+    <x-filament::dropdown placement="bottom-end" teleport width="xs" class="fi-user-menu v2-um">
+        <x-slot name="trigger">
+            <button type="button" class="fi-user-menu-trigger v2-um-trigger" aria-label="{{ __('Open the menu for :name', ['name' => $name]) }}">
+                <span class="v2-avatar" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+            </button>
+        </x-slot>
+        <x-filament::dropdown.list>
+            <a href="{{ EditProfile::settingsUrl() }}" class="v2-um-head">
+                <span class="v2-avatar is-large" aria-hidden="true">{{ InitialsAvatarProvider::initials($name) }}</span>
+                <span class="v2-um-text">
+                    <span class="v2-um-name">{{ $name }}</span>
+                    <span class="v2-um-email" dir="ltr">{{ $user->email }}</span>
+                </span>
+                <span class="v2-chip">{{ $context->plan()->name }}</span>
+            </a>
+        </x-filament::dropdown.list>
+        <x-filament::dropdown.list>
+            @if ($upgrade)
+                <x-filament::dropdown.list.item tag="a" :href="UpgradeFlow::chooseUrl($context->higherPlans()[0]->key ?? null)">{{ __('Upgrade') }}</x-filament::dropdown.list.item>
+            @else
+                <x-filament::dropdown.list.item tag="a" :href="EditProfile::settingsUrl('plan')">{{ __('Plan and usage') }}</x-filament::dropdown.list.item>
+            @endif
+            <x-filament::dropdown.list.item tag="a" :href="EditProfile::settingsUrl()">{{ __('Settings') }}</x-filament::dropdown.list.item>
+            <div class="v2-um-theme" x-data="{ theme: localStorage.getItem('filament:theme:mode') || 'system' }" x-on:theme-changed.window="theme = $event.detail">
+                <span id="v2-um-theme">{{ __('Theme') }}</span>
+                <span class="v2-segmented" role="radiogroup" aria-labelledby="v2-um-theme">
+                    @foreach (['system' => __('System'), 'light' => __('Light'), 'dark' => __('Dark')] as $value => $label)
+                        <button type="button" role="radio" x-bind:aria-checked="theme === '{{ $value }}' ? 'true' : 'false'"
+                            x-on:click="theme = '{{ $value }}'; window.dispatchEvent(new CustomEvent('theme-changed', { detail: '{{ $value }}' }))">{{ $label }}</button>
+                    @endforeach
+                </span>
+            </div>
+            <x-filament::dropdown.list.item tag="button" x-on:click="$dispatch('el-help')">{{ __('Help and shortcuts') }}</x-filament::dropdown.list.item>
+            @if (\App\Services\Staff\StaffAccess::isStaff())
+                <x-filament::dropdown.list.item tag="a" :href="\Filament\Facades\Filament::getPanel('admin')->getUrl() ?? '/admin'">{{ __('Admin panel') }}</x-filament::dropdown.list.item>
+            @endif
+        </x-filament::dropdown.list>
+        <x-filament::dropdown.list>
+            <form action="{{ filament()->getLogoutUrl() }}" method="post">
+                @csrf
+                <x-filament::dropdown.list.item tag="button" type="submit">{{ __('Sign out') }}</x-filament::dropdown.list.item>
+            </form>
+        </x-filament::dropdown.list>
+    </x-filament::dropdown>
+@endif

@@ -420,7 +420,7 @@
 
         <div class="el-head">
             <p class="el-meta-line">
-                <span x-text="d.kind === 'live' ? 'Live captions (final transcript pending)' : 'Final transcript'"></span>
+                <span x-text="d.kind === 'live' ? {{ Js::from(__('Live captions (final transcript pending)')) }} : {{ Js::from(__('Final transcript')) }}"></span>
                 <span x-show="d.status && d.status !== 'completed'" x-text="'· ' + (d.status || '').replace('_', ' ')"></span>
                 <span x-text="'· ' + d.language"></span>
                 <span x-show="d.edited">· edited</span>
@@ -432,7 +432,7 @@
                 <button type="button" x-show="viewOffered('roman')" x-on:click="pickView('roman')" :aria-pressed="view === 'roman'" :data-unmade="viewReady('roman') ? null : ''">Roman Urdu</button>
                 <button type="button" lang="ur" x-show="viewOffered('urdu')" x-on:click="pickView('urdu')" :aria-pressed="view === 'urdu'" :data-unmade="viewReady('urdu') ? null : ''">اردو</button>
                 <button type="button" x-show="viewOffered('english')" x-on:click="pickView('english')" :aria-pressed="view === 'english'" :data-unmade="viewReady('english') ? null : ''">English</button>
-                <button type="button" x-on:click="pickView('original')" :aria-pressed="view === 'original'">Original</button>
+                <button type="button" x-on:click="pickView('original')" :aria-pressed="view === 'original'">{{ __('Original') }}</button>
                 @if (($data['views_locked'] ?? false) && ($viewsBadge = \App\Filament\Support\PlanLock::lowestBadge('views')))<button type="button" class="el-views-lock" x-show="d.views_locked" x-cloak x-on:click="$wire.mountAction('upgradeViews')" aria-label="Roman Urdu, English and Urdu views are not in your plan. See plans" data-views-locked>{!! $viewsBadge->toHtml() !!}</button>@endif
             </span>
         </div>
@@ -441,16 +441,16 @@
             <label class="el-find" x-show="d.segments.length">
                 <span class="el-i el-i-search" aria-hidden="true"></span>
                 <input type="search" x-model="find" x-on:input="hitAt = 0" x-on:keydown.enter.prevent="findMove($event.shiftKey ? -1 : 1)" x-on:keydown.escape="find = ''"
-                    placeholder="Find" aria-label="Find in the transcript">
+                    placeholder="{{ __('Find') }}" aria-label="{{ __('Find in the transcript') }}">
                 <span class="el-find-count" x-show="find.trim().length > 1" x-text="hits().length ? (hitAt + 1) + ' of ' + hits().length : 'None'"></span>
                 <button type="button" x-show="hits().length > 1" x-on:click="findMove(-1)" aria-label="Previous match"><span class="el-i el-i-up" aria-hidden="true"></span></button>
                 <button type="button" x-show="hits().length > 1" x-on:click="findMove(1)" aria-label="Next match"><span class="el-i el-i-down" aria-hidden="true"></span></button>
             </label>
             <span class="el-spacer"></span>
-            <button type="button" class="el-btn" x-show="d.editable && view === 'original'" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? 'Done editing' : 'Edit text'"></button>
-            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? 'Copied' : 'Copy text'"></button>
-            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? 'Copied' : (copied === 'failed' ? 'Copy failed' : 'Copy with timestamps')"></button>
-            <button type="button" class="el-btn el-btn-text" x-show="d.segments.length" x-on:click="copy(false, true)" title="Unsure words marked [?word], with a first line that tells an AI what the marks mean" x-text="copied === 'ai' ? 'Copied' : 'Copy for AI'"></button>
+            <button type="button" class="el-btn" x-show="d.editable && view === 'original'" x-on:click="editing = !editing" :aria-pressed="editing" x-text="editing ? {{ Js::from(__('Done editing')) }} : {{ Js::from(__('Edit text')) }}"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(false)" x-text="copied === 'text' ? {{ Js::from(__('Copied')) }} : {{ Js::from(__('Copy text')) }}"></button>
+            <button type="button" class="el-btn" x-show="d.segments.length" x-on:click="copy(true)" x-text="copied === 'times' ? {{ Js::from(__('Copied')) }} : (copied === 'failed' ? {{ Js::from(__('Copy failed')) }} : {{ Js::from(__('Copy with timestamps')) }})"></button>
+            <button type="button" class="el-btn el-btn-text" x-show="d.segments.length" x-on:click="copy(false, true)" title="Unsure words marked [?word], with a first line that tells an AI what the marks mean" x-text="copied === 'ai' ? {{ Js::from(__('Copied')) }} : {{ Js::from(__('Copy for AI')) }}"></button>
             <span class="el-sr" role="status" aria-live="polite" x-text="copied === 'failed' ? 'Copy failed' : (copied ? 'Copied to the clipboard' : (saving !== null ? 'Saving' : ''))"></span>
         </div>
 
@@ -520,8 +520,8 @@
                                 <template x-for="s in suggFor(i)" :key="'sg' + s.id">
                                     <p class="el-sugg-row">
                                         <span>Suggested: “<strong x-text="s.from"></strong>” → “<strong x-text="s.to"></strong>”<span x-show="s.reason" x-text="' · ' + s.reason"></span></span>
-                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, true)">Accept</button>
-                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, false)">Dismiss</button>
+                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, true)">{{ __('Accept') }}</button>
+                                        <button type="button" class="el-btn el-btn-text" :disabled="deciding === s.id" x-on:click="decide(s.id, false)">{{ __('Dismiss') }}</button>
                                     </p>
                                 </template>
                                 <template x-if="d.segments[i].check && !editing">

@@ -7,6 +7,7 @@ namespace App\Filament\Resources\CaptureSessions\Schemas;
 use App\Enums\SttProviderKey;
 use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
+use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Services\Workspaces\ConsoleAccess;
 use App\Stt\LanguageChoice;
@@ -15,6 +16,8 @@ use Filament\Infolists\Components\ViewEntry;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Group;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Tabs;
+use Filament\Schemas\Components\Tabs\Tab;
 use Filament\Schemas\Schema;
 
 /**
@@ -25,6 +28,10 @@ final class CaptureSessionInfolist
 {
     public static function configure(Schema $schema): Schema
     {
+        if (ConsoleV2::library()) {
+            return self::v2($schema);
+        }
+
         return $schema->components([
             Grid::make(['default' => 1, 'xl' => 3])->columnSpanFull()->schema([
                 Group::make([
@@ -36,6 +43,35 @@ final class CaptureSessionInfolist
                         ->visible(fn (CaptureSession $r): bool => $r->client_id !== null && ! $r->hasNoAudio()),
                     self::details(),
                 ])->columnSpan(1),
+            ]),
+        ]);
+    }
+
+    /**
+     * The v2.0 recording page (ui_v2.library), as the apps draw it: tabs Transcript · Summary · Ask · Details. The
+     * transcript keeps its docked player and its Screens; the summary is the call notes; Ask asks the recording's
+     * project; Details holds the facts.
+     */
+    private static function v2(Schema $schema): Schema
+    {
+        return $schema->components([
+            Tabs::make(__('Recording'))->columnSpanFull()->persistTabInQueryString('view')->extraAttributes(['class' => 'v2-rec-tabs'])->tabs([
+                Tab::make(__('Transcript'))->id('transcript')->schema([
+                    ViewEntry::make('organise')->hiddenLabel()->view('filament.recording.chips'),
+                    TranscriptPlayerEntry::make('player')->hiddenLabel()->visible(fn (CaptureSession $r): bool => ! $r->hasNoAudio()),
+                    ViewEntry::make('no_audio_state')->hiddenLabel()->view('filament.v2.recording-empty')
+                        ->viewData(['kind' => 'no_audio'])->visible(fn (CaptureSession $r): bool => $r->hasNoAudio()),
+                ]),
+                Tab::make(__('Summary'))->id('summary')->schema([
+                    ViewEntry::make('call_notes')->hiddenLabel()->view('filament.recording.call-notes')
+                        ->visible(fn (CaptureSession $r): bool => $r->client_id !== null && ! $r->hasNoAudio()),
+                    ViewEntry::make('summary_state')->hiddenLabel()->view('filament.v2.recording-empty')
+                        ->viewData(['kind' => 'summary'])->visible(fn (CaptureSession $r): bool => $r->client_id === null),
+                ]),
+                Tab::make(__('Ask'))->id('ask')->schema([
+                    ViewEntry::make('ask')->hiddenLabel()->view('filament.v2.recording-ask'),
+                ]),
+                Tab::make(__('Details'))->id('details')->schema([self::details()]),
             ]),
         ]);
     }

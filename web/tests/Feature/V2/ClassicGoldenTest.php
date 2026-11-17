@@ -23,6 +23,8 @@ function normaliseClassic(string $html, string $csrf = ''): string
     if ($csrf !== '') {
         $html = str_replace($csrf, 'CSRF', $html);
     }
+    // The self-hosted Inter faces are inlined only where `filament:assets` has published them (not in every checkout).
+    $html = (string) preg_replace("/<style>(@font-face\\{font-family:'Inter';[^}]*\\})+<\\/style>/", '', $html);
     // Lazy components carry their (random) id and a checksum, base64-encoded.
     $html = (string) preg_replace("/__lazyLoad\\(&#039;[A-Za-z0-9+\/=]+&#039;\\)/", '__lazyLoad(LAZY)', $html);
     // Livewire's component ids (20 random letters and digits), wherever a page repeats them.

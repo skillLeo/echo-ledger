@@ -17,7 +17,7 @@
 <div class="el-recording-chips" style="display: flex; flex-direction: column; gap: var(--space-3)">
     @if ($readOnly)
         <div class="el-chips" role="group" aria-label="Organise">
-            <span class="el-chip el-chip-static">@svg('heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span></span>
+            <span class="el-chip el-chip-static">@svg('heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? __('No project') }}</span></span>
             <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span></span>
             @foreach ($labels as $label)
                 <span class="el-chip el-chip-static el-on">@svg('heroicon-s-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span></span>
@@ -27,7 +27,7 @@
         <div class="el-chips" role="group" aria-label="Organise">
             <button type="button" @class(['el-chip', 'el-on' => $session->client !== null]) wire:click="mountAction('fileUnder')"
                 aria-label="Project: {{ $session->client?->name ?? 'none' }}. Change">
-                @svg($session->client !== null ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? 'No project' }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
+                @svg($session->client !== null ? 'heroicon-s-folder' : 'heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? __('No project') }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
             </button>
             @if ($canRetranscribe)
                 <button type="button" class="el-chip" wire:click="mountAction('retranscribe_as')" aria-label="Language: {{ $language }}. Transcribe again in another language">
@@ -42,14 +42,14 @@
                 </button>
             @endforeach
             <button type="button" class="el-chip" wire:click="mountAction('labels')">
-                @svg('heroicon-o-plus', ['aria-hidden' => 'true'])<span>{{ $labels === [] ? 'Labels' : 'Label' }}</span>
+                @svg('heroicon-o-plus', ['aria-hidden' => 'true'])<span>{{ $labels === [] ? __('Labels') : __('Label') }}</span>
             </button>
             <button type="button" class="el-chip" wire:click="togglePin" aria-pressed="{{ $session->pinned ? 'true' : 'false' }}">
-                @svg($session->pinned ? 'heroicon-s-star' : 'heroicon-o-star', ['aria-hidden' => 'true'])<span>{{ $session->pinned ? 'Pinned' : 'Pin' }}</span>
+                @svg($session->pinned ? 'heroicon-s-star' : 'heroicon-o-star', ['aria-hidden' => 'true'])<span>{{ $session->pinned ? __('Pinned') : __('Pin') }}</span>
             </button>
             <button type="button" class="el-chip" wire:click="toggleKeep" aria-pressed="{{ $session->keep_forever ? 'true' : 'false' }}"
                 title="Kept recordings are never deleted automatically">
-                @svg($session->keep_forever ? 'heroicon-s-lock-closed' : 'heroicon-o-lock-open', ['aria-hidden' => 'true'])<span>Keep forever</span>
+                @svg($session->keep_forever ? 'heroicon-s-lock-closed' : 'heroicon-o-lock-open', ['aria-hidden' => 'true'])<span>{{ __('Keep forever') }}</span>
             </button>
         </div>
     @endif
