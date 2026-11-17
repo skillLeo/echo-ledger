@@ -61,6 +61,7 @@ const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
+const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
 const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
@@ -834,6 +835,12 @@ export default function MainApp() {
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
             </div></Suspense>}
+            ask={ui.flags["ui_v2.ask"] ? (
+              <Suspense fallback={null}><div className="el-root el-embedded">
+                <AskV2 projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))} onOpenAt={(id, ms) => openRecording(id, ms)}
+                  onOpenProject={(id) => openProject(id)} onLibrary={() => openFolder(null)} />
+              </div></Suspense>
+            ) : undefined}
             live={ui.flags["ui_v2.live"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
