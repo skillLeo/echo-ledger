@@ -110,7 +110,7 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::get('help/guides', [HelpController::class, 'guides'])->middleware('abilities:config:read')->name('api.help.guides');
         Route::get('help/guides/{id}', [HelpController::class, 'guide'])->middleware('abilities:config:read')->name('api.help.guides.show');
         Route::get('help/whats-new', [HelpController::class, 'whatsNew'])->middleware('abilities:config:read')->name('api.help.whats-new');
-        Route::post('support/messages', [HelpController::class, 'support'])->middleware(['abilities:sessions:write', 'throttle:support'])->name('api.support.messages');
+        Route::post('support/messages', [HelpController::class, 'support'])->middleware('abilities:sessions:write')->name('api.support.messages');
         // Upgrade requests (v1.6): the newest one of this device's person.
         Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
         // Payment receipts (v1.7): a receipt of the person's own request, decrypted for this answer only.

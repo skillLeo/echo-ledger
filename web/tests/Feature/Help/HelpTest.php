@@ -96,8 +96,32 @@ describe('the device API', function () {
         foreach (range(1, 3) as $i) {
             $other->postJson('/api/support/messages', ['subject' => "s{$i}", 'message' => 'm'])->assertStatus(202);
         }
-        $other->postJson('/api/support/messages', ['subject' => 'six', 'message' => 'm'])->assertStatus(429);
-        $api->postJson('/api/support/messages', ['subject' => '', 'message' => ''])->assertStatus(429);
+        $other->postJson('/api/support/messages', ['subject' => 'six', 'message' => 'm'])->assertStatus(429)->assertJsonPath('code', 'too_many_attempts');
+        // The console counts in the same bucket: the person's.
+        Filament::setCurrentPanel('app');
+        $this->actingAs($device->user->fresh(), 'web');
+        Livewire::test(Help::class)->callAction('contactSupport', ['subject' => 'From the console', 'message' => 'm'])->assertNotified();
+        Mail::assertQueued(SupportMessageMail::class, 5);
+    });
+
+    it('asks for a confirmed email first: the reply goes to it', function () {
+        $user = Fx::user(['email' => 'unconfirmed@example.test']);
+        $user->forceFill(['email_verified_at' => null])->save();
+
+        $this->api(Fx::token(Fx::device($user)))->postJson('/api/support/messages', ['subject' => 'Hi', 'message' => 'm'])
+            ->assertForbidden()->assertJsonPath('code', 'email_not_verified');
+        Mail::assertNothingQueued();
+    });
+
+    it('shows the person\'s words as written: no link, image, heading or HTML of theirs in the email', function () {
+        $user = Fx::user(['name' => 'Eve **Bold**', 'email' => 'eve@example.test']);
+        $mail = new SupportMessageMail($user->name, $user->email, '# [Click](https://evil.example) <b>now</b>',
+            "## A heading\n![tracker](https://evil.example/p.png)\n[my link](javascript:alert(1))\n<script>alert(1)</script>\n> quoted", [], 'android');
+
+        $html = $mail->render();
+        expect($html)->not->toContain('href="https://evil.example')->not->toContain('href="javascript')->not->toContain('src="https://evil.example')
+            ->not->toContain('<script')->not->toContain('<b>now')->not->toContain('<h2')->not->toContain('<strong>Bold')
+            ->toContain('## A heading')->toContain('[my link](javascript:alert(1))')->toContain('&lt;script');
     });
 });
 

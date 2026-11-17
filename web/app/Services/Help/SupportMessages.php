@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Help;
 
+use App\Exceptions\ApiError;
 use App\Mail\SupportMessageMail;
 use App\Models\Device;
 use App\Models\DeviceReport;
@@ -11,6 +12,7 @@ use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Contact support (v1.8 P6.4): an email to the server's support address (Admin → Settings → Email, default
@@ -34,9 +36,26 @@ final class SupportMessages
         return 'contact@'.preg_replace('/^www\./', '', $host);
     }
 
-    /** Sends [$message] from [$user]; with [$includeReport], [$device]'s report (or, from the console, their devices'). */
+    /** Messages one person may send an hour, from the apps and the console together. */
+    public const PER_HOUR = 5;
+
+    /**
+     * Sends [$message] from [$user]; with [$includeReport], [$device]'s report (or, from the console, their devices').
+     * `403 email_not_verified` until the account's email is confirmed (the reply goes to it); `429 too_many_attempts`
+     * past 5 an hour, one count per person whichever app or the console writes.
+     */
     public function send(User $user, string $subject, string $message, bool $includeReport, ?Device $device = null): void
     {
+        if (! $user->hasVerifiedEmail()) {
+            throw new ApiError(403, 'email_not_verified', 'Confirm your email first: support answers it.');
+        }
+        $key = 'support:u'.$user->id;
+        if (RateLimiter::tooManyAttempts($key, self::PER_HOUR)) {
+            $wait = RateLimiter::availableIn($key);
+
+            throw new ApiError(429, 'too_many_attempts', 'Too many messages for now. Try again in '.max(1, (int) ceil($wait / 60)).' minutes, or write to '.$this->address().'.', [], ['Retry-After' => (string) $wait]);
+        }
+        RateLimiter::hit($key, 3600);
         $reports = [];
         if ($includeReport) {
             $reports = DeviceReport::query()->withoutGlobalScopes()->where('user_id', $user->id)
