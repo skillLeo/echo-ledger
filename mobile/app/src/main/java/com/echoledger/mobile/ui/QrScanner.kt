@@ -155,7 +155,7 @@ fun QrScanner(accept: (String) -> Boolean, onResult: (String) -> Unit, onCancel:
         ) {
             Text("Scan the sign-in QR code", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
             Text(
-                "In the EchoLedger console open Profile → Devices → Sign in a device and point the camera at the code.",
+                "In the EchoLedger console open Account → Devices → Sign in a device and point the camera at the code.",
                 color = Color.White.copy(alpha = 0.8f),
                 textAlign = TextAlign.Center
             )

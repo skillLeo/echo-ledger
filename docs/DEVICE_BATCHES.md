@@ -43,7 +43,7 @@ of "accurate transcripts", "Urdu and Roman Urdu" instead of "Urdu, accurately".
 Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
 Also: the desktop app's words are English only (the phone is translated). Its Urdu pictures show the right-to-left
 layout with English words. Translating the desktop interface into Urdu is a separate piece of work: now, or later?
-Indexes: `docs/v2/gate3/phone/index.md` and `docs/v2/gate3/desktop/index.md`.
+Each Gate 3 folder (phone and desktop) has an index of its pictures.
 
 **4. Mac, if time is left, about 15 minutes**
 DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build. Later, in a v2 Mac build: Cmd+Z on an

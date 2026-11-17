@@ -1,74 +1,81 @@
 package com.echoledger.mobile.ui.v2.settings
 
 import com.echoledger.mobile.R
+import com.echoledger.mobile.calls.PhoneAppNote
+import com.echoledger.mobile.calls.PhoneAppNote.Kind
 
-/** A last-call note as a code: the words to say (a string resource) and what goes in them. */
+/** A last-call note as words to say (a string resource) and what goes in them. */
 data class NoteCode(val words: Int, val args: List<Any> = emptyList())
 
 /**
- * The Phone app import's last-call note (PhoneAppRecordings.lastNote, today an English sentence) as a code each page
- * says in its own language. TODO(phone core): have lastNote() return this code itself; until then the core's sentences
- * are read back here, one pattern each. A note that matches none (a free-form reason) has no code: the page then shows
- * no note rather than English words in another language.
+ * The Phone app import's last-call note (PhoneAppRecordings.lastNote, a [PhoneAppNote]) as words in the screen's
+ * language. Every kind has its own words: the `when` is exhaustive, so a new kind does not build without them.
  */
 object LastCallNote {
-    private val PATTERNS: List<Pair<Regex, (MatchResult) -> NoteCode>> = listOf(
-        r("Imported the Phone app's recording \\((\\d+) s\\)\\.") { NoteCode(R.string.v2_calls_note_imported, listOf(it.int(1))) },
-        r("Imported the Phone app's recording \\((\\d+) s\\); EchoLedger's own has one side only\\.") {
-            NoteCode(R.string.v2_calls_note_imported_one_side, listOf(it.int(1)))
-        },
-        r("Imported the Phone app's recording \\((\\d+) s\\), as you chose\\.") {
-            NoteCode(R.string.v2_calls_note_imported_chosen, listOf(it.int(1)))
-        },
-        r("Waiting: EchoLedger is still saving its own recording of this call\\.") { NoteCode(R.string.v2_calls_note_wait) },
-        r("EchoLedger's own recording kept \\(both sides apart\\); the Phone app's copy stays in its folder\\.") {
-            NoteCode(R.string.v2_calls_note_own_apart)
-        },
-        r("EchoLedger's own recording kept \\(both voices on one track\\); the Phone app's copy stays in its folder\\.") {
-            NoteCode(R.string.v2_calls_note_own_one_track)
-        },
-        r("EchoLedger heard both sides itself; the Phone app's copy stays in its folder\\.") {
-            NoteCode(R.string.v2_calls_note_heard_both)
-        },
-        r("Not imported, shorter than (\\d+) s \\(Skip calls shorter than\\)\\.") {
-            NoteCode(R.string.v2_calls_note_short_setting, listOf(it.int(1)))
-        },
-        r("Not imported, shorter than (\\d+) s\\.") { NoteCode(R.string.v2_calls_note_short, listOf(it.int(1))) },
-        r("Not imported: EchoLedger's recording of this call was discarded\\.") { NoteCode(R.string.v2_calls_note_discarded) },
-        r("Not imported: auto-record was off\\.") { NoteCode(R.string.v2_calls_note_auto_off) },
-        r("Not imported: Record phone calls was not set to Always\\.") { NoteCode(R.string.v2_calls_note_not_always) },
-        r("Waiting for you: the phone does not say which app made the file; import it in Settings if it is this call's\\.") {
-            NoteCode(R.string.v2_calls_note_unknown_maker)
-        },
-        r("Not imported: another app made the file in the call folder\\.") { NoteCode(R.string.v2_calls_note_other_app) },
-        r("Not imported: another app \\((.+)\\) made the file in the call folder\\.") {
-            NoteCode(R.string.v2_calls_note_other_app_named, listOf(it.groupValues[1]))
-        },
-        r("Not imported: the file is larger than a recording of this call can be\\.") { NoteCode(R.string.v2_calls_note_too_large) },
-        r("The Phone app's copy did not come: EchoLedger's own recording \\(your voice only\\) is kept as usual\\.") {
-            NoteCode(R.string.v2_calls_note_copy_did_not_come)
-        },
-        r("Not imported: it is no longer waiting\\.") { NoteCode(R.string.v2_calls_note_no_longer_waiting) },
-        r("Not imported: the file is gone\\.") { NoteCode(R.string.v2_calls_note_gone) },
-        r("Not imported: the file no longer fits the call\\.") { NoteCode(R.string.v2_calls_note_no_longer_fits) },
-        r("Not imported yet: the file could not be read\\.") { NoteCode(R.string.v2_calls_note_unreadable) },
-        r("Not imported: the file changed after the call\\.") { NoteCode(R.string.v2_calls_note_changed) },
-        r("Not imported: EchoLedger can't take this kind of audio file\\.") { NoteCode(R.string.v2_calls_note_unsupported) },
-        r("Not imported yet: the Phone app is still saving the file\\.") { NoteCode(R.string.v2_calls_note_saving) },
-        r("Not imported: no permission to read audio files or the call log\\.") { NoteCode(R.string.v2_calls_note_no_permission) },
-        r("The Phone app's copy took the place of EchoLedger's own \\(your voice only\\)\\.") {
-            NoteCode(R.string.v2_calls_note_took_place)
+    fun code(note: PhoneAppNote): NoteCode {
+        val seconds = listOf<Any>(note.seconds ?: 0)
+        return when (note.kind) {
+            Kind.IMPORTED -> NoteCode(R.string.v2_calls_note_imported, seconds)
+
+            Kind.IMPORTED_ONE_SIDE -> NoteCode(R.string.v2_calls_note_imported_one_side, seconds)
+
+            Kind.IMPORTED_AS_CHOSEN -> NoteCode(R.string.v2_calls_note_imported_chosen, seconds)
+
+            Kind.WAITING_FOR_OWN -> NoteCode(R.string.v2_calls_note_wait)
+
+            Kind.OWN_KEPT_APART -> NoteCode(R.string.v2_calls_note_own_apart)
+
+            Kind.OWN_KEPT_ONE_TRACK -> NoteCode(R.string.v2_calls_note_own_one_track)
+
+            Kind.HEARD_BOTH_SIDES -> NoteCode(R.string.v2_calls_note_heard_both)
+
+            Kind.SHORTER_THAN_SETTING -> NoteCode(R.string.v2_calls_note_short_setting, seconds)
+
+            Kind.SHORTER_THAN_MINIMUM -> NoteCode(R.string.v2_calls_note_short, seconds)
+
+            Kind.OWN_DISCARDED -> NoteCode(R.string.v2_calls_note_discarded)
+
+            Kind.AUTO_RECORD_OFF -> NoteCode(R.string.v2_calls_note_auto_off)
+
+            Kind.PHONE_CALLS_NOT_ALWAYS -> NoteCode(R.string.v2_calls_note_not_always)
+
+            Kind.PHONE_CALLS_OFF -> NoteCode(R.string.v2_calls_note_phone_calls_off)
+
+            Kind.APP_AUTO_RECORD_OFF -> note.app?.let { NoteCode(R.string.v2_calls_note_app_auto_off, listOf(it)) }
+                ?: NoteCode(R.string.v2_calls_note_auto_off)
+
+            Kind.RECORD_NOT_CHOSEN -> NoteCode(R.string.v2_calls_note_record_not_chosen)
+
+            Kind.NOT_WANTED -> NoteCode(R.string.v2_calls_note_not_wanted)
+
+            Kind.UNKNOWN_MAKER -> NoteCode(R.string.v2_calls_note_unknown_maker)
+
+            Kind.OTHER_APP -> note.owner?.let { NoteCode(R.string.v2_calls_note_other_app_named, listOf(it)) }
+                ?: NoteCode(R.string.v2_calls_note_other_app)
+
+            Kind.TOO_LARGE -> NoteCode(R.string.v2_calls_note_too_large)
+
+            Kind.FILE_GONE -> NoteCode(R.string.v2_calls_note_gone)
+
+            Kind.FILE_CHANGED -> NoteCode(R.string.v2_calls_note_changed)
+
+            Kind.FILE_CHANGED_WHILE_READ -> NoteCode(R.string.v2_calls_note_changed_while_read)
+
+            Kind.UNSUPPORTED -> NoteCode(R.string.v2_calls_note_unsupported)
+
+            Kind.NO_LONGER_WAITING -> NoteCode(R.string.v2_calls_note_no_longer_waiting)
+
+            Kind.NO_LONGER_FITS -> NoteCode(R.string.v2_calls_note_no_longer_fits)
+
+            Kind.UNREADABLE -> NoteCode(R.string.v2_calls_note_unreadable)
+
+            Kind.STILL_SAVING -> NoteCode(R.string.v2_calls_note_saving)
+
+            Kind.COPY_DID_NOT_COME -> NoteCode(R.string.v2_calls_note_copy_did_not_come)
+
+            Kind.TOOK_THE_PLACE -> NoteCode(R.string.v2_calls_note_took_place)
+
+            Kind.NO_PERMISSION -> NoteCode(R.string.v2_calls_note_no_permission)
         }
-    )
-
-    private fun r(pattern: String, code: (MatchResult) -> NoteCode) = Regex(pattern, RegexOption.IGNORE_CASE) to code
-
-    private fun MatchResult.int(group: Int): Int = groupValues[group].toInt()
-
-    /** The note's code, or null when it is none of the core's sentences. */
-    fun code(text: String): NoteCode? {
-        val t = text.trim()
-        for ((pattern, code) in PATTERNS) pattern.matchEntire(t)?.let { return code(it) }
-        return null
     }
 }

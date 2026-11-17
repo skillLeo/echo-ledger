@@ -1012,6 +1012,34 @@ class ApiClient(baseUrl: String, pins: List<String>, private val token: String?,
         call(request("assist/sessions/$id/end").post("{}".toRequestBody(jsonType)).build(), null as KSerializer<Unit>?)
     }
 
+    /** `GET /api/help/guides?q=` (contract 2.0.0-d): the user guide's sections, or those matching [query], best first. */
+    suspend fun helpGuides(query: String?): com.echoledger.mobile.data.HelpGuidesDto {
+        val url = url("help/guides").toHttpUrl().newBuilder().apply { query?.let { addQueryParameter("q", it) } }.build()
+        val req = Request.Builder().url(url).header("Accept", "application/json")
+            .apply { token?.let { header("Authorization", "Bearer $it") } }.get().build()
+        return call(req, com.echoledger.mobile.data.HelpGuidesDto.serializer())!!
+    }
+
+    /** `GET /api/help/guides/{id}`: one guide's Markdown (`404` for an unknown id). */
+    suspend fun helpGuide(id: String): com.echoledger.mobile.data.HelpGuideDto = call(
+        request("help/guides/${java.net.URLEncoder.encode(id, "UTF-8")}").get().build(),
+        com.echoledger.mobile.data.HelpGuideDto.serializer()
+    )!!
+
+    /** `GET /api/help/whats-new?platform=`: the platform's last releases with notes, newest first. */
+    suspend fun whatsNew(platform: String): com.echoledger.mobile.data.WhatsNewDto =
+        call(request("help/whats-new?platform=$platform").get().build(), com.echoledger.mobile.data.WhatsNewDto.serializer())!!
+
+    /** `POST /api/support/messages` → `202`: to the server's support address; the last device report only when asked. */
+    suspend fun sendSupportMessage(subject: String, message: String, includeDeviceReport: Boolean) {
+        val body = buildJsonObject {
+            put("subject", subject.take(120))
+            put("message", message.take(5000))
+            put("include_device_report", includeDeviceReport)
+        }.toString().toRequestBody(jsonType)
+        call(request("support/messages").post(body).build(), null as KSerializer<Unit>?, allowEmpty = true)
+    }
+
     /** `PUT /api/account/ui` (since 2.0.0-a): "Switch back to classic" ([classic] true) or its undo; the new flags. */
     suspend fun setClassicUi(classic: Boolean): com.echoledger.mobile.data.UiChoiceDto {
         val body = buildJsonObject { put("classic", classic) }.toString().toRequestBody(jsonType)

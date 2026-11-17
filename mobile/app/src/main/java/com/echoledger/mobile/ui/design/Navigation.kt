@@ -137,7 +137,16 @@ private fun androidx.compose.foundation.layout.RowScope.TabSlot(
             }
         }
         Spacer(Modifier.height(4.dp))
-        Text(tab.label, style = LocalEchoType.current.micro, color = tint, maxLines = 1)
+        // Since v1.8.1 (bug P-011): at very large text the label grows to 1.5 × at most and ends in "…" rather than
+        // being cut mid-word; the tab's name is read out whole either way.
+        val micro = LocalEchoType.current.micro
+        Text(
+            tab.label,
+            style = micro.copy(fontSize = NavLabel.size(micro.fontSize, androidx.compose.ui.platform.LocalDensity.current.fontScale)),
+            color = tint,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -262,4 +271,13 @@ fun RecordingStrip(elapsed: String, onOpen: () -> Unit, onStop: () -> Unit, modi
             Box(Modifier.size(12.dp).clip(RoundedCornerShape(2.dp)).background(c.danger))
         }
     }
+}
+
+/** The bottom bar's label size (since v1.8.1): the system text size counts up to 1.5 ×, never more. */
+object NavLabel {
+    const val MAX_SCALE = 1.5f
+
+    /** [base] scaled by the system at [fontScale]: shrunk so the label ends at [MAX_SCALE] × its size. */
+    fun size(base: androidx.compose.ui.unit.TextUnit, fontScale: Float): androidx.compose.ui.unit.TextUnit =
+        if (fontScale <= MAX_SCALE) base else base * (MAX_SCALE / fontScale)
 }

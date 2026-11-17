@@ -16,6 +16,12 @@
     <string name="v2_calls_und_24">After 24 hours</string>
     <string name="v2_calls_und_72">After 3 days</string>
     <string name="v2_calls_auto_title">Auto-record apps</string>
+    <string name="v2_calls_autorecord">Auto-record calls</string>
+    <string name="v2_calls_autorecord_not_in_build">Recording calls is in the website version of EchoLedger: Google Play does not allow the capture helper it needs.</string>
+    <string name="v2_calls_autorecord_needs_android">Needs Android 12 or newer</string>
+    <string name="v2_calls_autorecord_setup_first">Turn on call capture in Setup first</string>
+    <string name="v2_calls_autorecord_ask">The after-call card asks after each call; kept after 10 seconds</string>
+    <string name="v2_calls_autorecord_keep">Answered calls are kept automatically; unanswered and short ones are skipped</string>
     <string name="v2_calls_auto_off_note">Auto-record is off: these apps are recorded only when you start a recording.</string>
     <string name="v2_calls_app_not">Not recorded</string>
     <string name="v2_calls_app_auto">Recorded automatically</string>
@@ -89,6 +95,11 @@
     <string name="v2_calls_note_unsupported">Not imported: EchoLedger can\'t take this kind of audio file.</string>
     <string name="v2_calls_note_saving">Not imported yet: the Phone app is still saving the file.</string>
     <string name="v2_calls_note_no_permission">Not imported: no permission to read audio files or the call log.</string>
+    <string name="v2_calls_note_phone_calls_off">Not imported: phone calls are off.</string>
+    <string name="v2_calls_note_app_auto_off">Not imported: auto-record is off for %1$s.</string>
+    <string name="v2_calls_note_record_not_chosen">Not imported: Record was not chosen.</string>
+    <string name="v2_calls_note_not_wanted">Not imported: this call was not to be recorded.</string>
+    <string name="v2_calls_note_changed_while_read">Not imported: the file changed while it was read.</string>
     <string name="v2_calls_note_took_place">The Phone app\'s copy took the place of EchoLedger\'s own (your voice only).</string>
     <string name="v2_calls_pa_last">Last call %1$s: %2$s</string>
 </resources>
