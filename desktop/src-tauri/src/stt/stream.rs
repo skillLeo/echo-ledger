@@ -174,24 +174,25 @@ async fn stream_socket(
                     let _ = stop_now(&mut tx, protocol).await;
                     terminate_deadline = Some(tokio::time::Instant::now() + TERMINATE_WAIT);
                     if protocol == Protocol::ElevenLabsRealtime {
-                        // ElevenLabs commits and keeps the socket open: every commit still waiting (a forced one in
-                        // flight, and Stop's own) gets its answer, or 3 s pass, before it closes: no last words lost.
-                        waits.forced += 1;
-                        let _ = tokio::time::timeout(TERMINATE_WAIT, async {
-                            while waits.forced > 0 {
-                                let Some(Ok(Message::Text(t))) = rx.next().await else { break };
-                                let raw = t.as_str();
-                                if let Some(answer) = commit_answer(protocol, raw) {
-                                    waits.answered(answer);
-                                    if answer != Answer::Text {
-                                        continue;
-                                    }
-                                }
-                                if let Some(ev) = protocol.parse(raw) {
-                                    on_event(ev);
+                        // ElevenLabs commits and keeps the socket open. Its answers carry no id, so the first one that
+                        // comes after Stop's commit is taken as its own; a short grace lets one more in flight (a
+                        // forced commit's, a VAD commit's) arrive too, never past TERMINATE_WAIT.
+                        waits.forced_end();
+                        let cap = tokio::time::Instant::now() + TERMINATE_WAIT;
+                        let mut close_at = cap;
+                        while let Ok(Some(Ok(message))) = tokio::time::timeout_at(close_at, rx.next()).await {
+                            let Message::Text(t) = message else { continue };
+                            let raw = t.as_str();
+                            if let Some(answer) = commit_answer(protocol, raw) {
+                                close_at = close_at.min(tokio::time::Instant::now() + STOP_GRACE);
+                                if waits.answered(answer) || answer != Answer::Text {
+                                    continue;
                                 }
                             }
-                        }).await;
+                            if let Some(ev) = protocol.parse(raw) {
+                                on_event(ev);
+                            }
+                        }
                         let _ = tx.send(Message::Close(None)).await;
                         return Ok(());
                     }
@@ -207,13 +208,11 @@ async fn stream_socket(
                         }
                         // The answer to a forced end: with text, a caption; without (or throttled, or "not enough
                         // audio"), the wait grows. A refusal after a forced commit is no failure: logged, never shown.
-                        if let Some(answer) = commit_answer(protocol, text.as_str()) {
-                            let forced = waits.forced > 0;
-                            waits.answered(answer);
-                            if forced && answer == Answer::Refused {
-                                eprintln!("[echoledger] captions: the provider declined a forced commit; the wait is now {} ms", waits.wait.as_millis());
-                                continue;
-                            }
+                        if let Some(answer) = commit_answer(protocol, text.as_str())
+                            && waits.answered(answer)
+                        {
+                            eprintln!("[echoledger] captions: the provider declined a forced commit; the wait is now {} ms", waits.wait.as_millis());
+                            continue;
                         }
                         if let Some(event) = protocol.parse(text.as_str()) {
                             if let SttEvent::Partial { text } | SttEvent::Final { text, .. } = &event
@@ -298,6 +297,13 @@ async fn stream_socket(
 /// How long a stopped session waits for the provider's end-of-session message.
 const TERMINATE_WAIT: Duration = Duration::from_secs(3);
 
+/// After the first answer that follows Stop's commit, how long one more in flight may take to arrive.
+const STOP_GRACE: Duration = Duration::from_millis(500);
+
+/// How long after a forced end a provider's refusal (`commit_throttled`, `insufficient_audio_activity`) is taken as its
+/// answer: logged, never shown. Its answers carry no id, so time is what ties them to the forced end.
+pub const REFUSAL_WINDOW: Duration = Duration::from_secs(4);
+
 /// The longest a caption waits once speech has gone out: then the turn is ended (AssemblyAI `ForceEndpoint`, an
 /// ElevenLabs commit) and its text comes back. Never reached while the provider sends partials.
 pub const CAPTION_WAIT: Duration = Duration::from_secs(2);
@@ -350,13 +356,15 @@ pub struct CaptionWait {
     /// How long a caption may take: CAPTION_WAIT, doubled after each forced end that brought no text (to
     /// CAPTION_WAIT_MAX), back to CAPTION_WAIT with the next caption.
     pub wait: Duration,
-    /// Forced ends (and Stop's commit) not answered yet.
-    pub forced: usize,
+    /// When the turn was last ended by force (or by Stop): refusals within [`REFUSAL_WINDOW`] of it are its answer.
+    pub forced_at: Option<tokio::time::Instant>,
+    /// That forced end has not been answered yet (by text, or by nothing).
+    pub open: bool,
 }
 
 impl Default for CaptionWait {
     fn default() -> Self {
-        Self { since: None, wait: CAPTION_WAIT, forced: 0 }
+        Self { since: None, wait: CAPTION_WAIT, forced_at: None, open: false }
     }
 }
 
@@ -381,23 +389,38 @@ impl CaptionWait {
     pub fn caption(&mut self) {
         self.since = None;
         self.wait = CAPTION_WAIT;
+        self.open = false;
     }
 
     /// The turn was ended now.
     pub fn forced_end(&mut self) {
-        self.since = None;
-        self.forced += 1;
+        self.forced_end_at(tokio::time::Instant::now());
     }
 
-    /// A turn ended: text resets the wait; nothing (or a refusal) after a forced end doubles it.
-    pub fn answered(&mut self, answer: Answer) {
-        let forced = self.forced > 0;
-        self.forced = self.forced.saturating_sub(1);
+    pub fn forced_end_at(&mut self, now: tokio::time::Instant) {
+        self.since = None;
+        self.forced_at = Some(now);
+        self.open = true;
+    }
+
+    /// A turn ended (by force, or the provider's own VAD: the answer does not say). Text resets the wait; the first
+    /// nothing (or refusal) within the window of an open forced end doubles it. True for a refusal within the window:
+    /// the forced end's answer, logged and never shown.
+    pub fn answered(&mut self, answer: Answer) -> bool {
+        self.answered_at(answer, tokio::time::Instant::now())
+    }
+
+    pub fn answered_at(&mut self, answer: Answer, now: tokio::time::Instant) -> bool {
+        let in_window = self.forced_at.is_some_and(|at| now.saturating_duration_since(at) <= REFUSAL_WINDOW);
         match answer {
             Answer::Text => self.caption(),
-            Answer::Empty | Answer::Refused if forced => self.wait = (self.wait * 2).min(CAPTION_WAIT_MAX),
+            Answer::Empty | Answer::Refused if self.open && in_window => {
+                self.wait = (self.wait * 2).min(CAPTION_WAIT_MAX);
+                self.open = false;
+            }
             _ => {}
         }
+        answer == Answer::Refused && in_window
     }
 }
 

@@ -974,7 +974,7 @@ fn dictation_keeps_its_first_words_and_live_sessions_one_second() {
 
 #[test]
 fn a_forced_end_that_brings_nothing_back_doubles_the_wait_and_a_caption_resets_it() {
-    use desktop_lib::stt::stream::{Answer, CAPTION_WAIT, CAPTION_WAIT_MAX, CaptionWait};
+    use desktop_lib::stt::stream::{Answer, CAPTION_WAIT, CAPTION_WAIT_MAX, CaptionWait, REFUSAL_WINDOW};
     let now = tokio::time::Instant::now();
     let mut waits = CaptionWait::default();
     assert_eq!(waits.due(), None, "nothing said yet");
@@ -983,24 +983,27 @@ fn a_forced_end_that_brings_nothing_back_doubles_the_wait_and_a_caption_resets_i
     waits.sent_at(&speech(50), now);
     assert_eq!(waits.due(), Some(now + CAPTION_WAIT));
     for expected in [4, 8, 8] {
-        waits.forced_end();
+        waits.forced_end_at(now);
         assert_eq!(waits.due(), None);
-        waits.answered(Answer::Empty);
+        assert!(!waits.answered_at(Answer::Empty, now + Duration::from_millis(300)));
         assert_eq!(waits.wait, Duration::from_secs(expected), "doubled, up to {CAPTION_WAIT_MAX:?}");
         waits.sent_at(&speech(50), now);
     }
-    waits.forced_end();
-    waits.answered(Answer::Refused);
-    assert_eq!(waits.wait, CAPTION_WAIT_MAX);
     waits.caption();
     assert_eq!(waits.wait, CAPTION_WAIT, "a real caption starts over");
-    // Stop's own commit and one in flight: both counted.
-    waits.forced_end();
-    waits.forced += 1;
-    waits.answered(Answer::Text);
-    assert_eq!(waits.forced, 1);
-    waits.answered(Answer::Empty);
-    assert_eq!(waits.forced, 0, "every commit answered");
+    // A refusal: kept quiet within the window of a forced end, a failure after it.
+    waits.forced_end_at(now);
+    assert!(waits.answered_at(Answer::Refused, now + Duration::from_secs(1)), "the forced end's answer");
+    assert_eq!(waits.wait, CAPTION_WAIT * 2);
+    assert!(waits.answered_at(Answer::Refused, now + REFUSAL_WINDOW), "still within the window");
+    assert_eq!(waits.wait, CAPTION_WAIT * 2, "one forced end doubles the wait once");
+    assert!(!waits.answered_at(Answer::Refused, now + REFUSAL_WINDOW + Duration::from_millis(1)), "after it: a real failure");
+    // A VAD commit's text first, then the refusal of the forced one: the caption counts, the refusal stays quiet.
+    let mut waits = CaptionWait::default();
+    waits.forced_end_at(now);
+    assert!(!waits.answered_at(Answer::Text, now + Duration::from_millis(100)));
+    assert!(waits.answered_at(Answer::Refused, now + Duration::from_millis(200)));
+    assert_eq!(waits.wait, CAPTION_WAIT, "the caption came: no back-off");
 }
 
 #[test]
@@ -1127,4 +1130,68 @@ async fn a_dictation_session_whose_start_takes_two_seconds_keeps_its_first_words
     let _ = stop.send(true);
     tokio::time::timeout(Duration::from_secs(5), task).await.unwrap().unwrap().unwrap();
     assert_eq!(binaries(&log).concat()[..64_000], spoken[..], "nothing said before the start is lost");
+}
+
+#[tokio::test]
+async fn a_vad_commit_that_comes_before_the_refusal_of_a_forced_one_is_shown_and_the_refusal_is_not() {
+    // ElevenLabs answers carry no id: its own VAD commit's text lands first, then the forced commit is refused.
+    let commits: Arc<Mutex<Vec<std::time::Instant>>> = Arc::default();
+    let seen = commits.clone();
+    let (port, _server) = serve(move |ws| async move {
+        let mut ws = ws;
+        ws.send(Message::text(json!({"message_type": "session_started", "session_id": "s1", "config": {}}).to_string())).await.unwrap();
+        while let Some(Ok(message)) = ws.next().await {
+            if let Message::Text(text) = message {
+                let v: Value = serde_json::from_str(text.as_str()).unwrap();
+                if v["commit"] == true {
+                    seen.lock().unwrap().push(std::time::Instant::now());
+                    let vad = json!({"message_type": "committed_transcript", "text": "Earlier words."});
+                    let refused = json!({"message_type": "commit_throttled", "error": "Commit throttled"});
+                    ws.send(Message::text(vad.to_string())).await.unwrap();
+                    ws.send(Message::text(refused.to_string())).await.unwrap();
+                }
+            }
+        }
+    })
+    .await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    feed_real_time(client.pcm.clone(), speech(3_000));
+    let waiting = commits.clone();
+    wait_for("the forced commit", Duration::from_secs(4), || !waiting.lock().unwrap().is_empty()).await;
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let events = client.events();
+    assert!(events.iter().any(|e| matches!(e, SttEvent::Final { text, .. } if text == "Earlier words.")), "{events:?}");
+    assert!(!events.iter().any(|e| matches!(e, SttEvent::Error(_))), "the refusal is never shown: {events:?}");
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn stop_racing_a_vad_commit_still_delivers_the_last_words() {
+    // Stop's commit and a VAD commit cross: the VAD answer comes first, Stop's own 300 ms later. Both arrive, and the
+    // session closes well within the 3 s cap.
+    let (port, _server) = serve(move |ws| async move {
+        let mut ws = ws;
+        ws.send(Message::text(json!({"message_type": "session_started", "session_id": "s1", "config": {}}).to_string())).await.unwrap();
+        while let Some(Ok(message)) = ws.next().await {
+            if let Message::Text(text) = message {
+                let v: Value = serde_json::from_str(text.as_str()).unwrap();
+                if v["commit"] == true {
+                    ws.send(Message::text(json!({"message_type": "committed_transcript", "text": "VAD words."}).to_string())).await.unwrap();
+                    tokio::time::sleep(Duration::from_millis(300)).await;
+                    let _ = ws.send(Message::text(json!({"message_type": "committed_transcript", "text": "Last words."}).to_string())).await;
+                }
+            }
+        }
+    })
+    .await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    client.pcm.send(speech(500)).unwrap();
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let events = client.events.clone();
+    let stopped = std::time::Instant::now();
+    client.finish(Duration::from_secs(5)).await.unwrap();
+    let took = stopped.elapsed();
+    let finals: Vec<String> = events.lock().unwrap().iter().filter_map(|e| if let SttEvent::Final { text, .. } = e { Some(text.clone()) } else { None }).collect();
+    assert_eq!(finals, ["VAD words.", "Last words."]);
+    assert!(took < Duration::from_millis(1_500), "closed after the grace, not the 3 s cap: {took:?}");
 }
