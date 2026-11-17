@@ -86,15 +86,11 @@ function registeredApiRoutes(): array
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
 const SERVED_BEFORE_DOCUMENTED = [
-    // v1.8 P6.3: inviting people, until docs/API.md 2.0.0-d names them.
-    'DELETE /api/workspace/invitations/{}',
-    'DELETE /api/workspace/invite-links/{}',
-    'GET /api/workspace/invitations',
-    'POST /api/workspace/invitations',
-    'POST /api/workspace/invite-links',
 ];
 
-const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];
+const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate',
+    // v1.8 P6.4 (2.0.0-d): help and support, until they are served.
+    'GET /api/help/guides', 'GET /api/help/guides/{}', 'GET /api/help/whats-new', 'POST /api/support/messages'];
 
 it('documents every endpoint the router serves, except the provider webhook which has its own section', function () {
     $documented = collect(documentedEndpoints())->map(fn (array $e) => $e['method'].' '.shapeOf($e['uri']))->sort()->values()->all();
