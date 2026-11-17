@@ -22,8 +22,16 @@ first: it gates the release.
    4. Press Capture screen now, then Bookmark; wait 30 seconds; stop.
    5. After upload, open the recording: pass if it is about 1:30 long with the screen and bookmark at about 1:00.
       Send a photo of the pill after waking and of the recording page.
-4. DC-03, if a second monitor is at hand: open the main window and the pill on the second display, unplug it, check
-   both come back on screen; plug it back and drag the pill across.
+4. DC-03 (needs the v2 test build from the main code, not the 1.8.1 installer; only if time is left and a 150 %
+   second display is at hand). Start it from PowerShell so it keeps a log:
+   `Start-Process "<path>\echoledger-desktop.exe" -RedirectStandardError "$env:TEMP\echoledger-log.txt"`
+   1. Start a recording; drag the pill onto the 150 % display and press Mark at once: it answers at once, same size,
+      not cut off. Drag it back and repeat.
+   2. Drag the Live Assist card near the right edge of the 150 % display; quit and restart: pill and card open there,
+      whole.
+   3. With both on the 150 % display, unplug it: within about 5 s both move to the other display, whole, clickable.
+   4. Make the 150 % display the primary and stop a recording: the after-call card docks bottom-right, whole.
+   Send the log lines that start "[echoledger] placing" and "... was off screen at".
 
 **2. Gate 3, about 15 minutes**
 Look at the 24 sample screens (phone and desktop, light and dark, English and Urdu) in `docs/v2/gate3/` and choose the
