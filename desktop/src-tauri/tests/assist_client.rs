@@ -431,6 +431,47 @@ async fn messages_wait_for_ready_and_go_out_at_the_relay_s_rate() {
     session.stop();
 }
 
+fn rejected(in_reply_to: u64) -> Message {
+    Message::Text(json!({"type": "error", "seq": 2, "code": "token_refresh_rejected", "message": "Refused.", "retry": false, "suggestion_id": null, "in_reply_to": in_reply_to, "fatal": false}).to_string().into())
+}
+
+#[tokio::test]
+async fn a_new_token_rejected_three_times_is_fetched_again_after_growing_waits() {
+    // The relay rejects every token_refresh on the open connection and notes when each arrived.
+    let arrived: Arc<Mutex<Vec<std::time::Instant>>> = Arc::default();
+    let log = arrived.clone();
+    let relay = Relay::start(never, move |_, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            let _ = ws.send(ready(false)).await;
+            loop {
+                let message = next_json(&mut ws).await;
+                if message["type"] == "token_refresh" {
+                    log.lock().unwrap().push(std::time::Instant::now());
+                    let _ = ws.send(rejected(message["seq"].as_u64().unwrap())).await;
+                }
+            }
+        }
+    })
+    .await;
+    let (refresh, calls) = refresher(&relay.url);
+    let events = Events::default();
+    let policy = Policy { backoff: vec![Duration::from_millis(100), Duration::from_millis(300)], give_up_after: Duration::from_millis(900), refresh_early: Duration::from_secs(120), refresh_retry: Duration::from_millis(50) };
+    // Due for a refresh at once: the token expires inside the 2 minutes.
+    let _session = client::spawn(grant(&relay.url, "t1", chrono::Duration::seconds(60)), refresh, policy, events.sink());
+    events.wait_for("the end", |e| matches!(e, AssistEvent::Ended(_))).await;
+    assert_eq!(events.all().last(), Some(&AssistEvent::Ended(EndReason::TokenRejected)), "{:?}", events.all());
+    let at = arrived.lock().unwrap().clone();
+    assert!(at.len() >= 4, "{} refreshes", at.len());
+    let gaps: Vec<Duration> = at.windows(2).map(|w| w[1] - w[0]).collect();
+    assert!(gaps[0] < Duration::from_millis(90), "the first rejection: another token at once ({:?})", gaps[0]);
+    assert!(gaps[1] >= Duration::from_millis(100) && gaps[1] < Duration::from_millis(290), "then the first pause ({:?})", gaps[1]);
+    assert!(gaps[2] >= Duration::from_millis(300), "then a longer one ({:?})", gaps[2]);
+    assert!(at.len() <= 6, "no tight loop: {} refreshes", at.len());
+    assert_eq!(*calls.lock().unwrap() as usize, at.len());
+    assert_eq!(relay.connections().len(), 1, "all on one connection");
+}
+
 #[tokio::test]
 async fn a_token_refused_again_and_again_waits_like_any_reconnect() {
     // Every connection is refused with 401, whatever the token.

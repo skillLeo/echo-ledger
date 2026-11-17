@@ -9,7 +9,9 @@
 //! - waits for `ready`, then sends what waits, paced to its `limits.messages_per_second`, with a `seq` per connection
 //!   from 1 (the outbox, [`super::outbox`]);
 //! - sends `token_refresh` with a new token 2 minutes before the current one expires (`refresh` fetches it from the
-//!   server's `POST /api/assist/sessions/{id}/token`), and again when the relay rejects one;
+//!   server's `POST /api/assist/sessions/{id}/token`); when the relay rejects one, another is fetched at once the
+//!   first time, then after the usual growing pauses, and the session ends once rejections have gone on for the
+//!   resume grace (an accepted token or a new `ready` starts the count again);
 //! - on a dropped connection reconnects with growing pauses inside the relay's 120 s resume grace; 4401 or a refused
 //!   token gets a new token and reconnects at once the first time, then with the usual pauses; 4409 (a newer
 //!   connection took over), 4403 (another person's session) and 1000 end it.
@@ -74,6 +76,8 @@ pub enum EndReason {
     Insecure,
     /// No connection inside the resume grace, no new token, or an address this build does not connect to.
     GaveUp(String),
+    /// The relay kept rejecting new tokens (`token_refresh_rejected`) for the whole resume grace.
+    TokenRejected,
 }
 
 /// The relay's close codes (services/assist-relay `session::close`).
@@ -265,6 +269,33 @@ pub fn spawn(grant: RelayGrant, refresh: Refresh, policy: Policy, on_event: impl
 enum Outcome {
     Stopped,
     Closed { code: Option<u16>, was_ready: bool },
+    /// New tokens were rejected for too long.
+    TokenRejected,
+}
+
+/// `token_refresh_rejected` in a row on an open connection (pure): the first gets a new token at once, the next ones
+/// after the reconnect pauses; past the resume grace the session ends.
+#[derive(Debug, Default)]
+pub struct Rejections {
+    count: u32,
+    since: Option<Instant>,
+}
+
+impl Rejections {
+    /// One more rejection at `now`: how long to wait before the next token, or `None` to give up.
+    pub fn rejected(&mut self, policy: &Policy, now: Instant) -> Option<Duration> {
+        self.count += 1;
+        let since = *self.since.get_or_insert(now);
+        if now.duration_since(since) >= policy.give_up_after {
+            return None;
+        }
+        Some(if self.count == 1 { Duration::ZERO } else { policy.pause(self.count - 1) })
+    }
+
+    /// A token was accepted, or the relay said `ready`: the count starts again.
+    pub fn reset(&mut self) {
+        *self = Rejections::default();
+    }
 }
 
 type OnEvent = Arc<dyn Fn(AssistEvent) + Send + Sync>;
@@ -300,6 +331,7 @@ impl Session {
             match connect(&self.grant).await {
                 Ok(socket) => match self.serve(socket).await {
                     Outcome::Stopped => return EndReason::Closed,
+                    Outcome::TokenRejected => return EndReason::TokenRejected,
                     Outcome::Closed { code, was_ready } => {
                         if was_ready {
                             attempt = 0;
@@ -375,6 +407,7 @@ impl Session {
         // A refresh runs on its own, so the socket keeps reading and sending meanwhile.
         let (refreshed_tx, mut refreshed) = mpsc::unbounded_channel::<Result<RelayGrant, String>>();
         let mut refreshing = false;
+        let mut rejections = Rejections::default();
         let closed = |code: Option<u16>, ready: bool| Outcome::Closed { code, was_ready: ready };
         loop {
             let can_send = ready && !self.outbox.is_empty();
@@ -390,12 +423,22 @@ impl Session {
                             ServerMessage::Unknown => continue,
                             ServerMessage::Ready(r) => {
                                 ready = true;
+                                rejections.reset();
                                 pace = gap(r.limits.and_then(|l| l.messages_per_second));
                                 next_send = Instant::now();
                                 (self.on_event)(AssistEvent::Connected { resumed: r.resumed, mode: r.mode.clone() });
                             }
-                            // A rejected new token: fetch another one at once (the old one is valid until it expires).
-                            ServerMessage::Error(error) if error.code == "token_refresh_rejected" => refresh_at = Instant::now(),
+                            // A rejected new token (the old one is valid until it expires): another one, at once the
+                            // first time, then after growing pauses; given up past the resume grace.
+                            ServerMessage::Error(error) if error.code == "token_refresh_rejected" => match rejections.rejected(&self.policy, Instant::now()) {
+                                Some(wait) => refresh_at = Instant::now() + wait,
+                                None => {
+                                    (self.on_event)(AssistEvent::Message(message));
+                                    let _ = sink.send(Message::Close(Some(CloseFrame { code: CloseCode::Normal, reason: "".into() }))).await;
+                                    return Outcome::TokenRejected;
+                                }
+                            },
+                            ServerMessage::TokenRefreshed { .. } => rejections.reset(),
                             _ => {}
                         }
                         (self.on_event)(AssistEvent::Message(message));
@@ -471,6 +514,18 @@ mod tests {
         let now = DateTime::from_timestamp(1_763_380_800, 0).unwrap();
         assert_eq!(policy.refresh_in(now + chrono::Duration::minutes(15), now), Duration::from_secs(13 * 60));
         assert_eq!(policy.refresh_in(now + chrono::Duration::seconds(30), now), Duration::ZERO, "already due");
+    }
+
+    #[test]
+    fn rejected_tokens_in_a_row_wait_longer_each_time_then_give_up() {
+        let policy = Policy::default();
+        let start = Instant::now();
+        let mut rejections = Rejections::default();
+        let waits: Vec<Option<Duration>> = (0..4).map(|i| rejections.rejected(&policy, start + Duration::from_secs(i))).collect();
+        assert_eq!(waits, [Some(Duration::ZERO), Some(Duration::from_millis(250)), Some(Duration::from_millis(500)), Some(Duration::from_secs(1))], "at once, then 250 ms → 8 s");
+        assert_eq!(rejections.rejected(&policy, start + policy.give_up_after), None, "past the resume grace");
+        rejections.reset();
+        assert_eq!(rejections.rejected(&policy, start + Duration::from_secs(500)), Some(Duration::ZERO), "an accepted token starts again");
     }
 
     #[test]

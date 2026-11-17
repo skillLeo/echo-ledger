@@ -71,6 +71,7 @@ fn end_word(reason: &EndReason) -> &'static str {
         EndReason::WrongSession => "wrong_session",
         EndReason::Insecure => "insecure",
         EndReason::GaveUp(_) => "gave_up",
+        EndReason::TokenRejected => "token_rejected",
     }
 }
 
@@ -82,6 +83,7 @@ pub fn end_sentence(reason: &EndReason) -> Option<&'static str> {
         EndReason::WrongSession => Some("This Live Assist session belongs to another account."),
         EndReason::Insecure => Some(crate::net::pinning::RELAY_INSECURE),
         EndReason::GaveUp(_) => Some("Live Assist lost its connection. Captions and the recording go on."),
+        EndReason::TokenRejected => Some("Live Assist could not renew its access. Captions and the recording go on."),
     }
 }
 
