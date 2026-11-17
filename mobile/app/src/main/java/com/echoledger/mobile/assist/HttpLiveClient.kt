@@ -89,8 +89,8 @@ data class HttpPolicy(
  *   a `superseded` or `cancelled` end itself; a stream that drops leaves the suggestion it was writing without one, so
  *   that suggestion is cleared ([AssistMessage.Lost]).
  * - The session is refreshed every 13 minutes ([refresh]); that keeps it on.
- * - Refusals read as the card's problems: `429` too fast, `422` a bad message, `426` an app too old for this
- *   session; `401`, `404` and `409 session_ended` end the session.
+ * - Refusals read as the card's problems: `429` too fast, `422` a bad message, `503 relay_unavailable` can't connect
+ *   right now, `426` an app too old for this session; `401`, `404` and `409 session_ended` end the session.
  */
 class HttpLiveClient(
     grant: HttpGrant,
@@ -209,7 +209,7 @@ class HttpLiveClient(
                 c.execute().use { response ->
                     begun.complete(Unit)
                     if (!response.isSuccessful) {
-                        refused(response.code, runCatching { response.body.string() }.getOrDefault(""))
+                        refused(response.code, runCatching { response.peekBody(MAX_REFUSAL_BYTES).string() }.getOrDefault(""))
                         return@use
                     }
                     val source = response.body.source()
@@ -320,6 +320,8 @@ class HttpLiveClient(
 
             status == 429 -> problem("rate_limited", words ?: TOO_FAST, retry = true)
 
+            status == 503 && code == "relay_unavailable" -> problem("relay_unavailable", AssistHub.RELAY_DOWN, retry = true)
+
             status == 422 -> problem("bad_message", words ?: CONNECTION_FAILED, retry = false)
 
             else -> problem("connection_failed", CONNECTION_FAILED, retry = true)
@@ -335,7 +337,10 @@ class HttpLiveClient(
         const val MAX_LINE_BYTES = 64 * 1024L
         const val MAX_EVENT_BYTES = 256 * 1024L
 
+        /** The most of a refusal's body read (its code and message are near the start). */
+        const val MAX_REFUSAL_BYTES = 64 * 1024L
+
         const val CONNECTION_FAILED = "Live Assist couldn't reach the server. Try again."
-        const val TOO_FAST = "Too much at once. Try again in a moment."
+        const val TOO_FAST = "Too many requests. Wait a moment and try again."
     }
 }

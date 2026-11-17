@@ -103,6 +103,9 @@ private fun problemWords(state: CardState): String? {
             AssistProblem.BadMessage -> R.string.v2_assist_error_bad_message
             AssistProblem.BudgetOff -> R.string.v2_assist_error_budget_off
             AssistProblem.BudgetWait -> R.string.v2_assist_error_budget_wait
+            AssistProblem.UpdateApp -> R.string.v2_assist_error_update_app
+            AssistProblem.CantConnect -> R.string.v2_assist_error_cant_connect
+            AssistProblem.Unreachable -> R.string.v2_assist_error_unreachable
             AssistProblem.Other -> R.string.v2_assist_error_other
         }
     )

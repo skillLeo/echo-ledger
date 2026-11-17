@@ -119,6 +119,15 @@ enum class AssistProblem {
     BadMessage,
     BudgetOff,
     BudgetWait,
+
+    /** HTTP mode (1.9.0-q): this session needs a newer app (`426 app_update_required`). */
+    UpdateApp,
+
+    /** HTTP mode: the server can't reach the relay right now (`503 relay_unavailable`). */
+    CantConnect,
+
+    /** HTTP mode: a message couldn't reach the server (offline, a redirect, the server down). */
+    Unreachable,
     Other
 }
 
@@ -215,6 +224,13 @@ object AssistCard {
         "documents_too_large" -> AssistProblem.DocumentsTooLarge
 
         "rate_limited" -> AssistProblem.TooFast
+
+        // HTTP mode (1.9.0-q), from the phone's own HTTP client.
+        "app_update_required" -> AssistProblem.UpdateApp
+
+        "relay_unavailable" -> AssistProblem.CantConnect
+
+        "connection_failed" -> AssistProblem.Unreachable
 
         "bad_message" -> AssistProblem.BadMessage
 

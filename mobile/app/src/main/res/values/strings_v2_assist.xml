@@ -41,6 +41,9 @@
     <string name="v2_assist_error_bad_message">That request didn\'t go through. Try again.</string>
     <string name="v2_assist_error_budget_off">Suggestions are off: this month\'s assist hours are used. Captions go on.</string>
     <string name="v2_assist_error_budget_wait">Try again in a moment.</string>
+    <string name="v2_assist_error_update_app">Live Assist needs the latest version of the app.</string>
+    <string name="v2_assist_error_cant_connect">Live Assist can\'t connect right now. Try again in a few minutes.</string>
+    <string name="v2_assist_error_unreachable">Live Assist couldn\'t reach the server. Try again.</string>
     <string name="v2_assist_error_other">Something went wrong with Live Assist. Recording goes on.</string>
     <string name="v2_assist_practice_question">Question %1$d of %2$d</string>
     <string name="v2_assist_practice_done">Practice finished: %1$d questions.</string>

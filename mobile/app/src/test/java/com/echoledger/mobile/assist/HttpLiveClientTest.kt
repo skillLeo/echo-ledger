@@ -223,7 +223,7 @@ class HttpLiveClientTest {
     }
 
     @Test
-    fun `refusals read as the card's problems, and an ended session or an old app ends it`() {
+    fun `refusals read as the card's problems (429, 503, 422), and an ended session or an old app (426) ends it`() {
         val live = client()
         live.start()
         sse.refuse(429, """{"code":"rate_limited","message":"Slow down."}""")
@@ -233,6 +233,20 @@ class HttpLiveClientTest {
         assertEquals("rate_limited", tooFast.code)
         assertTrue(tooFast.retry)
         assertFalse(tooFast.fatal)
+
+        sse.refuse(503, """{"code":"relay_unavailable","message":"Live Assist can't connect right now. Try again in a few minutes."}""")
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        waitFor("the 503") { events.filterIsInstance<RelayEvent.Error>().size == 2 }
+        val down = events.filterIsInstance<RelayEvent.Error>().last()
+        assertEquals("relay_unavailable", down.code)
+        assertEquals(AssistHub.RELAY_DOWN, down.message)
+        assertTrue(down.retry)
+        assertTrue("the session goes on", ended.isEmpty())
+
+        sse.refuse(422, """{"code":"bad_message","message":"The message could not be read."}""")
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        waitFor("the 422") { events.filterIsInstance<RelayEvent.Error>().size == 3 }
+        assertEquals("bad_message", events.filterIsInstance<RelayEvent.Error>().last().code)
 
         sse.refuse(426, """{"code":"app_update_required","message":"Live Assist needs the latest version of the app."}""")
         live.send(ClientMessage.Command(SendKind.HelpNow))
