@@ -1,0 +1,77 @@
+id,platform,screen,feature,how to reach it in classic,where it lives in v2,status,test that proves it
+PH-LIB-001,phone,Library,"Status chip ""Calls: Ready"" / ""Not ready"" in the header, opens the Ready check","Library header, right of the title (ReadyChipView)",Not in the v2 Library header; Home's status strip has it. Plan 2 keeps the chip in the Library header,missing,none
+PH-LIB-002,phone,Library,⋮ More › Select (enters selection with the first row ticked),Library header ⋮ › Select,No selection mode,missing,none
+PH-LIB-003,phone,Library,⋮ More › Sync now,Library header ⋮ › Sync now,"No Sync now; only ""Try again"" on the offline banner or the error state",missing,none
+PH-LIB-004,phone,Library,Pull down to sync,Pull the list down (PullToRefreshBox),No pull to refresh,missing,none
+PH-LIB-005,phone,Library,"⋮ More › Recently deleted: restore, Delete now / Erase now (asks), ""erased in 5 hours""",Library header ⋮ › Recently deleted (inline card),"Trash icon in the Library top bar › Trash page: Restore, Erase now (asks), ""Erases on …""",partial,V2ScreenShotsTest.trash (screenshot only; no restore or erase test)
+PH-LIB-006,phone,Library,Scroll to the top when the Library tab is tapped again,Tap the Library tab while on it,Not wired,missing,none
+PH-LIB-007,phone,Library,"Search recordings and transcripts: titles on the phone, transcript words on the server (2+ characters)",Search pill under the header,"Search field matches title, preview line and project on the phone only; no transcript search",partial,LibraryModelTest.searchLooksAtTitleMetaAndProject
+PH-LIB-008,phone,Library,"Search results in two groups, Titles and Transcripts; a transcript match opens the recording at that moment","Search pill, type 2+ characters","Flat filtered list; no transcript matches, no opening at the moment",missing,none
+PH-LIB-009,phone,Library,"Recent searches (last five, kept on this phone, tap to search again)","Search pill, empty field",None,missing,none
+PH-LIB-010,phone,Library,Clear search (✕) and leave search (back arrow or Back),Search field,Search field has a clear button; there is no separate search mode to leave,partial,none
+PH-LIB-011,phone,Library,"Group by: Date (default), App / Type, Project, Language, Status, Device, None",Sort icon in the search pill › View › Group by,No grouping; one flat list,missing,none
+PH-LIB-012,phone,Library,"Sort by: Newest, Oldest, Longest, Shortest, Name A–Z, Recently opened",Sort icon in the search pill › View › Sort by,Newest first only,missing,none
+PH-LIB-013,phone,Library,"Density: Comfortable, Compact",Sort icon in the search pill › View › Density,One density,missing,none
+PH-LIB-014,phone,Library,"Group, sort and density remembered per view on this phone",View sheet (stored in settings per view),Nothing to remember,missing,none
+PH-LIB-015,phone,Library,"Filter chip Source: Phone, Desktop, Web (several at once, with a count)",Chip row under the search pill › Source › sheet with Clear and Apply,No Source filter,missing,none
+PH-LIB-016,phone,Library,"Filter chip Date: Today, This week (with counts)",Chip row › Date,Saved view chip Today; no This week,partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-017,phone,Library,Filter chip Project: No project and every project,Chip row › Project,No Project filter,missing,none
+PH-LIB-018,phone,Library,Filter chip Language (the languages the recordings have),Chip row › Language,No Language filter,missing,none
+PH-LIB-019,phone,Library,"Filter chip Status: Waiting for decision, Failed, Pinned, Bookmarked (with counts)",Chip row › Status,"Saved view Untranscribed (untranscribed and failed); no Waiting, Pinned or Bookmarked",partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-020,phone,Library,"Filter by bookmark: Any bookmark, Bookmark: <tag>",Chip row › Status (bookmark tags),None,missing,none
+PH-LIB-021,phone,Library,Filter chip Labels (shown when there are labels),Chip row › Labels,None,missing,none
+PH-LIB-022,phone,Library,A chip shows how many choices are on; each sheet has Clear and Apply,Chip row,"Saved view chips toggle on and off; no counts, no Clear",partial,none
+PH-LIB-023,phone,Library,"""Nothing matches"" with a Clear filters button",Library with filters that match nothing,"""No match"" empty state without a way to clear",partial,none
+PH-LIB-024,phone,Library,"Sections: Pinned first, then Today, Yesterday, This week, then one per month; sticky headers with counts",The list (Group by Date),"One flat list, newest first, no headers",missing,none
+PH-LIB-025,phone,Library,Fold or unfold a section (tap its name or arrow),Section header,None,missing,none
+PH-LIB-026,phone,Library,"Select a whole section (its box in selection, or long-press the header)",Section header,None,missing,none
+PH-LIB-027,phone,Library,Long-press a row (or tap its icon) to select; tap more rows to add; Back leaves selection,Library row,"Long-press opens a sheet with one action, Delete",partial,none
+PH-LIB-028,phone,Library,Selection bar: ✕ close and the count,Library in selection,None,missing,none
+PH-LIB-029,phone,Library,Select all,Selection bar,None,missing,none
+PH-LIB-030,phone,Library,"Move to: Inbox, the projects as a tree, New project… (name, Create)",Selection bar › Move,None,missing,none
+PH-LIB-031,phone,Library,"Label: type a label, Add or Remove; existing labels to pick",Selection bar › Label,None,missing,none
+PH-LIB-032,phone,Library,"Delete the selection: ""Delete 3 (restorable for 48 hours)""",Selection bar › Delete,Only one recording at a time (long-press sheet),partial,V2ShellTest.deleteMovesToTrashAndUndoRestores
+PH-LIB-033,phone,Library,Rename (one selected),Selection bar ⋮ › Rename,None in the Library,missing,none
+PH-LIB-034,phone,Library,Pin and Unpin the selection,Selection bar ⋮ › Pin / Unpin,None,missing,none
+PH-LIB-035,phone,Library,Keep forever and Stop keeping the selection,Selection bar ⋮ › Keep forever / Stop keeping,None,missing,none
+PH-LIB-036,phone,Library,Export the selection as Word (.docx),Selection bar ⋮ › Export as Word,None,missing,none
+PH-LIB-037,phone,Library,Export the selection as Text (.txt),Selection bar ⋮ › Export as Text,None,missing,none
+PH-LIB-038,phone,Library,Export the selection as Markdown (.md),Selection bar ⋮ › Export as Markdown,None,missing,none
+PH-LIB-039,phone,Library,Export the selection as Subtitles (.srt),Selection bar ⋮ › Export as Subtitles,None,missing,none
+PH-LIB-040,phone,Library,Export the selection as Web subtitles (.vtt),Selection bar ⋮ › Export as Web subtitles,None,missing,none
+PH-LIB-041,phone,Library,Export the selection as JSON,Selection bar ⋮ › Export as JSON,None,missing,none
+PH-LIB-042,phone,Library,Swipe right on a row: Pin / Unpin (springs back),Library row,None,missing,none
+PH-LIB-043,phone,Library,"Swipe left on a row: Delete, with ""Recording deleted · Undo""",Library row,Delete from the long-press sheet with an Undo toast; no swipe,partial,V2ShellTest.deleteMovesToTrashAndUndoRestores
+PH-LIB-044,phone,Library,"Row icon: the source app's tile with a device badge (phone, laptop, web)",Library row,"Source icon in an avatar; no device badge; generic glyphs, not the real logos (plan 3)",partial,none
+PH-LIB-045,phone,Library,"Row title, or ""WhatsApp call"" / ""Voice note"" / ""Phone call"" when untitled",Library row,"Title, else the source's name",done,LibraryModelTest.statusDurationAndTitle
+PH-LIB-046,phone,Library,"Row time: ""1:29 AM"" today and yesterday, ""Mon"" this week, ""Oct 22"" before",Library row,WhatsApp-style times in the screen's language,done,LibraryModelTest.timesReadLikeWhatsAppInTheLocalZone
+PH-LIB-047,phone,Library,"Row meta: length and project (""2:02 · Acme"")",Library row,Length and the transcript's first line; the project only through search,partial,none
+PH-LIB-048,phone,Library,"Row status line: ""Transcribing · part 2 of 3 · about 1 min left"", ""Improving Roman Urdu… 60%""",Library row while it is being transcribed,"Badge ""Transcribing"" without the part, time left or percent",partial,LibraryModelTest.statusDurationAndTitle
+PH-LIB-049,phone,Library,"Row failed: ""Transcription failed · Tap to retry"" in red with an alert icon",Library row,"Badge ""Failed""; tapping opens the recording (no retry from the row)",partial,none
+PH-LIB-050,phone,Library,"Row no audio: ""No audio"" with a muted mic icon",Library row,No no-audio state on the row,missing,none
+PH-LIB-051,phone,Library,Row pinned mark,Library row,None,missing,none
+PH-LIB-052,phone,Library,Row unopened: brand dot and a semibold title until opened,Library row,None,missing,none
+PH-LIB-053,phone,Library,"Live refresh every 5 s while something uploads, is transcribed or its views are made",Library (automatic),No refresh while busy,missing,none
+PH-LIB-054,phone,Library,"Uploading section: ""Waiting to upload"", ""Uploading 40%""",Top of the Library,"Rows say ""Uploading"" with no percent and no waiting state",partial,none
+PH-LIB-055,phone,Library,"Upload failed: ""Upload failed · Tap to retry""",Uploading section row,"""Failed"" badge, tap to retry",done,none
+PH-LIB-056,phone,Library,"Already in your Library: ""Tap to dismiss"" for a duplicate upload",Uploading section row,None,missing,none
+PH-LIB-057,phone,Library,Upload row ⋮: Retry upload; Delete recording… (asks: this phone has the only copy),Uploading section row ⋮ or long-press,No menu; no delete for a recording that never uploaded,missing,none
+PH-LIB-058,phone,Library,"Offline banner ""You're offline. Showing the last synced library."" with Retry",Top of the Library,Offline banner with Try again,partial,none
+PH-LIB-059,phone,Library,"Server banners: app update (Update), maintenance, the admin's announcement (close)",Top of the Library,None in v2,missing,none
+PH-LIB-060,phone,Library,"""Calls are not being recorded: …"" banner with Fix",Top of the Library,Home's status strip; plan 2 moves it to one quiet banner in Library,partial,HomeTest.theStatusStripSaysWhatCallsAreDoingNow
+PH-LIB-061,phone,Library,Calls waiting for Keep or Discard: one card with Review,Top of the Library,Home › Needs action lists each waiting call with Keep and Discard; plan 2 makes it one quiet banner in Library,partial,V2ShellTest.homeDiscardIsTheDelayedDiscardAndUndoBringsTheCallBack
+PH-LIB-062,phone,Library,Skeleton rows on the first sync,Library before the first sync,Skeleton list,done,none
+PH-LIB-063,phone,Library,"Empty Library: ""No recordings yet""",Library with nothing,Empty state,done,none
+PH-LIB-064,phone,Library,Library is the start screen; Home removed as a tab; setup checklist as a dismissible card at the top of Library,Not in classic (plan 2),Home is a tab in v2,missing,none
+PH-LIB-065,phone,Library,Activity as a bell with a badge in the Library header,Classic: Activity tab (plan 2),None in Library,missing,none
+PH-LIB-066,phone,Library,Settings from the avatar at the top right,Classic: Settings tab (plan 2),Avatar in the Library top bar,done,V2ShellTest.settingsFromTheAvatarOffersClassicLook
+PH-LIB-067,phone,Library,"Saved views in a ""Views"" chip: Today, Untranscribed, Starred, Audio only",Not in classic (plan 3),Today and Untranscribed as separate chips; no Starred or Audio only,partial,LibraryModelTest.savedViewsCombineAndTheNewestComesFirst
+PH-LIB-068,phone,Library,"Applied filters as filled chips with ✕, and ""Clear all""",Not in classic (plan 3),None,missing,none
+PH-LIB-069,phone,Library,"Mark important (flag), with its row mark",Not in classic (plan 3),None,missing,none
+PH-LIB-070,phone,Library,Transcribe from the selection (shows the minutes first),"Not in classic (plan 3, call rules)",None,missing,none
+PH-LIB-071,phone,Library,Export the selection as a Web page (.html),Not in classic as a choice (plan 3),None,missing,none
+PH-LIB-072,phone,Library,Copy for AI from the selection,Classic: only on a recording and a project (plan 3),None,missing,none
+PH-LIB-073,phone,Library,Row: label colour dot,Not in classic (plan 3),None,missing,none
+PH-LIB-074,phone,Library,"Row: ""Audio · 18 days left"" for audio kept without a transcript",Not in classic (call rules plan 5),None,missing,none
+PH-LIB-075,phone,Library,Swipes can be turned off in Settings,Not in classic (plan 3),None,missing,none
+PH-LIB-076,phone,Library,"Smooth with 2,000+ recordings (lazy list), with a test","Classic: lazy list, no test (plan 3)",Lazy list; no test,partial,none
