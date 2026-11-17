@@ -12,6 +12,7 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "lock", "security", "security.activity",
   "share_privacy", "share_privacy.check",
   "notifications",
+  "mic", "screen", "screen.excluded",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */

@@ -332,6 +332,8 @@ const commands: Record<string, (args: Args) => unknown> = {
     original: screen.endsWith("subtitles") ? "" : "Necesitamos rotar al sitio B ahora mismo",
     text: screen.endsWith("subtitles") ? "We were never supposed to meet like this." : "We need to rotate to site B right now",
   } : null,
+  screens_status: () => ({ supported: true, platform: mac ? "macos" : "windows", borderless: !mac, permission: true, inPlan: true, onServer: true }),
+  screens_permission: () => true,
   input_devices: () => [
     { id: "default", name: "Microphone (Realtek Audio)", isDefault: !bluetooth, bluetooth: false },
     ...(bluetooth ? [{ id: "airpods", name: "AirPods Pro", isDefault: true, bluetooth: true }] : []),

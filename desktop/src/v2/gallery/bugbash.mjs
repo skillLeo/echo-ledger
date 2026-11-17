@@ -81,6 +81,10 @@ const CASES = [
   ["a-set-share-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-share-check", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Check screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-notifications", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Notifications", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-mic", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Microphone & audio", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-mic-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Microphone & audio", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-screen", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-excluded", "app", `${app("settings")}&plan=pro`, ["en"], async (page) => { await page.getByRole("button", { name: "Screen moments", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Never capture these apps", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];

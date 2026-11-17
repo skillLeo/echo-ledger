@@ -16,6 +16,7 @@ import { LockPageV2 } from "./LockV2";
 import { SecurityPageV2, SignInActivityPageV2 } from "./SecurityV2";
 import { SharePrivacyPageV2, ShareCheckPageV2 } from "./SharePrivacyV2";
 import { NotificationsPageV2 } from "./NotificationsV2";
+import { ExcludedAppsPageV2, MicrophonePageV2, ScreenMomentsPageV2 } from "./RecordingInputV2";
 
 export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
   section: { id: string; seq: number };
@@ -64,6 +65,9 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
       case "share_privacy": return <SharePrivacyPageV2 settings={settings} patch={patch} onCheck={() => open("share_privacy.check")} />;
       case "share_privacy.check": return <ShareCheckPageV2 />;
       case "notifications": return <NotificationsPageV2 settings={settings} patch={patch} run={run} />;
+      case "mic": return <MicrophonePageV2 settings={settings} patch={patch} disabled={!!status.recording || status.dictationActive} systemAudioNote={status.systemAudioNote} />;
+      case "screen": return <ScreenMomentsPageV2 settings={settings} patch={patch} onExcluded={() => open("screen.excluded")} />;
+      case "screen.excluded": return <ExcludedAppsPageV2 settings={settings} patch={patch} platform={platform} />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }

@@ -890,3 +890,11 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-setting__time { inline-size: calc(var(--el-space-64) * 2); }
 .el-input:has(> input:disabled) { background: var(--el-role-bg-subtle); color: var(--el-role-text-disabled); border-color: var(--el-role-border-default); }
 .el-input > input:disabled { color: var(--el-role-text-disabled); cursor: not-allowed; }
+
+/* Microphone & audio: the two level bars and the test's result. */
+.el-meters { display: inline-flex; align-items: center; gap: var(--el-space-8); }
+.el-meter { display: inline-block; inline-size: calc(var(--el-space-64) * 1.5); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-border-default); overflow: hidden; }
+.el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); }
+.el-test-result { display: grid; gap: var(--el-space-8); }
+.el-test-result > p { margin: 0; }
+.el-test-result audio { inline-size: 100%; }

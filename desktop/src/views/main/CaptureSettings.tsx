@@ -219,7 +219,7 @@ export function testVerdict(result: Pick<TestResult, "micHeard" | "systemHeard">
   ];
 }
 
-const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
+export const PERMISSION_TEXT: Record<PermissionsStatus["microphone"], string> = {
   allowed: "Allowed",
   denied: "Not allowed",
   unknown: "Asked on first use",
