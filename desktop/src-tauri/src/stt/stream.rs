@@ -10,7 +10,7 @@ use tokio::sync::watch;
 use tokio_tungstenite::tungstenite::{ClientRequestBuilder, Message, http::Uri};
 use tokio_tungstenite::{Connector, connect_async_tls_with_config};
 
-use super::protocol::{ASSEMBLYAI_TERMINATE, SttEvent, assemblyai_session_seconds, elevenlabs_audio_message, parse_assemblyai, parse_elevenlabs};
+use super::protocol::{ASSEMBLYAI_FORCE_ENDPOINT, ASSEMBLYAI_TERMINATE, SttEvent, assemblyai_session_seconds, elevenlabs_audio_message, parse_assemblyai, parse_elevenlabs};
 use crate::net::models::Grant;
 use crate::net::pinning::public_tls_config;
 
@@ -119,7 +119,11 @@ async fn stream_socket(
 
     let mut started = false;
     let mut pending: Vec<u8> = Vec::new();
-    let max_buffer = frame_bytes * 200; // ≤ 10 s buffered before Begin
+    // Before Begin only the last second is kept: more would be sent at once and the provider, throttled to about 1.25x
+    // real time, would take four times as long to catch up, every caption late meanwhile.
+    let max_buffer = pre_begin_bytes(frame_bytes);
+    // Speech sent and no caption since: when, so a provider that holds its turn open is made to end it (CAPTION_WAIT).
+    let mut voiced_since: Option<tokio::time::Instant> = None;
     let mut terminating = false;
     // Once Terminate is sent, the provider gets this long to confirm before the socket is closed (A6.DR11).
     let mut terminate_deadline: Option<tokio::time::Instant> = None;
@@ -156,6 +160,9 @@ async fn stream_socket(
                             *provider_seconds = Some(seconds);
                         }
                         if let Some(event) = protocol.parse(text.as_str()) {
+                            if matches!(event, SttEvent::Partial { .. } | SttEvent::Final { .. }) {
+                                voiced_since = None;
+                            }
                             match &event {
                                 SttEvent::Started if !started => {
                                     started = true;
@@ -167,6 +174,7 @@ async fn stream_socket(
                                     let whole = pending.len() - pending.len() % frame_bytes;
                                     for frame in pending[..whole].chunks(frame_bytes) {
                                         send_audio(&mut tx, protocol, frame).await?;
+                                        note_voice(&mut voiced_since, frame);
                                     }
                                     pending.drain(..whole);
                                 }
@@ -189,6 +197,7 @@ async fn stream_socket(
                             while pending.len() >= frame_bytes {
                                 let frame: Vec<u8> = pending.drain(..frame_bytes).collect();
                                 send_audio(&mut tx, protocol, &frame).await?;
+                                note_voice(&mut voiced_since, &frame);
                             }
                         } else if pending.len() > max_buffer {
                             let excess = pending.len() - max_buffer;
@@ -210,6 +219,14 @@ async fn stream_socket(
                 let _ = tx.send(Message::Close(None)).await;
                 return Ok(());
             }
+            _ = tokio::time::sleep_until(voiced_since.map_or_else(tokio::time::Instant::now, |at| at + CAPTION_WAIT)), if started && !terminating && voiced_since.is_some() => {
+                // Speech went out and nothing came back for CAPTION_WAIT: the provider holds the turn open (music or
+                // noise under the voice keeps it from hearing a pause). Ending the turn brings its text back now.
+                let waited = voiced_since.map(|at| at.elapsed().as_millis()).unwrap_or_default();
+                eprintln!("[echoledger] captions: no caption {waited} ms after speech, the turn is ended now ({protocol:?})");
+                voiced_since = None;
+                end_turn(&mut tx, protocol).await?;
+            }
             _ = idle.tick(), if started && !terminating && protocol == Protocol::ElevenLabsRealtime => {
                 // ElevenLabs closes after 15 s without frames; keep the session alive with silence.
                 if pending.is_empty() {
@@ -222,6 +239,45 @@ async fn stream_socket(
 
 /// How long a stopped session waits for the provider's end-of-session message.
 const TERMINATE_WAIT: Duration = Duration::from_secs(3);
+
+/// The longest a caption waits once speech has gone out: then the turn is ended (AssemblyAI `ForceEndpoint`, an
+/// ElevenLabs commit) and its text comes back. Never reached while the provider sends partials.
+pub const CAPTION_WAIT: Duration = Duration::from_secs(2);
+
+/// What is kept before the provider's Begin: the last second of audio, in whole frames (pure).
+pub fn pre_begin_bytes(frame_bytes: usize) -> usize {
+    let second: usize = 16_000 * 2;
+    second.div_ceil(frame_bytes).max(1) * frame_bytes
+}
+
+/// A 16-bit PCM frame loud enough to be someone speaking (pure): room tone and the silence of a quiet app are not.
+pub fn voiced(frame: &[u8]) -> bool {
+    let samples = frame.len() / 2;
+    if samples == 0 {
+        return false;
+    }
+    let energy: f64 = frame.as_chunks::<2>().0.iter().map(|b| f64::from(i16::from_le_bytes(*b)).powi(2)).sum();
+    (energy / samples as f64).sqrt() >= VOICE_RMS
+}
+
+/// The level (RMS of 16-bit samples, about -36 dBFS) above which a frame counts as speech for [`CAPTION_WAIT`].
+const VOICE_RMS: f64 = 500.0;
+
+/// The first speech sent since the last caption starts the wait.
+fn note_voice(voiced_since: &mut Option<tokio::time::Instant>, frame: &[u8]) {
+    if voiced_since.is_none() && voiced(frame) {
+        *voiced_since = Some(tokio::time::Instant::now());
+    }
+}
+
+/// Ends the provider's current turn so its text comes back now.
+async fn end_turn(tx: &mut WsSink, protocol: Protocol) -> Result<(), String> {
+    let msg = match protocol {
+        Protocol::AssemblyAiV3 => Message::text(ASSEMBLYAI_FORCE_ENDPOINT),
+        Protocol::ElevenLabsRealtime => Message::text(elevenlabs_audio_message(&[], true)),
+    };
+    tx.send(msg).await.map_err(|e| e.to_string())
+}
 
 /// At the end of a session: sends what is left in `pending` padded with silence to a whole frame, so the last
 /// words reach the provider without a short frame (A6.DR1).

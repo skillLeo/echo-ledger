@@ -373,7 +373,9 @@ async fn a_missing_audio_spec_defaults_to_fifty_millisecond_frames() {
 }
 
 #[tokio::test]
-async fn at_most_ten_seconds_of_audio_are_buffered_while_waiting_for_the_session() {
+async fn at_most_one_second_of_audio_is_buffered_while_waiting_for_the_session() {
+    // More would go out at once on Begin, and the provider (throttled to about 1.25x real time) would take four times
+    // as long to catch up, every caption late meanwhile.
     let log: Log = Arc::default();
     let server_log = log.clone();
     let (port, _server) = serve(move |ws| {
@@ -386,16 +388,16 @@ async fn at_most_ten_seconds_of_audio_are_buffered_while_waiting_for_the_session
         client.pcm.send(piece.to_vec()).unwrap();
     }
     wait_for("the flush", Duration::from_secs(10), || {
-        binaries(&log).concat().len() >= 320_000
+        binaries(&log).concat().len() >= 32_000
     })
     .await;
     tokio::time::sleep(Duration::from_millis(200)).await;
     client.finish(Duration::from_secs(5)).await.unwrap();
     let received = binaries(&log).concat();
-    assert_eq!(received.len(), 320_000, "ten seconds");
+    assert_eq!(received.len(), 32_000, "one second");
     assert_eq!(
         received,
-        pushed[pushed.len() - 320_000..],
+        pushed[pushed.len() - 32_000..],
         "the newest audio is kept, the oldest dropped"
     );
 }
@@ -815,4 +817,147 @@ async fn a_rejected_upgrade_is_reported_with_its_status_and_without_the_token() 
     .unwrap_err();
     assert!(err.contains("401"), "{err}");
     assert!(!err.contains("short-lived"), "{err}");
+}
+
+// ---- The caption delay: frames in, caption out ------------------------------------------------------------------
+
+/// Someone speaking: a loud 220 Hz tone, `ms` of 16 kHz 16-bit PCM.
+fn speech(ms: usize) -> Vec<u8> {
+    (0..16 * ms)
+        .flat_map(|n| (((n as f32 * 220.0 * std::f32::consts::TAU / 16_000.0).sin() * 8_000.0) as i16).to_le_bytes())
+        .collect()
+}
+
+/// A provider that never ends a turn on its own (music or noise under the voice: it never hears a pause) and sends no
+/// partials: only `ForceEndpoint` brings a turn's text back. With it, captions lagged 30-60 s.
+async fn turn_holding_assemblyai(mut ws: Ws, log: Log, partials_every: Option<Duration>) {
+    ws.send(Message::text(BEGIN)).await.unwrap();
+    let mut partial = tokio::time::interval(partials_every.unwrap_or(Duration::from_secs(3_600)));
+    partial.tick().await;
+    loop {
+        tokio::select! {
+            message = ws.next() => {
+                let Some(Ok(message)) = message else { return };
+                match message {
+                    Message::Text(text) => {
+                        log.lock().unwrap().push(Frame::Text(text.as_str().to_string()));
+                        if text.as_str().contains("ForceEndpoint") {
+                            let turn = json!({"type": "Turn", "end_of_turn": true, "turn_is_formatted": true, "transcript": "Hello there.", "words": []});
+                            ws.send(Message::text(turn.to_string())).await.unwrap();
+                        }
+                        if text.as_str().contains("Terminate") {
+                            let _ = ws.send(Message::text(TERMINATION)).await;
+                            let _ = ws.close(None).await;
+                            return;
+                        }
+                    }
+                    Message::Binary(bytes) => log.lock().unwrap().push(Frame::Binary(bytes.to_vec())),
+                    Message::Close(_) => return,
+                    _ => {}
+                }
+            }
+            _ = partial.tick(), if partials_every.is_some() => {
+                let turn = json!({"type": "Turn", "end_of_turn": false, "turn_is_formatted": false, "transcript": "hello", "words": []});
+                ws.send(Message::text(turn.to_string())).await.unwrap();
+            }
+        }
+    }
+}
+
+/// Feeds `audio` in 50 ms pieces at real time; gives when the first piece went in.
+fn feed_real_time(pcm: UnboundedSender<Vec<u8>>, audio: Vec<u8>) -> std::time::Instant {
+    let started = std::time::Instant::now();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_millis(50));
+        for piece in audio.chunks(1_600) {
+            tick.tick().await;
+            if pcm.send(piece.to_vec()).is_err() {
+                return;
+            }
+        }
+    });
+    started
+}
+
+fn forced(log: &Log) -> usize {
+    texts(log).iter().filter(|v| v["type"] == "ForceEndpoint" || v["commit"] == true).count()
+}
+
+#[tokio::test]
+async fn a_caption_comes_out_within_the_caption_wait_even_when_the_provider_holds_its_turn() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| turn_holding_assemblyai(ws, server_log, None)).await;
+    let client = start_client(grant("assemblyai_v3", port, 50, vec![]));
+    let fed = feed_real_time(client.pcm.clone(), speech(6_000));
+    let events = client.events.clone();
+    wait_for("a caption", Duration::from_secs(5), || {
+        events.lock().unwrap().iter().any(|e| matches!(e, SttEvent::Final { .. }))
+    })
+    .await;
+    let delay = fed.elapsed();
+    let cap = desktop_lib::stt::stream::CAPTION_WAIT;
+    assert!(delay <= cap + Duration::from_millis(800), "frames in to caption out: {delay:?} (the cap is {cap:?})");
+    assert!(delay >= cap - Duration::from_millis(100), "only after the wait: {delay:?}");
+    assert_eq!(forced(&log), 1, "the turn was ended once");
+    // Still speaking: the next caption comes within the wait again, not at the end of the speech.
+    wait_for("the second caption", Duration::from_secs(4), || {
+        events.lock().unwrap().iter().filter(|e| matches!(e, SttEvent::Final { .. })).count() >= 2
+    })
+    .await;
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn a_provider_that_sends_partials_is_never_made_to_end_its_turn() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| turn_holding_assemblyai(ws, server_log, Some(Duration::from_millis(500)))).await;
+    let client = start_client(grant("assemblyai_v3", port, 50, vec![]));
+    feed_real_time(client.pcm.clone(), speech(3_500));
+    tokio::time::sleep(Duration::from_millis(3_500)).await;
+    assert!(client.events().iter().any(|e| matches!(e, SttEvent::Partial { .. })));
+    assert_eq!(forced(&log), 0, "captions came: nothing to force");
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn silence_never_ends_a_turn() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| turn_holding_assemblyai(ws, server_log, None)).await;
+    let client = start_client(grant("assemblyai_v3", port, 50, vec![]));
+    feed_real_time(client.pcm.clone(), vec![0u8; 32_000 * 3]);
+    tokio::time::sleep(Duration::from_millis(3_000)).await;
+    assert_eq!(forced(&log), 0, "nobody spoke");
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[tokio::test]
+async fn elevenlabs_holding_its_turn_is_committed_within_the_caption_wait() {
+    let log: Log = Arc::default();
+    let server_log = log.clone();
+    let (port, _server) = serve(move |ws| elevenlabs_server(ws, server_log, true)).await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    let fed = feed_real_time(client.pcm.clone(), speech(4_000));
+    let events = client.events.clone();
+    wait_for("a caption", Duration::from_secs(5), || {
+        events.lock().unwrap().iter().any(|e| matches!(e, SttEvent::Final { .. }))
+    })
+    .await;
+    let delay = fed.elapsed();
+    assert!(delay <= desktop_lib::stt::stream::CAPTION_WAIT + Duration::from_millis(800), "frames in to caption out: {delay:?}");
+    client.finish(Duration::from_secs(5)).await.unwrap();
+}
+
+#[test]
+fn speech_is_told_from_silence_and_one_second_waits_for_the_start() {
+    use desktop_lib::stt::stream::{pre_begin_bytes, voiced};
+    assert!(voiced(&speech(50)));
+    assert!(!voiced(&[0u8; 1_600]));
+    let hum: Vec<u8> = (0..800).flat_map(|n| ((n % 7) as i16 * 20).to_le_bytes()).collect();
+    assert!(!voiced(&hum), "room tone is not speech");
+    assert_eq!(pre_begin_bytes(1_600), 32_000);
+    assert_eq!(pre_begin_bytes(3_200), 32_000);
+    assert_eq!(pre_begin_bytes(8_000), 32_000);
 }
