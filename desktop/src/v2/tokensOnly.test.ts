@@ -106,5 +106,6 @@ describe("scaled fills", () => {
   it("text that finds its own direction lines up with its column, in the form Chromium and WebKit read too", () => {
     const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
     expect(css).toMatch(/\.el-row__title, [^{]*\{\s*text-align: match-parent;\s*text-align: -webkit-match-parent;\s*\}/);
+    expect(css).toMatch(/\.el-screens-strip__title \{\s*text-align: match-parent;/);
   });
 });

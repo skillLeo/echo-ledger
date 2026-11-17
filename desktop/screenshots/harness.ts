@@ -124,8 +124,8 @@ function respond(cmd: string, args: Record<string, unknown> | undefined): unknow
     case "upload_list":
       if (held) {
         return [
-          makeUploadItem("held-1", { title: "Call with Omar", sourceApp: "whatsapp", startedAt: "2026-11-05T15:20:00Z", durationMs: 1_312_000, heldFor: "hassam@example.com" }),
-          makeUploadItem("held-2", { sourceApp: "google_meet", startedAt: "2026-11-05T11:00:00Z", durationMs: 2_410_000, heldFor: "hassam@example.com" }),
+          makeUploadItem("held-1", { title: "Call with Omar", sourceApp: "whatsapp", startedAt: "2026-11-05T15:20:00Z", durationMs: 1_312_000, heldFor: "ayesha@example.test" }),
+          makeUploadItem("held-2", { sourceApp: "google_meet", startedAt: "2026-11-05T11:00:00Z", durationMs: 2_410_000, heldFor: "ayesha@example.test" }),
         ];
       }
       return empty ? [] : [makeUploadItem("up-1", { state: "failed", lastError: "No connection to the server", attempts: 3 })];

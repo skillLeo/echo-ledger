@@ -174,10 +174,12 @@ function entitlementsHere() {
   if (!free && !ultra && !pro) return null;
   const e = sampleEntitlements(free ? "free" : pro ? "pro" : "ultra");
   if (near && e.limits.monthly_minutes) e.limits.monthly_minutes = { ...e.limits.monthly_minutes, used: 552 };
-  // `&unlimited=1`: minutes without a monthly limit (the Ultra account in Hassam's screenshots).
+  // `&unlimited=1`: minutes without a monthly limit (the Ultra account in the owner's screenshots).
   if (params.get("unlimited") === "1") e.limits.monthly_minutes = { limit: null, used: 651, resets_at: "2026-12-01" };
   if (requestStage) {
-    const r = makeUpgradeRequest(requestStage, { plan: pro ? "ultra" : "pro", amount_due: pro ? "Rs 12,499" : "Rs 2,999", amount_due_pkr: pro ? 12499 : 2999 });
+    // A decided request shows for a few days after its decision (requestShown): decided this morning, so it always does.
+    const decided = requestStage === "approved" || requestStage === "declined" ? { decided_at: new Date(new Date().setHours(9, 0, 0, 0)).toISOString() } : {};
+    const r = makeUpgradeRequest(requestStage, { plan: pro ? "ultra" : "pro", amount_due: pro ? "Rs 12,499" : "Rs 2,999", amount_due_pkr: pro ? 12499 : 2999, ...decided });
     if (params.get("round") === "1" && r.payment) {
       r.payment.proofs = [
         ...r.payment.proofs,
@@ -279,12 +281,12 @@ const commands: Record<string, (args: Args) => unknown> = {
   account_get: () => (params.get("deleting") === "1" ? { ...ACCOUNT, deletes_at: "2026-12-09T10:00:00Z" } : ACCOUNT),
   // Send to WhatsApp (v1.6): the browser opens nothing here; the voice is "saved" in Downloads.
   whatsapp_open: () => false,
-  save_audio_downloads: () => "C:\\Users\\Hassam\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
+  save_audio_downloads: () => "C:\\Users\\Ayesha\\Downloads\\Kick-off Contoso website 2026-11-06.ogg",
   update_status: () =>
     screen === "library-update"
       ? { phase: "ready", current: "1.5.0", version: "1.5.1", notes: "Faster sign-in and the account page.", checkedAt: new Date().toISOString(), message: null, progress: null }
       : { phase: "up_to_date", current: "1.5.0", version: null, notes: null, checkedAt: new Date(Date.now() - 3 * 3_600_000).toISOString(), message: "You have the latest version.", progress: null },
-  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }, { from: "kuraishi", to: "Qureshi" }], dictationSnippets: [{ trigger: "insert signature", text: "Regards, Hassam" }], onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
+  get_settings: () => makeSettings({ deviceName: "Work laptop", consentAcknowledged: true, dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }, { from: "kuraishi", to: "Qureshi" }], dictationSnippets: [{ trigger: "insert signature", text: "Regards, Ayesha" }], onboardingDone: !onboarding, notificationCategories: { sharing: false }, notificationSounds: { usage: false }, hideFromSharing: hiding }),
   main_view_get: () => JSON.stringify({ tab, recordingId: empty || tab !== "library" || screen === "library-table" ? null : opened, scroll: {} }),
   lock_status: () => ({ enabled: false, locked: false, hasPin: false, osMethod: null, retryAfterSeconds: 0 }),
   library_list: () => (empty ? [] : LISTED),

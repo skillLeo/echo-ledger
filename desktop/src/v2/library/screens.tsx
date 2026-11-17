@@ -39,7 +39,7 @@ export function ScreensStrip({ screens, onOpen }: { screens: ScreenMoment[]; onO
   if (screens.length === 0) return null;
   return (
     <section className="el-screens-strip" aria-labelledby="el-screens-strip-title">
-      <h2 className="el-body-strong el-screens-strip__title" id="el-screens-strip-title">{screens.length === 1 ? "1 screen" : `${screens.length} screens`}</h2>
+      <h2 className="el-body-strong el-screens-strip__title" id="el-screens-strip-title" dir="auto">{screens.length === 1 ? "1 screen" : `${screens.length} screens`}</h2>
       <ul className="el-screens-strip__list">
         {screens.map((s, i) => <li key={s.id}><ScreenThumb screen={s} onOpen={() => onOpen(i)} /></li>)}
       </ul>

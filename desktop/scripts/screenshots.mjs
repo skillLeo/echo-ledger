@@ -393,7 +393,7 @@ const SCREENS = [
   ["settings-overview-pro-pending", "settings&plan=pro&request=awaiting_payment", settingsReady],
   ["settings-overview-deleting", "settings&plan=free&deleting=1", settingsReady],
   ["settings-narrow", "settings&plan=free", settingsReady, { width: 860, height: 560 }],
-  // The Settings list at Hassam's 1000 pt window, the search focused (its ring and the switches whole), a plan with no
+  // The Settings list at the owner's 1000 pt window, the search focused (its ring and the switches whole), a plan with no
   // monthly limit (no empty bar), and the same at 200 % text (the page zoomed twice: half the room in points).
   ["settings-1000", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1000, height: 700 }],
   ["settings-1100", "settings&plan=ultra&unlimited=1", async (page) => { await settingsReady(page); await page.getByRole("textbox", { name: "Search settings" }).focus(); }, { width: 1100, height: 740 }],

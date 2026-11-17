@@ -98,7 +98,7 @@ describe("small words of the shell", () => {
 
   it("makes initials and names the palette's keys per computer", () => {
     expect(initials("Sara Ahmed")).toBe("SA");
-    expect(initials("hassam")).toBe("H");
+    expect(initials("ayesha")).toBe("A");
     expect(initials("  ")).toBe("?");
     expect(initials(null)).toBe("?");
     expect(paletteKeys("macos")).toBe("⌘K");
