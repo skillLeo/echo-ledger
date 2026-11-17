@@ -867,3 +867,5 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-form--flush > .el-button--quiet { align-self: flex-start; }
 .el-dialog__actions--inline { display: flex; justify-content: flex-end; gap: var(--el-space-8); padding: 0; }
 .el-help__report { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-4); }
+.el-row--disabled { color: var(--el-role-text-disabled); }
+.el-row--disabled .el-row__hit { cursor: not-allowed; }

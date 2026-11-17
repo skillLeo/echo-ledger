@@ -9,7 +9,8 @@ import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } f
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
 import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
-import { ConsentPage, PrivacyPage } from "../../../views/main/AccountSettings";
+import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
+import { LockPage } from "../../../views/main/SecuritySettings";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage } from "../../../views/main/CaptureSettings";
@@ -40,25 +41,30 @@ beforeEach(() => {
   respond("list_clients", { data: [{ id: "c1", name: "Qureshi Textiles" }] });
   resetEntitlementsForTests(sampleEntitlements("free"));
   respond("account_get", ACCOUNT);
+  respond("security_overview", { devices: [], events: [{ id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: "2026-11-17T08:00:00Z" }] });
+  respond("lock_status", { enabled: false, locked: false, hasPin: false, osMethod: "windows_hello", retryAfterSeconds: 0 });
 });
 
+let onUnpaired = vi.fn();
 const show = async (section: string, platform = "windows") => {
   const onHome = vi.fn();
-  render(<div className="el-root"><SettingsPagesV2 section={{ id: section, seq: 1 }} onHome={onHome} run={run} status={makeStatus({ platform: platform as "windows" })} /></div>);
+  onUnpaired = vi.fn();
+  render(<div className="el-root"><SettingsPagesV2 section={{ id: section, seq: 1 }} onHome={onHome} run={run} status={makeStatus({ platform: platform as "windows" })} onUnpaired={onUnpaired} /></div>);
   await act(flushAsync);
   return onHome;
 };
 const patches = () => callsOf("update_settings").map((c) => (c as { patch: SettingsPatch }).patch);
 
 describe("which sections open a v2 page", () => {
-  it("Dictation and Captions pages and their settings, by page, setting or v1.6 name", () => {
+  it("the pages with a v2 page and their settings, by page, setting or v1.6 name", () => {
     expect(sectionTarget("voice")).toEqual({ page: "voice", setting: null });
     expect(sectionTarget("voice#voice.cleanup")).toEqual({ page: "voice", setting: "voice.cleanup" });
     expect(sectionTarget("captions.opacity")).toEqual({ page: "captions.style", setting: "captions.opacity" });
     expect(hasV2Page("voice.history")).toBe(true);
     expect(hasV2Page("captions")).toBe(true);
     expect(hasV2Page("calls")).toBe(true);
-    expect(hasV2Page("lock")).toBe(false);
+    expect(hasV2Page("lock")).toBe(true);
+    expect(hasV2Page("notifications")).toBe(false);
     expect(hasV2Page("nonsense")).toBe(false);
   });
 });
@@ -312,6 +318,60 @@ describe("Privacy & data v2", () => {
   });
 });
 
+describe("App lock v2", () => {
+  it("off: when it locks and Lock now wait; a PIN is set by typing it twice", async () => {
+    respond("lock_set_pin", { enabled: false, locked: false, hasPin: true, osMethod: "windows_hello", retryAfterSeconds: 0 });
+    await show("lock");
+    expect(screen.getByRole("combobox", { name: /^Lock after/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Lock now" })).toBeDisabled();
+    expect(screen.getByText(/Windows Hello or your PIN unlocks it/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "PIN" }));
+    const dialog = screen.getByRole("dialog", { name: "Set PIN" });
+    fireEvent.change(within(dialog).getByLabelText("PIN (4–12 digits)"), { target: { value: "12a34" } });
+    fireEvent.change(within(dialog).getByLabelText("Repeat the PIN"), { target: { value: "1235" } });
+    expect(within(dialog).getByText("The PINs differ.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Set PIN" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("Repeat the PIN"), { target: { value: "1234" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Set PIN" }));
+    await act(flushAsync);
+    expect(callsOf("lock_set_pin")).toEqual([{ pin: "1234" }]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("button", { name: "PIN" })).toHaveAccessibleDescription(/Set/);
+  });
+
+  it("on: Lock now locks", async () => {
+    respond("get_settings", { ...SETTINGS, appLock: true });
+    respond("lock_now", { enabled: true, locked: true, hasPin: true, osMethod: null, retryAfterSeconds: 0 });
+    await show("lock");
+    fireEvent.click(screen.getByRole("button", { name: "Lock now" }));
+    await act(flushAsync);
+    expect(callsOf("lock_now")).toHaveLength(1);
+  });
+});
+
+describe("Sign-in & security v2", () => {
+  it("password and two-step open the website; activity lists sign-ins; Sign out everywhere asks first", async () => {
+    respond("server_page_open", null);
+    respond("account_sign_out_everywhere", makeStatus({ paired: false }));
+    await show("security");
+    fireEvent.click(screen.getByRole("button", { name: "Password, opens in browser" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]);
+    expect(screen.getByRole("button", { name: "Two-step sign-in, opens in browser" })).toHaveAccessibleDescription(/On/);
+    fireEvent.click(screen.getByRole("button", { name: "Sign out everywhere" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Sign out everywhere?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Sign out everywhere" }));
+    await act(flushAsync);
+    expect(callsOf("account_sign_out_everywhere")).toHaveLength(1);
+    expect(onUnpaired).toHaveBeenCalled();
+  });
+
+  it("Sign-in activity", async () => {
+    await show("security.activity");
+    expect(within(screen.getByRole("list", { name: "Recent activity" })).getByText("Signed in, Work laptop")).toBeInTheDocument();
+  });
+});
+
 /**
  * Parity with today's pages: every control each page shows (rendered, with the same settings) is on its v2 page.
  * Today's names that differ only in form map to the v2 control by role.
@@ -342,6 +402,10 @@ describe("parity with today's Dictation and Captions pages", () => {
       today: () => <PrivacyPage account={{ ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" }} settings={SETTINGS} onAccount={() => undefined} onConsent={() => undefined} />,
       map: { "button: Recording consentNot yet": ["button", "Recording consent"], "button: Cancel deletion, opens in browser": ["button", "Cancel deletion, opens in browser"] } },
     { name: "Recording consent", section: "privacy.consent", today: () => <ConsentPage status={makeStatus()} settings={SETTINGS} patch={patch} /> },
+    { name: "App lock", section: "lock", today: () => <LockPage settings={SETTINGS} patch={patch} run={run} />,
+      map: { "combobox: Lock after": ["combobox", /^Lock after/], "button: PINNot set": ["button", "PIN"] } },
+    { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
+      map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] } },
     { name: "Style", section: "captions.style", today: () => <CaptionStylePage settings={SETTINGS} patch={patch} />,
       map: { "combobox: Position": ["combobox", /^Position/], "combobox: Hide when nobody speaks": ["combobox", /^Hide when nobody speaks/] } },
   ];

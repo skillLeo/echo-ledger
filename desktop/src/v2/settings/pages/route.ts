@@ -9,6 +9,7 @@ export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "calls", "calls.sites",
   "transcription.language", "words", "key",
   "privacy", "privacy.consent",
+  "lock", "security", "security.activity",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */

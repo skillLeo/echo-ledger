@@ -12,12 +12,16 @@ import { useEntitlements } from "../../../lib/entitlements";
 import type { AppStatus } from "../../../lib/ipc";
 import { useAccount } from "../../../views/main/AccountSettings";
 import { ConsentPageV2, PrivacyPageV2 } from "./PrivacyV2";
+import { LockPageV2 } from "./LockV2";
+import { SecurityPageV2, SignInActivityPageV2 } from "./SecurityV2";
 
-export function SettingsPagesV2({ section, onHome, run, status }: {
+export function SettingsPagesV2({ section, onHome, run, status, onUnpaired }: {
   section: { id: string; seq: number };
   onHome: () => void;
   run: Run;
   status: AppStatus;
+  /** The app's status after signing out (Sign out everywhere). */
+  onUnpaired: (s: AppStatus) => void;
 }) {
   const start = sectionTarget(section.id);
   const [page, setPage] = useState(start?.page ?? "voice");
@@ -52,6 +56,9 @@ export function SettingsPagesV2({ section, onHome, run, status }: {
       case "key": return entitlements ? <KeyPageV2 e={entitlements} /> : <PageLoading />;
       case "privacy": return account === undefined ? <PageLoading /> : <PrivacyPageV2 account={account} settings={settings} onAccount={setAccount} onConsent={() => open("privacy.consent")} />;
       case "privacy.consent": return <ConsentPageV2 status={status} settings={settings} patch={patch} />;
+      case "lock": return <LockPageV2 settings={settings} patch={patch} run={run} />;
+      case "security": return account ? <SecurityPageV2 account={account} run={run} onSignedOut={onUnpaired} onActivity={() => open("security.activity")} /> : <PageLoading />;
+      case "security.activity": return <SignInActivityPageV2 />;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }
