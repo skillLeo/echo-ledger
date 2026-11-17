@@ -16,6 +16,7 @@ use App\Models\ClientFile;
 use App\Models\Device;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Services\Assist\AssistRecords;
 use App\Services\InterfaceFlags;
 use App\Services\Workspaces\Workspaces;
 use Filament\Actions\Testing\TestAction;
@@ -48,7 +49,7 @@ function consoleAs(Device $device): User
 }
 
 /** An ended session of [$device]'s person with a ready report (made with the fake model). */
-function reportedSession(Device $device, bool $practice = true): AssistSession
+function reportedSession(Device $device, bool $practice = false): AssistSession
 {
     fakeAssistReportAi();
     $session = AssistSession::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'device_id' => $device->id,
@@ -171,7 +172,7 @@ describe('sessions and reports', function () {
 
         Livewire::test(AssistSessions::class)->assertCanSeeTableRecords([$mine])->assertCanNotSeeTableRecords([$other]);
         $this->get(AssistReportPage::getUrl(['session' => $mine->id]))->assertOk()
-            ->assertSee('Practice report')->assertSee('They asked about your notice period and salary.')
+            ->assertSee('Live Assist report')->assertSee('They asked about your notice period and salary.')
             ->assertSee('Why this job?')->assertSee('Um I like Laravel.')->assertSee('Good')
             ->assertSee('Words per minute')->assertSee('Thank you for your time today.')->assertSee('Send my portfolio by Friday');
         // Anyone else's session is the same 404 as an unknown one.
@@ -204,4 +205,30 @@ describe('sessions and reports', function () {
             ->and(AssistTurn::query()->where('assist_session_id', $session->id)->count())->toBe(0)
             ->and(AssistSession::query()->withoutGlobalScopes()->withTrashed()->find($session->id)->report)->toBeNull();
     });
+});
+
+it('writes a hostile report as inert Markdown: no HTML, no link, no image, no cell of its own', function () {
+    $evil = [
+        'version' => 1, 'practice' => false, 'meeting_type' => 'interview', 'title' => '<script>alert(1)</script> # Title', 'started_at' => '2026-11-17T10:00:00+00:00', 'seconds' => 60,
+        'summary' => "Line one <img src=x onerror=alert(1)>\n\n- not a list\n1. not a number\n> not a quote\n![t](https://track.example/p.png)",
+        'qa' => [['index' => 1, 'question' => 'Click [here](javascript:alert(1))', 'answer' => 'ends with a backslash\\', 'hint' => ['text' => '`code` **bold** ~~gone~~ _i_'],
+            'verdict' => 'weak', 'better_answer' => 'A | B']],
+        'mistakes' => [['said' => '<b>x</b>', 'fact' => '&amp; &#60;']], 'promises' => ['+ plus'], 'action_items' => ['#hash'],
+        'coaching' => ['grammar' => [['said' => '[a](b)', 'better' => '<i>', 'why' => 'x']]],
+        'follow_up_email' => ['subject' => '![s](https://t.example/s.png)', 'body' => "Hi\n<a href=\"https://evil.example\">x</a>"], 'facts' => ['<iframe>'],
+    ];
+    $md = AssistRecords::markdown($evil, 'UTC');
+
+    // No tag, no entity of its own, no link or image syntax that a Markdown reader would act on.
+    expect($md)->not->toMatch('/<(?!\/)/')->not->toContain('<script')->not->toContain('<img')->not->toContain('<a ')->not->toContain('<iframe')
+        ->not->toMatch('/(?<!\\\\)!(?<!\\\\)\[/')->not->toMatch('/(?<!\\\\)\]\(/')->not->toContain('&#60;')
+        ->toContain('# &lt;script\>alert\(1\)&lt;/script\> \# Title')
+        ->toContain('Click \[here\]\(javascript:alert\(1\)\)')
+        ->toContain('&amp;amp; &amp;\#60;')
+        ->toContain("\\- not a list\n\n1\\. not a number\n\n\\> not a quote");
+    // The table row keeps its six cells: the trailing backslash and the | inside a cell are escaped.
+    $row = collect(explode("\n", $md))->first(fn (string $l): bool => str_starts_with($l, '| 1 |'));
+    expect(preg_match_all('/(?<!\\\\)\|/', str_replace('\\\\', '', $row)))->toBe(7)
+        ->and($row)->toContain('ends with a backslash\\\\ |')->toContain('A \| B')->toContain('\`code\` \*\*bold\*\* \~\~gone\~\~ \_i\_');
+    expect(AssistRecords::md('\\'))->toBe('\\\\')->and(AssistRecords::md('a & <b>'))->toBe('a &amp; &lt;b\>');
 });
