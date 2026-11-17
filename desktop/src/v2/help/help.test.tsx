@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import MainApp from "../../views/main/MainApp";
-import { HelpV2, MESSAGE_MAX, helpError, stripTitle } from "./HelpV2";
+import { HelpV2, MESSAGE_MAX, helpError, reportLine, stripTitle } from "./HelpV2";
 import { MAX_BLOCKS, MAX_CELLS, MAX_INLINE, MAX_LINES, MAX_ROWS, Markdown, blocks, inline } from "./markdown";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
@@ -27,6 +27,7 @@ beforeEach(() => {
   respondWith("help_guides", ({ q }) => ({ data: q ? GUIDES.filter((g) => g.title.toLowerCase().includes(String(q).toLowerCase())) : GUIDES }));
   respond("help_guide", GUIDE);
   respond("help_whats_new", { data: RELEASES });
+  respond("last_device_report", { sentAt: "2026-11-16T09:00:00Z" });
 });
 
 const show = async (platform = "windows") => {
@@ -202,9 +203,10 @@ describe("Help v2", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Subject" }), { target: { value: "Screens missing " } });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "The strip is empty after a Zoom call." } });
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveAttribute("maxlength", String(MESSAGE_MAX));
-    const attach = screen.getByRole("checkbox", { name: "Attach this computer's last device check" });
+    await act(flushAsync);
+    const attach = screen.getByRole("checkbox", { name: "Include a report from this computer" });
     expect(attach).not.toBeChecked();
-    expect(attach).toHaveAccessibleDescription("The app version, the system and what it allows EchoLedger. Never your recordings or transcripts.");
+    expect(attach).toHaveAccessibleDescription("Your last device check report, from 16 November 2026: the app version, the system and what it allows EchoLedger. Never your recordings or transcripts.");
     fireEvent.click(send);
     await act(flushAsync);
     expect(callsOf("support_send")).toEqual([{ subject: "Screens missing", message: "The strip is empty after a Zoom call.", includeDeviceReport: false }]);
@@ -213,13 +215,46 @@ describe("Help v2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Write another" }));
     fireEvent.change(screen.getByRole("textbox", { name: "Subject" }), { target: { value: "Again" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Message" }), { target: { value: "With the report." } });
-    fireEvent.click(screen.getByRole("checkbox", { name: "Attach this computer's last device check" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Include a report from this computer" }));
     fail("support_send", "You've sent 5 messages this hour. Try again later.");
     fireEvent.click(screen.getByRole("button", { name: "Send" }));
     await act(flushAsync);
     expect(callsOf("support_send")[1]).toEqual({ subject: "Again", message: "With the report.", includeDeviceReport: true });
     expect(screen.getByRole("alert")).toHaveTextContent("You've sent 5 messages this hour. Try again later.");
     expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue("With the report.");
+  });
+});
+
+describe("Contact support says exactly which report goes with it", () => {
+  const contact = async (platform: string) => {
+    const { onMacCheck } = await show(platform);
+    fireEvent.click(screen.getByRole("tab", { name: "Contact support" }));
+    await act(flushAsync);
+    return onMacCheck;
+  };
+
+  it("on a Mac: the last Mac check report and its date, and Run the Mac check first opens it", async () => {
+    const onMacCheck = await contact("macos");
+    expect(screen.getByRole("checkbox", { name: "Include a report from this computer" })).toHaveAccessibleDescription(/^Your last Mac check report, from 16 November 2026:/);
+    fireEvent.click(screen.getByRole("button", { name: "Run the Mac check first" }));
+    expect(onMacCheck).toHaveBeenCalled();
+  });
+
+  it("no report yet: says so, and there is nothing to tick; Windows has no Mac check", async () => {
+    respond("last_device_report", { sentAt: null });
+    respond("support_send", null);
+    await contact("windows");
+    const box = screen.getByRole("checkbox", { name: "Include a report from this computer" });
+    expect(box).toBeDisabled();
+    expect(box).toHaveAccessibleDescription("No report from this computer yet.");
+    expect(screen.queryByRole("button", { name: "Run the Mac check first" })).toBeNull();
+  });
+
+  it("a core without the command yet counts as no report", async () => {
+    fail("last_device_report", "command last_device_report not found");
+    await contact("windows");
+    expect(screen.getByRole("checkbox", { name: "Include a report from this computer" })).toHaveAccessibleDescription("No report from this computer yet.");
+    expect(reportLine("macos", undefined)).toBe("Looking for this computer's last report…");
   });
 });
 

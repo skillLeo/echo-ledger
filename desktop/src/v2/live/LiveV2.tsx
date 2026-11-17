@@ -1,13 +1,15 @@
 // The Live tab in the new look (ui_v2.live, IA 3): everything during a call or session from one place. Record (now,
 // or a voice note), Live Assist (upcoming sessions and a new one, only while live_assist is on), Live Translate,
 // Dictation and Captions; each opens its feature or its one settings home.
-import { useEffect, useState, type ReactNode } from "react";
-import { api, type AppStatus, type Settings } from "../../lib/ipc";
+import { useEffect, useState } from "react";
+import { api, type AppStatus, type LiveTranslateAvailability, type Settings } from "../../lib/ipc";
 import { prettyShortcut, formatWhen } from "../../lib/format";
 import { Badge, Button, Card, EmptyState, Icons, List, ListRow, Loading, SkeletonRow, Status } from "../components";
 import { shellStatus } from "../shell/status";
 import { assist, type Prep } from "../assist/adapter";
 import { MEETING_TYPES, PrepScreen } from "../assist/PrepScreen";
+import { PlanBadge, useLocked } from "../../views/main/Upgrade";
+import { LiveTranslateV2, UNAVAILABLE_WORDS, translateAvailability } from "./LiveTranslateV2";
 
 export type LiveV2Props = {
   status: AppStatus;
@@ -19,17 +21,32 @@ export type LiveV2Props = {
   onCaptions: () => void;
   /** A Settings page ("voice", "captions", "calls"). */
   onSettings: (section: string) => void;
-  /** Live Translate's own panel (today's), opened in place. */
-  translate?: ReactNode;
+  /** The app's action runner (a notice on failure), for Live Translate's commands. */
+  run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined>;
 };
 
-export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, translate }: LiveV2Props) {
+export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCaptions, onSettings, run }: LiveV2Props) {
   const [prep, setPrep] = useState<Prep | "new" | null>(null);
   const [upcoming, setUpcoming] = useState<Prep[] | null>(null);
   const [upcomingFailed, setUpcomingFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [translateOpen, setTranslateOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
+  // As today's Record page: a plan without Live Translate shows it locked, with the plan that has it; a server without
+  // it doesn't show it.
+  const translateLocked = useLocked("live_translate");
+  const [translateAnswer, setTranslateAnswer] = useState<LiveTranslateAvailability | null>(null);
+  useEffect(() => {
+    let live = true;
+    api.liveTranslateStatus().then((a) => live && setTranslateAnswer(a ?? null), () => undefined);
+    return () => {
+      live = false;
+    };
+  }, []);
+  const translate = translateAvailability(translateAnswer, status.platform, status.plan.liveTranslate && !translateLocked);
+  // Listed where it runs, and where it is held back by the system or the plan (saying which); a server without it at all
+  // doesn't list it.
+  const translateShown = translate.available || translate.reason === "platform" || translateLocked || (translateAnswer?.reason === "plan");
 
   useEffect(() => {
     api.settings().then(setSettings, () => undefined);
@@ -104,8 +121,11 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
         <h2 className="el-caption el-body-strong el-group__title">During a call</h2>
         <Card>
           <List label="During a call" className="el-group__rows">
-            <ListRow compact icon={Icons.LanguagesIcon} iconStyle="plain" title="Live Translate" meta="Translate what a game or video says, as it is said"
-              chevron onClick={() => setTranslateOpen(!translateOpen)} />
+            {translateShown && (
+              <ListRow compact icon={Icons.LanguagesIcon} iconStyle="plain" title="Live Translate"
+                meta={translate.reason ? UNAVAILABLE_WORDS[translate.reason] : "Translate what a game or video says, as it is said"}
+                badge={translate.reason === "plan" ? <PlanBadge feature="live_translate" /> : undefined} chevron onClick={() => setTranslateOpen(!translateOpen)} />
+            )}
             <ListRow compact icon={Icons.KeyboardIcon} iconStyle="plain" title="Dictation" meta="Speak, and the words are typed where you are"
               value={key("dictation") ?? undefined} chevron onClick={() => onSettings("voice")} />
             <ListRow compact icon={Icons.CaptionsIcon} iconStyle="plain" title="Captions"
@@ -115,7 +135,7 @@ export function LiveV2({ status, assistOn, projects, onRecord, onVoiceNote, onCa
               chevron={!status.recording} onClick={status.recording ? undefined : () => onSettings("captions")} />
           </List>
         </Card>
-        {translateOpen && translate && <div className="el-live-translate">{translate}</div>}
+        {translateOpen && translateShown && <LiveTranslateV2 run={run} unavailable={translate.reason} planBadge={<PlanBadge feature="live_translate" />} />}
       </section>
     </div>
   );
