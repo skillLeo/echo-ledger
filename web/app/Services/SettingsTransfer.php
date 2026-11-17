@@ -137,6 +137,10 @@ final class SettingsTransfer
             && (! is_string($settings['assemblyai.streaming_mode']) || ! array_key_exists($settings['assemblyai.streaming_mode'], AssemblyAiDriver::STREAMING_MODES))) {
             unset($settings['assemblyai.streaming_mode']);
         }
+        // Fast English captions is a real yes or no: a string ("false") or a number is dropped.
+        if (array_key_exists('assemblyai.fast_english', $settings) && ! is_bool($settings['assemblyai.fast_english'])) {
+            unset($settings['assemblyai.fast_english']);
+        }
         // Fastest's silence is whole milliseconds between the floor and the ceiling, or dropped.
         $silence = $settings['assemblyai.fastest_min_silence_ms'] ?? null;
         if (array_key_exists('assemblyai.fastest_min_silence_ms', $settings)

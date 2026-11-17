@@ -6,6 +6,7 @@ use App\Filament\Admin\Pages\Settings;
 use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\Device;
+use App\Models\UsageLedgerEntry;
 use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
@@ -228,7 +229,8 @@ describe('Fast English captions', function () {
         expect($q)->toMatchArray(['speech_model' => 'assemblyai-stt-3-7-realtime', 'mode' => 'min_latency', 'min_turn_silence' => '320', 'max_turn_silence' => '640'])
             ->and(collect($grant['grants'][0]['init_messages'])->firstWhere('type', 'UpdateConfiguration')['language_codes'])->toBe(['en']);
 
-        foreach (['ur', null] as $language) {
+        // Urdu (with English words), a mixed Urdu and English spelling, Arabic and Automatic stay on 3.6 Pro.
+        foreach (['ur', 'ur+en', 'ar', null] as $language) {
             $q = captionWsQuery(captionLatencyGrant(array_filter(['language' => $language]))['grants'][0]['ws_url']);
             expect($q['speech_model'])->toBe('universal-3-6-pro');
         }
@@ -242,5 +244,34 @@ describe('Fast English captions', function () {
         Livewire::test(Settings::class)->assertSet('data.assemblyai_fast_english', false)
             ->set('data.assemblyai_fast_english', true)->call('save')->assertHasNoErrors();
         expect(app(SettingsRepository::class)->get('assemblyai.fast_english'))->toBeTrue();
+    });
+});
+
+describe('Fast English captions, the record and the import', function () {
+    it('records the model the grant used in the usage ledger: 3.7 Realtime under Fast English, 3.6 Pro otherwise', function () {
+        app(SettingsRepository::class)->set('assemblyai.fast_english', true);
+        app(CredentialVault::class)->put('assemblyai', 'api_key', 'aai_test_key');
+        Http::fake(['*' => Http::response(['token' => 'tmp_tok'], 200)]);
+        $device = Device::factory()->create();
+        Sanctum::actingAs($device, Device::ABILITIES);
+        $report = function (string $language, string $ref) use ($device): ?string {
+            $session = CaptureSession::factory()->open()->create(['user_id' => $device->user_id, 'device_id' => $device->id]);
+            test()->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $session->id, 'channels' => ['me'], 'language' => $language])->assertOk();
+            test()->postJson('/api/usage', ['report_id' => $ref, 'use_case' => 'live_captions', 'provider' => 'assemblyai', 'session_id' => $session->id,
+                'streamed_ms' => 60000, 'channels' => 1])->assertCreated();
+
+            return UsageLedgerEntry::query()->where('report_id', $ref)->value('model');
+        };
+
+        expect($report('en', 'report-en-1'))->toBe('assemblyai-stt-3-7-realtime')
+            ->and($report('ur', 'report-ur-1'))->toBe('universal-3-6-pro');
+    });
+
+    it('imports Fast English captions only as a real yes or no', function () {
+        $read = fn (mixed $v): array => app(SettingsTransfer::class)->read(json_encode(['format' => SettingsTransfer::FORMAT, 'settings' => ['assemblyai.fast_english' => $v]]));
+
+        expect($read(true))->toBe(['assemblyai.fast_english' => true])
+            ->and($read(false))->toBe(['assemblyai.fast_english' => false])
+            ->and($read('false'))->toBe([])->and($read('true'))->toBe([])->and($read(1))->toBe([]);
     });
 });
