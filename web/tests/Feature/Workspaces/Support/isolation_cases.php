@@ -88,7 +88,8 @@ const ISO_WEB_BYPASS = [
     'invitations.show' => 'signed link of one invitation: the token and the invited address are the only keys',
     // Since v1.8 P6.3: an invite link's page; its secret token decides the team, and joining needs a signed-in account.
     'join.show' => 'invite link: the secret token decides the team, nothing of any workspace shows but its name',
-    'join.accept' => 'invite link: the secret token decides the team; the signed-in account joins it',
+    'join.resume' => 'invite link: the one this visitor opened, from their own session (encrypted)',
+    'join.accept' => 'invite link: the one this visitor opened, from their own session; the signed-in account joins it',
     'invitations.accept' => 'signed link of one invitation: the token and the invited address are the only keys',
     'account.delete' => 'deleting one\'s own account: the signed-in person only, no workspace data',
     'account.delete.store' => 'deleting one\'s own account: the signed-in person only, no workspace data',

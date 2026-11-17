@@ -18,8 +18,10 @@ use App\Models\WorkspaceInvitation;
 use App\Models\WorkspaceInviteLink;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\InviteLinks;
+use App\Services\Accounts\JoinSession;
 use App\Services\Accounts\SignUp;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
 use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
@@ -113,19 +115,21 @@ describe('joining with a link', function () {
         $guest = Fx::user(['email' => 'guest@example.test']);
         $this->actingAs($guest, 'web');
         $this->get($url)->assertOk()->assertSee('Join Acme');
-        $this->post(route('join.accept', ['token' => linkToken($url)]))->assertRedirect(GetTheApps::getUrl(panel: 'app'));
+        $this->post(route('join.accept'))->assertRedirect(GetTheApps::getUrl(panel: 'app'));
         expect($team->roleOf($guest))->toBe(WorkspaceRole::Member)->and($guest->fresh()->current_workspace_id)->toBe($team->id)
             ->and($link->fresh()->uses)->toBe(1);
         // Again: already in, nothing more used.
         $this->get($url)->assertOk()->assertSee('You are in Acme already');
-        $this->post(route('join.accept', ['token' => linkToken($url)]))->assertRedirect();
+        $this->post(route('join.accept'))->assertRedirect();
         expect($link->fresh()->uses)->toBe(1);
 
-        // Its last place, then closed.
+        // Its last place, then closed (each one opens the link first: it waits in their session).
         $this->actingAs(Fx::user(), 'web');
-        $this->post(route('join.accept', ['token' => linkToken($url)]))->assertRedirect();
+        $this->get($url)->assertOk();
+        $this->post(route('join.accept'))->assertRedirect();
         $this->actingAs(Fx::user(), 'web');
-        $this->post(route('join.accept', ['token' => linkToken($url)]))->assertStatus(410);
+        $this->get($url)->assertStatus(410);
+        $this->post(route('join.accept'))->assertStatus(410);
         expect($link->fresh()->uses)->toBe(2);
     });
 
@@ -138,7 +142,8 @@ describe('joining with a link', function () {
         ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
         Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
         $this->actingAs($joiner = Fx::user(), 'web');
-        $this->post(route('join.accept', ['token' => linkToken($url)]))->assertForbidden()->assertSee('This team is full');
+        $this->get($url)->assertOk();
+        $this->post(route('join.accept'))->assertForbidden()->assertSee('This team is full');
         expect($team->roleOf($joiner))->toBeNull();
     });
 
@@ -146,9 +151,12 @@ describe('joining with a link', function () {
         app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
         [$owner, $team] = inviteTeam();
         ['url' => $url, 'link' => $link] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
-        $this->get($url)->assertOk()->assertSee('/app/register?join='.linkToken($url), false);
+        // The page links to the plain sign-up page: the link waits in the session, never in another address.
+        $this->get($url)->assertOk()->assertHeader('Referrer-Policy', 'no-referrer')->assertDontSee('register?join', false);
 
-        $page = Livewire::withQueryParams(['join' => linkToken($url)])->test(Register::class)->assertDontSee('Sign-up on this server is by invitation');
+        // The same visitor's session (a Livewire test has its own): the link the page kept.
+        JoinSession::put(linkToken($url));
+        $page = Livewire::test(Register::class)->assertDontSee('Sign-up on this server is by invitation');
         $page->fillForm(['email' => 'new.person@example.test'])->call('authenticate')->assertHasNoFormErrors();
         $code = null;
         Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use (&$code): bool {
@@ -161,9 +169,10 @@ describe('joining with a link', function () {
 
         $person = User::query()->where('email', 'new.person@example.test')->sole();
         expect($team->roleOf($person))->toBe(WorkspaceRole::Viewer)->and($link->fresh()->uses)->toBe(1);
-        // Without the link, sign-up stays by invitation.
+        // Used: forgotten; without it, sign-up stays by invitation.
+        expect(session()->has('join.link'))->toBeFalse();
         auth('web')->logout();
-        Livewire::withQueryParams([])->test(Register::class)->assertSee('Sign-up on this server is by invitation');
+        Livewire::test(Register::class)->assertSee('Sign-up on this server is by invitation');
     });
 });
 
@@ -258,5 +267,65 @@ describe('when whoever invited may no longer invite', function () {
         $this->get($emailUrl)->assertStatus(410)->assertSee('This invitation is no longer valid');
         expect(fn () => app(Invitations::class)->accept($invitation, $boss))->toThrow(ApiError::class);
         expect($team->roleOf($boss))->toBeNull();
+    });
+});
+
+describe('a sign-up by invitation that cannot join', function () {
+    it('makes no account when the team is full: the whole sign-up goes back and says why', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, null);
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
+        JoinSession::put(linkToken($url));
+
+        $page = Livewire::test(Register::class)->fillForm(['email' => 'late@example.test'])->call('authenticate')->assertHasNoFormErrors();
+        $code = null;
+        Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use (&$code): bool {
+            $code = $mail->hasTo('late@example.test') ? $mail->code : $code;
+
+            return true;
+        });
+        $page->fillForm(['code' => $code])->call('authenticate')->fillForm(['name' => 'Late', 'accept_terms' => true])->call('authenticate')
+            ->assertNotified(PlanLimits::SEATS_MESSAGE);
+        expect(User::query()->where('email', 'late@example.test')->exists())->toBeFalse();
+    });
+
+    it('leaves exactly the account that joined when two sign-ups race for a one-use link', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        ['link' => $link] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, 1);
+        // Both passed the check while the link was open; the first one takes its only use.
+        SignUp::withLink($link);
+        $first = app(SignUp::class)->create(['name' => 'First', 'email' => 'first@example.test', 'password' => 'x'], emailVerified: true, via: 'code');
+        expect(fn () => app(SignUp::class)->create(['name' => 'Second', 'email' => 'second@example.test', 'password' => 'x'], emailVerified: true, via: 'code'))
+            ->toThrow(ApiError::class, 'no longer open');
+
+        expect($team->roleOf($first))->toBe(WorkspaceRole::Member)->and(User::query()->where('email', 'second@example.test')->exists())->toBeFalse()
+            ->and($link->fresh()->uses)->toBe(1);
+        // Open to anyone, the account is made all the same, without joining.
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        $third = app(SignUp::class)->create(['name' => 'Third', 'email' => 'third@example.test', 'password' => 'x'], emailVerified: true, via: 'code');
+        expect($team->roleOf($third))->toBeNull();
+    });
+});
+
+describe('the link\'s token stays out of addresses', function () {
+    it('keeps the link encrypted in the session, comes back to /join after signing in, and sends no referrer', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, null);
+        $token = linkToken($url);
+
+        $this->get($url)->assertOk()->assertHeader('Referrer-Policy', 'no-referrer');
+        expect(session('url.intended'))->toBe(route('join.resume'))->and(session('join.link'))->toBeString()->not->toContain($token);
+        $this->get(route('join.resume'))->assertOk()->assertSee('Join Acme')->assertHeader('Referrer-Policy', 'no-referrer');
+        $this->get('/app/register')->assertOk()->assertHeader('Referrer-Policy', 'no-referrer');
+        $this->get('/app/register?invite=x')->assertHeader('Referrer-Policy', 'no-referrer');
+
+        $this->actingAs($member = Fx::user(), 'web');
+        $this->post(route('join.accept'))->assertRedirect(GetTheApps::getUrl(panel: 'app'));
+        expect($team->roleOf($member))->toBe(WorkspaceRole::Member)->and(session()->has('join.link'))->toBeFalse();
+        // Used and forgotten: /join has nothing to show.
+        $this->get(route('join.resume'))->assertStatus(410);
     });
 });

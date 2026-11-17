@@ -7,6 +7,7 @@ namespace App\Filament\Auth;
 use App\Models\WorkspaceInvitation;
 use App\Services\Accounts\Invitations;
 use App\Services\Accounts\InviteLinks;
+use App\Services\Accounts\JoinSession;
 use App\Services\Accounts\SignUp;
 use Filament\Forms\Components\TextInput;
 use Filament\Schemas\Components\Component;
@@ -27,14 +28,13 @@ class Register extends Login
     #[Locked]
     public ?string $invite = null;
 
-    /** Since v1.8 P6.3: the invite link's token (`?join=…`, from "Join Acme on EchoLedger"); the browser cannot change it. */
-    #[Locked]
-    public ?string $join = null;
-
-    /** Every request of the page: an open invite link lets this sign-up through and joins the team (SignUp::withLink). */
+    /**
+     * Every request of the page (since v1.8 P6.3): the invite link the visitor opened (JoinSession, never in this page's
+     * address or state) lets this sign-up through and joins its team (SignUp::withLink).
+     */
     public function boot(): void
     {
-        SignUp::withLink(app(InviteLinks::class)->find($this->join));
+        SignUp::withLink(app(InviteLinks::class)->find(JoinSession::token()));
     }
 
     public function mount(): void
@@ -42,9 +42,12 @@ class Register extends Login
         abort_unless(app(SignUp::class)->open(), 404);
         $token = request()->query('invite');
         $this->invite = is_string($token) ? mb_substr($token, 0, 128) : null;
+        // An address with `?join=` (an older page's): kept in the session like the link's own page does.
         $join = request()->query('join');
-        $this->join = is_string($join) ? mb_substr($join, 0, 128) : null;
-        SignUp::withLink(app(InviteLinks::class)->find($this->join));
+        if (is_string($join) && $join !== '') {
+            JoinSession::put(mb_substr($join, 0, 128));
+        }
+        SignUp::withLink(app(InviteLinks::class)->find(JoinSession::token()));
 
         parent::mount();
 
@@ -103,7 +106,7 @@ class Register extends Login
     {
         $signUp = app(SignUp::class);
 
-        return $signUp->mode() === SignUp::ANYONE || ($signUp->open() && ($this->invitation() !== null || app(InviteLinks::class)->find($this->join) !== null));
+        return $signUp->mode() === SignUp::ANYONE || ($signUp->open() && ($this->invitation() !== null || app(InviteLinks::class)->find(JoinSession::token()) !== null));
     }
 
     private function invitation(): ?WorkspaceInvitation

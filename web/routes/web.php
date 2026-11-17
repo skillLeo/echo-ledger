@@ -27,6 +27,7 @@ use App\Http\Controllers\WorkspaceSwitchController;
 use App\Http\Middleware\AccountGate;
 use App\Http\Middleware\EnsureConsoleAccess;
 use App\Http\Middleware\EnsureWorkspaceMember;
+use App\Http\Middleware\NoReferrerOnInvites;
 use Filament\Http\Middleware\AuthenticateSession;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -149,15 +150,17 @@ Route::middleware([AuthenticateSession::class, 'throttle:google'])->prefix('/aut
 
 // Your account (v1.5): /account/delete without the app (Google Play links to it), and the "Export my data" link.
 // Workspace invitations (v1.5): a signed link for one address, 7 days, once.
-Route::middleware([AuthenticateSession::class, 'signed', 'throttle:account'])->group(function (): void {
+Route::middleware([AuthenticateSession::class, 'signed', 'throttle:account', NoReferrerOnInvites::class])->group(function (): void {
     Route::get('/invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
     Route::post('/invitations/{token}', [InvitationController::class, 'accept'])->middleware('auth:web')->name('invitations.accept');
 });
 
 // Invite links (v1.8 P6.3): "Join Acme on EchoLedger"; the token is the secret, so no signature.
-Route::middleware([AuthenticateSession::class, 'throttle:account'])->group(function (): void {
+Route::middleware([AuthenticateSession::class, 'throttle:account', NoReferrerOnInvites::class])->group(function (): void {
     Route::get('/join/{token}', [JoinController::class, 'show'])->name('join.show');
-    Route::post('/join/{token}', [JoinController::class, 'accept'])->middleware('auth:web')->name('join.accept');
+    // From here on the link is in the session, encrypted (App\Services\Accounts\JoinSession): no token in an address.
+    Route::get('/join', [JoinController::class, 'resume'])->name('join.resume');
+    Route::post('/join', [JoinController::class, 'accept'])->middleware('auth:web')->name('join.accept');
 });
 
 // A notification of the bell opened (since v1.6.1): marked read, then where it is about. Only the person's own.

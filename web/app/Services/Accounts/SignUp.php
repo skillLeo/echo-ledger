@@ -91,6 +91,14 @@ final class SignUp
         }
     }
 
+    /** The link bound for this request as it was then (create() lets join() decide, with its rows locked). */
+    private function boundLink(): ?WorkspaceInviteLink
+    {
+        $link = app()->bound(self::LINK) ? app(self::LINK) : null;
+
+        return $link instanceof WorkspaceInviteLink ? $link : null;
+    }
+
     private function link(): ?WorkspaceInviteLink
     {
         $link = app()->bound(self::LINK) ? app(self::LINK) : null;
@@ -132,12 +140,17 @@ final class SignUp
                 } catch (ApiError) {
                     // The team filled its seats meanwhile: the account is made all the same, without joining it.
                 }
-            } elseif (($link = $this->link()) !== null) {
-                // Since v1.8 P6.3: the invite link the sign-up page was opened with.
+            } elseif (($link = $this->boundLink()) !== null) {
+                // Since v1.8 P6.3: the invite link the sign-up came with. join() checks it again with its rows locked.
                 try {
                     app(InviteLinks::class)->join($link, $user);
-                } catch (ApiError) {
-                    // Its seats or uses ran out meanwhile: the account is made all the same, without joining.
+                    JoinSession::forget();
+                } catch (ApiError $e) {
+                    // By invitation only, the link was this account's only way in: no join, no account (the whole
+                    // transaction goes back, and the person reads why). Open to anyone, it is made all the same.
+                    if ($this->mode() === self::INVITED) {
+                        throw $e;
+                    }
                 }
             }
             $this->audit->record('account_created', $user->id, $user, match ($via) {
