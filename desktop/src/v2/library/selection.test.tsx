@@ -288,16 +288,45 @@ describe("the row ⋮ and the right-click menu", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Renamed");
   });
 
-  it("Send to WhatsApp sends the transcript's text", async () => {
-    respond("session_detail", { playback_url: null });
+  it("Send to WhatsApp is classic's sheet: Text only copies the text and says when WhatsApp got only its start", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a" });
     respond("transcript_detail", makeTranscript({ id: "tr-bilal" }));
     respond("whatsapp_open", true);
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Bilal Qureshi" }));
     fireEvent.click(menuItem("Send to WhatsApp…"));
     await act(flushAsync);
-    expect(callsOf("whatsapp_open")).toHaveLength(1);
-    expect((callsOf("whatsapp_open")[0] as { text: string }).text.length).toBeGreaterThan(0);
+    const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+    expect(within(sheet).getAllByRole("button").map((b) => b.textContent)).toEqual(["", "Text only", "Text and voice", "Link (works for 7 days)", "Cancel"]);
+    fireEvent.click(within(sheet).getByRole("button", { name: "Text only" }));
+    await act(flushAsync);
+    const sent = (callsOf("whatsapp_open")[0] as { text: string }).text;
+    expect(sent.length).toBeGreaterThan(0);
+    expect(writeText).toHaveBeenCalledWith(sent);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("WhatsApp opens with the start of the text. The whole text is copied: paste it there.");
+    expect(screen.queryByRole("dialog", { name: "Send to WhatsApp" })).toBeNull();
+  });
+
+  it("Send to WhatsApp without a transcript offers only the 7-day link, which is made, copied and sent", async () => {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    respond("session_detail", { playback_url: null });
+    respond("share_create", { url: "https://ledger.example.com/s/abc", id: "sh1" });
+    respond("whatsapp_open", false);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "More for Voice note" }));
+    fireEvent.click(menuItem("Send to WhatsApp…"));
+    await act(flushAsync);
+    const sheet = screen.getByRole("dialog", { name: "Send to WhatsApp" });
+    expect(sheet).toHaveAccessibleDescription("There is no transcript yet: only the link can be sent.");
+    expect(within(sheet).getByRole("button", { name: "Text only" })).toBeDisabled();
+    fireEvent.click(within(sheet).getByRole("button", { name: "Link (works for 7 days)" }));
+    await act(flushAsync);
+    expect(writeText).toHaveBeenCalledWith("https://ledger.example.com/s/abc");
+    expect(callsOf("whatsapp_open")).toEqual([{ text: "Voice note\nhttps://ledger.example.com/s/abc" }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Link made (it works for 7 days) and copied");
   });
 
   it("a right-click opens the same menu at the pointer; on a picked row it acts on every picked one", async () => {
@@ -325,15 +354,151 @@ describe("the row ⋮ and the right-click menu", () => {
     expect(screen.getByRole("menu", { name: "Recording actions" })).toBeInTheDocument();
   });
 
-  it("the Delete key on a focused row sends it to Trash with Undo", async () => {
+  it("the Delete key on a focused row sends it to Trash; Undo brings it back and focus returns to it; plain Backspace does nothing", async () => {
     respond("delete_session", null);
+    respondWith("session_restore", () => ({ data: ITEMS[3] }));
     await show();
     act(() => row("Habib & Co.").focus());
+    fireEvent.keyDown(row("Habib & Co."), { key: "Backspace" });
+    await act(flushAsync);
+    expect(callsOf("delete_session")).toEqual([]);
     fireEvent.keyDown(row("Habib & Co."), { key: "Delete" });
     await act(flushAsync);
     expect(callsOf("delete_session")).toEqual([{ id: "habib" }]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent('"Habib & Co." moved to Trash');
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent('"Habib & Co." moved to Trash');
+    act(() => within(toast).getByRole("button", { name: "Undo" }).focus());
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "habib" }]);
+    expect(row("Habib & Co.")).toHaveFocus();
   });
+});
+
+describe("menus stay inside the window", () => {
+  const box = (top: number, height: number, left = 900, width = 220) =>
+    ({ top, bottom: top + height, left, right: left + width, width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+  beforeEach(() => {
+    resetTauriMock();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    Object.assign(window, { innerWidth: 1280, innerHeight: 800 });
+  });
+
+  it("a row ⋮ near the bottom opens upwards; a sub-menu that would run off the bottom moves up; one off the end side flips", async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("el-menu--sub")) return box(700, 240, 1200);
+      if (this.getAttribute("role") === "menu") return box(760, 420);
+      if (this.classList.contains("el-menu-anchor")) return box(724, 32);
+      return box(0, 0);
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
+    const menu = screen.getByRole("menu", { name: "More for Habib & Co." });
+    expect(menu).toHaveAttribute("data-up", "true");
+    fireEvent.click(menuItem("Export"));
+    const sub = screen.getByRole("menu", { name: "Export" });
+    expect(sub).toHaveAttribute("data-flip", "true");
+    expect(sub.style.transform).toBe("translateY(-148px)");
+    spy.mockRestore();
+  });
+
+  it("a right-click near the window's corner keeps the whole menu in view, in right-to-left too", async () => {
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("el-menu--context") ? box(0, 400, 0, 240) : box(0, 0);
+    });
+    document.documentElement.dir = "rtl";
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.contextMenu(row("Habib & Co."), { clientX: 1270, clientY: 790 });
+    expect(screen.getByRole("menu", { name: "Recording actions" })).toHaveStyle({ left: "1040px", top: "400px" });
+    document.documentElement.dir = "ltr";
+    spy.mockRestore();
+  });
+
+  it("the context menu's place is its left and top alone (inset: auto), so right-to-left pages can't stretch it", async () => {
+    const { readFileSync } = await import("node:fs");
+    const css = readFileSync(`${process.cwd()}/src/v2/styles/v2.css`, "utf8");
+    expect(css).toMatch(/\.el-menu--context \{ position: fixed; inset: auto;/);
+  });
+});
+
+describe("Trash, Undo and the limits", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(NOW);
+    respond("library_list", ITEMS);
+    respond("library_refresh", ITEMS);
+    respond("trash_keep_hours", 36);
+    respondWith("sessions_bulk", (args) => ((args as { ids: string[] }).ids.length));
+  });
+  const show = async () => {
+    render(<LibraryV2 />);
+    await act(flushAsync);
+  };
+
+  it("Undo restores one after another and reloads once; a failed one is counted and said, the rest come back", async () => {
+    respondWith("session_restore", (args) => {
+      if ((args as { id: string }).id === "usman") throw new Error("Already erased");
+      return { data: ITEMS[0] };
+    });
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent("2 recordings moved to Trash · kept there for 36 hours");
+    const reloads = callsOf("library_list").length;
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "bilal" }, { id: "usman" }]);
+    expect(callsOf("library_list").length).toBe(reloads + 1);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("1 back · 1 still in Trash: Already erased");
+  });
+
+  it("deleting every recording shown asks first; Cancel leaves them", async () => {
+    await show();
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    const ask = screen.getByRole("alertdialog", { name: "Move 4 recordings to Trash?" });
+    expect(ask).toHaveAccessibleDescription(/stay in Trash for 36 hours/);
+    fireEvent.click(within(ask).getByRole("button", { name: "Cancel" }));
+    expect(callsOf("sessions_bulk")).toEqual([]);
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Move to Trash" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toHaveLength(1);
+  });
+
+  it("says so plainly when the server moved none", async () => {
+    respond("sessions_bulk", 0);
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Nothing was moved to Trash.");
+  });
+
+  it("more than 200 picked: the actions wait and the bar says why; Transcribe says its 50", async () => {
+    const many = Array.from({ length: 201 }, (_, i) => makeItem(`r${i}`, { title: `Call ${i}`, started_at: at(17, 8), status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } }));
+    respond("library_list", many);
+    respond("library_refresh", many);
+    await show();
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    expect(bar()).toHaveTextContent("Up to 200 at a time: unselect 1");
+    expect(within(bar()).getByRole("button", { name: "Delete" })).toBeDisabled();
+    expect(within(bar()).getByRole("button", { name: "Move to project" })).toBeDisabled();
+    fireEvent.click(within(bar()).getByRole("button", { name: "Unselect all" }));
+    for (const r of rows().slice(0, 51)) fireEvent.click(r);
+    fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
+    expect(menuItem("Transcribe (50 at a time)")).toHaveAttribute("aria-disabled", "true");
+  }, 30_000);
 });
 
 describe("Copy for AI's header", () => {

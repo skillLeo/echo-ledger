@@ -4,12 +4,13 @@
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
 import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type TranscribeEstimate } from "../../lib/ipc";
-import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
+import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
 import { projectLabel } from "../../lib/projects";
 import { MAX_LABEL_CHARS } from "../../lib/organise";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
 import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
+import { ATTACH_NOTE, fileName, linkMessage, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
 import { Button, Dialog, Icons, Select, TextField } from "../components";
 import type { MenuItem } from "../components/Menu";
 
@@ -256,4 +257,98 @@ export function knownLabels(items: readonly LibraryItem[]): string[] {
   const counts = new Map<string, number>();
   for (const i of items) for (const l of i.labels ?? []) counts.set(l, (counts.get(l) ?? 0) + 1);
   return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([l]) => l);
+}
+
+/**
+ * Send to WhatsApp, as classic's sheet (views/main/WhatsAppSheet.tsx) and the phone: the text of the view being read,
+ * the text with the voice (saved in Downloads to attach), or a link that works for 7 days. The text always goes on the
+ * clipboard too: a long one is cut in the message and the core says so. Without a transcript only the link is offered.
+ * `text` and `hasAudio` come from the recording page; from a row they are read here.
+ */
+export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClose, say }: {
+  item: LibraryItem;
+  text?: string | null;
+  hasAudio?: boolean;
+  onClose: () => void;
+  say: Say;
+}) {
+  const [text, setText] = useState<string | null | undefined>(given);
+  const [hasAudio, setHasAudio] = useState<boolean | undefined>(givenAudio);
+  const [working, setWorking] = useState<"text" | "voice" | "link" | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
+  useEffect(() => {
+    if (given === undefined) recordingLines(item).then((l) => setText(l?.length ? transcriptText(l, false) : null)).catch(() => setText(null));
+    if (givenAudio === undefined) api.session(item.id).then((d) => setHasAudio(typeof d.playback_url === "string")).catch(() => setHasAudio(false));
+  }, [item, given, givenAudio]);
+  const copy = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const open = async (message: string, copied: boolean) => {
+    const cut = await api.whatsappOpen(message);
+    if (cut) say(copied ? "WhatsApp opens with the start of the text. The whole text is copied: paste it there." : "WhatsApp opens with the start of the text.");
+    return cut;
+  };
+  const run = async (kind: "text" | "voice" | "link", fn: () => Promise<void>) => {
+    if (working) return;
+    setWorking(kind);
+    try {
+      await fn();
+    } catch (e) {
+      say(errorMessage(e));
+    } finally {
+      setWorking(null);
+    }
+  };
+  const sendText = () => run("text", async () => {
+    if (!text) return;
+    const cut = await open(text, await copy(text));
+    if (!cut) say("Opening WhatsApp with the text");
+    onClose();
+  });
+  const sendVoice = () => run("voice", async () => {
+    if (!text) return;
+    const path = await api.saveAudioToDownloads(item.id);
+    await open(text, await copy(text));
+    setSaved(path);
+  });
+  const sendLink = () => run("link", async () => {
+    const link = await api.createShare(item.id, WHATSAPP_LINK_SECONDS, null, !!hasAudio);
+    if (!link.url) throw new Error("The server made the link but did not send it. Try again.");
+    await copy(link.url);
+    await open(linkMessage(item.title ?? null, link.url), false);
+    say("Link made (it works for 7 days) and copied");
+    onClose();
+  });
+  const loading = text === undefined || hasAudio === undefined;
+  if (saved) {
+    return (
+      <Dialog open title="Send to WhatsApp" onClose={onClose} actions={<Button variant="primary" onClick={onClose}>Done</Button>}
+        description={`Saved in Downloads: ${fileName(saved)}`}>
+        <p><b>{ATTACH_NOTE}</b>: in the chat, click <b>+</b> (or the paper clip), then <b>Document</b>, and choose this file. The text is in the message, and copied too.</p>
+      </Dialog>
+    );
+  }
+  return (
+    <Dialog open title="Send to WhatsApp" onClose={onClose}
+      description={text === null ? "There is no transcript yet: only the link can be sent." : "Opens WhatsApp, or WhatsApp Web, with the message ready to send to the person you choose."}
+      actions={<Button onClick={onClose}>Cancel</Button>}>
+      <div className="el-choices">
+        <Button variant="primary" disabled={!text || !!working} loading={working === "text"} loadingLabel="Opening WhatsApp…" onClick={() => void sendText()}>Text only</Button>
+        <p className="el-caption el-secondary">The text of the view you are reading.</p>
+        {hasAudio && (
+          <>
+            <Button disabled={!text || !!working} loading={working === "voice"} loadingLabel="Saving the voice…" onClick={() => void sendVoice()}>Text and voice</Button>
+            <p className="el-caption el-secondary">The text in the message; the voice saved in Downloads to attach.</p>
+          </>
+        )}
+        <Button disabled={loading || !!working} loading={working === "link"} loadingLabel="Making the link…" onClick={() => void sendLink()}>Link (works for 7 days)</Button>
+        <p className="el-caption el-secondary">Anyone with it can read{hasAudio ? " and listen" : ""} for 7 days.</p>
+      </div>
+    </Dialog>
+  );
 }

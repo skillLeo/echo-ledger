@@ -48,10 +48,12 @@ export const PAIRS = [
       await page.waitForTimeout(1500);
     })]],
   ["selection", "Library selection: classic's bulk bar with More open | the new design's bar (× · count · Select all · Move, Label, Share, Delete · ⋮) with ⋮ › Export ▸ open",
+    // Classic's list column clips its More popover at 1280 wide (a classic layout limit); a wider window shows it whole.
     [classic("library"), steps(click("Select"), pickRows(2), async (page) => {
       await page.locator(".bulk-bar summary", { hasText: "More" }).click();
       await page.waitForTimeout(400);
-    })],
+      await page.locator(".bulk-pop").last().scrollIntoViewIfNeeded();
+    }), { width: 1800, height: 1000 }],
     [v2("library"), steps(click("Select"), pickRows(2), async (page) => {
       await page.getByRole("button", { name: "More actions" }).click();
       await page.getByRole("menuitem", { name: "Export" }).hover();
@@ -74,8 +76,8 @@ const base = server.resolvedUrls.local[0];
 await mkdir(out, { recursive: true });
 const browser = await chromium.launch();
 
-async function shoot([path, step], theme) {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
+async function shoot([path, step, viewport], theme) {
+  const page = await browser.newPage({ viewport: viewport ?? { width: 1280, height: 800 }, colorScheme: theme, reducedMotion: "reduce" });
   await page.goto(`${base}${path}&theme=${theme}`);
   await page.waitForTimeout(2200);
   if (step) await step(page);

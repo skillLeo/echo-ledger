@@ -196,7 +196,8 @@
 .el-menu--has-sub { overflow: visible; max-block-size: none; }
 .el-menu--sub { inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-start: calc(100% - var(--el-space-4)); min-inline-size: calc(var(--el-space-64) * 3); }
 .el-menu--sub[data-flip] { inset-inline-start: auto; inset-inline-end: calc(100% - var(--el-space-4)); }
-.el-menu--context { position: fixed; min-inline-size: calc(var(--el-space-64) * 3.5); }
+.el-menu[data-up] { inset-block-start: auto; inset-block-end: calc(100% + var(--el-space-4)); }
+.el-menu--context { position: fixed; inset: auto; min-inline-size: calc(var(--el-space-64) * 3.5); }
 
 /* ---- ListRow ------------------------------------------------------------------------------------------------ */
 .el-list { display: flex; flex-direction: column; }
@@ -714,6 +715,8 @@ button.el-step__head { cursor: pointer; }
 .el-page__titles { display: flex; flex-direction: column; gap: var(--el-space-4); min-inline-size: 0; flex: 1 1 calc(var(--el-space-64) * 6); }
 .el-page__meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
 .el-page__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
+.el-choices { display: grid; gap: var(--el-space-4); justify-items: start; }
+.el-choices > .el-button:not(:first-child) { margin-block-start: var(--el-space-8); }
 /* Selection mode: × · "3 selected" · Select all on the start side, the four actions and ⋮ on the end side. */
 .el-selectbar { position: sticky; inset-block-start: 0; z-index: var(--el-layer-sticky); background: var(--el-role-bg-canvas); padding-block: var(--el-space-4); }
 .el-selectbar__start { display: flex; align-items: center; gap: var(--el-space-8); }

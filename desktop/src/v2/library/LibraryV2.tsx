@@ -7,7 +7,7 @@ import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem } from "../../lib/ipc";
 import { formatDuration, rowDate } from "../../lib/format";
 import { eraseIn } from "../../views/main/LibraryOrganise";
-import { useTrashKeepHours } from "../../lib/trash";
+import { hoursWords, useTrashKeepHours } from "../../lib/trash";
 import {
   Badge, Button, Chip, Dialog, EmptyState, FilterBar, Icons, List, ListRow, ListSection, Loading, SearchField, SkeletonRow,
   Toast, ToastRegion,
@@ -17,14 +17,17 @@ import { binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts
 import { RecordingPage } from "./RecordingPage";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
-  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingLines, recordingsWord, RenameDialog,
-  TranscribeDialog,
+  copyForAiToClipboard, exportMenu, exportRecordings, knownLabels, LabelDialog, MoveDialog, recordingsWord, RenameDialog,
+  TranscribeDialog, WhatsAppDialog,
 } from "./organise";
-import { transcriptText } from "../../lib/format";
 
 type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
-  | { kind: "rename"; item: LibraryItem };
+  | { kind: "rename" | "whatsapp"; item: LibraryItem };
+
+/** The core's limits (src-tauri commands.rs MAX_BULK, MAX_TRANSCRIBE): more picked than this and the bar says so. */
+const MAX_BULK = 200;
+const MAX_TRANSCRIBE = 50;
 
 /** Keys the Library answers anywhere but in a field, a dialog or a menu. */
 const typing = (target: EventTarget | null) =>
@@ -143,8 +146,37 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       say(errorMessage(e));
     }
   };
+  /**
+   * Brings recordings back from Trash one after another (the core has no bulk restore), then reloads once and says
+   * how many came back and how many are still in Trash.
+   */
+  const restoreMany = async (ids: readonly string[]) => {
+    let back = 0;
+    let firstError: string | null = null;
+    for (const id of ids) {
+      try {
+        await api.restoreSession(id);
+        back++;
+      } catch (e) {
+        firstError ??= errorMessage(e);
+      }
+    }
+    await load();
+    const left = ids.length - back;
+    say(left === 0 ? `${recordingsWord(back)} back` : `${back} back · ${left} still in Trash${firstError ? `: ${firstError}` : ""}`);
+  };
+  /** Delete a whole view or more than this many: asked first. */
+  const ASK_ABOVE = 20;
+  const [askDelete, setAskDelete] = useState<string[] | null>(null);
+  const deleteOrAsk = (ids: readonly string[]) => {
+    const everything = ids.length > 1 && ids.length >= shownCount.current;
+    if (ids.length > ASK_ABOVE || everything) setAskDelete([...ids]);
+    else void removeMany(ids);
+  };
+  const shownCount = useRef(0);
   /** Several to Trash at once, with one Undo that brings them all back. */
   const removeMany = async (ids: readonly string[]) => {
+    setAskDelete(null);
     if (ids.length === 1) {
       const one = items?.find((i) => i.id === ids[0]);
       if (one) await remove(one);
@@ -158,10 +190,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       setItems((list) => list?.filter((i) => !ids.includes(i.id)) ?? list);
       endSelection();
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
-      say(`${recordingsWord(gone || ids.length)} moved to Trash`, {
-        label: "Undo",
-        run: () => void Promise.all(ids.map((id) => api.restoreSession(id))).then(() => load()).catch((e) => say(errorMessage(e))),
-      });
+      if (!gone) {
+        say("Nothing was moved to Trash. Try again, or reload the Library.");
+        void load();
+        return;
+      }
+      say(`${recordingsWord(gone)} moved to Trash · kept there for ${hoursWords(keepHours)}`, { label: "Undo", run: () => void restoreMany(ids) });
     } catch (e) {
       say(errorMessage(e));
     }
@@ -171,18 +205,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       const changed = await api.bulkSessions([...ids], action);
       say(ids.length === 1 ? done : `${done} · ${recordingsWord(changed)}`);
       await load();
-    } catch (e) {
-      say(errorMessage(e));
-    }
-  };
-  const sendToWhatsApp = async (item: LibraryItem) => {
-    try {
-      const lines = await recordingLines(item);
-      if (!lines?.length) {
-        say("This recording has no transcript to send yet");
-        return;
-      }
-      await api.whatsappOpen(transcriptText(lines, false));
     } catch (e) {
       say(errorMessage(e));
     }
@@ -208,11 +230,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     if (!none((i) => !!i.pinned)) add("unpin", { label: "Unpin", icon: Icons.PinIcon, group: "Organise", onPick: () => void bulk(ids, "unpin", "Unpinned") });
     if (!all((i) => !!i.keep)) add("keep", { label: "Keep forever", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "keep", "Kept forever") });
     if (!none((i) => !!i.keep)) add("unkeep", { label: "Allow auto clean-up", icon: Icons.KeepIcon, group: "Organise", onPick: () => void bulk(ids, "unkeep", "Auto clean-up allowed") });
-    if (!one || isUntranscribed(one)) add("transcribe", { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
+    if (!one || isUntranscribed(one)) {
+      add("transcribe", ids.length > MAX_TRANSCRIBE
+        ? { label: `Transcribe (${MAX_TRANSCRIBE} at a time)`, icon: Icons.TranscriptIcon, group: "Organise", disabled: true }
+        : { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
+    }
     add("export", exportMenu((format) => void exportRecordings(ids, format, say)));
     add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: () => void copyForAiToClipboard(chosen, say) });
-    if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: () => void sendToWhatsApp(one) });
-    add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => void removeMany(ids) });
+    if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: () => setOrganise({ kind: "whatsapp", item: one }) });
+    add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
     return list.map(({ key: _key, ...item }) => item);
   };
 
@@ -243,6 +269,9 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const shownIds = shown.map((i) => i.id);
   const pickedIds = shownIds.filter((id) => picked.has(id));
   const allPicked = shownIds.length > 0 && pickedIds.length === shownIds.length;
+  shownCount.current = shownIds.length;
+  // More picked than the core takes at once: the actions wait and the bar says why.
+  const tooMany = pickedIds.length > MAX_BULK;
   const toggle = (id: string) => {
     setSelecting(true);
     anchor.current = id;
@@ -282,14 +311,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     if (open || view === "trash" || !items || typing(e.target) || organise || context) return;
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
-    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !e.shiftKey) {
       e.preventDefault();
       pickAll();
-    } else if ((e.key === "Delete" || e.key === "Backspace") && !e.metaKey && !e.ctrlKey) {
+    } else if (e.key === "Delete" || (e.key === "Backspace" && (e.metaKey || e.ctrlKey))) {
       const ids = selecting && pickedIds.length ? pickedIds : focused ? [focused] : [];
       if (!ids.length) return;
       e.preventDefault();
-      void removeMany(ids);
+      deleteOrAsk(ids);
     } else if (e.key === "Escape" && selecting) {
       e.preventDefault();
       endSelection();
@@ -325,6 +354,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       {organise?.kind === "move" && <MoveDialog ids={organise.ids} title={organise.title} current={organise.current} onClose={closeOrganise} say={say} />}
       {organise?.kind === "label" && <LabelDialog ids={organise.ids} known={knownLabels(items ?? [])} onClose={closeOrganise} say={say} />}
       {organise?.kind === "transcribe" && <TranscribeDialog ids={organise.ids} onClose={closeOrganise} say={say} />}
+      {organise?.kind === "whatsapp" && <WhatsAppDialog item={organise.item} onClose={() => setOrganise(null)} say={say} />}
+      <Dialog open={!!askDelete} alert title={`Move ${recordingsWord(askDelete?.length ?? 0)} to Trash?`}
+        description={`They stay in Trash for ${hoursWords(keepHours)}, then their audio and transcripts are erased. Undo brings them back.`}
+        onClose={() => setAskDelete(null)}
+        actions={<><Button onClick={() => setAskDelete(null)}>Cancel</Button><Button variant="danger" onClick={() => askDelete && void removeMany(askDelete)}>Move to Trash</Button></>} />
       {organise?.kind === "rename" && <RenameDialog item={organise.item} onClose={closeOrganise} say={say}
         onRenamed={(r) => setItems((list) => list?.map((i) => (i.id === r.id ? { ...i, ...r } : i)) ?? list)} />}
     </>
@@ -361,23 +395,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
             <div className="el-selectbar__start">
               <Button variant="quiet" icon={Icons.CloseIcon} aria-label="Cancel selection" onClick={endSelection} />
               <h1 className="el-title-m" aria-live="polite">{pickedIds.length ? `${pickedIds.length} selected` : "Select recordings"}</h1>
+              {tooMany && <span className="el-caption el-secondary" role="status">Up to {MAX_BULK} at a time: unselect {pickedIds.length - MAX_BULK}</span>}
               <Button variant="quiet" size="sm" aria-keyshortcuts="Meta+A Control+A" onClick={() => (allPicked ? setPicked(new Set()) : pickAll())}>
                 {allPicked ? "Unselect all" : "Select all"}
               </Button>
             </div>
             <div className="el-page__actions">
-              <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length}
+              <Button variant="quiet" icon={Icons.MoveIcon} aria-label="Move to project" title="Move to project" disabled={!pickedIds.length || tooMany}
                 onClick={() => setOrganise({ kind: "move", ids: pickedIds })} />
-              <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length}
+              <Button variant="quiet" icon={Icons.LabelIcon} aria-label="Label" title="Label" disabled={!pickedIds.length || tooMany}
                 onClick={() => setOrganise({ kind: "label", ids: pickedIds })} />
-              {pickedIds.length > 0 && (
+              {pickedIds.length > 0 && !tooMany && (
                 <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
                   items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say)).items!.map((i) => ({ ...i, group: "Export transcripts" })),
                     { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => picked.has(i.id)), say) }]} />
               )}
-              <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length}
-                onClick={() => void removeMany(pickedIds)} />
-              {pickedIds.length > 0 && (
+              <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
+                onClick={() => deleteOrAsk(pickedIds)} />
+              {pickedIds.length > 0 && !tooMany && (
                 <Menu label="More actions" button={{ variant: "quiet", icon: Icons.MoreIcon }}
                   items={menuFor(pickedIds, new Set(["open", "move", "label", "ai", "delete"]))} />
               )}

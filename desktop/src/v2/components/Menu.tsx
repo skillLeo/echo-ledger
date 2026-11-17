@@ -34,6 +34,8 @@ type ListProps = {
   listRef?: Ref<HTMLUListElement>;
 };
 
+/** The gap a menu keeps from the window's edges. */
+const EDGE = 8;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
 
 /** The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level. */
@@ -46,14 +48,36 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     if (typeof listRef === "function") listRef(el);
     else if (listRef) (listRef as MutableRefObject<HTMLUListElement | null>).current = el;
   };
-  // A sub-menu with no room on its end side opens on the start side instead (a ⋮ at the window's edge).
-  const [flip, setFlip] = useState(false);
+  // The list stays inside the window. A sub-menu with no room on its end side opens on the start side, and moves up
+  // when it would run off the bottom. A button's menu with no room below opens upwards when there is more room above
+  // (a ⋮ on the last rows), and a list without sub-menus scrolls inside the room it has.
+  const [fit, setFit] = useState<{ flip?: boolean; up?: boolean; shift?: number; room?: number }>({});
   useLayoutEffect(() => {
     const el = own.current;
-    if (!el || !className.includes("el-menu--sub")) return;
+    if (!el || className.includes("el-menu--context")) return;
     const box = el.getBoundingClientRect();
-    if (box.width && (box.right > window.innerWidth || box.left < 0)) setFlip(true);
-  }, [className]);
+    if (!box.height) return;
+    const bottom = window.innerHeight - EDGE;
+    if (className.includes("el-menu--sub")) {
+      setFit({
+        flip: box.right > window.innerWidth || box.left < 0,
+        shift: box.bottom > bottom ? Math.min(box.bottom - bottom, Math.max(0, box.top - EDGE)) : undefined,
+      });
+      return;
+    }
+    if (box.bottom <= bottom) return;
+    const anchor = el.parentElement?.getBoundingClientRect();
+    const above = (anchor?.top ?? box.top) - EDGE;
+    const below = bottom - box.top;
+    const up = above > below;
+    const scrolls = !items.some((i) => i.items);
+    setFit({ up, room: scrolls && box.height > (up ? above : below) ? Math.floor(up ? above : below) : undefined });
+  }, [className, items]);
+  const fitted: CSSProperties = {
+    ...style,
+    ...(fit.shift ? { transform: `translateY(-${fit.shift}px)` } : {}),
+    ...(fit.room ? { maxBlockSize: `${fit.room}px`, overflowY: "auto" } : {}),
+  };
   useEffect(() => {
     if (sub !== null) return;
     own.current?.querySelectorAll<HTMLElement>(':scope > li > [role="menuitem"]')[active]?.focus();
@@ -87,7 +111,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
 
   return (
     <ul className={`${className}${items.some((i) => i.items) ? " el-menu--has-sub" : ""}`} role="menu" id={id} aria-label={label} ref={setRef}
-      onKeyDown={keyDown} style={style} data-flip={flip || undefined}>
+      onKeyDown={keyDown} style={fitted} data-flip={fit.flip || undefined} data-up={fit.up || undefined}>
       {items.map((item, i) => {
         const header = item.group && item.group !== items[i - 1]?.group ? item.group : null;
         const subOpen = sub === i;
