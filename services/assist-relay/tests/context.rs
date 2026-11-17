@@ -229,3 +229,60 @@ fn every_rewrite_has_its_own_now_without_skip_or_the_hint_shape() {
         assert!(now.contains(language), "{kind:?}: {now}");
     }
 }
+
+#[test]
+fn an_urdu_context_billed_a_token_a_character_stays_within_its_reservation() {
+    use assist_relay::budget::{cost_micros, estimate_micros, worst_micros};
+    use assist_relay::provider::Usage;
+    let mut call = interview();
+    call.language_help = LanguageHelp::Urdu;
+    call.brief.goals = "ادائیگی کے نظام کا کام دکھانا اور ٹیم کے بارے میں پوچھنا".into();
+    call.documents = vec![Document {
+        id: "cv".into(),
+        title: "سی وی".into(),
+        text: "میں نے ادائیگی کا نظام بنایا، روزانہ چالیس ہزار ادائیگیاں، اور ملاپ تین دن سے چار گھنٹے کر دیا۔ ".repeat(40),
+    }];
+    let context = build(&call, &transcript(10), Task::Answer { turn_id: Some("o-1"), text: "آپ کا نوٹس پیریڈ کتنا ہے؟", partial: false }, TranscriptScope::Full);
+    let config = RelayConfig::built_in();
+    let spec = config.model("claude-haiku-5-5").unwrap();
+    let max_output = 400;
+    // The worst bill for Urdu: every Urdu (non-ASCII) character a token, the English pack rules at their usual four
+    // characters a token, and the longest answer.
+    let text = context.text();
+    let urdu = text.chars().filter(|c| !c.is_ascii()).count();
+    let english = text.chars().filter(char::is_ascii).count().div_ceil(4);
+    assert!(urdu > english, "a mostly Urdu context: {urdu} Urdu characters, {english} English tokens");
+    let input = u32::try_from(urdu + english).unwrap();
+    let billed = cost_micros(spec, &Usage { input_tokens: input, output_tokens: max_output, ..Usage::default() });
+    let reserved = worst_micros(spec, &context, max_output);
+    assert!(billed <= reserved, "billed {billed} > reserved {reserved}");
+    // The mode-choice estimate (two characters a token) would not have covered it.
+    let estimate = estimate_micros(spec, context.tokens(), 0, false, max_output);
+    assert!(estimate < billed, "the estimate {estimate} already covered {billed}");
+}
+
+#[test]
+fn a_cache_write_dearer_than_input_stays_within_the_reservation() {
+    use assist_relay::budget::{cost_micros, estimate_micros, worst_micros};
+    use assist_relay::provider::Usage;
+    let context = build(&interview(), &transcript(10), Task::Answer { turn_id: Some("o-1"), text: "What is your notice period?", partial: false }, TranscriptScope::Full);
+    let config = RelayConfig::built_in();
+    let spec = config.model("claude-haiku-5-5").unwrap();
+    assert!(spec.price.cache_write > spec.price.input, "Anthropic bills a cache write above plain input");
+    let max_output = 400;
+    // A cold cache at its worst: the whole cacheable part written to the cache, the rest plain input.
+    let cacheable = context.upper_cacheable_tokens();
+    assert!(cacheable > 0);
+    let usage = Usage {
+        cache_write_tokens: cacheable,
+        input_tokens: context.upper_tokens() - cacheable,
+        output_tokens: max_output,
+        ..Usage::default()
+    };
+    let billed = cost_micros(spec, &usage);
+    let reserved = worst_micros(spec, &context, max_output);
+    assert!(billed <= reserved, "billed {billed} > reserved {reserved}");
+    // Pricing it all as plain input would not have covered it.
+    let as_input = estimate_micros(spec, context.upper_tokens(), 0, false, max_output);
+    assert!(as_input < billed, "plain input {as_input} already covered {billed}");
+}

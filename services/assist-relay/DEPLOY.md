@@ -57,6 +57,10 @@ VPS has one). A copy of it is useless on another machine. A new VPS gets the sec
 **Rotating the secret** (in a quiet hour: each relay restart reconnects the live calls). The relay goes first, the
 server second:
 
+> **More than one relay instance:** give EVERY instance the new secret as `relay_secret` and the old one as
+> `relay_secret_previous` before the first instance restarts. The server switches to the new secret on the first
+> request signed with it from any instance, so an instance still holding only the old secret would be refused.
+
 1. In the console, make the new `assist_relay` secret **without switching the server to it yet**: the server keeps
    signing tokens and checking internal requests with the old one.
 2. On the relay, encrypt the new secret as `relay_secret` and the old one as `relay_secret_previous`
@@ -188,7 +192,7 @@ rest of a 4 GB VPS to nginx and the system. See LOADTEST.md.
 
 ## 6. nginx and TLS
 
-`/etc/nginx/sites-available/assist-relay` (link it into `sites-enabled`). If the console runs on the same VPS, keep
+`/etc/nginx/sites-available/assist-relay` (linked into `sites-enabled` once the certificate exists, below). If the console runs on the same VPS, keep
 its `default_server` block from docs/DEPLOY_VPS.md, which refuses unknown host names.
 
 ```
@@ -245,8 +249,11 @@ server {
 }
 ```
 
+Get the certificate before enabling the site (the site names its files, so `nginx -t` fails without them):
+
 ```
-sudo certbot --nginx -d <relay host> --reuse-key
+sudo certbot certonly --nginx -d <relay host> --reuse-key
+sudo ln -s /etc/nginx/sites-available/assist-relay /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 

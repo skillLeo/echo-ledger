@@ -147,13 +147,19 @@ pub struct TokenVerifier {
 
 impl std::fmt::Debug for TokenVerifier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("TokenVerifier").field("keys", &self.keys.len()).field("issuer", &self.issuer).finish()
+        f.debug_struct("TokenVerifier")
+            .field("keys", &self.keys.len())
+            .field("issuer", &self.issuer)
+            .finish()
     }
 }
 
 impl TokenVerifier {
     pub fn new(keys: Vec<Secret>, issuer: impl Into<String>) -> Self {
-        TokenVerifier { keys, issuer: issuer.into() }
+        TokenVerifier {
+            keys,
+            issuer: issuer.into(),
+        }
     }
 
     /// Verifies `token` at unix time `now` and returns its claims.
@@ -171,12 +177,21 @@ impl TokenVerifier {
             return Err(AuthError::Malformed);
         };
         let header: Header = decode_json(header_b64)?;
-        if header.alg != "HS256" || header.crit.is_some() || header.typ.as_deref().is_some_and(|t| t != "JWT") {
+        if header.alg != "HS256"
+            || header.crit.is_some()
+            || header.typ.as_deref().is_some_and(|t| t != "JWT")
+        {
             return Err(AuthError::Algorithm);
         }
-        let signature = URL_SAFE_NO_PAD.decode(signature_b64).map_err(|_| AuthError::Malformed)?;
+        let signature = URL_SAFE_NO_PAD
+            .decode(signature_b64)
+            .map_err(|_| AuthError::Malformed)?;
         let signed = &token[..header_b64.len() + 1 + payload_b64.len()];
-        if !self.keys.iter().any(|key| signature_matches(key, signed.as_bytes(), &signature)) {
+        if !self
+            .keys
+            .iter()
+            .any(|key| signature_matches(key, signed.as_bytes(), &signature))
+        {
             return Err(AuthError::Signature);
         }
         let claims: Claims = decode_json(payload_b64).map_err(|_| AuthError::Claims)?;
@@ -189,7 +204,9 @@ impl TokenVerifier {
         if claims.iat > now.saturating_add(LEEWAY_SECS) {
             return Err(AuthError::NotYetValid);
         }
-        if claims.exp.saturating_sub(claims.iat) > MAX_TTL_SECS || claims.exp.saturating_sub(now) > MAX_TTL_SECS + LEEWAY_SECS {
+        if claims.exp.saturating_sub(claims.iat) > MAX_TTL_SECS
+            || claims.exp.saturating_sub(now) > MAX_TTL_SECS + LEEWAY_SECS
+        {
             return Err(AuthError::TooLong);
         }
         if !valid_id(&claims.sub)
@@ -205,7 +222,12 @@ impl TokenVerifier {
     }
 
     /// As `verify`, and the token must name `session_id`.
-    pub fn verify_for_session(&self, token: &str, session_id: &str, now: i64) -> Result<Claims, AuthError> {
+    pub fn verify_for_session(
+        &self,
+        token: &str,
+        session_id: &str,
+        now: i64,
+    ) -> Result<Claims, AuthError> {
         let claims = self.verify(token, now)?;
         if claims.sid != session_id {
             return Err(AuthError::WrongSession);
@@ -215,7 +237,9 @@ impl TokenVerifier {
 }
 
 fn decode_json<T: for<'de> Deserialize<'de>>(part: &str) -> Result<T, AuthError> {
-    let bytes = URL_SAFE_NO_PAD.decode(part).map_err(|_| AuthError::Malformed)?;
+    let bytes = URL_SAFE_NO_PAD
+        .decode(part)
+        .map_err(|_| AuthError::Malformed)?;
     serde_json::from_slice(&bytes).map_err(|_| AuthError::Malformed)
 }
 
@@ -231,7 +255,9 @@ fn signature_matches(key: &Secret, signed: &[u8], signature: &[u8]) -> bool {
 fn valid_id(value: &str) -> bool {
     !value.is_empty()
         && value.len() <= MAX_ID_CHARS
-        && value.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':' | b'/'))
+        && value
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b':' | b'/'))
 }
 
 /// Mints tokens the way the server does. The relay itself never mints: the tests and the load test use this.
@@ -254,11 +280,15 @@ impl TokenSigner {
         let header = URL_SAFE_NO_PAD.encode(br#"{"alg":"HS256","typ":"JWT"}"#);
         let payload = URL_SAFE_NO_PAD.encode(serde_json::to_vec(claims).unwrap_or_default());
         let signed = format!("{header}.{payload}");
-        format!("{signed}.{}", URL_SAFE_NO_PAD.encode(self.mac(signed.as_bytes())))
+        format!(
+            "{signed}.{}",
+            URL_SAFE_NO_PAD.encode(self.mac(signed.as_bytes()))
+        )
     }
 
     fn mac(&self, signed: &[u8]) -> Vec<u8> {
-        let mut mac = HmacSha256::new_from_slice(self.key.expose()).unwrap_or_else(|_| unreachable!("HMAC takes any key length"));
+        let mut mac = HmacSha256::new_from_slice(self.key.expose())
+            .unwrap_or_else(|_| unreachable!("HMAC takes any key length"));
         mac.update(signed);
         mac.finalize().into_bytes().to_vec()
     }
@@ -281,7 +311,10 @@ mod tests {
             plan: Plan::Pro,
             modes: vec![Mode::Fast, Mode::Balanced],
             models: vec!["claude-haiku-5-5".into(), "claude-sonnet-5-5".into()],
-            budget: BudgetClaim { seconds_left: 36_000, cents_left: 150 },
+            budget: BudgetClaim {
+                seconds_left: 36_000,
+                cents_left: 150,
+            },
             practice: false,
             iat: NOW - 10,
             exp: NOW + 600,
@@ -300,13 +333,17 @@ mod tests {
     #[test]
     fn a_good_token_round_trips() {
         let token = sign(&claims());
-        assert_eq!(verifier().verify_for_session(&token, "01JSESSION", NOW), Ok(claims()));
+        assert_eq!(
+            verifier().verify_for_session(&token, "01JSESSION", NOW),
+            Ok(claims())
+        );
         assert_eq!(claims().budget_micros(), 1_500_000);
     }
 
     #[test]
     fn a_token_signed_with_another_secret_is_refused() {
-        let token = TokenSigner::new(Secret::new("another-secret-that-is-long-enough-0000")).sign(&claims());
+        let token = TokenSigner::new(Secret::new("another-secret-that-is-long-enough-0000"))
+            .sign(&claims());
         assert_eq!(verifier().verify(&token, NOW), Err(AuthError::Signature));
     }
 
@@ -325,19 +362,32 @@ mod tests {
     #[test]
     fn expiry_allows_only_the_clock_leeway() {
         let token = sign(&claims());
-        assert!(verifier().verify(&token, NOW + 600 + LEEWAY_SECS - 1).is_ok());
-        assert_eq!(verifier().verify(&token, NOW + 600 + LEEWAY_SECS), Err(AuthError::Expired));
+        assert!(
+            verifier()
+                .verify(&token, NOW + 600 + LEEWAY_SECS - 1)
+                .is_ok()
+        );
+        assert_eq!(
+            verifier().verify(&token, NOW + 600 + LEEWAY_SECS),
+            Err(AuthError::Expired)
+        );
     }
 
     #[test]
     fn tokens_longer_than_fifteen_minutes_are_refused() {
         let mut long = claims();
         long.exp = long.iat + MAX_TTL_SECS + 1;
-        assert_eq!(verifier().verify(&sign(&long), NOW), Err(AuthError::TooLong));
+        assert_eq!(
+            verifier().verify(&sign(&long), NOW),
+            Err(AuthError::TooLong)
+        );
         let mut backdated = claims();
         backdated.iat = NOW - 3600;
         backdated.exp = NOW + MAX_TTL_SECS + LEEWAY_SECS + 1;
-        assert_eq!(verifier().verify(&sign(&backdated), NOW), Err(AuthError::TooLong));
+        assert_eq!(
+            verifier().verify(&sign(&backdated), NOW),
+            Err(AuthError::TooLong)
+        );
     }
 
     #[test]
@@ -345,16 +395,25 @@ mod tests {
         let mut future = claims();
         future.iat = NOW + 120;
         future.exp = NOW + 700;
-        assert_eq!(verifier().verify(&sign(&future), NOW), Err(AuthError::NotYetValid));
+        assert_eq!(
+            verifier().verify(&sign(&future), NOW),
+            Err(AuthError::NotYetValid)
+        );
     }
 
     #[test]
     fn the_wrong_session_issuer_or_audience_is_refused() {
         let token = sign(&claims());
-        assert_eq!(verifier().verify_for_session(&token, "01JOTHER", NOW), Err(AuthError::WrongSession));
+        assert_eq!(
+            verifier().verify_for_session(&token, "01JOTHER", NOW),
+            Err(AuthError::WrongSession)
+        );
         let mut other_audience = claims();
         other_audience.aud = "console".into();
-        assert_eq!(verifier().verify(&sign(&other_audience), NOW), Err(AuthError::Audience));
+        assert_eq!(
+            verifier().verify(&sign(&other_audience), NOW),
+            Err(AuthError::Audience)
+        );
         let stranger = TokenVerifier::new(vec![Secret::new(SECRET)], "someone-else");
         assert_eq!(stranger.verify(&token, NOW), Err(AuthError::Audience));
     }
@@ -363,9 +422,17 @@ mod tests {
     fn only_hs256_is_accepted() {
         let token = sign(&claims());
         let payload_and_signature = token.split_once('.').unwrap().1;
-        for header in [r#"{"alg":"none","typ":"JWT"}"#, r#"{"alg":"HS512"}"#, r#"{"alg":"HS256","crit":["exp"]}"#] {
+        for header in [
+            r#"{"alg":"none","typ":"JWT"}"#,
+            r#"{"alg":"HS512"}"#,
+            r#"{"alg":"HS256","crit":["exp"]}"#,
+        ] {
             let forged = format!("{}.{payload_and_signature}", URL_SAFE_NO_PAD.encode(header));
-            assert_eq!(verifier().verify(&forged, NOW), Err(AuthError::Algorithm), "{header}");
+            assert_eq!(
+                verifier().verify(&forged, NOW),
+                Err(AuthError::Algorithm),
+                "{header}"
+            );
         }
         let unsigned = format!("{}.", token.rsplit_once('.').unwrap().0);
         assert_eq!(verifier().verify(&unsigned, NOW), Err(AuthError::Signature));
@@ -373,7 +440,14 @@ mod tests {
 
     #[test]
     fn malformed_tokens_are_refused() {
-        for token in ["", "abc", "a.b", "a.b.c.d", "!!!.###.$$$", &"a".repeat(MAX_TOKEN_BYTES + 1)] {
+        for token in [
+            "",
+            "abc",
+            "a.b",
+            "a.b.c.d",
+            "!!!.###.$$$",
+            &"a".repeat(MAX_TOKEN_BYTES + 1),
+        ] {
             assert!(verifier().verify(token, NOW).is_err(), "{token}");
         }
         assert_eq!(verifier().verify("", NOW), Err(AuthError::Missing));
@@ -396,16 +470,24 @@ mod tests {
             "practice":true,"iat":1,"exp":2,"jti":"j"}"#;
         let claims: Claims = serde_json::from_str(json).unwrap();
         assert!(claims.practice);
-        assert_eq!(claims.budget, BudgetClaim { seconds_left: 3600, cents_left: 250 });
+        assert_eq!(
+            claims.budget,
+            BudgetClaim {
+                seconds_left: 3600,
+                cents_left: 250
+            }
+        );
         assert_eq!(claims.budget_micros(), 2_500_000);
-        let missing_budget = json.replace(r#""budget":{"seconds_left":3600,"cents_left":250},"#, "");
+        let missing_budget =
+            json.replace(r#""budget":{"seconds_left":3600,"cents_left":250},"#, "");
         assert!(serde_json::from_str::<Claims>(&missing_budget).is_err());
     }
 
     #[test]
     fn the_previous_secret_still_verifies_during_a_rotation() {
         let old = "the-previous-secret-still-long-enough-0001";
-        let rotating = TokenVerifier::new(vec![Secret::new(SECRET), Secret::new(old)], "echoledger");
+        let rotating =
+            TokenVerifier::new(vec![Secret::new(SECRET), Secret::new(old)], "echoledger");
         let token = TokenSigner::new(Secret::new(old)).sign(&claims());
         assert!(rotating.verify(&token, NOW).is_ok());
         assert_eq!(verifier().verify(&token, NOW), Err(AuthError::Signature));
@@ -414,7 +496,9 @@ mod tests {
     #[test]
     fn errors_never_carry_the_token() {
         let token = sign(&claims());
-        let error = verifier().verify_for_session(&token, "01JOTHER", NOW).unwrap_err();
+        let error = verifier()
+            .verify_for_session(&token, "01JOTHER", NOW)
+            .unwrap_err();
         let shown = format!("{error} {error:?} {} {}", error.code(), error.reason());
         assert!(!shown.contains(&token[..20]));
     }
