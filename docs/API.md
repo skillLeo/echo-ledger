@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-e (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-f (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-f: `503 server_busy` on picture uploads when the server is decoding as many pictures as it allows.
 2.0.0-e: meeting assets (v1.8 P4): screens' `file_name` and `said`, near-duplicates, 120 an hour, 320 px thumbnails,
 the pack's `text` format, `screens/` in the ZIP, parts of the printed pack.
 2.0.0-d: inviting people (email invitations with 1/7/30 days, invite links, seats) and help (guides, what's new,
@@ -1216,6 +1217,9 @@ unless a share link of the recording allows downloads.
   5 minutes, at most 2 pixels differing by more than 12 shades of grey at 640 px) is that screen: `200` with the
   existing screen, as for a byte-identical picture. A picture not the size it claims, above 25 MP or longer than 4 to 1
   is never compared and is kept as its own screen.
+- `503 server_busy` (since 2.0.0-f): `POST /sessions/{id}/screens` and `POST /upgrade-requests/{id}/proofs` when the
+  server is already decoding as many pictures as it allows. Nothing is kept; `Retry-After: 5`. Apps send the same picture
+  again later; it is not a failure of the picture.
 - At most 400 screens a recording and at most 120 in any hour of it; both answer `409 too_many_screens` ("This
   recording already keeps 120 screens in an hour."). Thumbnails are 320 px wide WebP from v1.8 (480 before; payment
   receipts stay 480).
