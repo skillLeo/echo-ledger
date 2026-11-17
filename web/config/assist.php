@@ -77,6 +77,8 @@ return [
     'report' => [
         'model' => 'claude-sonnet-5-5',
         'max_output_tokens' => 6000,
+        // A report made again (a late post from the relay) asks the model at most this many times in all.
+        'max_runs' => 3,
         'transcript_chars' => 60000,
         'long_pause_ms' => 3000,
         // Counted as whole words or phrases, ignoring case.

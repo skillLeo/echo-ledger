@@ -23,6 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string $source_type call | file | user
  * @property string|null $source_id
  * @property int|null $at_ms
+ * @property string|null $assist_session_id the Live Assist session whose report added it (v1.9 L7)
  * @property Carbon $created_at
  */
 class ClientMemoryItem extends Model
@@ -31,7 +32,7 @@ class ClientMemoryItem extends Model
 
     public const KINDS = ['scope', 'decision', 'question', 'change'];
 
-    protected $fillable = ['workspace_id', 'client_id', 'kind', 'text', 'happened_on', 'pinned', 'source_type', 'source_id', 'at_ms'];
+    protected $fillable = ['workspace_id', 'client_id', 'kind', 'text', 'happened_on', 'pinned', 'source_type', 'source_id', 'at_ms', 'assist_session_id'];
 
     /** @return array<string, string> */
     protected function casts(): array

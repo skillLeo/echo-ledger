@@ -13,6 +13,7 @@ use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistTurn;
 use App\Models\CaptureSession;
+use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
@@ -191,6 +192,8 @@ final class AssistSessionController extends Controller
         }
         $session->turns()->delete();
         $session->suggestions()->delete();
+        // The action items its report added to a project's memory go with it; lines a person pinned stay.
+        ClientMemoryItem::query()->withoutGlobalScopes()->where('assist_session_id', $session->id)->where('pinned', false)->delete();
         $session->forceFill(['report' => null, 'summary' => null, 'facts' => null, 'report_status' => 'none'])->save();
         $session->delete();
 

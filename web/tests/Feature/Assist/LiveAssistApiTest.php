@@ -390,7 +390,7 @@ describe('a session', function () {
             $api->postJson($uri, ['turns' => $turns])->assertStatus(409)->assertJsonPath('code', 'session_ended');
         }
         $report = $api->getJson("/api/assist/sessions/{$id}/report")->assertOk();
-        expect($report->json('questions'))->toBe([['at_ms' => 81200, 'text' => 'What is your notice period?']])
+        expect($report->json('qa.0'))->toMatchArray(['at_ms' => 81200, 'question' => 'What is your notice period?', 'answer' => 'One month.'])
             ->and($report->json('turns'))->toBe(2);
         expect($api->getJson('/api/assist/sessions')->json('data.0'))->toMatchArray(['id' => $id, 'status' => 'ended', 'report' => 'ready']);
     });
