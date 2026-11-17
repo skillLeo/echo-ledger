@@ -16,8 +16,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -109,7 +111,9 @@ class AssistHttpMessagesTest {
 
     private val ready = AssistMessage.Ready("s1", LiveMode.Balanced, listOf(LiveMode.Balanced), resumed = false, meetingType = null)
 
-    private fun card(case: Case) = AssistCard.reduce(listOf(ready, case.error))
+    /** The card after the client's error; 426 also ends the session (the client ends it), so the card says so. */
+    private fun card(case: Case) =
+        AssistCard.reduce(listOfNotNull(ready, case.error, AssistMessage.Ended.takeIf { case.problem == AssistProblem.UpdateApp }))
 
     @Test
     fun eachRefusalIsItsOwnProblemOnTheCard() {
@@ -127,13 +131,20 @@ class AssistHttpMessagesTest {
                 language = l
                 compose.waitForIdle()
                 compose.onNodeWithText(if (l == EchoLanguage.Urdu) c.ur else c.en).assertIsDisplayed()
+                // An app too old ends the session: the card says it ended and offers nothing to tap.
+                val help = res.getString(R.string.v2_assist_help_now)
+                if (c.problem == AssistProblem.UpdateApp) {
+                    if (l == EchoLanguage.English) compose.onNodeWithText(res.getString(R.string.v2_assist_ended)).assertIsDisplayed()
+                    compose.onAllNodesWithText(help).assertCountEquals(0)
+                    compose.onAllNodesWithText("ابھی مدد کریں").assertCountEquals(0)
+                }
             }
         }
     }
 
     @Test
     fun theStartScreenSaysUpdateAndCantConnectInUrduToo() {
-        var result by mutableStateOf<AssistHub.Start>(AssistHub.Start.Refused(AssistHub.UPDATE_APP))
+        var result by mutableStateOf<AssistHub.Start>(AssistHub.Start.UpdateApp)
         compose.setContent {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.Urdu) {
                 V2AssistStart(onBack = {}, onRecord = {}, start = { result }, cardAllowed = { true }, showCard = {}, onAllowCard = {})
@@ -148,7 +159,7 @@ class AssistHttpMessagesTest {
         }
         tapStart()
         compose.onNodeWithText(cases[0].ur).assertIsDisplayed()
-        result = AssistHub.Start.Failed(AssistHub.RELAY_DOWN)
+        result = AssistHub.Start.CantConnect
         tapStart()
         compose.onNodeWithText(cases[1].ur).assertIsDisplayed()
     }

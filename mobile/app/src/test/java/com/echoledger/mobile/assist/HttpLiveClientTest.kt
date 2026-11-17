@@ -263,6 +263,38 @@ class HttpLiveClientTest {
     }
 
     @Test
+    fun `a refusal body past 64 KiB is read from its start, and the session goes on`() {
+        val live = client()
+        live.start()
+        // The status alone can't say it (a 409 is also an ended session): the code at the body's start does.
+        sse.refuse(409, """{"code":"session_active","message":"${"x".repeat(200 * 1024)}"}""")
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        waitFor("the 409") { events.any { it is RelayEvent.Error } }
+        assertEquals("session_active", events.filterIsInstance<RelayEvent.Error>().single().code)
+        // Nothing waits on the rest of the body: the next message goes out.
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        sse.next()
+        sse.next().end()
+        assertTrue(ended.isEmpty())
+    }
+
+    @Test
+    fun `another live session of this person reads as busy, and this one goes on`() {
+        val live = client()
+        live.start()
+        sse.refuse(409, """{"code":"session_active","message":"A session is on.","session_id":"old-1"}""")
+        live.send(ClientMessage.Command(SendKind.HelpNow))
+        waitFor("the 409") { events.any { it is RelayEvent.Error } }
+        val busy = events.filterIsInstance<RelayEvent.Error>().single()
+        assertEquals("session_active", busy.code)
+        assertEquals(
+            com.echoledger.mobile.ui.v2.assist.AssistProblem.Busy,
+            com.echoledger.mobile.ui.v2.assist.AssistCard.problemOf(busy.code, busy.retry, busy.fatal)
+        )
+        assertTrue("the session goes on", ended.isEmpty())
+    }
+
+    @Test
     fun `a live address on another host is never sent the device token`() {
         assertNull(api.assistLive("https://elsewhere.example/api/assist/sessions/a1/live", "{}"))
         assertNull(api.assistLive(sse.base.replace("http://", "https://") + "/api/assist/sessions/a1/live", "{}"))

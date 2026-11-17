@@ -308,7 +308,8 @@ class HttpLiveClient(
     /** A POST refused before its stream began. */
     private fun refused(status: Int, body: String) {
         val o = runCatching { com.echoledger.mobile.data.ApiJson.parseToJsonElement(body).jsonObject }.getOrNull()
-        val code = (o?.get("code") as? JsonPrimitive)?.contentOrNull
+        // A body cut at its first 64 KiB is no whole JSON: its code is read from its start.
+        val code = (o?.get("code") as? JsonPrimitive)?.contentOrNull ?: CODE.find(body)?.groupValues?.get(1)
         val words = (o?.get("message") as? JsonPrimitive)?.contentOrNull
         when {
             status == 401 || status == 404 || (status == 409 && code != "session_active") -> end(RelayEnd.Closed)
@@ -317,6 +318,9 @@ class HttpLiveClient(
                 problem("app_update_required", AssistHub.UPDATE_APP, retry = false, fatal = true)
                 end(RelayEnd.Refused)
             }
+
+            // Another live session of this person is on (docs/API_ASSIST.md: a second live session while one runs).
+            status == 409 && code == "session_active" -> problem("session_active", words ?: BUSY, retry = true)
 
             status == 429 -> problem("rate_limited", words ?: TOO_FAST, retry = true)
 
@@ -341,6 +345,11 @@ class HttpLiveClient(
         const val MAX_REFUSAL_BYTES = 64 * 1024L
 
         const val CONNECTION_FAILED = "Live Assist couldn't reach the server. Try again."
+        const val BUSY = "Live Assist is busy right now. Trying again."
+
+        /** `"code": "…"` near the start of a refusal's body. */
+        private val CODE = Regex("\"code\"\\s*:\\s*\"([a-z_]+)\"")
+
         const val TOO_FAST = "Too many requests. Wait a moment and try again."
     }
 }

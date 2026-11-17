@@ -93,8 +93,11 @@ class SseStandIn : Closeable {
                         "Connection: close\r\n\r\n"
                     ).toByteArray()
             )
-            out.write(text)
-            out.flush()
+            // A client that reads only the start of a large body closes the connection under the rest.
+            runCatching {
+                out.write(text)
+                out.flush()
+            }
             client.close()
         } else {
             out.write(
