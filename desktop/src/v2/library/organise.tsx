@@ -3,7 +3,8 @@
 // dialogs behind Move, Label, Rename and Transcribe. Selection mode, the row ⋮, the right-click menu and the recording
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
-import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type TranscribeEstimate } from "../../lib/ipc";
+import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type TranscribeEstimate, type TranscriptionLanguage } from "../../lib/ipc";
+import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
 import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
 import { projectLabel } from "../../lib/projects";
@@ -349,6 +350,44 @@ export function WhatsAppDialog({ item, text: given, hasAudio: givenAudio, onClos
         <Button disabled={loading || !!working} loading={working === "link"} loadingLabel="Making the link…" onClick={() => void sendLink()}>Link (works for 7 days)</Button>
         <p className="el-caption el-secondary">Anyone with it can read{hasAudio ? " and listen" : ""} for 7 days.</p>
       </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Change language & re-transcribe: the language the recording is in, then a new transcript in it. The current one stays
+ * until the new one is ready. "English only" on a recording with Urdu in it is said once (the engine would translate).
+ */
+export function LanguageDialog({ item, onClose, say }: { item: LibraryItem; onClose: () => void; say: Say }) {
+  const [language, setLanguage] = useState<string>(item.language ?? "");
+  const [warned, setWarned] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const risk = language === "en" && englishOnlyRisk(item.transcript?.final_language, item.transcript?.preview);
+  const options = [
+    ...MAIN_LANGUAGES.map((o) => ({ value: o.value ?? "", label: menuLabel(o) })),
+    ...MORE_LANGUAGES.map((o) => ({ value: o.value ?? "", label: menuLabel(o) })),
+  ];
+  const run = async () => {
+    if (risk && !warned) {
+      setWarned(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.retranscribe(item.id, (language || null) as TranscriptionLanguage | null);
+      say(`Re-transcribing in ${languageLabel(language || null)}. The current transcript stays until the new one is ready.`);
+      onClose();
+    } catch (e) {
+      say(errorMessage(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <Dialog open title="Change language and re-transcribe" onClose={onClose}
+      description={warned ? "English only would translate the Urdu in this recording into English. Choose Urdu (with English words) to keep what was said." : "The current transcript stays until the new one is ready."}
+      actions={<><Button onClick={onClose}>Cancel</Button>
+        <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void run()}>{warned ? "Re-transcribe anyway" : "Re-transcribe"}</Button></>}>
+      <Select label="Language" options={options} value={language} onChange={(v) => { setLanguage(v); setWarned(false); }} />
     </Dialog>
   );
 }

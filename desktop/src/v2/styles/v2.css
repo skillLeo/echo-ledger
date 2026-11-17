@@ -546,6 +546,14 @@
 .el-segment__time.el-num { font-size: var(--el-text-caption-size); }
 .el-segment--active { background: var(--el-role-accent-soft); margin-inline: calc(var(--el-space-12) * -1); padding-inline: var(--el-space-12); border-radius: var(--el-radius-sm); border-block-end-color: transparent; }
 .el-segment__text { min-inline-size: 0; overflow-wrap: anywhere; }
+.el-segment__play { border: 0; padding: 0; background: transparent; cursor: pointer; text-align: start; }
+.el-segment__play:hover { color: var(--el-role-accent-text); text-decoration: underline; }
+.el-transcript--play .el-segment__text { cursor: pointer; }
+.el-segment__note { color: var(--el-role-text-secondary); font-size: var(--el-text-caption-size); margin-inline-start: var(--el-space-8); }
+/* The recording page's tools: Show as above the transcript, the action row under the player. */
+.el-recording__actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-recording__viewbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8) var(--el-space-12); margin-block-end: var(--el-space-8); }
+.el-recording__toggles { display: flex; flex-wrap: wrap; gap: var(--el-space-16); padding: 0 var(--el-space-16) var(--el-space-12); }
 :lang(ur) .el-segment__text { font-size: var(--el-text-urdu-body-size); line-height: var(--el-text-urdu-body-line); }
 
 /* ---- The app shell (ui_v2.shell) -------------------------------------------------------------------------- */

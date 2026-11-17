@@ -375,6 +375,9 @@ export const LucideFolderInputIcon = L(["M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69
 export const LucideInfinityIcon = L(["M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z"]);
 export const LucideListChecksIcon = L(["m3 17 2 2 4-4", "m3 7 2 2 4-4", "M13 6h8", "M13 12h8", "M13 18h8"]);
 export const LucideSendIcon = L(["M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z", "m21.854 2.147-10.94 10.939"]);
+/** Back and forward 10 seconds in the player (Lucide rotate-ccw, rotate-cw). */
+export const LucideRotateCcwIcon = L(["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5"]);
+export const LucideRotateCwIcon = L(["M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", "M21 3v5h-5"]);
 export const LucideLaptopIcon = L(["M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"]);
 export const LucideSearchIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Svg>

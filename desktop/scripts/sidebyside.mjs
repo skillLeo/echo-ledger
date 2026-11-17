@@ -68,6 +68,24 @@ export const PAIRS = [
       await page.getByRole("button", { name: /^More for / }).first().click({ force: true });
       await page.waitForTimeout(400);
     })]],
+  ["recording", "The recording page: classic's detail | the new design's page with ⋮ open (Organise · Export · Danger)",
+    [classic("library"), null],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Recording actions" }).click();
+      await page.waitForTimeout(400);
+    })]],
+  ["recording-menus", "Copy and Export: classic's copy row and Export… select | the new design's Copy ▾ and Export ▾ menus with Show as",
+    [classic("library"), steps(async (page) => {
+      await page.locator("select", { hasText: "Export…" }).first().focus();
+    })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Kick-off: Contoso website" }).first().click();
+      await page.waitForTimeout(1200);
+      await page.getByRole("button", { name: "Export", exact: true }).click();
+      await page.waitForTimeout(400);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });

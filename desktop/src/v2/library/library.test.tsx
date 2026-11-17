@@ -175,8 +175,9 @@ describe("LibraryV2", () => {
         "Screen 1 · 0:04: The proforma invoice", "Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00",
       ]);
       const lines = within(screen.getByRole("list", { name: "Transcript" })).getAllByRole("listitem").filter((li) => li.classList.contains("el-segment"));
-      expect(within(lines[0]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 1 · 0:04: The proforma invoice"]);
-      expect(within(lines[1]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00"]);
+      // Each line starts with its "Play from" time, then the screens of its moment.
+      expect(within(lines[0]).getAllByRole("button").map((b) => b.getAttribute("aria-label")).slice(1)).toEqual(["Screen 1 · 0:04: The proforma invoice"]);
+      expect(within(lines[1]).getAllByRole("button").map((b) => b.getAttribute("aria-label")).slice(1)).toEqual(["Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00"]);
     });
 
     it("the viewer: what was said around it, the text on it, its file name, the next one, Play from here", async () => {
@@ -284,7 +285,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     expect(callsOf("delete_session")).toEqual([{ id: "bilal" }]);
     // The deleted recording's place goes to the next one in the list.
@@ -311,7 +313,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     expect(screen.getByRole("button", { name: "Voice note" })).toHaveFocus();
     const search = screen.getByRole("searchbox");
@@ -335,7 +338,8 @@ describe("LibraryV2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
     await act(flushAsync);
     respond("library_list", ITEMS.slice(1));
-    fireEvent.click(screen.getByRole("button", { name: "Delete" }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
     await act(flushAsync);
     respond("library_list", ITEMS);
     fireEvent.click(within(screen.getByRole("status", { name: "Notifications" })).getByRole("button", { name: "Undo" }));
@@ -423,7 +427,8 @@ describe("LibraryV2", () => {
       await act(flushAsync);
       expect(screen.getByRole("alert", { name: "The transcript didn't load" })).toBeInTheDocument();
       expect(screen.getByText(/0:00 \/ 18:24/)).toBeInTheDocument();
-      fireEvent.click(screen.getByRole("button", { name: "Save audio" }));
+      fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+      fireEvent.click(screen.getByRole("menuitem", { name: "Save audio" }));
       await act(flushAsync);
       expect(callsOf("save_audio")).toEqual([{ id: "bilal" }]);
       fireEvent.click(screen.getByRole("tab", { name: "Details" }));

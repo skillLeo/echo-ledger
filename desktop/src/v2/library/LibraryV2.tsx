@@ -21,6 +21,9 @@ import {
   TranscribeDialog, WhatsAppDialog,
 } from "./organise";
 
+/** What the recording page adds to the one menu: its language item, its view-aware Export ▸, Save audio. */
+export type RecordingMenuParts = { organise?: MenuItem[]; export?: MenuItem; export_more?: MenuItem[]; whatsapp?: () => void };
+
 type Organise =
   | { kind: "move" | "label" | "transcribe"; ids: string[]; title?: string | null; current?: string | null }
   | { kind: "rename" | "whatsapp"; item: LibraryItem };
@@ -214,7 +217,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
    * The one menu for a recording or for the picked ones: Organise, Export, then Delete, last and red. `without` leaves
    * out what the selection bar already shows as buttons.
    */
-  const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set()): MenuItem[] => {
+  const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set(), own: RecordingMenuParts = {}): MenuItem[] => {
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
     const all = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
@@ -235,9 +238,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
         ? { label: `Transcribe (${MAX_TRANSCRIBE} at a time)`, icon: Icons.TranscriptIcon, group: "Organise", disabled: true }
         : { label: "Transcribe…", icon: Icons.TranscriptIcon, group: "Organise", onPick: () => setOrganise({ kind: "transcribe", ids: [...ids] }) });
     }
-    add("export", exportMenu((format) => void exportRecordings(ids, format, say)));
+    for (const item of own.organise ?? []) add(item.label, { group: "Organise", ...item });
+    add("export", own.export ?? exportMenu((format) => void exportRecordings(ids, format, say)));
+    for (const item of own.export_more ?? []) add(item.label, { group: "Export", ...item });
     add("ai", { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Export", onPick: () => void copyForAiToClipboard(chosen, say) });
-    if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: () => setOrganise({ kind: "whatsapp", item: one }) });
+    if (one) add("whatsapp", { label: "Send to WhatsApp…", icon: Icons.SendIcon, group: "Export", onPick: own.whatsapp ?? (() => setOrganise({ kind: "whatsapp", item: one })) });
     add("delete", { label: ids.length === 1 ? "Delete" : `Delete ${ids.length}`, icon: Icons.TrashIcon, group: "Danger", danger: true, shortcut: "Del", onPick: () => deleteOrAsk(ids) });
     return list.map(({ key: _key, ...item }) => item);
   };
@@ -308,7 +313,15 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   // Undo, Esc ends selection, J and K move between rows, X ticks the focused row.
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   keys.current = (e: KeyboardEvent) => {
-    if (open || view === "trash" || !items || typing(e.target) || organise || context) return;
+    if (organise || context || typing(e.target)) return;
+    // Esc closes the open recording and goes back to the list (its row gets focus again).
+    if (open && e.key === "Escape" && !e.defaultPrevented) {
+      e.preventDefault();
+      setOpenId(null);
+      setFocusAfter({ rowId: open.id, seq: ++seq.current });
+      return;
+    }
+    if (open || view === "trash" || !items) return;
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !e.shiftKey) {
@@ -375,7 +388,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   if (open) {
     return (
       <div className="el-root el-embedded" data-v2="library" ref={root}>
-        <RecordingPage item={open} onBack={() => setOpenId(null)} onDelete={(i) => void remove(i)} onMessage={(t) => say(t)} />
+        <RecordingPage item={open} onBack={() => setOpenId(null)} onMessage={(t) => say(t)}
+          menu={(own) => menuFor([open.id], new Set(["open"]), own)} />
         {dialogs}
         {toasts}
       </div>
