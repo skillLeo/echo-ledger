@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (screens). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_screens_title">Screens</string>
+    <string name="v2_screens_label">Screen %1$d · %2$s</string>
+    <string name="v2_screens_count_one">1 screen</string>
+    <string name="v2_screens_count_other">%1$d screens</string>
+    <string name="v2_screens_position">%1$d of %2$d</string>
+    <string name="v2_screens_said">What was said</string>
+    <string name="v2_screens_said_none">Nothing was said in the 15 seconds around it.</string>
+    <string name="v2_screens_said_loading">The transcript isn\'t ready yet.</string>
+    <string name="v2_screens_play_from_here">Play from here</string>
+    <string name="v2_screens_text_on_screen">Text on the screen</string>
+    <string name="v2_screens_file">File</string>
+    <string name="v2_screens_picture_failed">The picture couldn\'t be loaded.</string>
+    <string name="v2_screens_previous">Previous screen</string>
+    <string name="v2_screens_next">Next screen</string>
+    <string name="v2_screens_open">Open the screen</string>
+</resources>

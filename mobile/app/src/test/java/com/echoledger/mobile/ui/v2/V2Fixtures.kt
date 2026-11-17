@@ -16,7 +16,8 @@ object V2Fixtures {
         durationMs: Long,
         final: String?,
         preview: String? = null,
-        client: String? = null
+        client: String? = null,
+        screens: Int? = null
     ) = LibraryItem(
         id = id,
         sourceDevice = "phone",
@@ -27,7 +28,8 @@ object V2Fixtures {
         durationMs = durationMs,
         status = if (final == "failed") "failed" else "completed",
         transcript = final?.let { TranscriptSummary(finalStatus = it, finalTranscriptId = "01JT$id", preview = preview) },
-        updatedAt = started
+        updatedAt = started,
+        screenCount = screens
     )
 
     fun library(urdu: Boolean = false): List<LibraryItem> {
@@ -49,7 +51,8 @@ object V2Fixtures {
                 "google_meet",
                 "2026-11-17T04:00:00Z",
                 2_895_000,
-                "processing"
+                "processing",
+                screens = 14
             ),
             item(
                 "01JD",
@@ -77,7 +80,8 @@ object V2Fixtures {
                 "2026-11-02T10:00:00Z",
                 4_000_000,
                 "completed",
-                client = t("Qureshi Builders", "قریشی بلڈرز")
+                client = t("Qureshi Builders", "قریشی بلڈرز"),
+                screens = 6
             )
         )
     }

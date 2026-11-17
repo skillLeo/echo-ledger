@@ -2,6 +2,8 @@ package com.echoledger.mobile.ui.v2.components
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.automirrored.outlined.Notes
 import androidx.compose.material.icons.outlined.BookmarkBorder
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Forward10
 import androidx.compose.material.icons.outlined.GraphicEq
 import androidx.compose.material.icons.outlined.Home
+import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Mic
@@ -74,6 +77,11 @@ object EchoIcons {
     val Folder: ImageVector get() = Icons.Outlined.FolderOpen
     val SignOut: ImageVector get() = Icons.AutoMirrored.Outlined.Logout
     val Captions: ImageVector get() = Icons.Outlined.ClosedCaption
+
+    /** A recording's screen moments (the Screens strip, a Library row's count). */
+    val Screens: ImageVector get() = Icons.Outlined.Image
+    val Previous: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowLeft
+    val Next: ImageVector get() = Icons.AutoMirrored.Outlined.KeyboardArrowRight
     val Todo: ImageVector get() = Icons.Outlined.RadioButtonUnchecked
     val Restore: ImageVector get() = Icons.Outlined.RestoreFromTrash
 

@@ -2,8 +2,10 @@ package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -222,7 +224,17 @@ fun V2LibraryContent(
                         title = row.title,
                         meta = row.meta,
                         titleEnd = row.time,
-                        metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
+                        metaEnd = {
+                            // The screens icon and count (meeting assets) before the length, when it has any.
+                            val screens = row.item.screenCount ?: 0
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+                            ) {
+                                if (screens > 0) ScreensCountMark(screens)
+                                Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary)
+                            }
+                        },
                         status = statusBadge(row.status, text),
                         leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
                         tall = true,
