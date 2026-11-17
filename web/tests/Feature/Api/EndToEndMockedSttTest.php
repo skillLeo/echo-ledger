@@ -108,8 +108,8 @@ describe('a recording the user keeps', function () {
         $this->flushHeaders()->get($path)->assertOk()->assertSee('Hi, thanks for calling.');
         expect(unscoped(fn () => ShareLinkView::query()->where('outcome', 'viewed')->count()))->toBe(1);
 
-        // 10. Retention: past the window the recording goes to the undo bin; the link stops working at once and the
-        //     bin then erases the audio and the transcript.
+        // 10. Retention never removes a transcribed recording (2.1.0-a, D1): it stays past the window. Deleted by its
+        //     owner, it goes to the undo bin; the link stops working at once and the bin then erases audio and transcript.
         $old = now()->subDays(40);
         CaptureSession::withTrashed()->whereKey($sessionId)->update(['created_at' => $old, 'updated_at' => $old]);
         Recording::query()->where('capture_session_id', $sessionId)->update(['created_at' => $old]);
@@ -117,6 +117,8 @@ describe('a recording the user keeps', function () {
         $storedPath = unscoped(fn () => Recording::query()->where('capture_session_id', $sessionId)->value('stored_path'));
 
         Artisan::call('recordings:retention');
+        $this->asToken($token)->getJson("/api/sessions/{$sessionId}")->assertOk();
+        $this->asToken($token)->deleteJson("/api/sessions/{$sessionId}")->assertSuccessful();
 
         $this->asToken($token)->getJson("/api/sessions/{$sessionId}")->assertNotFound();
         $this->flushHeaders()->get($path)->assertNotFound();

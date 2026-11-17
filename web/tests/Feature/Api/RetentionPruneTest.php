@@ -7,9 +7,11 @@ use App\Enums\TranscriptStatus;
 use App\Models\CaptureSession;
 use App\Models\Recording;
 use App\Models\Transcript;
+use App\Models\User;
 use App\Models\WebhookEvent;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\PersonalAccessToken;
 use Tests\Feature\Api\Support\Fixtures;
@@ -21,11 +23,14 @@ beforeEach(function () {
     [$this->device] = $this->enroll();
 });
 
-/** A session with a ready encrypted recording and a transcript, created $days days ago. */
-function agedSession(object $test, int $days, array $attributes = []): CaptureSession
+/**
+ * A session with a ready encrypted recording, created $days days ago. Since 2.1.0-a (D1) retention only removes audio
+ * nobody transcribed, so its transcript failed unless $transcribed.
+ */
+function agedSession(object $test, int $days, array $attributes = [], bool $transcribed = false): CaptureSession
 {
     $session = $test->makeReadySession($test->device, Fixtures::audio(3000), array_merge(['status' => 'completed'], $attributes));
-    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => TranscriptStatus::Completed, 'text' => 'kept or not']);
+    $session->transcripts()->create(['kind' => TranscriptKind::Final, 'provider' => 'assemblyai', 'status' => $transcribed ? TranscriptStatus::Completed : TranscriptStatus::Failed, 'text' => $transcribed ? 'kept or not' : null]);
     $at = now()->subDays($days);
     CaptureSession::withTrashed()->whereKey($session->id)->update(['created_at' => $at, 'updated_at' => $at]);
     Recording::query()->where('capture_session_id', $session->id)->update(['created_at' => $at]);
@@ -42,6 +47,29 @@ function prune(): void
 }
 
 describe('retention window', function () {
+    it('never removes a transcribed, starred or shared-workspace recording, however old (2.1.0-a, D1)', function () {
+        $transcribed = agedSession($this, 400, [], true);
+        $starred = agedSession($this, 400, ['pinned' => true]);
+        prune();
+        expect(CaptureSession::query()->find($transcribed->id))->not->toBeNull()
+            ->and(CaptureSession::query()->find($starred->id))->not->toBeNull();
+
+        // The same untranscribed recording is removed alone, and kept once its workspace has another member.
+        $shared = agedSession($this, 400);
+        $other = User::factory()->create();
+        DB::table('workspace_user')->insert(['workspace_id' => $shared->workspace_id, 'user_id' => $other->id, 'role' => 'member', 'created_at' => now(), 'updated_at' => now()]);
+        prune();
+        expect(CaptureSession::query()->find($shared->id))->not->toBeNull();
+    });
+
+    it('still removes audio nobody transcribed after 30 days', function () {
+        $old = agedSession($this, 31);
+
+        prune();
+
+        expect(CaptureSession::query()->find($old->id))->toBeNull();
+    });
+
     it('bins recordings older than the retention, erases them after 48 hours and keeps newer ones', function () {
         $old = agedSession($this, 40);
         $fresh = agedSession($this, 5);

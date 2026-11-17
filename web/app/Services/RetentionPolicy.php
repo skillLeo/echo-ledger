@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Enums\SessionStatus;
+use App\Enums\TranscriptStatus;
 use App\Exceptions\ApiError;
 use App\Models\CaptureSession;
 use App\Models\Client;
@@ -22,7 +23,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 
 /**
- * Retention controls (plan B17). Recordings older than their retention (the client's own, else the general setting,
+ * Retention controls (plan B17). Since 2.1.0-a only recordings without a finished transcript, not starred, not kept and
+ * not in a shared workspace. Recordings older than their retention (the client's own, else the general setting,
  * and since v1.5 never longer than their workspace plan's days) go to the undo bin unless they are kept; the bin erases
  * audio and text 48 hours after a delete. Runs hourly.
  */
@@ -102,11 +104,23 @@ final class RetentionPolicy
         return $own;
     }
 
+    /**
+     * Workspaces with more than one member: their recordings are never removed automatically (D5).
+     */
+    public static function sharedWorkspaces(): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('workspace_user')->select('workspace_id')->groupBy('workspace_id')->havingRaw('count(*) > 1');
+    }
+
     /** @param Builder<CaptureSession> $query */
     private function binExpired(Builder $query, int $days): int
     {
         $moved = 0;
-        $query->where('keep_forever', false)->where('status', '!=', SessionStatus::Recording->value)
+        // Since 2.1.0-a (owner's decision D1): transcribed, starred and shared-workspace recordings are never removed
+        // automatically; only the person deletes them. What is left is audio nobody transcribed.
+        $query->where('keep_forever', false)->where('pinned', false)->where('status', '!=', SessionStatus::Recording->value)
+            ->whereDoesntHave('finalTranscript', fn (Builder $t) => $t->where('status', TranscriptStatus::Completed->value))
+            ->whereNotIn('workspace_id', self::sharedWorkspaces())
             ->where('created_at', '<', now()->subDays($days))
             ->chunkById(100, function (Collection $sessions) use (&$moved): void {
                 foreach ($sessions as $session) {

@@ -392,7 +392,7 @@ class Plans extends Page implements HasTable
                 TextInput::make('storage_gb')->label('Storage (GB)')->numeric()->minValue(0)->maxValue(1000000),
                 TextInput::make('max_devices')->label('Devices per person')->integer()->minValue(0)->maxValue(100000),
                 TextInput::make('retention_days')->label('Retention (days)')->integer()->minValue(1)->maxValue(3650)
-                    ->helperText('Applies to recordings made after it is set; older ones are never deleted by it.'),
+                    ->helperText('Applies to recordings made after it is set, and only to those nobody transcribed or starred; older ones are never deleted by it.'),
                 TextInput::make('seats')->integer()->minValue(1)->maxValue(100000),
                 TextInput::make('ai_credits_usd')->label('AI credits (US$ a month)')->numeric()->minValue(0)->maxValue(100000),
                 TextInput::make('max_file_minutes')->label('Longest recording (minutes)')->integer()->minValue(1)->maxValue(100000),

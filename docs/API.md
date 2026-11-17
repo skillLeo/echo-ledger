@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.1.0-a (2026-11-17, proposed; frozen for the sprint at 2.0.0-f until the lead accepts it)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.1.0-a (2026-11-17, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
 2.1.0-a: call rules, the after-call choice and audio clean-up (docs/PLAN_CALL_RULES.md): `GET/PUT/DELETE /api/call-rules…`,
 `POST /api/sessions/{id}/choice`, batch `POST /api/sessions/transcribe[/estimate]`, `GET/PUT /api/account/privacy`;
 library items gain `choice` and `retention`; `GET /api/config` gains `call_rules`; the plan limit `audio_retention_days`
@@ -837,8 +837,10 @@ like any deletion. The retention in days:
   Never). Existing plans get the same defaults, which touch no existing recording (none is audio only).
 - the person's own choice (`GET/PUT /api/account/privacy`) can only shorten it: effective = the shorter of the two, and
   Never only where the allowance is Never. An override above the plan is refused (`422 above_plan`).
-- This does not replace the retention of 1.5 (`retention_days`, "Recordings older than…", B17), which moves *every*
-  recording that is not kept to the bin: it keeps working as it does today (see the lead's decision D1 below).
+- **Change to the retention of 1.5 (B17, `retention_days`, D1):** until 2.1.0-a it moved *every* recording that was not
+  kept to the bin after the general or plan days, transcribed ones too. Since 2.1.0-a it never moves a recording with a
+  finished transcript, a starred (`pinned`) one or one in a shared workspace; it still moves audio nobody transcribed
+  (no transcript, or a failed one) that is not kept, after the same days.
 - Warning: three days before, `cleanup_soon` (above) shows on Home and the console's Home line; once a week (Monday)
   one Activity entry says how many will go and on which day. No push for any item, ever.
 
@@ -862,16 +864,10 @@ Transcribe all, the storage line, the rules pages) show under `ui_v2.after_call`
 `ui_v2.settings`; the admin Retention numbers under `ui_v2.admin`. The server's behaviour (rules, the daily clean-up)
 needs no flag: it acts only on recordings whose choice is `keep_audio`, which exist only after a rule or a choice.
 
-**Decisions for the lead before this is frozen.**
-- D1. Since 1.5 (B17) the hourly retention moves **every** recording that is not kept (transcribed ones too) to the bin after
-  the general `retention_days` (30 by default) or the plan's days. docs/PLAN_CALL_RULES.md says transcribed recordings are
-  never deleted automatically. This contract leaves 1.5's rule untouched (no behaviour change) and adds the new clean-up
-  beside it. If the owner wants transcribed recordings exempt, say so: it changes today's behaviour and needs its own entry.
-- D2. "Ask me (follow the default)" is two things here: *Use my default* = no rule; *Ask me* = the stored action `ask`.
-- D3. Groups (saved, unknown, favourites) sit between a contact and a source in the precedence; the plan lists only contact
-  > source > default.
-- D4. A person with no stored default keeps transcribing every recording (legacy); only new accounts start on `ask`.
-- D5. "Workspace" means a workspace with other members; a person's own one-member workspace is not protected.
+**Decisions (the lead, 2026-11-17):** D1 transcribed, starred and shared-workspace recordings are never removed
+automatically (the change to 1.5's retention above); D2 *Use my default* = no rule, *Ask me* = the stored action `ask`;
+D3 groups sit between a contact and a source; D4 a person with no stored default keeps transcribing (legacy), new
+accounts start on `ask`; D5 "workspace" means one with other members.
 
 ### `GET /api/clients` — `library:read`
 `200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "retention_days": null, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`

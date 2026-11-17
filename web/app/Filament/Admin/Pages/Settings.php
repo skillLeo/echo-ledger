@@ -458,12 +458,12 @@ class Settings extends Page
                 ]),
                 'storage' => $this->tab('storage', [
                     $this->section('retention')->columns(2)->schema([
-                        Select::make('retention_preset')->label('Delete recordings & transcripts after')->live()->dehydrated(false)->selectablePlaceholder(false)
+                        Select::make('retention_preset')->label('Delete untranscribed recordings after')->live()->dehydrated(false)->selectablePlaceholder(false)
                             ->options(['7' => '7 days', '14' => '14 days', '30' => '30 days', 'custom' => 'Custom'])
                             ->afterStateUpdated(fn (?string $state, Set $set) => is_numeric($state) ? $set('retention_days', (int) $state) : null),
                         TextInput::make('retention_days')->label('Days')
                             ->numeric()->minValue(1)->maxValue(365)->required()
-                            ->helperText('Older recordings go to Trash, then are erased. Kept recordings and projects with their own setting are exempt.'),
+                            ->helperText('Older recordings nobody transcribed go to Trash, then are erased. Transcribed, starred and kept recordings, shared workspaces and projects with their own setting are never deleted by it.'),
                         // Since v2.0 (owner's decision 2026-11-17): Trash's time, the same the apps read (trash.keep_hours).
                         TextInput::make('trash_keep_hours')->label('Keep deleted recordings in Trash (hours)')
                             ->integer()->minValue(SettingsRepository::TRASH_HOURS_MIN)->maxValue(SettingsRepository::TRASH_HOURS_MAX)->required()
