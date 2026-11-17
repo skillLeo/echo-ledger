@@ -515,6 +515,167 @@ fn audio_processes() -> Vec<AudioProcess> {
     out
 }
 
+/// Whether the output device may be the clock of Live Translate's aggregate device (pure): only one that records
+/// nothing (no input streams). A headset's microphone in the aggregate would turn on, and Live Translate never listens
+/// to a microphone.
+pub fn output_may_clock(output_input_streams: usize) -> bool {
+    output_input_streams == 0
+}
+
+/// Live Translate on the Mac (14.2+): hears only the processes `pids` (one app's), through a private Core Audio
+/// process tap mixed down to mono, in a private aggregate device with nothing else in it. Hands `on_samples` 16 kHz
+/// mono blocks until `stop`, like Windows' `app_loopback`. The app's sound still plays as usual (the tap does not mute
+/// it). Tears down in Apple's order: stop, IOProc, aggregate, tap.
+/// NOT VERIFIED ON HARDWARE: the device session (DEVICE_BATCHES: Chrome, Zoom, a game; Safari is not listed) checks it.
+pub fn app_tap(pids: &[u32], stop: &AtomicBool, mut on_samples: impl FnMut(Vec<f32>)) -> Result<(), String> {
+    let system_object = kAudioObjectSystemObject as AudioObjectID;
+    let objects: Vec<u32> = pids
+        .iter()
+        .filter_map(|&pid| unsafe { get_u32(system_object, kAudioHardwarePropertyTranslatePIDToProcessObject, kAudioObjectPropertyScopeGlobal, Some(&(pid as i32))) })
+        .filter(|&id| id != 0)
+        .collect();
+    if objects.is_empty() {
+        return Err("This app stopped playing sound. Play something in it, then start Live Translate again.".into());
+    }
+    let numbers: Vec<_> = objects.into_iter().map(NSNumber::new_u32).collect();
+    let included = NSArray::from_retained_slice(&numbers);
+    let description = unsafe { CATapDescription::initMonoMixdownOfProcesses(CATapDescription::alloc(), &included) };
+    unsafe { description.setPrivate(true) };
+    let tap_uid = unsafe { description.UUID() }.UUIDString().to_string();
+    let mut tap: AudioObjectID = 0;
+    if unsafe { AudioHardwareCreateProcessTap(Some(&description), &mut tap) } != 0 {
+        return Err("macOS did not let EchoLedger hear this app. Allow System Audio Recording for EchoLedger in System Settings › Privacy & Security.".into());
+    }
+    let aggregate = match unsafe { tap_aggregate(&tap_uid) } {
+        Ok(aggregate) => aggregate,
+        Err(e) => {
+            unsafe { AudioHardwareDestroyProcessTap(tap) };
+            return Err(e);
+        }
+    };
+    let device_rate = unsafe { get_f64(aggregate, kAudioDevicePropertyNominalSampleRate) }.unwrap_or(48_000.0) as u32;
+
+    let (raw_tx, raw_rx) = channel::<Vec<f32>>();
+    let block = RcBlock::new(
+        move |_now: NonNull<AudioTimeStamp>, input: NonNull<AudioBufferList>, _in_time: NonNull<AudioTimeStamp>, _out: NonNull<AudioBufferList>, _out_time: NonNull<AudioTimeStamp>| {
+            let list = unsafe { input.as_ref() };
+            let buffers = unsafe { std::slice::from_raw_parts(list.mBuffers.as_ptr(), list.mNumberBuffers as usize) };
+            // The tap is the aggregate's last input stream (the only one, unless a silent output device clocks it).
+            let Some(b) = buffers.last() else { return };
+            if b.mData.is_null() || b.mNumberChannels == 0 {
+                return;
+            }
+            let samples = unsafe { std::slice::from_raw_parts(b.mData as *const f32, b.mDataByteSize as usize / 4) };
+            let _ = raw_tx.send(downmix_to_mono(samples, b.mNumberChannels as usize));
+        },
+    );
+    let queue = DispatchQueue::new("com.echoledger.translate.io", None);
+    let mut proc_id: AudioDeviceIOProcID = None;
+    if unsafe { AudioDeviceCreateIOProcIDWithBlock(NonNull::from(&mut proc_id), aggregate, Some(&queue), RcBlock::as_ptr(&block)) } != 0 {
+        unsafe {
+            AudioHardwareDestroyAggregateDevice(aggregate);
+            AudioHardwareDestroyProcessTap(tap);
+        }
+        return Err("Live Translate could not open this app's sound.".into());
+    }
+    let started = unsafe { AudioDeviceStart(aggregate, proc_id) } == 0;
+    if started {
+        let mut resampler = Resampler::new(device_rate, TARGET_RATE);
+        while !stop.load(Ordering::SeqCst) {
+            match raw_rx.recv_timeout(Duration::from_millis(100)) {
+                Ok(samples) => on_samples(resampler.process(&samples)),
+                Err(RecvTimeoutError::Timeout) => {}
+                Err(RecvTimeoutError::Disconnected) => break,
+            }
+        }
+    }
+    unsafe {
+        AudioDeviceStop(aggregate, proc_id);
+        AudioDeviceDestroyIOProcID(aggregate, proc_id);
+        AudioHardwareDestroyAggregateDevice(aggregate);
+        AudioHardwareDestroyProcessTap(tap);
+    }
+    drop(block);
+    if started { Ok(()) } else { Err("Live Translate could not start hearing this app.".into()) }
+}
+
+/// A private aggregate device holding only the tap `tap_uid`; if macOS wants a clock device, the default output device,
+/// only when it records nothing ([`output_may_clock`]).
+unsafe fn tap_aggregate(tap_uid: &str) -> Result<AudioObjectID, String> {
+    let yes: &CFType = CFBoolean::new(true);
+    let no: &CFType = CFBoolean::new(false);
+    let tap_entry = CFDictionary::<CFString, CFType>::from_slices(
+        &[&*cfstr(kAudioSubTapUIDKey), &*cfstr(kAudioSubTapDriftCompensationKey)],
+        &[&*CFString::from_str(tap_uid), no],
+    );
+    let tap_array = CFArray::from_objects(&[&*tap_entry]);
+    let name = CFString::from_str(&format!("{AGGREGATE_PREFIX}translate-{}", std::process::id()));
+    let create = |clock: Option<&str>| -> Result<AudioObjectID, i32> {
+        let uid_value = CFString::from_str(&uuid::Uuid::new_v4().to_string());
+        let mut keys = vec![
+            cfstr(kAudioAggregateDeviceUIDKey),
+            cfstr(kAudioAggregateDeviceNameKey),
+            cfstr(kAudioAggregateDeviceIsPrivateKey),
+            cfstr(kAudioAggregateDeviceIsStackedKey),
+            cfstr(kAudioAggregateDeviceTapAutoStartKey),
+            cfstr(kAudioAggregateDeviceTapListKey),
+        ];
+        let mut values: Vec<&CFType> = vec![&uid_value, &name, yes, no, yes, tap_array.as_ref()];
+        let clock_uid = clock.map(CFString::from_str);
+        let sub = clock.map(|uid| CFDictionary::<CFString, CFType>::from_slices(&[&*cfstr(kAudioSubDeviceUIDKey)], &[&*CFString::from_str(uid)]));
+        let sub_array = sub.as_ref().map(|d| CFArray::from_objects(&[&**d]));
+        if let (Some(uid), Some(list)) = (clock_uid.as_ref(), sub_array.as_ref()) {
+            keys.push(cfstr(kAudioAggregateDeviceMainSubDeviceKey));
+            values.push(uid);
+            keys.push(cfstr(kAudioAggregateDeviceSubDeviceListKey));
+            values.push(list.as_ref());
+        }
+        let key_refs: Vec<&CFString> = keys.iter().map(|k| &**k).collect();
+        let dictionary = CFDictionary::<CFString, CFType>::from_slices(&key_refs, &values);
+        let mut aggregate: AudioObjectID = 0;
+        match unsafe { AudioHardwareCreateAggregateDevice(dictionary.as_opaque(), NonNull::from(&mut aggregate)) } {
+            0 => Ok(aggregate),
+            status => Err(status),
+        }
+    };
+    match create(None) {
+        Ok(aggregate) => Ok(aggregate),
+        Err(status) => {
+            let system_object = kAudioObjectSystemObject as AudioObjectID;
+            let output = unsafe { get_u32(system_object, kAudioHardwarePropertyDefaultOutputDevice, kAudioObjectPropertyScopeGlobal, None) };
+            let silent_output = output.filter(|&device| output_may_clock(unsafe { input_stream_channels(device) }.len())).and_then(|device| unsafe { device_uid(device) });
+            match silent_output {
+                Some(uid) => create(Some(&uid)).map_err(|status| format!("Live Translate could not open this app's sound (OSStatus {status}).")),
+                None => Err(format!("Live Translate could not open this app's sound (OSStatus {status}).")),
+            }
+        }
+    }
+}
+
+/// Live Translate (macOS 14.2+): the apps playing sound now, with their processes (`translate::players`).
+fn playing() -> Vec<crate::translate::players::PlayingApp> {
+    use crate::translate::players::{Player, group};
+    let processes: Vec<Player> = audio_processes().into_iter().map(|p| Player { pid: p.pid, bundle: p.bundle, output: p.output }).collect();
+    group(&processes, std::process::id())
+}
+
+/// The apps playing sound now, each by the name macOS gives it (its running name, else a known one or its bundle id).
+pub fn playing_apps() -> Vec<(u32, String)> {
+    playing().into_iter().map(|app| (app.root, app_name(&app.bundle))).collect()
+}
+
+/// The processes of the app `pid` stands for that play sound now; none when it stopped playing.
+pub fn playing_pids(pid: u32) -> Option<Vec<u32>> {
+    crate::translate::players::pids_of(&playing(), pid)
+}
+
+fn app_name(bundle: &str) -> String {
+    use objc2_app_kit::NSRunningApplication;
+    let id = objc2_foundation::NSString::from_str(bundle);
+    let running = NSRunningApplication::runningApplicationsWithBundleIdentifier(&id);
+    running.iter().find_map(|app| app.localizedName()).map(|name| name.to_string()).unwrap_or_else(|| crate::translate::players::fallback_name(bundle))
+}
+
 /// Active-tab URLs of a running browser through Apple Events (`osascript`, 1 s timeout). Needs the Automation
 /// permission (`NSAppleEventsUsageDescription` in Info.plist); without it the script fails and the list is empty.
 fn tab_urls(application: &str, safari: bool) -> Vec<String> {
@@ -606,6 +767,12 @@ mod tests {
         assert_eq!(mic_buffer(0, 0, false), None);
         // A microphone that did not make it into the aggregate is never read from the tap's buffer.
         assert_eq!(mic_buffer(1, 1, false), None);
+    }
+
+    #[test]
+    fn live_translate_never_takes_a_device_that_records_as_its_clock() {
+        assert!(output_may_clock(0), "speakers: they record nothing");
+        assert!(!output_may_clock(1), "AirPods or a headset: their microphone would turn on");
     }
 
     #[test]

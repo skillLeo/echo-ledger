@@ -17,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use self::gate::FRAME_SAMPLES;
 use self::gate::SpeechGate;
 use self::protocol::{LiveTranslateToken, Speed};
@@ -110,8 +110,23 @@ pub struct Availability {
     pub reason: Option<Unavailable>,
 }
 
-/// This system can capture one app's sound for Live Translate.
-pub const PLATFORM_SUPPORTED: bool = cfg!(windows);
+/// Whether this system can hear one app for Live Translate: Windows (its process loopback says so itself when the
+/// build is too old), a Mac with macOS 14.2 or later (Core Audio process taps).
+pub fn platform_supported() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        mac_supports(crate::mac_check::native::version())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        cfg!(windows)
+    }
+}
+
+/// macOS 14.2 or later has process taps (pure).
+pub fn mac_supports(version: (u32, u32, u32)) -> bool {
+    (version.0, version.1) >= crate::mac_check::CALL_AUDIO_FROM
+}
 
 /// The availability (pure): the system first (no plan brings it to a Mac), then the plan.
 pub fn availability(platform: bool, in_plan: bool) -> Availability {
@@ -141,7 +156,11 @@ pub fn apps() -> Vec<TranslateApp> {
         list.dedup_by(|a, b| a.name == b.name);
         list
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::audio::platform::macos::playing_apps().into_iter().map(|(pid, name)| TranslateApp { pid, name }).collect()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Vec::new()
     }
@@ -242,7 +261,7 @@ pub fn register_hotkeys(app: &AppHandle) -> Vec<String> {
                     .unwrap()
                     .insert(action, shortcut);
             }
-            Err(_) => taken.push(accelerator.replace("CommandOrControl", "Ctrl")),
+            Err(_) => taken.push(crate::shortcuts::label(accelerator, cfg!(target_os = "macos"))),
         }
     }
     taken
@@ -258,9 +277,46 @@ fn unregister_hotkeys(app: &AppHandle) {
     }
 }
 
+/// Why Live Translate cannot start on this system.
+pub const PLATFORM_TEXT: &str = "Live Translate needs macOS 14.2 or later on a Mac, or Windows 10 21H2 or later.";
+
+/// What Live Translate says when the app picked plays nothing by the time it starts.
+pub const STOPPED_PLAYING: &str = "This app stopped playing sound. Play something in it, then start Live Translate again.";
+
+/// The capture thread: `hear` hands it one app's sound (16 kHz mono) until `stop`; it is cut into the speech gate's
+/// frames for the session. Why it ended early is said in the window.
+#[cfg(any(windows, target_os = "macos"))]
+fn spawn_capture(
+    app: AppHandle,
+    feed: Arc<Mutex<Feed>>,
+    stop: Arc<AtomicBool>,
+    tx: mpsc::Sender<Vec<i16>>,
+    hear: impl FnOnce(&AtomicBool, &mut dyn FnMut(Vec<f32>)) -> Result<(), String> + Send + 'static,
+) -> Result<(), String> {
+    std::thread::Builder::new()
+        .name("el-translate-capture".into())
+        .spawn(move || {
+            let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
+            let mut send = |samples: Vec<f32>| {
+                pending.extend(gate::to_pcm16(&samples, 16_000));
+                while pending.len() >= FRAME_SAMPLES {
+                    let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
+                    let _ = tx.blocking_send(frame);
+                }
+            };
+            if let Err(message) = hear(&stop, &mut send)
+                && let Ok(mut f) = feed.lock()
+            {
+                f.notice = Some(message);
+                let _ = app.emit(FEED_EVENT, &*f);
+            }
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
 /// Starts Live Translate for `pid`; `fetch_token` asks the server for a temporary Soniox key.
-/// On the Mac it is not there yet: the arguments go unused until it is.
-#[cfg_attr(not(windows), allow(unused_variables))]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(unused_variables))]
 pub fn start<F, Fut>(
     app: AppHandle,
     pid: u32,
@@ -291,35 +347,19 @@ where
 
     let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
     #[cfg(windows)]
-    {
-        let stop_capture = stop_flag.clone();
-        let app_for_capture = app.clone();
-        let feed_for_capture = feed.clone();
-        std::thread::Builder::new()
-            .name("el-translate-capture".into())
-            .spawn(move || {
-                let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
-                let result =
-                    crate::audio::platform::windows::app_loopback(pid, &stop_capture, |samples| {
-                        pending.extend(gate::to_pcm16(&samples, 16_000));
-                        while pending.len() >= FRAME_SAMPLES {
-                            let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
-                            let _ = tx.blocking_send(frame);
-                        }
-                    });
-                if let Err(message) = result
-                    && let Ok(mut f) = feed_for_capture.lock()
-                {
-                    f.notice = Some(message);
-                    let _ = app_for_capture.emit(FEED_EVENT, &*f);
-                }
-            })
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(not(windows))]
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+        crate::audio::platform::windows::app_loopback(pid, stop, send)
+    })?;
+    #[cfg(target_os = "macos")]
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+        // The app's processes that play sound now (a browser's helpers with it), read when it starts.
+        let pids = crate::audio::platform::macos::playing_pids(pid).ok_or_else(|| STOPPED_PLAYING.to_string())?;
+        crate::audio::platform::macos::app_tap(&pids, stop, send)
+    })?;
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         drop(tx);
-        return Err("Live Translate on the Mac comes in a later version.".into());
+        return Err("Live Translate is not available on this system.".into());
     }
     #[allow(unreachable_code)]
     {
@@ -491,7 +531,12 @@ mod tests {
         assert_eq!(none(true, false), serde_json::json!({"available": false, "reason": "plan"}));
         assert_eq!(none(false, true), serde_json::json!({"available": false, "reason": "platform"}));
         assert_eq!(none(false, false), serde_json::json!({"available": false, "reason": "platform"}), "the system first: no plan brings it to a Mac");
-        assert_eq!(PLATFORM_SUPPORTED, cfg!(windows));
+        #[cfg(target_os = "macos")]
+        assert_eq!(platform_supported(), mac_supports(crate::mac_check::native::version()));
+        #[cfg(windows)]
+        assert!(platform_supported());
+        assert!(mac_supports((14, 2, 0)) && mac_supports((15, 0, 0)) && mac_supports((26, 1, 0)));
+        assert!(!mac_supports((14, 1, 2)) && !mac_supports((13, 6, 0)), "below 14.2 the reason stays platform");
     }
 
     #[test]
