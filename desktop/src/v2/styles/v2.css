@@ -898,3 +898,8 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-test-result { display: grid; gap: var(--el-space-8); }
 .el-test-result > p { margin: 0; }
 .el-test-result audio { inline-size: 100%; }
+.el-meter--wide { inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 5); margin-block-start: var(--el-space-4); }
+.el-meter--warn .el-meter__fill { background: var(--el-role-warning-default); }
+.el-meter--full .el-meter__fill { background: var(--el-role-danger-default); }
+.el-storage-value--warn { color: var(--el-role-warning-default); }
+.el-storage-value--full { color: var(--el-role-danger-default); }

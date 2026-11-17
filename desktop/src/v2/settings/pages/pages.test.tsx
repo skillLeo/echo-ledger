@@ -10,7 +10,8 @@ import { resetEntitlementsForTests } from "../../../lib/entitlements";
 import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
 import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
-import { LockPage, NotificationsPage } from "../../../views/main/SecuritySettings";
+import { LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
+import { resetTrashKeepHoursForTests } from "../../../lib/trash";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage, MicrophonePage } from "../../../views/main/CaptureSettings";
@@ -502,6 +503,38 @@ describe("Screen moments v2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Remove 1Password" }));
     await act(flushAsync);
     expect(patches()[1]).toEqual({ screenExcludedApps: ["Signal.exe"] });
+  });
+});
+
+describe("Storage v2", () => {
+  it("what is stored against the plan's limit, how many recordings, how long they are kept, and Trash's hours from the server", async () => {
+    resetTrashKeepHoursForTests();
+    respond("storage_info", { recordings_bytes: 900_000_000, recordings_count: 1234, disk_free_bytes: null, disk_total_bytes: null, retention_days: 365 });
+    respond("trash_keep_hours", 72);
+    resetEntitlementsForTests(sampleEntitlements("pro"));
+    await show("storage");
+    const meter = screen.getByRole("meter");
+    expect(Number(meter.getAttribute("aria-valuenow"))).toBeGreaterThan(0);
+    expect(screen.getByText("1,234 recordings")).toBeInTheDocument();
+    expect(screen.getByText("1 year")).toBeInTheDocument();
+    expect(screen.getAllByText(/72 hours/).length).toBeGreaterThan(0);
+  });
+
+  it("says the same facts as today's page (today's says the Bin keeps 2 days; v2 says Trash, with the server's hours)", async () => {
+    resetTrashKeepHoursForTests();
+    respond("storage_info", { recordings_bytes: 10_000, recordings_count: 1, disk_free_bytes: null, disk_total_bytes: null, retention_days: 30 });
+    respond("trash_keep_hours", 48);
+    render(<StoragePage limitBytes={null} />);
+    await act(flushAsync);
+    const today = document.body.textContent ?? "";
+    cleanup();
+    await show("storage");
+    const v2 = document.body.textContent ?? "";
+    for (const fact of ["Your storage", "1 recording", "Recordings kept", "30 days"]) {
+      expect(today, fact).toContain(fact);
+      expect(v2, fact).toContain(fact);
+    }
+    expect(v2).toContain("48 hours");
   });
 });
 
