@@ -93,6 +93,41 @@ async fn sent_screens_are_deleted_here_and_the_folder_goes_with_the_last() {
 }
 
 #[tokio::test]
+async fn the_server_already_keeping_a_screen_counts_as_kept() {
+    // 200 with the existing screen: the same picture, or a near-duplicate of the one before (2.0.0-e).
+    let server = MockServer::start(inbox_session().fixed("POST", &screens_path(), Reply::json(200, common::fixture("screen_existing_200.json"))));
+    let (dir, store) = stored(2);
+
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
+
+    assert_eq!((result.sent, result.dropped, result.stopped), (2, 0, None), "kept, not dropped or retried");
+    assert!(!dir.path().join("screens").join("rec").exists(), "nothing waits here any more");
+}
+
+#[tokio::test]
+async fn a_screen_s_file_name_and_what_was_said_are_the_server_s() {
+    let upload = ScreenUpload { at_ms: 872_000, width: 1920, height: 1080, trigger: "change".into(), sha256: "ab".repeat(32) };
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", &screens_path(), Reply::json(200, common::fixture("screen_existing_200.json")))
+            .fixed("GET", &screens_path(), Reply::json(200, common::fixture("screens_index.json"))),
+    );
+    let kept = client(&server).upload_screen(SESSION, &upload, WEBP).await.unwrap();
+    assert_eq!((kept.index, kept.file_name.as_deref()), (7, Some("S07_14-32_the-clients-invoice-page-with-the-pay-button.webp")));
+    assert_eq!(kept.said.as_deref(), Some("Client: Can you see the invoice?\nMe: Yes, the Pay button is at the bottom."));
+
+    // The list goes to the window as the server sent it: its names, its lines, a null where nothing was said.
+    let list = client(&server).session_screens(SESSION).await.unwrap();
+    assert_eq!(list, common::fixture("screens_index.json"));
+    let typed: Vec<desktop_lib::net::models::ScreenMoment> = serde_json::from_value(list["data"].clone()).unwrap();
+    assert_eq!(typed[0].file_name.as_deref(), Some("S01_00-12_screen.webp"));
+    assert_eq!(typed[0].said, None);
+    // An older server's screen, without them, still reads.
+    let old: desktop_lib::net::models::ScreenMoment = serde_json::from_value(json!({"id": "s", "index": 1, "at_ms": 0})).unwrap();
+    assert_eq!((old.file_name, old.said), (None, None));
+}
+
+#[tokio::test]
 async fn screens_wait_for_their_session() {
     let server = MockServer::start(inbox_session());
     let dir = tempfile::tempdir().unwrap();

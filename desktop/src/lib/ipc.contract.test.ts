@@ -319,6 +319,10 @@ describe("wire types", () => {
     expect(rustFields(rustSourceDeclaring("struct", "DataList"), "DataList", false)).toEqual(["data"]);
   });
 
+  it("a screen has the fields the Rust model reads, file_name and said included (2.0.0-e)", () => {
+    expect(sorted(tsInterfaceKeys("ScreenMoment"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ScreenMoment"), "ScreenMoment", false)));
+  });
+
   it("screen hold reasons match the serde names of the Rust enum", () => {
     expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
   });

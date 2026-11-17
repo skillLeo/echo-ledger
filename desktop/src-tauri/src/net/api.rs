@@ -1270,7 +1270,7 @@ impl ApiClient {
 
     /// `POST /api/sessions/{id}/screens` (since v1.5): one screen moment as `multipart/form-data`, the WebP `image`
     /// with its moment, size, trigger and SHA-256. The same image again is `200` with the screen the server has.
-    pub async fn upload_screen(&self, session_id: &str, screen: &ScreenUpload, image: &[u8]) -> AppResult<serde_json::Value> {
+    pub async fn upload_screen(&self, session_id: &str, screen: &ScreenUpload, image: &[u8]) -> AppResult<ScreenMoment> {
         let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
         let fields = [
             ("at_ms", screen.at_ms.to_string()),
@@ -1286,7 +1286,8 @@ impl ApiClient {
             .body(body)
             .send()
             .await?;
-        Self::parse(resp).await
+        // 201 with the new screen or 200 with the one the server kept already: either way the server holds it.
+        Ok(Self::parse::<UploadedScreen>(resp).await?.data)
     }
 
     /// `GET /api/sessions/{id}/screens` (since v1.5): the recording's screens in time order, with signed image links.

@@ -1597,3 +1597,36 @@ pub struct WhatsNewRelease {
     #[serde(default)]
     pub notes: String,
 }
+
+// ---- Screens (docs/API.md "Screen moments", 2.0.0-e "Meeting assets") ----------------------------------------------
+
+/// A screen of a recording as the server sends it. Every field may be missing from an older server; the lists go to
+/// the window as the server sent them, so the window shows the server's own `file_name` and `said`.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ScreenMoment {
+    pub id: String,
+    /// "Screen 7": the recording's screens in time order from 1.
+    pub index: u32,
+    pub at_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    pub trigger: String,
+    pub ocr_text: Option<String>,
+    pub description: Option<String>,
+    pub image_url: String,
+    pub thumb_url: String,
+    pub created_at: Option<String>,
+    /// Since 2.0.0-e: its name in the meeting pack's `screens/` folder, `S07_14-32_invoice-page.webp`.
+    pub file_name: Option<String>,
+    /// Since 2.0.0-e: the transcript lines within 15 s of it, `Speaker: text` each; null without a transcript.
+    pub said: Option<String>,
+}
+
+/// `POST /api/sessions/{id}/screens`'s answer: `201` with the new screen, or `200` with the one the server already had
+/// (the same picture, or a near-duplicate of the screen before or after it).
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(default)]
+pub struct UploadedScreen {
+    pub data: ScreenMoment,
+}
