@@ -6,4 +6,5 @@ export { SettingsV2 } from "./settings/SettingsV2";
 export { SetupHealth } from "./setup/SetupHealth";
 export { HomeV2 } from "./home/HomeV2";
 export { LiveV2 } from "./live/LiveV2";
+export { AskV2 } from "./ask/AskV2";
 export { AfterCallNoticeV2 } from "./shell/AfterCallNotice";

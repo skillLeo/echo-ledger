@@ -34,6 +34,8 @@ export type ShellProps = {
   me?: { name: string; email: string; plan: string | null } | null;
   /** The Live module's page (ui_v2.live); without it Live says where to find its features meanwhile. */
   live?: ReactNode;
+  /** The Ask module's page (ui_v2.ask); without it Ask says where to ask meanwhile. */
+  ask?: ReactNode;
   /** The new shell's own notices above every page (the After a call notice). */
   notices?: ReactNode;
   /** The banners above every page (one at a time). */
@@ -42,7 +44,7 @@ export type ShellProps = {
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, notices, banners, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, ask, notices, banners, children }: ShellProps) {
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
@@ -97,6 +99,8 @@ export function Shell({ tab, onGo, status, me, live, notices, banners, children 
           <EmptyState icon={Icons.RecordIcon} title="Live is on its way"
             body="Live Assist, Live Translate and Dictation will have their place here. Until then, start them from Home or the tray."
             action={<Button onClick={() => go("home")}>Open Home</Button>} />
+        ) : own === "ask" && ask ? (
+          <section className="content page-ask">{ask}</section>
         ) : own === "ask" ? (
           <EmptyState icon={Icons.AskIcon} title="Ask is on its way"
             body="Questions across all your recordings will have their place here. Until then, ask inside a project, on its Notes tab."

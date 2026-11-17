@@ -84,6 +84,15 @@ export type SessionActive = { session_id: string | null; practice: boolean; text
 
 export type AssistSnapshot = { messages: AssistMessage[]; hint_level: HintLevel; paused: boolean; muted_until: string | null; meeting_type?: MeetingType | null };
 
+/** The running session on this computer, from the core's snapshot: the last `ready`'s id. */
+export function activeSessionId(snapshot: { messages: { type: string; session_id?: string }[] } | null | undefined): string | null {
+  const ready = [...(snapshot?.messages ?? [])].reverse().find((m) => m.type === "ready" && typeof m.session_id === "string");
+  return ready?.session_id ?? null;
+}
+
+/** When the running session is not on this computer: it is ended where it runs. */
+export const NOT_HERE = "The other session runs on another device. End it there, then start this one.";
+
 /** The core's commands (lib/ipc.ts), typed for the card and the prep. */
 export const assist = {
   preps: (status: PrepStatus | null = null) => api.assistPrepsList(status) as unknown as Promise<Prep[]>,
@@ -96,11 +105,14 @@ export const assist = {
     api.assistStart(prepId, mode, false, clientRef) as unknown as Promise<AssistStarted>,
   schedule: (prepId: string, at: string) => api.assistSchedule(prepId, at) as unknown as Promise<Prep>,
   end: () => api.assistEnd(),
-  /** Ends the running session (409 session_active) and starts this one; without its id, ends it and starts again. */
+  /**
+   * Ends the running session (409 session_active) and starts this one. Without its id the core is asked which session
+   * runs here (assist_state); a session that isn't on this computer is never ended by a guess.
+   */
   startReplacing: async (sessionId: string | null, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) => {
-    if (sessionId) return api.assistStartReplacing(sessionId, prepId, mode, practice, clientRef) as unknown as Promise<AssistStarted>;
-    await api.assistEnd();
-    return api.assistStart(prepId, mode, practice, clientRef) as unknown as Promise<AssistStarted>;
+    const id = sessionId ?? activeSessionId(await api.assistState().catch(() => null));
+    if (!id) throw new Error(NOT_HERE);
+    return api.assistStartReplacing(id, prepId, mode, practice, clientRef) as unknown as Promise<AssistStarted>;
   },
   /** The answer to 409 session_active that keeps the running session (also when the card is closed while it asks). */
   keepRunning: () => api.assistKeepRunning(),

@@ -17,7 +17,7 @@ const only = arg("only");
 const onlyCase = arg("case");
 process.env.ECHOLEDGER_DEFAULT_SERVER ??= "https://ledger.example.com";
 
-const FLAGS = "ui_v2.shell,ui_v2.library,ui_v2.settings,ui_v2.setup_health,ui_v2.home,ui_v2.live,live_assist,ui_v2.recording_controls,ui_v2.after_call";
+const FLAGS = "ui_v2.ask,ui_v2.shell,ui_v2.library,ui_v2.settings,ui_v2.setup_health,ui_v2.home,ui_v2.live,live_assist,ui_v2.recording_controls,ui_v2.after_call";
 const app = (screen) => `scripts/screens/index.html?screen=${screen}&uiflags=${FLAGS}`;
 const nav = (name) => async (page) => {
   await page.getByRole("navigation", { name: "Main" }).getByRole("button", { name, exact: true }).click();
@@ -36,6 +36,7 @@ const CASES = [
   ["a-trash", "app", app("library"), ["en"], async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", "app", app("library"), ["en"], nav("Home")],
   ["a-live", "app", app("library"), ["en"], nav("Live")],
+  ["a-ask", "app", app("library"), ["en"], nav("Ask")],
   ["a-prep", "app", app("library"), ["en"], async (page) => { await nav("Live")(page); await page.getByRole("button", { name: "New session" }).click(); await page.waitForTimeout(800); }],
   ["a-settings", "app", app("settings"), ["en"]],
   ["a-settings-page", "app", app("settings"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],

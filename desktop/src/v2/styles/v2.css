@@ -662,6 +662,10 @@ button.el-step__head { cursor: pointer; }
 .el-prep__actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--el-space-8); }
 .el-prep__when { inline-size: calc(var(--el-space-64) * 3.5); }
 
+/* ---- Ask ------------------------------------------------------------------------------------------------- */
+.el-ask__row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--el-space-12); }
+.el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
 .el-page--wide { max-inline-size: calc(var(--el-space-64) * 15); }
