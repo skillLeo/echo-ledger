@@ -29,6 +29,7 @@ import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoToastHost
 import com.echoledger.mobile.ui.v2.components.EchoToastState
+import com.echoledger.mobile.ui.v2.help.HelpSource
 import com.echoledger.mobile.ui.v2.home.HomeActions
 import com.echoledger.mobile.ui.v2.home.V2HomeScreen
 import com.echoledger.mobile.ui.v2.library.SavedView
@@ -107,14 +108,16 @@ fun EchoV2Shell(
     modifier: Modifier = Modifier,
     language: EchoLanguage = systemEchoLanguage(),
     /** The wall clock toast deadlines and delayed discards are on (tests give their own). */
-    clock: () -> Long = System::currentTimeMillis
+    clock: () -> Long = System::currentTimeMillis,
+    /** Help v2's guides, notes and support messages (the phone core's); without it Help stays the classic page. */
+    help: HelpSource? = null
 ) {
     EchoV2Theme(darkTheme = darkTheme, language = language) {
         val toasts = remember { EchoToastState(clock) }
         CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)
             Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
-                ShellBody(vm, flags, classic, onSwitchToClassic)
+                ShellBody(vm, flags, classic, onSwitchToClassic, help)
                 EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
             }
         }
@@ -136,7 +139,7 @@ private fun MessagesToToasts(vm: MainViewModel, toasts: EchoToastState) {
 }
 
 @Composable
-private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens, onSwitchToClassic: (Boolean) -> Unit) {
+private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens, onSwitchToClassic: (Boolean) -> Unit, help: HelpSource?) {
     val text = v2Text
     var tab by rememberSaveable { mutableStateOf(V2Tab.Library) }
     var route by remember { mutableStateOf<V2Route>(V2Route.Tabs) }
@@ -165,7 +168,8 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                         onUpgrade = classic.upgrade,
                         openClassicPage = classic.settingsPage,
                         setupPage = { highlight, back -> SetupPage(vm, flags, classic, highlight, back) },
-                        onBack = { route = V2Route.Tabs }
+                        onBack = { route = V2Route.Tabs },
+                        help = help
                     )
                 } else {
                     V2SettingsHome(

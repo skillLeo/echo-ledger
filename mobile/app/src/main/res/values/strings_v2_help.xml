@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (help). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_help_title">Help</string>
+    <string name="v2_help_tab_guides">Guides</string>
+    <string name="v2_help_tab_new">What\'s new</string>
+    <string name="v2_help_tab_contact">Contact support</string>
+    <string name="v2_help_search">Search help</string>
+    <string name="v2_help_guides_failed">The guides didn\'t load</string>
+    <string name="v2_help_no_match_title">No guide matches</string>
+    <string name="v2_help_no_match_body">Try other words, or ask us in Contact support.</string>
+    <string name="v2_help_no_guides_title">No guides yet</string>
+    <string name="v2_help_no_guides_body">Your server has no user guide. Contact support can help.</string>
+    <string name="v2_help_checks">Checks</string>
+    <string name="v2_help_phone_check">Phone check</string>
+    <string name="v2_help_phone_check_help">What Android allows EchoLedger, and how to fix the rest</string>
+    <string name="v2_help_guide_failed">This guide didn\'t open</string>
+    <string name="v2_help_new_failed">What\'s new didn\'t load</string>
+    <string name="v2_help_no_notes_title">No release notes yet</string>
+    <string name="v2_help_no_notes_body">Notes for each new version of the app appear here.</string>
+    <string name="v2_help_version">Version %1$s</string>
+    <string name="v2_help_contact_intro">Tell us what happened and what you expected. We reply by email.</string>
+    <string name="v2_help_subject">Subject</string>
+    <string name="v2_help_message">Message</string>
+    <string name="v2_help_count">%1$s of %2$s characters</string>
+    <string name="v2_help_attach">Attach this phone\'s last report</string>
+    <string name="v2_help_report_none">No report from this phone yet</string>
+    <string name="v2_help_report_last">Your last report from %1$s</string>
+    <string name="v2_help_report_what">The app version, Android and what it allows EchoLedger. Never your recordings or transcripts.</string>
+    <string name="v2_help_send">Send</string>
+    <string name="v2_help_sending">Sending</string>
+    <string name="v2_help_sent_title">Message sent</string>
+    <string name="v2_help_sent_body">Support replies to your account\'s email address, usually within a working day.</string>
+    <string name="v2_help_write_another">Write another</string>
+    <string name="v2_help_offline">You\'re offline. Check the internet connection and try again.</string>
+    <string name="v2_help_failed_generic">Something went wrong. Try again.</string>
+    <string name="v2_help_try_again">Try again</string>
+</resources>
