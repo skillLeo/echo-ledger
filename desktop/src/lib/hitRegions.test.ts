@@ -64,13 +64,32 @@ describe("useHitRegions", () => {
     scroller.dispatchEvent(new Event("scroll", { bubbles: false }));
     await settle();
     expect(callsOf("overlay_set_hit_regions")).toHaveLength(2);
-    expect(callsOf("overlay_set_hit_regions")[1]).toEqual({ regions: [{ x: 4, y: 34, w: 32, h: 32 }] });
+    expect(callsOf("overlay_set_hit_regions")[1]).toEqual({ regions: [{ x: 4, y: 34, w: 32, h: 32 }], scale: 1 });
 
     unmount();
     rect = box(50, 50, 20, 20);
     scroller.dispatchEvent(new Event("scroll", { bubbles: false }));
     await settle();
     expect(callsOf("overlay_set_hit_regions")).toHaveLength(2);
+  });
+
+  it("says the scale it measured at, and reports again when the window moved to a monitor with another one", async () => {
+    resetTauriMock();
+    respond("overlay_set_hit_regions", undefined);
+    vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
+    vi.stubGlobal("devicePixelRatio", 1);
+    const button = document.createElement("div");
+    button.setAttribute("data-hit", "");
+    button.getBoundingClientRect = () => box(10, 10, 20, 20);
+    document.body.append(button);
+
+    const { unmount } = renderHook(() => useHitRegions([]));
+    expect(callsOf("overlay_set_hit_regions")).toEqual([{ regions: [{ x: 4, y: 4, w: 32, h: 32 }], scale: 1 }]);
+    // Dragged onto a 150 % monitor: the CSS layout is the same, the scale is not (the safety timer catches it).
+    vi.stubGlobal("devicePixelRatio", 1.5);
+    await new Promise((resolve) => setTimeout(resolve, 800));
+    expect(callsOf("overlay_set_hit_regions").at(-1)).toEqual({ regions: [{ x: 6, y: 6, w: 48, h: 48 }], scale: 1.5 });
+    unmount();
   });
 
   it("still reports regions where ResizeObserver does not exist", () => {

@@ -1767,7 +1767,9 @@ export const api = {
   addReplacement: (from: string, to: string, clientId: string | null) => invoke<{ replacements: unknown[] }>("vocabulary_replace_add", { from, to, clientId }),
   /** Accepts or dismisses a suggested fix; the answer is the transcript. */
   decideSuggestion: (id: string, suggestion: number, accept: boolean) => invoke<TranscriptDetail>("transcript_suggestion", { id, suggestion, accept }),
-  setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
+  /** The window's interactive parts in physical pixels, and the device pixel ratio they were measured at (the core
+   * keeps them at the window's current scale, so a move to a monitor with another scale never leaves them stale). */
+  setHitRegions: (regions: RectPx[], scale = 1) => invoke<void>("overlay_set_hit_regions", { regions, scale }),
   snapOverlay: () => invoke<void>("overlay_snap"),
   pauseRecording: () => invoke<AppStatus>("pause_recording"),
   resumeRecording: () => invoke<AppStatus>("resume_recording"),

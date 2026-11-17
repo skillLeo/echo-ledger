@@ -33,6 +33,14 @@ pub fn cursor_in_regions_scaled(cursor: (f64, f64), cursor_scale: f64, origin: (
     })
 }
 
+/// Regions multiplied by `by` (pure): a window's regions are kept in CSS px and made physical at the scale the window
+/// has now, so a move to a monitor with another scale (per-monitor DPI on Windows) never leaves them stale. A scale
+/// that is not a positive number counts as 1.
+pub fn scale_regions(regions: &[RectPx], by: f64) -> Vec<RectPx> {
+    let by = if by.is_finite() && by > 0.0 { by } else { 1.0 };
+    regions.iter().map(|r| RectPx { x: r.x * by, y: r.y * by, w: r.w * by, h: r.h * by }).collect()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Corner {
@@ -115,6 +123,40 @@ pub fn pill_origin(saved: Option<PillPosition>, areas: &[WorkArea], primary: Wor
     saved
         .and_then(|p| areas.iter().find(|a| contains(**a, (p.x, p.y))).map(|a| clamp_into(*a, (p.x, p.y), size)))
         .unwrap_or_else(|| top_center(primary, size, margin))
+}
+
+/// A window's physical size on a display at scale `to`, from its size at scale `from` (pure). Per-monitor DPI on
+/// Windows keeps a window's logical size across monitors, so a pill 352 px wide at 100 % is 528 px at 150 %. Equal
+/// scales (a Mac's points, which are 1 on every display here) keep it.
+pub fn size_at(size: (u32, u32), from: f64, to: f64) -> (u32, u32) {
+    let ok = |s: f64| s.is_finite() && s > 0.0;
+    if !ok(from) || !ok(to) || (from - to).abs() < f64::EPSILON {
+        return size;
+    }
+    let f = to / from;
+    ((f64::from(size.0) * f).round() as u32, (f64::from(size.1) * f).round() as u32)
+}
+
+/// [`pill_origin`] over displays with their scales: the window is `size` at `window_scale` now, and it is kept inside
+/// the display it lands on at the size it will have there. `margin_logical` is in logical px of that display.
+pub fn pill_origin_scaled(saved: Option<PillPosition>, areas: &[(WorkArea, f64)], primary: usize, size: (u32, u32), window_scale: f64, margin_logical: f64) -> Option<(i32, i32)> {
+    if let Some(p) = saved
+        && let Some((area, scale)) = areas.iter().find(|(a, _)| contains(*a, (p.x, p.y)))
+    {
+        return Some(clamp_into(*area, (p.x, p.y), size_at(size, window_scale, *scale)));
+    }
+    let (area, scale) = *areas.get(primary)?;
+    Some(top_center(area, size_at(size, window_scale, scale), (margin_logical * scale).round() as i32))
+}
+
+/// [`rescue`] over displays with their scales: whether half of the window shows is judged at its size now; the display
+/// it moves into gets it at the size it will have there.
+pub fn rescue_scaled(areas: &[(WorkArea, f64)], pos: (i32, i32), size: (u32, u32), window_scale: f64) -> Option<(i32, i32)> {
+    let rects: Vec<WorkArea> = areas.iter().map(|(a, _)| *a).collect();
+    rescue(&rects, pos, size)?;
+    let centre = (pos.0 + size.0 as i32 / 2, pos.1 + size.1 as i32 / 2);
+    let (area, scale) = areas[area_for(&rects, centre)?];
+    Some(clamp_into(area, pos, size_at(size, window_scale, scale)))
 }
 
 /// The display that holds `point`, else the nearest one (its index); none without displays.

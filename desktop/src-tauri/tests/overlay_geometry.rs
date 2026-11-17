@@ -572,3 +572,72 @@ fn the_review_card_docks_bottom_right_of_the_primary_work_area() {
     assert_eq!(dock(PRIMARY, (360, 168), Corner::BottomRight, 18), (1920 - 360 - 18, 1040 - 168 - 18));
     assert_eq!(dock(PRIMARY, (540, 252), Corner::BottomRight, 27), (1920 - 540 - 27, 1040 - 252 - 27));
 }
+
+// ---- Per-monitor DPI (Windows): a window dragged between 100 % and 150 % monitors ------------------------------------
+
+#[test]
+fn hit_regions_follow_the_window_onto_a_monitor_with_another_scale() {
+    use desktop_lib::overlay::geometry::{RectPx, cursor_in_regions_scaled, scale_regions};
+    // The pill's Stop button, measured on the 100 % monitor: CSS px 300..340 × 20..60 (the core keeps CSS px).
+    let css = [RectPx { x: 300.0, y: 20.0, w: 40.0, h: 40.0 }];
+    // Dragged onto the 150 % monitor to its right: its client area starts at physical (2000, 100).
+    let origin = (2000, 100);
+    // The cursor on the button's right part, as Windows reports it there (physical).
+    let cursor = (2000.0 + 330.0 * 1.5, 100.0 + 40.0 * 1.5);
+    assert!(cursor_in_regions_scaled(cursor, 1.0, origin, 1.0, &scale_regions(&css, 1.5)), "at the scale the window has now");
+    assert!(!cursor_in_regions_scaled(cursor, 1.0, origin, 1.0, &scale_regions(&css, 1.0)), "at the old scale the click would go through");
+    // Back on the 100 % monitor.
+    assert!(cursor_in_regions_scaled((330.0, 40.0), 1.0, (0, 0), 1.0, &scale_regions(&css, 1.0)));
+    // A Mac: the same regions made physical at its 2× display and brought back to points come out the same.
+    assert!(cursor_in_regions_scaled((330.0 * 2.0, 40.0 * 2.0), 2.0, (0, 0), 2.0, &scale_regions(&css, 2.0)));
+    // A scale that is not a number keeps the regions as they are.
+    assert_eq!(scale_regions(&css, f64::NAN), css.to_vec());
+    assert_eq!(scale_regions(&css, 0.0), css.to_vec());
+}
+
+/// A 100 % primary display (1920 × 1080, taskbar 40 px) with a 150 % one to its right (2880 × 1620 physical,
+/// taskbar 60 px), as Windows reports them in physical px.
+fn mixed_desk() -> Vec<(desktop_lib::overlay::geometry::WorkArea, f64)> {
+    use desktop_lib::overlay::geometry::WorkArea;
+    vec![(WorkArea { x: 0, y: 0, w: 1920, h: 1040 }, 1.0), (WorkArea { x: 1920, y: 0, w: 2880, h: 1560 }, 1.5)]
+}
+
+#[test]
+fn a_window_keeps_its_logical_size_on_a_display_with_another_scale() {
+    use desktop_lib::overlay::geometry::size_at;
+    assert_eq!(size_at((352, 84), 1.0, 1.5), (528, 126), "the pill at 150 %");
+    assert_eq!(size_at((528, 126), 1.5, 1.0), (352, 84), "and back");
+    assert_eq!(size_at((360, 168), 1.25, 1.75), (504, 235));
+    assert_eq!(size_at((352, 84), 1.0, 1.0), (352, 84));
+    assert_eq!(size_at((352, 84), f64::NAN, 1.5), (352, 84), "a scale that is not known changes nothing");
+}
+
+#[test]
+fn the_pill_saved_on_a_150_percent_display_stays_whole_there_at_its_size_there() {
+    use desktop_lib::overlay::geometry::{PillPosition, pill_origin_scaled};
+    let desk = mixed_desk();
+    // Saved near the right edge of the 150 % display; built on the 100 % one (352 × 84 there, 528 × 126 here).
+    let saved = Some(PillPosition { x: 4400, y: 1500 });
+    assert_eq!(pill_origin_scaled(saved, &desk, 0, (352, 84), 1.0, 12.0), Some((1920 + 2880 - 528, 1560 - 126)), "the whole pill at 150 %");
+    // Saved on the 100 % display while the window is on the 150 % one: its size there is the smaller one.
+    let saved = Some(PillPosition { x: 1700, y: 900 });
+    assert_eq!(pill_origin_scaled(saved, &desk, 0, (528, 126), 1.5, 12.0), Some((1920 - 352, 900)), "352 × 84 there: only x is pulled in");
+    // No saved place: top-centre of the primary display, its margin in its own px.
+    assert_eq!(pill_origin_scaled(None, &desk, 1, (352, 84), 1.0, 12.0), Some((1920 + (2880 - 528) / 2, 18)));
+    assert_eq!(pill_origin_scaled(None, &[], 0, (352, 84), 1.0, 12.0), None);
+}
+
+#[test]
+fn a_window_rescued_onto_a_display_with_another_scale_fits_it_at_its_size_there() {
+    use desktop_lib::overlay::geometry::rescue_scaled;
+    let desk = mixed_desk();
+    // The 150 % display was unplugged with the Live Assist card on it (360 × 240 logical, 540 × 360 there).
+    let only_primary = vec![desk[0]];
+    let moved = rescue_scaled(&only_primary, (3000, 400), (540, 360), 1.5).unwrap();
+    assert_eq!(moved, (1920 - 360, 400), "kept whole on the 100 % display at 360 × 240");
+    // On screen: left alone.
+    assert_eq!(rescue_scaled(&desk, (2000, 400), (540, 360), 1.5), None);
+    // Moved by a display layout change onto the 150 % display's edge from the 100 % one.
+    let moved = rescue_scaled(&desk, (4790, 1500), (360, 240), 1.0).unwrap();
+    assert_eq!(moved, (1920 + 2880 - 540, 1560 - 360));
+}

@@ -988,8 +988,10 @@ pub fn main_view_set(view: String, state: State<'_, crate::lifecycle::WindowLife
 }
 
 #[tauri::command]
-pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, state: State<'_, HitRegions>) {
-    state.0.lock().unwrap().insert(window.label().to_string(), regions);
+pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, scale: f64, state: State<'_, HitRegions>) {
+    // Kept in CSS px: the poll makes them physical at the window's scale then (`geometry::scale_regions`).
+    let css = crate::overlay::geometry::scale_regions(&regions, 1.0 / scale);
+    state.0.lock().unwrap().insert(window.label().to_string(), css);
     state.1.notify_one(); // wake the idle click-through poll at once (C9)
 }
 
