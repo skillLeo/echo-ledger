@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Models\User;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Services\SettingsTransfer;
 use App\Stt\Drivers\AssemblyAiDriver;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Http;
@@ -99,13 +100,24 @@ it('sends only the turn silences to the budget Universal-Streaming models, which
         ->and($q['max_turn_silence'])->toBe('640');
 });
 
-it('takes Urdu steering and the presets on the 3.7 Realtime models too', function () {
+it('steers languages and sets presets on Universal-3.6 Pro only', function () {
     $driver = app(AssemblyAiDriver::class);
 
-    expect(AssemblyAiDriver::streamingSupportsLanguages('assemblyai-stt-3-7-realtime'))->toBeTrue()
-        ->and(AssemblyAiDriver::streamingSupportsLanguages('universal-3-6-pro'))->toBeTrue()
+    expect(AssemblyAiDriver::streamingSupportsLanguages('universal-3-6-pro'))->toBeTrue()
+        ->and(AssemblyAiDriver::streamingSupportsLanguages('assemblyai-stt-3-7-realtime'))->toBeFalse()
         ->and(AssemblyAiDriver::streamingSupportsLanguages('universal-streaming-english'))->toBeFalse()
-        ->and($driver->turnSettings('assemblyai-stt-3-7-realtime'))->toBe(['mode' => 'min_latency', 'min_turn_silence' => 128, 'max_turn_silence' => 640]);
+        ->and($driver->turnSettings('universal-3-6-pro'))->toHaveKey('mode')
+        ->and($driver->turnSettings('assemblyai-stt-3-7-realtime'))->not->toHaveKey('mode');
+});
+
+it('imports only a known caption speed from a settings file', function () {
+    $transfer = app(SettingsTransfer::class);
+    $read = fn (mixed $v): array => $transfer->read(json_encode(['format' => SettingsTransfer::FORMAT, 'settings' => ['assemblyai.streaming_mode' => $v, 'assemblyai.region' => 'eu']]));
+
+    expect($read('balanced'))->toBe(['assemblyai.streaming_mode' => 'balanced', 'assemblyai.region' => 'eu'])
+        ->and($read('warp_speed'))->toBe(['assemblyai.region' => 'eu'])
+        ->and($read(['min_latency']))->toBe(['assemblyai.region' => 'eu'])
+        ->and($read(5))->toBe(['assemblyai.region' => 'eu']);
 });
 
 it('saves the caption speed from Admin › Settings and refuses an unknown one', function () {
