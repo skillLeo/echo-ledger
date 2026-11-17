@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type { Settings, SettingsPatch } from "../../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
-import { collectControls, findControls, stale, type ControlRole } from "../../../test/parity";
+import { collectControls, stale, type ControlRole } from "../../../test/parity";
 import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
 import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
@@ -373,59 +373,120 @@ describe("Sign-in & security v2", () => {
 });
 
 /**
- * Parity with today's pages: every control each page shows (rendered, with the same settings) is on its v2 page.
- * Today's names that differ only in form map to the v2 control by role.
+ * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
+ * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
+ * state must be on the v2 page in the same state. A question asked through the app's confirm (Reset to defaults,
+ * Remove the key, Clear history) must be the same question on both. Settings that reveal more (the lock on, auto-record
+ * off) are states of their own. Today's names that differ only in form map to the v2 control.
  */
-describe("parity with today's Dictation and Captions pages", () => {
+describe("parity with today's Settings pages, in every state", () => {
   const patch = async () => true;
-  type Page = { name: string; section: string; platform?: string; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account; today: () => ReactElement; map?: Record<string, [ControlRole | "password", string | RegExp]> };
+  type Act = () => Promise<void>;
+  type Step = { name: string; today: Act; v2?: Act };
+  type Page = {
+    name: string; section: string; platform?: string; settings?: Partial<Settings>; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account;
+    lock?: { hasPin: boolean }; today: (settings: Settings) => ReactElement; steps?: Step[]; map?: Record<string, [ControlRole | "password", string | RegExp]>;
+  };
+  const press = (name: string | RegExp, role: ControlRole = "button"): Act => async () => {
+    fireEvent.click(screen.getAllByRole(role, { name })[0]);
+    await act(flushAsync);
+  };
+  const type = (label: string, value: string): Act => async () => {
+    const field = screen.getByLabelText(label);
+    fireEvent.change(field, { target: { value } });
+    await act(flushAsync);
+  };
+  const both = (...acts: Act[]): Act => async () => {
+    for (const a of acts) await a();
+  };
+  const reset: Step = { name: "Reset to defaults", today: press("Reset to defaults") };
+  const withKey = () => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; };
   const PAGES: Page[] = [
-    { name: "Voice notes & dictation", section: "voice", today: () => <VoicePage settings={SETTINGS} patch={patch} onOpen={() => undefined} />,
+    { name: "Voice notes & dictation", section: "voice", today: (st) => <VoicePage settings={st} patch={patch} onOpen={() => undefined} />, steps: [reset],
       map: { "combobox: How the shortcut works": ["combobox", /^How the shortcut works/], "combobox: Dictation output": ["combobox", /^Dictation output/],
         "button: Replacements1": ["button", "Replacements"], "button: Snippets1": ["button", "Snippets"] } },
-    { name: "Replacements", section: "voice.replacements", today: () => <ReplacementsPage settings={SETTINGS} patch={patch} /> },
-    { name: "Snippets", section: "voice.snippets", today: () => <SnippetsPage settings={SETTINGS} patch={patch} /> },
-    { name: "Recent dictations", section: "voice.history", today: () => <HistoryPage />, map: { "button: Copy": ["button", /^Copy/] } },
-    { name: "Captions", section: "captions", today: () => <CaptionsPage settings={SETTINGS} patch={patch} onStyle={() => undefined} /> },
-    { name: "Calls & meetings", section: "calls", today: () => <CallsPage settings={SETTINGS} patch={patch} platform="windows" onSites={() => undefined} consentRead={false} onConsent={() => undefined} />,
-      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] } },
-    { name: "Calls & meetings on a Mac", section: "calls", platform: "macos", today: () => <CallsPage settings={SETTINGS} patch={patch} platform="macos" onSites={() => undefined} consentRead={false} onConsent={() => undefined} />,
-      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] } },
-    { name: "Call sites", section: "calls.sites", today: () => <CallSitesPage rules={SETTINGS.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] } },
-    { name: "Language", section: "transcription.language", today: () => <LanguagePage settings={SETTINGS} patch={patch} />, map: { "combobox: Language": ["combobox", /^Language/] } },
-    { name: "Custom words", section: "words", today: () => <WordsPage settings={SETTINGS} patch={patch} />, map: { "combobox: Use terms from project": ["combobox", /^Use terms from project/] } },
-    { name: "Transcription key", section: "key", today: () => <TranscriptionKeyPage e={sampleEntitlements("free")} /> },
-    { name: "Transcription key, saved", section: "key", entitlements: (() => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; })(), today: () => <TranscriptionKeyPage e={(() => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; })()} /> },
-    { name: "Privacy & data", section: "privacy", today: () => <PrivacyPage account={ACCOUNT} settings={SETTINGS} onAccount={() => undefined} onConsent={() => undefined} />,
-      map: { "button: Recording consentNot yet": ["button", "Recording consent"] } },
-    { name: "Privacy & data, deletion pending", section: "privacy", account: { ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" },
-      today: () => <PrivacyPage account={{ ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" }} settings={SETTINGS} onAccount={() => undefined} onConsent={() => undefined} />,
-      map: { "button: Recording consentNot yet": ["button", "Recording consent"], "button: Cancel deletion, opens in browser": ["button", "Cancel deletion, opens in browser"] } },
-    { name: "Recording consent", section: "privacy.consent", today: () => <ConsentPage status={makeStatus()} settings={SETTINGS} patch={patch} /> },
-    { name: "App lock", section: "lock", today: () => <LockPage settings={SETTINGS} patch={patch} run={run} />,
-      map: { "combobox: Lock after": ["combobox", /^Lock after/], "button: PINNot set": ["button", "PIN"] } },
-    { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
-      map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] } },
-    { name: "Style", section: "captions.style", today: () => <CaptionStylePage settings={SETTINGS} patch={patch} />,
+    { name: "Replacements", section: "voice.replacements", today: (st) => <ReplacementsPage settings={st} patch={patch} />,
+      steps: [{ name: "a replacement typed", today: both(type("When I say", "kuraishi"), type("Write", "Qureshi")) }] },
+    { name: "Snippets", section: "voice.snippets", today: (st) => <SnippetsPage settings={st} patch={patch} />,
+      steps: [{ name: "a snippet typed", today: both(type("Phrase", "bank"), type("Text to insert", "Meezan Bank")) }] },
+    { name: "Recent dictations", section: "voice.history", today: () => <HistoryPage />, map: { "button: Copy": ["button", /^Copy/] },
+      steps: [{ name: "Clear history", today: press("Clear history") }] },
+    { name: "Captions", section: "captions", today: (st) => <CaptionsPage settings={st} patch={patch} onStyle={() => undefined} />, steps: [reset] },
+    { name: "Style", section: "captions.style", today: (st) => <CaptionStylePage settings={st} patch={patch} />, steps: [reset],
       map: { "combobox: Position": ["combobox", /^Position/], "combobox: Hide when nobody speaks": ["combobox", /^Hide when nobody speaks/] } },
+    ...(["windows", "macos"] as const).flatMap((platform) => [true, false].map((autoMode): Page => ({
+      name: `Calls & meetings, ${platform}, auto-record ${autoMode ? "on" : "off"}`, section: "calls", platform, settings: { autoMode },
+      today: (st) => <CallsPage settings={st} patch={patch} platform={platform} onSites={() => undefined} consentRead={false} onConsent={() => undefined} />, steps: [reset],
+      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] },
+    }))),
+    { name: "Call sites", section: "calls.sites", today: (st) => <CallSitesPage rules={st.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] },
+      steps: [{ name: "a site typed", today: type("Address or title contains", "meet.jit.si") }] },
+    { name: "Language", section: "transcription.language", today: (st) => <LanguagePage settings={st} patch={patch} />, steps: [reset], map: { "combobox: Language": ["combobox", /^Language/] } },
+    { name: "Custom words", section: "words", today: (st) => <WordsPage settings={st} patch={patch} />, steps: [reset], map: { "combobox: Use terms from project": ["combobox", /^Use terms from project/] } },
+    { name: "Transcription key", section: "key", today: () => <TranscriptionKeyPage e={sampleEntitlements("free")} />,
+      steps: [{ name: "a key typed", today: type("Groq key", "gsk_abcdefghijklmnopqrstuvwxyz") }] },
+    { name: "Transcription key, saved", section: "key", entitlements: withKey(), today: () => <TranscriptionKeyPage e={withKey()} />,
+      steps: [{ name: "Remove key", today: press("Remove key") }] },
+    { name: "Privacy & data", section: "privacy", today: (st) => <PrivacyPage account={ACCOUNT} settings={st} onAccount={() => undefined} onConsent={() => undefined} />,
+      map: { "button: Recording consentNot yet": ["button", "Recording consent"] },
+      steps: [
+        { name: "Delete my account, with the password", today: press("Delete my account") },
+        { name: "Delete my account, with a two-step code", today: both(press("Delete my account"), press("Use a two-step code instead")) },
+      ] },
+    { name: "Privacy & data, deletion pending", section: "privacy", account: { ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" },
+      today: (st) => <PrivacyPage account={{ ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" }} settings={st} onAccount={() => undefined} onConsent={() => undefined} />,
+      map: { "button: Recording consentNot yet": ["button", "Recording consent"], "button: Cancel deletion, opens in browser": ["button", "Cancel deletion, opens in browser"] } },
+    { name: "Recording consent", section: "privacy.consent", today: (st) => <ConsentPage status={makeStatus()} settings={st} patch={patch} /> },
+    ...[false, true].flatMap((appLock) => [false, true].map((hasPin): Page => ({
+      name: `App lock ${appLock ? "on" : "off"}, PIN ${hasPin ? "set" : "not set"}`, section: "lock", settings: { appLock }, lock: { hasPin },
+      today: (st) => <LockPage settings={st} patch={patch} run={run} />,
+      steps: [{ name: hasPin ? "Change PIN" : "Set PIN", today: press(/^PIN/), v2: press("PIN") }, reset],
+      map: { "combobox: Lock after": ["combobox", /^Lock after/], [`button: PIN${hasPin ? "Set" : "Not set"}`]: ["button", "PIN"] },
+    }))),
+    { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
+      map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
+      steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
   ];
 
-  it.each(PAGES.map((p) => [p.name, p] as const))("%s: every control today's page has is on the v2 page", async (_, page) => {
-    const first = render(page.today());
+  /** The controls on screen and the confirm questions asked, after `step` (none: the page as it opens). */
+  const capture = async (render_: () => void, step: Act | null): Promise<{ controls: string[]; asked: string[] }> => {
+    const asked = answerConfirm();
+    asked.mockReturnValue(false);
+    render_();
     await act(flushAsync);
-    const today = [...collectControls(new Set())];
-    first.unmount();
-    expect(today.length).toBeGreaterThan(0);
-    if (page.entitlements) resetEntitlementsForTests(page.entitlements);
-    if (page.account) respond("account_get", page.account);
-    await show(page.section, page.platform);
-    const missing = today.filter((control) => {
-      const mapped = page.map?.[control];
-      const [role, name] = mapped ?? [control.split(": ")[0] as ControlRole | "password", control.slice(control.indexOf(": ") + 2)];
-      return findControls(role, name).length === 0;
-    });
-    expect(missing).toEqual([]);
-    expect(stale(today, Object.keys(page.map ?? {}))).toEqual([]);
+    if (step) await step();
+    const controls = [...collectControls(new Set())];
+    cleanup();
+    return { controls, asked: asked.mock.calls.map((c) => c[0]) };
+  };
+
+  it.each(PAGES.map((p) => [p.name, p] as const))("%s", async (_, page) => {
+    const settings = { ...SETTINGS, ...page.settings } as Settings;
+    const states: [string, Step | null][] = [["as it opens", null], ...(page.steps ?? []).map((st) => [st.name, st] as [string, Step])];
+    const seen = new Set<string>();
+    for (const [state, step] of states) {
+      respond("get_settings", settings);
+      respond("lock_status", { enabled: !!page.settings?.appLock, locked: false, hasPin: page.lock?.hasPin ?? false, osMethod: "windows_hello", retryAfterSeconds: 0 });
+      resetEntitlementsForTests(page.entitlements ?? sampleEntitlements("free"));
+      respond("account_get", page.account ?? ACCOUNT);
+      const today = await capture(() => render(page.today(settings)), step?.today ?? null);
+      expect(today.controls.length, state).toBeGreaterThan(0);
+      today.controls.forEach((c) => seen.add(c));
+      const v2 = await capture(() => {
+        render(<div className="el-root"><SettingsPagesV2 section={{ id: page.section, seq: 1 }} onHome={vi.fn()} run={run}
+          status={makeStatus({ platform: (page.platform ?? "windows") as "windows" })} onUnpaired={vi.fn()} /></div>);
+      }, step ? step.v2 ?? step.today : null);
+      const v2Has = (control: string) => {
+        const [role, name] = page.map?.[control] ?? [control.split(": ")[0] as ControlRole | "password", control.slice(control.indexOf(": ") + 2)];
+        return v2.controls.some((c) => {
+          const [r, n] = [c.split(": ")[0], c.slice(c.indexOf(": ") + 2)];
+          return r === role && (typeof name === "string" ? n === name : name.test(n));
+        });
+      };
+      expect(today.controls.filter((c) => !v2Has(c)), `${page.name}: ${state}`).toEqual([]);
+      expect(v2.asked, `${page.name}: ${state}, the question asked`).toEqual(today.asked);
+    }
+    expect(stale([...seen], Object.keys(page.map ?? {}))).toEqual([]);
   });
 });
 
