@@ -38,6 +38,8 @@ const SCREENS = [
   ["g-assist", "?v2gallery&screen=assist&lang=en"],
   ["a-library", app("library")],
   ["a-recording", app("library"), async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
+  ["a-recording-screens", app("library"), async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); }],
+  ["a-screen-viewer", app("library"), async (page) => { await page.getByRole("button", { name: "Weekly sync with Northwind", exact: true }).click(); await page.waitForTimeout(1500); await page.getByRole("region", { name: /screens?$/ }).getByRole("button").first().click(); await page.waitForTimeout(800); }],
   ["a-trash", app("library"), async (page) => { await page.getByRole("button", { name: "Trash", exact: true }).click(); await page.waitForTimeout(1200); }],
   ["a-home", app("library"), nav("Home")],
   ["a-live", app("library"), nav("Live")],

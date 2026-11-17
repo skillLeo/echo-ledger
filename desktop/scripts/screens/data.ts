@@ -1,7 +1,7 @@
 // Sample data for the screenshot fixture: the phone's design screens use the same people and calls, so the desktop
 // and the phone pictures can be compared side by side.
-import type { ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
-import { makeItem, makeTranscript } from "../../src/test/fixtures";
+import type { ScreenMoment, ActivityItem, CallNotes, ClientFolder, ClientWorkspace, FilingRule, LibraryItem, LibraryViews, PendingItem, RequestLink, Segment, ShareLink, SharedItem, SkippedItem, TranscriptDetail } from "../../src/lib/ipc";
+import { makeItem, makeScreen, makeTranscript } from "../../src/test/fixtures";
 
 const DAY = 86_400_000;
 const at = (daysAgo: number, hour: number, minute = 0): string => {
@@ -29,7 +29,7 @@ const ready = (id: string, preview: string) => ({
 
 export const ITEMS: LibraryItem[] = [
   makeItem("r1", { title: "Weekly sync with Northwind", source_app: "zoom", source_app_label: "Zoom", source_device: "desktop", source_device_label: "Desktop",
-    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
+    client: client("c-north", "Northwind"), started_at: at(0, 9, 0), duration_ms: 2_530_000, status: "completed", screen_count: 3, transcript: ready("r1", "Let us go over the roadmap for the next quarter.") }),
   // v1.5: an Urdu call a backup engine transcribed ("Backup engine — Re-transcribe?").
   makeItem("r2", { title: "Invoice questions", source_app: "whatsapp", source_app_label: "WhatsApp", source_device: "phone", source_device_label: "Phone", pinned: true,
     client: client("c-aria", "Aria Studio"), started_at: at(0, 7, 10), duration_ms: 742_000, status: "completed", language: "ur", language_chip: "UR",
@@ -233,3 +233,22 @@ export const ACCOUNT = {
   super_admin: true,
   workspaces: [{ id: 1, name: "Acme team", role: "owner", current: true }, { id: 2, name: "Personal", role: "owner" }],
 };
+
+/** The Northwind call's screens (meeting assets, v1.8 P4): the first two with the server's name and what was said. */
+export const SCREENS_R1: ScreenMoment[] = [
+  makeScreen(1, 12_000, { id: "r1-s1", description: "Roadmap slide, Q1 priorities", ocr_text: "Q1 ROADMAP\n1. Billing page\n2. Team invites\n3. Mobile sign-in",
+    file_name: "S01_0-12_roadmap-slide-q1-priorities.webp", said: "Sara (Acme): Let me share the roadmap.\nYou: The billing page comes first?" }),
+  makeScreen(2, 95_000, { id: "r1-s2", description: "The billing page, Pay button highlighted", file_name: "S02_1-35_the-billing-page-pay-button-highlighted.webp", said: null }),
+  makeScreen(3, 610_000, { id: "r1-s3", description: "Budget table for phase one" }),
+];
+
+/** A plain picture for a screen in fixture mode: a grey page with its title, as an SVG data URL. */
+export function screenPictureFor(url: string): string {
+  const n = /screens\/(\d+)/.exec(url)?.[1] ?? "1";
+  const title = SCREENS_R1[Number(n) - 1]?.description ?? "Screen";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720"><rect width="1280" height="720" fill="#F4F4F2"/>`
+    + `<rect x="0" y="0" width="1280" height="64" fill="#E4E4E0"/><rect x="64" y="128" width="720" height="40" fill="#C9C9C4"/>`
+    + `<rect x="64" y="200" width="1100" height="20" fill="#DCDCD7"/><rect x="64" y="240" width="980" height="20" fill="#DCDCD7"/><rect x="64" y="280" width="1040" height="20" fill="#DCDCD7"/>`
+    + `<text x="64" y="420" font-family="sans-serif" font-size="48" fill="#3A3A36">${title}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
