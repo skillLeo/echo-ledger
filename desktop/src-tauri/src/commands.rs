@@ -3060,7 +3060,13 @@ pub async fn translate_start(app: AppHandle, state: State<'_, AppState>, request
     };
     // The window a Stop just closed is waited for: the new session gets its own.
     crate::translate::wait_closed(&app).await.map_err(AppError::Message)?;
-    crate::overlay::create_translate_window(&app, mode == crate::translate::Mode::Watch).map_err(|e| AppError::Message(e.to_string()))?;
+    // Built on a blocking thread: the build waits for the main thread to make its webview, never on an async worker.
+    let builder = app.clone();
+    let watch = mode == crate::translate::Mode::Watch;
+    tauri::async_runtime::spawn_blocking(move || crate::overlay::create_translate_window(&builder, watch))
+        .await
+        .map_err(|e| AppError::Message(e.to_string()))?
+        .map_err(|e| AppError::Message(e.to_string()))?;
     crate::translate::start(app.clone(), pid, name, mode, speed, fetch).map_err(AppError::Message)?;
     let taken = crate::translate::register_hotkeys(&app);
     // The tray says it is listening (with Stop) for as long as it does.

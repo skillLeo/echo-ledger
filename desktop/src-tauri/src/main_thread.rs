@@ -28,6 +28,8 @@
 //! - a name shadowed by a local variable or parameter (a call to a local `f` is taken for the caller's closure);
 //! - `join()` on a thread that itself waits for the main thread (the lock holder waits for the thread, the thread for
 //!   the main thread);
+//! - a `spawn_blocking(…)` awaited while a guard is held: its closure is read as running on its own (like `spawn`'s),
+//!   but the holder waits for it, and it may wait for the main thread;
 //! - macro bodies that do not parse as expressions (`tokio::select!`, `json!`, `vec![x; n]`);
 //! - calls that wait but whose names other types share, so they are not listed: a menu's `append`, `insert`, `remove`
 //!   and `items`, a window's `title()`, a webview's `size()`, `position()` and `bounds()`;
@@ -134,8 +136,10 @@ mod tests {
 
     /// The closures given to these run later (on the main thread, a task or a thread of their own): each is read as a
     /// unit of its own, with no guard of the code that gave it.
-    const LATER: [&str; 21] = [
+    const LATER: [&str; 22] = [
         "spawn",
+        // The blocking pool's thread (window builds, `lifecycle::spawn_build`): like a thread of its own.
+        "spawn_blocking",
         "init",
         "on_menu_event",
         "on_tray_icon_event",
