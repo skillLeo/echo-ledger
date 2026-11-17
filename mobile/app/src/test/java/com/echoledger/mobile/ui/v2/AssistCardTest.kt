@@ -17,6 +17,15 @@ import com.echoledger.mobile.ui.v2.assist.ModeReason
 import com.echoledger.mobile.ui.v2.assist.SuggestionKind
 import com.echoledger.mobile.ui.v2.assist.SuggestionStatus
 import com.echoledger.mobile.ui.v2.assist.SuggestionText
+import java.io.File
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -66,11 +75,12 @@ class AssistCardTest {
         assertEquals("s-1", s.shownId)
         assertEquals("Draft", s.shown?.text)
         assertTrue(s.ready)
-        // An upgrade comes as one token with the whole text; at that token the draft leaves for good.
+        // An upgrade comes as one token with the whole text; that token moves the card. The draft keeps its own text
+        // (it ended done; only its own end could change it).
         val first = play(Token("s-2", "Yes, it holds for sixty."), from = s)
         assertEquals("s-2", first.shownId)
-        assertEquals(SuggestionStatus.Superseded, first.suggestions.first { it.id == "s-1" }.status)
-        assertEquals("", first.suggestions.first { it.id == "s-1" }.text)
+        assertEquals(SuggestionStatus.Done, first.suggestions.first { it.id == "s-1" }.status)
+        assertEquals("Draft", first.suggestions.first { it.id == "s-1" }.text)
         val upgraded = play(SuggestionEnd("s-2", EndStatus.Done), from = first)
         assertEquals("Yes, it holds for sixty.", upgraded.shown?.text)
         // If the upgrade were then cancelled, the replaced draft does not come back.
@@ -128,13 +138,14 @@ class AssistCardTest {
     @Test
     fun skipEndsTheSuggestionItNames() {
         val s = play(ready, start("s-1"), Skip("s-1", "t-1"))
-        assertEquals(SuggestionStatus.Skipped, s.shown?.status)
+        assertEquals(SuggestionStatus.Skipped, s.suggestions.single().status)
+        assertNull(s.shownId)
         assertTrue(s.skipped)
         assertFalse(s.ready)
     }
 
     @Test
-    fun aResumedConnectionClearsTheCard() {
+    fun aResumedReadyClearsOnlyASuggestionStillStreaming() {
         val before =
             play(
                 ready,
@@ -147,12 +158,85 @@ class AssistCardTest {
         val s = play(ready.copy(resumed = true), from = before)
         assertEquals("", s.suggestions.first { it.id == "s-2" }.text)
         assertEquals(SuggestionStatus.Cancelled, s.suggestions.first { it.id == "s-2" }.status)
-        // The card is clear until the next suggestion; the earlier one does not come back.
+        // It was on the card: the card is clear until the next suggestion.
         assertNull(s.shownId)
         assertFalse(s.ready)
         assertEquals("s-3", play(start("s-3", turn = "t-3"), from = s).shownId)
         // Not resumed: nothing is cleared.
         assertEquals("Half an ans", play(ready, from = before).shown?.text)
+    }
+
+    @Test
+    fun aFinishedSuggestionAndNoReplyNeededStayAcrossAResumedReady() {
+        val done = play(ready, start("s-1"), Token("s-1", "Delivery by Thursday."), SuggestionEnd("s-1", EndStatus.Done))
+        val resumed = play(ready.copy(resumed = true), from = done)
+        assertEquals("s-1", resumed.shownId)
+        assertEquals("Delivery by Thursday.", resumed.shown?.text)
+        assertEquals(SuggestionStatus.Done, resumed.shown?.status)
+        assertTrue(resumed.ready)
+        val skipped = play(ready, start("s-1"), Skip("s-1", "t-1"), ready.copy(resumed = true))
+        assertTrue(skipped.skipped)
+    }
+
+    /** The same sequences the desktop card's tests run (docs/v2/assist-card-sequences.json): the two can't drift. */
+    @Test
+    fun theSharedSequencesGiveTheSameCardAsOnTheDesktop() {
+        val file =
+            File(
+                File(System.getProperty("screenshots.dir") ?: "../../docs/design/screens").parentFile!!.parentFile,
+                "v2/assist-card-sequences.json"
+            )
+        val sequences = Json.parseToJsonElement(file.readText()).jsonObject["sequences"]!!.jsonArray
+        assertTrue(sequences.size >= 10)
+        for (sequence in sequences) {
+            val name = sequence.jsonObject["name"]!!.jsonPrimitive.content
+            var state = CardState()
+            sequence.jsonObject["steps"]!!.jsonArray.forEachIndexed { i, step ->
+                state = AssistCard.reduce(state, wire(step.jsonObject["message"]!!.jsonObject))
+                val expect = step.jsonObject["expect"]!!.jsonObject
+                val at = "$name, step ${i + 1}"
+                assertEquals(at, expect["shown_id"]!!.jsonPrimitive.contentOrNull, state.shownId)
+                assertEquals(at, expect["text"]!!.jsonPrimitive.content, state.shown?.text.orEmpty())
+                assertEquals(at, expect["status"]!!.jsonPrimitive.contentOrNull, state.shown?.status?.name?.lowercase())
+                assertEquals(at, expect["skipped"]!!.jsonPrimitive.boolean, state.skipped)
+            }
+        }
+    }
+
+    /** A relay message as it comes over the wire (what the core parses), for the shared sequences. */
+    private fun wire(m: JsonObject): AssistMessage {
+        fun str(key: String) = m[key]?.jsonPrimitive?.contentOrNull
+        fun bool(key: String) = m[key]?.jsonPrimitive?.booleanOrNull ?: false
+        val camel = { w: String -> w.split('_').joinToString("") { it.replaceFirstChar(Char::uppercase) } }
+        return when (str("type")) {
+            "ready" -> Ready(
+                str("session_id")!!,
+                LiveMode.from(str("mode")),
+                m["allowed_modes"]!!.jsonArray.map { LiveMode.from(it.jsonPrimitive.content) },
+                resumed = bool("resumed"),
+                meetingType = null
+            )
+
+            "suggestion_start" -> SuggestionStart(
+                str("suggestion_id")!!,
+                str("turn_id"),
+                SuggestionKind.valueOf(camel(str("kind")!!)),
+                speculative = bool("speculative"),
+                replaces = str("replaces"),
+                mode = LiveMode.from(str("mode")),
+                draft = bool("draft")
+            )
+
+            "token" -> Token(str("suggestion_id")!!, str("text")!!)
+
+            "suggestion_end" -> SuggestionEnd(str("suggestion_id")!!, EndStatus.valueOf(camel(str("status")!!)))
+
+            "skip" -> Skip(str("suggestion_id"), str("turn_id"))
+
+            "error" -> Error(str("code")!!, str("message").orEmpty(), bool("retry"), str("suggestion_id"), bool("fatal"))
+
+            else -> error("No such message in the sequences: ${str("type")}")
+        }
     }
 
     @Test
