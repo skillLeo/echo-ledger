@@ -802,7 +802,8 @@ impl SettingsPatch {
         if let Some(v) = self.ask_unknown_apps { s.ask_unknown_apps = v; }
         if let Some(v) = &self.site_rules { s.site_rules = v.clone(); }
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
-        if let Some(v) = self.after_call { s.after_call = v; }
+        // Choosing After a call answers the one-time notice about it.
+        if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
