@@ -739,6 +739,16 @@ export interface AssistSnapshot {
 export interface UiFlagsAnswer {
   ui_flags: Record<string, boolean>;
   ui_classic: boolean;
+  /** The design switch (since 2.0.0-g); null from an older server (show only the 2.0.0-a switch). */
+  ui_design?: UiDesign | null;
+}
+/** `ui_design` (docs/API.md "The design switch"): show Try the new design while `can_try`, Switch back to classic
+ * while `can_switch_back`. */
+export interface UiDesign {
+  choice: "v2" | "classic" | null;
+  current: "v2" | "classic";
+  can_try: boolean;
+  can_switch_back: boolean;
 }
 
 /** The last app that used the microphone without being recorded, and when it was last seen so (kept by the core). */
@@ -1744,7 +1754,7 @@ export const api = {
   /** One zip file, saved where the person chooses; null when they cancel the save dialog. */
   /** The finished transcripts of the selected recordings in one zip; `view` (roman | english | urdu) exports each one
    * whose Show as view is ready in it. */
-  exportSessions: (ids: string[], format: BulkExportFormat, view: ExportView | null = null) => invoke<string | null>("sessions_export", { ids, format, view }),
+  exportSessions: (ids: string[], format: BulkExportFormat, view?: ExportView) => invoke<string | null>("sessions_export", { ids, format, view }),
   /** Transcribe on an audio-only recording (since v1.8): its transcript starts now. */
   sessionTranscribe: (id: string) => invoke<Record<string, unknown>>("session_transcribe", { id }),
   /** Transcribe selected (1-50): which started, which were skipped and why, and the minutes. Nothing starts when the
@@ -1869,6 +1879,9 @@ export const api = {
   trashKeepHours: () => invoke<number>("trash_keep_hours"),
   /** "Switch back to classic" (`PUT /api/account/ui`): the server's new flags. */
   uiClassicSet: (classic: boolean) => invoke<UiFlagsAnswer>("ui_classic_set", { classic }),
+  /** The design switch (contract 2.0.0-g): "v2" is Try the new design, "classic" is Switch back to classic, null the
+   * default. The answer has the same shape as `ui_flags`, with `ui_design`. */
+  uiDesignSet: (design: "v2" | "classic" | null) => invoke<UiFlagsAnswer>("ui_design_set", { design }),
   /** Help (docs/API.md 2.0.0-d, v1.8 P6.4): the user guide's sections, those matching `q` best first (at most 20). */
   helpGuides: (q: string | null = null) => invoke<{ data: HelpGuideHit[] }>("help_guides", { q }),
   /** One section of the guide, as Markdown. */

@@ -2639,11 +2639,33 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
     let state = app.state::<AppState>();
     let api = state.api()?;
     let answer = api.set_ui_classic(classic).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// The design switch (contract 2.0.0-g): `v2` is Try the new design, `classic` is Switch back to classic, none is the
+/// default. `PUT /api/account/ui`, its answer kept in the cached config and returned in the `ui_flags` shape; the config
+/// is then read again in the background. `422 design_not_available` comes back as it is (nothing open to try).
+#[tauri::command]
+pub async fn ui_design_set(app: AppHandle, design: Option<String>) -> AppResult<crate::ui_flags::UiFlags> {
+    if design.as_deref().is_some_and(|d| !matches!(d, "v2" | "classic")) {
+        return Err(AppError::msg("That design is not one of the choices."));
+    }
+    let answer = app.state::<AppState>().api()?.set_ui_design(design.as_deref()).await?;
+    Ok(took_ui_answer(&app, answer))
+}
+
+/// A `PUT /api/account/ui` answer: kept in the cached config, the window told, the config read again in the background
+/// (the contract asks for it right after the PUT); the flags as the window reads them.
+fn took_ui_answer(app: &AppHandle, answer: crate::net::models::UiAnswer) -> crate::ui_flags::UiFlags {
+    let state = app.state::<AppState>();
     if let Some(config) = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
         config.ui_flags = answer.ui_flags.clone();
         config.ui_classic = answer.ui_classic;
+        if answer.ui_design.is_some() {
+            config.ui_design = answer.ui_design.clone();
+        }
     }
-    crate::actions::emit_status(&app);
+    crate::actions::emit_status(app);
     let reader = app.clone();
     tauri::async_runtime::spawn(async move {
         let state = reader.state::<AppState>();
@@ -2654,7 +2676,7 @@ pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::u
             crate::actions::emit_status(&reader);
         }
     });
-    Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
+    crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic).with_design(answer.ui_design.as_ref())
 }
 
 // ---- Live Assist (docs/API_ASSIST.md 1.9.0-g; the card's commands, desktop/src/v2/assist/adapter.ts) ----------------

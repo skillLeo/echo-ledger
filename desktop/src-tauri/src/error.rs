@@ -37,7 +37,7 @@ const PLAIN_CODES: [&str; 11] = [
 
 /// Projects, filing rules and sending (since v1.5): what the app says, whatever words the server chose. The commands
 /// that know more (which project has the rule, which address has no account) say that instead.
-const CODE_TEXT: [(&str, &str); 38] = [
+const CODE_TEXT: [(&str, &str); 39] = [
     ("invalid_parent", "A project can't go inside itself or one of its own folders. Pick another folder."),
     ("too_deep", "Projects can be nested 4 levels deep at most. Pick a folder higher up."),
     ("rule_exists", "Another project already has this rule. Remove it there first, or file these recordings by something else."),
@@ -75,6 +75,7 @@ const CODE_TEXT: [(&str, &str); 38] = [
     ("too_many_open_uploads", "Too many recordings are still uploading from this computer. Let them finish, then try again."),
     ("too_many_open_sessions", "Too many recordings of this computer are still open on the server. Finish or discard them, then try again."),
     ("duplicate_recording", "This file is already in your Library."),
+    ("design_not_available", "The new design isn't open to try yet."),
     ("not_audio_only", "This recording is already transcribed, or its audio is still uploading."),
     ("cannot_retranscribe", "This recording's audio isn't on the server yet, so it can't be transcribed again. Try again once it has uploaded."),
     ("too_large", "This file is too large for the server."),

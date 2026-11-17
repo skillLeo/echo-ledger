@@ -597,6 +597,13 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `PUT /api/account/ui` (contract 2.0.0-g): the design switch, `v2` (Try the new design), `classic` (Switch back
+    /// to classic) or none (back to the default). `422 design_not_available` when there is nothing to try.
+    pub async fn set_ui_design(&self, design: Option<&str>) -> AppResult<crate::net::models::UiAnswer> {
+        let resp = self.authed(self.http.put(self.url("account/ui")))?.json(&json!({ "design": design })).send().await?;
+        Self::parse(resp).await
+    }
+
     /// `POST /api/assist/sessions` (Live Assist 1.9.0-e): starts a session; the relay and speech tokens come back.
     pub async fn assist_start(&self, request: &AssistStartRequest) -> AppResult<AssistStartAnswer> {
         let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;

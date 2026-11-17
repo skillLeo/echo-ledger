@@ -104,3 +104,35 @@ async fn a_recording_s_language_changes_without_re_transcribing_it() {
     assert_eq!(server.requests()[0].json(), json!({"language": "ur"}));
     assert!(server.requests_to("POST", &format!("/api/sessions/{A}/retranscribe")).is_empty(), "nothing re-transcribed");
 }
+
+#[tokio::test]
+async fn the_design_switch_is_set_and_its_refusal_says_why() {
+    let answer = json!({"ui_flags": {"ui_v2.shell": true}, "ui_classic": false, "ui_design": {"choice": "v2", "current": "v2", "can_try": false, "can_switch_back": true}});
+    let server = MockServer::start(Router::new().fixed("PUT", "/api/account/ui", Reply::json(200, answer)));
+    let api = client(&server);
+    let got = api.set_ui_design(Some("v2")).await.unwrap();
+    let flags = desktop_lib::ui_flags::UiFlags::read(got.ui_flags.as_ref(), got.ui_classic).with_design(got.ui_design.as_ref());
+    assert!(flags.is_on("ui_v2.shell"));
+    assert_eq!(flags.design.as_ref().map(|d| (d.current.as_str(), d.can_switch_back)), Some(("v2", true)));
+    api.set_ui_design(None).await.unwrap();
+    let sent = server.requests_to("PUT", "/api/account/ui");
+    assert_eq!(sent[0].json(), json!({"design": "v2"}));
+    assert_eq!(sent[1].json(), json!({"design": null}), "back to the default");
+
+    let refused = MockServer::start(Router::new().fixed("PUT", "/api/account/ui", Reply::json(422, json!({"code": "design_not_available", "message": "Nothing to try yet."}))));
+    let err = client(&refused).set_ui_design(Some("v2")).await.unwrap_err();
+    assert_eq!(err.code(), Some("design_not_available"));
+    assert_eq!(err.to_string(), "The new design isn't open to try yet.");
+}
+
+#[tokio::test]
+async fn the_config_carries_the_design_switch_and_an_older_one_does_not() {
+    let base: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/config.json")).unwrap()).unwrap();
+    let mut with = base.clone();
+    with["ui_flags"] = json!({"ui_v2.home": true});
+    with["ui_design"] = json!({"choice": null, "current": "classic", "can_try": true, "can_switch_back": false});
+    let config: desktop_lib::net::models::ServerConfig = serde_json::from_value(with).unwrap();
+    assert_eq!(config.ui().design.map(|d| d.can_try), Some(true));
+    let older: desktop_lib::net::models::ServerConfig = serde_json::from_value(base).unwrap();
+    assert_eq!(older.ui().design, None, "an older server shows only the 2.0.0-a switch");
+}

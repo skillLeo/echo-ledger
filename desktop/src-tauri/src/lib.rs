@@ -611,6 +611,7 @@ pub fn run() {
             commands::trash_keep_hours,
             commands::after_call_notice_answer,
             commands::ui_classic_set,
+            commands::ui_design_set,
             commands::assist_preps_list,
             commands::assist_prep_save,
             commands::assist_prep_delete,
