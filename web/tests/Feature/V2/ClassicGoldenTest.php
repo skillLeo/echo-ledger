@@ -23,6 +23,9 @@ require_once __DIR__.'/Support/golden.php';
 function classicConsole(): array
 {
     Carbon::setTestNow(Carbon::parse('2026-11-17 11:42:00', 'UTC'));
+    // The saved copies were made with debug off, as in production. A shell that exports APP_DEBUG=true wins over
+    // phpunit.xml and changes every page (Filament adds an error-notification script to the Livewire effects).
+    expect(config('app.debug'))->toBeFalse('the saved pages need debug off: run the suite with APP_DEBUG unset');
     $owner = Fx::user(['name' => 'Bilal Qureshi', 'email' => 'bilal@qureshi-textiles.example']);
     $device = Fx::device($owner, ['name' => 'Galaxy S25']);
     $client = Fx::client($owner, 'Qureshi Textiles');

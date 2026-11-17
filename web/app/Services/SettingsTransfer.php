@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Stt\Drivers\AssemblyAiDriver;
 use App\Support\Brand;
 use InvalidArgumentException;
 
@@ -66,6 +67,7 @@ final class SettingsTransfer
         'markers.tags',
         'assemblyai.region',
         'assemblyai.streaming_model',
+        'assemblyai.streaming_mode',
         'assemblyai.async_models',
         'groq.plan',
         'gemini.model',
@@ -125,6 +127,13 @@ final class SettingsTransfer
             throw new InvalidArgumentException('The file has no settings.');
         }
 
-        return array_intersect_key($settings, array_flip(self::PORTABLE));
+        $settings = array_intersect_key($settings, array_flip(self::PORTABLE));
+        // The caption speed must be one of the known presets; anything else is dropped (the stored value stays).
+        if (array_key_exists('assemblyai.streaming_mode', $settings)
+            && (! is_string($settings['assemblyai.streaming_mode']) || ! array_key_exists($settings['assemblyai.streaming_mode'], AssemblyAiDriver::STREAMING_MODES))) {
+            unset($settings['assemblyai.streaming_mode']);
+        }
+
+        return $settings;
     }
 }

@@ -175,6 +175,7 @@ class Settings extends Page
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
+            'assemblyai_streaming_mode' => $all['assemblyai.streaming_mode'],
             'assemblyai_async_models' => $all['assemblyai.async_models'],
             'groq_plan' => isset(GroqPacer::PLANS[$all['groq.plan'] ?? '']) ? $all['groq.plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini_model' => GeminiDriver::modelOr($all['gemini.model'] ?? null),
@@ -376,6 +377,12 @@ class Settings extends Page
                             'universal-streaming-english' => 'Universal-Streaming English (budget)',
                             'universal-streaming-multilingual' => 'Universal-Streaming Multilingual (budget)',
                         ])->required(),
+                        Select::make('assemblyai_streaming_mode')->label('Caption speed')->options([
+                            'min_latency' => 'Fastest (default)',
+                            'balanced' => 'Balanced',
+                            'max_accuracy' => 'Most accurate, slower',
+                        ])->required()->selectablePlaceholder(false)
+                            ->helperText('How soon live captions end a line. Fastest ends it after 0.64 s of quiet, Balanced after 1.28 s, Most accurate after 2.56 s. Applies to captions started after saving.'),
                         TagsInput::make('assemblyai_async_models')->label('Final transcript models (priority order)')->columnSpanFull(),
                     ]),
                     $this->section('groq')->collapsible()->collapsed()->columns(2)->schema([
@@ -803,6 +810,7 @@ class Settings extends Page
             'support.email' => filled($state['support_email'] ?? null) ? mb_strtolower(trim((string) $state['support_email'])) : null,
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
+            'assemblyai.streaming_mode' => $state['assemblyai_streaming_mode'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
             'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),
