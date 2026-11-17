@@ -196,6 +196,21 @@ html[lang='ur'] .fi-body {
     line-height: var(--el-text-urdu-body-line);
 }
 
+/*
+ * Right to left: a line written in English (a name, an email, a page not yet in Urdu, model output) keeps its own
+ * order, and a number with its unit stays one run ("1 min", "$0.00"). The shortcut chips read left to right.
+ */
+html[dir='rtl'] .fi-body :is(p, h1, h2, h3, h4, li, dt, dd, td, th, label, .fi-wi-stats-overview-stat-value,
+    .fi-wi-stats-overview-stat-description, .fi-wi-stats-overview-stat-label, .fi-section-header-description, .fi-ta-text-item-label) {
+    unicode-bidi: plaintext;
+    text-align: right;
+}
+
+html[dir='rtl'] .fi-body :is(kbd, .fi-input-wrp-suffix, .el-kbd) {
+    direction: ltr;
+    unicode-bidi: isolate;
+}
+
 /* Nastaliq's letters are tall: Urdu labels get its line height, so nothing is cut off. */
 html[lang='ur'] .v2-sb-label,
 html[lang='ur'] .v2-row-title,
@@ -215,6 +230,21 @@ html[lang='ur'] .v2-sb-label,
 html[lang='ur'] .v2-row-title,
 html[lang='ur'] .v2-row-meta {
     padding-block: var(--el-space-2);
+}
+
+/* the classic pages' text sizes, with Nastaliq's room above and below */
+html[lang='ur'] .fi-body :is(.text-xs, .text-sm, .text-base, .fi-section-header-description, .fi-wi-stats-overview-stat-description,
+    .fi-wi-stats-overview-stat-label, .el-muted, .el-note-item, .el-card-title) {
+    line-height: var(--el-text-urdu-body-line);
+}
+
+html[lang='ur'] .fi-body :is(.fi-section-header-heading, .text-lg, .text-xl) {
+    line-height: calc(var(--el-text-urdu-body-line) * 1.3);
+}
+
+html[lang='ur'] .fi-header-heading,
+html[lang='ur'] .fi-wi-stats-overview-stat-value {
+    line-height: calc(var(--el-text-title-l-line) * 1.8);
 }
 
 .v2-mono,
@@ -1469,4 +1499,35 @@ html .fi-body .el-player .el-chip {
 
 [dir='rtl'] .v2-viewer-body .v2-icon-flip {
     transform: scaleX(-1);
+}
+
+/* ================================================================== 7. Details */
+
+.v2-details {
+    margin: 0;
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.v2-details-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--el-space-16);
+    min-height: var(--el-component-list-row-height-compact);
+    padding: var(--el-space-8) var(--el-space-16);
+}
+
+.v2-details-row + .v2-details-row {
+    border-top: var(--el-border-hairline) solid var(--el-role-border-default);
+}
+
+.v2-details-row dt {
+    color: var(--el-role-text-secondary);
+}
+
+.v2-details-row dd {
+    margin: 0;
+    text-align: end;
 }

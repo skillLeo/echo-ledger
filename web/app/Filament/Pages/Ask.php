@@ -13,9 +13,12 @@ use App\Services\ClientAi\ClientWorkspace;
 use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Actions\Action;
 use Filament\Pages\Page;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\Support\Htmlable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Livewire\Attributes\Url;
 
 /**
@@ -92,12 +95,40 @@ class Ask extends Page
             return;
         }
         $this->askError = null;
+        // The API's per-person limit (20 questions a minute), in the same bucket whichever app or the console asks.
+        $wait = self::askLimit();
+        if ($wait !== null) {
+            $this->askError = __('Too many questions for now. Try again in :seconds seconds.', ['seconds' => $wait]);
+
+            return;
+        }
         try {
             $this->answer = app(ClientWorkspace::class)->ask($client, trim($this->question), $this->askLanguage);
         } catch (ApiError $e) {
             $this->answer = null;
             $this->askError = $e->getMessage();
         }
+    }
+
+    /** Counts a question against the API's `ask` limiter for the person; the seconds to wait when it is used up. */
+    private static function askLimit(): ?int
+    {
+        $user = auth()->user();
+        $request = Request::create('/api/ask', 'POST');
+        $request->setUserResolver(fn (): mixed => $user);
+        $limit = RateLimiter::limiter('ask')($request);
+        $limit = $limit instanceof Limit ? $limit : (is_array($limit) ? $limit[0] : null);
+        if (! $limit instanceof Limit) {
+            return null;
+        }
+        // Keyed as ThrottleRequests keys a named limiter, so the API and the console share the bucket.
+        $key = md5('ask'.$limit->key);
+        if (RateLimiter::tooManyAttempts($key, $limit->maxAttempts)) {
+            return max(1, RateLimiter::availableIn($key));
+        }
+        RateLimiter::hit($key, $limit->decaySeconds);
+
+        return null;
     }
 
     public function updatedProject(): void

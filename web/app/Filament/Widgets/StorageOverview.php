@@ -24,19 +24,25 @@ class StorageOverview extends StatsOverviewWidget
 
     protected ?string $heading = 'Storage';
 
+    /** Since v2.0 in the console's language (English is unchanged). */
+    protected function getHeading(): ?string
+    {
+        return __((string) $this->heading);
+    }
+
     /** @return list<Stat> */
     protected function getStats(): array
     {
         $policy = app(RetentionPolicy::class);
         $storage = $policy->storage((int) CurrentWorkspace::id());
         $stats = [
-            Stat::make('Recordings', Number::fileSize($storage['recordings_bytes'], precision: 1))
-                ->description($storage['recordings_count'].' files · deleted after '.$policy->daysFor(null).' days'),
+            Stat::make(__('Recordings'), Number::fileSize($storage['recordings_bytes'], precision: 1))
+                ->description(__(':count files · deleted after :days days', ['count' => $storage['recordings_count'], 'days' => $policy->daysFor(null)])),
         ];
         if ($storage['disk_total_bytes'] !== null && $storage['disk_free_bytes'] !== null && $storage['disk_total_bytes'] > 0) {
             $used = 1 - $storage['disk_free_bytes'] / $storage['disk_total_bytes'];
-            $stats[] = Stat::make('Server disk', Number::percentage($used * 100, precision: 0).' used')
-                ->description(Number::fileSize($storage['disk_free_bytes'], precision: 1).' free of '.Number::fileSize($storage['disk_total_bytes'], precision: 1))
+            $stats[] = Stat::make(__('Server disk'), __(':percent used', ['percent' => Number::percentage($used * 100, precision: 0)]))
+                ->description(__(':free free of :total', ['free' => Number::fileSize($storage['disk_free_bytes'], precision: 1), 'total' => Number::fileSize($storage['disk_total_bytes'], precision: 1)]))
                 ->color($used > 0.9 ? 'danger' : ($used > 0.75 ? 'warning' : 'success'));
         }
 

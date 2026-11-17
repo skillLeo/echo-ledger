@@ -18,7 +18,7 @@
     @if ($readOnly)
         <div class="el-chips" role="group" aria-label="Organise">
             <span class="el-chip el-chip-static">@svg('heroicon-o-folder', ['aria-hidden' => 'true'])<span>{{ $session->client?->name ?? __('No project') }}</span></span>
-            <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span></span>
+            <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ __($language) }}</span></span>
             @foreach ($labels as $label)
                 <span class="el-chip el-chip-static el-on">@svg('heroicon-s-tag', ['aria-hidden' => 'true'])<span>{{ $label }}</span></span>
             @endforeach
@@ -31,10 +31,10 @@
             </button>
             @if ($canRetranscribe)
                 <button type="button" class="el-chip" wire:click="mountAction('retranscribe_as')" aria-label="Language: {{ $language }}. Transcribe again in another language">
-                    @svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
+                    @svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ __($language) }}</span>@svg('heroicon-m-chevron-down', ['aria-hidden' => 'true', 'style' => 'width: 14px; height: 14px'])
                 </button>
             @else
-                <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ $language }}</span></span>
+                <span class="el-chip el-chip-static">@svg('heroicon-o-language', ['aria-hidden' => 'true'])<span>{{ __($language) }}</span></span>
             @endif
             @foreach ($labels as $label)
                 <button type="button" class="el-chip el-on" wire:click="mountAction('labels')" aria-label="Label {{ $label }}. Edit labels">

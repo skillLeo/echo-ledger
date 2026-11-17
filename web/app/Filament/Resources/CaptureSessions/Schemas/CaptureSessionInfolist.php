@@ -74,7 +74,9 @@ final class CaptureSessionInfolist
                 Tab::make(__('Moments'))->id('moments')->schema([
                     ViewEntry::make('moments')->hiddenLabel()->view('filament.v2.recording-moments'),
                 ]),
-                Tab::make(__('Details'))->id('details')->schema([self::details()]),
+                Tab::make(__('Details'))->id('details')->schema([
+                    ViewEntry::make('details')->hiddenLabel()->view('filament.v2.recording-details'),
+                ]),
             ]),
         ]);
     }
