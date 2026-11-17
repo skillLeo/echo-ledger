@@ -192,7 +192,7 @@ rest of a 4 GB VPS to nginx and the system. See LOADTEST.md.
 
 ## 6. nginx and TLS
 
-`/etc/nginx/sites-available/assist-relay` (link it into `sites-enabled`). If the console runs on the same VPS, keep
+`/etc/nginx/sites-available/assist-relay` (linked into `sites-enabled` once the certificate exists, below). If the console runs on the same VPS, keep
 its `default_server` block from docs/DEPLOY_VPS.md, which refuses unknown host names.
 
 ```
@@ -249,8 +249,11 @@ server {
 }
 ```
 
+Get the certificate before enabling the site (the site names its files, so `nginx -t` fails without them):
+
 ```
-sudo certbot --nginx -d <relay host> --reuse-key
+sudo certbot certonly --nginx -d <relay host> --reuse-key
+sudo ln -s /etc/nginx/sites-available/assist-relay /etc/nginx/sites-enabled/
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
