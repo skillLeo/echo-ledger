@@ -50,12 +50,12 @@ final class SupportMessages
             throw new ApiError(403, 'email_not_verified', 'Confirm your email first: support answers it.');
         }
         $key = 'support:u'.$user->id;
-        if (RateLimiter::tooManyAttempts($key, self::PER_HOUR)) {
+        // Counted first, refused above the limit: two sends at the same moment cannot both pass the last place.
+        if (RateLimiter::hit($key, 3600) > self::PER_HOUR) {
             $wait = RateLimiter::availableIn($key);
 
             throw new ApiError(429, 'too_many_attempts', 'Too many messages for now. Try again in '.max(1, (int) ceil($wait / 60)).' minutes, or write to '.$this->address().'.', [], ['Retry-After' => (string) $wait]);
         }
-        RateLimiter::hit($key, 3600);
         $reports = [];
         if ($includeReport) {
             $reports = DeviceReport::query()->withoutGlobalScopes()->where('user_id', $user->id)

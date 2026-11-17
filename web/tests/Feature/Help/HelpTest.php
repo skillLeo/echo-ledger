@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\Settings;
 use App\Filament\Pages\Help;
 use App\Mail\SupportMessageMail;
@@ -14,6 +15,7 @@ use App\Services\SettingsRepository;
 use App\Services\SettingsTransfer;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
@@ -102,6 +104,25 @@ describe('the device API', function () {
         $this->actingAs($device->user->fresh(), 'web');
         Livewire::test(Help::class)->callAction('contactSupport', ['subject' => 'From the console', 'message' => 'm'])->assertNotified();
         Mail::assertQueued(SupportMessageMail::class, 5);
+    });
+
+    it('counts a send before it goes: at 4 used, of two at once only one passes', function () {
+        $user = Fx::user();
+        foreach (range(1, 4) as $i) {
+            RateLimiter::hit('support:u'.$user->id, 3600);
+        }
+        $support = app(SupportMessages::class);
+        $outcomes = [];
+        foreach (range(1, 2) as $i) {
+            try {
+                $support->send($user, "s{$i}", 'm', false);
+                $outcomes[] = 'sent';
+            } catch (ApiError $e) {
+                $outcomes[] = $e->apiCode();
+            }
+        }
+        expect($outcomes)->toBe(['sent', 'too_many_attempts']);
+        Mail::assertQueued(SupportMessageMail::class, 1);
     });
 
     it('asks for a confirmed email first: the reply goes to it', function () {

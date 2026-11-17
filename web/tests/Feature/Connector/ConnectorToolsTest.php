@@ -229,7 +229,7 @@ describe('get_recording', function () {
             ->toContain('Project: Acme / Website')
             ->toContain('App: WhatsApp')
             ->toContain('View: Original')
-            ->toContain("[0:05] Me: Let me share my screen\n[Screen 1 at 0:30]\n[1:00] Omar: Please send the pelican invoice\n[Screen 2 at 14:32: The client's invoice page with the Pay button]\n[15:00] Me: Click here to pay")
+            ->toContain("[0:05] Me: Let me share my screen\n[Screen 1 at 0:30]\n[1:00] Omar: Please send the pelican invoice\n[Screen 2 at 14:32 — The client's invoice page with the Pay button]\n[15:00] Me: Click here to pay")
             ->toContain('each picture link works for 30 minutes')
             ->toContain("Text: Invoice #2041\nTotal walrus 85,000")
             ->toContain('/screen-media/'.$world['first']->id.'/image?')

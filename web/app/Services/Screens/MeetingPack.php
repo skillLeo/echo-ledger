@@ -92,10 +92,15 @@ final class MeetingPack
         ];
     }
 
-    /** "[Screen 7 at 14:32]" without the brackets: the screen's number and its moment. */
-    public static function label(int $number, int $atMs): string
+    /**
+     * "[Screen 7 at 14:32 — Orders page, client points at Submit]" without the brackets: the screen's number, its moment
+     * and (since v1.8 P4.4) its description.
+     */
+    public static function label(int $number, int $atMs, ?string $description = null): string
     {
-        return 'Screen '.$number.' at '.TranscriptExporter::clock($atMs);
+        $description = trim((string) preg_replace('/\s+/u', ' ', (string) $description));
+
+        return 'Screen '.$number.' at '.TranscriptExporter::clock($atMs).($description !== '' ? ' — '.$description : '');
     }
 
     /** `images/screen-07.webp`: numbered with at least two digits, as many as the last number needs. */
