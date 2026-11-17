@@ -55,6 +55,10 @@ const CASES = [
   ["a-settings", "app", app("settings"), ["en"]],
   ["a-settings-page", "app", app("settings"), ["en"], async (page) => { await page.locator(".el-row__hit").first().click(); await page.waitForTimeout(1200); }],
   ["a-setup", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Setup & health" }).click(); await page.waitForTimeout(1500); }],
+  ["a-help", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); }],
+  ["a-help-guide", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "After a call", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-whats-new", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "What's new" }).click(); await page.waitForTimeout(800); }],
+  ["a-contact", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "Contact support" }).click(); await page.waitForTimeout(500); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];

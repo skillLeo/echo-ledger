@@ -49,6 +49,10 @@ const SCREENS = [
   ["a-project-memory", app("project"), async (page) => { await project(page); await page.getByRole("tab", { name: "Memory & instructions" }).click(); await page.waitForTimeout(800); }],
   ["a-settings", app("settings")],
   ["a-setup", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Setup & health" }).click(); await page.waitForTimeout(1500); }],
+  ["a-help", app("settings"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); }],
+  ["a-help-guide", app("settings"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("button", { name: "After a call", exact: true }).click(); await page.waitForTimeout(800); }],
+  ["a-whats-new", app("settings"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "What's new" }).click(); await page.waitForTimeout(800); }],
+  ["a-contact", app("settings"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(1200); await page.getByRole("tab", { name: "Contact support" }).click(); await page.waitForTimeout(500); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 

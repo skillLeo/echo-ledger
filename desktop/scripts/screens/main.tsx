@@ -14,7 +14,7 @@ import { clearMocks, mockIPC, mockWindows } from "@tauri-apps/api/mocks";
 import "../../src/styles.css";
 import "../../src/views/controls.css";
 import { makeAfterCallState, makeChipItem, makeMicUser, makePlan, makeRecording, makeRecordingState, makeSavedToast, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../src/test/fixtures";
-import { SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
+import { HELP_GUIDE, HELP_GUIDES, WHATS_NEW, SCREENS_R1, screenPictureFor, ACCOUNT, ACTIVITY, ANSWER, CLIENTS, ITEMS, LIBRARY_VIEWS, NOTES_R5, PENDING, REQUESTS, RULES, SHARED, SHARES, SKIPPED, TRANSCRIPTS, VIEWS, WORKSPACE } from "./data";
 import { inFolderHere } from "../../src/lib/folders";
 import type { SmartFolder } from "../../src/lib/ipc";
 
@@ -300,6 +300,10 @@ const commands: Record<string, (args: Args) => unknown> = {
   transcript_views: () => VIEWS,
   session_screens: ({ id }) => ({ data: id === "r1" ? SCREENS_R1 : [] }),
   screen_image: ({ url }) => screenPictureFor(String(url)),
+  help_guides: ({ q }) => ({ data: q ? HELP_GUIDES.filter((g) => `${g.title} ${g.excerpt}`.toLowerCase().includes(String(q).toLowerCase())) : HELP_GUIDES }),
+  help_guide: () => HELP_GUIDE,
+  help_whats_new: () => ({ data: WHATS_NEW }),
+  support_send: () => null,
   unsure_markers: () => null,
   pending_list: () => (empty ? [] : PENDING),
   skipped_list: () => (empty ? [] : SKIPPED),

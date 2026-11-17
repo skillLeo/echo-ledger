@@ -252,3 +252,22 @@ export function screenPictureFor(url: string): string {
     + `<text x="64" y="420" font-family="sans-serif" font-size="48" fill="#3A3A36">${title}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
+
+/** Help (2.0.0-d): a few of the user guide's sections, one to read, and the Windows release notes. */
+export const HELP_GUIDES = [
+  { id: "after-a-call", title: "After a call", excerpt: "When a call ends, EchoLedger asks what to keep: the transcript, the audio only, or nothing." },
+  { id: "record-automatically", title: "Record automatically", excerpt: "Calls in WhatsApp, Google Meet, Zoom and Teams start recording on their own." },
+  { id: "live-captions", title: "Live captions", excerpt: "Captions of both sides of a call, as people speak." },
+  { id: "screen-moments", title: "Screens from your meetings", excerpt: "What a meeting showed, kept at its moments, with what was said around it." },
+];
+export const HELP_GUIDE = {
+  id: "after-a-call", title: "After a call",
+  markdown: "## After a call\n\nWhen a call ends, **EchoLedger** asks what to keep. The card stays on screen until you choose.\n\n"
+    + "1. **Transcribe** writes the words and keeps the audio.\n2. **Save audio** keeps only the sound; you can transcribe it later.\n3. **Delete** removes it. You can undo for a few seconds.\n\n"
+    + "| Choice | What it keeps |\n|---|---|\n| Transcribe | The audio and the transcript |\n| Save audio | The audio |\n| Delete | Nothing |\n\n"
+    + "To skip the question for every call, open Settings › After a call and choose `Transcribe every call`.",
+};
+export const WHATS_NEW = [
+  { version: "2.0.1", platform: "windows", released_at: "2026-11-15T10:00:00Z", notes: "- Screens from a meeting on the recording page, with what was said around each one\n- Help inside the app: guides, what's new and Contact support\n- Undo with Ctrl+Z after deleting a recording" },
+  { version: "2.0.0", platform: "windows", released_at: "2026-11-01T10:00:00Z", notes: "The new look: Home, Library, Live and Ask in one sidebar, and Settings you can search." },
+];
