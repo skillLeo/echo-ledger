@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material3.Text
@@ -37,6 +38,7 @@ import com.echoledger.mobile.ui.v2.components.EchoSwitch
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.library.LibraryModel
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.largeText
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /** The profile card's content: who is signed in, the plan and the month's minutes, and the storage. */
@@ -198,8 +200,8 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
                 }
             }
         }
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+        val usage: @Composable (Modifier) -> Unit = { m ->
+            Column(m, verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
                 profile.plan?.let { EchoStatus(text.plan(it), EchoStatusKind.Accent) }
                 if (profile.usedMinutes != null && profile.monthlyMinutes != null) {
                     Text(text.minutesUsed(profile.usedMinutes, profile.monthlyMinutes), style = EchoV2.type.meta, color = c.textSecondary)
@@ -212,7 +214,16 @@ private fun ProfileCard(profile: Profile, onUpgrade: () -> Unit, modifier: Modif
                     )
                 }
             }
-            EchoButton(text.upgrade, onClick = onUpgrade)
+        }
+        if (largeText()) {
+            // From 150 % text Upgrade goes under the usage lines, full width, so they keep the card's width.
+            usage(Modifier.fillMaxWidth())
+            EchoButton(text.upgrade, onClick = onUpgrade, modifier = Modifier.fillMaxWidth())
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
+                usage(Modifier.weight(1f))
+                EchoButton(text.upgrade, onClick = onUpgrade)
+            }
         }
     }
 }

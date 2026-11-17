@@ -37,7 +37,7 @@ class MotionAndIconsTest {
 
     @Test
     fun `only messages that confirm something carry the check`() {
-        listOf("Saved to your library", "Copied", "Copied with timestamps", "Restored — it uploads now", "Renamed").forEach {
+        listOf("Saved to your library", "Copied", "Copied with timestamps", "Restored: it uploads now", "Renamed").forEach {
             assertTrue(it, isConfirmation(it))
         }
         listOf("The project could not be updated.", "Offline", "Re-transcribing…", "Line 3 could not be read").forEach {

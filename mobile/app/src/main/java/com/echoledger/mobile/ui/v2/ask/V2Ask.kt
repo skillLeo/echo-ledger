@@ -77,8 +77,8 @@ enum class AskLanguage(val wire: String) {
 /**
  * Ask v2 (behind `ui_v2.ask`, docs/v2/IA.md 4): pick what to ask about, ask in your own words, get the answer with the
  * recordings it comes from (each opens at its moment). The server answers per project today (`POST
- * /api/clients/{id}/ask`), so the scope is a project; "All recordings" is shown, disabled, with why. On the existing
- * view model's Ask and project list.
+ * /api/clients/{id}/ask`), so the scope is a project; asking across all recordings isn't offered until the server
+ * supports it. On the existing view model's Ask and project list.
  */
 @Composable
 fun V2AskScreen(
@@ -179,7 +179,6 @@ fun V2AskContent(
                         onSelect = { onSelect(it.id) },
                         optionLabel = { it.name }
                     )
-                    Text(stringResource(R.string.v2_ask_scope_all_soon), style = EchoV2.type.caption, color = c.textSecondary)
                 }
                 EchoTextField(
                     value = question,

@@ -10,7 +10,7 @@ class NoticesTest {
     @Test
     fun `confirmations are successes, problems are errors, the rest is information`() {
         assertEquals(NoticeKind.SUCCESS, Notices.kindOf("Saved"))
-        assertEquals(NoticeKind.SUCCESS, Notices.kindOf("Restored — it uploads now"))
+        assertEquals(NoticeKind.SUCCESS, Notices.kindOf("Restored: it uploads now"))
         assertEquals(NoticeKind.ERROR, Notices.kindOf("The export failed."))
         assertEquals(NoticeKind.ERROR, Notices.kindOf("Can't reach the server. Try again."))
         assertEquals(NoticeKind.ERROR, Notices.kindOf("Shizuku is not running. Start it (Wireless debugging) and try again."))

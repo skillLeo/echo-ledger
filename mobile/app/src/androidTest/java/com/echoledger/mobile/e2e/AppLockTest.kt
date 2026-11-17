@@ -12,6 +12,8 @@ package com.echoledger.mobile.e2e
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.echoledger.mobile.e2e.support.AppState
 import com.echoledger.mobile.e2e.support.E2eTest
+import com.echoledger.mobile.e2e.support.Library
+import com.echoledger.mobile.e2e.support.SeedData
 import com.echoledger.mobile.e2e.support.Shell
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.After
@@ -49,12 +51,19 @@ class AppLockTest : E2eTest() {
         }
     }
 
+    /** Settings › App lock, its own page (the Settings list has a page per subject). */
+    private fun openAppLockPage() {
+        Ui.awaitText("Settings")
+        Ui.scrollDownTo(lockLabel)
+        Ui.clickText(lockLabel)
+    }
+
     /** Switching the lock on takes one successful unlock: the switch opens the prompt and only the PIN saves it. */
     private fun enableLockWithPin() {
         Shell.setDevicePin(pin)
         launchPaired()
         Ui.openTab("Settings")
-        Ui.clickText("Privacy & security")
+        openAppLockPage()
         Ui.awaitText(lockLabel)
         Ui.switchNear(lockLabel).click()
         enterPin()
@@ -65,7 +74,7 @@ class AppLockTest : E2eTest() {
     fun withoutASecureLockScreenTheSwitchIsDisabledAndSaysWhy() {
         launchPaired()
         Ui.openTab("Settings")
-        Ui.clickText("Privacy & security")
+        openAppLockPage()
         Ui.awaitText(lockLabel)
         assertTrue(Ui.has("Set a screen lock on this phone to use App lock."))
         assertTrue(Ui.has("Open security settings"))
@@ -77,7 +86,7 @@ class AppLockTest : E2eTest() {
         Shell.setDevicePin(pin)
         launchPaired()
         Ui.openTab("Settings")
-        Ui.clickText("Privacy & security")
+        openAppLockPage()
         Ui.awaitText(lockLabel)
         Ui.switchNear(lockLabel).click()
         cancelUnlockPrompt()
@@ -109,13 +118,15 @@ class AppLockTest : E2eTest() {
 
     @Test
     fun theLockedAppDoesNotExposeTheLibraryBehindTheCover() {
+        // A library with a known recording, so what the cover must hide is there behind it.
+        SeedData.ensure()
         enableLockWithPin()
         Ui.launchApp()
         cancelUnlockPrompt()
         Ui.awaitText("EchoLedger is locked", Ui.NORMAL)
         assertFalse(
             "screen content must not be readable through accessibility while the cover is shown",
-            Ui.has("Recordings from your phone, computer and the web") || Ui.has("All")
+            Ui.has(Library.SEARCH_HINT) || Ui.has(SeedData.GOOD_ONE) || Ui.has("All recordings")
         )
     }
 

@@ -327,7 +327,7 @@ class MainViewModelTest : AppTest() {
         val job = vm.refresh()
         pumpUntil("refresh to finish") { job.isCompleted }
 
-        assertEquals("Offline — showing the last synced library", vm.message.value)
+        assertEquals("Offline: showing the last synced library", vm.message.value)
         assertEquals(listOf("01JA"), vm.library.value.map { it.id })
     }
 

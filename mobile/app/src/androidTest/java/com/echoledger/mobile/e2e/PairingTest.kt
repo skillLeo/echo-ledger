@@ -71,7 +71,7 @@ class PairingTest : E2eTest() {
         Ui.fillField("One-time sign-in code", code.display)
         submit()
         Backend.notePairingAttempt()
-        Ui.awaitTextContaining("Paired with", Ui.LONG)
+        Ui.awaitTextContaining("Signed in to", Ui.LONG)
         Ui.awaitText("No recordings yet", Ui.LONG)
         assertTrue(Backend.deviceNames().isNotEmpty())
         val settings = AppState.settings()

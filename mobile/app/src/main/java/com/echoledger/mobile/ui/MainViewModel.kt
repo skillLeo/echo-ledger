@@ -576,7 +576,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             _message.value = "This phone was signed out on the server. Sign in again."
         } catch (e: Exception) {
             _offline.value = true
-            _message.value = "Offline — showing the last synced library"
+            _message.value = "Offline: showing the last synced library"
         } finally {
             _syncing.value = false
         }
@@ -1256,7 +1256,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun restoreSkipped(id: String) = viewModelScope.launch(Dispatchers.IO) {
         Decisions.restoreSkipped(getApplication(), id)
         reloadLocal()
-        say("Restored — it uploads now", com.echoledger.mobile.core.NoticeTarget.Library)
+        say("Restored: it uploads now", com.echoledger.mobile.core.NoticeTarget.Library)
     }
 
     fun updateSettings(transform: (AppSettings) -> AppSettings) = viewModelScope.launch { graph.settings.update(transform) }

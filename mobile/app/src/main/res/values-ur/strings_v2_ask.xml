@@ -3,8 +3,6 @@
 <resources>
     <string name="v2_ask_title">پوچھیں</string>
     <string name="v2_ask_scope">کس بارے میں پوچھیں</string>
-    <string name="v2_ask_scope_all">تمام ریکارڈنگز</string>
-    <string name="v2_ask_scope_all_soon">تمام ریکارڈنگز (ابھی دستیاب نہیں)</string>
     <string name="v2_ask_question">آپ کا سوال</string>
     <string name="v2_ask_question_hint">مثلاً: بلال ٹریڈرز نے ادائیگی پر کیا طے کیا؟</string>
     <string name="v2_ask_ask_button">پوچھیں</string>

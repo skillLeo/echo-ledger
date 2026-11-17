@@ -102,10 +102,10 @@
     <string name="v2_vm_uploading_not_deleted">It is uploading now, so it was not deleted. It will be in your Library in a moment.</string>
     <string name="v2_vm_key_removed">Key removed</string>
     <string name="v2_vm_key_saved">Key saved. New recordings are transcribed with it.</string>
-    <string name="v2_vm_offline">Offline — showing the last synced library</string>
+    <string name="v2_vm_offline">Offline: showing the last synced library</string>
     <string name="v2_vm_rename_in_console">Rename it in the console: Account → Devices.</string>
     <string name="v2_vm_renamed">Renamed</string>
-    <string name="v2_vm_restored_uploads">Restored — it uploads now</string>
+    <string name="v2_vm_restored_uploads">Restored: it uploads now</string>
     <string name="v2_vm_restored">Restored</string>
     <string name="v2_vm_saved_to_library">Saved to your library</string>
     <string name="v2_vm_sent_one">Sent to 1 person</string>
