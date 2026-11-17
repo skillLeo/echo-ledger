@@ -612,6 +612,13 @@ pub async fn support_send(app: AppHandle, subject: String, message: String, incl
     crate::help::send(&app.state::<AppState>().api()?, &subject, &message, include_device_report).await
 }
 
+/// What a message to support attaches when the person asks for the device report: the last report this computer sent
+/// for the account signed in ("Send to my admin"), and when; none yet. Nothing is checked or sent here.
+#[tauri::command]
+pub fn last_device_report(state: State<'_, AppState>) -> crate::device_report::LastDeviceReport {
+    crate::device_report::last(&state.data_dir, state.owner().as_ref())
+}
+
 // ---- Payment receipts (v1.7, docs/API.md "Payment receipts") -------------------------------------------------------
 
 /// "Choose file…" on Send receipt: screenshots and PDFs, several at once; each path then goes to
@@ -2824,6 +2831,10 @@ pub async fn mac_check_send(app: AppHandle) -> AppResult<String> {
     let report = report.ok_or_else(|| AppError::msg("Run the check first."))?;
     let api = state.api()?;
     let reported_at = api.device_report(&crate::net::models::DeviceReport::of_mac_check(&report)).await?;
+    // Remembered across restarts: the support form says this report goes with a message.
+    if let Err(e) = crate::device_report::remember(&state.data_dir, &reported_at, state.owner()) {
+        eprintln!("[echoledger] remembering the device report: {e}");
+    }
     if let Some(last) = state.mac_check.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
         last.sent_at = Some(reported_at.clone());
     }

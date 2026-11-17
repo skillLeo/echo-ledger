@@ -323,6 +323,10 @@ describe("wire types", () => {
     expect(sorted(tsInterfaceKeys("ScreenMoment"))).toEqual(sorted(rustFields(rustSourceDeclaring("struct", "ScreenMoment"), "ScreenMoment", false)));
   });
 
+  it("the last device report says when it was sent, as Rust sends it", () => {
+    expect(tsInterfaceKeys("LastDeviceReport")).toEqual(rustFields(rustSourceDeclaring("struct", "LastDeviceReport"), "LastDeviceReport"));
+  });
+
   it("screen hold reasons match the serde names of the Rust enum", () => {
     expect(sorted(tsUnionValues("ScreenHoldReason"))).toEqual(sorted(rustEnumValues(rustSourceDeclaring("enum", "HoldReason"), "HoldReason")));
   });

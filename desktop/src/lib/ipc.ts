@@ -1356,6 +1356,12 @@ export interface HelpGuide {
   markdown: string;
 }
 
+/** What a message to support attaches when the person asks for the device report (`last_device_report`): the last
+ * report this computer sent for this account with Send to my admin, and when the server took it; null when none yet. */
+export interface LastDeviceReport {
+  sentAt: string | null;
+}
+
 /** `GET /api/help/whats-new?platform=` (2.0.0-d): one release's notes. */
 export interface WhatsNewRelease {
   version: string;
@@ -1826,6 +1832,8 @@ export const api = {
   helpGuide: (id: string) => invoke<HelpGuide>("help_guide", { id }),
   /** This platform's last releases with notes, newest first (the core names the platform: windows or mac). */
   helpWhatsNew: () => invoke<{ data: WhatsNewRelease[] }>("help_whats_new"),
+  /** The device report a message to support would attach: when this computer last sent one, or null (never checks or sends). */
+  lastDeviceReport: () => invoke<LastDeviceReport>("last_device_report"),
   /** Contact support (5 an hour): the device's last report goes with it only when `includeDeviceReport`. */
   supportSend: (subject: string, message: string, includeDeviceReport: boolean) =>
     invoke<void>("support_send", { subject, message, includeDeviceReport }),
