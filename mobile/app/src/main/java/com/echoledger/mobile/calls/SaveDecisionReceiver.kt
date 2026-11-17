@@ -101,12 +101,18 @@ object Decisions {
      * ([DISCARD_AFTER_MS]), so Undo still finds it. [DiscardLaterWorker] deletes it then, also after the app was closed
      * or killed. Null when the call is gone, was sent already or is on its way out (nothing is discarded).
      */
-    suspend fun discardLater(context: Context, recordingId: String, nowMs: Long = System.currentTimeMillis()): LocalRecording? {
+    suspend fun discardLater(
+        context: Context,
+        recordingId: String,
+        nowMs: Long = System.currentTimeMillis(),
+        /** How long the file waits for Undo; longer for a screen whose toasts stay longer (accessibility). */
+        afterMs: Long = DISCARD_AFTER_MS
+    ): LocalRecording? {
         val graph = (context.applicationContext as EchoLedgerApp).graph
         Notifications.cancelDecision(context, recordingId)
         DecisionTimeoutWorker.cancel(context, recordingId)
         UploadWorker.cancel(context, recordingId)
-        val at = Instant.ofEpochMilli(nowMs + DISCARD_AFTER_MS).toString()
+        val at = Instant.ofEpochMilli(nowMs + afterMs).toString()
         val discarding = graph.recordings.update(recordingId) {
             if (it.state in DISCARDABLE) {
                 it.copy(state = DISCARDING, discardAt = at, discardedFrom = if (it.state == WAITING) WAITING else KEPT)
@@ -114,7 +120,7 @@ object Decisions {
                 it
             }
         }?.takeIf { it.state == DISCARDING } ?: return null
-        DiscardLaterWorker.schedule(context, recordingId, DISCARD_AFTER_MS)
+        DiscardLaterWorker.schedule(context, recordingId, afterMs)
         WidgetStateStore.refresh(context)
         return discarding
     }
@@ -142,6 +148,8 @@ object Decisions {
                 it
             }
         }?.takeIf { it.state == WAITING || it.state == KEPT } ?: return null
+        // Waiting again: its "kept after 10 s" runs again too, whoever shows the question, so it never waits without one.
+        if (back.state == WAITING) DecisionTimeoutWorker.schedule(context, recordingId)
         WidgetStateStore.refresh(context)
         return back
     }

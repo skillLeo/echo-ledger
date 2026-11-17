@@ -106,6 +106,31 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `a longer Undo time keeps the file that much longer`() {
+        call(state = "pending_decision")
+        val now = System.currentTimeMillis()
+        val discarding = runBlocking { Decisions.discardLater(app, "call-1", nowMs = now, afterMs = 20_000) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + 20_000).toString(), discarding.discardAt)
+        assertTrue(discardWork("call-1").single().initialDelayMillis >= 20_000)
+        // The default is unchanged.
+        call("call-2", state = "pending_decision")
+        val usual = runBlocking { Decisions.discardLater(app, "call-2", nowMs = now) }!!
+        assertEquals(java.time.Instant.ofEpochMilli(now + Decisions.DISCARD_AFTER_MS).toString(), usual.discardAt)
+    }
+
+    @Test
+    fun `a call brought back by Undo waits for a decision with its timer running again`() {
+        call(state = "pending_decision")
+        runBlocking { Decisions.discardLater(app, "call-1") }
+        assertTrue(timeoutWork("call-1").all { it.state == WorkInfo.State.CANCELLED })
+
+        // Undo through the core alone (no chip or notification shows it again).
+        runBlocking { Decisions.undoDiscard(app, "call-1") }
+        assertEquals("pending_decision", app.peekRecording("call-1")?.state)
+        assertTrue("kept after 10 s again", timeoutWork("call-1").any { it.state == WorkInfo.State.ENQUEUED })
+    }
+
+    @Test
     fun `the final delete and an Undo never interleave`() {
         call(state = "pending_decision")
         runBlocking { Decisions.discardLater(app, "call-1") }
