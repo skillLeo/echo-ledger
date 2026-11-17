@@ -160,6 +160,17 @@ describe("the workflows run the smoke test", () => {
     expect(workflow("desktop-windows.yml")).toContain("Remove-Item Env:RUNNER_TEMP");
   });
 
+  it("the Windows build keeps its PDB as an artifact only: never in the installer or a release, no runner path in the exe", () => {
+    const windows = workflow("desktop-windows.yml");
+    expect(windows).toContain("CARGO_PROFILE_RELEASE_DEBUG: line-tables-only");
+    expect(windows).toContain('CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C link-arg=/PDBALTPATH:%_PDB%"');
+    const pdb = windows.split("\n      - ").find((step) => step.includes("name: EchoLedger-windows-x64-pdb")) ?? "";
+    expect(pdb).toContain("retention-days: ${{ startsWith(github.ref, 'refs/tags/') && 90 || 7 }}");
+    expect(windows).toContain("name: Check the installer carries no PDB");
+    expect(windows).toMatch(/permissions:\n  contents: read\n/);
+    expect(windows).not.toMatch(/contents: write|gh release|action-gh-release|tagName|releaseId/);
+  });
+
   it("the manual Windows check waits for the windowed app before it reads the exit code", () => {
     const qa = readFileSync(resolve(__dirname, "../../docs/MANUAL_QA.md"), "utf8");
     const row = qa.split("\n").find((line) => line.startsWith("| WIN-6 |")) ?? "";
