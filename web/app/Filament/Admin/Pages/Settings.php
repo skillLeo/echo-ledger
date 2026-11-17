@@ -17,6 +17,7 @@ use App\Services\AuditLog;
 use App\Services\CredentialVault;
 use App\Services\EngineWait;
 use App\Services\Entitlements\UnusualUsage;
+use App\Services\Help\SupportMessages;
 use App\Services\MailSettings;
 use App\Services\RetentionPolicy;
 use App\Services\SessionMarkers;
@@ -169,6 +170,7 @@ class Settings extends Page
             'mail_from_address' => $all['mail.from_address'] ?? null,
             // Only a name saved here (the product's name is the placeholder), so saving the form never stores it.
             'mail_from_name' => $all['mail.from_name'] ?? null,
+            'support_email' => $all['support.email'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
             'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
@@ -529,6 +531,10 @@ class Settings extends Page
                             TextInput::make('mail_from_address')->label('From address')->email()->maxLength(255)->placeholder('echoledger@example.com')
                                 ->helperText('Use an address of a domain whose DNS records allow this server (SPF, DKIM, DMARC).'),
                             TextInput::make('mail_from_name')->label('From name')->maxLength(100)->placeholder(Brand::name()),
+                            // Since v1.8 P6.4: the apps' and the console's Contact support.
+                            TextInput::make('support_email')->label('Support address')->email()->maxLength(255)
+                                ->placeholder(fn (): string => app(SupportMessages::class)->address())
+                                ->helperText('Contact support in the apps and the console writes here. Empty: '.app(SupportMessages::class)->address().'.'),
                             Actions::make([
                                 Action::make('sendTestEmail')->label('Send a test email')->icon(Heroicon::OutlinedPaperAirplane)->color('gray')
                                     ->modalHeading('Send a test email')
@@ -788,6 +794,7 @@ class Settings extends Page
             'mail.username' => filled($state['mail_username'] ?? null) ? trim((string) $state['mail_username']) : null,
             'mail.from_address' => filled($state['mail_from_address'] ?? null) ? trim((string) $state['mail_from_address']) : null,
             'mail.from_name' => filled($state['mail_from_name'] ?? null) ? trim((string) $state['mail_from_name']) : null,
+            'support.email' => filled($state['support_email'] ?? null) ? mb_strtolower(trim((string) $state['support_email'])) : null,
             'assemblyai.region' => $state['assemblyai_region'],
             'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],

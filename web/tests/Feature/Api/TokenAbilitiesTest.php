@@ -152,6 +152,11 @@ function abilityRoutes(): array
         'cancel an invitation' => ['DELETE', "/api/workspace/invitations/{$id}", 'sessions:write'],
         'make an invite link' => ['POST', '/api/workspace/invite-links', 'sessions:write'],
         'revoke an invite link' => ['DELETE', "/api/workspace/invite-links/{$id}", 'sessions:write'],
+        // Since v1.8 P6.4: help and Contact support.
+        'the guide' => ['GET', '/api/help/guides', 'config:read'],
+        'a guide' => ['GET', "/api/help/guides/{$id}", 'config:read'],
+        'what is new' => ['GET', '/api/help/whats-new', 'config:read'],
+        'write to support' => ['POST', '/api/support/messages', 'sessions:write'],
         'assist: start a session' => ['POST', '/api/assist/sessions', 'stt:token'],
         'assist: refresh its tokens' => ['POST', "/api/assist/sessions/{$id}/token", 'stt:token'],
     ];
