@@ -1,7 +1,6 @@
 // Live Assist (v1.9 L4) on the desktop: the typed seam between the screens and the core. The core owns the relay
-// connection (docs/API_ASSIST.md 1.9.0-f: tokens, refresh, resume, pinning) and the REST calls; the screens only call
-// these commands and listen to one event. Until the core has them, fixture.ts plays a session for development and tests
-// (development builds only).
+// connection (docs/API_ASSIST.md 1.9.0-n: tokens, refresh, resume, pinning) and the REST calls; the screens only call
+// these commands (lib/ipc.ts) and listen to one event. fixture.ts plays a session in development builds and tests.
 //
 // Commands (core):
 //   assist_preps_list { status: string | null }           → Prep[]          GET /api/assist/preps?status=
@@ -26,7 +25,7 @@
 //   assist_shown { suggestionId, renderMs }               → void            the first text of a suggestion was drawn
 //   A start refused because another session runs comes as an `assist:message` of type `session_active`, or as
 //   assist_start's rejection carrying the same fields with `code: "session_active"`.
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "../../lib/ipc";
 import { listen } from "@tauri-apps/api/event";
 
 export type MeetingType = "interview" | "boss" | "existing_client" | "new_client" | "general";
@@ -85,28 +84,33 @@ export type SessionActive = { session_id: string | null; practice: boolean; text
 
 export type AssistSnapshot = { messages: AssistMessage[]; hint_level: HintLevel; paused: boolean; muted_until: string | null; meeting_type?: MeetingType | null };
 
+/** The core's commands (lib/ipc.ts), typed for the card and the prep. */
 export const assist = {
-  preps: (status: PrepStatus | null = null) => invoke<Prep[]>("assist_preps_list", { status }),
-  savePrep: (prep: PrepDraft) => invoke<Prep>("assist_prep_save", { prep }),
-  deletePrep: (id: string) => invoke<void>("assist_prep_delete", { id }),
-  addDocuments: (id: string, fileIds: string[]) => invoke<Prep>("assist_prep_documents_add", { id, fileIds }),
-  removeDocument: (id: string, fileId: string) => invoke<Prep>("assist_prep_document_remove", { id, fileId }),
+  preps: (status: PrepStatus | null = null) => api.assistPrepsList(status) as unknown as Promise<Prep[]>,
+  savePrep: (prep: PrepDraft) => api.assistPrepSave(prep as never) as unknown as Promise<Prep>,
+  deletePrep: (id: string) => api.assistPrepDelete(id),
+  addDocuments: (id: string, fileIds: string[]) => api.assistPrepDocumentsAdd(id, fileIds) as unknown as Promise<Prep>,
+  removeDocument: (id: string, fileId: string) => api.assistPrepDocumentRemove(id, fileId) as unknown as Promise<Prep>,
   /** `clientRef`: the recording an offer was for (the call already running), so the session joins it. */
   start: (prepId: string | null, mode: AssistMode | null = null, clientRef: string | null = null) =>
-    invoke<AssistStarted>("assist_start", { prepId, mode, practice: false, clientRef }),
-  schedule: (prepId: string, at: string) => invoke<Prep>("assist_schedule", { prepId, at }),
-  end: () => invoke<void>("assist_end"),
-  /** Ends `sessionId` (the running session) and starts this one, in one step on the core. */
-  startReplacing: (sessionId: string | null, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
-    invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice, clientRef }),
+    api.assistStart(prepId, mode, false, clientRef) as unknown as Promise<AssistStarted>,
+  schedule: (prepId: string, at: string) => api.assistSchedule(prepId, at) as unknown as Promise<Prep>,
+  end: () => api.assistEnd(),
+  /** Ends the running session (409 session_active) and starts this one; without its id, ends it and starts again. */
+  startReplacing: async (sessionId: string | null, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) => {
+    if (sessionId) return api.assistStartReplacing(sessionId, prepId, mode, practice, clientRef) as unknown as Promise<AssistStarted>;
+    await api.assistEnd();
+    return api.assistStart(prepId, mode, practice, clientRef) as unknown as Promise<AssistStarted>;
+  },
   /** The answer to 409 session_active that keeps the running session (also when the card is closed while it asks). */
-  keepRunning: () => invoke<void>("assist_keep_running"),
+  keepRunning: () => api.assistKeepRunning(),
+  send: (kind: SendKind) => api.assistSend(kind),
+  set: (settings: { mode?: AssistMode; hint_level?: HintLevel; paused?: boolean; muted_seconds?: number }) =>
+    api.assistSet(settings) as unknown as Promise<AssistSnapshot>,
+  feedback: (suggestionId: string, action: "used" | "dismissed") => api.assistFeedback(suggestionId, action),
   /** When a suggestion's first text appeared, from its suggestion_start (1.9.0-n's "shown" report). */
-  shown: (suggestionId: string, renderMs: number) => invoke<void>("assist_shown", { suggestionId, renderMs }),
-  send: (kind: SendKind) => invoke<void>("assist_send", { kind }),
-  set: (settings: { mode?: AssistMode; hint_level?: HintLevel; paused?: boolean; muted_seconds?: number }) => invoke<AssistSnapshot>("assist_set", { settings }),
-  feedback: (suggestionId: string, action: "used" | "dismissed") => invoke<void>("assist_feedback", { suggestionId, action }),
-  hideCard: () => invoke<void>("assist_card_hide"),
-  state: () => invoke<AssistSnapshot | null>("assist_state"),
+  shown: (suggestionId: string, renderMs: number) => api.assistShown(suggestionId, renderMs),
+  hideCard: () => api.assistCardHide(),
+  state: () => api.assistState() as unknown as Promise<AssistSnapshot | null>,
   listen: (cb: (m: AssistMessage) => void) => listen<AssistMessage>("assist:message", (e) => cb(e.payload)),
 };

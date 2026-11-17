@@ -832,7 +832,7 @@ export default function MainApp() {
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
-              <AfterCallNoticeV2 text={(status as AppStatus & { afterCallNotice?: string | null }).afterCallNotice} onStatus={setStatus} />
+              <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
             </div></Suspense>}
             live={ui.flags["ui_v2.live"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
