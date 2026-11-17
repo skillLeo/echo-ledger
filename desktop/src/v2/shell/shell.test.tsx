@@ -82,6 +82,40 @@ describe("the shell", () => {
   });
 });
 
+describe("the After a call notice in the new shell", () => {
+  it("says it once, with Always transcribe; closing keeps Ask me", async () => {
+    const { AfterCallNoticeV2 } = await import("./AfterCallNotice");
+    respond("after_call_notice_answer", makeStatus());
+    const onStatus = vi.fn();
+    const { rerender } = render(<AfterCallNoticeV2 text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
+    expect(screen.getByTestId("after-call-notice-v2")).toHaveTextContent("After a call, EchoLedger now asks what to do.");
+    fireEvent.click(screen.getByRole("button", { name: "Always transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }]);
+    expect(onStatus).toHaveBeenCalled();
+    expect(screen.getByText("Every call is now transcribed.")).toBeInTheDocument();
+    rerender(<AfterCallNoticeV2 key="again" text="After a call, EchoLedger now asks what to do." onStatus={onStatus} />);
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(callsOf("after_call_notice_answer")).toEqual([{ alwaysTranscribe: true }, { alwaysTranscribe: false }]);
+  });
+
+  it("shows in the shell from the core's status, and not without it", async () => {
+    respond("app_status", { ...makeStatus(), afterCallNotice: "After a call, EchoLedger now asks what to do." });
+    respond("library_list", [makeItem("a")]);
+    respond("library_refresh", [makeItem("a")]);
+    respond("get_settings", makeSettings());
+    respond("list_clients", { data: [] });
+    respond("mic_users", []);
+    respond("session_detail", {});
+    respond("ui_flags", { ui_flags: { "ui_v2.shell": true }, ui_classic: false });
+    render(<MainApp />);
+    await act(flushAsync);
+    await act(flushAsync);
+    expect(await screen.findByTestId("after-call-notice-v2")).toBeInTheDocument();
+  });
+});
+
 describe("Settings' account card", () => {
   it("shows who, the plan with Upgrade, the month's minutes and the storage numbers", async () => {
     respond("account_get", { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: false, google: false, created_at: null, workspace: null, deletes_at: null });

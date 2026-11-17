@@ -5,7 +5,7 @@
 import { useState, type ReactNode } from "react";
 import { Button, Icons, Progress } from "../components";
 import type { AssistMode, HintLevel, SendKind } from "./adapter";
-import { boldParts, modeLabel, parseSuggestion, shown, type CardState } from "./card";
+import { boldParts, modeLabel, offerQuestion, parseSuggestion, shown, type CardState } from "./card";
 
 /** The consent line of the prompt pack (1.0.1), for boss, client and general meetings. */
 export const CONSENT_LINE = "Just so you know: I record this call and use an AI assistant that takes notes and suggests points to me. Is that okay with you?";
@@ -21,6 +21,12 @@ export type AssistCardActions = {
   onMute: () => void;
   onHide: () => void;
   onCopyConsent: () => void;
+  /** The core's offer: Start (with the call's client_ref) or Not now. */
+  onStartOffer: () => void;
+  onDismissOffer: () => void;
+  /** 409 session_active: end the running session, then start this one; or keep it. */
+  onEndAndStart: () => void;
+  onKeepRunning: () => void;
 };
 
 function Bold({ text }: { text: string }) {
@@ -47,6 +53,33 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
       : state.meetingType ? CONSENT_LINE : null;
   const rtl = parsed?.language && parsed.language.label !== "Roman Urdu";
 
+  const sessionActive = state.sessionActive && (
+    <div className="el-assist__note" role="alert">
+      <span>Another Live Assist session is running.</span>
+      <Button size="sm" variant="primary" onClick={actions.onEndAndStart}>End it and start this one</Button>
+      <Button size="sm" variant="quiet" onClick={actions.onKeepRunning}>Keep it</Button>
+    </div>
+  );
+  // Before a session: the core's offer for a prepared meeting's call (it never starts by itself).
+  if (!state.sessionId) {
+    if (!state.offer && !state.sessionActive && !state.error) return null;
+    return (
+      <section className="el-assist el-assist--offer" data-hit aria-label="Live Assist" data-testid="assist-card">
+        {state.offer && (
+          <div className="el-assist__offer">
+            <p className="el-assist__first" dir="auto">{offerQuestion(state.offer)}</p>
+            <div className="el-assist__actions">
+              <Button size="sm" variant="primary" onClick={actions.onStartOffer}>Start</Button>
+              <Button size="sm" variant="quiet" onClick={actions.onDismissOffer}>Not now</Button>
+            </div>
+          </div>
+        )}
+        {sessionActive}
+        {state.error && <p className="el-field__error" role="alert">{state.error.text}</p>}
+      </section>
+    );
+  }
+
   return (
     <section className="el-assist" data-hit aria-label="Live Assist" data-testid="assist-card">
       <div className="el-assist__bar" data-tauri-drag-region>
@@ -72,6 +105,7 @@ export function AssistCard({ state, hint, muted, badge, actions }: {
         </div>
       )}
       {state.modeNote && <p className="el-assist__mode el-caption" role="status">{state.modeNote}</p>}
+      {sessionActive}
 
       <div className="el-assist__body" aria-live="polite" aria-busy={s?.status === "streaming"}>
         {question && <p className="el-assist__question el-caption" dir="auto">{question}</p>}

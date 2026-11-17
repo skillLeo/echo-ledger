@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { callsOf, emitEvent, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import type { AssistMessage } from "./adapter";
 import { FIXTURE_SESSION, fixtureStream } from "./fixture";
-import { EMPTY_CARD, cardReducer, modeNote, parseSuggestion, shown, type CardState } from "./card";
+import { EMPTY_CARD, cardReducer, errorWords, isSessionActive, modeNote, offerQuestion, parseSuggestion, shown, type CardState } from "./card";
 import { AssistCard, CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
 import AssistApp from "./AssistApp";
 
@@ -47,14 +47,14 @@ describe("the card's rules (1.9.0-f)", () => {
     const s = play([READY, start("s1"), token("s1", "Half"),
       { type: "error", code: "provider_error", message: "That suggestion didn't come through.", retry: true, suggestion_id: "s1", in_reply_to: null, fatal: false }]);
     expect(shown(s)).toMatchObject({ text: "", status: "failed" });
-    expect(s.error).toEqual({ text: "That suggestion didn't come through.", fatal: false, suggestionId: "s1" });
+    expect(s.error).toEqual({ text: "That suggestion didn't come through.", fatal: false, suggestionId: "s1", code: "provider_error" });
   });
 
   it("mode_changed says why, in words; requested says nothing; captions only says captions go on", () => {
     expect(modeNote("fast", "budget")).toBe("Switched to Fast to stay within your assist hours.");
     expect(modeNote("balanced", "requested")).toBeNull();
     expect(modeNote("captions_only", "budget")).toBe("This month's assist hours are used. Assist is paused; captions go on.");
-    const s = play([READY, { type: "mode_changed", mode: "fast", reason: "budget", requested: "balanced" }]);
+    const s = play([READY, { type: "mode_changed", from: "balanced", to: "fast", reason: "budget", requested: "balanced" }]);
     expect(s.mode).toBe("fast");
     expect(s.requestedMode).toBe("balanced");
   });
@@ -87,7 +87,7 @@ describe("the card's rules (1.9.0-f)", () => {
 });
 
 describe("the card", () => {
-  const actions = () => ({ onSend: vi.fn(), onMode: vi.fn(), onHint: vi.fn(), onMute: vi.fn(), onHide: vi.fn(), onCopyConsent: vi.fn() });
+  const actions = () => ({ onSend: vi.fn(), onMode: vi.fn(), onHint: vi.fn(), onMute: vi.fn(), onHide: vi.fn(), onCopyConsent: vi.fn(), onStartOffer: vi.fn(), onDismissOffer: vi.fn(), onEndAndStart: vi.fn(), onKeepRunning: vi.fn() });
 
   it("shows the question small, the first line, bullets, Say next and the language line, and the captions", () => {
     render(<AssistCard state={play(FIXTURE_SESSION)} hint="outline" muted={false} actions={actions()} />);
@@ -130,7 +130,7 @@ describe("the card", () => {
   });
 
   it("captions only: no suggestion controls, the reason said, captions go on", () => {
-    const s = play([READY, { type: "mode_changed", mode: "captions_only", reason: "budget" }, { type: "turn", turn_id: "t1", channel: "other", text: "Hello?", final: true }]);
+    const s = play([READY, { type: "mode_changed", from: "fast", to: "captions_only", reason: "budget" }, { type: "turn", turn_id: "t1", channel: "other", text: "Hello?", final: true }]);
     render(<AssistCard state={s} hint="full" muted={false} actions={actions()} />);
     expect(screen.queryByRole("button", { name: "Help me now" })).toBeNull();
     expect(screen.getByText("This month's assist hours are used. Assist is paused; captions go on.")).toBeInTheDocument();
@@ -174,5 +174,109 @@ describe("the assist window", () => {
     await act(flushAsync);
     expect(await screen.findByText("Ask for the LC copy.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /^Hints: Keywords/ })).toBeInTheDocument();
+  });
+});
+
+describe("contract 1.9.0-n on the card", () => {
+  const err = (code: string, retry: boolean, suggestion_id: string | null = null): AssistMessage =>
+    ({ type: "error", code, message: "relay text", retry, suggestion_id, in_reply_to: null, fatal: false });
+
+  it("reads the new mode from `to`", () => {
+    const s = play([READY, { type: "mode_changed", from: "balanced", to: "fast", reason: "budget" }]);
+    expect(s.mode).toBe("fast");
+    expect(s.modeNote).toBe("Switched to Fast to stay within your assist hours.");
+  });
+
+  it("a skip naming a suggestion ends it, without words", () => {
+    const s = play([READY, start("s1"), { type: "skip", suggestion_id: "s1", turn_id: "t1" }]);
+    expect(s.suggestions[0]).toMatchObject({ status: "skipped", text: "" });
+    expect(shown(s)).toBeNull();
+    expect(s.skipped).toBe(true);
+    expect(play([token("s1", "late")], s).suggestions[0].text).toBe("");
+  });
+
+  it("ready with resumed: true clears a card still streaming; a finished one stays", () => {
+    const streaming = play([READY, start("s1"), token("s1", "Half an ans")]);
+    const resumed = play([{ ...READY, resumed: true } as AssistMessage], streaming);
+    expect(shown(resumed)).toBeNull();
+    expect(resumed.suggestions[0]).toMatchObject({ text: "", status: "cancelled" });
+    const done = play([READY, start("s1"), token("s1", "Whole."), { type: "suggestion_end", suggestion_id: "s1", status: "done" }, { ...READY, resumed: true } as AssistMessage]);
+    expect(shown(done)!.text).toBe("Whole.");
+  });
+
+  it("budget_exhausted: off for this call when it won't retry, try again in a moment when it will", () => {
+    expect(play([READY, err("budget_exhausted", false)]).error!.text).toBe("Suggestions are off for this call.");
+    expect(play([READY, err("budget_exhausted", true)]).error!.text).toBe("Try again in a moment.");
+  });
+
+  it("every code gets a plain sentence; bad_message says nothing; never the code itself", () => {
+    for (const code of ["provider_unavailable", "provider_timeout", "model_declined", "nothing_to_rewrite", "documents_too_large", "rate_limited"]) {
+      const words = errorWords(code, true, "relay text")!;
+      expect(words).not.toContain(code);
+      expect(words).not.toBe("relay text");
+    }
+    expect(errorWords("provider_not_configured", false, "Live Assist isn't available right now.")).toBe("Live Assist isn't available right now.");
+    expect(play([READY, err("bad_message", false)]).error).toBeNull();
+  });
+
+  it("the core's offer asks for the prepared meeting, with the caller when known", () => {
+    const offer: AssistMessage = { type: "offer", prep_id: "pr1", title: "Interview at Mehran Foods", client_ref: "rec-7", caller: "Ayesha Siddiqui" };
+    const s = play([offer]);
+    expect(s.offer).toEqual({ prepId: "pr1", title: "Interview at Mehran Foods", clientRef: "rec-7", caller: "Ayesha Siddiqui" });
+    expect(offerQuestion(s.offer!)).toBe("Start Live Assist for Interview at Mehran Foods with Ayesha Siddiqui?");
+    expect(offerQuestion({ title: "March order", caller: null })).toBe("Start Live Assist for March order?");
+  });
+
+  it("session_active is recognised from an error message or a rejection", () => {
+    expect(play([READY, err("session_active", false)]).sessionActive).toBe(true);
+    expect(isSessionActive({ code: "session_active", message: "x" })).toBe(true);
+    expect(isSessionActive("Another session: session_active")).toBe(true);
+    expect(isSessionActive({ code: "budget_exhausted" })).toBe(false);
+  });
+});
+
+describe("the offer and session_active in the assist window", () => {
+  beforeEach(() => {
+    resetTauriMock();
+    respond("assist_state", null);
+    respond("set_hit_regions", null);
+    respond("ui_flags", { ui_flags: { live_assist: true, "ui_v2.live": true } });
+  });
+  const offer: AssistMessage = { type: "offer", prep_id: "pr1", title: "Interview at Mehran Foods", client_ref: "rec-7", caller: "Ayesha Siddiqui" };
+
+  it("Start passes the prep and the call's client_ref to assist_start; Not now closes it", async () => {
+    respond("assist_start", { session_id: "as-1", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false });
+    render(<AssistApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("assist:message", offer));
+    expect(await screen.findByText("Start Live Assist for Interview at Mehran Foods with Ayesha Siddiqui?")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await act(flushAsync);
+    expect(callsOf("assist_start")).toEqual([{ prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" }]);
+    await act(() => emitEvent("assist:message", { ...offer, prep_id: "pr2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    expect(screen.queryByText(/Start Live Assist for/)).toBeNull();
+  });
+
+  it("409 session_active: End it and start this one ends the running session, then starts this one", async () => {
+    let first = true;
+    respondWith("assist_start", () => {
+      if (first) { first = false; throw { code: "session_active", message: "Another session is running." }; }
+      return { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false };
+    });
+    respond("assist_end", null);
+    render(<AssistApp />);
+    await act(flushAsync);
+    await act(() => emitEvent("assist:message", offer));
+    fireEvent.click(await screen.findByRole("button", { name: "Start" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("Another Live Assist session is running.");
+    fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
+    await act(flushAsync);
+    expect(callsOf("assist_end")).toHaveLength(1);
+    expect(callsOf("assist_start")).toEqual([
+      { prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" },
+      { prepId: "pr1", mode: null, practice: false, clientRef: "rec-7" },
+    ]);
   });
 });

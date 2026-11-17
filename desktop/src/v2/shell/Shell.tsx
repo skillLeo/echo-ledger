@@ -34,13 +34,15 @@ export type ShellProps = {
   me?: { name: string; email: string; plan: string | null } | null;
   /** The Live module's page (ui_v2.live); without it Live says where to find its features meanwhile. */
   live?: ReactNode;
+  /** The new shell's own notices above every page (the After a call notice). */
+  notices?: ReactNode;
   /** The banners above every page (one at a time). */
   banners?: ReactNode;
   /** Today's page for the current tab. */
   children: ReactNode;
 };
 
-export function Shell({ tab, onGo, status, me, live, banners, children }: ShellProps) {
+export function Shell({ tab, onGo, status, me, live, notices, banners, children }: ShellProps) {
   // Live and Ask live in the shell only until their modules are built.
   const [own, setOwn] = useState<"live" | "ask" | null>(null);
   // Anything that opens a page of the app (a notice, the palette, a link) leaves Live or Ask. Worked out while
@@ -87,6 +89,7 @@ export function Shell({ tab, onGo, status, me, live, banners, children }: ShellP
         {item("settings", "Settings", Icons.SettingsIcon)}
       </Sidebar>
       <main className="el-shell__main" aria-label={own === "live" ? "Live" : own === "ask" ? "Ask" : undefined}>
+        {notices}
         {banners}
         {own === "live" && live ? (
           <section className="content page-live">{live}</section>

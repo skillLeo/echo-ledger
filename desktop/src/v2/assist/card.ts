@@ -4,7 +4,10 @@
 //   question taking the card) has its text cleared at that moment, before its replacement's first token;
 // - `cancelled` (they kept talking) leaves the card as it was before it started;
 // - a failure ends with an `error` naming the suggestion, never a `suggestion_end`;
-// - `mode_changed` says why the mode changed; captions never stop.
+// - `mode_changed` says why the mode changed (its `to`); captions never stop.
+// Since 1.9.0-n: a `skip` naming a suggestion ends it; `ready` with `resumed: true` clears a card still streaming;
+// every error code gets the app's own plain sentence (errorWords); a `session_active` refusal offers to end the running
+// session and start this one; the core's `offer` asks whether to start Live Assist for the call.
 import type { AssistMessage, AssistMode, LiveMode, MeetingType, SuggestionKind } from "./adapter";
 
 export type Suggestion = {
@@ -15,7 +18,7 @@ export type Suggestion = {
   draft: boolean;
   speculative: boolean;
   text: string;
-  status: "streaming" | "done" | "cancelled" | "superseded" | "failed";
+  status: "streaming" | "done" | "cancelled" | "superseded" | "failed" | "skipped";
 };
 
 export type CaptionLine = { turnId: string; channel: "me" | "other"; text: string; final: boolean };
@@ -36,7 +39,13 @@ export type CardState = {
   /** Why the mode changed, in words, until the next change. */
   modeNote: string | null;
   /** The last error the card shows (a failed suggestion or the session). */
-  error: { text: string; fatal: boolean; suggestionId: string | null } | null;
+  error: { text: string; fatal: boolean; suggestionId: string | null; code?: string } | null;
+  /** The core offers Live Assist for this call (a matching prep). */
+  offer: { prepId: string; title: string; clientRef: string; caller: string | null } | null;
+  /** Another session runs (409 session_active): the card offers to end it and start this one. */
+  sessionActive: boolean;
+  /** What the last start asked for (the offer's prep and call), to ask again after ending the running session. */
+  pendingStart: { prepId: string | null; clientRef: string | null } | null;
   /** The last other turn needed no reply. */
   skipped: boolean;
   budget: { left: number | null; total: number | null };
@@ -46,6 +55,7 @@ export type CardState = {
 export const EMPTY_CARD: CardState = {
   sessionId: null, meetingType: null, mode: "balanced", requestedMode: null, allowedModes: [], suggestions: [], shownId: null, turns: {},
   captions: [], modeNote: null, error: null, skipped: false, budget: { left: null, total: null }, ended: false,
+  offer: null, sessionActive: false, pendingStart: null,
 };
 
 const MODE_WORDS: Record<LiveMode, string> = { fast: "Fast", balanced: "Balanced", deep: "Deep", max: "Max", captions_only: "Captions only" };
@@ -80,13 +90,44 @@ function previousShown(state: CardState, id: string): string | null {
   return null;
 }
 
+/**
+ * The app's own sentence for a relay error code (1.9.0-n), never the code itself; null when the card says nothing
+ * (an unknown message type, a token being renewed). `provider_not_configured` keeps the relay's fixed message.
+ */
+export function errorWords(code: string, retry: boolean, message: string): string | null {
+  switch (code) {
+    case "budget_exhausted": return retry ? "Try again in a moment." : "Suggestions are off for this call.";
+    case "provider_not_configured": return message || "Live Assist isn't set up on this server yet.";
+    case "provider_unavailable":
+    case "provider_timeout": return "That suggestion didn't come through. Try again in a moment.";
+    case "model_declined": return "This one can't be answered here. Try Regenerate, or ask in other words.";
+    case "nothing_to_rewrite": return "There's nothing on the card to rewrite yet.";
+    case "documents_too_large": return "The documents are too large for this session. The earlier ones are still used.";
+    case "rate_limited": return "Too many requests at once. Try again in a moment.";
+    case "session_active": return "Another Live Assist session is running.";
+    case "bad_message": return null;
+    case "token_expired": return retry ? null : "Live Assist stopped: sign in again to start a new session.";
+    default: return message || "Something went wrong with Live Assist.";
+  }
+}
+
 export function cardReducer(state: CardState, m: AssistMessage): CardState {
   switch (m.type) {
-    case "ready":
+    case "ready": {
+      // Resumed: a suggestion that was streaming when the connection dropped gets no end; it leaves the card.
+      const suggestions = m.resumed
+        ? state.suggestions.map((s) => (s.status === "streaming" ? { ...s, text: "", status: "cancelled" as const } : s))
+        : state.suggestions;
+      const shownGone = m.resumed && state.suggestions.find((s) => s.id === state.shownId)?.status === "streaming";
       return {
-        ...state, sessionId: m.session_id, mode: m.mode, requestedMode: m.requested_mode, allowedModes: m.allowed_modes,
-        meetingType: m.meeting_type ?? state.meetingType, ended: false, error: state.error?.fatal ? null : state.error,
+        ...state, suggestions, shownId: shownGone ? null : state.shownId,
+        sessionId: m.session_id, mode: m.mode, requestedMode: m.requested_mode, allowedModes: m.allowed_modes,
+        meetingType: m.meeting_type ?? state.meetingType, ended: false, offer: null, sessionActive: false, pendingStart: null,
+        error: state.error?.fatal ? null : state.error,
       };
+    }
+    case "offer":
+      return { ...state, offer: { prepId: m.prep_id, title: m.title, clientRef: m.client_ref, caller: m.caller?.trim() || null }, ended: false };
     case "suggestion_start": {
       const s: Suggestion = { id: m.suggestion_id, turnId: m.turn_id, kind: m.kind, replaces: m.replaces, draft: m.draft, speculative: m.speculative, text: "", status: "streaming" };
       return { ...state, suggestions: [...state.suggestions.slice(-19), s], shownId: m.suggestion_id, skipped: false, error: null };
@@ -104,13 +145,19 @@ export function cardReducer(state: CardState, m: AssistMessage): CardState {
       }
       return patch(state, m.suggestion_id, (x) => ({ ...x, status: "done" }));
     }
-    case "skip":
-      return { ...state, skipped: true };
+    case "skip": {
+      // No reply needed: the suggestion it names ends without words.
+      if (!m.suggestion_id) return { ...state, skipped: true };
+      const next = patch(state, m.suggestion_id, (x) => ({ ...x, text: "", status: "skipped" }));
+      return { ...next, skipped: true, shownId: state.shownId === m.suggestion_id ? null : state.shownId };
+    }
     case "mode_changed":
-      return { ...state, mode: m.mode, requestedMode: m.requested ?? state.requestedMode, modeNote: modeNote(m.mode, m.reason) };
+      return { ...state, mode: m.to, requestedMode: m.requested ?? state.requestedMode, modeNote: modeNote(m.to, m.reason) };
     case "error": {
       const next = m.suggestion_id ? patch(state, m.suggestion_id, (x) => ({ ...x, text: "", status: "failed" })) : state;
-      return { ...next, error: { text: m.message, fatal: m.fatal, suggestionId: m.suggestion_id } };
+      if (m.code === "session_active") return { ...next, sessionActive: true, error: null };
+      const text = errorWords(m.code, m.retry, m.message);
+      return text === null ? next : { ...next, error: { text, fatal: m.fatal, suggestionId: m.suggestion_id, code: m.code } };
     }
     case "turn": {
       const turns = m.channel === "other" ? { ...state.turns, [m.turn_id]: m.text } : state.turns;
@@ -153,4 +200,15 @@ export function parseSuggestion(text: string): ParsedSuggestion {
 /** "**key** rest" as parts, the bold ones marked. */
 export function boldParts(text: string): { text: string; bold: boolean }[] {
   return text.split(/(\*\*[^*]+\*\*)/).filter(Boolean).map((p) => (p.startsWith("**") && p.endsWith("**") ? { text: p.slice(2, -2), bold: true } : { text: p, bold: false }));
+}
+
+/** "Start Live Assist for Interview at Mehran Foods with Ayesha Siddiqui?" ("with …" only when the caller is known). */
+export function offerQuestion(offer: { title: string; caller: string | null }): string {
+  return `Start Live Assist for ${offer.title.trim() || "this call"}${offer.caller ? ` with ${offer.caller}` : ""}?`;
+}
+
+/** Whether a rejection is the server's 409 session_active (the core passes its code along). */
+export function isSessionActive(e: unknown): boolean {
+  const code = (e as { code?: unknown } | null)?.code;
+  return code === "session_active" || (typeof e === "string" && /session_active/.test(e));
 }

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import MainApp from "../../views/main/MainApp";
-import { callsOf, fail, flushAsync, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import type { Prep } from "../assist/adapter";
 import { PrepScreen, TEMPLATES, newDraft, withType } from "../assist/PrepScreen";
@@ -78,7 +78,7 @@ describe("the prep screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start now" }));
     await act(flushAsync);
     expect(callsOf("assist_prep_save")[0]).toMatchObject({ prep: { title: "Interview at Mehran Foods", meeting_type: "interview" } });
-    expect(callsOf("assist_start")).toEqual([{ prepId: "pr9", mode: "balanced" }]);
+    expect(callsOf("assist_start")).toEqual([{ prepId: "pr9", mode: "balanced", practice: false, clientRef: null }]);
     expect(onStarted).toHaveBeenCalled();
   });
 
@@ -89,6 +89,56 @@ describe("the prep screen", () => {
     fireEvent.click(screen.getByRole("button", { name: "Start now" }));
     await act(flushAsync);
     expect(screen.getByRole("alert")).toHaveTextContent("Deep is in the Ultra plan.");
+  });
+});
+
+describe("the prep per contract 1.9.0-n", () => {
+  const WORKSPACE = { data: { client: { id: "c1", name: "Qureshi Textiles", ai_notes: true }, ai: { configured: true, spent_usd: 0, budget_usd: 0, client_spent_usd: 0 }, brief: null, memory: [], notes: [],
+    files: [{ id: "f1", name: "Proforma March.pdf", mime: "application/pdf", size_bytes: 1000, pages: 3, status: "ready", error: null, instructions: false }] } };
+  const pickProject = async () => {
+    fireEvent.click(screen.getByRole("combobox", { name: /Project/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Qureshi Textiles" }));
+    await act(flushAsync);
+  };
+
+  it("documents_too_large from attaching is said on the prep; the earlier documents stay", async () => {
+    respond("client_workspace", WORKSPACE);
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    respondWith("assist_prep_documents_add", () => { throw { code: "documents_too_large", message: "too large" }; });
+    render(<PrepScreen projects={[{ id: "c1", name: "Qureshi Textiles" }]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    await pickProject();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Proforma March.pdf" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("The documents are too large for this session. The earlier ones are still used.");
+  });
+
+  it("documents_too_large from the relay is said on the prep too", async () => {
+    respond("client_workspace", WORKSPACE);
+    render(<PrepScreen projects={[{ id: "c1", name: "Qureshi Textiles" }]} onBack={vi.fn()} onStarted={vi.fn()} />);
+    await pickProject();
+    await act(() => emitEvent("assist:message", { type: "error", code: "documents_too_large", message: "x", retry: false, suggestion_id: null, in_reply_to: null, fatal: false }));
+    expect(screen.getByRole("alert")).toHaveTextContent("The documents are too large for this session.");
+  });
+
+  it("409 session_active on Start now offers to end the running session and start this one", async () => {
+    respond("assist_prep_save", { ...PREP, id: "pr9", status: "draft" });
+    let first = true;
+    respondWith("assist_start", () => {
+      if (first) { first = false; throw { code: "session_active", message: "Another session is running." }; }
+      return { session_id: "as-2", auto_saved: true, mode: "balanced", allowed_modes: ["balanced"], seconds_left: 3600, practice: false };
+    });
+    respond("assist_end", null);
+    const onStarted = vi.fn();
+    render(<PrepScreen projects={[]} onBack={vi.fn()} onStarted={onStarted} />);
+    fireEvent.click(screen.getByRole("button", { name: "Start now" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("Another Live Assist session is running.");
+    expect(onStarted).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "End it and start this one" }));
+    await act(flushAsync);
+    expect(callsOf("assist_end")).toHaveLength(1);
+    expect(callsOf("assist_start")).toHaveLength(2);
+    expect(onStarted).toHaveBeenCalled();
   });
 });
 

@@ -32,7 +32,7 @@ export function Gallery({ screen, lang, state = "ready" }: Pick<GalleryParams, "
         {screen === "assist" && (
           <div className="g-assist">
             <AssistCard state={FIXTURE_SESSION.reduce(cardReducer, EMPTY_CARD)} hint="outline" muted={false}
-              actions={{ onSend: noop, onMode: noop, onHint: noop, onMute: noop, onHide: noop, onCopyConsent: noop }} />
+              actions={{ onSend: noop, onMode: noop, onHint: noop, onMute: noop, onHide: noop, onCopyConsent: noop, onStartOffer: noop, onDismissOffer: noop, onEndAndStart: noop, onKeepRunning: noop }} />
           </div>
         )}
       </main>

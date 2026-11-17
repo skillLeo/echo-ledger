@@ -12,6 +12,7 @@ export { Dialog, Sheet, useFocusTrap } from "./Dialog";
 export { Badge, Status, type Tone, type StatusKind } from "./Badge";
 export { Toggle, Checkbox, Radio, RadioGroup } from "./choices";
 export { EmptyState } from "./EmptyState";
+export { Banner } from "./Banner";
 export { Skeleton, SkeletonRow, Loading, Progress } from "./Skeleton";
 export { HealthCheckRow, SetupStep, Steps, type HealthState } from "./health";
 export { Tabs, Segmented } from "./Tabs";

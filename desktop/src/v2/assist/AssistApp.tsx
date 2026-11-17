@@ -9,15 +9,28 @@ import { errorMessage } from "../../lib/ipc";
 import { useUiFlags } from "../flags";
 import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
 import { AssistCard, CONSENT_LINE } from "./AssistCard";
-import { EMPTY_CARD, cardReducer, type CardState } from "./card";
+import { EMPTY_CARD, cardReducer, isSessionActive, type CardState } from "./card";
 import "../components";
 
-type Action = AssistMessage | { type: "local_error"; text: string } | { type: "reset"; messages: AssistMessage[] };
+type Action =
+  | AssistMessage
+  | { type: "local_error"; text: string }
+  | { type: "reset"; messages: AssistMessage[] }
+  | { type: "starting"; prepId: string | null; clientRef: string | null }
+  | { type: "session_active_refused" }
+  | { type: "offer_dismissed" }
+  | { type: "session_active_dismissed" };
 
-function reduce(state: CardState, a: Action): CardState {
-  if (a.type === "reset") return a.messages.reduce(cardReducer, EMPTY_CARD);
-  if (a.type === "local_error") return { ...state, error: { text: a.text, fatal: false, suggestionId: null } };
-  return cardReducer(state, a);
+export function reduce(state: CardState, a: Action): CardState {
+  switch (a.type) {
+    case "reset": return a.messages.reduce(cardReducer, EMPTY_CARD);
+    case "local_error": return { ...state, error: { text: a.text, fatal: false, suggestionId: null } };
+    case "starting": return { ...state, pendingStart: { prepId: a.prepId, clientRef: a.clientRef }, offer: null, error: null };
+    case "session_active_refused": return { ...state, sessionActive: true };
+    case "offer_dismissed": return { ...state, offer: null };
+    case "session_active_dismissed": return { ...state, sessionActive: false, pendingStart: null };
+    default: return cardReducer(state, a);
+  }
 }
 
 export function useAssistCard(fixture: boolean): [CardState, (a: Action) => void, { hint: HintLevel; setHint: (h: HintLevel) => void; mutedUntil: number; setMutedUntil: (t: number) => void }] {
@@ -68,10 +81,14 @@ export default function AssistApp() {
   }, [local.mutedUntil, now]);
 
   const run = useCallback((fn: () => Promise<unknown>) => {
-    fn().catch((e) => dispatch({ type: "local_error", text: errorMessage(e) }));
+    fn().catch((e) => dispatch(isSessionActive(e) ? { type: "session_active_refused" } : { type: "local_error", text: errorMessage(e) }));
   }, [dispatch]);
+  const start = (prepId: string | null, clientRef: string | null) => {
+    dispatch({ type: "starting", prepId, clientRef });
+    run(() => assist.start(prepId, null, clientRef));
+  };
 
-  if (concealed || (!fixture && readFor === null) || !on || state.ended) return <div className="el-root el-embedded el-assist-root" />;
+  if (concealed || (!fixture && readFor === null) || !on || (state.ended && !state.offer)) return <div className="el-root el-embedded el-assist-root" />;
   return (
     <div className="el-root el-embedded el-assist-root">
       <AssistCard state={state} hint={local.hint} muted={local.mutedUntil > now} badge={<PrivacyBadge compact />}
@@ -87,6 +104,18 @@ export default function AssistApp() {
           },
           onHide: () => run(() => assist.hideCard()),
           onCopyConsent: () => run(() => navigator.clipboard.writeText(CONSENT_LINE)),
+          onStartOffer: () => state.offer && start(state.offer.prepId, state.offer.clientRef),
+          onDismissOffer: () => dispatch({ type: "offer_dismissed" }),
+          onEndAndStart: () => {
+            const again = state.pendingStart;
+            dispatch({ type: "session_active_dismissed" });
+            run(async () => {
+              await assist.end();
+              dispatch({ type: "starting", prepId: again?.prepId ?? null, clientRef: again?.clientRef ?? null });
+              await assist.start(again?.prepId ?? null, null, again?.clientRef ?? null);
+            });
+          },
+          onKeepRunning: () => dispatch({ type: "session_active_dismissed" }),
         }} />
     </div>
   );

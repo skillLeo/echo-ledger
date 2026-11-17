@@ -324,6 +324,20 @@
   padding: var(--el-space-16) var(--el-space-24) var(--el-space-24);
 }
 
+/* ---- Banner ---------------------------------------------------------------------------------------------- */
+.el-banner {
+  display: flex; align-items: center; gap: var(--el-space-12);
+  margin: var(--el-space-12) var(--el-space-32) 0;
+  padding: var(--el-space-8) var(--el-space-8) var(--el-space-8) var(--el-space-16);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-card-radius);
+  background: var(--el-role-bg-surface);
+}
+.el-banner--warning { background: var(--el-role-warning-soft); }
+.el-banner--danger { background: var(--el-role-danger-soft); }
+.el-banner__icon { color: var(--el-role-text-secondary); }
+.el-banner__text { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-2); }
+
 /* ---- Badge and Status --------------------------------------------------------------------------------------- */
 .el-badge {
   display: inline-flex; align-items: center; gap: var(--el-space-4);
@@ -573,6 +587,10 @@ button.el-step__head { cursor: pointer; }
   box-shadow: var(--el-shadow-1);
   white-space: nowrap;
 }
+/* A kept screen: one short flash of the accent ring (never a loop); under Reduce motion a still ring instead. */
+.el-pill--captured { box-shadow: var(--el-shadow-1), 0 0 0 var(--el-focus-width) var(--el-role-accent-default); animation: el-captured var(--el-motion-slow) var(--el-motion-ease-out) 2; }
+@keyframes el-captured { 50% { box-shadow: var(--el-shadow-1), 0 0 0 var(--el-focus-width) transparent; } }
+@media (prefers-reduced-motion: reduce) { .el-pill--captured { animation: none; } }
 .el-pill__summary {
   display: inline-flex; align-items: center; gap: var(--el-space-8);
   min-block-size: calc(var(--el-space-24) + var(--el-space-4));
@@ -618,6 +636,7 @@ button.el-step__head { cursor: pointer; }
   border-radius: var(--el-component-card-radius);
   box-shadow: var(--el-shadow-2);
 }
+.el-assist__offer { display: flex; flex-direction: column; gap: var(--el-space-8); }
 .el-assist__bar { display: flex; align-items: center; gap: var(--el-space-4); cursor: grab; }
 .el-assist__budget { flex: 1; min-inline-size: var(--el-space-48); padding-inline: var(--el-space-8); }
 .el-assist__note { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); border: var(--el-border-hairline) solid var(--el-role-border-default); }

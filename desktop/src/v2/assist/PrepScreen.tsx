@@ -6,6 +6,7 @@ import { api, errorMessage, type ClientFile } from "../../lib/ipc";
 import { Badge, Button, Card, Checkbox, EmptyState, Icons, Loading, Segmented, Select, Skeleton, TextArea, TextField } from "../components";
 import { assist, type AssistMode, type HintLevel, type LanguageHelp, type MeetingType, type Prep, type PrepDraft } from "./adapter";
 import { CONSENT_LINE, INTERVIEW_NOTE } from "./AssistCard";
+import { errorWords, isSessionActive } from "./card";
 
 export const MEETING_TYPES: readonly { value: MeetingType; label: string }[] = [
   { value: "interview", label: "Interview" },
@@ -66,6 +67,21 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [scheduleAt, setScheduleAt] = useState(prep?.scheduled_at?.slice(0, 16) ?? "");
+  /** 409 session_active on Start now: the prep to start once the running session has ended. */
+  const [activeFor, setActiveFor] = useState<string | null>(null);
+  /** documents_too_large (1.9.0-n): from attaching, or from the relay when the session sends them; the old ones stay. */
+  const [docsTooLarge, setDocsTooLarge] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    const un = assist.listen((m) => {
+      if (live && m.type === "error" && m.code === "documents_too_large") setDocsTooLarge(true);
+    });
+    return () => {
+      live = false;
+      void un.then((f) => f()).catch(() => undefined);
+    };
+  }, []);
   const set = <K extends keyof PrepDraft>(key: K, value: PrepDraft[K]) => setDraft((d) => ({ ...d, [key]: value }));
 
   useEffect(() => {
@@ -98,7 +114,22 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
   const attached = new Set((saved?.documents ?? []).map((d) => d.file_id));
   const toggleFile = (file: ClientFile, on: boolean) => run(`file-${file.id}`, async () => {
     const p = saved ?? (await save());
-    setSaved(on ? await assist.addDocuments(p.id, [file.id]) : await assist.removeDocument(p.id, file.id));
+    try {
+      setSaved(on ? await assist.addDocuments(p.id, [file.id]) : await assist.removeDocument(p.id, file.id));
+      if (!on) setDocsTooLarge(false);
+    } catch (e) {
+      if ((e as { code?: unknown } | null)?.code !== "documents_too_large") throw e;
+      setDocsTooLarge(true);
+    }
+  });
+  const startNow = (prepId: string) => run("start", async () => {
+    try {
+      await assist.start(prepId, draft.mode);
+      onStarted();
+    } catch (e) {
+      if (!isSessionActive(e)) throw e;
+      setActiveFor(prepId);
+    }
   });
   const tooLong = (["goals", "done", "not_done", "to_discuss", "instructions"] as const).find((k) => draft[k].length > MAX);
 
@@ -131,12 +162,13 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
             <EmptyState tone="error" icon={Icons.ErrorIcon} title="The project's files didn't load"
               body="The session works without them; you can attach them later." action={<Button onClick={() => setFilesAttempt((n) => n + 1)}>Try again</Button>} />
           ) : files === null ? (
-            <Loading label="Reading the project's files"><Skeleton width="medium" /><Skeleton width="long" /></Loading>
+            <Loading label="Reading the project's files" key="loading"><Skeleton width="medium" /><Skeleton width="long" /></Loading>
           ) : files.length === 0 ? (
             <EmptyState icon={Icons.TranscriptIcon} title="No files in this project" body="Add files to the project, then attach them here." />
           ) : (
             <fieldset className="el-radio-group">
               <legend>Use in this session</legend>
+              {docsTooLarge && <p className="el-field__error" role="alert">{errorWords("documents_too_large", false, "")}</p>}
               {files.map((f) => (
                 <Checkbox key={f.id} label={f.name} checked={attached.has(f.id)} disabled={busy === `file-${f.id}`}
                   hint={f.pages ? `${f.pages} pages` : undefined} onChange={(e) => void toggleFile(f, e.target.checked)} />
@@ -184,13 +216,22 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
       </section>
 
       {error && <p className="el-field__error" role="alert">{error}</p>}
+      {activeFor && (
+        <div className="el-consent" role="alert">
+          <span>Another Live Assist session is running.</span>
+          <span className="el-page__actions">
+            <Button size="sm" variant="primary" loading={busy === "start"} loadingLabel="Starting…"
+              onClick={() => { const id = activeFor; setActiveFor(null); void run("start", async () => { await assist.end(); await startNow(id); }); }}>End it and start this one</Button>
+            <Button size="sm" variant="quiet" onClick={() => setActiveFor(null)}>Keep it</Button>
+          </span>
+        </div>
+      )}
       {tooLong && <p className="el-field__error" role="alert">Each part of the brief can have up to 4,000 characters.</p>}
       <div className="el-prep__actions">
         <Button variant="primary" icon={Icons.RecordIcon} loading={busy === "start"} loadingLabel="Starting…" disabled={!!tooLong}
           onClick={() => void run("start", async () => {
             const p = await save();
-            await assist.start(p.id, draft.mode);
-            onStarted();
+            await startNow(p.id);
           })}>Start now</Button>
         <TextField label="Schedule for" type="datetime-local" value={scheduleAt} onChange={(e) => setScheduleAt(e.target.value)} className="el-prep__when" />
         <Button disabled={!scheduleAt || !!tooLong} loading={busy === "schedule"} loadingLabel="Scheduling…"

@@ -60,6 +60,7 @@ const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
+const AfterCallNoticeV2 = lazy(() => v2().then((m) => ({ default: m.AfterCallNoticeV2 })));
 
 type Tab = MainTab;
 /** The pages in the sidebar's order (Home is "record", Account "settings"): a switch fades in from that side. */
@@ -827,6 +828,9 @@ export default function MainApp() {
         <Suspense fallback={null}>
           <ShellV2 tab={tab} onGo={goTo} status={shellStatusOf(status)}
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
+            notices={<Suspense fallback={null}><div className="el-root el-embedded">
+              <AfterCallNoticeV2 text={(status as AppStatus & { afterCallNotice?: string | null }).afterCallNotice} onStatus={setStatus} />
+            </div></Suspense>}
             live={ui.flags["ui_v2.live"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
                 <LiveV2 status={status} assistOn={ui.flags.live_assist} projects={(projects ?? []).map((p) => ({ id: p.id, name: p.name }))}
