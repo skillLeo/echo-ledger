@@ -94,6 +94,8 @@ describe.runIf(process.platform !== "win32")("check-mac-signature.sh", () => {
     expect(runCheck({ verifies: false }, false).stderr).toContain("does not verify");
   });
 
+  // It shells out to the check six times (a sh script with stand-in codesign and shasum each time): 4 to 5 s measured on
+  // a Mac, more under load, so about 3x that instead of the default 5 s.
   it("fails a build that is not from the pinned certificate, or whose requirement does not pin it", () => {
     expect(runCheck({ certificate: false }, true).stderr).toContain("holds no certificate");
     expect(runCheck({ sha256: "f".repeat(64) }, true).stderr).toContain("signed with another certificate");
@@ -103,7 +105,7 @@ describe.runIf(process.platform !== "win32")("check-mac-signature.sh", () => {
       expect(result.status, requirement).toBe(1);
       expect(result.stderr).toContain("does not pin the certificate");
     }
-  });
+  }, 15_000);
 });
 
 describe.runIf(process.platform !== "win32")("release-mac.sh", () => {
