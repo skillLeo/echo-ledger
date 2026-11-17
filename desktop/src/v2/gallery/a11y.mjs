@@ -74,6 +74,7 @@ const SCREENS = [
   ["a-set-share", app("settings"), async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-share-mac", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-share-check", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Check screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-notifications", app("settings"), async (page) => { await page.getByRole("button", { name: "Notifications", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 

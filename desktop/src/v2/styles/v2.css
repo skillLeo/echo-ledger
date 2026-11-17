@@ -887,3 +887,6 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-check-frame { position: relative; overflow: hidden; border-radius: var(--el-radius-sm); border: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-check-frame img { inline-size: 100%; block-size: auto; display: block; }
 .el-check-mark { position: absolute; }
+.el-setting__time { inline-size: calc(var(--el-space-64) * 2); }
+.el-input:has(> input:disabled) { background: var(--el-role-bg-subtle); color: var(--el-role-text-disabled); border-color: var(--el-role-border-default); }
+.el-input > input:disabled { color: var(--el-role-text-disabled); cursor: not-allowed; }

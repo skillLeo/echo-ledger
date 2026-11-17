@@ -4,13 +4,13 @@ import type { ReactElement } from "react";
 import type { Settings, SettingsPatch } from "../../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
-import { collectControls, stale, type ControlRole } from "../../../test/parity";
+import { collectControls, stale, type ControlRole, type RolelessField } from "../../../test/parity";
 import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
 import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
 import { ConsentPage, PrivacyPage, SecurityPage } from "../../../views/main/AccountSettings";
-import { LockPage } from "../../../views/main/SecuritySettings";
+import { LockPage, NotificationsPage } from "../../../views/main/SecuritySettings";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage } from "../../../views/main/CaptureSettings";
@@ -64,7 +64,8 @@ describe("which sections open a v2 page", () => {
     expect(hasV2Page("captions")).toBe(true);
     expect(hasV2Page("calls")).toBe(true);
     expect(hasV2Page("lock")).toBe(true);
-    expect(hasV2Page("notifications")).toBe(false);
+    expect(hasV2Page("notifications")).toBe(true);
+    expect(hasV2Page("appearance")).toBe(false);
     expect(hasV2Page("nonsense")).toBe(false);
   });
 });
@@ -372,6 +373,44 @@ describe("Sign-in & security v2", () => {
   });
 });
 
+describe("Notifications v2", () => {
+  it("one switch for all, sounds, quiet hours and their times, a switch per kind, and a test", async () => {
+    respond("get_settings", { ...SETTINGS, activityNotifications: true, quietHours: true, quietFrom: "22:00", quietTo: "07:00" });
+    respond("notification_test", true);
+    await show("notifications");
+    fireEvent.click(screen.getByRole("switch", { name: "Play sounds" }));
+    fireEvent.change(screen.getByLabelText("Quiet hours from"), { target: { value: "21:30" } });
+    fireEvent.click(screen.getByRole("switch", { name: "Sharing" }));
+    await act(flushAsync);
+    const ps = patches();
+    expect(Object.values(ps[0].notificationSounds ?? {}).every((v) => v === false)).toBe(true);
+    expect(ps[1]).toEqual({ quietFrom: "21:30" });
+    expect(ps[2]).toEqual({ notificationCategories: { sharing: !(SETTINGS.notificationCategories?.sharing !== false) } });
+    fireEvent.click(screen.getByRole("button", { name: "Send a test notification" }));
+    await act(flushAsync);
+    expect(callsOf("notification_test")).toEqual([{ category: "other" }]);
+  });
+
+  it("with notifications off, everything under them waits; with quiet hours off, the times wait", async () => {
+    respond("get_settings", { ...SETTINGS, activityNotifications: false, quietHours: true });
+    await show("notifications");
+    expect(screen.getByRole("switch", { name: "Play sounds" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Recording" })).toBeDisabled();
+    expect(screen.getByLabelText("Quiet hours to")).toBeDisabled();
+  });
+
+  it("a test the system didn't show says how to allow it", async () => {
+    respond("notification_test", false);
+    const notices: string[] = [];
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "notifications", seq: 1 }} onHome={vi.fn()} status={makeStatus()} onUnpaired={vi.fn()}
+      run={(fn) => fn().catch((e) => { notices.push(String(e)); return undefined; })} /></div>);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "Send a test notification" }));
+    await act(flushAsync);
+    expect(notices).toEqual(["The system didn't show it. Allow notifications for EchoLedger in your computer's settings."]);
+  });
+});
+
 /**
  * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
  * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
@@ -385,7 +424,7 @@ describe("parity with today's Settings pages, in every state", () => {
   type Step = { name: string; today: Act; v2?: Act };
   type Page = {
     name: string; section: string; platform?: string; settings?: Partial<Settings>; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account;
-    lock?: { hasPin: boolean }; today: (settings: Settings) => ReactElement; steps?: Step[]; map?: Record<string, [ControlRole | "password", string | RegExp]>;
+    lock?: { hasPin: boolean }; today: (settings: Settings) => ReactElement; steps?: Step[]; map?: Record<string, [ControlRole | RolelessField, string | RegExp]>;
   };
   const press = (name: string | RegExp, role: ControlRole = "button"): Act => async () => {
     fireEvent.click(screen.getAllByRole(role, { name })[0]);
@@ -443,6 +482,11 @@ describe("parity with today's Settings pages, in every state", () => {
       steps: [{ name: hasPin ? "Change PIN" : "Set PIN", today: press(/^PIN/), v2: press("PIN") }, reset],
       map: { "combobox: Lock after": ["combobox", /^Lock after/], [`button: PIN${hasPin ? "Set" : "Not set"}`]: ["button", "PIN"] },
     }))),
+    ...[true, false].flatMap((activityNotifications) => [true, false].map((quietHours): Page => ({
+      name: `Notifications ${activityNotifications ? "on" : "off"}, quiet hours ${quietHours ? "on" : "off"}`, section: "notifications",
+      settings: { activityNotifications, quietHours }, today: (st) => <NotificationsPage settings={st} patch={patch} run={run} />, steps: [reset],
+      map: { "time: From": ["time", "Quiet hours from"], "time: To": ["time", "Quiet hours to"] },
+    }))),
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
@@ -477,7 +521,7 @@ describe("parity with today's Settings pages, in every state", () => {
           status={makeStatus({ platform: (page.platform ?? "windows") as "windows" })} onUnpaired={vi.fn()} /></div>);
       }, step ? step.v2 ?? step.today : null);
       const v2Has = (control: string) => {
-        const [role, name] = page.map?.[control] ?? [control.split(": ")[0] as ControlRole | "password", control.slice(control.indexOf(": ") + 2)];
+        const [role, name] = page.map?.[control] ?? [control.split(": ")[0] as ControlRole | RolelessField, control.slice(control.indexOf(": ") + 2)];
         return v2.controls.some((c) => {
           const [r, n] = [c.split(": ")[0], c.slice(c.indexOf(": ") + 2)];
           return r === role && (typeof name === "string" ? n === name : name.test(n));

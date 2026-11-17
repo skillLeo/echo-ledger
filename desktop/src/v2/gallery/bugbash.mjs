@@ -80,6 +80,7 @@ const CASES = [
   ["a-set-share", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-share-mac", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-share-check", "app", app("settings-mac"), ["en"], async (page) => { await page.getByRole("button", { name: "Screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Check screen-share privacy", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-notifications", "app", app("settings"), ["en"], async (page) => { await page.getByRole("button", { name: "Notifications", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-controls", "app", app("controls"), ["en"], async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 const THEMES = ["light", "dark"];
