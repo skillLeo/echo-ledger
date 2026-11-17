@@ -95,6 +95,21 @@ return [
             ],
         ],
 
+        // Since v1.9 (L7): Live Assist's reports on their own queue. One run waits up to 300 s for the model and the job
+        // up to 420 s (MakeAssistReportJob::$timeout), longer than the other queues' retry_after: this one gives the
+        // job back only after 480 s, so a report still being made is never started twice. Same driver as the default
+        // connection; its own worker (web/DEPLOY.md, docs/DEPLOY_VPS.md).
+        'assist-reports' => [
+            ...match (env('QUEUE_CONNECTION', 'database')) {
+                'redis' => ['driver' => 'redis', 'connection' => env('REDIS_QUEUE_CONNECTION', 'default'), 'block_for' => null],
+                'sync' => ['driver' => 'sync'],
+                default => ['driver' => 'database', 'connection' => env('DB_QUEUE_CONNECTION'), 'table' => env('DB_QUEUE_TABLE', 'jobs')],
+            },
+            'queue' => 'assist-reports',
+            'retry_after' => 480,
+            'after_commit' => false,
+        ],
+
     ],
 
     /*

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\Device;
 use App\Models\Plan;
 use App\Models\Workspace;
+use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\RelaySecret;
 use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
@@ -70,4 +71,50 @@ function relayHeaders(string $method, string $path, string $body = '', string $s
         'Content-Type' => 'application/json',
         'Accept' => 'application/json',
     ];
+}
+
+/**
+ * The report's model, faked: answers [$data] (a good default) and remembers what it read. Bound for AssistReportAi.
+ *
+ * @param  array<string, mixed>|null  $data
+ */
+function fakeAssistReportAi(?array $data = null, ?Throwable $fails = null): object
+{
+    $fake = new class($data, $fails) implements AssistReportAi
+    {
+        /** @var list<array<string, mixed>> */
+        public array $inputs = [];
+
+        /** @var list<string> what the budget check measured */
+        public array $prompts = [];
+
+        public function __construct(public ?array $data, public ?Throwable $fails) {}
+
+        public function promptText(array $input): string
+        {
+            return $this->prompts[] = (string) json_encode($input, JSON_UNESCAPED_UNICODE);
+        }
+
+        public function write(array $input): array
+        {
+            $this->inputs[] = $input;
+            if ($this->fails !== null) {
+                throw $this->fails;
+            }
+
+            return ['data' => $this->data ?? [
+                'summary' => 'They asked about your notice period and salary.',
+                'summary_translation' => 'Unhon ne notice period aur salary ka poocha.',
+                'qa' => [['index' => 1, 'verdict' => 'good', 'better_answer' => ''], ['index' => 2, 'verdict' => 'weak', 'better_answer' => 'I am looking for 300,000 rupees a month.']],
+                'mistakes' => [['said' => 'I have five years of Laravel', 'fact' => 'Me: three years of Laravel (minute 1)']],
+                'promises' => ['Send my portfolio by Friday'],
+                'grammar' => [['said' => 'I am working here since 2022', 'better' => 'I have been working here since 2022', 'why' => 'since needs the perfect'], ['said' => '', 'better' => 'x', 'why' => 'x']],
+                'action_items' => ['Send the portfolio by Friday', 'Ask about the start date'],
+                'follow_up_email' => ['subject' => 'Thank you', 'body' => 'Thank you for your time today.'],
+            ], 'model' => 'claude-sonnet-5-5', 'tokens' => ['input' => 10000, 'cached' => 2000, 'written' => 1000, 'output' => 1500]];
+        }
+    };
+    app()->instance(AssistReportAi::class, $fake);
+
+    return $fake;
 }

@@ -19,7 +19,10 @@ use Illuminate\Support\Carbon;
  * @property string $provider
  * @property string $model
  * @property string $mode
+ * @property string|null $plan the plan the call ran on (free, pro, ultra), as the relay token named it
  * @property string $kind
+ * @property string|null $outcome
+ * @property array<string, mixed>|null $latency the relay's latency stages in ms (AssistStats::STAGES)
  * @property string $cost_usd
  * @property Carbon $occurred_at
  */
@@ -28,7 +31,7 @@ final class AssistUsage extends Model
     protected $table = 'assist_usage';
 
     protected $fillable = [
-        'assist_session_id', 'workspace_id', 'user_id', 'suggestion_id', 'provider', 'model', 'mode', 'kind', 'trigger', 'outcome',
+        'assist_session_id', 'workspace_id', 'user_id', 'suggestion_id', 'provider', 'model', 'mode', 'plan', 'kind', 'trigger', 'outcome',
         'fallback', 'input_tokens', 'cached_tokens', 'written_tokens', 'output_tokens', 'cost_usd', 'estimated', 'latency', 'occurred_at',
     ];
 

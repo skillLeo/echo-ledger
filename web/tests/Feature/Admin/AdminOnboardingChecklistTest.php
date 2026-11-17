@@ -183,5 +183,8 @@ it('never reveals a credential in the checklist', function () {
 
     $html = $this->get('/app')->assertOk()->getContent();
 
-    expect($html)->not->toContain('aai-secret-key-1234567890')->not->toContain('7890');
+    // Not even its tail as the credentials page shows it ("ends …7890"). A bare "7890" can turn up by chance inside the
+    // page's random tokens (W-007), so the tail is looked for on its own, not inside another run of letters and digits.
+    expect($html)->not->toContain('aai-secret-key-1234567890')->not->toContain('…7890')
+        ->not->toMatch('/(?<![0-9A-Za-z])7890(?![0-9A-Za-z])/');
 });

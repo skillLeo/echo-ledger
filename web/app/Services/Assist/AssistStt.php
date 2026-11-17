@@ -14,8 +14,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * The captions block of a Live Assist session (docs/API_ASSIST.md `stt`): a short-lived streaming key, as Live
  * Translate gets one. Null when the speech provider is not set up or does not answer. Only a session with a running
- * recording may go on without it (the app's recording has its own captions); Practice, or a live session without a
- * recording, is refused instead (AssistSessionController, 503 provider_not_configured).
+ * recording may start without it (the app's recording has its own captions); Practice, or a live session without a
+ * recording, is refused at the start instead (AssistSessionController, 503 provider_not_configured). A token refresh
+ * never fails for it: `stt` is null and the app asks again (1.9.0-j).
  */
 final class AssistStt
 {

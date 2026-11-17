@@ -57,6 +57,10 @@ reconciler and the 30-day retention cleanup.
 ```
 The scheduler (`routes/console.php`) runs:
 - `queue:work --stop-when-empty --max-time=55 --tries=3 --timeout=900` every minute (`withoutOverlapping(15)`)
+- since v1.9, Live Assist's reports on their own queue: `queue:work assist-reports --queue=assist-reports
+  --stop-when-empty --max-time=55 --tries=1 --timeout=420` every minute (`withoutOverlapping(10)`). Its connection
+  (`config/queue.php` `assist-reports`) uses the same driver as `QUEUE_CONNECTION` with `retry_after` 480, longer than
+  a report can take, so one is never made twice.
 - `stt:reconcile` every 5 minutes (recovers missed webhooks, retries provider-side deletes)
 - `recordings:retention` hourly (recordings past their retention go to the 48-hour undo bin; the bin erases what has
   waited 48 hours) and `model:prune` daily (webhook events, old tombstones and other expired rows)
