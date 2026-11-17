@@ -115,6 +115,30 @@ Back up the bucket as well: `APP_KEY` and `ECHOLEDGER_RECORDINGS_KEY` never go t
 bucket itself, and useless without those two keys. A copy holds erased files for as long as it is kept: 30 days at most,
 as with the rule above.
 
+## PHP-FPM workers and pictures
+
+A screen or a payment receipt is decoded on the request that sends it: up to about 200 MB of memory for the largest
+picture taken (25 megapixels), for a moment. The server raises PHP's memory limit to 512M for that step only and puts
+it back after, and decodes **at most 2 pictures at a time** (a cache lock per slot, so it holds for every FPM process;
+`ECHOLEDGER_PICTURE_DECODE_SLOTS`). A third waits up to 20 seconds (`ECHOLEDGER_PICTURE_DECODE_WAIT`), then answers
+`503 server_busy`; the apps send it again later.
+
+Size the pool with that in mind, in `/etc/php/8.4/fpm/pool.d/www.conf`:
+
+```
+pm = dynamic
+; (RAM for PHP) / (about 60 MB an ordinary request), less 2 × 200 MB for the pictures being decoded.
+; 4 GB VPS, about 2.5 GB for PHP: (2500 - 400) / 60 ≈ 35.
+pm.max_children = 35
+pm.start_servers = 6
+pm.min_spare_servers = 4
+pm.max_spare_servers = 10
+pm.max_requests = 500
+```
+
+Keep `memory_limit` at 256M in `php.ini`: the server raises it only around a decode. If uploads often get
+`server_busy`, add a slot and 200 MB of memory for it, rather than more children.
+
 ## Claude and ChatGPT connector
 
 The connector signs its tokens with a key pair in `storage/` (web/DEPLOY.md, "Claude and ChatGPT connector"). They do

@@ -12,8 +12,11 @@ use App\Models\Screen;
 use App\Services\ChunkedUploadService;
 use App\Services\Storage\RecordingFiles;
 use App\Services\Workspaces\PlanLimits;
+use Closure;
+use Illuminate\Contracts\Cache\Lock;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\UniqueConstraintViolationException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -104,11 +107,14 @@ class ScreenStore
         $thumbPlain = $this->uploads->tempPath('screen-thumb');
         $written = [];
         try {
-            self::roomToDecode();
-            self::writeThumbnail($plainPath, $thumbPlain);
-            // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is the one
-            // kept already, as an exact repeat is (ScreenSimilarity, conservative).
-            $near = $this->nearDuplicate($session, $plainPath, $meta);
+            // The decodes (the thumbnail, the comparison) in a decode slot, with room for them.
+            $near = self::decoding(function () use ($plainPath, $thumbPlain, $session, $meta): ?Screen {
+                self::writeThumbnail($plainPath, $thumbPlain);
+
+                // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is
+                // the one kept already, as an exact repeat is (ScreenSimilarity, conservative).
+                return $this->nearDuplicate($session, $plainPath, $meta);
+            });
             if ($near instanceof Screen) {
                 return [$near, false];
             }
@@ -327,22 +333,81 @@ class ScreenStore
     /** Memory for decoding the largest picture taken (25 MP at 4 bytes a pixel, with room to spare). */
     public const DECODE_MEMORY = 512 * 1024 * 1024;
 
-    /** Raises PHP's memory limit to DECODE_MEMORY for this request where it is lower (a 128M default would fail). */
-    public static function roomToDecode(): void
+    /**
+     * Runs [$work], which decodes pictures, in one of the server's decode slots (echoledger.picture_decodes: 2 by
+     * default, each a cache lock, so the bound holds for every PHP process sharing the cache; a picture takes up to
+     * about 200 MB), with PHP's memory limit raised to DECODE_MEMORY where it is lower. The limit
+     * is put back afterwards, so a queue worker or Octane keeps its own; when the process still holds more than its old
+     * limit (rare: GD frees its pictures), the raised one stays for the rest of the process rather than fail. Throws
+     * `503 server_busy` (Retry-After 5) when no slot frees up in time (20 seconds by default).
+     *
+     * @template T
+     *
+     * @param  Closure(): T  $work
+     * @return T
+     */
+    public static function decoding(Closure $work): mixed
+    {
+        $slot = self::decodeSlot();
+        $previous = self::roomToDecode();
+        try {
+            return $work();
+        } finally {
+            if ($previous !== null && memory_get_usage(true) < self::bytes($previous)) {
+                @ini_set('memory_limit', $previous);
+            }
+            $slot->release();
+        }
+    }
+
+    /** A free decode slot, waiting for one as long as the configuration says. */
+    private static function decodeSlot(): Lock
+    {
+        $slots = max(1, (int) config('echoledger.picture_decodes.slots', 2));
+        $deadline = microtime(true) + (float) config('echoledger.picture_decodes.wait_seconds', 20);
+        do {
+            for ($i = 0; $i < $slots; $i++) {
+                // Held for at most a minute even if the process dies mid-decode.
+                $lock = Cache::lock('pictures:decode:'.$i, 60);
+                if ($lock->get()) {
+                    return $lock;
+                }
+            }
+            if (microtime(true) >= $deadline) {
+                break;
+            }
+            usleep(200_000);
+        } while (true);
+
+        throw new ApiError(503, 'server_busy', 'The server is busy with other pictures. Try again in a moment.', [], ['Retry-After' => '5']);
+    }
+
+    /**
+     * Raises PHP's memory limit to DECODE_MEMORY where it is lower (a 128M default would fail on a 25 MP picture).
+     * Use decoding(), which also puts it back.
+     *
+     * @return string|null the limit before, when it was raised
+     */
+    public static function roomToDecode(): ?string
     {
         $limit = trim((string) ini_get('memory_limit'));
-        if ($limit === '' || $limit === '-1') {
-            return;
+        if ($limit === '' || $limit === '-1' || self::bytes($limit) >= self::DECODE_MEMORY) {
+            return null;
         }
-        $bytes = (int) $limit * match (strtolower(substr($limit, -1))) {
+        ini_set('memory_limit', (string) self::DECODE_MEMORY);
+
+        return $limit;
+    }
+
+    /** A php.ini size ("128M", "262144K", "2G", "536870912") in bytes. */
+    private static function bytes(string $size): int
+    {
+        return (int) $size * match (strtolower(substr($size, -1))) {
             'g' => 1024 ** 3,
             'm' => 1024 ** 2,
             'k' => 1024,
             default => 1,
         };
-        if ($bytes < self::DECODE_MEMORY) {
-            ini_set('memory_limit', (string) self::DECODE_MEMORY);
-        }
     }
 
     private function twin(CaptureSession $session, string $sha): ?Screen

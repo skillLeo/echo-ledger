@@ -21,6 +21,7 @@ use App\Services\Workspaces\Workspaces;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Database\Connection;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
@@ -164,6 +165,16 @@ describe('sending a receipt', function () {
         expect(getimagesizefromstring((string) $thumb->getContent())[0])->toBe(480);
         $this->api($this->token)->getJson("/api/upgrade-requests/{$this->id}/proofs/{$proof['id']}?variant=original")->assertNotFound()->assertJsonPath('code', 'proof_not_found');
         $this->api($this->token)->getJson('/api/upgrade-requests/latest')->assertJsonPath('payment.proofs.0.id', $proof['id']);
+    });
+
+    it('decodes a receipt in a decode slot, as screens are: none free answers 503 server_busy and keeps nothing', function () {
+        config(['echoledger.picture_decodes.wait_seconds' => 0.2]);
+        $held = [Cache::lock('pictures:decode:0', 60), Cache::lock('pictures:decode:1', 60)];
+        expect($held[0]->get() && $held[1]->get())->toBeTrue();
+        sendReceipt($this, receiptJpegWithExif(400, 200, 1))->assertStatus(503)->assertJsonPath('code', 'server_busy');
+        expect(UpgradeRequestProof::query()->count())->toBe(0)->and(Storage::disk('recordings')->allFiles('payment-proofs'))->toBe([]);
+        $held[0]->release();
+        sendReceipt($this, receiptJpegWithExif(400, 200, 1))->assertCreated();
     });
 
     it('turns a photo upright and leaves its EXIF, location and comments behind', function () {
