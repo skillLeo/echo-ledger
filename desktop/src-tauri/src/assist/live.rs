@@ -79,10 +79,21 @@ fn same_app(named: &str, source_app: &str) -> bool {
     if named == "whatsapp" { source_app.starts_with("whatsapp") } else { named == source_app }
 }
 
-/// The caller's name and the prep's person are the same person: a word of one is a word of the other (pure).
+/// Honorifics and titles that say nothing about who someone is.
+const HONORIFICS: [&str; 22] = [
+    "mr", "mrs", "ms", "miss", "mx", "dr", "sir", "madam", "madame", "prof", "professor", "engr", "eng", "sahib", "sahab", "saab", "sb", "mian", "janab", "begum", "hafiz", "haji",
+];
+
+/// The name words of a name (pure): no honorifics or titles, only words of 3 letters or more.
+pub fn name_words(name: &str) -> Vec<String> {
+    words(name).into_iter().map(|w| w.trim_end_matches('.').to_string()).filter(|w| w.chars().count() >= 3 && !HONORIFICS.contains(&w.as_str())).collect()
+}
+
+/// The caller is the prep's person (pure): the prep's name word is the caller's; with two name words or more, all of
+/// them (the full name), so a shared family or company word is never enough.
 pub fn same_person(person: &str, caller: &str) -> bool {
-    let caller = words(caller);
-    words(person).iter().filter(|w| w.chars().count() >= 2).any(|w| caller.contains(w))
+    let (wanted, heard) = (name_words(person), name_words(caller));
+    !wanted.is_empty() && wanted.iter().all(|w| heard.contains(w))
 }
 
 impl Armed {
@@ -102,48 +113,56 @@ pub struct CallStart<'a> {
     pub caller: Option<&'a str>,
 }
 
-/// What an armed prep does with a recording that started (pure).
+/// What the armed preps do with a recording that started (pure). Live Assist never starts by itself: a call that
+/// may be a prep's meeting gets the card's question; matching only chooses which prep it offers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Arming {
-    /// Not its meeting: a voice note, a call that began before it was armed or after its time.
+    /// No prep's meeting: a voice note, or a call that began before any prep was armed or after its time.
     Nothing,
-    /// The app and the person it names match: Live Assist starts.
-    Start(String),
-    /// It names nobody, something does not match, or two preps could be this call: the card asks.
-    Ask(String),
-    /// It names a person and the caller is not known yet: asked again in a moment.
+    /// The card asks about this prep.
+    Offer(String),
+    /// A prep names a person and the caller is not known yet: asked again in a moment, to offer the right prep.
     Wait,
 }
 
-fn verdict(armed: &Armed, call: &CallStart<'_>) -> Arming {
-    if call.mode != crate::audio::RecordingMode::Call || call.started_at < armed.armed_at || call.started_at > armed.until {
+/// A recording a prep's window holds: a call that started while it was armed.
+fn in_window(armed: &Armed, call: &CallStart<'_>) -> bool {
+    call.mode == crate::audio::RecordingMode::Call && call.started_at >= armed.armed_at && call.started_at <= armed.until
+}
+
+/// How well a prep matches the call (pure): its app and its person count; one that does not match counts against it.
+fn score(armed: &Armed, call: &CallStart<'_>) -> i32 {
+    let app = armed.app.map_or(0, |a| if same_app(a, call.source_app) { 2 } else { -2 });
+    let person = match (armed.person.as_deref(), call.caller) {
+        (Some(p), Some(c)) => {
+            if same_person(p, c) { 3 } else { -3 }
+        }
+        _ => 0,
+    };
+    app + person
+}
+
+/// Which prep the card offers for a recording that started (pure): the best match among the preps whose window holds
+/// it, the one scheduled nearest the call on a tie. While a prep names a person and the caller is not known, it waits
+/// (`late` ends the wait: the offer goes with what is known).
+pub fn decide(armed: &[Armed], call: &CallStart<'_>, late: bool) -> Arming {
+    let candidates: Vec<&Armed> = armed.iter().filter(|a| in_window(a, call)).collect();
+    if candidates.is_empty() {
         return Arming::Nothing;
     }
-    let app = armed.app.map(|a| same_app(a, call.source_app));
-    let person = armed.person.as_deref().map(|p| call.caller.map(|c| same_person(p, c)));
-    match (app, person) {
-        (Some(false), _) | (_, Some(Some(false))) | (None, None) => Arming::Ask(armed.prep_id.clone()),
-        (_, Some(None)) => Arming::Wait,
-        _ => Arming::Start(armed.prep_id.clone()),
+    if !late && call.caller.is_none() && candidates.iter().any(|a| a.person.is_some()) {
+        return Arming::Wait;
     }
+    let best = candidates.iter().max_by_key(|a| (score(a, call), -(a.at - call.started_at).num_seconds().abs()));
+    best.map_or(Arming::Nothing, |a| Arming::Offer(a.prep_id.clone()))
 }
 
-/// What the armed preps do with a recording that started (pure): one that matches starts; two that could be this call,
-/// or one that names nothing or does not match, make the card ask about the one scheduled nearest the call.
-pub fn decide(armed: &[Armed], call: &CallStart<'_>) -> Arming {
-    let candidates: Vec<(&Armed, Arming)> = armed.iter().map(|a| (a, verdict(a, call))).filter(|(_, v)| *v != Arming::Nothing).collect();
-    let nearest = || candidates.iter().min_by_key(|(a, _)| (a.at - call.started_at).num_seconds().abs()).map(|(a, _)| a.prep_id.clone());
-    let starts: Vec<&String> = candidates.iter().filter_map(|(_, v)| if let Arming::Start(id) = v { Some(id) } else { None }).collect();
-    match starts.as_slice() {
-        [one] => Arming::Start((*one).clone()),
-        [] if candidates.iter().any(|(_, v)| *v == Arming::Wait) => Arming::Wait,
-        _ => nearest().map_or(Arming::Nothing, Arming::Ask),
-    }
-}
-
-/// The card's question when an armed prep may be this call (it starts nothing by itself).
-pub fn offer_message(armed: &Armed) -> serde_json::Value {
-    serde_json::json!({"type": "offer", "prep_id": armed.prep_id, "title": armed.title, "question": "Start Live Assist for this call?"})
+/// The card's question for a prep (it starts nothing by itself): "Start Live Assist for <prep title>?", naming the
+/// caller when known, with the recording it is about.
+pub fn offer_message(armed: &Armed, caller: Option<&str>, client_ref: &str) -> serde_json::Value {
+    let title = armed.title.trim();
+    let question = if title.is_empty() { "Start Live Assist for this call?".to_string() } else { format!("Start Live Assist for {title}?") };
+    serde_json::json!({"type": "offer", "prep_id": armed.prep_id, "title": armed.title, "caller": caller, "question": question, "client_ref": client_ref})
 }
 
 /// When a prep scheduled for `at` is armed (pure).
@@ -277,8 +296,14 @@ async fn send_last_turns(app: &AppHandle, taken: &Taken) {
 }
 
 /// Starts a session: the recording first (unless it is Practice), then the server and the relay; the card opens.
-pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String>, practice: bool) -> AppResult<AssistStarted> {
+/// `client_ref`: the recording an offer was about ("Start Live Assist for <prep>?"); the start is refused when that
+/// recording is no longer the one running.
+pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String>, practice: bool, client_ref: Option<String>) -> AppResult<AssistStarted> {
     let state = app.state::<crate::AppState>();
+    let running = state.capture.info().map(|i| i.client_ref);
+    if !offer_still_current(client_ref.as_deref(), running.as_deref()) {
+        return Err(AppError::msg(OFFER_GONE));
+    }
     let flags = crate::ui_flags::cached(&state);
     if !super::enabled(&flags) {
         return Err(AppError::msg("Live Assist isn't on for you yet."));
@@ -380,10 +405,18 @@ pub fn active_message(active: &crate::net::models::ActiveAssist, this_device: Op
 }
 
 /// "End it and start this one": the active session ends, then this start is tried once more.
-pub async fn start_replacing(app: &AppHandle, active_id: &str, prep_id: Option<String>, mode: Option<String>, practice: bool) -> AppResult<AssistStarted> {
+pub async fn start_replacing(app: &AppHandle, active_id: &str, prep_id: Option<String>, mode: Option<String>, practice: bool, client_ref: Option<String>) -> AppResult<AssistStarted> {
     let api = app.state::<crate::AppState>().api()?;
     let active = checked(active_id)?.to_string();
-    session::end_then_start(&active, |id| async move { api.assist_end(&id).await }, || start(app, prep_id, mode, practice)).await
+    session::end_then_start(&active, |id| async move { api.assist_end(&id).await }, || start(app, prep_id, mode, practice, client_ref)).await
+}
+
+/// An offer's call has ended (or another one runs).
+pub const OFFER_GONE: &str = "That call has ended, so Live Assist didn't start.";
+
+/// An offer is still about the recording that runs (pure); a start that names no recording always is.
+pub fn offer_still_current(offered: Option<&str>, running: Option<&str>) -> bool {
+    offered.is_none_or(|offered| running == Some(offered))
 }
 
 /// The relay's events of a session that is not in the registry yet.
@@ -687,18 +720,18 @@ pub fn rearm(app: &AppHandle) {
     });
 }
 
-/// How long an armed prep that names a person waits for the caller's name before the card asks.
-const CALLER_WAIT: Duration = Duration::from_secs(30);
+/// How long the offer waits for the caller's name when a prep names a person.
+const CALLER_WAIT: Duration = Duration::from_secs(10);
 
-/// A recording started: an armed prep that matches it starts its session; one that may be this call makes the card
-/// ask. Never a voice note, never a call that was running before the prep was armed.
+/// A recording started: when it may be an armed prep's meeting, the card asks "Start Live Assist for <prep>?". Live
+/// Assist never starts by itself; never for a voice note or a call that was running before the prep was armed.
 pub fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     if app.state::<crate::AppState>().assist.armed().is_empty() {
         return;
     }
     let (app, info) = (app.clone(), info.clone());
     tauri::async_runtime::spawn(async move {
-        let asked_until = Instant::now() + CALLER_WAIT;
+        let late_at = Instant::now() + CALLER_WAIT;
         loop {
             let state = app.state::<crate::AppState>();
             if state.assist.session_id().is_some() || state.capture.info().map(|i| i.client_ref) != Some(info.client_ref.clone()) {
@@ -706,25 +739,19 @@ pub fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo)
             }
             let caller = state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref().filter(|(r, _)| *r == info.client_ref).and_then(|(_, c)| c.name.clone());
             let call = CallStart { mode: info.mode, started_at: info.started_at, source_app: &info.source_app, caller: caller.as_deref() };
-            let decision = {
+            let (decision, offer) = {
                 let armed = state.assist.armed();
-                match decide(&armed, &call) {
-                    Arming::Wait if Instant::now() >= asked_until => armed.iter().find(|a| verdict(a, &call) == Arming::Wait).map_or(Arming::Nothing, |a| Arming::Ask(a.prep_id.clone())),
-                    other => other,
-                }
+                let decision = decide(&armed, &call, Instant::now() >= late_at);
+                let offer = match &decision {
+                    Arming::Offer(id) => armed.iter().find(|a| &a.prep_id == id).map(|a| offer_message(a, caller.as_deref(), &info.client_ref)),
+                    _ => None,
+                };
+                (decision, offer)
             };
             match decision {
                 Arming::Nothing => return,
                 Arming::Wait => tokio::time::sleep(Duration::from_secs(2)).await,
-                Arming::Start(prep_id) => {
-                    state.assist.armed().retain(|a| a.prep_id != prep_id);
-                    if let Err(e) = start(&app, Some(prep_id), None, false).await {
-                        let _ = app.emit("app:error", e.to_string());
-                    }
-                    return;
-                }
-                Arming::Ask(prep_id) => {
-                    let offer = state.assist.armed().iter().find(|a| a.prep_id == prep_id).map(offer_message);
+                Arming::Offer(_) => {
                     if let Some(offer) = offer {
                         crate::lifecycle::show(&app, WINDOW, "assist");
                         emit(&app, &offer);
@@ -832,35 +859,57 @@ mod tests {
     }
 
     #[test]
-    fn a_prep_starts_only_with_a_matching_call_that_starts_inside_its_window() {
-        let zoom_with_sara = [armed("p1", "Interview on Zoom", "Sara Khan", "2026-12-01T10:00:00Z")];
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", Some("Sara"))), Arming::Start("p1".into()), "app and person match");
-        // A call already running when the prep was armed is never its meeting.
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T09:50:00Z", "zoom", Some("Sara"))), Arming::Nothing);
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:11:00Z", "zoom", Some("Sara"))), Arming::Nothing, "after its time");
+    fn a_prep_is_only_ever_offered_for_a_call_that_starts_inside_its_window() {
+        let zoom_with_imran = [armed("p1", "Interview on Zoom", "Imran Khan", "2026-12-01T10:00:00Z")];
+        let call_at = |at| call(at, "zoom", Some("Imran Khan"));
+        assert_eq!(decide(&zoom_with_imran, &call_at("2026-12-01T10:01:00Z"), false), Arming::Offer("p1".into()), "a match is offered, never started");
+        // A call already running when the prep was armed, or after its time, is never offered.
+        assert_eq!(decide(&zoom_with_imran, &call_at("2026-12-01T09:50:00Z"), true), Arming::Nothing);
+        assert_eq!(decide(&zoom_with_imran, &call_at("2026-12-01T10:11:00Z"), true), Arming::Nothing);
         // A voice note is never a meeting.
         let note = CallStart { mode: crate::audio::RecordingMode::VoiceNote, ..call("2026-12-01T10:01:00Z", "voice_note", None) };
-        assert_eq!(decide(&zoom_with_sara, &note), Arming::Nothing);
-        // Another app: it does not start by itself; the card asks.
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "google_meet", Some("Sara"))), Arming::Ask("p1".into()));
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", Some("Omar Ali"))), Arming::Ask("p1".into()), "another person");
-        assert_eq!(decide(&zoom_with_sara, &call("2026-12-01T10:01:00Z", "zoom", None)), Arming::Wait, "the caller's name is not known yet");
-        // A prep that names neither: the card asks.
-        let bare = [armed("p2", "Weekly", "", "2026-12-01T10:00:00Z")];
-        assert_eq!(decide(&bare, &call("2026-12-01T10:00:30Z", "zoom", None)), Arming::Ask("p2".into()));
-        let whatsapp = [armed("p3", "Call on WhatsApp", "", "2026-12-01T10:00:00Z")];
-        assert_eq!(decide(&whatsapp, &call("2026-12-01T10:00:30Z", "whatsapp_business", None)), Arming::Start("p3".into()), "WhatsApp's apps are one");
+        assert_eq!(decide(&zoom_with_imran, &note, true), Arming::Nothing);
+        // Another app or another person: still only a question.
+        assert_eq!(decide(&zoom_with_imran, &call("2026-12-01T10:01:00Z", "google_meet", Some("Sana")), true), Arming::Offer("p1".into()));
+        // The prep names a person and the caller is not known yet: it waits, then asks with what it knows.
+        assert_eq!(decide(&zoom_with_imran, &call("2026-12-01T10:01:00Z", "zoom", None), false), Arming::Wait);
+        assert_eq!(decide(&zoom_with_imran, &call("2026-12-01T10:01:00Z", "zoom", None), true), Arming::Offer("p1".into()));
+        // A prep naming only the app: offered at once, there is no person to wait for.
+        let app_only = [armed("p3", "Call on WhatsApp", "", "2026-12-01T10:00:00Z")];
+        assert_eq!(decide(&app_only, &call("2026-12-01T10:00:30Z", "whatsapp_business", None), false), Arming::Offer("p3".into()));
     }
 
     #[test]
-    fn two_preps_close_together_make_the_card_ask_about_the_nearest() {
-        let two = [armed("p1", "Weekly", "", "2026-12-01T10:00:00Z"), armed("p2", "Standup", "", "2026-12-01T10:05:00Z")];
-        assert_eq!(decide(&two, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Ask("p2".into()));
-        let both_zoom = [armed("p1", "Zoom one", "", "2026-12-01T10:00:00Z"), armed("p2", "Zoom two", "", "2026-12-01T10:05:00Z")];
-        assert_eq!(decide(&both_zoom, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Ask("p2".into()), "two that match: asked, never guessed");
-        assert_eq!(decide(&both_zoom, &call("2026-12-01T10:01:00Z", "zoom", None)), Arming::Start("p1".into()), "before the second is armed, only the first can be it");
-        let one_matches = [armed("p1", "On Zoom", "", "2026-12-01T10:00:00Z"), armed("p2", "Weekly", "", "2026-12-01T10:05:00Z")];
-        assert_eq!(decide(&one_matches, &call("2026-12-01T10:04:00Z", "zoom", None)), Arming::Start("p1".into()), "the one that names this app");
+    fn matching_chooses_which_prep_is_offered() {
+        // Two preps close together: the one whose person called is offered, whichever is nearer.
+        let two = [armed("p1", "With Imran", "Dr Imran", "2026-12-01T10:00:00Z"), armed("p2", "With Sana", "Dr Sana", "2026-12-01T10:05:00Z")];
+        assert_eq!(decide(&two, &call("2026-12-01T10:04:00Z", "zoom", Some("Dr Imran")), true), Arming::Offer("p1".into()));
+        assert_eq!(decide(&two, &call("2026-12-01T10:04:00Z", "zoom", Some("Dr Sana")), true), Arming::Offer("p2".into()));
+        // Nothing tells them apart: the nearer one.
+        assert_eq!(decide(&two, &call("2026-12-01T10:04:00Z", "zoom", Some("Omar")), true), Arming::Offer("p2".into()));
+        // The app ranks too.
+        let apps = [armed("p1", "On Zoom", "", "2026-12-01T10:00:00Z"), armed("p2", "On Google Meet", "", "2026-12-01T10:05:00Z")];
+        assert_eq!(decide(&apps, &call("2026-12-01T10:04:00Z", "zoom", None), false), Arming::Offer("p1".into()));
+    }
+
+    #[test]
+    fn an_offer_starts_only_while_its_call_is_the_one_running() {
+        assert!(offer_still_current(Some("rec-1"), Some("rec-1")));
+        assert!(!offer_still_current(Some("rec-1"), Some("rec-2")), "another call runs now");
+        assert!(!offer_still_current(Some("rec-1"), None), "the call ended");
+        assert!(offer_still_current(None, None) && offer_still_current(None, Some("rec-2")), "Start now names no recording");
+    }
+
+    #[test]
+    fn people_match_on_their_name_words_never_on_titles_or_a_shared_word() {
+        assert!(!same_person("Dr Imran", "Dr Sana"), "a shared title is not a match");
+        assert!(same_person("Dr Imran", "Imran"));
+        assert!(!same_person("Imran Khan", "Khan Traders"), "two name words: the full name");
+        assert!(same_person("Imran Khan", "Imran Khan (Acme)"));
+        assert!(!same_person("Imran Khan", "Imran"), "half of a full name is not enough");
+        assert!(same_person("Mian Sahib Tariq", "Tariq"), "honorifics are not name words");
+        assert!(!same_person("Al", "Al"), "only words of 3 letters or more");
+        assert!(!same_person("", "Imran"));
     }
 
     #[test]
@@ -870,9 +919,9 @@ mod tests {
         assert_eq!(named_app(&prep("Teams sync")), Some("microsoft_teams"));
         assert_eq!(named_app(&prep("Zoom or Teams")), None, "two apps: none for sure");
         assert_eq!(named_app(&prep("Zoomed-out review")), None, "a word, not a part of one");
-        assert!(same_person("Sara Khan", "Sara") && same_person("Sara", "Sara Khan (Acme)"));
-        assert!(!same_person("Sara Khan", "Omar Ali"));
-        assert_eq!(offer_message(&armed("p1", "Weekly", "", "2026-12-01T10:00:00Z"))["question"], "Start Live Assist for this call?");
+        let offer = offer_message(&armed("p1", "Weekly sync", "", "2026-12-01T10:00:00Z"), Some("Sara"), "rec-7");
+        assert_eq!(offer, json!({"type": "offer", "prep_id": "p1", "title": "Weekly sync", "caller": "Sara", "question": "Start Live Assist for Weekly sync?", "client_ref": "rec-7"}));
+        assert_eq!(offer_message(&armed("p1", " ", "", "2026-12-01T10:00:00Z"), None, "rec-7")["question"], "Start Live Assist for this call?");
         assert!(!format!("{:?}", armed("p1", "SECRET title", "SECRET person", "2026-12-01T10:00:00Z")).contains("SECRET"));
     }
 

@@ -2612,16 +2612,17 @@ pub async fn assist_schedule(app: AppHandle, prep_id: String, at: String) -> App
 
 /// Starts Live Assist, only while the server's `live_assist` flag is on: the recording first (Practice has none), then
 /// the server session linked to it, then the relay pinned with the config's `relay_pins` (none refuses the connection
-/// in plain words). The card opens and hears the session as `assist:message`.
+/// in plain words). The card opens and hears the session as `assist:message`. `client_ref`: the recording an offer was
+/// about; refused when another recording runs now.
 #[tauri::command]
-pub async fn assist_start(app: AppHandle, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>) -> AppResult<crate::assist::session::AssistStarted> {
-    crate::assist::live::start(&app, prep_id, mode, practice.unwrap_or(false)).await
+pub async fn assist_start(app: AppHandle, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>, client_ref: Option<String>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start(&app, prep_id, mode, practice.unwrap_or(false), client_ref).await
 }
 
 /// "End it and start this one" after a `session_active`: the named session ends, then this start is tried once more.
 #[tauri::command]
-pub async fn assist_start_replacing(app: AppHandle, session_id: String, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>) -> AppResult<crate::assist::session::AssistStarted> {
-    crate::assist::live::start_replacing(&app, &session_id, prep_id, mode, practice.unwrap_or(false)).await
+pub async fn assist_start_replacing(app: AppHandle, session_id: String, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>, client_ref: Option<String>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start_replacing(&app, &session_id, prep_id, mode, practice.unwrap_or(false), client_ref).await
 }
 
 /// Ends the session that runs (`POST /api/assist/sessions/{id}/end`) and stops the recording.

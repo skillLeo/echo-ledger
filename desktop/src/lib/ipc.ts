@@ -707,6 +707,7 @@ export type AssistMessage =
   | { type: "turn"; turn_id: string; channel: "me" | "other"; text: string; final: boolean }
   | { type: "budget"; seconds_left: number | null; seconds_total: number | null }
   | { type: "session_active"; session_id: string; practice: boolean; text: string; action: string }
+  | { type: "offer"; prep_id: string; title: string; caller: string | null; question: string; client_ref: string }
   | { type: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up" | "token_rejected"; message: string | null };
 /** `assist_state`: the session so far, for a window opened mid-session. */
 export interface AssistSnapshot {
@@ -1801,10 +1802,11 @@ export const api = {
   /** Schedules a prep for `at` (RFC 3339): armed 2 minutes before, it waits up to 10 minutes for the meeting. */
   assistSchedule: (prepId: string, at: string) => invoke<AssistPrep>("assist_schedule", { prepId, at }),
   /** Starts the recording, the session and the relay while `live_assist` is on; the card hears `assist:message`. */
-  assistStart: (prepId: string | null, mode: AssistMode | null = null, practice = false) => invoke<AssistStarted>("assist_start", { prepId, mode, practice }),
+  assistStart: (prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
+    invoke<AssistStarted>("assist_start", { prepId, mode, practice, clientRef }),
   /** "End it and start this one" after `session_active`: that session ends, then this start is tried once more. */
-  assistStartReplacing: (sessionId: string, prepId: string | null, mode: AssistMode | null = null, practice = false) =>
-    invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice }),
+  assistStartReplacing: (sessionId: string, prepId: string | null, mode: AssistMode | null = null, practice = false, clientRef: string | null = null) =>
+    invoke<AssistStarted>("assist_start_replacing", { sessionId, prepId, mode, practice, clientRef }),
   /** Ends the running session and stops the recording (nothing runs: nothing happens). */
   assistEnd: () => invoke<void>("assist_end"),
   assistSend: (kind: AssistSendKind) => invoke<void>("assist_send", { kind }),
