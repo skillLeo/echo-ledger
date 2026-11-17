@@ -37,6 +37,7 @@ use Illuminate\Support\Carbon;
  * @property list<string>|null $facts
  * @property Carbon|null $facts_at when the relay wrote the stored facts ledger
  * @property Carbon|null $summary_at when the relay wrote the stored summary
+ * @property int $report_rev the relay's posts after the end, so a report made before the last one is made again
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
  * @property Carbon|null $deleted_at
@@ -49,7 +50,7 @@ final class AssistSession extends Model
 
     protected $fillable = [
         'workspace_id', 'user_id', 'device_id', 'assist_prep_id', 'capture_session_id', 'mode', 'practice', 'platform', 'auto_saved',
-        'status', 'started_at', 'last_token_at', 'ended_at', 'seconds_used', 'report_status', 'report', 'summary', 'facts', 'facts_at', 'summary_at',
+        'status', 'started_at', 'last_token_at', 'ended_at', 'seconds_used', 'report_status', 'report', 'summary', 'facts', 'facts_at', 'summary_at', 'report_rev',
     ];
 
     /** @return array<string, string> */
@@ -67,6 +68,7 @@ final class AssistSession extends Model
             'facts' => 'encrypted:array',
             'facts_at' => 'datetime',
             'summary_at' => 'datetime',
+            'report_rev' => 'integer',
         ];
     }
 

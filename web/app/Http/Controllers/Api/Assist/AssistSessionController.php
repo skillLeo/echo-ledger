@@ -15,6 +15,7 @@ use App\Models\AssistTurn;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
+use App\Models\User;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistStt;
 use App\Services\Assist\RelayToken;
@@ -56,14 +57,21 @@ final class AssistSessionController extends Controller
         $mode = $practice ? $this->plans->modes($device->workspace_id, true)[0] : (string) ($data['mode'] ?? ($prep !== null ? $prep->mode : 'balanced'));
         $this->plans->assertMode($device->workspace_id, $mode, $practice);
         $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
+        // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
+        // call without a recording; a running recording has its own captions).
+        $this->relay->assertReady();
+        $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off');
+        if ($stt === null && $recording === null) {
+            throw new ApiError(503, 'provider_not_configured', 'Live captions are not set up on the server yet.');
+        }
 
         $session = DB::transaction(function () use ($device, $data, $practice, $prep, $recording, $mode): AssistSession {
-            if (! $practice) {
-                $this->endAbandoned($device);
-                $running = $this->query($device)->where('status', 'active')->where('practice', false)->lockForUpdate()->exists();
-                if ($running) {
-                    throw new ApiError(409, 'session_active', 'Live Assist is already on in another call. End it there first.');
-                }
+            // One assist session at a time per person, live or Practice: each spends what is left of the month, so two
+            // at once would spend it twice. The person's row is locked so two starts at once cannot both pass.
+            User::query()->whereKey($device->user_id)->lockForUpdate()->first();
+            $this->endAbandoned($device);
+            if ($this->query($device)->where('status', 'active')->exists()) {
+                throw new ApiError(409, 'session_active', 'Live Assist is already on in another call or Practice. End it there first.');
             }
             $session = AssistSession::query()->create([
                 'workspace_id' => $device->workspace_id,
@@ -86,7 +94,8 @@ final class AssistSessionController extends Controller
 
         return response()->json([
             'session' => ['id' => $session->id, 'auto_saved' => $session->auto_saved, 'mode' => $session->mode, 'practice' => $session->practice],
-            ...$this->tokens($session),
+            'relay' => $this->relay->block($session),
+            'stt' => $stt,
             'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id, $practice)['seconds_left']],
         ], 201)->header('Cache-Control', 'no-store');
     }
@@ -95,9 +104,15 @@ final class AssistSessionController extends Controller
     public function token(Request $request, string $id): JsonResponse
     {
         $session = $this->active($request, $id);
+        $this->relay->assertReady();
+        $prep = $session->prep;
+        $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off', $session->id);
+        if ($stt === null && $session->capture_session_id === null) {
+            throw new ApiError(503, 'provider_not_configured', 'Live captions are not set up on the server yet.');
+        }
         $session->forceFill(['last_token_at' => now()])->save();
 
-        return response()->json($this->tokens($session))->header('Cache-Control', 'no-store');
+        return response()->json(['relay' => $this->relay->block($session), 'stt' => $stt])->header('Cache-Control', 'no-store');
     }
 
     /** POST /api/assist/sessions/{id}/turns — `sessions:write`: final turns; a client_ref seen before is ignored. */
@@ -132,7 +147,7 @@ final class AssistSessionController extends Controller
     {
         $session = $this->active($request, $id);
         self::close($session, now());
-        MakeAssistReportJob::dispatch($session->id);
+        MakeAssistReportJob::enqueue($session);
 
         return response()->json(['report' => 'queued']);
     }
@@ -154,11 +169,14 @@ final class AssistSessionController extends Controller
         return response()->json(self::payload($this->find($request, $id)));
     }
 
-    /** GET /api/assist/sessions/{id}/report — `library:read`; `404 report_not_ready` until the job is done. */
+    /**
+     * GET /api/assist/sessions/{id}/report — `library:read`; `404 report_not_ready` until the job has made it. While a
+     * late post from the relay has it made again, the one made before is shown.
+     */
     public function report(Request $request, string $id): JsonResponse
     {
         $session = $this->find($request, $id);
-        if ($session->report_status !== 'ready' || $session->report === null) {
+        if ($session->report === null) {
             throw new ApiError(404, 'report_not_ready', 'The report is not ready yet.');
         }
 
@@ -226,15 +244,6 @@ final class AssistSessionController extends Controller
         ])->save();
     }
 
-    /** @return array{relay: array<string, string>, stt: array<string, mixed>|null} */
-    private function tokens(AssistSession $session): array
-    {
-        $prep = $session->prep;
-        $language = $prep instanceof AssistPrep ? $prep->language_help : 'off';
-
-        return ['relay' => $this->relay->block($session), 'stt' => $this->stt->block($session, $language !== 'off')];
-    }
-
     /**
      * A live session whose app stopped refreshing its token (the last token long expired) is over: it ends where its
      * last token did, so its time is not counted on.
@@ -247,7 +256,7 @@ final class AssistSessionController extends Controller
             ->each(function (AssistSession $stale): void {
                 $at = ($stale->last_token_at ?? $stale->started_at)->copy()->addSeconds((int) config('assist.token_ttl_seconds', 900));
                 self::close($stale, $at->isFuture() ? now() : $at);
-                MakeAssistReportJob::dispatch($stale->id);
+                MakeAssistReportJob::enqueue($stale);
             });
     }
 

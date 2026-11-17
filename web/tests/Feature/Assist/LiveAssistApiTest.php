@@ -12,6 +12,7 @@ use App\Models\ClientFile;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
+use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Livewire\Livewire;
@@ -172,6 +173,8 @@ describe('starting a session', function () {
     it('starts a live session with a relay token the relay accepts, from the relay setting', function () {
         $device = assistPerson('pro');
         $recording = Fx::session($device->user, $device, ['status' => SessionStatus::Recording]);
+        // Without the captions' provider a session with a running recording still starts: the recording has its own.
+        app(CredentialVault::class)->forget('soniox', 'api_key');
         $this->freezeTime();
 
         $answer = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'balanced', 'recording_session_id' => $recording->id])
@@ -215,21 +218,27 @@ describe('starting a session', function () {
     it('starts from a prep: auto-saved, the prep\'s mode, and the prep is done', function () {
         $api = $this->api(Fx::token(assistPerson('pro')));
         $prep = $api->postJson('/api/assist/preps', ['meeting_type' => 'existing_client', 'mode' => 'fast', 'language_help' => 'urdu'])->json('id');
-        app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
-        Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:abc', 'expires_at' => '2026-12-01T10:10:00Z'])]);
-
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'prep_id' => $prep])->assertCreated()
             ->assertJsonPath('session.auto_saved', true)->assertJsonPath('session.mode', 'fast')
             ->assertJsonPath('stt.provider', 'soniox')->assertJsonPath('stt.token', 'temp:abc')->assertJsonPath('stt.translate_other', true);
         expect($api->getJson("/api/assist/preps/{$prep}")->json('status'))->toBe('done');
     });
 
-    it('allows one live session at a time, and ends one whose app stopped refreshing its token', function () {
-        $api = $this->api(Fx::token(assistPerson('pro')));
-        $first = $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
+    it('allows one assist session at a time, live or Practice, and ends one whose app stopped refreshing its token', function () {
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        $practice = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated()->json('session.id');
+        // A second Practice, and a live session next to Practice, would spend the month's allowance twice.
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->assertJsonPath('code', 'session_active');
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertStatus(409)->assertJsonPath('code', 'session_active');
+        // From another device of the same person too.
+        $this->api(Fx::token(Fx::device($device->user, ['workspace_id' => $device->workspace_id])))
+            ->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])->assertStatus(409);
+        $api->postJson("/api/assist/sessions/{$practice}/end")->assertOk();
 
+        $first = $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
         $api->postJson('/api/assist/sessions', ['platform' => 'android', 'mode' => 'fast'])->assertStatus(409)->assertJsonPath('code', 'session_active');
-        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated();
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409);
 
         $this->travel(21)->minutes();
         $api->postJson('/api/assist/sessions', ['platform' => 'android', 'mode' => 'fast'])->assertCreated();
@@ -238,10 +247,33 @@ describe('starting a session', function () {
         expect($stale->status)->toBe('ended')->and($stale->seconds_used)->toBe(900);
     });
 
-    it('answers 503 while the relay is not set up', function () {
+    it('answers 503 while the relay is not set up, and creates nothing', function () {
         app(SettingsRepository::class)->set('relay.url', null);
         $this->api(Fx::token(assistPerson()))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])
             ->assertStatus(503)->assertJsonPath('code', 'provider_not_configured');
+        expect(AssistSession::query()->withoutGlobalScopes()->count())->toBe(0);
+    });
+
+    it('refuses Practice, and a live session without a recording, while the captions cannot be given, and creates nothing', function () {
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        app(CredentialVault::class)->forget('soniox', 'api_key');
+
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])
+            ->assertStatus(503)->assertJsonPath('code', 'provider_not_configured')->assertJsonPath('message', 'Live captions are not set up on the server yet.');
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])
+            ->assertStatus(503)->assertJsonPath('message', 'Live captions are not set up on the server yet.');
+        expect(AssistSession::query()->withoutGlobalScopes()->count())->toBe(0);
+
+        // The provider set up but not answering: the same.
+        app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
+        Http::swap(new HttpFactory);
+        Http::fake(fn () => Http::response('down', 500));
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(503);
+        // With a running recording it starts without captions: the recording has its own.
+        $recording = Fx::session($device->user, $device, ['status' => SessionStatus::Recording]);
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast', 'recording_session_id' => $recording->id])
+            ->assertCreated()->assertJsonPath('stt', null);
     });
 });
 

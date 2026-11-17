@@ -6,8 +6,10 @@ use App\Models\Device;
 use App\Models\Plan;
 use App\Models\Workspace;
 use App\Services\Assist\RelaySecret;
+use App\Services\CredentialVault;
 use App\Services\InterfaceFlags;
 use App\Services\SettingsRepository;
+use Illuminate\Support\Facades\Http;
 use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 /*
@@ -16,11 +18,13 @@ use Tests\Feature\Security\Support\SecurityFixtures as Fx;
 
 const ASSIST_SECRET = 'relay-secret-for-the-tests-0123456789-abcdef';
 
-/** The relay set up: its host and its secret. */
+/** The relay set up: its host and its secret; and the captions' provider, which answers with a streaming key. */
 function assistRelaySetUp(): void
 {
     app(SettingsRepository::class)->set('relay.url', 'relay.example.com');
     app(RelaySecret::class)->rotate(ASSIST_SECRET);
+    app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
+    Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:abc', 'expires_at' => '2026-12-01T10:10:00Z'])]);
 }
 
 /** A person on [$plan] with a device, and the live_assist flag on for them (unless [$flag] is false). */

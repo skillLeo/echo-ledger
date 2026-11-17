@@ -3,16 +3,21 @@
 declare(strict_types=1);
 
 use App\Filament\Admin\Pages\ApiCredentials;
+use App\Http\Middleware\VerifyAssistRelay;
+use App\Jobs\MakeAssistReportJob;
 use App\Models\AssistSession;
 use App\Models\AssistSuggestion;
 use App\Models\AssistUsage;
 use App\Models\Credential;
 use App\Models\UsageLedgerEntry;
+use App\Services\Assist\AssistPlans;
 use App\Services\Assist\RelaySecret;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use Filament\Facades\Filament;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
 use Livewire\Livewire;
 use Tests\Feature\Security\Support\ApiClient;
@@ -82,6 +87,13 @@ describe('signatures', function () {
     });
 });
 
+it('limits the internal API before it works out any signature', function () {
+    foreach (['providers', 'usage', 'suggestions', 'facts', 'summary'] as $name) {
+        $middleware = Route::getRoutes()->getByName("api.internal.assist.{$name}")->gatherMiddleware();
+        expect(array_search('throttle:assist-relay', $middleware, true))->toBeLessThan(array_search(VerifyAssistRelay::class, $middleware, true));
+    }
+});
+
 describe('the catalog', function () {
     it('gives the relay the keys of the providers it knows, the models as relay.toml has them and the mode map', function () {
         $vault = app(CredentialVault::class);
@@ -136,9 +148,134 @@ describe('reports', function () {
             ->and((string) DB::table('assist_sessions')->where('id', $session->id)->value('summary'))->not->toContain('notice period');
     });
 
+    it('charges a session deleted since, and keeps the rest of it away', function () {
+        $session = relaySession();
+        $session->delete();
+        $usage = ['suggestion_id' => 'sug-late', 'session_id' => $session->id, 'model' => 'claude-haiku-5-5', 'provider' => 'anthropic', 'mode' => 'fast',
+            'kind' => 'answer', 'tokens' => ['input' => 10, 'cached' => 0, 'written' => 0, 'output' => 5], 'cost_usd' => 0.5];
+
+        relayCall($this, 'POST', '/api/internal/assist/usage', $usage)->assertOk()->assertJsonPath('stored', true);
+        expect(AssistUsage::query()->where('assist_session_id', $session->id)->count())->toBe(1)
+            ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/sug-late')->count())->toBe(1);
+        // Deleting a session never gives back what it spent.
+        expect(app(AssistPlans::class)->left($session->workspace_id, $session->user_id, false)['cents_left'])->toBe(1450);
+
+        relayCall($this, 'POST', '/api/internal/assist/suggestions', ['suggestion_id' => 'sug-late', 'session_id' => $session->id, 'text' => 'x'])->assertNotFound();
+        relayCall($this, 'POST', '/api/internal/assist/facts', ['session_id' => $session->id, 'facts' => ['x']])->assertNotFound();
+        relayCall($this, 'POST', '/api/internal/assist/summary', ['session_id' => $session->id, 'summary' => 'x'])->assertNotFound();
+        expect(AssistSuggestion::query()->count())->toBe(0);
+    });
+
+    it('answers stored false to a repeat that raced the first one', function () {
+        $session = relaySession();
+        // The same suggestion stored by another request between this one's check and its insert.
+        $raced = false;
+        AssistUsage::creating(function (AssistUsage $usage) use (&$raced): void {
+            if (! $raced) {
+                $raced = true;
+                DB::table('assist_usage')->insert(['assist_session_id' => $usage->assist_session_id, 'workspace_id' => $usage->workspace_id, 'user_id' => $usage->user_id,
+                    'suggestion_id' => $usage->suggestion_id, 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer',
+                    'cost_usd' => 0.01, 'occurred_at' => now(), 'created_at' => now(), 'updated_at' => now()]);
+            }
+        });
+
+        relayCall($this, 'POST', '/api/internal/assist/usage', ['suggestion_id' => 'sug-race', 'session_id' => $session->id, 'model' => 'claude-haiku-5-5',
+            'provider' => 'anthropic', 'mode' => 'fast', 'kind' => 'answer', 'tokens' => ['input' => 1, 'cached' => 0, 'written' => 0, 'output' => 1], 'cost_usd' => 0.01])
+            ->assertOk()->assertJsonPath('stored', false);
+        // Nothing of this request's is left (the other request's row is its own: here it went with this transaction).
+        expect(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/sug-race')->count())->toBe(0);
+    });
+
+    it('keeps the newest facts ledger and summary, whatever order they arrive in', function () {
+        $session = relaySession();
+        $post = fn (string $what, mixed $value, string $at) => relayCall($this, 'POST', "/api/internal/assist/{$what}",
+            ['session_id' => $session->id, $what => $value, 'at' => $at])->assertOk();
+
+        $post('facts', ['Them: budget 8,000 USD (minute 2)', 'Me: start in January'], '2026-11-17T10:05:00Z')->assertJsonPath('stored', true);
+        $post('facts', ['Them: budget 8,000 USD (minute 2)'], '2026-11-17T10:03:00Z')->assertJsonPath('stored', false);
+        $post('summary', 'Up to minute 10.', '2026-11-17T10:10:00Z')->assertJsonPath('stored', true);
+        $post('summary', 'Up to minute 5.', '2026-11-17T10:05:00Z')->assertJsonPath('stored', false);
+
+        $session->refresh();
+        expect($session->facts)->toBe(['Them: budget 8,000 USD (minute 2)', 'Me: start in January'])
+            ->and($session->facts_at->toAtomString())->toBe('2026-11-17T10:05:00+00:00')
+            ->and($session->summary)->toBe('Up to minute 10.')->and($session->summary_at->toAtomString())->toBe('2026-11-17T10:10:00+00:00');
+    });
+
+    it('makes the report about 30 seconds after the end, and again when the relay posts after it', function () {
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        $id = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->json('session.id');
+        Queue::fake();
+        $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+        Queue::assertPushed(MakeAssistReportJob::class, fn (MakeAssistReportJob $job): bool => $job->sessionId === $id
+            && $job->delay instanceof DateTimeInterface && abs(now()->diffInSeconds($job->delay) - 30) <= 1);
+        $api->getJson("/api/assist/sessions/{$id}/report")->assertNotFound()->assertJsonPath('code', 'report_not_ready');
+
+        (new MakeAssistReportJob($id))->handle();
+        expect($api->getJson("/api/assist/sessions/{$id}/report")->assertOk()->json('summary'))->toBeNull();
+
+        // A late summary marks it stale and queues it again; the one made before is shown meanwhile.
+        relayCall($this, 'POST', '/api/internal/assist/summary', ['session_id' => $id, 'summary' => 'The last minute.', 'at' => now()->toAtomString()])->assertOk();
+        Queue::assertPushed(MakeAssistReportJob::class, 2);
+        $api->getJson("/api/assist/sessions/{$id}")->assertJsonPath('report', 'queued');
+        $api->getJson("/api/assist/sessions/{$id}/report")->assertOk();
+        (new MakeAssistReportJob($id))->handle();
+        expect($api->getJson("/api/assist/sessions/{$id}/report")->json('summary'))->toBe('The last minute.');
+        $api->getJson("/api/assist/sessions/{$id}")->assertJsonPath('report', 'ready');
+
+        // A post while a report is being made: that report is kept for now and made again.
+        $session = AssistSession::query()->withoutGlobalScopes()->find($id);
+        $session->forceFill(['report_status' => 'queued'])->save();
+        $raced = false;
+        AssistSession::retrieved(function (AssistSession $read) use ($id, &$raced): void {
+            // Right after the job read the session, the relay's post counts once more.
+            if ($read->id === $id && ! $raced) {
+                $raced = true;
+                DB::table('assist_sessions')->where('id', $id)->increment('report_rev');
+            }
+        });
+        (new MakeAssistReportJob($id))->handle();
+        expect($session->fresh()->report_status)->toBe('queued');
+        Queue::assertPushed(MakeAssistReportJob::class, 3);
+    });
+
     it('answers 404 for a session it does not know, which the relay does not send again', function () {
         relayCall($this, 'POST', '/api/internal/assist/summary', ['session_id' => '01ARZ3NDEKTSV4RRFFQ69G5FAV', 'summary' => 'x'])->assertNotFound();
         relayCall($this, 'POST', '/api/internal/assist/usage', ['suggestion_id' => 's', 'session_id' => 'nope'])->assertStatus(422);
+    });
+});
+
+describe('rotating the secret', function () {
+    it('signs relay tokens with the previous secret during the overlap, until the relay signs with the new one', function () {
+        $device = assistPerson('pro');
+        $relay = app(RelaySecret::class);
+        $new = $relay->rotate('the-new-relay-secret-0123456789-abcdefghij');
+        $token = fn (): string => $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])
+            ->assertCreated()->json('relay.token');
+        $end = fn (string $token, string $secret = ASSIST_SECRET) => $this->api(Fx::token($device))
+            ->postJson('/api/assist/sessions/'.relayClaims($token, $secret)['sid'].'/end')->assertOk();
+
+        // The relay may not have the new secret yet: tokens are signed with the old one, which it has.
+        $first = $token();
+        relayClaims($first, ASSIST_SECRET);
+        $end($first);
+        // A request the relay signed with the old one changes nothing.
+        relayCall($this, 'GET', '/api/internal/assist/providers', [], ASSIST_SECRET)->assertOk();
+        $second = $token();
+        relayClaims($second, ASSIST_SECRET);
+        $end($second);
+
+        // Its first request signed with the new one: from now on the tokens are signed with the new one.
+        relayCall($this, 'GET', '/api/internal/assist/providers', [], $new)->assertOk();
+        $third = $token();
+        expect(relayClaims($third, $new)['practice'])->toBeTrue();
+        $end($third, $new);
+
+        // After the overlap the new one signs, whatever the relay did.
+        $newer = $relay->rotate('the-newer-relay-secret-0123456789-abcdefgh');
+        $this->travel(16)->minutes();
+        expect(relayClaims($token(), $newer)['practice'])->toBeTrue();
     });
 });
 
@@ -148,13 +285,18 @@ describe('the admin panel', function () {
         $this->actingAs(Fx::superAdmin(), 'web');
     });
 
-    it('generates a relay secret, keeps the old one as the previous for its overlap, and has a Moonshot key', function () {
-        Livewire::test(ApiCredentials::class)->assertSee('Live Assist relay')->assertSee('Moonshot')
-            ->callFormComponentAction('assist_relay__secret', 'generate_assist_relay_secret')->assertNotified('New relay secret generated');
+    it('generates a relay secret, shows it once in a modal with a copy box, keeps the old one for its overlap, and has a Moonshot key', function () {
+        $page = Livewire::test(ApiCredentials::class)->assertSee('Live Assist relay')->assertSee('Moonshot')
+            ->callFormComponentAction('assist_relay__secret', 'generate_assist_relay_secret');
 
         $relay = app(RelaySecret::class);
         expect($relay->current())->not->toBe(ASSIST_SECRET)->and($relay->previous())->toBe(ASSIST_SECRET)
             ->and(Credential::query()->where(['provider' => 'assist_relay', 'key' => 'previous_secret'])->exists())->toBeTrue();
+        // Shown in the modal, never in a notification (stored notifications outlive the page), and forgotten by the page.
+        $page->assertActionMounted('relaySecretShown')->assertActionDataSet(['secret' => $relay->current()])
+            ->assertMountedActionModalSee('It is not shown again')->assertSet('newRelaySecret', null)->assertNotNotified();
+        $page->callMountedAction()->assertActionNotMounted('relaySecretShown');
+        expect(DB::table('notifications')->count())->toBe(0);
 
         // A pasted secret must be long enough for the relay.
         Livewire::test(ApiCredentials::class)->set('data.assist_relay__secret', 'short-secret')->call('save')->assertHasErrors(['data.assist_relay__secret']);
