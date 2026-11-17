@@ -343,6 +343,11 @@ impl Transcript {
         self.full.iter().map(|b| b.tokens).sum()
     }
 
+    /// The upper bound of the closed blocks' tokens (`text::upper_tokens`), as `full_block_tokens`.
+    pub fn upper_full_block_tokens(&self) -> u32 {
+        self.full.iter().map(|b| crate::text::upper_tokens(&b.text)).sum()
+    }
+
     /// Tokens the transcript adds to a request in `scope`.
     pub fn tokens(&self, scope: TranscriptScope) -> u32 {
         let latest: u32 = self.latest().iter().map(|t| estimate_tokens(&t.line()) + 1).sum();

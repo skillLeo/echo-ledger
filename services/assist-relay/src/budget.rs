@@ -28,10 +28,22 @@ pub fn estimate_micros(spec: &ModelSpec, context_tokens: u32, cacheable_tokens: 
     to_micros(micros)
 }
 
-/// A request's worst case on one model, for budget bounds: the context's upper-bound tokens all as uncached input
-/// (`Context::upper_tokens`), and the longest answer.
+/// A bound on one request's cost: `context_tokens` of input, of which the `cacheable_tokens` up to the last cache
+/// breakpoint are priced at the dearer of plain input and a cache write (whichever the provider bills them as), the
+/// rest at plain input, and `output_tokens` of answer. Token counts are upper bounds (`text::upper_tokens`).
+pub fn bound_micros(spec: &ModelSpec, context_tokens: u32, cacheable_tokens: u32, output_tokens: u32) -> u64 {
+    let price = spec.price_for(context_tokens);
+    let cacheable = cacheable_tokens.min(context_tokens);
+    let micros = f64::from(cacheable) * price.input.max(price.cache_write)
+        + f64::from(context_tokens - cacheable) * price.input
+        + f64::from(output_tokens) * price.output;
+    to_micros(micros)
+}
+
+/// A request's worst case on one model, for budget bounds: the context's upper-bound tokens
+/// (`Context::upper_tokens`), its cacheable part possibly billed as a cache write, and the longest answer.
 pub fn worst_micros(spec: &ModelSpec, context: &crate::context::Context, max_output_tokens: u32) -> u64 {
-    estimate_micros(spec, context.upper_tokens(), 0, false, max_output_tokens)
+    bound_micros(spec, context.upper_tokens(), context.upper_cacheable_tokens(), max_output_tokens)
 }
 
 fn to_micros(value: f64) -> u64 {

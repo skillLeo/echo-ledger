@@ -20,7 +20,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use crate::auth::{AuthError, Claims, TokenVerifier};
-use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_micros, micros_to_usd, worst_micros};
+use crate::budget::{Cause, allowed_modes, bound_micros, choose_mode, cost_micros, estimate_micros, micros_to_usd, worst_micros};
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
@@ -1562,9 +1562,14 @@ impl Engine {
         let ledger: u32 =
             self.call.facts.iter().map(|f| upper_tokens(&f.text) + 2).sum::<u32>() + upper_tokens(&self.call.summary);
         let tokens = fixed + ledger + self.transcript.upper_tokens(plan.transcript) + QUESTION_TOKENS * 2;
+        // The cacheable part as the context places its breakpoints (`Context::upper_cacheable_tokens`).
+        let cacheable = match plan.transcript {
+            TranscriptScope::Recent => fixed,
+            TranscriptScope::Full => fixed + ledger + self.transcript.upper_full_block_tokens(),
+        };
         std::iter::once(plan.primary.as_str())
             .chain(plan.fallback.as_deref())
-            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| estimate_micros(spec, tokens, 0, false, plan.max_output_tokens)))
+            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| bound_micros(spec, tokens, cacheable, plan.max_output_tokens)))
             .fold(0u64, u64::saturating_add)
     }
 
@@ -2055,7 +2060,7 @@ impl Engine {
         };
         // The warm-up spends too (a cache write): it starts only when its worst case fits what is free, and holds it.
         let tokens = request.context.upper_tokens();
-        let worst = estimate_micros(spec, tokens, tokens, false, 1);
+        let worst = bound_micros(spec, tokens, tokens, 1);
         if self.reserved.contains_key(WARM_KEY) || worst > self.remaining() {
             return;
         }

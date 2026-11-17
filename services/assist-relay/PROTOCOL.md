@@ -367,7 +367,8 @@ The post-call report is the server's queue job (plan L7). For it, and for practi
 ## The budget gate
 
 Every suggestion (and its upgrade, and the cache warm-up) holds its worst case from the budget until it is charged:
-both models, no cache, the longest answer; background calls hold theirs too. A suggestion starts only when its worst
+both models, no cache read (the cacheable part priced as a cache write when that costs more than plain input),
+every non-ASCII character a token, the longest answer; background calls hold theirs too. A suggestion starts only when its worst
 case fits in what is left with all of those held back. When the mode's doesn't fit (calls are in flight), the next
 cheaper allowed mode answers this one question, with no `mode_changed` (`suggestion_start.mode` says which); a hard
 question's upgrade that doesn't fit beside its draft is left out. When none fits, a question the app asked for (help
