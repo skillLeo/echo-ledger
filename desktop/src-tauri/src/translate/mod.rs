@@ -130,6 +130,29 @@ fn running() -> &'static Mutex<Option<Running>> {
     R.get_or_init(|| Mutex::new(None))
 }
 
+/// The feed of the session whose capture ended on its own, until Stop (Close) or the next Start: the main window's
+/// panel, opened later (closed during a game), still says it ended and why, and its Close takes the window away.
+fn last_ended() -> &'static Mutex<Option<Feed>> {
+    static E: OnceLock<Mutex<Option<Feed>>> = OnceLock::new();
+    E.get_or_init(|| Mutex::new(None))
+}
+
+/// The session's feed as it ended (its capture ended on its own): ended, with the reason, never hidden. Kept for the
+/// panel ([`current_feed`]) and returned to be sent.
+fn mark_ended(feed: &mut Feed, reason: String) -> Feed {
+    feed.status = "ended".into();
+    feed.notice = Some(reason);
+    // Hidden, the window said it was listening: it shows why it stopped instead.
+    feed.hidden = false;
+    *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(feed.clone());
+    feed.clone()
+}
+
+/// No ended session to show any more (Stop or Close, or a new Start).
+fn clear_ended() {
+    *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = None;
+}
+
 /// Why Live Translate cannot start on this computer now.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -219,11 +242,9 @@ pub fn display_name(image: &str) -> String {
 }
 
 pub fn current_feed() -> Option<Feed> {
-    running()
-        .lock()
-        .ok()?
-        .as_ref()
-        .and_then(|r| r.feed.lock().ok().map(|f| f.clone()))
+    let running = running().lock().ok()?.as_ref().and_then(|r| r.feed.lock().ok().map(|f| f.clone()));
+    // None runs: the one that ended on its own, until it is closed.
+    running.or_else(|| last_ended().lock().unwrap_or_else(|p| p.into_inner()).clone())
 }
 
 pub fn is_running() -> bool {
@@ -258,6 +279,8 @@ fn update_feed(app: &AppHandle, change: impl FnOnce(&mut Feed)) -> Option<Feed> 
 /// Ends the session, closes the window and gives Ctrl+Shift+T / H back to other apps.
 pub fn stop(app: &AppHandle) {
     stop_session();
+    // Also Close on an ended session: the panel and the window let it go.
+    clear_ended();
     unregister_hotkeys(app);
     let _ = app.emit(
         FEED_EVENT,
@@ -384,11 +407,8 @@ fn spawn_capture(
             }
             unregister_hotkeys(&app);
             if let Ok(mut f) = feed.lock() {
-                f.status = "ended".into();
-                f.notice = Some(reason);
-                // Hidden, the window said it was listening: it shows why it stopped instead.
-                f.hidden = false;
-                let _ = app.emit(FEED_EVENT, &*f);
+                let ended = mark_ended(&mut f, reason);
+                let _ = app.emit(FEED_EVENT, &ended);
             }
             crate::actions::emit_status(&app);
         })
@@ -431,6 +451,7 @@ where
     Fut: std::future::Future<Output = Result<LiveTranslateToken, String>> + Send + 'static,
 {
     stop_session();
+    clear_ended();
     let stop_flag = Arc::new(AtomicBool::new(false));
     let feed = Arc::new(Mutex::new(Feed {
         mode: Some(mode),
@@ -662,7 +683,7 @@ mod tests {
         let source = include_str!("mod.rs");
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        for step in ["ended_reason(", "status = \"ended\"", "f.hidden = false", "emit_status(&app)"] {
+        for step in ["ended_reason(", "mark_ended(&mut f, reason)", "emit_status(&app)"] {
             assert!(thread.contains(step), "{step}");
         }
         // A session no longer current says nothing: the check comes before the keys, the feed and the status.
@@ -670,6 +691,37 @@ mod tests {
         for step in ["unregister_hotkeys(&app)", "app.emit(FEED_EVENT", "emit_status(&app)"] {
             assert!(thread.find(step).is_some_and(|at| at > gate), "{step} only for the current session");
         }
+    }
+
+    #[test]
+    fn an_ended_session_stays_on_the_panel_with_its_reason_until_it_is_closed_or_another_starts() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        *running().lock().unwrap() = None;
+        clear_ended();
+        assert_eq!(current_feed(), None);
+        // Its capture ended on its own (the app stopped playing), its session left `running`.
+        let mut feed = Feed { status: "live".into(), app: "Valorant".into(), hidden: true, locked: true, ..Default::default() };
+        let sent = mark_ended(&mut feed, STOPPED_PLAYING.into());
+        let shown = current_feed().expect("the panel opened later still has it");
+        assert_eq!(shown, sent);
+        assert_eq!((shown.status.as_str(), shown.notice.as_deref(), shown.hidden), ("ended", Some(STOPPED_PLAYING), false));
+        assert!(!is_running(), "the tray never says it listens");
+        // A running session's own feed comes first.
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 9 });
+        assert_eq!(current_feed().map(|f| f.status), Some("live".into()));
+        *running().lock().unwrap() = None;
+        // Close (Stop) and a new Start let it go.
+        clear_ended();
+        assert_eq!(current_feed(), None);
+        let source = include_str!("mod.rs");
+        let stop = &source[source.find("pub fn stop(app: &AppHandle)").unwrap()..];
+        let stop = &stop[..stop.find("\n}").unwrap()];
+        assert!(stop.contains("clear_ended();") && stop.contains("w.close()"), "Close clears it and closes the window: {stop}");
+        let start = &source[source.find("pub fn start<").unwrap()..];
+        let start = &start[..start.find("let (tx, rx)").unwrap()];
+        assert!(start.contains("clear_ended();"), "a new Start clears it");
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut f, reason)"));
     }
 
     #[test]
