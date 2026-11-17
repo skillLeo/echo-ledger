@@ -126,8 +126,10 @@ Errors added by Live Assist:
   ```
   **Transport (since 1.9.0-q).** `transports` lists what the app can use (`relay`, `http`); absent means
   `["relay"]` (apps before 1.9.0-q). The server picks one for the whole session from Admin › Settings › Live Assist
-  connection: **Automatic** (the relay when its address is set and its health check passed within the last minute,
-  otherwise HTTP mode), **Shared hosting** (always HTTP mode) or **Dedicated relay** (always the relay). `transport`
+  connection: **Dedicated relay** (the default: always the relay on the VPS; `503 relay_unavailable` while it is
+  down or not set up), **Automatic** (the relay whenever its address and secret are set, with the same `503` while it is
+  down, never HTTP mode instead; HTTP mode only while no relay is set up at all) or **Shared hosting** (always HTTP mode;
+  an emergency choice the admin makes by hand, never picked on its own: live answers may be slower or cut off). `transport`
   says which: `"relay"` with the `relay` block and `"http": null`, or `"http"` with `"relay": null` and
   ```json
   "http": {"live_url": "https://<server>/api/assist/sessions/01JC…/live",

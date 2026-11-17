@@ -44,9 +44,8 @@ final class AssistLiveController extends Controller
         }
         RateLimiter::hit($rate, 1);
         $open = 'assist-live-open:'.$session->id;
-        Cache::add($open, 0, EventStream::MAX_SECONDS + 20);
-        if ((int) Cache::increment($open) > self::MAX_STREAMS) {
-            Cache::decrement($open);
+        if (self::openStreams($open, +1) > self::MAX_STREAMS) {
+            self::openStreams($open, -1);
             throw new ApiError(429, 'rate_limited', 'Too many open streams for this session.', headers: ['Retry-After' => '1']);
         }
 
@@ -54,8 +53,23 @@ final class AssistLiveController extends Controller
             try {
                 $this->handler->handle($session, $message, $stream);
             } finally {
-                Cache::decrement($open);
+                self::openStreams($open, -1);
             }
+        });
+    }
+
+    /**
+     * The session's open streams after adding [$delta], never below 0. Each change writes the count again with a fresh
+     * lifetime (a stream's longest life and a margin), so a count left by a worker that died runs out on its own
+     * instead of living on from its first stream; a lock keeps two requests from writing over each other.
+     */
+    private static function openStreams(string $key, int $delta): int
+    {
+        return (int) Cache::lock($key.':lock', 5)->block(2, function () use ($key, $delta): int {
+            $count = max(0, (int) Cache::get($key, 0) + $delta);
+            Cache::put($key, $count, EventStream::MAX_SECONDS + 20);
+
+            return $count;
         });
     }
 

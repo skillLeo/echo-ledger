@@ -487,15 +487,23 @@ it('reserves the worst case for Urdu: every character of it a token', function (
     assistLive($api, $id, ['type' => 'context_update', 'documents' => [['id' => 'n', 'title' => 'Notes', 'text' => mb_substr(str_repeat('ڈیلیوری جمعرات کو ہے۔ ', 4600), 0, 100000)]]]);
     assistLive($api, $id, [...ASSIST_QUESTION, 'turn_id' => 'o-2']);
 
-    // Every Urdu character is a token at worst (about 82,000 here, at $0.125 and $0.15 per million on the two models that
-    // can bill: at least 2.25 cents, so three), where the same length of English is about a third of that (two cents).
-    expect($reserved[0])->toBe(0.02)->and($reserved[1])->toBe(0.03);
+    // Every byte of Urdu is a token at worst (an Urdu letter is two UTF-8 bytes: about 180,000 tokens here with the tenth
+    // on top, billed on the long-context card above its threshold), where the same length of English is about a third
+    // of the characters (two cents).
+    expect($reserved[0])->toBe(0.02)->and($reserved[1])->toBe(0.15);
 });
 
-it('prices a token a character for Urdu and Arabic, three characters a token for English, with a tenth on top', function () {
+it('keeps an all-Urdu context under its reservation, even if every byte were a token', function () {
+    foreach (['ڈیلیوری جمعرات کو ہے۔ ', 'قیمت ۱۲۵۰۰ روپے، ادائیگی پہلے۔ ', 'کیا آپ نے دستخط شدہ معاہدہ بھیج دیا؟ '] as $line) {
+        $text = str_repeat($line, 500);
+        expect(Pricing::upperTokens($text))->toBeGreaterThanOrEqual(strlen($text));
+    }
+});
+
+it('bounds Urdu and Arabic by their UTF-8 bytes, English at three characters a token, with a tenth on top', function () {
     expect(Pricing::upperTokens(str_repeat('a', 300)))->toBe(110)
-        ->and(Pricing::upperTokens(str_repeat('ک', 300)))->toBe(330)
-        ->and(Pricing::upperTokens(str_repeat('ك', 100).str_repeat('a', 30)))->toBe(121)
+        ->and(Pricing::upperTokens(str_repeat('ک', 300)))->toBe(660)
+        ->and(Pricing::upperTokens(str_repeat('ك', 100).str_repeat('a', 30)))->toBe(231)
         ->and(Pricing::estimateTokens(str_repeat('ک', 300)))->toBe(150);
 });
 

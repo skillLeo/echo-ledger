@@ -121,13 +121,36 @@ class RelayHealth
     /** True for a public unicast address: not private, loopback, link-local, unspecified or otherwise reserved. */
     public static function isPublic(string $ip): bool
     {
-        // IPv4 mapped in IPv6 (::ffff:10.0.0.1) is judged as the IPv4 address.
+        // An IPv4 address carried in IPv6 is judged as that IPv4 address: mapped (::ffff:10.0.0.1), NAT64
+        // (64:ff9b::/96, 64:ff9b::a00:1 or 64:ff9b::10.0.0.1) and 6to4 (2002::/16, the next 32 bits: 2002:0a00:0001::).
         if (preg_match('/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i', $ip, $m) === 1) {
             $ip = $m[1];
+        } elseif (($embedded = self::embeddedIpv4($ip)) !== null) {
+            $ip = $embedded;
         }
 
         return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false
             && preg_match('/^(0\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|169\.254\.|f[cd][0-9a-f]{2}:|fe[89ab][0-9a-f]:)/i', $ip) !== 1;
+    }
+
+    /** The IPv4 address inside a NAT64 (64:ff9b::/96) or 6to4 (2002::/16) IPv6 address, else null. */
+    private static function embeddedIpv4(string $ip): ?string
+    {
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6) === false) {
+            return null;
+        }
+        $bytes = inet_pton($ip);
+        if ($bytes === false || strlen($bytes) !== 16) {
+            return null;
+        }
+        if (substr($bytes, 0, 12) === "\x00\x64\xff\x9b".str_repeat("\x00", 8)) {
+            return (string) inet_ntop(substr($bytes, 12, 4));
+        }
+        if (substr($bytes, 0, 2) === "\x20\x02") {
+            return (string) inet_ntop(substr($bytes, 2, 4));
+        }
+
+        return null;
     }
 
     /**

@@ -2477,6 +2477,292 @@
                         </div>
                     </div>
 
+                                                                        
+        <div                                        wire:partial="schema-component::form.general.live-assist-connection::data::section"
+                                        x-data="filamentSchemaComponent({
+                    path: 'data',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div id="form.general.live-assist-connection::data::section" class="fi-sc-section">
+            
+            
+            <section
+                x-data="{
+                    isCollapsed: false,
+                }"
+                                                    aria-labelledby="form.general.live-assist-connection::data::section-heading"
+                                                    aria-describedby="form.general.live-assist-connection::data::section-description"
+                                class="fi-section fi-section-has-header"            >
+                                    <header
+                                                class="fi-section-header"
+                    >
+                        
+                                                    <div class="fi-section-header-content fi-section-header-content-has-heading">
+                                                                    <div class="fi-section-header-text-ctn">
+                                                                                    <h2                                                id="form.general.live-assist-connection::data::section-heading"                                                class="fi-section-header-heading"
+                                            >
+                                                Live Assist connection                                            </h2>
+                                        
+                                                                                    <p
+                                                id="form.general.live-assist-connection::data::section-description"                                                class="fi-section-header-description"
+                                            >
+                                                How the apps reach Live Assist during a call. Shared hosting needs nothing more; a dedicated relay runs on a VPS (its secret and certificate pins are on API Credentials). Each session keeps the connection it started with.                                            </p>
+                                                                            </div>
+                                
+                                                            </div>
+                        
+                                            </header>
+                
+                                    <div
+                                                    id="form.general.live-assist-connection::data::section-content"
+                                                                        class="fi-section-content-ctn"
+                    >
+                        
+        <div class="fi-section-content fi-grid lg:fi-grid-cols  fi-sc  fi-sc-has-gap" style="--cols-lg: repeat(2, minmax(0, 1fr)); --cols-default: repeat(1, minmax(0, 1fr));">
+                                                
+        <div                                        wire:partial="schema-component::form.general.assist_connection"
+                                        x-data="filamentSchemaComponent({
+                    path: 'data.assist_connection',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-select-wrp fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.general.assist_connection"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Live Assist connection<sup class="fi-fo-field-label-required-mark">*</sup>
+                                                                            </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('select')?.focus()" class="fi-fo-select fi-fo-select-native fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+
+                                    
+                    <select
+                        aria-describedby="form.general.assist_connection-helper-text" id="form.general.assist_connection" required="required" wire:model.live="data.assist_connection" class="fi-select-input"                    >
+                        
+                                                                                    <option
+                                                                        value="relay"
+                                >
+                                    Dedicated relay (VPS)                                </option>
+                                                                                                                <option
+                                                                        value="automatic"
+                                >
+                                    Automatic                                </option>
+                                                                                                                <option
+                                                                        value="shared"
+                                >
+                                    Shared hosting (emergency only)                                </option>
+                                                                        </select>
+                
+                    </div>
+
+                    </div>
+
+                            
+                    
+        <div id="form.general.assist_connection-helper-text" class="fi-sc fi-inline  fi-sc-has-gap fi-sc-dense">
+                                                
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: 'data.assist_connection',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                                >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <span
+                                    class="fi-sc-text"        >
+            Dedicated relay (the default) always uses the relay on the VPS and says so when it is down, so the apps can try again. Automatic does the same whenever a relay is set up, and uses this server only while none is. Shared hosting is for emergencies only.        </span>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+        
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                        wire:partial="schema-component::form.general.relay_url"
+                                        x-data="filamentSchemaComponent({
+                    path: 'data.relay_url',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                        wire:key="KEY" class="fi-grid-col" style="--col-span-default: span 1 / span 1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div data-field-wrapper class="fi-fo-field">
+            
+            
+                            <div
+                    class="fi-fo-field-label-col"                >
+                    
+                    <div
+                        class="fi-fo-field-label-ctn"                    >
+                        
+                                                    <label                                                                    for="form.general.relay_url"
+                                                                class="fi-fo-field-label"
+                            >
+                                
+                                                                    <span class="fi-fo-field-label-content">
+                                        Relay address                                    </span>
+                                
+                                                            </label>
+                        
+                                            </div>
+
+                                    </div>
+            
+                            <div class="fi-fo-field-content-col">
+                    
+                                            
+        <div x-on:focus-input.stop="$el.querySelector('input')?.focus()" class="fi-fo-text-input fi-input-wrp">
+            
+                        <div class="fi-input-wrp-content-ctn">
+                
+        <input aria-describedby="form.general.relay_url-helper-text" id="form.general.relay_url" maxlength="253" placeholder="relay.example.com" type="text" wire:model="data.relay_url" class="fi-input" />
+
+        
+                    </div>
+
+                    </div>
+
+                            
+                    
+        <div id="form.general.relay_url-helper-text" class="fi-sc fi-inline  fi-sc-has-gap fi-sc-dense">
+                                                
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: 'data.relay_url',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                                >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <span
+                                    class="fi-sc-text"        >
+            The relay&#039;s host name; the apps connect to wss://&lt;host&gt;/v1/assist. Empty: no relay.        </span>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+        
+                                    </div>
+                    </div>
+
+                        </div>
+                    </div>
+
+                                                                        
+        <div                                                    x-data="filamentSchemaComponent({
+                    path: 'data',
+                    containerPath: 'data',
+                    $wire,
+                })"
+                                                        class="fi-grid-col" style="--col-span-default: 1 / -1;"        >
+                            <div
+                    class="fi-sc-component"
+                >
+                    
+        <div
+                        class="fi-sc-actions"        >
+            
+            
+                            <div
+                    class="fi-ac"                >
+                                            
+        
+        
+        <button                                                            type="button" wire:loading.attr="aria-disabled" wire:loading.class="fi-disabled" class="fi-ac-btn-action fi-btn fi-size-md  fi-color fi-color-primary fi-bg-color-600 hover:fi-bg-color-500 dark:fi-bg-color-600 dark:hover:fi-bg-color-500 fi-text-color-0 hover:fi-text-color-0 dark:fi-text-color-0 dark:hover:fi-text-color-0" wire:click="mountAction('checkRelay', {}, JSON.parse('{\u0022schemaComponent\u0022:\u0022form.general\u0022}'))"        >
+                            <svg wire:loading.remove.delay.default="1" wire:target="mountAction('checkRelay', {}, JSON.parse('{\u0022schemaComponent\u0022:\u0022form.general\u0022}'))" class="fi-icon fi-size-md" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" aria-hidden="true" data-slot="icon">
+  <path stroke-linecap="round" stroke-linejoin="round" d="M9.348 14.652a3.75 3.75 0 0 1 0-5.304m5.304 0a3.75 3.75 0 0 1 0 5.304m-7.425 2.121a6.75 6.75 0 0 1 0-9.546m9.546 0a6.75 6.75 0 0 1 0 9.546M5.106 18.894c-3.808-3.807-3.808-9.98 0-13.788m13.788 0c3.808 3.807 3.808 9.98 0 13.788M12 12h.008v.008H12V12Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/>
+</svg>                    <svg
+        fill="none"
+        viewBox="0 0 24 24"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true" wire:loading.delay.default="" wire:target="mountAction('checkRelay', {}, JSON.parse('{\u0022schemaComponent\u0022:\u0022form.general\u0022}'))" class="fi-icon fi-loading-indicator fi-size-md"
+    >
+        <path
+            clip-rule="evenodd"
+            d="M12 19C15.866 19 19 15.866 19 12C19 8.13401 15.866 5 12 5C8.13401 5 5 8.13401 5 12C5 15.866 8.13401 19 12 19ZM12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+            fill-rule="evenodd"
+            fill="currentColor"
+            opacity="0.2"
+        ></path>
+        <path
+            d="M2 12C2 6.47715 6.47715 2 12 2V5C8.13401 5 5 8.13401 5 12H2Z"
+            fill="currentColor"
+        ></path>
+    </svg>                            
+                                                Check relay                            
+            
+            
+                    </button>
+
+        
+                                            </div>
+            
+                    </div>
+
+                        </div>
+                    </div>
+
+                                            </div>
+
+        
+                                            </div>
+                            </section>
+
+                    </div>
+
+                        </div>
+                    </div>
+
                                             </div>
 
                 </div>

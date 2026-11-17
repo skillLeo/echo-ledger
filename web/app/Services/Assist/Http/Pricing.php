@@ -29,11 +29,15 @@ class Pricing
         return intdiv($ascii + 3, 4) + intdiv($other + 1, 2);
     }
 
-    /** An upper bound for [$text]: one token per non-ASCII character, one per three ASCII ones, 10 % on top. */
+    /**
+     * An upper bound for [$text]: one token per three ASCII characters, and for every other character its UTF-8 bytes
+     * (an Urdu or Arabic letter is two bytes, which no tokenizer splits further), 10 % on top.
+     */
     public static function upperTokens(string $text): int
     {
-        [$ascii, $other] = self::split($text);
-        $tokens = intdiv($ascii + 2, 3) + $other;
+        $ascii = strlen((string) preg_replace('/[^\x00-\x7F]/u', '', $text));
+        $otherBytes = strlen($text) - $ascii;
+        $tokens = intdiv($ascii + 2, 3) + max(0, $otherBytes);
 
         return max(1, $tokens + intdiv($tokens + 9, 10));
     }

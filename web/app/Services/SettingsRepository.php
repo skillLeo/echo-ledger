@@ -46,7 +46,7 @@ final class SettingsRepository
         'relay.url' => null,
         // Since 1.9.0-q: how Live Assist's live messages travel (App\Services\Assist\AssistTransport): automatic,
         // shared (HTTP mode on this server) or relay (always the relay).
-        'assist.connection' => 'automatic',
+        'assist.connection' => 'relay',   // the owner: the live relay runs only on the VPS (shared hosting: emergency only)
         // Since 1.9.0-g: the relay host's public-key pins (primary and backup), sent while live_assist is on.
         'relay.pins' => [],
         // A fingerprint of the relay secret once the relay signed with it (App\Services\Assist\RelaySecret::signing).

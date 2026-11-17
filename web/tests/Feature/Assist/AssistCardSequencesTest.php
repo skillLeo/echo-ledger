@@ -389,8 +389,9 @@ function assistStartBoth(object $test): array
     return [$api, (string) $start->json('session.id'), $start->json()];
 }
 
-it('runs a session over this server under Automatic while the relay is down, and keeps it there when the relay comes back', function () {
-    app(SettingsRepository::class)->set('assist.connection', AssistTransport::AUTOMATIC);
+it('runs a session over this server under Shared hosting (emergency) while the relay is down, and keeps it there when the relay comes back', function () {
+    // Since the owner's rule (2026-11-18) only Shared hosting, chosen by hand, runs on this server while a relay is set up.
+    app(SettingsRepository::class)->set('assist.connection', AssistTransport::SHARED);
     fakeAssistModels();
     app(RelayHealth::class)->record(['ok' => false]);
 
@@ -414,4 +415,16 @@ it('runs a session on the relay under Automatic while it answers, and this serve
 
     expect($start['transport'])->toBe('relay')->and($start['http'])->toBeNull()->and($start['relay']['url'])->toStartWith('wss://');
     $api->postJson("/api/assist/sessions/{$id}/live", ASSIST_Q1)->assertStatus(426)->assertJsonPath('code', 'app_update_required');
+});
+
+it('refuses a session under Automatic and Dedicated relay while the relay is down, never moving it to this server', function () {
+    fakeAssistModels();
+    app(RelayHealth::class)->record(['ok' => false]);
+
+    foreach ([AssistTransport::AUTOMATIC, AssistTransport::RELAY] as $choice) {
+        app(SettingsRepository::class)->set('assist.connection', $choice);
+        $api = (fn () => $this->api(Fx::token(assistPerson('pro'))))->call($this);
+        $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'balanced', 'transports' => ['relay', 'http']])
+            ->assertStatus(503)->assertJsonPath('code', 'relay_unavailable');
+    }
 });

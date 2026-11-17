@@ -11,6 +11,7 @@ use App\Models\AssistUsage;
 use App\Models\Client;
 use App\Models\ClientFile;
 use App\Models\Workspace;
+use App\Services\Assist\AssistTransport;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
@@ -337,8 +338,9 @@ describe('starting a session', function () {
         expect(AssistSession::query()->withoutGlobalScopes()->find($bobSession)->status)->toBe('active');
     });
 
-    it('without a relay, runs HTTP mode, and refuses an app that knows only the relay in plain words, creating nothing', function () {
+    it('without a relay, runs HTTP mode under Automatic, and refuses an app that knows only the relay in plain words, creating nothing', function () {
         app(SettingsRepository::class)->set('relay.url', null);
+        app(SettingsRepository::class)->set('assist.connection', AssistTransport::AUTOMATIC);
         $api = $this->api(Fx::token(assistPerson()));
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])
             ->assertStatus(426)->assertJsonPath('code', 'app_update_required')->assertJsonPath('message', 'Live Assist needs the latest version of the app.');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Services\Assist\AssistTransport;
+use App\Services\Assist\Http\EventStream;
 use App\Services\Assist\Http\LiveContext;
 use App\Services\SettingsRepository;
 use Illuminate\Support\Facades\Cache;
@@ -84,6 +85,26 @@ it('refuses what is not a live message, a session that is not HTTP mode, an ende
     $relay->forceFill(['transport' => 'http'])->save();
     $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
     $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertStatus(409)->assertJsonPath('code', 'session_ended');
+});
+
+it('counts open streams with a fresh lifetime on every change, never below 0', function () {
+    [$api, $id] = httpSession($this);
+    $key = 'assist-live-open:'.$id;
+
+    // A stream that ends takes itself off the count; a count left by a dead worker never goes below 0.
+    Cache::put($key, 0, 60);
+    $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertOk()->streamedContent();
+    expect((int) Cache::get($key))->toBe(0);
+
+    // Each request writes the count again with the full lifetime: a count from long ago runs out instead of living on.
+    Cache::put($key, 3, 5);
+    $this->travel(2)->seconds();
+    $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertOk()->streamedContent();
+    expect((int) Cache::get($key))->toBe(3);
+    $this->travel(10)->seconds();
+    expect((int) Cache::get($key))->toBe(3);
+    $this->travel(EventStream::MAX_SECONDS + 30)->seconds();
+    expect(Cache::get($key))->toBeNull();
 });
 
 it('allows 10 messages a second and 4 open streams per session', function () {

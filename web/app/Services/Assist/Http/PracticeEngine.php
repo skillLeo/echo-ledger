@@ -38,7 +38,9 @@ class PracticeEngine
 
             return;
         }
-        // One question at a time: a second `practice_next` while one is being written is told to wait.
+        // One question at a time: a second `practice_next` while one is being written is told to wait. The lock is a
+        // single-flight flag, not a queue: it is never waited for (get(), not block()), and it expires after 60 s if
+        // the request that holds it dies.
         $lock = Cache::lock('assist.live.practice.lock.'.$session->id, 60);
         if (! $lock->get()) {
             $stream->error('practice_busy', 'The next question is on its way.', true);

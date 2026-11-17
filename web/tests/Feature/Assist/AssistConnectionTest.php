@@ -5,6 +5,7 @@ declare(strict_types=1);
 use App\Exceptions\ApiError;
 use App\Filament\Admin\Pages\Settings;
 use App\Models\AuditEvent;
+use App\Models\Setting;
 use App\Services\Assist\AssistTransport;
 use App\Services\Assist\RelayHealth;
 use App\Services\SettingsRepository;
@@ -45,12 +46,14 @@ function connection(string $choice): AssistTransport
 }
 
 describe('the transport a session gets', function () {
-    it('is the relay under Automatic while the relay answers, and this server while it does not', function () {
+    it('is the relay under Automatic while the relay answers, and refused, never this server, while it is down', function () {
         relayAnswers(true);
         expect(connection(AssistTransport::AUTOMATIC)->choose(['relay', 'http']))->toBe('relay');
 
+        // The owner: shared hosting is never picked on its own while a relay is set up; down is said, not hidden.
         app(RelayHealth::class)->record(['ok' => false]);
-        expect(connection(AssistTransport::AUTOMATIC)->choose(['relay', 'http']))->toBe('http');
+        expect(fn () => connection(AssistTransport::AUTOMATIC)->choose(['relay', 'http']))
+            ->toThrow(fn (ApiError $e) => expect([$e->getStatusCode(), $e->apiCode()])->toBe([503, 'relay_unavailable']));
     });
 
     it('is this server under Automatic when no relay is set, without asking anyone', function () {
@@ -78,7 +81,8 @@ describe('the transport a session gets', function () {
     });
 
     it('refuses an app that does not know the transport the server runs, with a clear message', function () {
-        relayAnswers(false);
+        Http::fake();
+        app(SettingsRepository::class)->set('relay.url', null);
 
         expect(fn () => connection(AssistTransport::AUTOMATIC)->choose(['relay']))
             ->toThrow(fn (ApiError $e) => expect([$e->getStatusCode(), $e->apiCode(), $e->getMessage()])
@@ -86,10 +90,23 @@ describe('the transport a session gets', function () {
         expect(connection(AssistTransport::SHARED)->choose(['http']))->toBe('http');
     });
 
-    it('treats an unknown setting as Automatic', function () {
+    it('treats an unknown setting as the default, Dedicated relay, and offers Shared hosting as an emergency only', function () {
         relayAnswers(true);
 
-        expect(connection('something-else')->choice())->toBe(AssistTransport::AUTOMATIC);
+        expect(connection('something-else')->choice())->toBe(AssistTransport::RELAY)
+            ->and(AssistTransport::DEFAULT)->toBe(AssistTransport::RELAY)
+            ->and(array_key_first(AssistTransport::CHOICES))->toBe(AssistTransport::RELAY)
+            ->and(AssistTransport::CHOICES[AssistTransport::SHARED])->toBe('Shared hosting (emergency only)')
+            ->and(AssistTransport::SHARED_HELP)->toBe('Emergency only — live answers run through this website\'s hosting and may be slower or cut off.');
+    });
+
+    it('defaults to Dedicated relay on a server that never chose', function () {
+        relayAnswers(true);
+        Setting::query()->where('key', 'assist.connection')->delete();
+        app()->forgetScopedInstances();
+
+        expect(app(AssistTransport::class)->choice())->toBe(AssistTransport::RELAY)
+            ->and(app(AssistTransport::class)->choose(['relay', 'http']))->toBe('relay');
     });
 });
 
@@ -131,21 +148,22 @@ describe('Admin › Settings › Live Assist connection', function () {
         $this->actingAs(Fx::superAdmin(), 'web');
     });
 
-    it('defaults to Automatic and saves the choice with an activity entry naming before and after', function () {
+    it('defaults to Dedicated relay, warns under Shared hosting, and saves the choice with an activity entry', function () {
         Livewire::test(Settings::class)->assertSee('Live Assist connection')
-            ->assertSet('data.assist_connection', 'automatic')->assertSet('data.relay_url', 'relay.example.com')
-            ->set('data.assist_connection', 'shared')->call('save')->assertHasNoErrors();
+            ->assertSet('data.assist_connection', 'relay')->assertSet('data.relay_url', 'relay.example.com')
+            ->set('data.assist_connection', 'shared')->assertSee('Emergency only — live answers run through this website')
+            ->call('save')->assertHasNoErrors();
 
         expect(app(SettingsRepository::class)->get('assist.connection'))->toBe('shared');
         $entry = AuditEvent::query()->where('event', 'assist_connection_changed')->sole();
-        expect($entry->summary)->toBe('Live Assist connection: Automatic (relay.example.com) → Shared hosting (relay.example.com)')
-            ->and($entry->meta)->toMatchArray(['from' => ['connection' => 'automatic', 'relay' => 'relay.example.com'], 'to' => ['connection' => 'shared', 'relay' => 'relay.example.com']]);
+        expect($entry->summary)->toBe('Live Assist connection: Dedicated relay (VPS) (relay.example.com) → Shared hosting (emergency only) (relay.example.com)')
+            ->and($entry->meta)->toMatchArray(['from' => ['connection' => 'relay', 'relay' => 'relay.example.com'], 'to' => ['connection' => 'shared', 'relay' => 'relay.example.com']]);
     });
 
     it('logs a relay address change too, and nothing when neither changed', function () {
         Livewire::test(Settings::class)->set('data.relay_url', '')->call('save')->assertHasNoErrors();
         expect(AuditEvent::query()->where('event', 'assist_connection_changed')->sole()->summary)
-            ->toBe('Live Assist connection: Automatic (relay.example.com) → Automatic (no relay)');
+            ->toBe('Live Assist connection: Dedicated relay (VPS) (relay.example.com) → Dedicated relay (VPS) (no relay)');
 
         Livewire::test(Settings::class)->call('save')->assertHasNoErrors();
         expect(AuditEvent::query()->where('event', 'assist_connection_changed')->count())->toBe(1);
@@ -191,6 +209,8 @@ describe('the relay check never reaches inside the server\'s network', function 
         'IPv6 loopback' => ['six.example.com', ['::1']],
         'a host that resolves to a private address' => ['relay.attacker.example', ['93.184.215.14', '192.168.1.5']],
         'IPv4 mapped in IPv6' => ['mapped.example.com', ['::ffff:10.0.0.1']],
+        'NAT64 of a private address' => ['nat64.example.com', ['64:ff9b::a00:1']],
+        '6to4 of a private address' => ['sixtofour.example.com', ['2002:c0a8:0105::1']],
     ]);
 
     it('judges the addresses themselves', function (string $ip, bool $public) {
@@ -199,6 +219,11 @@ describe('the relay check never reaches inside the server\'s network', function 
         ['127.0.0.1', false], ['10.0.0.8', false], ['172.16.0.1', false], ['192.168.0.1', false], ['169.254.169.254', false],
         ['100.64.0.1', false], ['0.0.0.0', false], ['::1', false], ['fe80::1', false], ['fd00::1', false], ['::', false],
         ['93.184.215.14', true], ['2606:2800:220:1::1', true],
+        // NAT64 (64:ff9b::/96) and 6to4 (2002::/16) carry an IPv4 address, judged as that address.
+        ['64:ff9b::a00:1', false], ['64:ff9b::10.0.0.1', false], ['64:ff9b::7f00:1', false], ['64:ff9b::a9fe:a9fe', false],
+        ['64:ff9b::5db8:d70e', true],
+        ['2002:0a00:0001::1', false], ['2002:c0a8:0105::', false], ['2002:7f00:0001::1', false],
+        ['2002:5db8:d70e::1', true],
     ]);
 
     it('pins the checked address and follows no redirect', function () {
