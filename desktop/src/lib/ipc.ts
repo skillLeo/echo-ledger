@@ -702,7 +702,7 @@ export type AssistMessage =
   | { type: "token"; suggestion_id: string; text: string }
   | { type: "suggestion_end"; suggestion_id: string; status: "done" | "cancelled" | "superseded" | "other" }
   | { type: "skip"; suggestion_id: string; turn_id?: string | null }
-  | { type: "mode_changed"; from: string; to: string; mode: string; reason: "budget" | "budget_restored" | "plan" | "assist_time" | "requested" | "other"; requested?: AssistMode | null }
+  | { type: "mode_changed"; from: string; to: string; reason: "budget" | "budget_restored" | "plan" | "assist_time" | "requested" | "other"; requested?: AssistMode | null }
   | { type: "error"; code: string; message: string; retry: boolean; suggestion_id: string | null; in_reply_to: number | null; fatal: boolean }
   | { type: "turn"; turn_id: string; channel: "me" | "other"; text: string; final: boolean }
   | { type: "budget"; seconds_left: number | null; seconds_total: number | null }

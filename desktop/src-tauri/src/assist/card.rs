@@ -20,8 +20,25 @@ pub const EVENT: &str = "assist:message";
 /// At most this many messages are kept for a window opened mid-session (a finished suggestion's tokens are kept as one).
 pub const MAX_KEPT: usize = 1_000;
 
-/// The card's message for something the relay sent; none for what the card does not need (`token_refreshed`, unknown
-/// types). `mode_changed` also says the new mode as `mode`, the field the card reads.
+/// What the card says for a relay `error` (the D-135 rule: the app's own words for every code, never the relay's text);
+/// none for what the app handles itself (tokens, connection, its own message format).
+pub fn error_sentence(code: &str) -> Option<&'static str> {
+    Some(match code {
+        "token_refresh_rejected" | "token_expired" | "token_missing" | "token_invalid" | "wrong_session" | "bad_message" => return None,
+        "rate_limited" => "Live Assist is busy. Try again in a moment.",
+        "documents_too_large" => "The prep's documents are too long for Live Assist. Remove some, then try again.",
+        "nothing_to_rewrite" => "There's no suggestion to change yet.",
+        "budget_exhausted" => "Suggestions are off: this month's Live Assist time is used up. Captions go on.",
+        "provider_not_configured" => "Live Assist is not set up on the server yet. Ask your admin.",
+        "provider_unavailable" | "provider_timeout" => "Live Assist couldn't make this suggestion. Try again, or press Help now.",
+        "model_declined" => "Live Assist couldn't help with this one.",
+        _ => "Live Assist couldn't make this suggestion. Try again.",
+    })
+}
+
+/// The card's message for something the relay sent, its fields as the relay sends them (without `seq`); none for what
+/// the card does not need (`token_refreshed`, unknown types, errors the app handles). An `error`'s `message` is the
+/// app's sentence for its code ([`error_sentence`]), never the relay's text.
 pub fn relay_message(message: &ServerMessage, meeting_type: Option<&str>) -> Option<Value> {
     fn tagged<T: Serialize>(kind: &str, body: &T) -> Value {
         let mut value = serde_json::to_value(body).unwrap_or_else(|_| json!({}));
@@ -42,14 +59,11 @@ pub fn relay_message(message: &ServerMessage, meeting_type: Option<&str>) -> Opt
         ServerMessage::Token(token) => tagged("token", token),
         ServerMessage::SuggestionEnd(end) => tagged("suggestion_end", end),
         ServerMessage::Skip(skip) => tagged("skip", skip),
-        ServerMessage::Error(error) => tagged("error", error),
-        ServerMessage::ModeChanged(change) => {
-            let mut value = tagged("mode_changed", change);
-            if let Some(object) = value.as_object_mut() {
-                object.insert("mode".into(), change.to.clone().into());
-            }
-            value
+        ServerMessage::Error(error) => {
+            let sentence = error_sentence(&error.code)?;
+            tagged("error", &super::protocol::RelayError { message: sentence.to_string(), ..error.clone() })
         }
+        ServerMessage::ModeChanged(change) => tagged("mode_changed", change),
         ServerMessage::TokenRefreshed { .. } | ServerMessage::Unknown => return None,
     })
 }
@@ -292,9 +306,19 @@ mod tests {
         let end = relay_message(&ServerMessage::SuggestionEnd(SuggestionEnd { suggestion_id: "s1".into(), status: EndStatus::Superseded, model: "m".into(), latency: json!({}), usage: json!({}) }), None).unwrap();
         assert_eq!(end["status"], "superseded");
         let changed = relay_message(&ServerMessage::ModeChanged(ModeChanged { from: "deep".into(), to: "fast".into(), reason: ModeReason::Requested, requested: Some("fast".into()) }), None).unwrap();
-        assert_eq!(changed, json!({"type": "mode_changed", "from": "deep", "to": "fast", "mode": "fast", "reason": "requested", "requested": "fast"}));
-        let error = relay_message(&ServerMessage::Error(RelayError { code: "provider_error".into(), message: "The suggestion failed.".into(), retry: true, suggestion_id: Some("s2".into()), in_reply_to: None, fatal: false }), None).unwrap();
-        assert_eq!(error, json!({"type": "error", "code": "provider_error", "message": "The suggestion failed.", "retry": true, "suggestion_id": "s2", "in_reply_to": null, "fatal": false}));
+        assert_eq!(changed, json!({"type": "mode_changed", "from": "deep", "to": "fast", "reason": "requested", "requested": "fast"}), "as the relay sends it");
+        let error = |code: &str| RelayError { code: code.into(), message: "RELAY TEXT from the provider".into(), retry: true, suggestion_id: Some("s2".into()), in_reply_to: None, fatal: false };
+        let sent = relay_message(&ServerMessage::Error(error("provider_timeout")), None).unwrap();
+        assert_eq!(sent, json!({"type": "error", "code": "provider_timeout", "message": "Live Assist couldn't make this suggestion. Try again, or press Help now.", "retry": true, "suggestion_id": "s2", "in_reply_to": null, "fatal": false}));
+        for code in ["rate_limited", "documents_too_large", "nothing_to_rewrite", "budget_exhausted", "provider_not_configured", "provider_unavailable", "model_declined", "something_new"] {
+            let shown = relay_message(&ServerMessage::Error(error(code)), None).unwrap();
+            assert_eq!(shown["code"], code);
+            assert!(!shown["message"].as_str().unwrap().contains("RELAY TEXT"), "{code}: never the relay's text");
+            assert_eq!(shown["message"].as_str(), error_sentence(code));
+        }
+        for handled in ["token_refresh_rejected", "token_expired", "token_missing", "token_invalid", "wrong_session", "bad_message"] {
+            assert_eq!(relay_message(&ServerMessage::Error(error(handled)), None), None, "{handled}: the app handles it");
+        }
         assert_eq!(relay_message(&ServerMessage::TokenRefreshed { expires_at: "x".into() }, None), None);
         assert_eq!(relay_message(&ServerMessage::Unknown, None), None);
     }
