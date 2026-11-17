@@ -72,21 +72,39 @@ pub struct SseEvent {
     pub data: String,
 }
 
+/// The longest line a stream may send (a suggestion's token is a few words).
+pub const MAX_LINE: usize = 64 * 1024;
+/// The most one event's `data:` lines may add up to.
+pub const MAX_EVENT: usize = 256 * 1024;
+
+/// A stream that sent more than it may: the stream is treated as dropped.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Overflow {
+    Line,
+    Event,
+}
+
 /// Reads server-sent events from a byte stream in pieces of any size (pure): `event:`/`data:` lines, a blank line ends
-/// an event, lines starting with `:` are keep-alives, `\r\n` and `\n` both end a line.
+/// an event, lines starting with `:` are keep-alives, `\r\n` and `\n` both end a line. A line over [`MAX_LINE`] or an
+/// event's data over [`MAX_EVENT`] is an [`Overflow`]: nothing more is kept for it.
 #[derive(Default)]
 pub struct SseReader {
     buffer: Vec<u8>,
     event: String,
     data: Vec<String>,
+    data_len: usize,
 }
 
 impl SseReader {
-    /// Takes the next bytes; gives the events they complete, in order.
-    pub fn push(&mut self, bytes: &[u8]) -> Vec<SseEvent> {
+    /// Takes the next bytes; gives the events they complete, in order, or the overflow that ends the stream.
+    pub fn push(&mut self, bytes: &[u8]) -> Result<Vec<SseEvent>, Overflow> {
         self.buffer.extend_from_slice(bytes);
         let mut done = Vec::new();
         while let Some(end) = self.buffer.iter().position(|&b| b == b'\n') {
+            if end > MAX_LINE {
+                self.buffer.clear();
+                return Err(Overflow::Line);
+            }
             let mut line: Vec<u8> = self.buffer.drain(..=end).collect();
             line.pop();
             if line.last() == Some(&b'\r') {
@@ -97,6 +115,7 @@ impl SseReader {
                 if !self.data.is_empty() || !self.event.is_empty() {
                     let event = if self.event.is_empty() { "message".to_string() } else { std::mem::take(&mut self.event) };
                     done.push(SseEvent { event, data: std::mem::take(&mut self.data).join("\n") });
+                    self.data_len = 0;
                 }
                 continue;
             }
@@ -106,11 +125,23 @@ impl SseReader {
             let (field, value) = line.split_once(':').map_or((line.as_str(), ""), |(f, v)| (f, v.strip_prefix(' ').unwrap_or(v)));
             match field {
                 "event" => self.event = value.to_string(),
-                "data" => self.data.push(value.to_string()),
+                "data" => {
+                    self.data_len += value.len() + 1;
+                    if self.data_len > MAX_EVENT {
+                        self.buffer.clear();
+                        return Err(Overflow::Event);
+                    }
+                    self.data.push(value.to_string());
+                }
                 _ => {}
             }
         }
-        done
+        // No line end yet and already too long: it will not be a line.
+        if self.buffer.len() > MAX_LINE {
+            self.buffer.clear();
+            return Err(Overflow::Line);
+        }
+        Ok(done)
     }
 }
 
@@ -160,6 +191,9 @@ async fn run(
     let (from_streams, mut streams) = mpsc::unbounded_channel::<FromStream>();
     let (refreshed_tx, mut refreshed) = mpsc::unbounded_channel::<Result<HttpGrant, String>>();
     let mut waiting: VecDeque<ClientMessage> = VecDeque::new();
+    // Every task this session starts (a stream per message, the token refresh): all aborted when `run` returns, for
+    // whatever reason (Stop, a 426, the session gone), so no stream is left holding a connection open.
+    let mut tasks: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
     let mut open = 0usize;
     let mut busy_until: Option<Instant> = None;
     let mut refresh_at = Instant::now() + policy.refresh_every;
@@ -170,10 +204,12 @@ async fn run(
             let Some(message) = waiting.pop_front() else { break };
             open += 1;
             busy_until = None;
-            tokio::spawn(stream(api.clone(), grant.live_url.clone(), message, from_streams.clone()));
+            tasks.spawn(stream(api.clone(), grant.live_url.clone(), message, from_streams.clone()));
         }
         tokio::select! {
             _ = stop.changed() => return EndReason::Closed,
+            // Finished tasks leave the set (their results are nothing).
+            Some(_) = tasks.join_next(), if !tasks.is_empty() => {}
             message = outgoing.recv() => match message {
                 Some(message) => waiting.push_back(message),
                 None => return EndReason::Closed,
@@ -209,7 +245,7 @@ async fn run(
             _ = tokio::time::sleep_until(refresh_at), if !refreshing => {
                 refreshing = true;
                 let (refresh, done) = (refresh.clone(), refreshed_tx.clone());
-                tokio::spawn(async move {
+                tasks.spawn(async move {
                     let _ = done.send(refresh().await);
                 });
             }
@@ -275,7 +311,12 @@ async fn stream(api: Arc<ApiClient>, live_url: String, message: ClientMessage, t
     let mut reader = SseReader::default();
     let mut bytes = response.bytes_stream();
     while let Some(Ok(chunk)) = bytes.next().await {
-        for event in reader.push(&chunk) {
+        let Ok(events) = reader.push(&chunk) else {
+            // More than a stream may send: it is treated as dropped (the response is dropped with this task).
+            eprintln!("[echoledger] Live Assist: a stream sent more than it may; it was closed");
+            break;
+        };
+        for event in events {
             if event.event == "end" {
                 let _ = to.send(FromStream::Done { dropped: false });
                 return;
@@ -302,8 +343,45 @@ mod tests {
         ];
         for size in [1, 2, 3, 7, 64, text.len()] {
             let mut reader = SseReader::default();
-            let got: Vec<SseEvent> = text.as_bytes().chunks(size).flat_map(|piece| reader.push(piece)).collect();
+            let got: Vec<SseEvent> = text.as_bytes().chunks(size).flat_map(|piece| reader.push(piece).unwrap()).collect();
             assert_eq!(got, expected, "pieces of {size}");
+        }
+    }
+
+    #[test]
+    fn a_line_over_64_kib_or_an_event_over_256_kib_is_an_overflow() {
+        // A line: with its end, split, or never ended.
+        let long = format!("data: {}\n\n", "x".repeat(MAX_LINE + 10));
+        assert_eq!(SseReader::default().push(long.as_bytes()), Err(Overflow::Line));
+        let mut reader = SseReader::default();
+        let mut result = Ok(Vec::new());
+        for piece in long.as_bytes().chunks(1000) {
+            result = reader.push(piece);
+            if result.is_err() {
+                break;
+            }
+        }
+        assert_eq!(result, Err(Overflow::Line), "caught before the line even ends");
+        assert_eq!(SseReader::default().push("x".repeat(MAX_LINE + 1).as_bytes()), Err(Overflow::Line), "a line that never ends");
+        // Just under is fine.
+        let ok = format!("data: {}\n\n", "x".repeat(MAX_LINE - 10));
+        assert_eq!(SseReader::default().push(ok.as_bytes()).unwrap().len(), 1);
+        // An event: lines each under the cap add up past it.
+        let line = format!("data: {}\n", "y".repeat(60_000));
+        let mut reader = SseReader::default();
+        let mut got = Ok(Vec::new());
+        for _ in 0..5 {
+            got = reader.push(line.as_bytes());
+            if got.is_err() {
+                break;
+            }
+        }
+        assert_eq!(got, Err(Overflow::Event), "five 60 KB lines are over 256 KiB");
+        // The count starts over with each event.
+        let mut reader = SseReader::default();
+        for _ in 0..8 {
+            let event = format!("data: {}\n\n", "z".repeat(60_000));
+            assert_eq!(reader.push(event.as_bytes()).unwrap().len(), 1);
         }
     }
 
@@ -316,6 +394,21 @@ mod tests {
         assert_eq!(refusal(&server(409)), Refusal::Ended("Session ended.".into()));
         assert_eq!(refusal(&AppError::NotPaired), Refusal::Ended("Not signed in.".into()));
         assert!(matches!(refusal(&server(422)), Refusal::Dropped(_)));
+    }
+
+    #[test]
+    fn the_stream_client_has_no_total_timeout_and_follows_no_redirect() {
+        // A total timeout (120 s on the ordinary client) would cut a long stream; a followed redirect would re-send the
+        // meeting's words to an address the server did not name. Only silence cuts a stream.
+        let pinning = include_str!("../net/pinning.rs");
+        let live = &pinning[pinning.find("pub fn build_live_client(").unwrap()..];
+        let live = &live[..live.find("\n}\n").unwrap()];
+        assert!(!live.contains(".timeout("), "no total timeout: {live}");
+        assert!(live.contains(".read_timeout(LIVE_IDLE)") && live.contains("redirect::Policy::none()"), "{live}");
+        let api = include_str!("../net/api.rs");
+        let call = &api[api.find("pub async fn assist_live(").unwrap()..];
+        let call = &call[..call.find("\n    }\n").unwrap()];
+        assert!(call.contains(".live\n") && !call.contains("self.http"), "the call uses the stream client: {call}");
     }
 
     #[test]

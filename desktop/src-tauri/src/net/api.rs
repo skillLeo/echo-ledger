@@ -15,6 +15,8 @@ use crate::error::{AppError, AppResult};
 pub struct ApiClient {
     base: String,
     http: reqwest::Client,
+    /// For Live Assist's streams: no total timeout, no redirects ([`super::pinning::build_live_client`]).
+    live: reqwest::Client,
     token: Option<String>,
     /// This install's id (since v1.6, P3), sent by every sign-in route so the same computer keeps its row.
     install_id: Option<String>,
@@ -27,7 +29,8 @@ impl ApiClient {
             return Err(AppError::msg("The server URL must start with https:// (http is only allowed for localhost)."));
         }
         let http = build_http_client(&base, pins).map_err(AppError::Message)?;
-        Ok(Self { base, http, token, install_id: None })
+        let live = super::pinning::build_live_client(&base, pins).map_err(AppError::Message)?;
+        Ok(Self { base, http, live, token, install_id: None })
     }
 
     /// The same client sending `install_id` with every sign-in (v1.6, P3); none leaves it out (an older app's body).
@@ -618,7 +621,7 @@ impl ApiClient {
         }
         let token = self.token.as_deref().ok_or(AppError::NotPaired)?;
         let resp = self
-            .http
+            .live
             .post(live_url)
             .bearer_auth(token)
             .header("Accept", "text/event-stream")
@@ -626,6 +629,7 @@ impl ApiClient {
             .body(body)
             .send()
             .await?;
+        // A redirect is a refusal (the client follows none): the meeting's words are posted to this address only.
         if resp.status().is_success() {
             return Ok(resp);
         }

@@ -48,6 +48,12 @@ enum Plan {
     Status(u16, Value),
     /// A stream: each message after its pause, then `end` (or nothing: the stream drops).
     Events { events: Vec<(Duration, Value)>, end: bool },
+    /// A stream that never ends: its head, then silence until the app closes the connection.
+    Hang,
+    /// A stream of these raw bytes, then silence until the app closes it.
+    Raw(Vec<u8>),
+    /// A redirect to `Location`.
+    Redirect(u16, String),
 }
 
 struct Posted {
@@ -64,6 +70,8 @@ struct SseServer {
     base: String,
     posted: Arc<Mutex<Vec<Posted>>>,
     most_open: Arc<AtomicUsize>,
+    /// When the app closed a stream that never ended.
+    closed: Arc<Mutex<Vec<Instant>>>,
 }
 
 impl SseServer {
@@ -72,12 +80,15 @@ impl SseServer {
         let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
         let posted: Arc<Mutex<Vec<Posted>>> = Arc::default();
         let (open, most_open) = (Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        let closed: Arc<Mutex<Vec<Instant>>> = Arc::default();
+        let closed_log = closed.clone();
         let (log, plan) = (posted.clone(), Arc::new(plan));
         let (open_count, most) = (open.clone(), most_open.clone());
         tokio::spawn(async move {
             let index = Arc::new(AtomicUsize::new(0));
             while let Ok((mut tcp, _)) = listener.accept().await {
                 let (log, plan, index, open_count, most) = (log.clone(), plan.clone(), index.clone(), open_count.clone(), most.clone());
+                let closed_log = closed_log.clone();
                 tokio::spawn(async move {
                     let mut raw = Vec::new();
                     let mut buf = [0u8; 4096];
@@ -125,6 +136,37 @@ impl SseServer {
                             let reply = format!("HTTP/1.1 {status} Refused\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}", body.len());
                             let _ = tcp.write_all(reply.as_bytes()).await;
                         }
+                        Plan::Redirect(status, location) => {
+                            let reply = format!("HTTP/1.1 {status} Moved\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+                            let _ = tcp.write_all(reply.as_bytes()).await;
+                        }
+                        Plan::Hang => {
+                            let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n: open\n\n";
+                            let _ = tcp.write_all(head.as_bytes()).await;
+                            // Silence until the app lets go of the connection.
+                            let mut sink = [0u8; 64];
+                            loop {
+                                match tcp.read(&mut sink).await {
+                                    Ok(0) | Err(_) => break,
+                                    Ok(_) => {}
+                                }
+                            }
+                            closed_log.lock().unwrap().push(Instant::now());
+                        }
+                        Plan::Raw(bytes) => {
+                            let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n";
+                            let _ = tcp.write_all(head.as_bytes()).await;
+                            let _ = tcp.write_all(&bytes).await;
+                            // The stream stays open: only the app can end it (an oversized one it must close itself).
+                            let mut sink = [0u8; 64];
+                            loop {
+                                match tcp.read(&mut sink).await {
+                                    Ok(0) | Err(_) => break,
+                                    Ok(_) => {}
+                                }
+                            }
+                            closed_log.lock().unwrap().push(Instant::now());
+                        }
                         Plan::Events { events, end } => {
                             let head = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n: open\n\n";
                             let _ = tcp.write_all(head.as_bytes()).await;
@@ -143,7 +185,7 @@ impl SseServer {
                 });
             }
         });
-        SseServer { base, posted, most_open }
+        SseServer { base, posted, most_open, closed }
     }
 
     fn live_url(&self) -> String {
@@ -412,4 +454,86 @@ async fn only_an_address_on_this_server_gets_the_device_token() {
     let error = server.api().assist_live("https://elsewhere.example/api/assist/sessions/x/live", "{}".into()).await.unwrap_err();
     assert!(error.to_string().contains("not on this server"), "{error}");
     assert!(server.posted().is_empty());
+}
+
+#[tokio::test]
+async fn after_stop_no_stream_or_refresh_is_left_holding_a_connection() {
+    let server = SseServer::start(|_, _| Plan::Hang).await;
+    // A refresh that never finishes, holding a guard that says when it was dropped.
+    struct Guard(Arc<std::sync::atomic::AtomicBool>);
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            self.0.store(true, Ordering::SeqCst);
+        }
+    }
+    let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let flag = dropped.clone();
+    let refresh: HttpRefresh = Arc::new(move || {
+        let guard = Guard(flag.clone());
+        Box::pin(async move {
+            let _held = guard;
+            std::future::pending::<Result<HttpGrant, String>>().await
+        })
+    });
+    let events = Events::default();
+    let policy = HttpPolicy { refresh_every: Duration::from_millis(100), ..HttpPolicy::default() };
+    let handle = http::spawn(server.api(), grant(&server), refresh, policy, events.sink());
+    handle.send(ClientMessage::HelpNow { turn_id: None });
+    handle.send(ClientMessage::HelpNow { turn_id: None });
+    wait_for("both streams open", || server.posted().len() == 2).await;
+    tokio::time::sleep(Duration::from_millis(250)).await;
+    let stopped = Instant::now();
+    handle.stop();
+    wait_for("both connections closed", || server.closed.lock().unwrap().len() == 2).await;
+    for at in server.closed.lock().unwrap().iter() {
+        assert!(at.duration_since(stopped) < Duration::from_millis(500), "the server saw the connection close quickly");
+    }
+    wait_for("the refresh dropped", || dropped.load(Ordering::SeqCst)).await;
+    wait_for("the end", || events.all().iter().any(|e| matches!(e, AssistEvent::Ended(EndReason::Closed)))).await;
+}
+
+/// A stream that writes the unfinished suggestion `s9`, then `tail` and nothing else.
+async fn overflowing(tail: Vec<u8>) -> (SseServer, Events, desktop_lib::assist::client::AssistHandle) {
+    let mut bytes = b"event: suggestion_start\ndata: {\"type\":\"suggestion_start\",\"suggestion_id\":\"s9\",\"kind\":\"answer\",\"mode\":\"balanced\",\"model\":\"m\"}\n\n".to_vec();
+    bytes.extend(tail);
+    let server = SseServer::start(move |_, _| Plan::Raw(bytes.clone())).await;
+    let events = Events::default();
+    let handle = http::spawn(server.api(), grant(&server), never_refresh(), HttpPolicy::default(), events.sink());
+    handle.send(ClientMessage::HelpNow { turn_id: None });
+    (server, events, handle)
+}
+
+#[tokio::test]
+async fn a_line_over_64_kib_closes_the_stream_and_clears_the_suggestion() {
+    let (server, events, handle) = overflowing(format!("event: token\ndata: {}\n\n", "x".repeat(70_000)).into_bytes()).await;
+    wait_for("the drop", || events.all().iter().any(|e| matches!(e, AssistEvent::Message(desktop_lib::assist::protocol::ServerMessage::Ready(r)) if r.resumed))).await;
+    let (_, kept) = events.card();
+    assert!(kept.iter().all(|m| m["suggestion_id"] != "s9" && m["type"] != "token"), "{kept:?}");
+    wait_for("the app closed the stream", || !server.closed.lock().unwrap().is_empty()).await;
+    handle.stop();
+}
+
+#[tokio::test]
+async fn an_event_over_256_kib_closes_the_stream_and_clears_the_suggestion() {
+    let lines: String = (0..5).map(|_| format!("data: {}\n", "y".repeat(60_000))).collect();
+    let (server, events, handle) = overflowing(format!("event: token\n{lines}\n").into_bytes()).await;
+    wait_for("the drop", || events.all().iter().any(|e| matches!(e, AssistEvent::Message(desktop_lib::assist::protocol::ServerMessage::Ready(r)) if r.resumed))).await;
+    let (_, kept) = events.card();
+    assert!(kept.iter().all(|m| m["suggestion_id"] != "s9"), "{kept:?}");
+    wait_for("the app closed the stream", || !server.closed.lock().unwrap().is_empty()).await;
+    handle.stop();
+}
+
+#[tokio::test]
+async fn a_redirect_is_a_refusal_and_the_meeting_s_words_are_posted_nowhere_else() {
+    // The other address is on the same stand-in so a re-send would show.
+    let server = SseServer::start(|n, _| if n == 0 { Plan::Redirect(307, "/elsewhere".into()) } else { Plan::Events { events: vec![], end: true } }).await;
+    let events = Events::default();
+    let handle = http::spawn(server.api(), grant(&server), never_refresh(), HttpPolicy::default(), events.sink());
+    handle.send(turn("Private words"));
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let posted = server.posted();
+    assert_eq!(posted.len(), 1, "not followed: {:?}", posted.iter().map(|p| &p.0).collect::<Vec<_>>());
+    assert!(!events.all().iter().any(|e| matches!(e, AssistEvent::Ended(_))), "the message was dropped, the session goes on");
+    handle.stop();
 }
