@@ -17,13 +17,13 @@ describe("release gate", () => {
   });
 
   it("a release is blocked by a command with no declared fallback, and passes one with a fallback", () => {
-    const unsafe = { name: "help_guides" };
-    const safe = { name: "live_translate_status", fallback: "Live Translate shows as unavailable without it." };
+    const unsafe = { name: "help_guides", callers: [] };
+    const safe = { name: "live_translate_status", fallback: "Live Translate shows as unavailable without it.", callers: [] };
     expect(releaseBlockers({ release: true, version: "1.9.0", awaiting: [unsafe, safe] })).toEqual([
       "a release needs help_guides from the core: no safe fallback is declared",
     ]);
     expect(releaseBlockers({ release: true, version: "1.9.0", awaiting: [safe] })).toEqual([]);
-    expect(releaseBlockers({ release: true, version: "1.9.0", awaiting: [{ name: "x", fallback: "  " }] })).toHaveLength(1);
+    expect(releaseBlockers({ release: true, version: "1.9.0", awaiting: [{ name: "x", fallback: "  ", callers: [] }] })).toHaveLength(1);
     // Outside a release, only the version marker counts.
     expect(releaseBlockers({ release: false, version: "1.9.0", awaiting: [unsafe] })).toEqual([]);
     expect(releaseBlockers({ release: true, version: "1.9.0", awaiting: [] })).toEqual([]);
@@ -31,7 +31,7 @@ describe("release gate", () => {
 
   it("the list must be empty by its removeBy version, release or not, fallback or not", () => {
     expect(AWAITING_CORE.removeBy).toBe("2.0.0");
-    expect(releaseBlockers({ release: false, version: "2.0.0", awaiting: [{ name: "live_translate_status", fallback: "safe" }] })).toEqual([
+    expect(releaseBlockers({ release: false, version: "2.0.0", awaiting: [{ name: "live_translate_status", fallback: "safe", callers: [] }] })).toEqual([
       "version 2.0.0 has reached 2.0.0: the core must have live_translate_status, and AWAITING_CORE must be empty",
     ]);
     expect(versionAtLeast("1.10.2", "1.9.0")).toBe(true);

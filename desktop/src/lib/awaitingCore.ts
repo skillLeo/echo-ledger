@@ -3,8 +3,12 @@
 // - releaseGate.test.ts fails a release build while the list has a command without a declared safe fallback (what the
 //   app does without it, and why that is safe), and fails every run once the app's version reaches `removeBy`.
 
-/** A command the core doesn't have yet; `fallback` says why the app is safe without it (none: a release waits for it). */
-export type AwaitedCommand = { name: string; fallback?: string };
+/**
+ * A command the core doesn't have yet. `fallback` says why the app is safe without it (none: a release waits for it),
+ * and `callers` are the only source files (under src/) allowed to call it, so a fallback that rests on who calls the
+ * command can be checked: ipc.contract.test.ts fails when it is called anywhere else.
+ */
+export type AwaitedCommand = { name: string; fallback?: string; callers: readonly string[] };
 
 export const AWAITING_CORE: { removeBy: string; commands: readonly AwaitedCommand[] } = {
   /** The app version by which the list must be empty. */
@@ -14,10 +18,12 @@ export const AWAITING_CORE: { removeBy: string; commands: readonly AwaitedComman
     {
       name: "live_translate_status",
       fallback: "Without it the Live tab works the answer out from the system and the plan, and shows Live Translate as unavailable where it can't run.",
+      callers: ["lib/ipc.ts", "v2/live/LiveV2.tsx"],
     },
     {
       name: "diagnostic_report_copy",
       fallback: "Nothing in the app calls it yet: Setup & health shows no Copy the report button until the core has it.",
+      callers: [],
     },
   ],
 };
