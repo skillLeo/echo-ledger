@@ -26,11 +26,11 @@ return [
 
     'max_chunk_bytes' => 5 * 1024 * 1024,
 
-    // Pictures (screens, receipts) decoded at a time on one server, about 200 MB each at most, and how long one waits
-    // for a free slot before the answer is 503 server_busy (App\Services\Screens\ScreenStore::decoding).
+    // Pictures (screens, receipts) decoded at a time on one server, about 200 MB each at most (one at a time per person),
+    // and how long one waits for a free slot before the answer is 503 server_busy (App\Services\Screens\ScreenStore::decoding).
     'picture_decodes' => [
         'slots' => (int) env('ECHOLEDGER_PICTURE_DECODE_SLOTS', 2),
-        'wait_seconds' => (float) env('ECHOLEDGER_PICTURE_DECODE_WAIT', 20),
+        'wait_seconds' => (float) env('ECHOLEDGER_PICTURE_DECODE_WAIT', 4),
     ],
 
     'max_recording_bytes' => (int) env('ECHOLEDGER_MAX_RECORDING_BYTES', 2 * 1024 * 1024 * 1024),

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Livewire\Shell;
 
 use App\Filament\Concerns\DropsRecordings;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Shell;
 use App\Models\User;
 use Filament\Livewire\Sidebar as FilamentSidebar;
@@ -33,6 +34,7 @@ class Sidebar extends FilamentSidebar
 
     public function render(): View
     {
-        return view('filament.shell.sidebar');
+        // Since v2.0: the five-module sidebar under ui_v2.shell (the classic one otherwise, unchanged).
+        return view(ConsoleV2::shell() ? 'filament.v2.sidebar' : 'filament.shell.sidebar');
     }
 }

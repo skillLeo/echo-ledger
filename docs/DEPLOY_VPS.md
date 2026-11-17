@@ -120,8 +120,8 @@ as with the rule above.
 A screen or a payment receipt is decoded on the request that sends it: up to about 200 MB of memory for the largest
 picture taken (25 megapixels), for a moment. The server raises PHP's memory limit to 512M for that step only and puts
 it back after, and decodes **at most 2 pictures at a time** (a cache lock per slot, so it holds for every FPM process;
-`ECHOLEDGER_PICTURE_DECODE_SLOTS`). A third waits up to 20 seconds (`ECHOLEDGER_PICTURE_DECODE_WAIT`), then answers
-`503 server_busy`; the apps send it again later.
+`ECHOLEDGER_PICTURE_DECODE_SLOTS`), and one at a time per person. A third waits up to 4 seconds
+(`ECHOLEDGER_PICTURE_DECODE_WAIT`), then answers `503 server_busy`; the apps send it again later.
 
 Size the pool with that in mind, in `/etc/php/8.4/fpm/pool.d/www.conf`:
 

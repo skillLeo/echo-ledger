@@ -15,6 +15,7 @@ use App\Filament\Infolists\TranscriptPlayerEntry;
 use App\Filament\Resources\CaptureSessions\CaptureSessionResource;
 use App\Filament\Resources\CaptureSessions\Tables\CaptureSessionsTable;
 use App\Filament\Resources\Clients\ClientResource;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\NoticeTargets;
 use App\Filament\Support\PlanLock;
@@ -24,6 +25,7 @@ use App\Filament\Support\SendsToWhatsApp;
 use App\Filament\Support\SharingActions;
 use App\Filament\Support\Shell;
 use App\Filament\Support\StopsSharing;
+use App\Filament\Support\V2RecordingRow;
 use App\Filament\Support\WhatsAppActions;
 use App\Http\Controllers\AdminMediaController;
 use App\Jobs\MakeCallNotesJob;
@@ -137,6 +139,10 @@ class ViewCaptureSession extends ViewRecord
     public function getSubheading(): Htmlable
     {
         $session = $this->session();
+        // Since v2.0 (ui_v2.library): the source, who it was with, when, and one status, as the apps' header.
+        if (ConsoleV2::library()) {
+            return new HtmlString(view('filament.v2.recording-meta', ['row' => V2RecordingRow::for($session), 'session' => $session])->render());
+        }
         $at = $session->started_at->copy()->setTimezone(app(SettingsRepository::class)->displayTimezone());
 
         return new HtmlString(view('filament.recording.subheading', [
@@ -508,6 +514,41 @@ class ViewCaptureSession extends ViewRecord
     {
         if (ConsoleAccess::readOnly()) {
             return [];
+        }
+        // Since v2.0 (ui_v2.library): Share, Move and Delete, as the apps; everything else in More.
+        if (ConsoleV2::library()) {
+            return [
+                $this->shareAction()->label(__('Share'))->icon(null)->labeledFrom(null)->outlined(),
+                $this->fileUnderAction()->label(__('Move'))->color('gray')->outlined(),
+                DeleteAction::make()->label(__('Delete'))->icon(null)->color('danger')->outlined()
+                    ->modalDescription('Deletes the recording and transcript everywhere (all devices). This cannot be undone.'),
+                ActionGroup::make([
+                    ActionGroup::make([
+                        $this->speakersAction(),
+                        $this->replaceAction(),
+                        $this->historyAction(),
+                    ])->dropdown(false)->visible(fn (): bool => $this->editableTranscript() !== null),
+                    ActionGroup::make([
+                        $this->downloadAction(),
+                        $this->wrongScriptAction(),
+                        $this->showAsAction(),
+                        WhatsAppActions::send(fn (): CaptureSession => $this->session(), fn (): string => $this->readingView, copyForAi: true)->label('WhatsApp'),
+                    ])->dropdown(false),
+                    ActionGroup::make([
+                        CaptureSessionsTable::renameAction(),
+                        SharingActions::send(fn (): CaptureSession => $this->session()),
+                        SharingActions::sentTo(fn (): CaptureSession => $this->session()),
+                        $this->retryAction(),
+                        $this->retranscribeAsAction(),
+                        $this->secondEngineAction(),
+                        $this->compareAction(),
+                        $this->compareEnginesAction(),
+                        $this->engineResultsAction(),
+                        $this->referenceAction(),
+                        $this->clearReferenceAction(),
+                    ])->dropdown(false),
+                ])->label(__('More'))->icon(Heroicon::OutlinedEllipsisHorizontal)->color('gray'),
+            ];
         }
 
         return [
@@ -1153,9 +1194,23 @@ class ViewCaptureSession extends ViewRecord
         return $user !== null ? mb_substr((string) $user->getAttribute('name'), 0, 120) : null;
     }
 
+    /**
+     * Since v2.0 (ui_v2.library): back to the Library, above the title, as the apps.
+     *
+     * @return array{label: string, url: string}|null
+     */
+    public function v2BackLink(): ?array
+    {
+        return ConsoleV2::library() ? ['label' => __('Library'), 'url' => CaptureSessionResource::getUrl('index')] : null;
+    }
+
     /** "Sessions > Title", without a trailing "View" (C3). */
     public function getBreadcrumbs(): array
     {
+        if (ConsoleV2::library()) {
+            return [];
+        }
+
         return $this->getResourceBreadcrumbs();
     }
 }

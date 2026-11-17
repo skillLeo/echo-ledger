@@ -7,6 +7,7 @@ namespace App\Filament\Auth\Settings;
 use App\Exceptions\ApiError;
 use App\Filament\Pages\GetTheApps;
 use App\Filament\Pages\RecentlyDeleted;
+use App\Filament\Support\ConsoleV2;
 use App\Filament\Support\Notice as Notification;
 use App\Filament\Support\SettingsContext;
 use App\Filament\Support\Shell;
@@ -38,8 +39,9 @@ trait ManagesAppPages
 
         return [
             'prefs' => $prefs,
+            // The new frame (v2.0) has one sidebar look, so its style is not offered there.
             'rows' => [
-                'style' => ['appearance.sidebar', Shell::STYLES],
+                ...(ConsoleV2::shell() ? [] : ['style' => ['appearance.sidebar', Shell::STYLES]]),
                 'density' => ['appearance.density', Shell::DENSITIES],
                 'clock' => ['appearance.clock', ['12h' => '12-hour', '24h' => '24-hour']],
                 'layout' => ['appearance.library_view', Shell::LAYOUTS],
@@ -49,13 +51,17 @@ trait ManagesAppPages
             'classicOffered' => app(InterfaceFlags::class)->anyUiV2($this->account()),
             'classic' => (bool) $this->account()->ui_classic,
             'more' => LanguageChoice::MORE,
+            // Since v2.0: the console's language, under the new frame only.
+            'appLanguages' => ConsoleV2::shell() ? ConsoleV2::LANGUAGES : null,
         ];
     }
 
     /** One preference, saved at once. */
     public function setPreference(string $key, string $value): bool
     {
-        if (! in_array($key, ['style', 'density', 'clock', 'layout', 'language'], true) || ! Shell::remember($this->account(), $key, $value)) {
+        // Since v2.0 the console's language too, under the new frame only.
+        $keys = ['style', 'density', 'clock', 'layout', 'language', ...(ConsoleV2::shell() ? ['app_language'] : [])];
+        if (! in_array($key, $keys, true) || ! Shell::remember($this->account(), $key, $value)) {
             return false;
         }
         $this->account()->refresh();
@@ -65,6 +71,10 @@ trait ManagesAppPages
         }
         if ($key === 'density') {
             $this->js('document.documentElement.dataset.density = '.json_encode($value));
+        }
+        if ($key === 'app_language') {
+            // Every word and the direction change: the page is drawn again in the new language.
+            $this->js('setTimeout(() => window.location.reload(), 400)');
         }
 
         return true;

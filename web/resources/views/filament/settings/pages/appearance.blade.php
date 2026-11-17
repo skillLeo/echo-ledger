@@ -18,7 +18,7 @@
             </span>
         </span>
     </div>
-    @foreach ($rows as $key => [$id, $options])
+@includeWhen(! empty($appLanguages), 'filament.settings.pages.app-language')    @foreach ($rows as $key => [$id, $options])
         @php($entry = \App\Services\Accounts\SettingsRegistry::byId()[$id])
         <div class="el-set-row is-stacked" id="setting-{{ $id }}" tabindex="-1" data-setting="{{ $id }}" x-data="{ value: @js($prefs[$key]), saved: false,
                 pick(v) { this.value = v; this.saved = false; $wire.setPreference('{{ $key }}', v).then((ok) => { this.saved = ok; setTimeout(() => this.saved = false, 2000) }) } }">

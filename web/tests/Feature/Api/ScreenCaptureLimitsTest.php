@@ -257,6 +257,19 @@ it('decodes with the memory limit raised to 512M and put back after, a higher or
     expect($seen)->toBe([[$raised, $low], [$raised, ((int) $low * 1024).'K'], ['2G', '2G'], ['-1', '-1']])->and($afterFailure)->toBe($low);
 });
 
+it('keeps the raised limit when the process is within 32 MB of its old one, rather than fail', function () {
+    $limit = ini_get('memory_limit');
+    try {
+        $tight = (intdiv(memory_get_usage(true), 1024 * 1024) + 16).'M';
+        ini_set('memory_limit', $tight);
+        ScreenStore::decoding(fn () => null);
+        $after = ini_get('memory_limit');
+    } finally {
+        ini_set('memory_limit', (string) $limit);
+    }
+    expect($after)->toBe((string) ScreenStore::DECODE_MEMORY);
+});
+
 it('decodes at most 2 pictures at a time: a third waits, then answers 503 server_busy', function () {
     config(['echoledger.picture_decodes.wait_seconds' => 0.3]);
     $held = [Cache::lock('pictures:decode:0', 60), Cache::lock('pictures:decode:1', 60)];
@@ -279,6 +292,28 @@ it('decodes at most 2 pictures at a time: a third waits, then answers 503 server
     ], ['Accept' => 'application/json']);
     $response->assertStatus(503)->assertJsonPath('code', 'server_busy')->assertHeader('Retry-After', '5');
     expect(Screen::query()->withoutGlobalScopes()->count())->toBe(0);
+});
+
+it('decodes one picture at a time per person: a second from the same account waits, another account goes ahead', function () {
+    config(['echoledger.picture_decodes.wait_seconds' => 0.3]);
+    $mine = Cache::lock('pictures:decode:user:'.$this->session->user_id, 60);
+    expect($mine->get())->toBeTrue();
+    expect(fn () => ScreenStore::decoding(fn () => 'decoded', (int) $this->session->user_id))->toThrow(ApiError::class, 'busy');
+    // Another account takes the free slot, and frees it with its own lock after.
+    expect(ScreenStore::decoding(fn () => 'decoded', (int) $this->session->user_id + 1))->toBe('decoded')
+        ->and(Cache::lock('pictures:decode:0', 60)->get())->toBeTrue()
+        ->and(Cache::lock('pictures:decode:user:'.($this->session->user_id + 1), 60)->get())->toBeTrue();
+    // Through the API: 503, nothing kept.
+    $bytes = appScreen(orders());
+    $this->post("/api/sessions/{$this->session->id}/screens", [
+        'image' => UploadedFile::fake()->createWithContent('screen.webp', $bytes),
+        'at_ms' => 1000, 'width' => 1920, 'height' => 1080, 'trigger' => 'change', 'sha256' => hash('sha256', $bytes),
+    ], ['Accept' => 'application/json'])->assertStatus(503)->assertJsonPath('code', 'server_busy');
+    expect(Screen::query()->withoutGlobalScopes()->count())->toBe(0)->and(config('echoledger.picture_decodes.slots'))->toBe(2);
+});
+
+it('waits 4 seconds for a slot by default', function () {
+    expect((float) config('echoledger.picture_decodes.wait_seconds'))->toBe(4.0);
 });
 
 it('keeps at most 120 screens in any hour of a recording, on top of 400 in all', function () {
