@@ -15,7 +15,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use super::card::{self, Budget, Card, Snapshot, TurnBatch};
 use super::client::{AssistEvent, EndReason};
-use super::protocol::{Brief, ClientMessage, ContextUpdate, Settings};
+use super::protocol::{Brief, ClientMessage, ContextUpdate, Document, Settings};
 use super::session::{self, AssistStarted};
 use super::turns::TurnFeeder;
 use super::{Running, Taken};
@@ -207,7 +207,11 @@ pub fn first_context(prep: Option<&Prep>, mode: &str) -> ContextUpdate {
         language_help: prep.map(|p| p.language_help.clone()),
         assist: Some("on".into()),
     };
-    ContextUpdate { brief, settings: Some(settings), ..ContextUpdate::default() }
+    // The documents' extracted text (contract 1.9.0-m), the ones that have some.
+    let documents: Vec<Document> = prep
+        .map(|p| p.documents.iter().filter_map(|d| d.text.as_ref().filter(|t| !t.trim().is_empty()).map(|text| Document { id: d.file_id.clone(), title: d.name.clone(), text: text.clone() })).collect())
+        .unwrap_or_default();
+    ContextUpdate { brief, settings: Some(settings), documents: (!documents.is_empty()).then_some(documents), ..ContextUpdate::default() }
 }
 
 /// `assist_set`'s settings from the card.
@@ -738,6 +742,16 @@ mod tests {
         let first = serde_json::to_value(first_context(Some(&prep), "balanced")).unwrap();
         assert_eq!(first["brief"], json!({"meeting_type": "interview", "title": "Backend role", "counterpart": "Sara"}));
         assert_eq!(first["settings"], json!({"mode": "balanced", "hint_level": "full", "language_help": "urdu", "assist": "on"}));
+        assert!(first.get("documents").is_none(), "no documents: none sent");
+        let mut with_docs = prep.clone();
+        with_docs.documents = vec![
+            crate::net::models::PrepDocument { file_id: "f1".into(), name: "CV.pdf".into(), tokens: Some(2140), text: Some("Payments engineer, 6 years.".into()) },
+            crate::net::models::PrepDocument { file_id: "f2".into(), name: "Scan.png".into(), tokens: None, text: None },
+        ];
+        let sent = serde_json::to_value(first_context(Some(&with_docs), "balanced")).unwrap();
+        assert_eq!(sent["documents"], json!([{"id": "f1", "title": "CV.pdf", "text": "Payments engineer, 6 years."}]), "the extracted text goes to the relay (1.9.0-m)");
+        assert!(serde_json::to_value(&with_docs).unwrap()["documents"][0].get("text").is_none(), "and never to a window");
+        assert!(!format!("{:?}", with_docs.documents[0]).contains("Payments"), "nor to a log");
         let bare = serde_json::to_value(first_context(None, "fast")).unwrap();
         assert_eq!(bare, json!({"settings": {"mode": "fast", "assist": "on"}}), "Start now without a prep");
         let muted = settings_update(&CardSettings { muted_seconds: Some(60), ..CardSettings::default() }, true);

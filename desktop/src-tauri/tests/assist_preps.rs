@@ -63,6 +63,8 @@ async fn a_prep_is_created_or_updated_without_its_id_in_the_body() {
     assert_eq!(saved.id, PREP);
     assert_eq!(saved.not_done, "", "null text reads as empty");
     assert_eq!(saved.documents[0].tokens, Some(2140));
+    assert_eq!(saved.documents[0].text.as_deref(), Some("Payments engineer, six years at a bank."), "the single read carries the text (1.9.0-m)");
+    assert_eq!(saved.documents[1].text, None);
     let sent = body(&server, "POST", "/api/assist/preps");
     assert!(sent.get("id").is_none());
     assert_eq!(sent["meeting_type"], "interview");

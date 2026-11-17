@@ -1402,8 +1402,9 @@ fn text_or(value: String, default: &str) -> String {
     if value.is_empty() { default.to_string() } else { value }
 }
 
-/// A project file attached to a prep (the server extracts its text and counts its tokens).
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// A project file attached to a prep (the server extracts its text and counts its tokens). Its `text` comes only on
+/// the single read of a prep (contract 1.9.0-m) and goes to the relay, never to a window.
+#[derive(Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PrepDocument {
     #[serde(default, alias = "id", deserialize_with = "text")]
     pub file_id: String,
@@ -1411,6 +1412,15 @@ pub struct PrepDocument {
     pub name: String,
     #[serde(default, deserialize_with = "lenient")]
     pub tokens: Option<u64>,
+    #[serde(default, skip_serializing, deserialize_with = "lenient")]
+    pub text: Option<String>,
+}
+
+/// A document's words stay out of logs.
+impl std::fmt::Debug for PrepDocument {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrepDocument").field("file_id", &self.file_id).field("tokens", &self.tokens).finish_non_exhaustive()
+    }
 }
 
 /// A Live Assist prep (docs/API_ASSIST.md "Preps"), in the card's shape: every field present, `null` text as empty.

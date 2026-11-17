@@ -17,8 +17,8 @@
     "scheduled_at": "2026-12-01T10:00:00Z",
     "status": "draft",
     "documents": [
-      {"file_id": "01JBFILE000000000000000001", "name": "CV.pdf", "tokens": 2140},
-      {"file_id": "01JBFILE000000000000000002", "name": "Job description.docx", "tokens": null}
+      {"file_id": "01JBFILE000000000000000001", "name": "CV.pdf", "tokens": 2140, "text": "Payments engineer, six years at a bank."},
+      {"file_id": "01JBFILE000000000000000002", "name": "Job description.docx", "tokens": null, "text": null}
     ],
     "created_at": "2026-11-17T08:00:00Z"
   }
