@@ -1,7 +1,11 @@
 // The v2 recording page (ui_v2.library): title, the one player, the transcript with speakers, and the actions. The
 // data are today's: session_detail for the audio and speaker names, transcript_detail for the text.
-import { useEffect, useRef, useState } from "react";
-import { api, errorMessage, type LibraryItem, type TranscriptDetail } from "../../lib/ipc";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { api, errorMessage, type LibraryItem, type ScreenMoment, type TranscriptDetail } from "../../lib/ipc";
+import { confirmAction } from "../../lib/confirm";
+import { screenSaid, screensByLine } from "../../lib/screens";
+import { useSessionScreens } from "../../views/main/ScreenMoments";
+import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { formatDuration, formatWhen, sourceAppLabel, transcriptText } from "../../lib/format";
 import { activeIndex, speakerName } from "../../lib/player";
@@ -31,6 +35,8 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
   const [speed, setSpeed] = useState("1");
   const [busy, setBusy] = useState(false);
   const audio = useRef<HTMLAudioElement>(null);
+  const [screenOpen, setScreenOpen] = useState<number | null>(null);
+  const { screens, reload: reloadScreens } = useSessionScreens(item.id, item.screen_count);
   const state = itemState(item);
   const transcriptId = item.transcript?.final_transcript_id ?? item.transcript?.live_transcript_id ?? null;
 
@@ -69,6 +75,22 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
     : [];
   // The line being played is marked once playing has started, not on a page just opened.
   const active = transcript.state === "ready" && transcript.value && (playing || position > 0) ? activeIndex(transcript.value.segments, position * 1000) : -1;
+  // The screens at their moments: after the line that started at or before each one (the phone's rule).
+  const rawSegments = transcript.state === "ready" && transcript.value ? transcript.value.segments : null;
+  const screensAfter = useMemo(() => screensByLine(rawSegments ?? [], screens ?? []), [rawSegments, screens]);
+  const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
+  const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
+  const deleteScreen = async (screen: ScreenMoment) => {
+    if (!(await confirmAction({ title: `Delete screen ${screen.index}?`, body: "The recording and its transcript stay.", confirm: "Delete", tone: "danger" }))) return;
+    try {
+      await api.deleteScreen(item.id, screen.id);
+      setScreenOpen(null);
+      reloadScreens();
+      onMessage(`Screen ${screen.index} deleted`);
+    } catch (e) {
+      onMessage(errorMessage(e));
+    }
+  };
   const source = item.source_app_label ?? (item.source_app ? sourceAppLabel(item.source_app) : null);
   const meta = [source, item.client?.name, formatWhen(item.started_at)].filter(Boolean).join(" · ");
 
@@ -128,6 +150,7 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
           <Button variant="danger" icon={Icons.TrashIcon} disabled={busy} onClick={() => onDelete(item)}>Delete</Button>
         </div>
       </header>
+      {screens && screens.length > 0 && <ScreensStrip screens={screens} onOpen={setScreenOpen} />}
       <Card className="el-page__player">
         {detail.state === "loading" ? (
           <Loading label="Loading the audio"><Skeleton shape="block" /></Loading>
@@ -153,7 +176,8 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
             <EmptyState tone="error" icon={Icons.ErrorIcon} title="The transcript didn't load" body={transcript.message}
               action={<Button onClick={() => setAttempt((n) => n + 1)}>Try again</Button>} />
           ) : segments.length > 0 ? (
-            <Transcript label="Transcript" segments={segments} activeIndex={active >= 0 ? active : undefined} />
+            <Transcript label="Transcript" segments={segments} activeIndex={active >= 0 ? active : undefined}
+              after={(i) => { const at = screensAfter.get(i); return at ? <LineScreens screens={at} onOpen={openScreen} /> : null; }} />
           ) : state === "processing" && item.transcript?.final_status ? (
             <EmptyState icon={Icons.TranscriptIcon} title="Transcribing" body="The transcript appears here when it is ready. You can keep working meanwhile." />
           ) : state === "no_audio" ? (
@@ -175,6 +199,16 @@ export function RecordingPage({ item, onBack, onDelete, onMessage }: RecordingPa
           </dl>
         )}
       </Tabs>
+      {screenOpen !== null && screens?.[screenOpen] && (
+        <ScreenViewerV2 screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}
+          said={(s) => screenSaid(s, lines)}
+          onPlay={detail.state === "ready" && detail.value.url ? (s) => {
+            setScreenOpen(null);
+            seek(s.at_ms / 1000);
+            void audio.current?.play().catch(() => undefined);
+          } : undefined}
+          onDelete={(s) => void deleteScreen(s)} />
+      )}
     </div>
   );
 }

@@ -2,7 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
-import { makeItem, makeTranscript } from "../../test/fixtures";
+import { makeItem, makeScreen, makeTranscript } from "../../test/fixtures";
+import { answerConfirm } from "../../test/confirm";
+import { forgetPictures } from "../../lib/screens";
 import { BIN_HOURS, binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems } from "./model";
 import { LibraryV2 } from "./LibraryV2";
 
@@ -136,6 +138,103 @@ describe("LibraryV2", () => {
     await act(() => emitEvent("library:updated"));
     await act(flushAsync);
     expect(within(screen.getByRole("list", { name: "Recordings" })).getAllByRole("button")).toHaveLength(1);
+  });
+
+  describe("its screens (meeting assets)", () => {
+    const SCREENS = [
+      makeScreen(1, 4_000, { description: "The proforma invoice", ocr_text: "PROFORMA 40,000 m", file_name: "S01_0-04_the-proforma-invoice.webp", said: "Me: Here is the proforma.\nBilal Qureshi: Forty thousand metres." }),
+      makeScreen(2, 7_000, { description: "The bank's LC form" }),
+      makeScreen(3, 60_000),
+    ];
+    const open = async () => {
+      forgetPictures();
+      respond("session_detail", { playback_url: "https://ledger.example.com/a.m4a", speaker_names: { Client: "Bilal Qureshi" } });
+      respond("transcript_detail", makeTranscript({
+        id: "tr-bilal",
+        segments: [
+          { channel: 1, speaker: "Me", start_ms: 0, end_ms: 5000, text: "Assalam o alaikum, Bilal sahib." },
+          { channel: 2, speaker: "Client", start_ms: 6000, end_ms: 9000, text: "Walaikum assalam. The fabric is ready." },
+        ],
+      }));
+      respond("session_screens", { data: SCREENS });
+      respondWith("screen_image", ({ url }) => `data:image/webp;base64,${btoa(String(url))}`);
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" }));
+      await act(flushAsync);
+    };
+
+    it("a Screens strip under the title, and each screen after the line of its moment", async () => {
+      await open();
+      expect(callsOf("session_screens")).toEqual([{ id: "bilal" }]);
+      const strip = screen.getByRole("region", { name: "3 screens" });
+      expect(within(strip).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual([
+        "Screen 1 · 0:04: The proforma invoice", "Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00",
+      ]);
+      const lines = within(screen.getByRole("list", { name: "Transcript" })).getAllByRole("listitem").filter((li) => li.classList.contains("el-segment"));
+      expect(within(lines[0]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 1 · 0:04: The proforma invoice"]);
+      expect(within(lines[1]).getAllByRole("button").map((b) => b.getAttribute("aria-label"))).toEqual(["Screen 2 · 0:07: The bank's LC form", "Screen 3 · 1:00"]);
+    });
+
+    it("the viewer: what was said around it, the text on it, its file name, the next one, Play from here", async () => {
+      await open();
+      fireEvent.click(within(screen.getByRole("region", { name: "3 screens" })).getByRole("button", { name: /^Screen 1/ }));
+      await act(flushAsync);
+      const viewer = screen.getByRole("dialog", { name: "Screen 1 · 0:04" });
+      expect(viewer).toHaveAccessibleDescription("The proforma invoice");
+      expect(within(viewer).getByRole("img", { name: "The proforma invoice" })).toBeInTheDocument();
+      const said = within(viewer).getByRole("region", { name: "What was said" });
+      expect(said).toHaveTextContent("Me: Here is the proforma.");
+      expect(said).toHaveTextContent("Bilal Qureshi: Forty thousand metres.");
+      expect(within(viewer).getByText("PROFORMA 40,000 m")).toBeInTheDocument();
+      expect(viewer).toHaveTextContent("S01_0-04_the-proforma-invoice.webp");
+      expect(within(viewer).getByRole("button", { name: "Previous screen" })).toBeDisabled();
+
+      // A server without `said` yet: worked out from the transcript (within 15 s), with the speakers' names.
+      fireEvent.click(within(viewer).getByRole("button", { name: "Next screen" }));
+      const second = screen.getByRole("dialog", { name: "Screen 2 · 0:07" });
+      expect(within(second).getByRole("region", { name: "What was said" })).toHaveTextContent("Me: Assalam o alaikum, Bilal sahib.Bilal Qureshi: Walaikum assalam. The fabric is ready.");
+      expect(second).toHaveTextContent("S02_0-07_the-bank-s-lc-form.webp");
+      fireEvent.keyDown(within(second).getByRole("region", { name: "What was said" }), { key: "ArrowRight" });
+      const third = screen.getByRole("dialog", { name: "Screen 3 · 1:00" });
+      expect(within(third).getByRole("region", { name: "What was said" })).toHaveTextContent("Nothing was said within 15 seconds of this screen.");
+
+      const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+      fireEvent.click(within(third).getByRole("button", { name: "Play from here" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(play).toHaveBeenCalled();
+      expect(screen.getByRole("slider")).toHaveValue("60");
+      play.mockRestore();
+    });
+
+    it("Delete screen asks first, then reads the screens again", async () => {
+      await open();
+      respond("screen_delete", null);
+      fireEvent.click(within(screen.getByRole("region", { name: "3 screens" })).getByRole("button", { name: /^Screen 2/ }));
+      const asked = answerConfirm();
+      asked.mockReturnValue(false);
+      fireEvent.click(screen.getByRole("button", { name: "Delete screen" }));
+      await act(flushAsync);
+      expect(asked).toHaveBeenCalledWith("Delete screen 2? The recording and its transcript stay.");
+      expect(callsOf("screen_delete")).toHaveLength(0);
+      asked.mockReturnValue(true);
+      respond("session_screens", { data: [SCREENS[0], SCREENS[2]] });
+      fireEvent.click(screen.getByRole("button", { name: "Delete screen" }));
+      await act(flushAsync);
+      expect(callsOf("screen_delete")).toEqual([{ sessionId: "bilal", screen: "sc2" }]);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(screen.getByRole("region", { name: "2 screens" })).toBeInTheDocument();
+      expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Screen 2 deleted");
+    });
+
+    it("a recording without screens has no strip and doesn't ask for them", async () => {
+      respond("session_detail", { playback_url: null });
+      respond("transcript_detail", makeTranscript({ id: "tr-1" }));
+      await show();
+      fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
+      await act(flushAsync);
+      expect(callsOf("session_screens")).toHaveLength(0);
+      expect(screen.queryByRole("region", { name: /screens?$/ })).toBeNull();
+    });
   });
 
   it("opens a recording: the player, the transcript with speakers, and back", async () => {

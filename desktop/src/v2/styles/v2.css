@@ -766,3 +766,42 @@ button.el-step__head { cursor: pointer; }
 /* Meeting assets (v1.8 P4.3): the screens mark on a row. */
 .el-row__mark { flex: none; display: inline-flex; }
 .el-screens-mark { display: inline-flex; align-items: center; gap: var(--el-space-2); color: var(--el-role-text-secondary); }
+
+/* Meeting assets: thumbnails, the Screens strip under a recording's title, the screens in the transcript, the viewer. */
+.el-screen-thumb {
+  display: grid; gap: var(--el-space-4);
+  inline-size: calc(var(--el-space-64) * 2.5);
+  padding: 0; border: 0; background: transparent; color: inherit; font: inherit; text-align: start;
+  cursor: zoom-in; border-radius: var(--el-radius-sm);
+}
+.el-screen-thumb__picture {
+  position: relative; display: grid; place-items: center;
+  inline-size: 100%; aspect-ratio: 16 / 9; overflow: hidden;
+  border: var(--el-border-hairline) solid var(--el-role-border-default); border-radius: var(--el-radius-sm);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-secondary);
+}
+.el-screen-thumb__picture img { inline-size: 100%; block-size: 100%; object-fit: cover; display: block; }
+.el-screen-thumb__wait { position: absolute; inset: 0; block-size: auto; }
+.el-screen-thumb:hover .el-screen-thumb__picture { border-color: var(--el-role-border-strong); }
+.el-screen-thumb__label { color: var(--el-role-text-secondary); font-variant-numeric: tabular-nums; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.el-screens-strip { display: grid; gap: var(--el-space-4); margin-block-end: var(--el-space-16); min-inline-size: 0; }
+.el-screens-strip__title { margin: 0; font-size: var(--el-text-body-size); }
+.el-screens-strip__list {
+  display: flex; gap: var(--el-space-12); margin: 0; padding: var(--el-space-4); list-style: none;
+  overflow-x: auto; overscroll-behavior-inline: contain; scroll-snap-type: inline proximity;
+}
+.el-screens-strip__list > li { flex: none; scroll-snap-align: start; }
+.el-line-screens { grid-column: 2; display: flex; flex-wrap: wrap; gap: var(--el-space-12); margin: var(--el-space-8) 0 0; padding: 0; list-style: none; }
+.el-dialog--wide { inline-size: min(100%, calc(var(--el-space-64) * 15)); }
+.el-screen-viewer { display: grid; gap: var(--el-space-12); }
+.el-screen-viewer__stage { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: var(--el-space-8); }
+.el-screen-viewer__picture {
+  display: grid; place-items: center;
+  background: var(--el-role-bg-subtle); border-radius: var(--el-radius-md); overflow: hidden;
+}
+.el-screen-viewer__picture img { max-inline-size: 100%; max-block-size: calc(var(--el-space-64) * 8); inline-size: auto; block-size: auto; display: block; }
+.el-screen-viewer__wait { inline-size: 100%; block-size: calc(var(--el-space-64) * 4); }
+.el-screen-viewer__said { display: grid; gap: var(--el-space-4); }
+.el-said { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--el-space-4); }
+.el-screen-viewer__text summary { cursor: pointer; color: var(--el-role-text-secondary); }
+.el-screen-viewer__text p { margin-block-start: var(--el-space-8); white-space: pre-wrap; overflow-wrap: anywhere; }
