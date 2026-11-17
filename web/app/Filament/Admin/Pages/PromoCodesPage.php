@@ -77,7 +77,9 @@ class PromoCodesPage extends Page implements HasTable
             Action::make('create')->label('New promo code')->icon(Heroicon::OutlinedPlus)
                 ->authorize(fn (): bool => StaffAccess::can('plans.manage'))
                 ->schema(fn (): array => self::form(true))
-                ->fillForm(['percent' => 50, 'one_per_person' => true, 'months' => 1, 'active' => true])
+                // The Plan select shows its first option, so the form starts on it too: an untouched select saved null
+                // ("The plan field is required") while the browser showed a plan.
+                ->fillForm(fn (): array => ['plan' => array_key_first(self::offeredPlans()), 'percent' => 50, 'one_per_person' => true, 'months' => 1, 'active' => true])
                 ->action(function (array $data): void {
                     $promo = PromoCode::query()->create([...self::values($data), 'code' => PromoCode::normalize((string) $data['code']), 'created_by' => auth()->id()]);
                     app(AuditLog::class)->record('promo_code_created', (int) auth()->id(), $promo, "Promo code {$promo->code}: {$promo->percent} % off {$promo->plan}");
@@ -159,8 +161,7 @@ class PromoCodesPage extends Page implements HasTable
                         }
                     }),
                 Select::make('plan')->label('Plan')->required()->selectablePlaceholder(false)
-                    ->options(fn (): array => Plan::query()->where('on_offer', true)->whereNull('archived_at')->where('key', '!=', Plan::FREE)
-                        ->orderBy('sort_order')->orderBy('id')->pluck('name', 'key')->all()),
+                    ->options(fn (): array => self::offeredPlans()),
                 TextInput::make('percent')->label('Discount (%)')->required()->integer()->minValue(1)->maxValue(100)
                     ->helperText('100 % switches the plan on at once.'),
                 TextInput::make('months')->label('Months the plan lasts')->required()->integer()->minValue(1)->maxValue(36),
@@ -189,5 +190,16 @@ class PromoCodesPage extends Page implements HasTable
             'active' => (bool) ($data['active'] ?? true),
             'note' => filled($data['note'] ?? null) ? trim((string) $data['note']) : null,
         ];
+    }
+
+    /**
+     * The paid plans a code can be for, in the order the select shows them.
+     *
+     * @return array<string, string> key => name
+     */
+    private static function offeredPlans(): array
+    {
+        return Plan::query()->where('on_offer', true)->whereNull('archived_at')->where('key', '!=', Plan::FREE)
+            ->orderBy('sort_order')->orderBy('id')->pluck('name', 'key')->all();
     }
 }
