@@ -257,6 +257,14 @@ pub struct Budget {
 }
 
 impl Budget {
+    /// What a token refresh says is left now: counted from `now` on (the total stays unless it says one).
+    pub fn renewed(&self, plan: &crate::net::models::AssistPlanDto, now: Instant) -> Budget {
+        match plan.seconds_left {
+            Some(left) => Budget { left_at_start: Some(left), total: plan.seconds_total.or(self.total), started: now },
+            None => *self,
+        }
+    }
+
     pub fn message(&self, now: Instant) -> Value {
         let spent = now.duration_since(self.started).as_secs();
         budget_message(self.left_at_start.map(|left| left.saturating_sub(spent)), self.total)
@@ -300,6 +308,13 @@ mod tests {
         let budget = Budget { left_at_start: Some(100), total: Some(36_000), started };
         assert_eq!(budget.message(started + Duration::from_secs(30))["seconds_left"], 70);
         assert_eq!(budget.message(started + Duration::from_secs(300))["seconds_left"], 0, "never below zero");
+        // A token refresh says what is left now.
+        let later = started + Duration::from_secs(600);
+        let plan = crate::net::models::AssistPlanDto { modes: vec![], seconds_left: Some(5_000), seconds_total: None };
+        let renewed = budget.renewed(&plan, later);
+        assert_eq!(renewed.message(later + Duration::from_secs(10)), json!({"type": "budget", "seconds_left": 4990, "seconds_total": 36000}));
+        let silent = crate::net::models::AssistPlanDto { modes: vec![], seconds_left: None, seconds_total: None };
+        assert_eq!(budget.renewed(&silent, later).message(later)["seconds_left"], 0, "a refresh without a plan changes nothing");
     }
 
     #[test]

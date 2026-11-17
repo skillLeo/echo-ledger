@@ -55,6 +55,13 @@ async fn a_session_starts_refreshes_its_tokens_and_ends() {
     assert!(!format!("{:?}", answer.relay).contains("relay-token-1"), "the token is never printed");
     let refreshed = api.assist_token(ID).await.unwrap();
     assert_eq!(refreshed.relay.token, "relay-token-2");
+    // The connection's refresh hands the plan on: the card's time left counts from there.
+    let heard: Arc<std::sync::Mutex<Vec<Option<u64>>>> = Arc::default();
+    let log = heard.clone();
+    let refresh = session::refresh(Arc::new(client(&server)), ID.into(), vec!["sha256/AAAA".into()], Arc::new(move |plan| log.lock().unwrap().push(plan.seconds_left)));
+    let next = refresh().await.unwrap();
+    assert_eq!((next.token.as_str(), next.pins.len()), ("relay-token-2", 1));
+    assert_eq!(*heard.lock().unwrap(), [Some(30_600)]);
     api.assist_end(ID).await.unwrap();
     assert_eq!(server.requests_to("POST", &format!("/api/assist/sessions/{ID}/end")).len(), 1);
 }
@@ -88,7 +95,7 @@ async fn refusals_read_in_plain_words() {
 async fn nothing_reaches_the_server_while_live_assist_is_off() {
     let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(201, fixture("assist_session_start.json"))));
     let off = UiFlags::read(Some(&json!({"live_assist": false})), false);
-    let refused = session::start(Arc::new(client(&server)), &off, vec![], request(), |_| {}).await.unwrap_err();
+    let refused = session::start(Arc::new(client(&server)), &off, vec![], request(), Arc::new(|_| {}), |_| {}).await.unwrap_err();
     assert_eq!(refused.to_string(), "Live Assist isn't on for you yet.");
     assert!(server.requests_to("POST", "/api/assist/sessions").is_empty());
 }
@@ -100,7 +107,7 @@ async fn a_started_session_connects_to_the_relay_it_was_given() {
     let on = UiFlags::read(Some(&json!({"live_assist": true})), false);
     let events: Arc<std::sync::Mutex<Vec<AssistEvent>>> = Arc::default();
     let sink = events.clone();
-    let (answer, _handle) = session::start(Arc::new(client(&server)), &on, vec![], request(), move |event| sink.lock().unwrap().push(event)).await.unwrap();
+    let (answer, _handle) = session::start(Arc::new(client(&server)), &on, vec![], request(), Arc::new(|_| {}), move |event| sink.lock().unwrap().push(event)).await.unwrap();
     assert_eq!(answer.session.id, ID);
     for _ in 0..200 {
         if !events.lock().unwrap().is_empty() {

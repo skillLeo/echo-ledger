@@ -304,7 +304,21 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
     // What the relay says before the session is in the registry (its `ready` can be that quick) waits here.
     let early: Arc<std::sync::Mutex<Early>> = Arc::default();
     let (events, events_app, meeting) = (early.clone(), app.clone(), meeting_type.clone());
-    let (answer, handle) = session::start(api, &flags, pins, request, move |event| {
+    // A token refresh's plan: the time left counts from there.
+    let plan_app = app.clone();
+    let on_plan: session::OnPlan = Arc::new(move |plan| {
+        let state = plan_app.state::<crate::AppState>();
+        let message = state.assist.with_current(|r| {
+            r.budget = r.budget.renewed(&plan, Instant::now());
+            let message = r.budget.message(Instant::now());
+            r.card.record(&message);
+            message
+        });
+        if let Some(message) = message {
+            emit(&plan_app, &message);
+        }
+    });
+    let (answer, handle) = session::start(api, &flags, pins, request, on_plan, move |event| {
         let mut early = events.lock().unwrap_or_else(|p| p.into_inner());
         match early.id.clone() {
             Some(id) => on_event(&events_app, &id, meeting.as_deref(), event),

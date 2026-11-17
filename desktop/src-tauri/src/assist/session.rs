@@ -66,25 +66,40 @@ pub fn end_sentence(reason: &EndReason) -> Option<&'static str> {
     }
 }
 
+/// Hears the assist time left that a token refresh brings.
+pub type OnPlan = Arc<dyn Fn(crate::net::models::AssistPlanDto) + Send + Sync>;
+
+/// The relay connection's token refresh for session `id`: `POST …/token`, its relay grant pinned with `pins`; the plan
+/// it may carry goes to `on_plan`.
+pub fn refresh(api: Arc<crate::net::api::ApiClient>, id: String, pins: Vec<String>, on_plan: OnPlan) -> super::client::Refresh {
+    Arc::new(move || {
+        let (api, id, pins, on_plan) = (api.clone(), id.clone(), pins.clone(), on_plan.clone());
+        Box::pin(async move {
+            let answer = api.assist_token(&id).await.map_err(|e| e.to_string())?;
+            if let Some(plan) = answer.plan.clone() {
+                on_plan(plan);
+            }
+            Ok(grant(&answer.relay, &pins))
+        })
+    })
+}
+
 /// Starts a session: the server first, then the relay, only while `live_assist` is on. What the relay connection
-/// hears goes to `on_event`; the answer comes back for the plan and the session's settings.
+/// hears goes to `on_event`, the plan each token refresh brings to `on_plan`; the answer comes back for the plan and
+/// the session's settings.
 pub async fn start(
     api: Arc<crate::net::api::ApiClient>,
     flags: &crate::ui_flags::UiFlags,
     pins: Vec<String>,
     request: crate::net::models::AssistStartRequest,
+    on_plan: OnPlan,
     on_event: impl Fn(AssistEvent) + Send + Sync + 'static,
 ) -> crate::error::AppResult<(AssistStartAnswer, super::client::AssistHandle)> {
     if !super::enabled(flags) {
         return Err(crate::error::AppError::msg("Live Assist isn't on for you yet."));
     }
     let answer = api.assist_start(&request).await?;
-    let session_id = answer.session.id.clone();
-    let refresh_pins = pins.clone();
-    let refresh: super::client::Refresh = Arc::new(move || {
-        let (api, id, pins) = (api.clone(), session_id.clone(), refresh_pins.clone());
-        Box::pin(async move { api.assist_token(&id).await.map(|t| grant(&t.relay, &pins)).map_err(|e| e.to_string()) })
-    });
+    let refresh = refresh(api, answer.session.id.clone(), pins.clone(), on_plan);
     let handle = super::client::spawn(grant(&answer.relay, &pins), refresh, super::client::Policy::default(), on_event);
     Ok((answer, handle))
 }

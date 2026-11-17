@@ -1385,6 +1385,9 @@ pub struct AssistTokenAnswer {
     pub relay: AssistRelayDto,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
+    /// The assist time left now, when the server says.
+    #[serde(default, deserialize_with = "lenient")]
+    pub plan: Option<AssistPlanDto>,
 }
 
 /// A text field that may come as `null`: read as empty.
