@@ -13,13 +13,19 @@ type Block =
   | { kind: "code"; text: string };
 
 const LIST = /^\s*(?:[-*+]|(\d+)[.)])\s+(.*)$/;
-const cells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+/** A table's cells: at most MAX_CELLS of a row (the rest are dropped). */
+const cells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|", MAX_CELLS).map((c) => c.trim());
 
 /** At most this many lines of a guide are read, and this many blocks made. */
 export const MAX_LINES = 5000;
 export const MAX_BLOCKS = 5000;
 /** And at most this many characters. */
 export const MAX_CHARS = 400_000;
+/** A table keeps at most this many cells a row and rows (the rest of its rows are read past, not shown). */
+export const MAX_CELLS = 20;
+export const MAX_ROWS = 200;
+/** Bold, code and link marks are read only in text up to this long; longer text shows as it is written. */
+export const MAX_INLINE = 2000;
 
 /** The blocks of a Markdown text, in order. */
 export function blocks(markdown: string): Block[] {
@@ -43,7 +49,10 @@ export function blocks(markdown: string): Block[] {
       const head = cells(line);
       const rows: string[][] = [];
       i += 2;
-      while (i < lines.length && lines[i].trim().startsWith("|")) rows.push(cells(lines[i++]));
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        const row = lines[i++];
+        if (rows.length < MAX_ROWS) rows.push(cells(row));
+      }
       out.push({ kind: "table", head, rows });
       continue;
     }
@@ -83,6 +92,7 @@ export function blocks(markdown: string): Block[] {
 
 /** Bold, code and links' words inside a line. */
 export function inline(text: string): ReactNode[] {
+  if (text.length > MAX_INLINE) return [text];
   const out: ReactNode[] = [];
   // Each mark spans a bounded stretch, so a line full of unmatched "**" or "[" stays linear.
   const pattern = /\*\*([^*\n]{1,300})\*\*|`([^`\n]{1,300})`|\[([^\]\n]{1,300})\]\((?:[^()\s]|\([^()\s]{0,100}\)){0,500}\)/g;

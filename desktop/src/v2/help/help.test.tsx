@@ -4,7 +4,7 @@ import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from 
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import MainApp from "../../views/main/MainApp";
 import { HelpV2, MESSAGE_MAX, helpError, stripTitle } from "./HelpV2";
-import { MAX_BLOCKS, MAX_LINES, Markdown, blocks, inline } from "./markdown";
+import { MAX_BLOCKS, MAX_CELLS, MAX_INLINE, MAX_LINES, MAX_ROWS, Markdown, blocks, inline } from "./markdown";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -87,6 +87,20 @@ describe("the guide's Markdown", () => {
     const t = performance.now();
     inline(marks);
     expect(performance.now() - t).toBeLessThan(2000);
+  });
+
+  it("a table keeps at most 20 cells a row and 200 rows; marks are read only in text up to 2,000 characters", () => {
+    const wide = `| ${Array.from({ length: 500 }, (_, i) => `h${i}`).join(" | ")} |\n|---|---|\n| ${Array.from({ length: 500 }, (_, i) => `c${i}`).join(" | ")} |`;
+    const table = blocks(wide)[0] as { kind: "table"; head: string[]; rows: string[][] };
+    expect(table.head).toHaveLength(MAX_CELLS);
+    expect(table.rows[0]).toHaveLength(MAX_CELLS);
+    const tall = `| a | b |\n|---|---|\n${"| x | y |\n".repeat(1_000)}After the table.`;
+    const out = blocks(tall);
+    expect((out[0] as { rows: string[][] }).rows).toHaveLength(MAX_ROWS);
+    expect(out[1]).toEqual({ kind: "paragraph", text: "After the table." });
+    expect(inline("**bold**")).not.toEqual(["**bold**"]);
+    const long = `**bold** ${"word ".repeat(MAX_INLINE / 5)}`;
+    expect(inline(long)).toEqual([long]);
   });
 
   it("no link is clickable, whatever its target: a javascript: link shows its words only", () => {
