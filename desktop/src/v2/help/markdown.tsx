@@ -1,5 +1,7 @@
 // The user guide's Markdown as React elements, never as HTML: headings, paragraphs, lists, tables, quotes, bold and
-// code. A link shows its words only (the in-app guide has no links to follow). Anything else reads as plain text.
+// code. A link shows its words only (the in-app guide has no links to follow, so no target is ever clickable). Anything
+// else reads as plain text. The text comes from the server, so the parser is bounded: every step consumes at least one
+// line, and at most MAX_LINES lines and MAX_BLOCKS blocks are read.
 import type { ReactNode } from "react";
 
 type Block =
@@ -13,12 +15,18 @@ type Block =
 const LIST = /^\s*(?:[-*+]|(\d+)[.)])\s+(.*)$/;
 const cells = (line: string) => line.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
 
+/** At most this many lines of a guide are read, and this many blocks made. */
+export const MAX_LINES = 5000;
+export const MAX_BLOCKS = 5000;
+/** And at most this many characters. */
+export const MAX_CHARS = 400_000;
+
 /** The blocks of a Markdown text, in order. */
 export function blocks(markdown: string): Block[] {
-  const lines = markdown.replace(/\r\n?/g, "\n").split("\n");
+  const lines = markdown.slice(0, MAX_CHARS).replace(/\r\n?/g, "\n").split("\n", MAX_LINES);
   const out: Block[] = [];
   let i = 0;
-  while (i < lines.length) {
+  while (i < lines.length && out.length < MAX_BLOCKS) {
     const line = lines[i];
     if (!line.trim()) { i++; continue; }
     if (line.trim().startsWith("```")) {
@@ -48,7 +56,9 @@ export function blocks(markdown: string): Block[] {
     const item = LIST.exec(line);
     if (item) {
       const ordered = item[1] !== undefined;
-      const items: string[] = [];
+      // The first item is always taken, whatever its indent, so the list moves past its own line.
+      const items: string[] = [item[2]];
+      i++;
       while (i < lines.length) {
         const m = LIST.exec(lines[i]);
         if (m && (m[1] !== undefined) === ordered && !/^\s{2,}/.test(lines[i])) { items.push(m[2]); i++; continue; }
@@ -59,7 +69,10 @@ export function blocks(markdown: string): Block[] {
       out.push({ kind: "list", ordered, items });
       continue;
     }
-    const body: string[] = [];
+    // A paragraph: this line whatever it looks like (a "|" without a table, "#nospace"), then the lines that follow
+    // until a line that starts another block.
+    const body: string[] = [line.trim()];
+    i++;
     while (i < lines.length && lines[i].trim() && !/^(#{1,6})\s/.test(lines[i]) && !LIST.exec(lines[i]) && !lines[i].trim().startsWith("|") && !lines[i].trim().startsWith(">")) {
       body.push(lines[i++].trim());
     }
@@ -71,7 +84,8 @@ export function blocks(markdown: string): Block[] {
 /** Bold, code and links' words inside a line. */
 export function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const pattern = /\*\*(.+?)\*\*|`([^`]+)`|\[([^\]]+)\]\([^)]*\)/g;
+  // Each mark spans a bounded stretch, so a line full of unmatched "**" or "[" stays linear.
+  const pattern = /\*\*([^*\n]{1,300})\*\*|`([^`\n]{1,300})`|\[([^\]\n]{1,300})\]\((?:[^()\s]|\([^()\s]{0,100}\)){0,500}\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   while ((m = pattern.exec(text))) {

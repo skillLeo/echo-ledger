@@ -4,7 +4,7 @@ import { callsOf, fail, flushAsync, resetTauriMock, respond, respondWith } from 
 import { makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import MainApp from "../../views/main/MainApp";
 import { HelpV2, MESSAGE_MAX, helpError, stripTitle } from "./HelpV2";
-import { Markdown, blocks } from "./markdown";
+import { MAX_BLOCKS, MAX_LINES, Markdown, blocks, inline } from "./markdown";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -61,6 +61,39 @@ describe("the guide's Markdown", () => {
   it("an app whose core has no help commands yet says so in words", () => {
     expect(helpError("command help_guides not found")).toBe("Help isn't available in this version of the app yet. Update EchoLedger to use it.");
     expect(helpError("The server is out of reach.")).toBe("The server is out of reach.");
+  });
+
+  it("every odd line shape ends: each step reads at least one line", () => {
+    const odd = ["|", "| not a table", "|a|b|", ">", "> ", "#nospace", "####### seven", "   - indented item", "  1. indented number", "-", "1.", "```", "```\nnever closed",
+      "- a\n   - nested\n  - more", "| a |\n| b |", "#", "##", "*", "+ x", "1) y", "\t- tab", "> q\n|t"];
+    for (const text of odd) {
+      const started = performance.now();
+      const out = blocks(text);
+      expect(performance.now() - started, JSON.stringify(text)).toBeLessThan(200);
+      expect(out.length, JSON.stringify(text)).toBeLessThanOrEqual(text.split("\n").length);
+    }
+    expect(blocks("| not a table\nnext line")).toEqual([{ kind: "paragraph", text: "| not a table next line" }]);
+    expect(blocks("   - indented item")).toEqual([{ kind: "list", ordered: false, items: ["indented item"] }]);
+  });
+
+  it("a 100,000-line guide stays bounded in lines, blocks and time", () => {
+    const lines = Array.from({ length: 100_000 }, (_, i) => ["|", "- x", "# h", "text", "", "> q", "1. y"][i % 7]).join("\n");
+    const started = performance.now();
+    const out = blocks(lines);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(out.length).toBeLessThanOrEqual(MAX_BLOCKS);
+    expect(out.length).toBeLessThanOrEqual(MAX_LINES);
+    const marks = "**a ".repeat(50_000) + "[b ".repeat(50_000);
+    const t = performance.now();
+    inline(marks);
+    expect(performance.now() - t).toBeLessThan(2000);
+  });
+
+  it("no link is clickable, whatever its target: a javascript: link shows its words only", () => {
+    render(<Markdown text={"Open [this](javascript:alert(1)) or [that](https://example.com) or [x](data:text/html,hi)."} />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(document.querySelector("a, [href], [onclick]")).toBeNull();
+    expect(screen.getByText("Open this or that or x.")).toBeInTheDocument();
   });
 
   it("drops the section's own heading line when it repeats the title", () => {
