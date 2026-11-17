@@ -123,7 +123,6 @@ fun NotificationsPage(
                 onCheckedChange = { on -> update { it.copy(quietHours = on) } },
                 label = stringResource(R.string.v2_set_item_notifications_quiet),
                 supporting = stringResource(R.string.v2_set_quiet_help, settings.quietFrom, settings.quietTo),
-                enabled = settings.activityNotifications,
                 modifier = Modifier.highlightedIf(highlight == "notifications.quiet")
             )
             if (settings.quietHours) QuietHours(settings, update)
@@ -133,7 +132,10 @@ fun NotificationsPage(
     }
 }
 
-/** From and To of quiet hours, as 24-hour times; a time is saved once it reads as one. */
+/**
+ * From and To of quiet hours, as 24-hour times; a time is saved once it reads as one. Four digits get their ":" here
+ * ([quietTime]), so a keyboard without one still works.
+ */
 @Composable
 private fun QuietHours(settings: AppSettings, update: ((AppSettings) -> AppSettings) -> Unit) {
     var from by remember(settings.quietFrom) { mutableStateOf(settings.quietFrom) }
@@ -146,23 +148,23 @@ private fun QuietHours(settings: AppSettings, update: ((AppSettings) -> AppSetti
         EchoTextField(
             from,
             {
-                from = it.take(HHMM)
+                from = quietTime(it)
                 if (Activity.parseHhmm(from) != null) update { s -> s.copy(quietFrom = from) }
             },
             label = stringResource(R.string.v2_ntf_quiet_from),
             error = bad.takeIf { Activity.parseHhmm(from) == null },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             modifier = Modifier.weight(1f)
         )
         EchoTextField(
             to,
             {
-                to = it.take(HHMM)
+                to = quietTime(it)
                 if (Activity.parseHhmm(to) != null) update { s -> s.copy(quietTo = to) }
             },
             label = stringResource(R.string.v2_ntf_quiet_to),
             error = bad.takeIf { Activity.parseHhmm(to) == null },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Ascii),
             modifier = Modifier.weight(1f)
         )
     }
@@ -170,6 +172,12 @@ private fun QuietHours(settings: AppSettings, update: ((AppSettings) -> AppSetti
 
 /** "22:00". */
 private const val HHMM = 5
+
+/** What was typed in a quiet-hours time: "2230" reads as "22:30"; anything else as typed, at most five characters. */
+internal fun quietTime(typed: String): String {
+    val t = typed.trim()
+    return if (t.length == 4 && t.all(Char::isDigit)) t.substring(0, 2) + ":" + t.substring(2) else t.take(HHMM)
+}
 
 /** A kind of notification's name and line, in the screen's language. */
 private fun kindWords(category: NotifyCategory): Pair<Int, Int> = when (category) {

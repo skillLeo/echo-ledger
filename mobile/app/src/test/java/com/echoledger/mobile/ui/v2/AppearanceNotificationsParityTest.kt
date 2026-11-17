@@ -7,13 +7,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
+import androidx.compose.ui.test.performTextReplacement
 import com.echoledger.mobile.core.NotifyCategory
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.testsupport.ScreenTest
@@ -22,6 +25,7 @@ import com.echoledger.mobile.ui.SettingsScreen
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.settings.AppearancePage
 import com.echoledger.mobile.ui.v2.settings.NotificationsPage
+import com.echoledger.mobile.ui.v2.settings.quietTime
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -135,6 +139,8 @@ class AppearanceNotificationsParityTest : ScreenTest() {
         }
     }
 
+    private enum class NotifyStep { Open, Changed, NotificationsOff, ResetAsked, ResetDone }
+
     @Test
     fun notifications() {
         val d = AppSettings()
@@ -159,20 +165,28 @@ class AppearanceNotificationsParityTest : ScreenTest() {
                 NotificationsPage(settings, vm::updateSettings, highlight = null, onBack = {})
             }
         )
-        val run = { step: Step ->
+        val run = { step: NotifyStep ->
             when (step) {
-                Step.Open -> Unit
+                NotifyStep.Open -> Unit
 
                 // Quiet hours on (its From and To appear) and a kind of notification off.
-                Step.Changed -> {
+                NotifyStep.Changed -> {
                     toggle("Quiet hours")
                     toggle("Uploads")
                     pumpUntil("changed") { vm.settings.value.quietHours && "uploads" in vm.settings.value.notifyOff }
                 }
 
-                Step.ResetAsked -> press("Reset to defaults")
+                // Notifications off: quiet hours and the kinds stay on the page, and quiet hours can still be switched.
+                NotifyStep.NotificationsOff -> {
+                    toggle("Show notifications", "Activity notifications")
+                    pumpUntil("off") { !vm.settings.value.activityNotifications }
+                    toggle("Quiet hours")
+                    pumpUntil("quiet hours off") { !vm.settings.value.quietHours }
+                }
 
-                Step.ResetDone -> {
+                NotifyStep.ResetAsked -> press("Reset to defaults")
+
+                NotifyStep.ResetDone -> {
                     press("Reset")
                     pumpUntil("reset") { start(vm.settings.value) }
                 }
@@ -191,6 +205,24 @@ class AppearanceNotificationsParityTest : ScreenTest() {
                 put("button: Sound and vibration for ${c.title}", "button: Sound and vibration for ${c.title}")
             }
         }
-        compare(Step.entries, run, where, search) { defaults(start, toDefaults) }
+        compare(NotifyStep.entries, run, where, search) { defaults(start, toDefaults) }
+    }
+
+    @Test
+    fun aTimeTypedWithOrWithoutItsColonIsSaved() {
+        vm.updateSettings { it.copy(quietHours = true) }
+        pumpUntil("quiet hours") { vm.settings.value.quietHours }
+        page = 1
+        showBoth(today = {}, v2 = {
+            val settings by vm.settings.collectAsState()
+            NotificationsPage(settings, vm::updateSettings, highlight = null, onBack = {})
+        })
+        // A number keyboard has no ":": four digits are read as a time.
+        compose.onNode(hasSetTextAction() and hasText("From")).performTextReplacement("2230")
+        pumpUntil("from") { vm.settings.value.quietFrom == "22:30" }
+        compose.onNode(hasSetTextAction() and hasText("To")).performTextReplacement("06:45")
+        pumpUntil("to") { vm.settings.value.quietTo == "06:45" }
+        compose.onNode(hasSetTextAction() and hasText("From")).assertTextContains("22:30")
+        assertEquals(listOf("22:30", "07:5", "07:00", "12:34"), listOf("2230", "07:5", " 07:00 ", "12:345").map(::quietTime))
     }
 }
