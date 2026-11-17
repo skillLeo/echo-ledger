@@ -12,14 +12,18 @@ DEPLOY.md has the full reference (every setting, the hardening, rotation, rollba
 - The relay's name (in this page `<relay host>`, for example `relay.<your domain>`) points at the VPS's address in
   DNS. Check from your computer: `ping <relay host>` shows the VPS's address.
 - You can sign in to the console as the super admin.
-- The Anthropic and Groq keys are saved in Admin → API Credentials, and you can copy them again from the providers'
-  websites (step 4 needs them for one command each).
+- The Anthropic and Groq keys the relay will use are saved in Admin → API Credentials (step 6 checks them).
+- You can sign in to the Anthropic and Groq websites to create and delete API keys: steps 4 and 5 use a separate test
+  key at each, made for this release and deleted after it.
 
 **Rules for every step**
 
-- Wherever this page says `<relay host>` or `<region>`, type your own value, without the `< >`.
+- Wherever this page shows a value in `< >` (`<relay host>`, `<region>`, `<release tag>`…), type your own value, without
+  the `< >`.
 - A secret or a key is only ever pasted at a hidden prompt (`read -rs …`): nothing shows while you paste. Press Enter
   once after pasting. Never put one in a command line, a file, a ticket or a chat.
+- Never paste a token or a password into a command, not even inside an address. If an address you were given has
+  one in it, don't use it: ask for the SSH address instead.
 - If a check doesn't show what this page says, stop there and send the last 30 lines of the screen to the developer.
 
 ## 1. Install
@@ -34,12 +38,25 @@ sudo chmod 0700 /etc/credstore.encrypted
 sudo ufw allow OpenSSH && sudo ufw allow 'Nginx Full' && sudo ufw enable
 ```
 
-Build the relay on the VPS (about 10 minutes). The developer gives you the repository's address and the release's
-tag:
+**Access to the code, read-only.** Make a key on the VPS that can only read the repository:
+
+```
+ssh-keygen -t ed25519 -f ~/.ssh/relay_deploy -N '' -C relay-vps
+cat ~/.ssh/relay_deploy.pub
+```
+
+The second command prints one line starting with `ssh-ed25519`. That line is the public half and safe to send: send
+it to the developer, who adds it to the repository as a **read-only deploy key** and gives you back the repository's
+SSH address (it looks like `git@github.com:<owner>/<repository>.git`) and the release's tag. The other half
+(`~/.ssh/relay_deploy`, without `.pub`) never leaves the VPS.
+
+**Build the relay on the VPS** (about 10 minutes). The first connection asks whether to trust the host: type `yes`.
 
 ```
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && . "$HOME/.cargo/env"
-git clone <repository address> ~/echoledger && cd ~/echoledger && git checkout <release tag>
+GIT_SSH_COMMAND='ssh -i ~/.ssh/relay_deploy -o IdentitiesOnly=yes' git clone <repository SSH address> ~/echoledger
+cd ~/echoledger && git config core.sshCommand 'ssh -i ~/.ssh/relay_deploy -o IdentitiesOnly=yes'
+git checkout <release tag>
 cd services/assist-relay
 cargo test --locked && cargo build --release --locked
 ```
@@ -115,13 +132,28 @@ curl -fsS https://<relay host>/healthz
 
 You should see `syntax is ok`, then `{"status":"ok",…}` again, this time over the internet.
 
-**The spare key.** Made once, kept on the VPS where only root can read it. Also save a copy in your password manager
-(as a file attachment): it is the only way to move the relay to a new VPS without updating the apps.
+**The spare key.** Made once, kept on the VPS where only root can read it, with one copy in your password manager:
+it is the only way to move the relay to a new VPS without updating the apps. Never `cat`, open or print the key, and
+never email or paste it anywhere: it only moves as a file, as below.
 
 ```
 sudo mkdir -p -m 0700 /etc/letsencrypt/relay-backup
 sudo openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out /etc/letsencrypt/relay-backup/backup.key
 sudo chmod 0600 /etc/letsencrypt/relay-backup/backup.key
+sudo install -m 0600 -o "$USER" /etc/letsencrypt/relay-backup/backup.key ~/relay-backup.key
+```
+
+On your own computer, copy that file down (with the user name you log in to the VPS with):
+
+```
+scp <your VPS user>@<relay host>:relay-backup.key .
+```
+
+Attach `relay-backup.key` to an entry in your password manager, then delete the file from your computer and empty the
+trash. Back on the VPS, destroy the copy in your home folder (the one under `/etc/letsencrypt` stays):
+
+```
+shred -u ~/relay-backup.key
 ```
 
 **The two pins.** Each command prints one line of 44 characters ending in `=`:
@@ -131,7 +163,8 @@ sudo openssl pkey -in /etc/letsencrypt/live/<relay host>/privkey.pem -pubout -ou
 sudo openssl pkey -in /etc/letsencrypt/relay-backup/backup.key -pubout -outform der | openssl dgst -sha256 -binary | openssl base64
 ```
 
-Check the first one from outside. This must print the same line as the first command:
+Check the first one as the internet sees it. Run this on the VPS too; it must print the same line as the first
+command. If the two lines differ, stop: don't save the pins, and send the screen to the developer.
 
 ```
 openssl s_client -connect <relay host>:443 -servername <relay host> </dev/null 2>/dev/null \
@@ -151,7 +184,13 @@ except into your password manager.
 ## 4. The smoke-record gate
 
 This proves each real model answers through the relay's own code before anyone relies on it. Each command sends one
-or two small paid requests (a fraction of a cent). On the VPS, in the build folder:
+or two small paid requests (a fraction of a cent).
+
+**Test keys first.** On the Anthropic website and on the Groq website, create a new API key named `relay-smoke`.
+Use these two at the hidden prompts in steps 4 and 5, not the keys saved in Admin, and delete both at the providers
+when step 5 is done. The keys in Admin are the relay's own; step 6 checks them.
+
+On the VPS, in the build folder:
 
 ```
 cd ~/echoledger/services/assist-relay && mkdir -p ~/smoke-records
@@ -165,12 +204,12 @@ target/release/assist-relay-smoke --model openai/gpt-oss-120b --yes --record ~/s
 unset GROQ_API_KEY
 ```
 
-At each hidden prompt, paste that provider's key (the same one saved in Admin → API Credentials). It is used for these
-commands only and never saved.
+At each hidden prompt, paste that provider's `relay-smoke` key. It is used for these commands only and never saved.
 
 The gate passes when **every** command ends with `GATE-OK`, after a `first token … ms` line, an answer, and a line
 `input … output …; cost about $…`. For the first one (`--warm`), in the second request's line the `cached` number is
-larger than the `input` number before it (most of the request was read from the cache). If the console's model catalog enables another model, run the same command for it with its provider's key.
+larger than the `input` number before it (most of the request was read from the cache). If the console's model
+catalog enables another model, run the same command for it with a `relay-smoke` key from its provider.
 
 If any command doesn't end with `GATE-OK`, stop: the relay stays on `mock`, and the developer needs the screen.
 
@@ -189,6 +228,8 @@ You should see `listening` and `providers_fetched` again.
 
 This measures how fast each model starts answering, from the VPS, where the relay's calls start. About 12 requests
 per model, a few cents in all.
+
+At the two hidden prompts, paste the `relay-smoke` keys again: Anthropic's, then Groq's.
 
 ```
 cd ~/echoledger/services/assist-relay
@@ -209,8 +250,11 @@ curl -o /dev/null -s -w 'connect %{time_connect}s  tls %{time_appconnect}s\n' ht
 ```
 
 Every suggestion pays this trip once on top of the model's first token. The targets are, with the trip added: the
-middle (p50) first token at most 1.5 s in Fast, 2.0 s in Balanced and 3.0 s in Deep. Send the latency report (the LATENCY_V1_9.md file it wrote) and your
-five `connect` lines to the developer. If a target is missed, don't go on to step 6: tell the developer first.
+middle (p50) first token at most 1.5 s in Fast, 2.0 s in Balanced and 3.0 s in Deep. Send the latency report (the
+LATENCY_V1_9.md file it wrote) and your five `connect` lines to the developer. If a target is missed, don't go on to
+step 6: tell the developer first.
+
+**Now delete both `relay-smoke` keys** on the Anthropic and Groq websites. The relay doesn't use them.
 
 ## 6. Live Assist on, for you only
 
@@ -223,7 +267,10 @@ five `connect` lines to the developer. If a target is missed, don't go on to ste
 2. Close and reopen the app on your phone or desktop (it reads the setting when it starts). Live Assist now appears
    for you, and for no one else.
 3. Start a Practice session and answer a question. A suggestion should appear within a couple of seconds. On the VPS,
-   `journalctl -u assist-relay -n 20 -o cat` shows `attached`, then a `suggestion` line.
+   `journalctl -u assist-relay -n 20 -o cat` shows `attached`, then a `suggestion` line. This is the check of the keys
+   saved in Admin: the relay answers with them now. If the app says "Live Assist is not set up on the server yet", a
+   key in Admin → API Credentials is missing or wrong: fix it there, wait 10 minutes (the relay fetches the keys again),
+   and try again.
 
 If the app says it can't verify the relay's certificate, the pins in step 3 don't match: check both entries, and
 that the first one equals the `s_client` line.
