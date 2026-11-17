@@ -137,19 +137,32 @@ fn last_ended() -> &'static Mutex<Option<Feed>> {
     E.get_or_init(|| Mutex::new(None))
 }
 
-/// The session's feed as it ended (its capture ended on its own): ended, with the reason, never hidden. Kept for the
-/// panel ([`current_feed`]) only while no session runs, decided under `running`'s lock, which a Start holds while it
-/// clears it: a Start never gets an older session's ended feed back. Returned to be sent.
-fn mark_ended(feed: &mut Feed, reason: String) -> Feed {
+/// The session's own feed as it ended (its capture ended on its own): ended, with the reason, never hidden. Changed
+/// under its lock alone, so what the session holds says ended too; the copy returned is kept ([`keep_ended`]) and sent.
+fn mark_ended(feed: &Mutex<Feed>, reason: String) -> Feed {
+    let mut feed = feed.lock().unwrap_or_else(|p| p.into_inner());
     feed.status = "ended".into();
     feed.notice = Some(reason);
     // Hidden, the window said it was listening: it shows why it stopped instead.
     feed.hidden = false;
+    feed.clone()
+}
+
+/// Keeps an ended session's feed for the panel ([`current_feed`]) only while no session runs, decided under
+/// `running`'s lock, which a Start holds while it clears it: a Start never gets an older session's ended feed back. No
+/// feed lock is held here: `update_feed` and `current_feed` take `running` first and then a feed.
+fn keep_ended(ended: Feed) {
     let running = running().lock().unwrap_or_else(|p| p.into_inner());
     if running.is_none() {
-        *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(feed.clone());
+        *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(ended);
     }
-    feed.clone()
+}
+
+/// The session's feed to change and send while it has not stopped (Stop, or its capture's end, set `stop` before they
+/// take the feed's lock): checked under that lock, so nothing a session sends after its end reaches the panels.
+fn feed_while_live<'a>(feed: &'a Mutex<Feed>, stop: &AtomicBool) -> Option<std::sync::MutexGuard<'a, Feed>> {
+    let feed = feed.lock().ok()?;
+    (!stop.load(Ordering::SeqCst)).then_some(feed)
 }
 
 /// No ended session to show any more (Stop or Close, or a new Start).
@@ -410,11 +423,11 @@ fn spawn_capture(
                 return;
             };
             // Said before the keys go back: a Start during that wait (it waits for the main thread) is never followed
-            // by this session's ended feed. The feed is copied and its lock let go before `mark_ended` takes
-            // `running`'s: elsewhere (`update_feed`, `current_feed`) `running` is taken first and then a feed, so this
-            // thread never holds a feed while it waits for `running`.
-            let mut ended = feed.lock().unwrap_or_else(|p| p.into_inner()).clone();
-            let ended = mark_ended(&mut ended, reason);
+            // by this session's ended feed. The session's own feed says ended (under its lock alone; `stop` is set, so
+            // `run_session` sends nothing more), then the copy is kept under `running`'s lock with no feed lock held:
+            // elsewhere (`update_feed`, `current_feed`) `running` is taken first and then a feed.
+            let ended = mark_ended(&feed, reason);
+            keep_ended(ended.clone());
             let _ = app.emit(FEED_EVENT, &ended);
             // Its own window goes (the panel keeps the reason and Close): an unlocked window never takes clicks over a
             // game, and nothing counts it as open. Only while it is still the newest; a quick Start waits for it.
@@ -547,7 +560,7 @@ async fn run_session<F, Fut>(
         let token = match fetch_token().await {
             Ok(t) => t,
             Err(message) => {
-                if let Ok(mut f) = feed.lock() {
+                if let Some(mut f) = feed_while_live(&feed, &stop) {
                     f.notice = Some(message);
                     f.status = "reconnecting".into();
                     emit(&f);
@@ -570,7 +583,7 @@ async fn run_session<F, Fut>(
         )
         .await
         else {
-            if let Ok(mut f) = feed.lock() {
+            if let Some(mut f) = feed_while_live(&feed, &stop) {
                 if attempt == 0 {
                     f.notice = Some("No connection — retrying".into());
                 }
@@ -593,7 +606,7 @@ async fn run_session<F, Fut>(
         {
             continue;
         }
-        if let Ok(mut f) = feed.lock() {
+        if let Some(mut f) = feed_while_live(&feed, &stop) {
             f.notice = None;
             f.status = "live".into();
             emit(&f);
@@ -616,7 +629,7 @@ async fn run_session<F, Fut>(
                     if gate.quiet_frames >= REST_AFTER_FRAMES {
                         let _ = sink.send(Message::Text(protocol::END_OF_AUDIO.into())).await;
                         let _ = sink.close().await;
-                        if let Ok(mut f) = feed.lock() { f.status = "quiet".into(); f.partial.clear(); emit(&f); }
+                        if let Some(mut f) = feed_while_live(&feed, &stop) { f.status = "quiet".into(); f.partial.clear(); emit(&f); }
                         break;
                     }
                 }
@@ -624,13 +637,13 @@ async fn run_session<F, Fut>(
                     let Some(Ok(Message::Text(text))) = reply else { break };
                     let r = protocol::parse(&text);
                     if let Some(code) = r.error_code {
-                        if let Ok(mut f) = feed.lock() {
+                        if let Some(mut f) = feed_while_live(&feed, &stop) {
                             f.notice = Some(if code == 402 { "Soniox has no credit left. Add credit to the Soniox account.".into() } else { "Reconnecting…".into() });
                             emit(&f);
                         }
                         break;
                     }
-                    if let Ok(mut f) = feed.lock() {
+                    if let Some(mut f) = feed_while_live(&feed, &stop) {
                         f.text = tail(&(f.text.clone() + &r.final_translation));
                         f.partial = r.partial_translation;
                         f.original = tail(&(f.original.clone() + &r.final_original + if r.endpoint { " " } else { "" }));
@@ -697,7 +710,7 @@ mod tests {
         let source = include_str!("mod.rs");
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        for step in ["ended_reason(", "mark_ended(&mut ended, reason)", "emit_status(&app)"] {
+        for step in ["ended_reason(", "mark_ended(&feed, reason)", "emit_status(&app)"] {
             assert!(thread.contains(step), "{step}");
         }
         // A session no longer current says nothing: the check comes before the keys, the feed and the status.
@@ -714,8 +727,9 @@ mod tests {
         clear_ended();
         assert_eq!(current_feed(), None);
         // Its capture ended on its own (the app stopped playing), its session left `running`.
-        let mut feed = Feed { status: "live".into(), app: "Valorant".into(), hidden: true, locked: true, ..Default::default() };
-        let sent = mark_ended(&mut feed, STOPPED_PLAYING.into());
+        let feed = Mutex::new(Feed { status: "live".into(), app: "Valorant".into(), hidden: true, locked: true, ..Default::default() });
+        let sent = mark_ended(&feed, STOPPED_PLAYING.into());
+        keep_ended(sent.clone());
         let shown = current_feed().expect("the panel opened later still has it");
         assert_eq!(shown, sent);
         assert_eq!((shown.status.as_str(), shown.notice.as_deref(), shown.hidden), ("ended", Some(STOPPED_PLAYING), false));
@@ -729,8 +743,10 @@ mod tests {
         assert_eq!(current_feed(), None);
         // A newer session already runs: an older capture's end is sent but never kept, so it can't come back later.
         *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 10 });
-        let mut old = Feed { status: "live".into(), ..Default::default() };
-        assert_eq!(mark_ended(&mut old, STOPPED_HEARING.into()).status, "ended", "still sent to its window");
+        let old = Mutex::new(Feed { status: "live".into(), ..Default::default() });
+        let ended = mark_ended(&old, STOPPED_HEARING.into());
+        assert_eq!(ended.status, "ended", "still sent to its window");
+        keep_ended(ended);
         *running().lock().unwrap() = None;
         assert_eq!(current_feed(), None, "not kept while another session ran");
         let source = include_str!("mod.rs");
@@ -744,20 +760,46 @@ mod tests {
         // The natural end says it ended before the keys go back.
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        assert!(thread.find("mark_ended(&mut ended, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
-        // The feed's lock is let go (a copy taken) before mark_ended takes running's: never a feed held while waiting
-        // for running, which update_feed and current_feed take first.
-        let copied = thread.find("let mut ended = feed.lock().unwrap_or_else(|p| p.into_inner()).clone();").expect("the feed is copied, its lock dropped at once");
-        assert!(copied < thread.find("mark_ended(&mut ended, reason)").unwrap());
-        assert!(!thread.contains("if let Ok(mut f) = feed.lock()"), "no feed lock held across mark_ended");
+        assert!(thread.find("mark_ended(&feed, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
+        // The session's own feed says ended under its lock alone, then the copy is kept under running's: never a feed
+        // held while waiting for running, which update_feed and current_feed take first.
+        assert!(thread.find("let ended = mark_ended(&feed, reason);") < thread.find("keep_ended(ended.clone());"));
+        assert!(!thread.contains("feed.lock()"), "no feed lock taken in the capture thread itself");
+        let keep = &source[source.find("fn keep_ended(").unwrap()..];
+        assert!(!keep[..keep.find("\n}").unwrap()].contains("feed.lock()"), "keep_ended holds no feed lock");
+        // Nothing run_session sends gets past its end, or Stop: every send goes through `stop`, checked under the lock.
+        let session = &source[source.find("async fn run_session<").unwrap()..source.find("fn pcm_bytes(").unwrap()];
+        assert!(!session.contains("feed.lock()"), "every feed change is gated on stop");
+        assert_eq!(session.matches("if let Some(mut f) = feed_while_live(&feed, &stop)").count(), 6, "every send");
+        assert_eq!(session.matches("emit(&f)").count(), 6);
+        let gate = &source[source.find("fn feed_while_live<").unwrap()..];
+        let gate = &gate[..gate.find("\n}").unwrap()];
+        assert!(gate.find("feed.lock()") < gate.find("stop.load("), "stop is read under the feed's lock: {gate}");
         // Then its own window closes: after the ended feed, only while it is the newest, marked closing first.
-        let marked = thread.find("mark_ended(&mut ended, reason)").unwrap();
+        let marked = thread.find("mark_ended(&feed, reason)").unwrap();
         let guard = thread.find("if window_generation() == window {").expect("guarded by its window's number");
         let closing = thread.find("CLOSING.store(window, Ordering::SeqCst);").expect("a quick Start waits for it");
         let close = thread.find("let _ = w.close();").expect("the window closes");
         assert!(marked < guard && guard < closing && closing < close && close < thread.find("unregister_hotkeys(&app)").unwrap());
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
-        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut ended, reason)"));
+        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&feed, reason)"));
+    }
+
+    #[test]
+    fn a_natural_end_leaves_the_session_s_own_feed_ended_and_nothing_sent_after_it() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let feed = Arc::new(Mutex::new(Feed { status: "live".into(), app: "Valorant".into(), hidden: true, ..Default::default() }));
+        let stop = AtomicBool::new(false);
+        assert!(feed_while_live(&feed, &stop).is_some(), "running: its sends go");
+        // The capture ended on its own: stop is set first, then the session's own feed says ended.
+        stop.store(true, Ordering::SeqCst);
+        let sent = mark_ended(&feed, STOPPED_PLAYING.into());
+        let own = feed.lock().unwrap().clone();
+        assert_eq!((own.status.as_str(), own.notice.as_deref(), own.hidden), ("ended", Some(STOPPED_PLAYING), false), "what the session holds says ended");
+        assert_eq!(own, sent);
+        // A late Soniox reply or an error finds stop set: nothing changed, nothing sent.
+        assert!(feed_while_live(&feed, &stop).is_none());
+        assert_eq!(feed.lock().unwrap().status, "ended");
     }
 
     #[test]
