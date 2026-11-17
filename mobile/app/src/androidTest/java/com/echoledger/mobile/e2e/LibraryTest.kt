@@ -129,7 +129,7 @@ class LibraryTest : E2eTest() {
         Ui.awaitText("Nothing matches")
         Ui.clickText("Desktop")
         Ui.awaitText(SeedData.SILENT)
-        Ui.clickText("All")
+        Ui.clickText("All recordings")
         Ui.awaitText(SeedData.FAILED)
     }
 

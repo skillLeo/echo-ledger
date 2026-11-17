@@ -43,9 +43,12 @@ class PermissionsAndRecordingTest : E2eTest() {
 
     private fun openSetup() {
         launchPaired()
+        // The Setup guide is in Settings › About, under This phone (since v1.8.1, P-021).
         Ui.openTab("Settings")
-        Ui.clickText("Devices")
-        Ui.awaitText("This phone")
+        Ui.awaitText("Settings")
+        Ui.scrollDownTo("About")
+        Ui.clickText("About")
+        Ui.scrollDownTo("Setup guide")
         Ui.clickText("Setup guide")
         Ui.awaitText("Setup")
     }
@@ -76,9 +79,9 @@ class PermissionsAndRecordingTest : E2eTest() {
         launchPaired()
         Ui.openTab("Record")
         Ui.awaitText("Not recording")
-        Ui.clickText("REC")
+        Ui.clickText("Record")
         Thread.sleep(3_000)
-        assertTrue("still showing the idle recorder", Ui.has("Not recording") && Ui.has("REC"))
+        assertTrue("still showing the idle recorder", Ui.has("Not recording") && Ui.has("Record"))
         Ui.snapshot("record-idle")
         assertTrue(AppState.recordings().isEmpty())
         assertTrue("the recorder tells where the microphone is configured", Ui.has("Open setup"))
@@ -153,11 +156,11 @@ class PermissionsAndRecordingTest : E2eTest() {
         AppState.disableCaptions()
         Ui.openTab("Record")
         Ui.awaitText("Not recording")
-        Ui.clickText("REC")
+        Ui.clickText("Record")
         Ui.awaitText("Recording…", Ui.NORMAL)
-        assertTrue("the button turns into STOP", Ui.has("STOP"))
+        assertTrue("the button turns into Stop", Ui.has("Stop"))
         Thread.sleep(4_000)
-        Ui.clickText("STOP")
+        Ui.clickText("Stop")
         Ui.awaitText("Not recording", Ui.NORMAL)
         Ui.awaitCondition("the recording to reach the server", 120_000, 3_000) {
             Backend.liveSessions().any { it.sourceApp == "other" && it.finalStatus == "completed" }
@@ -175,12 +178,12 @@ class PermissionsAndRecordingTest : E2eTest() {
         launchPaired()
         AppState.disableCaptions()
         Ui.openTab("Record")
-        Ui.clickText("REC")
+        Ui.clickText("Record")
         Ui.awaitText("Recording…", Ui.NORMAL)
         try {
             Ui.awaitCondition("the recording notification with a Stop action", Ui.NORMAL) { recordingNotificationHasStopAction() }
         } finally {
-            if (Ui.has("STOP")) Ui.clickText("STOP")
+            if (Ui.has("Stop")) Ui.clickText("Stop")
         }
         Ui.awaitText("Not recording", Ui.NORMAL)
     }

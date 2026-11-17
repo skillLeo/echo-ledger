@@ -107,7 +107,7 @@ class SettingsTest : E2eTest() {
         assertTrue(Ui.hasContaining("Consent"))
         Ui.device.pressBack()
         Ui.awaitText("Settings")
-        assertTrue(Ui.has("Privacy & security"))
+        assertTrue(Ui.has("Privacy & data"))
     }
 
     @Test
