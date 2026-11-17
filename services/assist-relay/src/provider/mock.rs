@@ -62,6 +62,8 @@ pub struct MockProvider {
     latency: BTreeMap<String, MockLatency>,
     cache: Mutex<HashSet<(String, u64)>>,
     script: Mutex<VecDeque<MockBehavior>>,
+    /// Behaviours for the next warm-ups (Fail and Stall), apart from the answers' script.
+    warm_script: Mutex<VecDeque<MockBehavior>>,
     requests: Mutex<Vec<(String, Purpose)>>,
     stats: Arc<MockStats>,
 }
@@ -76,6 +78,7 @@ impl MockProvider {
             latency,
             cache: Mutex::new(HashSet::new()),
             script: Mutex::new(VecDeque::new()),
+            warm_script: Mutex::new(VecDeque::new()),
             requests: Mutex::new(Vec::new()),
             stats,
         }
@@ -84,6 +87,13 @@ impl MockProvider {
     /// Queues a behaviour for the next request to this provider.
     pub fn push(&self, behavior: MockBehavior) {
         if let Ok(mut script) = self.script.lock() {
+            script.push_back(behavior);
+        }
+    }
+
+    /// Queues a behaviour for the next warm-up (Fail or Stall; anything else warms as usual).
+    pub fn push_warm(&self, behavior: MockBehavior) {
+        if let Ok(mut script) = self.warm_script.lock() {
             script.push_back(behavior);
         }
     }
@@ -291,9 +301,14 @@ impl Provider for MockProvider {
         // A warm-up sends the cached prefix and a one-line placeholder, and asks for no output.
         usage.input_tokens = 8;
         let delay = Duration::from_millis(self.latency_for(&request.model).first_token_ms / 2);
+        let behavior = self.warm_script.lock().ok().and_then(|mut script| script.pop_front());
         async move {
             tokio::time::sleep(delay).await;
-            Ok(usage)
+            match behavior {
+                Some(MockBehavior::Fail(error)) => Err(error),
+                Some(MockBehavior::Stall) => std::future::pending().await,
+                _ => Ok(usage),
+            }
         }
         .boxed()
     }

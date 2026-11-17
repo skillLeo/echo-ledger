@@ -51,6 +51,8 @@ pub mod close {
 
 /// The warm-up's key among the reservations.
 const WARM_KEY: &str = "warm";
+/// The longest a cache warm-up may take.
+const WARM_TIMEOUT: Duration = Duration::from_secs(15);
 
 /// Tries at one practice question before practice stops.
 const PRACTICE_ATTEMPTS: u32 = 3;
@@ -2015,19 +2017,22 @@ impl Engine {
         self.last_warm = Some(Instant::now());
         tokio::spawn(async move {
             let mut guard = WarmGuard { feed: feed.clone(), model: Some(model.clone()) };
-            let result = provider.warm(request).await;
+            let result = tokio::time::timeout(WARM_TIMEOUT, provider.warm(request)).await.unwrap_or(Err(ProviderError::Timeout));
             guard.model = None;
             let _ = feed.send(Feed::Warmed { model, result }).await;
         });
     }
 
     fn on_warmed(&mut self, model: String, result: Result<Usage, ProviderError>) {
-        self.reserved.remove(WARM_KEY);
+        // What it reserved is its estimate: charged when it failed after its request was taken (a timeout, an error,
+        // a dropped connection), not when the provider turned it away unprocessed (rate limited, no key).
+        let estimate = self.reserved.remove(WARM_KEY).unwrap_or(0);
         let (cost, error) = match result {
             Ok(usage) => (self.config().model(&model).map_or(0, |spec| cost_micros(spec, &usage)), None),
-            Err(error) => (0, Some(error.code())),
+            Err(error @ (ProviderError::NotConfigured(_) | ProviderError::RateLimited)) => (0, Some(error.code())),
+            Err(error) => (estimate, Some(error.code())),
         };
-        if error.is_none() {
+        if cost > 0 {
             self.add_spend(cost, &model);
         }
         self.deps.telemetry.event(&SessionEvent::Warmed { session: self.session_id.clone(), model, cost_micros: cost, error });
