@@ -12,7 +12,6 @@ import com.echoledger.mobile.testsupport.ScreenTest
 import com.echoledger.mobile.testsupport.ServerFixtures
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
-import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.v2.ask.AskLanguage
 import com.echoledger.mobile.ui.v2.ask.V2AskScreen
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
@@ -92,10 +91,8 @@ class AskScreenTest : ScreenTest() {
         ask()
         compose.waitUntil(5_000) { has("Try again") }
         assertTrue(!has("internet connection"))
-        // Offline now: the next sync can't reach the server.
-        server.on("GET", "/api/clients", FakeServer.json(500, """{"message":"down"}"""))
-        vm.refresh()
-        pumpUntil("offline") { vm.offline.value }
+        // The server out of reach: nothing answers at its address any more.
+        server.close()
         compose.onAllNodes(hasText("Ask") and hasClickAction()).onFirst().performClick()
         compose.waitUntil(5_000) { has("You're offline. Check the internet connection and ask again.") }
     }
