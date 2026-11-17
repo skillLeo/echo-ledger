@@ -330,7 +330,7 @@ pub async fn wait_closed(app: &AppHandle) -> Result<(), String> {
 /// thread): run it with `spawn_blocking`, never on the main thread.
 pub fn window_gone(app: &AppHandle, gone: u64) {
     let ended = match running().lock() {
-        Ok(mut r) if gone_ends(r.as_ref().map(|r| r.window), gone) => r.take().inspect(|run| run.stop.store(true, Ordering::SeqCst)).is_some(),
+        Ok(mut r) if gone_ends(r.as_ref().map(|r| r.window), gone) => r.take().inspect(halt).is_some(),
         _ => false,
     };
     if !ended {
@@ -345,8 +345,16 @@ fn stop_session() {
     if let Ok(mut r) = running().lock()
         && let Some(run) = r.take()
     {
-        run.stop.store(true, Ordering::SeqCst);
+        halt(&run);
     }
+}
+
+/// Tells a session taken out of `running` (its lock still held) to stop, then waits out a send it has under way: a
+/// send checks `stop` under the feed's lock ([`feed_while_live`]), so once that lock has been taken and let go no
+/// later one goes, and the "stopped" sent after this is the last thing the panels get. Lock order: running, then feed.
+fn halt(run: &Running) {
+    run.stop.store(true, Ordering::SeqCst);
+    drop(run.feed.lock());
 }
 
 /// Ctrl+Shift+T (Edit / Lock) and Ctrl+Shift+H (hide), only while Live Translate runs: held all the time they would
@@ -803,6 +811,24 @@ mod tests {
     }
 
     #[test]
+    fn stop_waits_out_a_send_under_way_and_none_follows() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let stop = Arc::new(AtomicBool::new(false));
+        let feed: Arc<Mutex<Feed>> = Arc::default();
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: feed.clone(), window: 1 });
+        // A send under way: it passed the gate and holds the feed.
+        let sending = feed_while_live(&feed, &stop).expect("running: its sends go");
+        let stopper = std::thread::spawn(stop_session);
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(stop.load(Ordering::SeqCst), "stop is set at once");
+        assert!(!stopper.is_finished(), "Stop waits for the send under way");
+        drop(sending);
+        stopper.join().unwrap();
+        assert!(running().lock().unwrap().is_none());
+        assert!(feed_while_live(&feed, &stop).is_none(), "nothing sent after Stop");
+    }
+
+    #[test]
     fn a_window_gone_any_way_ends_the_session_and_its_keys() {
         let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
         let stop = Arc::new(AtomicBool::new(false));
@@ -826,6 +852,15 @@ mod tests {
         let body = &gone[gone.find("pub fn window_gone").unwrap()..];
         let body = &body[..body.find("\n}").unwrap()];
         assert!(body.contains("unregister_hotkeys(app)") && body.contains("status: \"stopped\""), "{body}");
+        // Stop and a window gone wait out a send under way, under running's lock, before "stopped" goes.
+        assert!(body.find("r.take().inspect(halt)") < body.find("status: \"stopped\""), "{body}");
+        let session = &gone[gone.find("fn stop_session()").unwrap()..];
+        assert!(session[..session.find("\n}").unwrap()].contains("halt(&run);"));
+        let halt = &gone[gone.find("fn halt(run: &Running)").unwrap()..];
+        let halt = &halt[..halt.find("\n}").unwrap()];
+        assert!(halt.find("run.stop.store(true") < halt.find("drop(run.feed.lock());"), "stop is set before the feed's lock is waited for: {halt}");
+        let stop = &gone[gone.find("pub fn stop(app: &AppHandle)").unwrap()..];
+        assert!(stop.find("stop_session();") < stop.find("status: \"stopped\""));
         // A Start never uses the window Stop closed.
         let commands = include_str!("../commands.rs");
         let start = &commands[commands.find("pub async fn translate_start").unwrap()..];
