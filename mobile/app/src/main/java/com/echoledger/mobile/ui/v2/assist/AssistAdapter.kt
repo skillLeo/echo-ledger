@@ -21,7 +21,7 @@ import kotlinx.coroutines.flow.Flow
  *   `token_refreshed`) and `Ended`. A newly opened card replays [snapshot] first, then follows [messages]. On close
  *   `4401` after `token_expired` the core reconnects with a new token within 120 s; on `1006` (a slow reader dropped)
  *   it reconnects and resumes; on `4409` it does not reconnect.
- * - [send]: `help_now`, `regenerate`, `shorter`, `translate`, `cancel` on the relay, each with the next client `seq`.
+ * - [send]: `help_now`, `regenerate`, `shorter`, `formal`, `translate`, `cancel` on the relay, each with the next client `seq`.
  * - [feedback]: `POST /api/assist/sessions/{id}/suggestions/{suggestion_id}/action` (used / dismissed).
  * - [reportShown]: the same route with `{"action": "shown", "render_ms": n}`, once per suggestion, when its first text
  *   is drawn (n: from the core receiving `suggestion_start` to that frame).

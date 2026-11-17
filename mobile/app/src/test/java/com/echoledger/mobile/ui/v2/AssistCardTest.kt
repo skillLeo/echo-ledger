@@ -53,7 +53,7 @@ class AssistCardTest {
     }
 
     @Test
-    fun aStartsReplacesTakesEvenAFinishedDraftOffTheCard() {
+    fun aReplacedSuggestionStaysUntilItsReplacementsFirstToken() {
         val s =
             play(
                 ready,
@@ -62,13 +62,52 @@ class AssistCardTest {
                 SuggestionEnd("s-1", EndStatus.Done),
                 start("s-2", SuggestionKind.Upgrade, replaces = "s-1")
             )
-        assertEquals(SuggestionStatus.Superseded, s.suggestions.first { it.id == "s-1" }.status)
-        // An upgrade comes as one token with the whole text.
-        val upgraded = play(Token("s-2", "Yes, it holds for sixty."), SuggestionEnd("s-2", EndStatus.Done), from = s)
+        // Never blank in between: the draft is still on the card.
+        assertEquals("s-1", s.shownId)
+        assertEquals("Draft", s.shown?.text)
+        assertTrue(s.ready)
+        // An upgrade comes as one token with the whole text; at that token the draft leaves for good.
+        val first = play(Token("s-2", "Yes, it holds for sixty."), from = s)
+        assertEquals("s-2", first.shownId)
+        assertEquals(SuggestionStatus.Superseded, first.suggestions.first { it.id == "s-1" }.status)
+        assertEquals("", first.suggestions.first { it.id == "s-1" }.text)
+        val upgraded = play(SuggestionEnd("s-2", EndStatus.Done), from = first)
         assertEquals("Yes, it holds for sixty.", upgraded.shown?.text)
         // If the upgrade were then cancelled, the replaced draft does not come back.
         val cancelled = play(start("s-3", turn = "t-2"), SuggestionEnd("s-3", EndStatus.Cancelled), from = upgraded)
         assertEquals("s-2", cancelled.shownId)
+    }
+
+    @Test
+    fun aReplacedSuggestionsOwnSupersededEndTakesItOffFirst() {
+        val s =
+            play(
+                ready,
+                start("s-1"),
+                Token("s-1", "I promise delivery tomorrow"),
+                start("s-2", replaces = "s-1"),
+                SuggestionEnd("s-1", EndStatus.Superseded)
+            )
+        // Its end came before the replacement's first token: cleared at once, and the replacement takes the card.
+        assertEquals("s-2", s.shownId)
+        assertEquals("", s.suggestions.first { it.id == "s-1" }.text)
+        assertEquals(SuggestionStatus.Streaming, s.shown?.status)
+        assertEquals("Delivery by Thursday", play(Token("s-2", "Delivery by Thursday"), from = s).shown?.text)
+    }
+
+    @Test
+    fun aReplacementThatFailsBeforeItsFirstTokenLeavesTheReplacedOneOnTheCard() {
+        val s =
+            play(
+                ready,
+                start("s-1"),
+                Token("s-1", "Draft"),
+                SuggestionEnd("s-1", EndStatus.Done),
+                start("s-2", SuggestionKind.Upgrade, replaces = "s-1"),
+                AssistMessage.Error("provider_timeout", "", retry = true, suggestionId = "s-2", fatal = false)
+            )
+        assertEquals("s-1", s.shownId)
+        assertEquals("Draft", s.shown?.text)
     }
 
     @Test
@@ -95,7 +134,7 @@ class AssistCardTest {
     }
 
     @Test
-    fun aResumedConnectionClearsWhatWasStillStreaming() {
+    fun aResumedConnectionClearsTheCard() {
         val before =
             play(
                 ready,
@@ -108,7 +147,10 @@ class AssistCardTest {
         val s = play(ready.copy(resumed = true), from = before)
         assertEquals("", s.suggestions.first { it.id == "s-2" }.text)
         assertEquals(SuggestionStatus.Cancelled, s.suggestions.first { it.id == "s-2" }.status)
-        assertEquals("s-1", s.shownId)
+        // The card is clear until the next suggestion; the earlier one does not come back.
+        assertNull(s.shownId)
+        assertFalse(s.ready)
+        assertEquals("s-3", play(start("s-3", turn = "t-3"), from = s).shownId)
         // Not resumed: nothing is cleared.
         assertEquals("Half an ans", play(ready, from = before).shown?.text)
     }

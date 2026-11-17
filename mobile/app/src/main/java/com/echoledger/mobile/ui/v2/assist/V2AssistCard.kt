@@ -3,16 +3,15 @@ package com.echoledger.mobile.ui.v2.assist
 import android.os.SystemClock
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Surface
@@ -109,7 +108,7 @@ private fun bold(text: String): AnnotatedString = buildAnnotatedString {
 /**
  * The Live Assist card in the phone's call pill (v1.9 L5, behind `live_assist` and `ui_v2.live`). Collapsed it is a dot
  * that lights when a suggestion is ready; expanded it shows at most three lines (the first line, then bullets) with
- * Help me now, Regenerate, Shorter and Urdu. The interview reminder or the consent line shows once per session. It
+ * Help me now, Regenerate, Shorter, More formal and Urdu. The interview reminder or the consent line shows once per session. It
  * floats over the call, so it uses the dark roles. A component on [CardState]; the core feeds it through [AssistAdapter].
  */
 @Composable
@@ -297,8 +296,9 @@ private fun AssistExpanded(
                 problemWords(state)?.let { Text(it, style = EchoV2.type.meta, color = c.danger) }
             }
             if (!state.captionsOnly && !state.ended) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = EchoTokens.Space.s8),
+                // Five buttons wrap onto a second line rather than scroll out of sight (narrow phones, large text).
+                FlowRow(
+                    Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Space.s8),
                     horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
                 ) {
                     EchoButton(stringResource(R.string.v2_assist_help_now), { onSend(SendKind.HelpNow) })
@@ -319,6 +319,12 @@ private fun AssistExpanded(
                         kind = EchoButtonKind.Plain,
                         enabled =
                             s != null
+                    )
+                    EchoButton(
+                        stringResource(R.string.v2_assist_formal),
+                        { onSend(SendKind.Formal) },
+                        kind = EchoButtonKind.Plain,
+                        enabled = s != null
                     )
                     EchoButton(
                         stringResource(R.string.v2_assist_urdu),

@@ -81,9 +81,12 @@ class LiveAssistUiTest {
         compose.onNodeWithText("Delivery to the Hyderabad godown by Thursday", substring = true).assertExists()
         compose.onNodeWithText("Help me now").performClick()
         compose.onNodeWithText("Shorter").performClick()
+        compose.onNodeWithText("More formal").performClick()
         // The language line's label also says Urdu; the button is the one that clicks.
-        compose.onNode(androidx.compose.ui.test.hasText("Urdu") and androidx.compose.ui.test.hasClickAction()).performClick()
-        assertEquals(listOf(SendKind.HelpNow, SendKind.Shorter, SendKind.Translate), adapter.sent)
+        compose.onNode(
+            androidx.compose.ui.test.hasText("Urdu") and androidx.compose.ui.test.hasClickAction()
+        ).performClick()
+        assertEquals(listOf(SendKind.HelpNow, SendKind.Shorter, SendKind.Formal, SendKind.Translate), adapter.sent)
         // "shown" once, when the first text was drawn.
         assertEquals(listOf("s-1"), adapter.shown.map { it.first })
         assertTrue(adapter.shown.single().second >= 0)

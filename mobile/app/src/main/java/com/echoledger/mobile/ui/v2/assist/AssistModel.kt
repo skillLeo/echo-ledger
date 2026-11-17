@@ -19,11 +19,12 @@ enum class LiveMode(val wire: String) {
 /** What asked for a suggestion (`suggestion_start.kind`). */
 enum class SuggestionKind { Answer, HelpNow, Regenerate, Shorter, Formal, Translate, Upgrade }
 
-/** What the phone sends from the card (`help_now`, `regenerate`, `shorter`, `translate`, `cancel`). */
+/** What the phone sends from the card (`help_now`, `regenerate`, `shorter`, `formal`, `translate`, `cancel`). */
 enum class SendKind(val wire: String) {
     HelpNow("help_now"),
     Regenerate("regenerate"),
     Shorter("shorter"),
+    Formal("formal"),
     Translate("translate"),
     Cancel("cancel")
 }
@@ -151,12 +152,15 @@ data class CardState(
  * The Live Assist card as a pure reducer (contract 1.9.0-n, the same rules as the desktop card):
  * - a suggestion streams token by token onto the card; `replaces` names the one it takes the place of;
  * - one that ends `superseded` (a refusal after words were shown, a draft replaced by its upgrade, or the next question
- *   taking the card) has its text cleared at that moment, before its replacement's first token;
+ *   taking the card) has its text cleared at that moment;
+ * - a suggestion named by a start's `replaces` stays on the card until its replacement's first token or its own
+ *   `superseded` end, whichever comes first, so the card is never blank in between; then it leaves for good, even one
+ *   already done;
  * - `cancelled` (they kept talking) puts back what the card showed before it started;
  * - a failure ends with an `error` naming the suggestion, never a `suggestion_end`; its text is cleared;
  * - `skip` ends the suggestion it names, which never had words ("No reply needed");
- * - `ready` with `resumed: true` clears a suggestion still streaming (it gets no end);
- * - a start's `replaces` takes the replaced suggestion off the card for good, even one already done;
+ * - `ready` with `resumed: true` clears the card (nothing shows until the next suggestion) and a suggestion still
+ *   streaming (it gets no end);
  * - each error code has its own sentence; `budget_exhausted` says "suggestions are off" (retry false) or "try again
  *   in a moment" (retry true); a question the budget gate holds sends nothing, so the card says nothing;
  * - practice shows the question number and its end;
@@ -167,6 +171,9 @@ object AssistCard {
 
     private fun CardState.patch(id: String, change: (Suggestion) -> Suggestion) =
         copy(suggestions = suggestions.map { if (it.id == id) change(it) else it })
+
+    /** Takes [id] off the card for good: its text cleared, never put back. */
+    private fun CardState.supersede(id: String) = patch(id) { it.copy(text = "", status = SuggestionStatus.Superseded) }
 
     /** What the card falls back to when [id] goes without words: the one shown before it, if it still has text. */
     private fun CardState.previousShown(id: String): String? {
@@ -233,18 +240,24 @@ object AssistCard {
                 allowedModes = m.allowedModes,
                 meetingType = m.meetingType ?: state.meetingType,
                 ended = false,
-                shownId = if (state.shownId in streaming) cleared.previousShown(state.shownId!!) else state.shownId,
+                // Resumed: the card starts clean; nothing from before the drop comes back.
+                shownId = if (m.resumed) null else state.shownId,
+                skipped = state.skipped && !m.resumed,
                 problem = state.problem.takeIf { it != AssistProblem.Reconnecting && it != AssistProblem.Busy }
             )
         }
 
         is AssistMessage.SuggestionStart -> {
             val s = Suggestion(m.suggestionId, m.turnId, m.kind, m.replaces, m.draft, "", SuggestionStatus.Streaming, m.receivedAtMs)
-            // What it replaces (a draft already done, or an answer whose question changed) leaves the card for good.
-            val replaced = m.replaces?.let { id -> state.patch(id) { it.copy(text = "", status = SuggestionStatus.Superseded) } } ?: state
+            // What it replaces (a draft already done, or an answer whose question changed) stays on the card until this
+            // one's first token or its own `superseded` end; one that isn't on the card leaves at once.
+            val stays = m.replaces != null && m.replaces == state.shownId && state.shown?.let {
+                it.text.isNotEmpty() && it.status != SuggestionStatus.Superseded
+            } == true
+            val replaced = if (m.replaces != null && !stays) state.supersede(m.replaces) else state
             replaced.copy(
                 suggestions = replaced.suggestions.takeLast(KEEP - 1) + s,
-                shownId = m.suggestionId,
+                shownId = if (stays) state.shownId else m.suggestionId,
                 skipped = false,
                 problem = null,
                 problemText = null
@@ -258,12 +271,24 @@ object AssistCard {
             ) {
                 state
             } else {
-                state.patch(m.suggestionId) { it.copy(text = it.text + m.text) }
+                val next = state.patch(m.suggestionId) { it.copy(text = it.text + m.text) }
+                val replaces = s.replaces
+                // Its first token: what it replaces leaves the card now, and it takes the card.
+                if (replaces != null && s.text.isEmpty() && m.text.isNotEmpty() && state.shownId == replaces) {
+                    next.supersede(replaces).copy(shownId = m.suggestionId)
+                } else {
+                    next
+                }
             }
         }
 
         is AssistMessage.SuggestionEnd -> when (m.status) {
-            EndStatus.Superseded -> state.patch(m.suggestionId) { it.copy(text = "", status = SuggestionStatus.Superseded) }
+            EndStatus.Superseded -> {
+                // Cleared at once; if a replacement is waiting for its first token, it takes the card now.
+                val waiting = state.suggestions.lastOrNull { it.replaces == m.suggestionId && it.status == SuggestionStatus.Streaming }
+                val next = state.supersede(m.suggestionId)
+                if (state.shownId == m.suggestionId && waiting != null) next.copy(shownId = waiting.id) else next
+            }
 
             EndStatus.Cancelled -> {
                 val next = state.patch(m.suggestionId) { it.copy(status = SuggestionStatus.Cancelled) }
