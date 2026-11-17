@@ -171,10 +171,16 @@ impl std::fmt::Debug for TurnRow {
 }
 
 impl TurnRow {
-    /// A final caption line of session `session_id`; its `client_ref` is the same however often it is sent.
+    /// A final caption line of session `session_id`; its `client_ref` is the same however often it is sent. The other
+    /// person's turn is named by the relay's `turn_id` itself (1.9.0-j: the report pairs each hint with its question);
+    /// the microphone's by the app's own ref. Turn ids never restart inside a session: the turns feed lives as long as
+    /// the session, across relay reconnects.
     pub fn of(session_id: &str, turn: &CardTurn) -> Option<Self> {
         turn.is_final.then(|| TurnRow {
-            client_ref: format!("{session_id}:{}", turn.turn_id),
+            client_ref: match turn.channel {
+                Channel::Other => turn.turn_id.clone(),
+                Channel::Me => format!("{session_id}:{}", turn.turn_id),
+            },
             channel: channel_word(turn.channel),
             start_ms: turn.start_ms.unwrap_or(0),
             end_ms: turn.end_ms.unwrap_or(0),
@@ -329,7 +335,9 @@ mod tests {
         let mut batch = TurnBatch::new(start);
         assert!(TurnRow::of("as-1", &turn("o-1", Channel::Other, "Hi", false)).is_none(), "partials stay on the card");
         let row = |n: usize| TurnRow::of("as-1", &turn(&format!("o-{n}"), Channel::Other, "Hi", true)).unwrap();
-        assert_eq!(row(1).client_ref, "as-1:o-1");
+        assert_eq!(row(1).client_ref, "o-1", "the relay's turn_id itself");
+        let mine = TurnRow::of("as-1", &turn("m-4", Channel::Me, "Sure.", true)).unwrap();
+        assert_eq!(mine.client_ref, "as-1:m-4", "the app's own ref");
         assert!(!batch.push(row(1)));
         assert!(!batch.push(row(1)), "the same turn waits once");
         assert!(!batch.due(start + Duration::from_secs(4)));
@@ -348,8 +356,8 @@ mod tests {
         batch.push(row(12));
         batch.failed(ten);
         let again = batch.take(later + BATCH_EVERY);
-        assert_eq!(again.first().map(|r| r.client_ref.as_str()), Some("as-1:o-2"), "a failed batch goes first");
-        assert_eq!(serde_json::to_value(&again[0]).unwrap(), json!({"client_ref": "as-1:o-2", "channel": "other", "start_ms": 1000, "end_ms": 2500, "text": "Hi"}));
+        assert_eq!(again.first().map(|r| r.client_ref.as_str()), Some("o-2"), "a failed batch goes first");
+        assert_eq!(serde_json::to_value(&again[0]).unwrap(), json!({"client_ref": "o-2", "channel": "other", "start_ms": 1000, "end_ms": 2500, "text": "Hi"}));
         assert!(!format!("{:?}", again[0]).contains("Hi"), "the words stay out of logs");
     }
 }

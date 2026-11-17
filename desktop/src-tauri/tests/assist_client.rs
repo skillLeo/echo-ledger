@@ -660,9 +660,48 @@ async fn a_running_session_stops_when_it_is_taken_out_with_its_waiting_turns() {
     registry.heard_final(Audio::System, "When can you start?", 1_000, 2_000);
     let taken = registry.take().expect("it ran");
     assert_eq!(taken.id, "01JS");
-    assert_eq!(taken.rows.iter().map(|r| r.client_ref.as_str()).collect::<Vec<_>>(), ["01JS:o-1"], "the turns still waiting go with it");
+    assert_eq!(taken.rows.iter().map(|r| r.client_ref.as_str()).collect::<Vec<_>>(), ["o-1"], "the turns still waiting go with it");
     events.wait_for("the end", |e| *e == AssistEvent::Ended(EndReason::Closed)).await;
     assert!(registry.current().is_none());
+}
+
+#[tokio::test]
+async fn turn_ids_never_restart_when_the_relay_connection_does() {
+    use desktop_lib::audio::types::Channel as Audio;
+    let got: Arc<Mutex<Vec<(usize, Value)>>> = Arc::default();
+    let log = got.clone();
+    let relay = Relay::start(never, move |index, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            let _ = ws.send(ready(index > 0)).await;
+            let message = next_json(&mut ws).await;
+            log.lock().unwrap().push((index, message));
+            if index == 0 {
+                close_with(&mut ws, 1012).await;
+            } else {
+                while let Some(Ok(_)) = ws.next().await {}
+            }
+        }
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let registry = desktop_lib::assist::Registry::default();
+    registry.begin(running(client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink())));
+    events.wait_for("ready", |e| matches!(e, AssistEvent::Connected { resumed: false, .. })).await;
+    registry.heard_final(Audio::System, "First question?", 1_000, 2_000);
+    events.wait_for("the reconnect", |e| matches!(e, AssistEvent::Connected { resumed: true, .. })).await;
+    registry.heard_final(Audio::System, "Second question?", 3_000, 4_000);
+    for _ in 0..300 {
+        if got.lock().unwrap().len() == 2 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let ids: Vec<(usize, String)> = got.lock().unwrap().iter().map(|(i, v)| (*i, v["turn_id"].as_str().unwrap().to_string())).collect();
+    assert_eq!(ids, [(0, "o-1".to_string()), (1, "o-2".to_string())], "one numbering for the whole session");
+    let rows = registry.take().unwrap().rows;
+    assert_eq!(rows.iter().map(|r| r.client_ref.as_str()).collect::<Vec<_>>(), ["o-1", "o-2"], "so client_refs never collide");
 }
 
 #[tokio::test]

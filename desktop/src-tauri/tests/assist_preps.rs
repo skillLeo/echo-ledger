@@ -114,14 +114,14 @@ async fn final_turns_go_in_a_batch_and_suggestion_actions_are_told() {
     );
     let api = client(&server);
     let rows = vec![
-        TurnRow { client_ref: format!("{SESSION}:o-1"), channel: "other", start_ms: 81_200, end_ms: 86_400, text: "So what is your notice period?".into(), language: None },
+        TurnRow { client_ref: "o-1".into(), channel: "other", start_ms: 81_200, end_ms: 86_400, text: "So what is your notice period?".into(), language: None },
         TurnRow { client_ref: format!("{SESSION}:m-1"), channel: "me", start_ms: 87_000, end_ms: 89_000, text: "One month.".into(), language: Some("en".into()) },
     ];
     assert_eq!(api.assist_turns(SESSION, &rows).await.unwrap(), 2);
     assert_eq!(
         body(&server, "POST", &format!("/api/assist/sessions/{SESSION}/turns")),
         json!({"turns": [
-            {"client_ref": format!("{SESSION}:o-1"), "channel": "other", "start_ms": 81200, "end_ms": 86400, "text": "So what is your notice period?"},
+            {"client_ref": "o-1", "channel": "other", "start_ms": 81200, "end_ms": 86400, "text": "So what is your notice period?"},
             {"client_ref": format!("{SESSION}:m-1"), "channel": "me", "start_ms": 87000, "end_ms": 89000, "text": "One month.", "language": "en"}
         ]})
     );
