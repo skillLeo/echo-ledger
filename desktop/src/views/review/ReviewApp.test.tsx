@@ -202,10 +202,12 @@ describe("Ask-me chip", () => {
     expect(chip()).not.toBeInTheDocument();
   });
 
-  it("shows the check when the core keeps the chip by itself once its time is up, and not when it goes earlier", async () => {
+  it("says Saved as audio, with the check, when the core saves the chip by itself once its time is up, and not when it goes earlier", async () => {
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
     await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Kept·/);
+    expect(keptChip()).toHaveTextContent(/^Saved as audio·/);
+    expect(keptChip()).toHaveAccessibleName(/^Saved as audio: /);
+    expect(keptChip()).not.toHaveTextContent(/Kept/);
     await waitFor(() => expect(screen.queryByTestId("keep-chip")).not.toBeInTheDocument(), { timeout: 3000 });
 
     await emitEvent("aftercall:state", makeAfterCallState({ ask: makeChipItem("p2") }));
@@ -265,13 +267,13 @@ describe("Ask-me chip", () => {
     expect(classes()).toEqual(["after-pill chip", "after-pill chip leaving"]);
   });
 
-  it("still shows the core's keep after an answer that failed", async () => {
+  it("still shows the core's Saved as audio after an answer that failed", async () => {
     fail("after_call_discard", "Could not discard.");
     await renderWindow(makeAfterCallState({ ask: makeChipItem("p1", {}, Date.now() - 10_500) }));
     fireEvent.click(button("Discard"));
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not discard.");
     await emitEvent("aftercall:state", makeAfterCallState());
-    expect(keptChip()).toHaveTextContent(/^Kept·/);
+    expect(keptChip()).toHaveTextContent(/^Saved as audio·/);
   });
 
   it("a new chip ends the kept one's moment, and only the kept one says Kept", async () => {

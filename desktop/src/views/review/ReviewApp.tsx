@@ -71,6 +71,12 @@ export default function ReviewApp() {
   const [held, setHeld] = useState<PendingItem | null>(null);
   // The chip kept last: it says Kept, with its check, from then until it has left.
   const [keptId, setKeptId] = useState<string | null>(null);
+  // Kept by the core because nobody answered in time: saved as audio only, not transcribed (v1.8 P1).
+  const [audioId, setAudioId] = useState<string | null>(null);
+  const keptByAnswer = useCallback((id: string) => {
+    setAudioId(null);
+    setKeptId(id);
+  }, []);
   const onAnswer = useCallback((item: PendingItem, keeping: boolean) => {
     setAnswered(item.id);
     if (keeping) setHeld(item);
@@ -96,12 +102,14 @@ export default function ReviewApp() {
     } else if (lastAsk && lastAsk.id !== answered && secondsLeft(lastAsk.deadlineAt, Date.now()) === 0) {
       setHeld(lastAsk);
       setKeptId(lastAsk.id);
+      setAudioId(lastAsk.id);
     }
   }
   const saved = usePresence(state.saved);
   const discarded = usePresence(state.discarded ?? null);
   const chip = usePresence(held && (!state.ask || state.ask.id === held.id) ? held : state.ask);
   const chipKept = !!chip.item && chip.item.id === keptId;
+  const keptWord = chipKept && chip.item?.id === audioId ? "Saved as audio" : "Kept";
 
   // The interface flags are read again each time the window shows something, before it is drawn (v2/flags.ts).
   const windowShown = useWindowShown();
@@ -125,7 +133,7 @@ export default function ReviewApp() {
           {(saved.item || discarded.item || chip.item) && <div className="review-badge"><PrivacyBadge compact /></div>}
           {saved.item && <SavedPill key={saved.item.id} saved={saved.item} leaving={saved.leaving} onGone={dropSaved} />}
           {discarded.item && <DiscardedPill key={discarded.item.id} discarded={discarded.item} leaving={discarded.leaving} onGone={dropDiscarded} />}
-          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={setKeptId} />}
+          {chip.item && <KeepChip key={chip.item.id} item={chip.item} kept={chipKept} keptWord={keptWord} leaving={chip.leaving} onGone={dropChip} onAnswer={onAnswer} onAnswerFailed={onAnswerFailed} onKept={keptByAnswer} />}
         </div>
       )}
     </div>
@@ -240,10 +248,12 @@ function DiscardedPill({ discarded, leaving, onGone }: { discarded: SavedToast; 
 
 /** "Ask me": the title (opens the recording to rename it or pick a project), ✓ Keep and a labelled Discard; kept by the
  * core at `deadlineAt` when nobody answers. */
-function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
+function KeepChip({ item, kept, keptWord = "Kept", leaving, onGone, onAnswer, onAnswerFailed, onKept }: {
   item: PendingItem;
   /** Kept: the check pops in where the app's icon was and the chip says so, then it leaves. */
   kept: boolean;
+  /** What a kept chip says: "Kept", or "Saved as audio" when its time ran out with no answer. */
+  keptWord?: string;
   leaving: boolean;
   onGone: (id: string) => void;
   onAnswer: (item: PendingItem, keeping: boolean) => void;
@@ -275,11 +285,11 @@ function KeepChip({ item, kept, leaving, onGone, onAnswer, onAnswerFailed, onKep
   const title = afterCallTitle(item);
   if (kept) {
     return (
-      <section className={`after-pill chip kept ${leaving ? "leaving" : ""}`} data-testid="keep-chip" role="status" aria-label={`Kept: ${title}`}
+      <section className={`after-pill chip kept ${leaving ? "leaving" : ""}`} data-testid="keep-chip" role="status" aria-label={`${keptWord}: ${title}`}
         aria-hidden={leaving || undefined}>
         <span className="after-icon ok" aria-hidden="true"><SuccessCheck size={14} /></span>
         <span className="after-text">
-          <b className="after-word">Kept</b>
+          <b className="after-word">{keptWord}</b>
           <span className="after-sep" aria-hidden="true">·</span>
           <span className="after-title" dir="auto" title={title}>{title}</span>
         </span>
