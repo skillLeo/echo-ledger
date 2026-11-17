@@ -100,16 +100,16 @@ final class AssistSessionController extends Controller
         ], 201)->header('Cache-Control', 'no-store');
     }
 
-    /** POST /api/assist/sessions/{id}/token — `stt:token`: new relay and captions blocks; the budget as it is now. */
+    /**
+     * POST /api/assist/sessions/{id}/token — `stt:token`: new relay and captions blocks; the budget as it is now. Captions
+     * being down never fails a refresh (1.9.0-j): `stt` is null, the session goes on, and the app asks again in 30 s.
+     */
     public function token(Request $request, string $id): JsonResponse
     {
         $session = $this->active($request, $id);
         $this->relay->assertReady();
         $prep = $session->prep;
         $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off', $session->id);
-        if ($stt === null && $session->capture_session_id === null) {
-            throw new ApiError(503, 'provider_not_configured', 'Live captions are not set up on the server yet.');
-        }
         $session->forceFill(['last_token_at' => now()])->save();
 
         return response()->json(['relay' => $this->relay->block($session), 'stt' => $stt])->header('Cache-Control', 'no-store');
