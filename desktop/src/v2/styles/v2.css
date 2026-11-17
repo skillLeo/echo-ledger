@@ -762,3 +762,7 @@ button.el-step__head { cursor: pointer; }
 }
 .el-progress__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); border-radius: inherit; }
 .el-empty--error .el-empty__icon { color: var(--el-role-danger-default); }
+
+/* Meeting assets (v1.8 P4.3): the screens mark on a row. */
+.el-row__mark { flex: none; display: inline-flex; }
+.el-screens-mark { display: inline-flex; align-items: center; gap: var(--el-space-2); color: var(--el-role-text-secondary); }

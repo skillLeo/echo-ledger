@@ -14,7 +14,7 @@ const at = (day: number, hour: number, minute = 0) => new Date(2026, 10, day, ho
 
 const ITEMS: LibraryItem[] = [
   makeItem("bilal", {
-    title: "Bilal Qureshi · Qureshi Textiles", source_app: "whatsapp", source_app_label: "WhatsApp", started_at: at(17, 11, 42), duration_ms: 1_104_000,
+    title: "Bilal Qureshi · Qureshi Textiles", source_app: "whatsapp", source_app_label: "WhatsApp", started_at: at(17, 11, 42), duration_ms: 1_104_000, screen_count: 3,
     transcript: { final_status: "completed", final_transcript_id: "tr-bilal", live_available: false, preview: "Payment terms for the March shipment" },
   }),
   makeItem("voice", {
@@ -52,7 +52,8 @@ describe("the Library's rules", () => {
 
   it("a row: who, the first words or the state, the time today or the date before, and the length", () => {
     expect(rowModel(ITEMS[0], NOW)).toMatchObject({ title: "Bilal Qureshi · Qureshi Textiles", meta: "Payment terms for the March shipment", badge: null, when: "11:42 am", duration: "18:24", app: "whatsapp" });
-    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ meta: "Voice note", badge: { tone: "warning", text: "Untranscribed" } });
+    expect(rowModel(ITEMS[0], NOW).screens).toBe(3);
+    expect(rowModel(ITEMS[1], NOW)).toMatchObject({ meta: "Voice note", badge: { tone: "warning", text: "Untranscribed" }, screens: 0 });
     expect(rowModel(ITEMS[2], NOW)).toMatchObject({ meta: "Phone call · Transcription failed", badge: { tone: "danger", text: "Failed" } });
     expect(rowModel(ITEMS[3], NOW).when).toBe("16 Nov");
     const transcribing = makeItem("t", { status: "processing", transcript: { final_status: "processing", final_transcript_id: null, live_available: false, preview: null } });
@@ -89,7 +90,9 @@ describe("LibraryV2", () => {
     await show();
     const list = screen.getByRole("list", { name: "Recordings" });
     const row = within(list).getByRole("button", { name: "Bilal Qureshi · Qureshi Textiles" });
-    expect(row).toHaveAccessibleDescription(/Payment terms for the March shipment.*11:42 am.*18:24/);
+    expect(row).toHaveAccessibleDescription(/^3 screens Payment terms for the March shipment.*11:42 am.*18:24/);
+    // The screens mark only on a recording with screens.
+    expect(within(list).getByRole("button", { name: "Voice note" })).not.toHaveAccessibleDescription(/screen/);
     expect(within(list).getByText("Today")).toBeInTheDocument();
     expect(within(list).getByText("Yesterday")).toBeInTheDocument();
     expect(within(list).queryByText("Deleted call")).toBeNull();
