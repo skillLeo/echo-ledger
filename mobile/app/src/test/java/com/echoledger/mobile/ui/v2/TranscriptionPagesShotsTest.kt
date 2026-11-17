@@ -8,11 +8,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.onRoot
 import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.data.FeatureDto
+import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.ServerFixtures
+import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.settings.KeyPage
 import com.echoledger.mobile.ui.v2.settings.LanguagePage
+import com.echoledger.mobile.ui.v2.settings.WordsPage
 import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
@@ -22,7 +26,7 @@ import org.junit.Test
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
-/** Language and Transcription key in the v2 look, light and dark, English and Urdu, at the S25's size. */
+/** Language, Custom words and Transcription key in the v2 look, light and dark, English and Urdu, at the S25's size. */
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [34], qualifiers = "w411dp-h891dp-420dpi")
 class TranscriptionPagesShotsTest : ScreenTest() {
@@ -33,17 +37,27 @@ class TranscriptionPagesShotsTest : ScreenTest() {
 
     @Test
     fun screenshots() {
+        // Two projects for Custom words.
+        kotlinx.coroutines.runBlocking { app.pairLocally(server) }
+        server.on("GET", "/api/clients", FakeServer.json(200, ServerFixtures.clients()))
+        server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        vm.refresh()
+        pumpUntil("projects") { vm.clients.value.size == 2 }
         vm.updateSettings { it.copy(plan = PlanState(features = mapOf("platform_transcription" to FeatureDto(enabled = false)))) }
         pumpUntil("free plan") { vm.settings.value.plan.needsOwnKey }
         show {
             val settings by vm.settings.collectAsState()
             EchoV2Theme(darkTheme = dark, language = language) {
                 CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                    if (which == "language") LanguagePage(vm, settings, null, {}) else KeyPage(vm, settings.plan, null, {})
+                    when (which) {
+                        "language" -> LanguagePage(vm, settings, null, {})
+                        "words" -> WordsPage(vm, settings, null, {})
+                        else -> KeyPage(vm, settings.plan, null, {})
+                    }
                 }
             }
         }
-        for (name in listOf("language", "key")) {
+        for (name in listOf("language", "words", "key")) {
             for ((l, d) in listOf(EchoLanguage.English to false, EchoLanguage.Urdu to false, EchoLanguage.English to true)) {
                 which = name
                 language = l
