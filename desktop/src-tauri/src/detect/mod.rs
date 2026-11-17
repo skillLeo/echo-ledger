@@ -202,6 +202,9 @@ pub struct DetectState {
     watchdog: Mutex<crate::call_guard::Watchdog>,
     /// The apps not recorded and when, newest first ([`keep_not_recorded`]), for "Why a call wasn't recorded".
     missed: Mutex<Vec<NotRecorded>>,
+    /// Who each call app's windows say the call is with now (wire value → name), read every tick: the contact a
+    /// call rule is checked against before capture starts.
+    callers: Mutex<HashMap<String, String>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -209,6 +212,17 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl DetectState {
+    /// For tests: the call in `source_app` is with `name`, as if its window said so.
+    #[cfg(test)]
+    pub(crate) fn note_caller(&self, source_app: &str, name: &str) {
+        lock(&self.callers).insert(source_app.to_string(), name.to_string());
+    }
+
+    /// Who the call in `source_app` (its wire value) is with, as its window says now; none when it does not say.
+    pub fn caller_now(&self, source_app: &str) -> Option<String> {
+        lock(&self.callers).get(source_app).cloned()
+    }
+
     /// The last observation with its decisions (refreshed once per second by the loop).
     pub fn mic_users(&self) -> Vec<MicUser> {
         lock(&self.users).clone()
@@ -318,6 +332,16 @@ fn tick(app: &AppHandle, settings: &crate::settings::Settings, now_ms: u64, tree
     }
     *lock(&detect.users) = users;
     *lock(&detect.meeting) = meeting_tree(trees, rules, recorded.filter(|_| recording));
+
+    // Who each call app's call is with now, for the call rules checked before a recording starts.
+    *lock(&detect.callers) = trees
+        .iter()
+        .filter_map(|t| {
+            let source = classify::classify_any(&t.name, t.pfn.as_deref())?;
+            let titles: Vec<String> = t.titles.iter().map(|s| strip_browser_suffix(s).to_string()).collect();
+            callers::meeting_name(source, &titles).map(|name| (source.as_str().to_string(), name))
+        })
+        .collect();
 
     // Caller names (since v1.2): who the recorded call is with, from its app's window titles.
     if recording

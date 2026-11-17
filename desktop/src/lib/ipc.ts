@@ -11,7 +11,9 @@ export type OldWindowsSharing = "black_box" | "show";
 export type Corner = "top_left" | "top_right" | "bottom_left" | "bottom_right";
 /** After a call (contract 1.8.0-e): `ask` (default), a small chip that saves the audio by itself after 12 s, not
  * transcribed; `always_transcribe` or `always_audio`, kept at once with "Saved · Undo". v1.5's `keep` reads as `ask`. */
-export type AfterCall = "ask" | "always_transcribe" | "always_audio";
+export type AfterCall = "ask" | "always_transcribe" | "always_audio" | "dont_record";
+/** A call rule's choice (docs/PLAN_CALL_RULES.md 1); words in lib/callRules.ts. */
+export type CallChoice = "ask" | "keep_audio" | "transcribe" | "dont_record";
 /** Why an automatic call was skipped quietly (v1.5): shorter than the setting, or nobody spoke on either side. */
 export type SkipReason = "too_short" | "no_speech";
 export type TrayState = "idle" | "recording" | "paused" | "uploading" | "attention";
@@ -380,6 +382,8 @@ export interface Settings {
   consentAcknowledged: boolean;
   afterCall: AfterCall;
   afterCallNotice: boolean;
+  sourceRules: Record<string, CallChoice>;
+  contactRules: Record<string, CallChoice>;
   skipCallsShorterThanS: number;
   askUnknownApps: boolean;
   siteRules: SiteRule[];
@@ -511,6 +515,8 @@ export interface SettingsPatch {
   overlayCorner?: Corner;
   afterCall?: AfterCall;
   skipCallsShorterThanS?: number;
+  sourceRules?: Record<string, CallChoice>;
+  contactRules?: Record<string, CallChoice>;
   askUnknownApps?: boolean;
   siteRules?: SiteRule[];
   captionLines?: number;

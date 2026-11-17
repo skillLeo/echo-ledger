@@ -775,6 +775,10 @@ pub struct SettingsPatch {
     after_call: Option<crate::settings::AfterCall>,
     /// 0, 5, 10, 20 or 30; anything else is refused.
     skip_calls_shorter_than_s: Option<u32>,
+    /// The call rules per source, whole (a source left out, or set to Ask me, follows the default).
+    source_rules: Option<HashMap<String, crate::call_rules::CallChoice>>,
+    /// The call rules per contact, whole (a contact set to Ask me follows the default).
+    contact_rules: Option<HashMap<String, crate::call_rules::CallChoice>>,
     /// 2, 3 or 5; anything else is refused.
     caption_lines: Option<u8>,
     /// Full replacement; refused when a value is out of range.
@@ -838,6 +842,11 @@ impl SettingsPatch {
         // Choosing After a call answers the one-time notice about it.
         if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
+        if let Some(v) = &self.source_rules { s.source_rules = crate::call_rules::cleaned(v, |k| crate::call_rules::SOURCES.iter().any(|(key, _, _)| *key == k)); }
+        if let Some(v) = &self.contact_rules {
+            let keyed: HashMap<String, crate::call_rules::CallChoice> = v.iter().map(|(name, c)| (crate::call_rules::contact_key(name), *c)).collect();
+            s.contact_rules = crate::call_rules::cleaned(&keyed, |k| !k.is_empty() && k.chars().count() <= 120);
+        }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
         if let Some(v) = &self.input_device { s.input_device = v.clone(); }

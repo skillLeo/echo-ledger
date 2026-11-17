@@ -9,6 +9,7 @@ pub mod app_menu;
 pub mod assist;
 pub mod audio;
 pub mod call_guard;
+pub mod call_rules;
 mod commands;
 pub mod deep_link;
 pub mod detect;

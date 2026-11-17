@@ -35,6 +35,8 @@ fn customised() -> Settings {
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
         after_call_notice: true,
+        source_rules: [("zoom".to_string(), crate::call_rules::CallChoice::Transcribe)].into(),
+        contact_rules: [("ahmed".to_string(), crate::call_rules::CallChoice::DontRecord)].into(),
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
@@ -170,6 +172,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "captionsOnRecord",
             "clientId",
             "consentAcknowledged",
+            "contactRules",
             "deviceId",
             "deviceName",
             "dictationCleanup",
@@ -202,10 +205,11 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "shortcuts",
             "siteRules",
             "skipCallsShorterThanS",
+            "sourceRules",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 48, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 50, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");

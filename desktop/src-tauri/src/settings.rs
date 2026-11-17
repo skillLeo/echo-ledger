@@ -21,13 +21,16 @@ pub enum AfterCall {
     Ask,
     AlwaysTranscribe,
     AlwaysAudio,
+    /// Calls are not recorded unless started by hand (call rules, docs/PLAN_CALL_RULES.md 2).
+    DontRecord,
 }
 
 impl AfterCall {
     /// Kept at once, without asking: `Some(transcribe)`; `None` when the card asks.
     pub fn keeps_at_once(self) -> Option<bool> {
         match self {
-            AfterCall::Ask => None,
+            // Don't record reaches the end of a call only when it was started by hand: the card asks.
+            AfterCall::Ask | AfterCall::DontRecord => None,
             AfterCall::AlwaysTranscribe => Some(true),
             AfterCall::AlwaysAudio => Some(false),
         }
@@ -280,6 +283,13 @@ pub struct Settings {
     /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Always transcribe one
     /// tap away ([`AFTER_CALL_NOTICE`]). Cleared once answered.
     pub after_call_notice: bool,
+    /// Call rules per source app (`zoom`, `meet`, `teams`, `slack`, `whatsapp`; [`crate::call_rules::SOURCES`]): a
+    /// source without one follows `after_call`.
+    #[serde(default)]
+    pub source_rules: HashMap<String, crate::call_rules::CallChoice>,
+    /// Call rules per contact, keyed by [`crate::call_rules::contact_key`]; they beat the source's and the default.
+    #[serde(default)]
+    pub contact_rules: HashMap<String, crate::call_rules::CallChoice>,
     /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
     pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
@@ -362,6 +372,8 @@ impl Default for Settings {
             // first (contract 1.8.0-e). The old keys are read and ignored.
             after_call: AfterCall::Ask,
             after_call_notice: false,
+            source_rules: HashMap::new(),
+            contact_rules: HashMap::new(),
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),

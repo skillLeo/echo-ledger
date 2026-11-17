@@ -244,10 +244,31 @@ pub async fn start_call_recording(app: &AppHandle, source_app: &str, auto: bool)
     start_call_recording_with(app, source_app, auto, captions).await
 }
 
+/// The call rule for a call from `source_app` with `contact` (call rules: contact > source > default).
+pub(crate) fn call_rule(settings: &crate::settings::Settings, source_app: &str, contact: Option<&str>) -> (crate::call_rules::CallChoice, crate::call_rules::RuleFrom) {
+    let rules = crate::call_rules::Rules { default: settings.after_call.into(), sources: &settings.source_rules, contacts: &settings.contact_rules };
+    crate::call_rules::resolve(rules, source_app, contact)
+}
+
+/// Whether a Don't record rule refuses this start (an automatic one only), decided before anything is captured or
+/// written: the rule that refused it, or none to go on. Reads only the settings and who the call app says the call is
+/// with now.
+pub(crate) fn refused_by_rule(state: &crate::AppState, source_app: &str, auto: bool) -> Option<crate::call_rules::RuleFrom> {
+    let contact = state.detect.caller_now(source_app);
+    let (choice, from) = call_rule(&state.settings(), source_app, contact.as_deref());
+    (!crate::call_rules::records(choice, auto)).then_some(from)
+}
+
 /// Starts a two-channel recording from a clean slate; `captions` decides whether live captions open with it.
 pub async fn start_call_recording_with(app: &AppHandle, source_app: &str, auto: bool, captions: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if state.capture.is_recording() {
+        return Ok(());
+    }
+    // A Don't record rule: the call is never recorded, nothing is captured or written (call rules, plan 2). Quietly:
+    // it is what the person asked for.
+    if let Some(from) = refused_by_rule(&state, source_app, auto) {
+        eprintln!("[echoledger] not recording a {source_app} call: Don't record ({from:?} rule)");
         return Ok(());
     }
     if !state.is_paired() {
@@ -342,7 +363,7 @@ pub async fn record_now(app: &AppHandle) -> AppResult<()> {
 pub async fn start_backup(app: &AppHandle, source: crate::detect::classify::SourceApp) {
     use crate::call_guard::{BACKUP_BODY, BACKUP_TITLE};
     let state = app.state::<crate::AppState>();
-    if state.capture.is_recording() {
+    if state.capture.is_recording() || refused_by_rule(&state, source.as_str(), true).is_some() {
         return;
     }
     match start_call_recording(app, source.as_str(), true).await {
@@ -567,7 +588,10 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     }
     // A Live Assist session from a prep saves its call without the after-call card (docs/API_ASSIST.md `auto_saved`).
     let assist_saved = take_assist_saved(&state, &client_ref);
-    let at_once = if assist_saved { Some(true) } else { pending::after_call(settings.after_call, mode).keeps_at_once() };
+    // The call's rule (contact > source > default) decides what happens now; a call started by hand under Don't record
+    // asks.
+    let rule = call_rule(&settings, &decision.source_app, decision.caller_name()).0.after_call();
+    let at_once = if assist_saved { Some(true) } else { pending::after_call(rule, mode).keeps_at_once() };
     let ask = at_once.is_none();
     let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
@@ -1999,5 +2023,80 @@ mod start_up_tests {
         let gate = outside.find("if !ready_or_queue(&OUTSIDE, args) || app.try_state::<crate::AppState>().is_none() {").expect("gated");
         assert!(gate < outside.find("handle_links(app, args)").unwrap() && gate < outside.find(".state::<crate::AppState>()").unwrap());
         assert!(lib.contains("tauri_plugin_single_instance::init(|app, argv, _cwd| actions::show_main_from_outside(app, &argv))"));
+    }
+}
+
+#[cfg(test)]
+mod call_rule_tests {
+    use crate::call_rules::{CallChoice, RuleFrom};
+
+    /// Everything under `dir`, folders and files.
+    fn written(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+        let mut found = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                found.push(entry.path());
+                found.extend(written(&entry.path()));
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn don_t_record_refuses_an_automatic_start_before_anything_is_captured_or_written() {
+        let dir = tempfile::tempdir().unwrap();
+        let state = crate::AppState::load(dir.path().to_path_buf(), true);
+        state
+            .update_settings(|s| {
+                s.source_rules = [("whatsapp".to_string(), CallChoice::DontRecord), ("zoom".to_string(), CallChoice::Transcribe)].into();
+                s.contact_rules = [("mum".to_string(), CallChoice::DontRecord)].into();
+            })
+            .unwrap();
+        let before = written(dir.path());
+        // The source's rule, the contact's rule over a source that records, and the default.
+        assert_eq!(super::refused_by_rule(&state, "whatsapp", true), Some(RuleFrom::Source));
+        assert_eq!(super::refused_by_rule(&state, "zoom", true), None);
+        state.detect.note_caller("zoom", "Mum");
+        assert_eq!(super::refused_by_rule(&state, "zoom", true), Some(RuleFrom::Contact), "the contact's rule beats Zoom's");
+        assert_eq!(super::refused_by_rule(&state, "zoom", false), None, "Record now is the person asking");
+        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", true), None, "the default asks");
+        state.update_settings(|s| s.after_call = crate::settings::AfterCall::DontRecord).unwrap();
+        assert_eq!(super::refused_by_rule(&state, "microsoft_teams", true), Some(RuleFrom::Default));
+        // Deciding wrote nothing but the settings themselves: no recording folder, no audio.
+        let after: Vec<_> = written(dir.path()).into_iter().filter(|p| !before.contains(p) && !p.ends_with("settings.json")).collect();
+        assert!(after.is_empty(), "nothing written: {after:?}");
+        assert!(!crate::net::sync::paths::recordings(dir.path()).exists(), "no recordings folder");
+        assert!(!state.capture.is_recording());
+    }
+
+    #[test]
+    fn every_automatic_start_asks_the_rule_before_capture() {
+        let source = include_str!("actions.rs");
+        let body = |name: &str| {
+            let start = source.find(name).unwrap_or_else(|| panic!("{name}"));
+            let rest = &source[start..];
+            rest[..rest.find("\n}\n").unwrap()].to_string()
+        };
+        let start = body("pub async fn start_call_recording_with(");
+        let gate = start.find("refused_by_rule(&state, source_app, auto)").expect("the rule is asked");
+        let capture = start.find("state.capture.start(").expect("capture starts here");
+        assert!(gate < capture, "the rule before capture");
+        for before in ["checked_permissions(", "start_captions(", "on_recording_started("] {
+            assert!(gate < start.find(before).unwrap(), "the rule before {before}");
+        }
+        let backup = body("pub async fn start_backup(");
+        assert!(backup.find("refused_by_rule(") < backup.find("start_call_recording("), "the backup start asks first and says nothing");
+        // The only automatic starts go through start_call_recording (the detect loop and the watchdog).
+        let detect = include_str!("detect/mod.rs");
+        assert!(detect.contains("crate::actions::start_call_recording(&app, source.as_str(), true)"));
+    }
+
+    #[test]
+    fn a_finished_call_follows_its_rule() {
+        let source = include_str!("actions.rs");
+        let decide = &source[source.find("fn decide_finished(").unwrap()..];
+        let decide = &decide[..decide.find("\n}\n").unwrap()];
+        assert!(decide.contains("call_rule(&settings, &decision.source_app, decision.caller_name())"), "{decide}");
+        assert!(!decide.contains("pending::after_call(settings.after_call"), "never the default alone");
     }
 }
