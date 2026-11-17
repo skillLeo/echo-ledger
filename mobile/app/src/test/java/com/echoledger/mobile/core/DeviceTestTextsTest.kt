@@ -43,10 +43,7 @@ class DeviceTestTextsTest {
         val fixed = holes.split(s)
         // A template that is mostly holes ("${'$'}name", "%1${'$'}s: %2${'$'}s") would match any text: it says nothing.
         if (fixed.sumOf { it.count(Char::isLetter) } < 4) return null
-        // Holes side by side or apart only by spaces or signs ("${'$'}{a}${'$'}{b}", "${'$'}{a} ${'$'}{b}") are one value, not
-        // one per hole: the parts between them without a letter or digit go.
-        val middle = fixed.drop(1).dropLast(1).filter { part -> part.any(Char::isLetterOrDigit) }
-        return Template(listOf(fixed.first()) + middle + listOf(fixed.last()))
+        return Template(fixed)
     }
 
     /** An app template by its fixed parts; one hole is one value (a number, a name, a date, at most a few words). */
@@ -58,8 +55,10 @@ class DeviceTestTextsTest {
 
         /**
          * [text] fits inside one filled-in template: it is part of one fixed part, or it runs from the end of one fixed
-         * part across holes and the whole fixed parts between them into the start of a later one. A text with more
-         * after the template ("Uploading 1 recording(s)… and more words") does not fit.
+         * part across holes and the whole fixed parts between them into the start of a later one, covering some of the
+         * template's own words (at least [MIN_LETTERS] letters of them: a hole alone takes any few words, so a match
+         * that is only holes and signs says nothing). A text with more after the template ("Uploading 1 recording(s)…
+         * and more words") does not fit.
          */
         fun fitsInside(text: String): Boolean {
             if (fixed.any { it.contains(text) }) return true
@@ -70,9 +69,13 @@ class DeviceTestTextsTest {
                     if (!text.startsWith(tail)) continue
                     val rest = text.substring(tail.length)
                     for (b in a + 1..fixed.lastIndex) {
-                        val between = (a + 1 until b).joinToString("") { Regex.escape(fixed[it]) + HOLE }
-                        val heads = (0..fixed[b].length).joinToString("|") { Regex.escape(fixed[b].substring(0, it)) }
-                        if (Regex(HOLE + between + "(?:$heads)").matches(rest)) return true
+                        val inner = (a + 1 until b).map { fixed[it] }
+                        val between = inner.joinToString("") { Regex.escape(it) + HOLE }
+                        for (h in 0..fixed[b].length) {
+                            val head = fixed[b].substring(0, h)
+                            val covered = (listOf(tail, head) + inner).sumOf { part -> part.count(Char::isLetter) }
+                            if (covered >= MIN_LETTERS && Regex(HOLE + between + Regex.escape(head)).matches(rest)) return true
+                        }
                     }
                 }
             }
@@ -139,6 +142,12 @@ class DeviceTestTextsTest {
             !isAppText("Uploading 1 recording(s)… and more words", app, patterns, partOf = true)
         )
         assertTrue("part of a filled-in template is", isAppText("1 recording(s)", app, patterns, partOf = true))
+        // A partial lookup has to cover some of a template's own words, not only fill its holes.
+        assertTrue(!isAppText("Near-end microphone source", app, patterns, partOf = true))
+        assertTrue("a stale one-word sample (the old setting's word)", !isAppText("Near-end", app, patterns, partOf = true))
+        // A template with several holes apart only by signs is filled in by one value each.
+        val row = Template(listOf("", " · ", " · ", ""))
+        assertTrue(row.matches("Karachi Cargo Services · WhatsApp · 12 min"))
     }
 
     @Test
@@ -163,6 +172,9 @@ class DeviceTestTextsTest {
 
     private companion object {
         const val HOLE = """\S+(?: \S+){0,3}"""
+
+        /** How many of a template's own letters a partial match must cover. */
+        const val MIN_LETTERS = 3
     }
 }
 
