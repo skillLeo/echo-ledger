@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
-import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeMicUser, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { ConfirmHost } from "./ConfirmHost";
@@ -408,6 +408,17 @@ describe("Live Translate on the Live tab (live_translate_status)", () => {
     await act(async () => undefined);
     expect(screen.queryByTestId("translate-unavailable")).toBeNull();
     expect(await screen.findByRole("option", { name: "Valorant" })).toBeInTheDocument();
+  });
+
+  it("while the core is asked: no reason, no words and no Start, even on a Mac", async () => {
+    respondWith("live_translate_status", () => new Promise(() => undefined));
+    respond("translate_apps", []);
+    respond("translate_status", null);
+    await setup({ platform: "macos" });
+    await act(async () => undefined);
+    expect(screen.queryByTestId("translate-unavailable")).toBeNull();
+    expect(screen.queryByText(/needs macOS 14.2|Not in your plan/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   });
 
   it("a core that doesn't answer: the plan decides, as before, and a Mac is told it needs macOS 14.2", async () => {

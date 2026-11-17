@@ -40,21 +40,23 @@ export const UNAVAILABLE_WORDS: Record<NonNullable<LiveTranslateAvailability["re
 };
 
 /**
- * Whether it can run here: the core's answer (live_translate_status), else worked out the same way from this system
- * and the plan, for a core that doesn't answer.
+ * Whether it can run here: the core's answer (live_translate_status); while it is asked (`undefined`), not yet and for
+ * no reason (Start off, no words); only once the core couldn't say (`null`), worked out the same way from this system
+ * and the plan.
  */
-export function translateAvailability(answer: LiveTranslateAvailability | null, platform: string, inPlan: boolean): LiveTranslateAvailability {
+export function translateAvailability(answer: LiveTranslateAvailability | null | undefined, platform: string, inPlan: boolean): LiveTranslateAvailability {
+  if (answer === undefined) return { available: false, reason: null };
   if (answer) return answer;
   if (platform === "macos") return { available: false, reason: "platform" };
   return inPlan ? { available: true, reason: null } : { available: false, reason: "plan" };
 }
 
-/** The core's answer, read once: null until it comes (or when the core can't say). */
-export function useTranslateAvailability(): LiveTranslateAvailability | null {
-  const [answer, setAnswer] = useState<LiveTranslateAvailability | null>(null);
+/** The core's answer, read once: undefined while it is asked, null when the core couldn't say (an older core, an error). */
+export function useTranslateAvailability(): LiveTranslateAvailability | null | undefined {
+  const [answer, setAnswer] = useState<LiveTranslateAvailability | null | undefined>(undefined);
   useEffect(() => {
     let live = true;
-    api.liveTranslateStatus().then((a) => live && setAnswer(a ?? null), () => undefined);
+    api.liveTranslateStatus().then((a) => live && setAnswer(a ?? null), () => live && setAnswer(null));
     return () => {
       live = false;
     };
