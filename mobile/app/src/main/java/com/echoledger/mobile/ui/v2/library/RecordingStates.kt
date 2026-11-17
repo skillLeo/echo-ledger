@@ -88,6 +88,17 @@ fun timeLeft(res: Resources, seconds: Long): String = if (seconds < 60) {
     res.getString(R.string.v2_rec_minutes, ((seconds + 30) / 60).toInt())
 }
 
+/** "Transcribing · part 2 of 3 · about 20 s left" (classic's TranscriptText.transcribing), in the screen's language. */
+fun transcribingLine(res: Resources, progress: ProgressDto?): String {
+    val total = progress?.total ?: 0
+    val done = progress?.done ?: 0
+    return listOfNotNull(
+        res.getString(R.string.v2_rec_step_transcribing),
+        if (total > 1) res.getString(R.string.v2_rec_part, (done + 1).coerceAtMost(total), total) else null,
+        progress?.etaSeconds?.let { res.getString(R.string.v2_rec_left, timeLeft(res, it)) }
+    ).joinToString(" · ")
+}
+
 /**
  * The line under the steps, in the screen's language, from the same facts as classic's ([RecordingSteps.Steps.line]):
  * "Transcribing · part 2 of 3 · about 20 s left", "Improving Roman Urdu… 60%", "Transcription failed", "Uploading";

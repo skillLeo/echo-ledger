@@ -154,11 +154,14 @@ fun RecordingMenuSheet(
     canExport: Boolean,
     actions: RecordingMenuActions,
     onDismiss: () -> Unit,
-    backToSource: Pair<String, () -> Unit>? = null
+    backToSource: Pair<String, () -> Unit>? = null,
+    canRetranscribe: Boolean = true
 ) {
     var exporting by remember { mutableStateOf(false) }
     EchoBottomSheet(onDismiss = onDismiss) {
-        RecordingMenuContent(item, hasAudio, skipSilence, canExport, exporting, { exporting = it }, actions, onDismiss, backToSource)
+        RecordingMenuContent(item, hasAudio, skipSilence, canExport, exporting, {
+            exporting = it
+        }, actions, onDismiss, backToSource, canRetranscribe)
     }
 }
 
@@ -173,7 +176,9 @@ fun RecordingMenuContent(
     onExporting: (Boolean) -> Unit,
     actions: RecordingMenuActions,
     onDone: () -> Unit,
-    backToSource: Pair<String, () -> Unit>? = null
+    backToSource: Pair<String, () -> Unit>? = null,
+    /** Change language & re-transcribe: only for a recording with a final transcript and audio (classic). */
+    canRetranscribe: Boolean = true
 ) {
     fun pick(action: () -> Unit) {
         onDone()
@@ -210,8 +215,8 @@ fun RecordingMenuContent(
             stringResource(if (item.keep) R.string.v2_rec_stop_keeping else R.string.v2_rec_keep),
             { pick { actions.keep(!item.keep) } }
         )
-        MenuGroup(stringResource(R.string.v2_rec_menu_transcript))
-        MenuRow(RecordingIcons.Language, stringResource(R.string.v2_rec_retranscribe), { pick(actions::retranscribe) })
+        if (canRetranscribe || hasAudio) MenuGroup(stringResource(R.string.v2_rec_menu_transcript))
+        if (canRetranscribe) MenuRow(RecordingIcons.Language, stringResource(R.string.v2_rec_retranscribe), { pick(actions::retranscribe) })
         if (hasAudio) {
             MenuRow(
                 RecordingIcons.SkipSilence,

@@ -35,7 +35,6 @@
     <string name="v2_rec_retranscribe_go">Re-transcribe</string>
     <string name="v2_rec_retranscribe_anyway">Re-transcribe anyway</string>
     <string name="v2_rec_english_only_warning">This recording has Urdu in it. English only makes the engine translate the Urdu into English. Choose Urdu to keep every word, or tap Re-transcribe anyway.</string>
-    <string name="v2_rec_retranscribing">Re-transcribing. The current transcript stays until the new one is ready.</string>
     <string name="v2_rec_more_languages">More languages</string>
     <string name="v2_rec_skip_silences">Skip silences</string>
     <string name="v2_rec_play_silences">Play silences</string>

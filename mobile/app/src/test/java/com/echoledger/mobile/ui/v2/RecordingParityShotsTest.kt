@@ -83,9 +83,10 @@ class RecordingParityShotsTest : ScreenTest() {
             )
         )
         server.on("GET", "/api/library", FakeServer.json(200, ServerFixtures.libraryPage(emptyList())))
+        server.on("DELETE", "/api/sessions/.+", FakeServer.empty(204))
     }
 
-    private val item = LibraryItem(
+    private var item = LibraryItem(
         id = ServerFixtures.SESSION_ID,
         sourceDevice = "phone",
         sourceDeviceLabel = "Pixel 9",
@@ -166,18 +167,22 @@ class RecordingParityShotsTest : ScreenTest() {
     /** One view: classic after [classicSteps], v2 after [v2Steps]. */
     private var shown = false
 
+    /** The words each half waits for before its steps (the transcript's first line, or a state's). */
+    private var ready = "Hi, thanks for calling."
+    private var readyV2: String? = null
+
     private fun view(name: String, classicSteps: () -> Unit, v2Steps: () -> Unit) {
         classic = true
         if (!shown) {
             page()
             shown = true
         }
-        awaitText("Hi, thanks for calling.")
+        awaitText(ready)
         classicSteps()
         val left = screen("classic")
         classic = false
         compose.waitForIdle()
-        awaitText("Hi, thanks for calling.")
+        awaitText(readyV2 ?: ready)
         v2Steps()
         sideBySide(name, left, screen("v2"))
     }
@@ -219,4 +224,84 @@ class RecordingParityShotsTest : ScreenTest() {
             everyVariant("tab-$name", {}, { press(if (urdu) ur else en) })
         }
     }
+
+    private fun transcript(json: String) = server.on("GET", "/api/transcripts/.+", FakeServer.json(200, json))
+
+    private fun failed(code: String) = ServerFixtures.transcript(status = "failed", errorCode = code, segments = "[]")
+
+    @Test
+    fun noAudio() {
+        transcript(failed("no_audio"))
+        ready = "Nothing was heard"
+        readyV2 = if (urdu) "کوئی آواز نہیں" else "Nothing was heard"
+        for (l in EchoLanguage.entries) {
+            for (d in listOf(false, true)) {
+                language = l
+                dark = d
+                readyV2 = if (urdu) "کوئی آواز نہیں" else "Nothing was heard"
+                view("state-no-audio", {}, {})
+            }
+        }
+    }
+
+    @Test
+    fun failedTranscription() {
+        transcript(failed("provider_timeout"))
+        ready = "Transcription failed."
+        for (l in EchoLanguage.entries) {
+            for (d in listOf(false, true)) {
+                language = l
+                dark = d
+                readyV2 = if (urdu) "ٹرانسکرپشن نہیں ہو سکی" else "Transcription failed"
+                view("state-failed", {}, {})
+            }
+        }
+    }
+
+    @Test
+    fun onItsWay() {
+        server.on("GET", "/api/transcripts/.+", FakeServer.json(404, """{"message":"No query results."}"""))
+        item = item.copy(transcript = item.transcript!!.copy(finalStatus = "processing"))
+        ready = "Notify me when ready"
+        for (l in EchoLanguage.entries) {
+            for (d in listOf(false, true)) {
+                language = l
+                dark = d
+                readyV2 = if (urdu) "تیار ہونے پر مجھے بتائیں" else "Notify me when ready"
+                view("state-steps", {}, {})
+            }
+        }
+    }
+
+    @Test
+    fun backupEngine() {
+        transcript(ServerFixtures.transcript(backupEngine = true))
+        ready = "Made with a backup service"
+        for (l in EchoLanguage.entries) {
+            for (d in listOf(false, true)) {
+                language = l
+                dark = d
+                readyV2 = if (urdu) "بیک اپ سروس" else "Made with a backup service"
+                view("state-backup-engine", {}, {})
+            }
+        }
+    }
+
+    @Test
+    fun deleteDialog() = everyVariant("delete-dialog", {
+        press("More")
+        press("Delete")
+    }, {
+        press(if (urdu) "مزید" else "More")
+        press(if (urdu) "حذف کریں" else "Delete")
+    })
+
+    @Test
+    fun undoToast() = everyVariant("undo-toast", {}, {
+        press(if (urdu) "مزید" else "More")
+        press(if (urdu) "حذف کریں" else "Delete")
+        val deletes = compose.onAllNodes(hasText(if (urdu) "حذف کریں" else "Delete") and hasClickAction())
+        deletes[deletes.fetchSemanticsNodes().size - 1].performClick()
+        compose.waitForIdle()
+    })
 }

@@ -2,6 +2,8 @@ package com.echoledger.mobile.ui.v2
 
 import android.content.ClipboardManager
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasContentDescription
@@ -225,7 +227,9 @@ class RecordingPageTest : ScreenTest() {
         pumpUntil("asked") { server.requestsTo("POST", "/api/sessions/.+/retranscribe").isNotEmpty() }
         val body = Json.parseToJsonElement(server.requestsTo("POST", "/api/sessions/.+/retranscribe").single().body!!.utf8()).jsonObject
         assertEquals("en", body["language"]?.jsonPrimitive?.content)
-        awaitText("Re-transcribing")
+        // One toast: the view model's own (the shell shows its messages), none of the page's.
+        pumpUntil("said once") { vm.message.value?.startsWith("Re-transcribing in English") == true }
+        compose.onAllNodesWithText("Re-transcribing", substring = true).assertCountEquals(0)
     }
 
     @Test
@@ -253,8 +257,21 @@ class RecordingPageTest : ScreenTest() {
     }
 
     @Test
-    fun deleteAsksFirstThenGoesToTrashWithUndo() {
-        open()
+    fun deleteAsksFirstThenGoesToTrashAndUndoWorksAfterThePageHasGone() {
+        server.on("POST", "/api/sessions/.+/restore", FakeServer.empty(204))
+        var open by androidx.compose.runtime.mutableStateOf(true)
+        show {
+            EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+                val toasts = rememberEchoToastState()
+                CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                    androidx.compose.foundation.layout.Box {
+                        // The host removes the page on Back, as the shell does.
+                        if (open) V2RecordingScreen(vm, item(), onBack = { open = false })
+                        EchoToastHost(toasts)
+                    }
+                }
+            }
+        }
         openMenu()
         press("Delete")
         compose.onNodeWithText("Delete this recording?").assertExists()
@@ -263,7 +280,11 @@ class RecordingPageTest : ScreenTest() {
         val deletes = compose.onAllNodes(hasText("Delete") and hasClickAction())
         deletes[deletes.fetchSemanticsNodes().size - 1].performClick()
         pumpUntil("deleted") { server.requestsTo("DELETE", "/api/sessions/.+").isNotEmpty() }
-        assertEquals(1, backs)
+        assertTrue("the page has gone", !open)
+        compose.onAllNodesWithText("Hi, thanks for calling.").assertCountEquals(0)
+        awaitText("Undo")
+        press("Undo")
+        pumpUntil("restored") { server.requestsTo("POST", "/api/sessions/.+/restore").isNotEmpty() }
     }
 
     @Test
@@ -502,6 +523,13 @@ class RecordingPageTest : ScreenTest() {
         serveTranscript(transcriptJson(status = "failed", errorCode = "no_audio", segments = "[]"))
         openWithCallbacks()
         awaitText("Nothing was heard in this recording")
+        // Nothing to play or share (classic): no player and no Share; nothing to re-transcribe either.
+        compose.onAllNodes(hasContentDescription("Play")).assertCountEquals(0)
+        compose.onAllNodes(hasText("Share") and hasClickAction()).assertCountEquals(0)
+        press("More")
+        compose.onAllNodesWithText("Change language & re-transcribe").assertCountEquals(0)
+        androidx.test.espresso.Espresso.pressBack()
+        compose.waitForIdle()
         press("Run capture test")
         assertEquals(1, captureTests)
         press("Delete")

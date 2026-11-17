@@ -35,8 +35,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.lifecycle.viewModelScope
 import com.echoledger.mobile.R
 import com.echoledger.mobile.core.Speakers
+import com.echoledger.mobile.core.TranscriptText
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.ScreenDto
 import com.echoledger.mobile.data.SegmentDto
@@ -78,7 +80,9 @@ sealed interface TranscriptState {
     data object Loading : TranscriptState
     data object None : TranscriptState
     data object Unreachable : TranscriptState
-    data class Failed(val sentence: String?) : TranscriptState
+
+    /** Failed, with its error code: the page words it in the phone's own words ([failureWords]), never the server's. */
+    data class Failed(val errorCode: String?) : TranscriptState
     data class Lines(val segments: List<SegmentDto>) : TranscriptState
 }
 
@@ -95,7 +99,7 @@ fun transcriptState(item: LibraryItem, loaded: TranscriptDto?, tried: Boolean): 
     if (summary.finalTranscriptId == null) return TranscriptState.None
     if (loaded == null) return if (tried) TranscriptState.Unreachable else TranscriptState.Loading
     return when {
-        loaded.status == "failed" -> TranscriptState.Failed(loaded.error)
+        loaded.status == "failed" -> TranscriptState.Failed(loaded.errorCode)
         loaded.segments.isEmpty() -> TranscriptState.None
         else -> TranscriptState.Lines(loaded.segments)
     }
@@ -242,6 +246,7 @@ private fun V2RecordingPage(
             hasAudio = hasAudio,
             skipSilence = player.skipSilence,
             canExport = page.exportId != null,
+            canRetranscribe = item.transcript?.finalStatus != null && !page.noAudio,
             actions = actions,
             onDismiss = { if (sheet == RecordingSheet.Menu) sheet = null },
             backToSource = backToSource
@@ -309,13 +314,17 @@ private fun V2RecordingPage(
 
         RecordingSheet.Retranscribe -> RetranscribeSheet(item, onRetranscribe = { language ->
             sheet = null
-            scope.launch { if (vm.retranscribe(item.id, language)) say(res.getString(R.string.v2_rec_retranscribing)) }
+            // The view model says it ("Re-transcribing in Urdu…"), as for classic's page: one toast.
+            scope.launch { vm.retranscribe(item.id, language) }
         }, onDismiss = { sheet = null })
 
         RecordingSheet.Delete -> DeleteRecordingDialog(onDelete = {
             sheet = null
             vm.delete(item)
-            scope.launch { toasts.showUndo(text.deleted, undo) { scope.launch { vm.restore(item.id) } } }
+            // The page goes at once; its Undo lives on in the shell's toast host, so it runs on the view model's scope
+            // (the page's own scope is cancelled with it).
+            val keep = vm.viewModelScope
+            keep.launch { toasts.showUndo(text.deleted, undo) { keep.launch { vm.restore(item.id) } } }
             onBack()
         }, onDismiss = { sheet = null })
 
@@ -417,7 +426,9 @@ private fun V2RecordingPage(
             bookmarks = page.bookmarks,
             onBookmark = { page.playFrom(it) },
             skipSilence = player.skipSilence,
-            onSkipSilence = if (hasAudio) ({ player.changeSkipSilence(it) }) else null
+            onSkipSilence = if (hasAudio) ({ player.changeSkipSilence(it) }) else null,
+            showPlayer = hasAudio,
+            showShare = !page.noAudio
         )
     )
 }
@@ -492,6 +503,17 @@ private fun transcriptInstead(
         t.status in RecordingPage.IN_PROGRESS && steps != null && steps.working -> (
             {
                 StepsBlock(item, t, steps) { vm.notifyWhenReady(item.id) }
+            }
+            )
+
+        t.status in RecordingPage.IN_PROGRESS -> (
+            {
+                val res = androidx.compose.ui.platform.LocalContext.current.resources
+                Text(
+                    TranscriptText.waitingForEngine(t) ?: transcribingLine(res, t.progress ?: item.transcript?.finalProgress),
+                    style = EchoV2.type.body,
+                    color = EchoV2.colors.textSecondary
+                )
             }
             )
 
@@ -640,19 +662,21 @@ fun V2RecordingContent(
                             }
                         }
                     }
-                    EchoPlayer(
-                        positionMs = positionMs,
-                        durationMs = durationMs,
-                        playing = playing,
-                        speed = speedLabel(speed),
-                        labels = EchoPlayerLabels(text.play, text.pause, text.back10, text.forward10, text.position, text.speed),
-                        onPlayPause = onPlayPause,
-                        onSeek = onSeek,
-                        onSpeed = onSpeed,
-                        modifier = Modifier.padding(top = EchoTokens.Space.s8),
-                        markers = head.bookmarks.map { it.atMs }
-                    )
-                    head.onSkipSilence?.let { onSkip ->
+                    if (head.showPlayer) {
+                        EchoPlayer(
+                            positionMs = positionMs,
+                            durationMs = durationMs,
+                            playing = playing,
+                            speed = speedLabel(speed),
+                            labels = EchoPlayerLabels(text.play, text.pause, text.back10, text.forward10, text.position, text.speed),
+                            onPlayPause = onPlayPause,
+                            onSeek = onSeek,
+                            onSpeed = onSpeed,
+                            modifier = Modifier.padding(top = EchoTokens.Space.s8),
+                            markers = head.bookmarks.map { it.atMs }
+                        )
+                    }
+                    head.onSkipSilence?.takeIf { head.showPlayer }?.let { onSkip ->
                         com.echoledger.mobile.ui.v2.components.EchoSwitch(
                             head.skipSilence,
                             onSkip,
@@ -663,7 +687,7 @@ fun V2RecordingContent(
             }
             item {
                 Row(Modifier.fillMaxWidth().padding(horizontal = EchoTokens.Space.s8, vertical = EchoTokens.Space.s8)) {
-                    EchoActionItem(EchoIcons.Share, text.share, onClick = onShare, modifier = Modifier.weight(1f))
+                    if (head.showShare) EchoActionItem(EchoIcons.Share, text.share, onClick = onShare, modifier = Modifier.weight(1f))
                     onCopy?.let {
                         EchoActionItem(
                             RecordingIcons.Copy,
@@ -724,7 +748,7 @@ fun V2RecordingContent(
                     }
 
                     is TranscriptState.Failed -> item {
-                        EchoErrorState(text.failed, transcript.sentence ?: text.transcriptLoadingError)
+                        EchoErrorState(text.failed, failureWords(transcript.errorCode))
                     }
 
                     is TranscriptState.Lines -> {
@@ -806,5 +830,9 @@ data class RecordingHead(
     val onBookmark: (Long) -> Unit = {},
     val skipSilence: Boolean = false,
     /** Null while there is no audio to play. */
-    val onSkipSilence: ((Boolean) -> Unit)? = null
+    val onSkipSilence: ((Boolean) -> Unit)? = null,
+    /** The player shows only with audio to play (classic: a playback address, and not "no audio"). */
+    val showPlayer: Boolean = true,
+    /** Share shows unless nothing was heard (classic). */
+    val showShare: Boolean = true
 )
