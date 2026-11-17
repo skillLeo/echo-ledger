@@ -284,6 +284,41 @@ class UploadWorkerTest : AppTest() {
         assertNull("sent, so the phone's copy goes", recording())
     }
 
+    /** Undo after a delete that may have run (it started, so the phone can't know whether it landed). */
+    private fun undoAfterAMaybeDelete() {
+        discardDuringUpload()
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id) }
+        app.graph.recordings.update(id) { it.copy(restoreServerCopy = true) }
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+        )
+    }
+
+    @Test
+    fun `a delete that never landed is not restored into a second copy`() {
+        undoAfterAMaybeDelete()
+        // The session was never deleted, so restore can't find it in the bin; the server still has it.
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals("the old reference, so the server keeps its one session", listOf(id, id), clientRefs())
+        assertNull(recording())
+    }
+
+    @Test
+    fun `a session really gone after a 404 is sent again fresh`() {
+        undoAfterAMaybeDelete()
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}"""))
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        val refs = clientRefs()
+        assertEquals(2, refs.size)
+        assertNotEquals(id, refs.last())
+        assertNull(recording())
+    }
+
     @Test
     fun `an upload that fails after a Discard leaves the call discarded`() {
         app.storeRecording(bytes = payload, state = "queued")

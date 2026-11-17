@@ -145,8 +145,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     /**
      * After an Undo of a Discard whose upload had reached the server (since v1.8.1): a delete that may have run is undone
      * (`POST /api/sessions/{id}/restore`), and the upload then finds that session again by its reference and finishes
-     * against it. A session that can no longer be restored (410 restore_expired, or not found) is sent again fresh under
-     * a new reference, so nothing is lost.
+     * against it. Restore answers 404 for a session that was never deleted too (the delete was stopped before it
+     * landed): the session is looked up, and while it exists the old reference stays, so the server never gets a second
+     * copy. Only a session really gone, or `410 restore_expired`, is sent again fresh under a new reference.
      */
     private suspend fun bringBackServerCopy(api: ApiClient, rec: LocalRecording): LocalRecording {
         val copy = rec.serverCopy ?: return rec
@@ -155,7 +156,11 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 api.restoreSession(copy)
                 false
             } catch (e: ApiException) {
-                if (e.status == 410 || e.status == 404) true else throw e
+                when (e.status) {
+                    410 -> true
+                    404 -> !stillThere(api, copy)
+                    else -> throw e
+                }
             }
         } else {
             false
@@ -163,6 +168,14 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         return keep(rec.id) {
             it.copy(serverCopy = null, restoreServerCopy = false, clientRef = if (fresh) UUID.randomUUID().toString() else it.clientRef)
         } ?: rec
+    }
+
+    /** Whether the server still has session [id] (not deleted): a 404 says it is gone; any other failure is retried. */
+    private suspend fun stillThere(api: ApiClient, id: String): Boolean = try {
+        api.sessionDetail(id)
+        true
+    } catch (e: ApiException) {
+        if (e.status == 404) false else throw e
     }
 
     /** The server session this run created or finished, once it has one. */
