@@ -225,7 +225,8 @@ back while they could still be `SKIP`), and a draft's upgrade is dropped.
 ```
 
 `reason`: `requested` (the app's `settings.mode`) | `plan` (the plan or token does not allow the requested mode) |
-`budget` (the budget left pays for fewer than 3 more suggestions in this mode) | `budget_restored` (a refreshed token
+`budget` (the budget left pays for fewer than 3 more suggestions in this mode, or 1 in Fast, or for less than one
+suggestion at its worst: both models, the longest answer) | `budget_restored` (a refreshed token
 brought budget back; also when the plan caps how far the mode rises) | `assist_time` (the token's assist time is
 used up). The steps are `max` → `deep` → `balanced` → `fast` → `captions_only`. In `captions_only` the relay makes no
 suggestions but keeps the connection, the transcript and the context, so suggestions resume when a new token brings
@@ -268,6 +269,7 @@ error answers. `fatal: true` means the relay closes the connection next.
 | `documents_too_large` | `documents` above about 60,000 tokens | no | Send the parts that matter, or retrieval chunks |
 | `nothing_to_rewrite` | A rewrite before any finished suggestion | no | Nothing |
 | `budget_exhausted` | Help now or a rewrite in `captions_only` | no | Show "Suggestions are off"; captions continue |
+| `budget_exhausted` (`retry: true`) | For now, the budget free beside calls in flight doesn't cover this suggestion even in the cheapest mode (it passes when they finish) | yes | Nothing, or "Try again in a moment" for help now |
 | `provider_not_configured` | The model's provider has no key on the server. Message: "Live Assist is not set up on the server yet. Ask your admin." (no vendor name) | no | Show the message |
 | `provider_unavailable`, `provider_timeout` | The model failed, after the fallback model if any | yes | Show the message; help now may work |
 | `model_declined` | The model declined, after the fallback model if any | no | Show the message |
@@ -361,6 +363,16 @@ The post-call report is the server's queue job (plan L7). For it, and for practi
    Claude Sonnet 5.5 and Opus 5.5), and the Fast mode's models, which the relay's own calls use.
 7. **The contract**: `practice_next`, `practice_question`, `practice_done`, the error codes `not_practice` and
    `practice_busy`, and the usage kinds above.
+
+## The budget gate
+
+Every suggestion (and its upgrade, and the cache warm-up) holds its worst case from the budget until it is charged:
+both models, no cache, the longest answer; background calls hold theirs too. A suggestion starts only when its worst
+case fits in what is left with all of those held back. When the mode's doesn't fit (calls are in flight), the next
+cheaper allowed mode answers this one question, with no `mode_changed` (`suggestion_start.mode` says which); a hard
+question's upgrade that doesn't fit beside its draft is left out; when none fits, the app gets `budget_exhausted`
+with `retry: true` and no suggestion. The mode itself follows the budget left without those holds, so it never moves
+for a call in flight.
 
 ## Close codes
 
