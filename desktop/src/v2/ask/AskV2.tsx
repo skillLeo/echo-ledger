@@ -39,12 +39,14 @@ export type AskV2Props = {
   onOpenAt: (sessionId: string, atMs: number) => void;
   onOpenProject: (projectId: string) => void;
   onLibrary: () => void;
+  /** Inside a project's page: no page title and no project choice (it asks that project). */
+  embedded?: boolean;
 };
 
 /** The answer languages the server takes (POST /api/clients/{id}/ask: en | roman_urdu); Urdu script waits for it. */
 const LANGUAGES: { value: AnswerLanguage; label: string }[] = [{ value: "en", label: "English" }, { value: "roman_urdu", label: "Roman Urdu" }];
 
-export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary }: AskV2Props) {
+export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProject, onLibrary, embedded = false }: AskV2Props) {
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
   const [question, setQuestion] = useState("");
   const [language, setLanguage] = useState<AnswerLanguage>("en");
@@ -79,13 +81,13 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
   };
 
   return (
-    <div className="el-page el-page--narrow" data-v2="ask">
-      <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>
+    <div className={embedded ? "el-ask el-ask--embedded" : "el-page el-page--narrow"} data-v2="ask">
+      {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
-        <div className="el-field">
+        {!embedded && <div className="el-field">
           <Select label="Ask about" value={chosen?.id ?? ""} onChange={choose} options={projects.map((p) => ({ value: p.id, label: p.name }))} />
           <span className="el-field__hint">All recordings (not available yet)</span>
-        </div>
+        </div>}
         <TextArea label="Your question" value={question} placeholder="What did Bilal Traders agree on payment?" rows={3}
           onChange={(e) => setQuestion(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void ask(); }} />

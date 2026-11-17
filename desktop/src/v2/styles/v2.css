@@ -664,6 +664,8 @@ button.el-step__head { cursor: pointer; }
 
 /* ---- Ask ------------------------------------------------------------------------------------------------- */
 .el-ask__row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--el-space-12); }
+.el-ask--embedded, .el-workspace-memory { display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
