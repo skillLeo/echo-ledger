@@ -1195,3 +1195,41 @@ async fn stop_racing_a_vad_commit_still_delivers_the_last_words() {
     assert_eq!(finals, ["VAD words.", "Last words."]);
     assert!(took < Duration::from_millis(1_500), "closed after the grace, not the 3 s cap: {took:?}");
 }
+
+#[test]
+fn the_wait_after_stop_is_longer_until_two_answers_have_come() {
+    use desktop_lib::stt::stream::stop_grace;
+    assert_eq!(stop_grace(1), Duration::from_millis(1_500));
+    assert_eq!(stop_grace(2), Duration::from_millis(500));
+    assert_eq!(stop_grace(5), Duration::from_millis(500));
+}
+
+#[tokio::test]
+async fn stop_s_own_answer_a_second_after_an_earlier_one_is_not_lost() {
+    // A commit already in flight answers first; Stop's own comes a full second later, more than the short grace.
+    let (port, _server) = serve(move |ws| async move {
+        let mut ws = ws;
+        ws.send(Message::text(json!({"message_type": "session_started", "session_id": "s1", "config": {}}).to_string())).await.unwrap();
+        while let Some(Ok(message)) = ws.next().await {
+            if let Message::Text(text) = message {
+                let v: Value = serde_json::from_str(text.as_str()).unwrap();
+                if v["commit"] == true {
+                    ws.send(Message::text(json!({"message_type": "committed_transcript", "text": "In flight."}).to_string())).await.unwrap();
+                    tokio::time::sleep(Duration::from_millis(1_000)).await;
+                    let _ = ws.send(Message::text(json!({"message_type": "committed_transcript", "text": "Stop's own."}).to_string())).await;
+                }
+            }
+        }
+    })
+    .await;
+    let client = start_client(grant("elevenlabs_realtime", port, 100, vec![]));
+    client.pcm.send(speech(500)).unwrap();
+    tokio::time::sleep(Duration::from_millis(600)).await;
+    let events = client.events.clone();
+    let stopped = std::time::Instant::now();
+    client.finish(Duration::from_secs(5)).await.unwrap();
+    let took = stopped.elapsed();
+    let finals: Vec<String> = events.lock().unwrap().iter().filter_map(|e| if let SttEvent::Final { text, .. } = e { Some(text.clone()) } else { None }).collect();
+    assert_eq!(finals, ["In flight.", "Stop's own."]);
+    assert!(took < Duration::from_millis(2_000), "closed after the second answer's grace, well inside the 3 s cap: {took:?}");
+}

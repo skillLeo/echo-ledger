@@ -174,17 +174,21 @@ async fn stream_socket(
                     let _ = stop_now(&mut tx, protocol).await;
                     terminate_deadline = Some(tokio::time::Instant::now() + TERMINATE_WAIT);
                     if protocol == Protocol::ElevenLabsRealtime {
-                        // ElevenLabs commits and keeps the socket open. Its answers carry no id, so the first one that
-                        // comes after Stop's commit is taken as its own; a short grace lets one more in flight (a
-                        // forced commit's, a VAD commit's) arrive too, never past TERMINATE_WAIT.
+                        // ElevenLabs commits and keeps the socket open. Its answers carry no id, and a commit already in
+                        // flight (a forced one, a VAD one) can answer first: so until two answers have come (that one
+                        // and Stop's own) the wait after an answer is STOP_GRACE_FIRST, then STOP_GRACE; never past
+                        // TERMINATE_WAIT. A provider that answers Stop's commit more than STOP_GRACE_FIRST after an
+                        // earlier answer loses that last answer: the limit of telling answers apart by order.
                         waits.forced_end();
                         let cap = tokio::time::Instant::now() + TERMINATE_WAIT;
                         let mut close_at = cap;
+                        let mut answers = 0usize;
                         while let Ok(Some(Ok(message))) = tokio::time::timeout_at(close_at, rx.next()).await {
                             let Message::Text(t) = message else { continue };
                             let raw = t.as_str();
                             if let Some(answer) = commit_answer(protocol, raw) {
-                                close_at = close_at.min(tokio::time::Instant::now() + STOP_GRACE);
+                                answers += 1;
+                                close_at = close_at.min(tokio::time::Instant::now() + stop_grace(answers));
                                 if waits.answered(answer) || answer != Answer::Text {
                                     continue;
                                 }
@@ -297,8 +301,16 @@ async fn stream_socket(
 /// How long a stopped session waits for the provider's end-of-session message.
 const TERMINATE_WAIT: Duration = Duration::from_secs(3);
 
-/// After the first answer that follows Stop's commit, how long one more in flight may take to arrive.
+/// After an answer that follows Stop's commit, how long one more in flight may take to arrive once two have come.
 const STOP_GRACE: Duration = Duration::from_millis(500);
+
+/// The same while fewer than two have come: the first may be a commit already in flight, with Stop's own behind it.
+const STOP_GRACE_FIRST: Duration = Duration::from_millis(1_500);
+
+/// How long to wait for the next answer after the `answers`-th one since Stop (pure).
+pub fn stop_grace(answers: usize) -> Duration {
+    if answers < 2 { STOP_GRACE_FIRST } else { STOP_GRACE }
+}
 
 /// How long after a forced end a provider's refusal (`commit_throttled`, `insufficient_audio_activity`) is taken as its
 /// answer: logged, never shown. Its answers carry no id, so time is what ties them to the forced end.
