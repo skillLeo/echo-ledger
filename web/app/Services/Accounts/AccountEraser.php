@@ -6,9 +6,15 @@ namespace App\Services\Accounts;
 
 use App\Enums\WorkspaceRole;
 use App\Models\AccountExport;
+use App\Models\AssistPrep;
+use App\Models\AssistSession;
+use App\Models\AssistSuggestion;
+use App\Models\AssistTurn;
+use App\Models\AssistUsage;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\ClientMemoryItem;
 use App\Models\Device;
 use App\Models\RequestLink;
 use App\Models\RequestUpload;
@@ -29,7 +35,8 @@ use Illuminate\Support\Facades\DB;
  * Erases an account at the end of its 7-day grace (since v1.5, `echoledger:erase-accounts`): its recordings in every
  * workspace with their audio, transcripts and screens (CaptureSession::purgeMedia(), so the encrypted files go too),
  * its projects with their files (ProjectTree::delete(), which moves anyone else's recordings in them to the Inbox),
- * the files it added to teammates' projects, its request links, exports, devices and tokens, its console sessions;
+ * the files it added to teammates' projects, its request links, exports, devices and tokens, its console sessions,
+ * its Live Assist (since v1.9: settings, preps, sessions with every word, reports and usage, in every workspace);
  * every workspace only it belongs to with everything still in it; then the account. Workspace rows are deleted only once they are empty, never to let foreign
  * keys cascade over encrypted files. Provider copies were erased when the recordings were transcribed or deleted; a
  * live recording is deleted first so ProviderCopyEraser runs for it too. Safe to run again after a failure.
@@ -100,6 +107,21 @@ final class AccountEraser
         foreach ($solo as $workspaceId) {
             $proofs->eraseFilesOf(workspaceId: $workspaceId);
         }
+
+        // Since v1.9: Live Assist, in every workspace, deleted sessions too: every line, suggestion, report, fact,
+        // summary and usage row, every prep with its documents' links, and the memory lines its reports added.
+        $assist = AssistSession::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $user->id)->pluck('id');
+        foreach ($assist->chunk(500) as $ids) {
+            AssistTurn::query()->whereIn('assist_session_id', $ids)->delete();
+            AssistSuggestion::query()->whereIn('assist_session_id', $ids)->delete();
+            AssistUsage::query()->whereIn('assist_session_id', $ids)->delete();
+            ClientMemoryItem::query()->withoutGlobalScopes()->whereIn('assist_session_id', $ids)->delete();
+            AssistSession::query()->withoutGlobalScopes()->withTrashed()->whereIn('id', $ids)->forceDelete();
+        }
+        AssistPrep::query()->withoutGlobalScopes()->withTrashed()->where('user_id', $user->id)->get()->each(function (AssistPrep $prep): void {
+            $prep->documents()->detach();
+            $prep->forceDelete();
+        });
 
         Device::query()->withoutGlobalScopes()->where(fn ($q) => $q->where('user_id', $user->id)->orWhereIn('workspace_id', $solo))->get()
             ->each(fn (Device $device) => $device->delete());

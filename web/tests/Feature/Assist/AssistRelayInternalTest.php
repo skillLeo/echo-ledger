@@ -158,7 +158,7 @@ describe('reports', function () {
         expect(AssistUsage::query()->where('assist_session_id', $session->id)->count())->toBe(1)
             ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/sug-late')->count())->toBe(1);
         // Deleting a session never gives back what it spent.
-        expect(app(AssistPlans::class)->left($session->workspace_id, $session->user_id)['cents_left'])->toBe(1450);
+        expect(app(AssistPlans::class)->left($session->workspace_id, $session->user_id, false)['cents_left'])->toBe(1450);
 
         relayCall($this, 'POST', '/api/internal/assist/suggestions', ['suggestion_id' => 'sug-late', 'session_id' => $session->id, 'text' => 'x'])->assertNotFound();
         relayCall($this, 'POST', '/api/internal/assist/facts', ['session_id' => $session->id, 'facts' => ['x']])->assertNotFound();

@@ -34,9 +34,11 @@ fn customised() -> Settings {
         client_id: Some("01JB8Q4C1D2E3F4G5H6J7K8M9N".into()),
         consent_acknowledged: true,
         after_call: AfterCall::Ask,
+        after_call_notice: true,
         skip_calls_shorter_than_s: 30,
         caption_lines: 5,
         pill_position: Some(PillPosition { x: -1_520, y: 64 }),
+        assist_card_position: Some(PillPosition { x: 880, y: 40 }),
         ask_unknown_apps: true,
         site_rules: vec![crate::detect::sites::SiteRule {
             id: "6f1c2d3e-4b5a-4c7d-8e9f-0a1b2c3d4e5f".into(),
@@ -102,11 +104,11 @@ fn a_fresh_install_has_the_documented_defaults() {
     assert_eq!(s.overlay_corner, Corner::BottomRight);
     assert_eq!(s.dictation_output, "type");
     assert_eq!(s.shortcuts, default_map());
-    assert_eq!(s.shortcuts.len(), 7, "voice note has no default shortcut");
+    assert_eq!(s.shortcuts.len(), 8, "voice note has no default shortcut");
     assert!(!s.ask_unknown_apps, "the unknown-app chip is off by default");
     assert!(s.site_rules.is_empty(), "built-in site rules are never stored");
     assert!(!s.browser_automation, "reading browser tabs is opt-in");
-    assert_eq!(s.after_call, AfterCall::Keep, "a call is kept at once, with Undo");
+    assert_eq!(s.after_call, AfterCall::Ask, "permission first: the card asks (contract 1.8.0-e)");
     assert_eq!(s.skip_calls_shorter_than_s, 10, "automatic calls under 10 s are skipped");
     assert_eq!(s.caption_lines, 3);
     assert_eq!(s.pill_position, None, "the pill starts at the top centre");
@@ -155,8 +157,10 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
         [
             "activityNotifications",
             "afterCall",
+            "afterCallNotice",
             "appLock",
             "askUnknownApps",
+            "assistCardPosition",
             "autoMode",
             "autoRecordApps",
             "autostart",
@@ -201,7 +205,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 46, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 48, "section 4.7 of the IPC contract");
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -421,9 +425,10 @@ fn an_unknown_shortcut_action_is_dropped_and_the_known_ones_are_kept() {
     let s = Settings::from_value(json!({
         "shortcuts": {"toggle_captions": "Ctrl+Shift+K", "pause_recording": "Ctrl+Shift+P", "voice_note": 42}
     }));
-    assert_eq!(s.shortcuts.len(), 3, "{:?}", s.shortcuts);
+    assert_eq!(s.shortcuts.len(), 4, "{:?}", s.shortcuts);
     assert_eq!(s.shortcuts[&Action::ToggleCaptions], "Ctrl+Shift+K");
     assert_eq!(s.shortcuts[&Action::HideAll], "CommandOrControl+Alt+Shift+P");
+    assert_eq!(s.shortcuts[&Action::CaptureScreen], "CommandOrControl+Alt+S", "Capture screen now, added later, too");
     assert_eq!(s.shortcuts[&Action::RecordNow], "CommandOrControl+Alt+R", "a shortcut added later gets its default");
 }
 
@@ -444,7 +449,7 @@ fn one_bad_value_costs_only_its_own_key() {
     }));
     assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
     assert!(s.auto_mode, "an invalid value falls back to the default");
-    assert_eq!(s.after_call, AfterCall::Keep);
+    assert_eq!(s.after_call, AfterCall::Ask);
     assert_eq!(s.pill_position, None);
     assert_eq!(s.hide_from_sharing, ShareHiding::All, "an unknown choice is the default");
 }
@@ -526,14 +531,13 @@ fn a_settings_file_from_version_one_loads_with_the_new_defaults() {
     assert_eq!(s.overlay_corner, Corner::TopRight);
     assert_eq!(
         (s.after_call, s.caption_lines, s.pill_position),
-        (AfterCall::Keep, 3, None)
+        (AfterCall::Ask, 3, None)
     );
 }
 
 #[test]
-fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
-    // v1.5: "Ask before saving: Always" with "Keep waiting" piled calls up in the waiting list; the user asked for
-    // Keep automatically as the new default, so every older file becomes Keep. The old keys still read cleanly.
+fn a_file_from_before_after_call_loads_as_ask_whatever_it_asked_before() {
+    // Contract 1.8.0-e: permission first, so every older file becomes Ask. The old keys still read cleanly.
     let d = dir();
     let path = d.path().join("settings.json");
     for (ask, timeout) in [("always", "wait"), ("auto_only", "discard"), ("never", "keep"), ("sometimes", "later")] {
@@ -543,14 +547,14 @@ fn a_file_from_before_after_call_loads_as_keep_whatever_it_asked_before() {
         )
         .unwrap();
         let s = Settings::load(&path);
-        assert_eq!(s.after_call, AfterCall::Keep, "{ask} + {timeout}");
+        assert_eq!(s.after_call, AfterCall::Ask, "{ask} + {timeout}");
         assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"), "the pairing is kept");
         assert!(!s.auto_mode, "the other settings are kept");
     }
     let s = Settings::load(&path);
     s.save(&path).unwrap();
     let written: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-    assert_eq!(written["afterCall"], "keep");
+    assert_eq!(written["afterCall"], "ask");
     assert!(written.get("askBeforeSaving").is_none() && written.get("decisionTimeout").is_none(), "the next save drops the old keys");
 }
 
@@ -566,12 +570,44 @@ fn skip_calls_shorter_than_takes_only_the_offered_choices() {
 }
 
 #[test]
-fn ask_me_survives_a_save_and_load() {
+fn every_after_a_call_choice_survives_a_save_and_load_and_v1_5_s_choices_become_ask() {
     let d = dir();
     let path = d.path().join("settings.json");
-    Settings { after_call: AfterCall::Ask, ..Settings::default() }.save(&path).unwrap();
-    assert_eq!(Settings::load(&path).after_call, AfterCall::Ask);
-    assert_eq!(Settings::from_value(json!({"afterCall": "keep"})).after_call, AfterCall::Keep);
+    for (choice, written) in [(AfterCall::Ask, "ask"), (AfterCall::AlwaysTranscribe, "always_transcribe"), (AfterCall::AlwaysAudio, "always_audio")] {
+        Settings { after_call: choice, ..Settings::default() }.save(&path).unwrap();
+        assert_eq!(Settings::load(&path).after_call, choice);
+        let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert_eq!(file["afterCall"], written);
+    }
+    // v1.5's "Keep automatically" and "Ask me" both migrate to ask (contract 1.8.0-e), and are written back as ask.
+    std::fs::write(&path, r#"{"serverUrl": "https://ledger.example.com", "afterCall": "keep"}"#).unwrap();
+    let s = Settings::load(&path);
+    assert_eq!(s.after_call, AfterCall::Ask);
+    assert_eq!(s.server_url.as_deref(), Some("https://ledger.example.com"));
+    s.save(&path).unwrap();
+    let file: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(file["afterCall"], "ask");
+}
+
+#[test]
+fn keep_automatically_becoming_ask_me_is_told_once() {
+    let d = dir();
+    let path = d.path().join("settings.json");
+    std::fs::write(&path, r#"{"serverUrl": "https://ledger.example.com", "afterCall": "keep"}"#).unwrap();
+    let s = Settings::load(&path);
+    assert!(s.after_call_notice, "a person who kept every call is told");
+    // Saved as ask: the next start finds the notice, not "keep" again.
+    s.save(&path).unwrap();
+    let again = Settings::load(&path);
+    assert!(again.after_call_notice && again.after_call == AfterCall::Ask);
+    // Answered (either way): never again.
+    Settings { after_call_notice: false, ..again }.save(&path).unwrap();
+    assert!(!Settings::load(&path).after_call_notice);
+    for choice in ["ask", "always_transcribe", "always_audio"] {
+        assert!(!Settings::from_value(json!({"afterCall": choice})).after_call_notice, "{choice}: nothing changed for them");
+    }
+    assert!(!Settings::from_value(json!({})).after_call_notice, "a new install has nothing to be told");
+    assert!(crate::settings::AFTER_CALL_NOTICE.ends_with("choose Always transcribe"));
 }
 
 #[test]

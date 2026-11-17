@@ -1,4 +1,12 @@
-# Live Assist contract — revision 1.9.0-m (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-p (frozen 2026-11-17 for the sprint)
+
+1.9.0-p: a report that could not be made shows `"report": "failed"` on the session; prep routes one per line.
+
+1.9.0-o: Ask over a session; usage kind `ask`; a prep's mode, hint level and language help default to the person's
+Live Assist settings.
+
+1.9.0-n: what the apps must handle as the relay behaves (ends of a suggestion, every error code, context replaces,
+limits, reconnect, slow readers, practice ends, aliases), one relay connection per session, the "shown" report.
 
 1.9.0-m: `GET /api/assist/preps/{id}` returns its documents' extracted text, which the app sends in `context_update`.
 
@@ -74,7 +82,10 @@ Errors added by Live Assist:
 | 409 | `session_active` | A second live session from the same person while one runs |
 
 ### Preps
-- `GET /api/assist/preps?status=` · `POST /api/assist/preps` · `GET|PATCH|DELETE /api/assist/preps/{id}`
+- `GET /api/assist/preps?status=` · `POST /api/assist/preps`
+- `GET /api/assist/preps/{id}`
+- `PATCH /api/assist/preps/{id}`
+- `DELETE /api/assist/preps/{id}`
   ```json
   {"meeting_type": "interview", "title": "Interview at Acme", "counterpart": "Sara Khan", "company": "Acme",
    "project_id": "01JB…", "goals": "…", "done": "…", "not_done": "…", "to_discuss": "…", "instructions": "…",
@@ -84,7 +95,8 @@ Errors added by Live Assist:
   `meeting_type`: `interview` | `boss` | `existing_client` | `new_client` | `general`; `hint_level`: `keywords` |
   `outline` | `full` (interview defaults to `outline`); `mode`: `fast` | `balanced` | `deep` | `max` (refused per
   plan at start, not at save); `language_help`: `off` | `urdu` | `roman_urdu` | `arabic`; `status`: `draft` |
-  `scheduled` | `armed` | `done` | `cancelled`. Text fields at most 4,000 characters each. Soft deleted.
+  `scheduled` | `armed` | `done` | `cancelled`. Text fields at most 4,000 characters each. Soft deleted. A prep created without `mode`, `hint_level` or
+  `language_help` takes the person's Live Assist settings for that meeting type (Live Assist → Settings).
 - `POST /api/assist/preps/{id}/documents` `{"file_ids": ["…"]}` attaches project files (the server extracts text and
   counts tokens); `GET /api/assist/preps/{id}` returns `documents: [{"file_id", "name", "tokens", "text"}]` (the
   text only on this single read, never in lists), and the app sends them in its first `context_update`; `DELETE /api/assist/preps/{id}/documents/{fileId}`.
@@ -123,14 +135,21 @@ Errors added by Live Assist:
 - `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`. It ends the person's own session in any of their
   workspaces (so the app can act on a `409 session_active`); anyone else's answers `404`.
 - `GET /api/assist/sessions?limit=` · `GET /api/assist/sessions/{id}` · `GET /api/assist/sessions/{id}/report`
-  (`404 report_not_ready` until the first report exists; a remade report replaces it). The report:
+  (`404 report_not_ready` until the first report exists; a remade report replaces it; a session whose report could
+  not be made shows `"report": "failed"`, and the report itself still answers `404 report_not_ready`). The report:
   `{"version", "mode", "practice", "meeting_type", "title", "started_at", "ended_at", "seconds", "turns",
   "ai": {"status", "reason", "model", "runs"}, "summary", "summary_translation", "qa": [{question, answer, hint,
   verdict, better_answer, missed}], "mistakes": [], "promises": [], "coaching": {"words_per_minute", "fillers",
   "talk_ratio", "pauses", "grammar": []}, "action_items": [], "memory_added", "follow_up_email", "facts",
   "running_summary", "suggestions", "used"}`; without the model (`ai.status` not `done`) the Q&A table, coaching,
   running summary and facts are still there · `DELETE /api/assist/sessions/{id}`.
-- `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action` `{"action": "used" | "dismissed" |
+- `POST /api/assist/sessions/{id}/ask` — `sessions:write`, 20 a minute per person. `{"question": "…"}` (at most 500
+  characters) → `200 {"answer": "…", "citations": [{"at_ms", "channel", "text"}]}`: the answer comes only from the
+  session's own lines, summary and facts; citations are the session's own lines, never the model's words; nothing is
+  stored. Billed as usage kind `ask` to the session's allowance (reserved at the worst case before the call). `402
+  budget_exhausted`, `503 provider_not_configured`, `502` when the call fails, `422` for a question over the limit or a
+  session with nothing said.
+- `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action` `{"action": "shown" | "used" | "dismissed" |
   "regenerated" | "shorter" | "formal" | "translated"}` → `204`.
 
 ### Internal (relay → server)
@@ -227,8 +246,39 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   `POST /api/internal/assist/facts` `{session_id, facts: [...], at}` and `POST /api/internal/assist/summary`
   `{session_id, summary, at}` replace what the server stored.
 - Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. The
-  server's own report call is usage kind `report`, charged to the session's allowance. Practice
+  server's own calls are usage kinds `report` and `ask`, charged to the session's allowance. Practice
   usage is billed to the plan's Practice allowance.
+
+### What the apps must handle (since 1.9.0-n)
+
+- Every `suggestion_start` ends with exactly one of `suggestion_end`, `skip` (`suggestion_id`, `turn_id`, `latency`,
+  `usage`; no tokens) or an `error` naming it. On `ready` with `resumed: true`, clear any card still streaming: a
+  suggestion running when the connection dropped gets no end.
+- Error codes besides those above: `provider_not_configured` (retry false; show the relay's fixed message, which
+  names no vendor), `provider_unavailable` and `provider_timeout` (retry true), `model_declined` (retry false),
+  `nothing_to_rewrite`, `documents_too_large` (the old documents stay), `rate_limited`, `bad_message` (an unknown
+  `type` or a binary frame; the connection stays open). Apps show their own plain sentence per code.
+- `budget_exhausted`: with `retry: false` (help now or a rewrite in `captions_only`) say suggestions are off; with
+  `retry: true` (the budget gate refused it for now) say "try again in a moment". An automatic question the gate holds
+  gets no message and may start up to 5 s later.
+- `context_update` replaces: a field that is present replaces what the relay had, an empty value clears it. Fields:
+  `brief`, `documents`, `memory`, `facts`, `summary`, `settings` (`mode`, `hint_level`, `language_help`,
+  `assist`: `on` | `paused`). Limits: 20 documents, 400,000 characters each, about 60,000 tokens in all, 200 facts.
+- Upgrades arrive as one `token` with the whole text; `replaces` may name a draft that already ended `done`. A
+  speculative answer whose final changed ends `superseded` (still streaming; the new start has `replaces: null`) or is
+  named by the new start's `replaces` (already finished).
+- `token_expired` mid-session: an `error` with `fatal: true`, `retry: true`, then close `4401`; the session waits 120 s
+  for a reconnect with a new token. A reader too slow for the relay is dropped without a close frame (the app sees
+  1006): reconnect and resume.
+- Practice: a question that can't be written fails twice with `retry: true`, the third time with `retry: false`; the
+  next `practice_next` gets `practice_done` (`asked`). A practice hint is an ordinary suggestion with `turn_id` `q-N`;
+  with `assist: paused` there is no hint, but help now and rewrites still work.
+- Optional fields: `help_now.turn_id`, `cancel.suggestion_id` (absent: every shown suggestion), `translate.language`;
+  `mode_changed` carries `from` and `to`. Refusals before the upgrade answer `{"code", "message"}`.
+- One relay connection per session: a second connection for the same session replaces the first (`4409`). There is
+  no viewer role; a phone shows Live Assist only for its own sessions.
+- The app reports when a suggestion was first drawn with `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action`
+  `{"action": "shown", "render_ms": 412}` (time from the relay's `suggestion_start` to the first text on screen).
 
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
 like a question (≥ 128 ms of silence) is cancelled and restarted if they keep talking within 700 ms; a balanced draft

@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.echoledger.mobile.ui.MainViewModel
+import com.echoledger.mobile.ui.v2.ask.V2AskScreen
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoIcons
@@ -34,6 +35,8 @@ import com.echoledger.mobile.ui.v2.library.SavedView
 import com.echoledger.mobile.ui.v2.library.V2LibraryScreen
 import com.echoledger.mobile.ui.v2.library.V2RecordingScreen
 import com.echoledger.mobile.ui.v2.library.V2TrashScreen
+import com.echoledger.mobile.ui.v2.live.LiveEntry
+import com.echoledger.mobile.ui.v2.live.V2LiveTab
 import com.echoledger.mobile.ui.v2.settings.V2SettingsScreen
 import com.echoledger.mobile.ui.v2.setup.HelperMethodMemory
 import com.echoledger.mobile.ui.v2.setup.V2SetupHealthScreen
@@ -57,6 +60,7 @@ sealed interface V2Route {
     data object Trash : V2Route
     data object Setup : V2Route
     data class ClassicPage(val id: String) : V2Route
+    data class Live(val entry: LiveEntry) : V2Route
     data class Recording(val id: String) : V2Route
 }
 
@@ -74,7 +78,12 @@ class ClassicScreens(
     /** One classic settings page by its SettingsIndex id (SettingsScreen with openPage), for Settings v2. */
     val settingsPage: @Composable (page: String, onBack: () -> Unit) -> Unit = { _, onBack -> settings(onBack) },
     /** The classic setup screens, until `ui_v2.setup_health` is on. */
-    val setup: @Composable (onBack: () -> Unit) -> Unit = { onBack -> settings(onBack) }
+    val setup: @Composable (onBack: () -> Unit) -> Unit = { onBack -> settings(onBack) },
+    /**
+     * What a Live tab row opens: the existing Record, voice note, Live Translate, Dictation and Captions screens, and
+     * Live Assist's start (prep, Start now) once the phone core has it. Defaults to the classic Live tab.
+     */
+    val liveEntry: @Composable (entry: LiveEntry, onBack: () -> Unit) -> Unit = { _, _ -> live() }
 )
 
 /**
@@ -166,6 +175,8 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
 
                 is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
 
+                is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
+
                 // The server's Trash time (contract 2.0.0-b, trash.keep_hours; 48 on an older server).
                 V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
@@ -218,9 +229,19 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
                         classic.library()
                     }
 
-                    V2Tab.Live -> classic.live()
+                    V2Tab.Live -> if (flags.isOn(UiFlags.LIVE)) {
+                        // Live Assist only for this person's flag, and only for sessions on this phone (no viewer role).
+                        V2LiveTab(liveAssist = flags.isOn(UiFlags.LIVE_ASSIST), liveTranslate = true, onOpen = { route = V2Route.Live(it) })
+                    } else {
+                        classic.live()
+                    }
 
-                    V2Tab.Ask -> classic.ask()
+                    V2Tab.Ask -> if (flags.isOn(UiFlags.ASK)) {
+                        // A citation opens its recording (the v2 page with ui_v2.library, else the Library tab).
+                        V2AskScreen(vm, onOpenAt = { id, _ -> if (flags.library) route = V2Route.Recording(id) else tab = V2Tab.Library })
+                    } else {
+                        classic.ask()
+                    }
                 }
             }
         }

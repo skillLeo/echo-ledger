@@ -350,6 +350,11 @@ fn ladder_config() -> RelayConfig {
         model.long_context = None;
     }
     config.budget.expected_output_tokens = 32;
+    // Short longest answers: a mode's worst case (both models, the longest answer) stays near its usual reserve, so the
+    // budget steps down mode by mode as it is spent.
+    for mode in Mode::LADDER {
+        config.modes.get_mut(mode).max_output_tokens = 40;
+    }
     config
 }
 
@@ -633,4 +638,46 @@ async fn usage_and_shown_texts_are_reported_for_the_server() {
     assert_eq!(texts.len(), 1, "only shown suggestions have a text");
     assert_eq!(texts[0].text, mock_reply(Purpose::Answer, QUESTION));
     assert_eq!(texts[0].turn_id.as_deref(), Some("o-14"));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_provider_that_panics_mid_suggestion_falls_back_instead_of_hanging() {
+    let h = harness(RelayConfig::built_in());
+    let mut fast = claims("s-attempt-panic");
+    fast.modes = vec![Mode::Fast];
+    let mut s = h.connect(fast);
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"mode": "fast"}})).await;
+    settle().await;
+    h.mock(ProviderKind::Anthropic).push(MockBehavior::Panic);
+    s.send(final_turn("o-1", "other", QUESTION)).await;
+    let end = s.until("suggestion_end").await.pop().unwrap();
+    assert_eq!((end["status"].as_str(), end["model"].as_str()), (Some("done"), Some("openai/gpt-oss-120b")));
+    // Charged and its reservation released: the next question runs in Fast as before.
+    s.send(final_turn("o-2", "other", QUESTION)).await;
+    assert_eq!(s.until("suggestion_end").await.pop().unwrap()["status"], "done");
+}
+
+/// A session whose first warm-up does what `behavior` says; what the warm-up cost the session.
+async fn warm_up_cost(behavior: MockBehavior, session: &str) -> u64 {
+    let h = harness(RelayConfig::built_in());
+    h.mock(ProviderKind::Anthropic).push_warm(behavior);
+    let mut s = h.connect(claims(session));
+    ready(&mut s).await;
+    s.send(json!({"type": "context_update", "brief": {"meeting_type": "interview", "title": "Backend role"},
+        "documents": [{"id": "cv", "title": "CV", "text": "Payments, refunds and payouts. ".repeat(200)}]}))
+    .await;
+    // The warm-up times out after 15 s at most.
+    s.drain(Duration::from_secs(20)).await;
+    h.state.registry.spent(session)
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_warm_up_that_hangs_times_out_and_is_charged_unless_refused() {
+    let hung = warm_up_cost(MockBehavior::Stall, "s-warm-stall").await;
+    let failed = warm_up_cost(MockBehavior::Fail(ProviderError::Unavailable), "s-warm-fail").await;
+    let refused = warm_up_cost(MockBehavior::Fail(ProviderError::RateLimited), "s-warm-refused").await;
+    assert!(hung > 0, "a warm-up that timed out is charged its estimate");
+    assert!(failed > 0, "a warm-up that failed after its request was taken is charged");
+    assert_eq!(refused, 0, "a rate-limited warm-up bills nothing");
 }

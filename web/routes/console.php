@@ -17,6 +17,16 @@ Schedule::command('queue:work --stop-when-empty --max-time=55 --tries=3 --timeou
     // On a VPS a supervisor runs the workers (QUEUE_VIA_SCHEDULER=false, docs/DEPLOY_VPS.md).
     ->when(fn (): bool => (bool) config('queue.via_scheduler', true));
 
+// Since v1.9 (L7): Live Assist's reports on their own queue, one at a time (a run can wait 300 s for the model).
+Schedule::command('queue:work assist-reports --queue=assist-reports --stop-when-empty --max-time=55 --tries=1 --timeout=420')
+    ->everyMinute()
+    ->withoutOverlapping(10)
+    ->runInBackground()
+    ->when(fn (): bool => (bool) config('queue.via_scheduler', true));
+
+// Since v1.9: Live Assist's reservations left behind and reports that never came (AssistBudget, MakeAssistReportJob).
+Schedule::command('assist:sweep')->everyFiveMinutes()->withoutOverlapping(10);
+
 Schedule::command('stt:reconcile')->everyFiveMinutes()->withoutOverlapping(10);
 
 // Recordings left in "assembling" by a request or worker that died (docs/API.md "complete").

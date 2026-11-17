@@ -1,7 +1,7 @@
 //! Keep / Discard after a recording ends (A2.1-A2.6, v1.5 "After a call"). A finished recording that is not kept at
 //! once stays on this computer as a `PendingDecision` in `pending.json` (atomic writes, tolerant loading, restored at
-//! start) and is not uploaded. With "Ask me" the after-call chip shows it and it keeps itself at `keep_at`, 10 s later;
-//! one without `keep_at` (the chip was never shown, it was opened in the main window, or it is left from before v1.5)
+//! start) and is not uploaded. With "Ask me" the after-call chip shows it, and at `keep_at`, 12 s later, it saves
+//! itself as audio only (v1.8 P1); one without `keep_at` (the chip was never shown, it was opened in the main window, or it is left from before v1.5)
 //! waits in the Library's waiting list. Keep moves it to the upload queue; Discard deletes its files, uploads nothing,
 //! requests no transcript and queues its server session (if captions opened one) for deletion. The functions here
 //! touch only files, so the whole flow is unit-tested; `actions` adds locking, events and the after-call window.
@@ -23,17 +23,25 @@ use crate::settings::AfterCall;
 /// Every `pending_*` command answers this when the id is not (or no longer) waiting.
 pub const NOT_WAITING: &str = "This recording is no longer waiting.";
 pub const TITLE_TOO_LONG: &str = "Use 200 characters or fewer.";
-/// "Ask me": the chip keeps the recording by itself this long after the call ended.
-pub const CHIP_SECONDS: i64 = 10;
+/// "Ask me": with no answer this long after the call ended, the chip saves the recording as audio only, not
+/// transcribed (v1.8 P1: "No answer within 12 s → Save audio"; contract 1.8.0-e).
+pub const CHIP_SECONDS: i64 = 12;
 const MAX_TITLE_CHARS: usize = 200;
 const MAX_FIRST_LINE_CHARS: usize = 140;
 /// The title of a recording recovered after a restart (since v1.3).
 pub const RECOVERED_TITLE: &str = "Recovered recording";
 
+/// A discarded recording's files on this computer (the pill's Discard, a declined Live Assist start): its folder and
+/// its screens. It is never added to the waiting list or the upload queue.
+pub fn discard_recording_files(data_dir: &Path, dir: &Path, client_ref: &str) {
+    crate::recovery::delete_recording_folder(dir);
+    crate::screens::store::ScreenStore::in_dir(data_dir).forget(client_ref);
+}
+
 /// What "After a call" means for a finished recording: calls (automatic or by hand) follow the setting; voice notes
-/// were stopped on purpose and are always kept, with the same Undo.
+/// were stopped on purpose and are always kept and transcribed, with the same Undo.
 pub fn after_call(setting: AfterCall, mode: RecordingMode) -> AfterCall {
-    if mode == RecordingMode::Call { setting } else { AfterCall::Keep }
+    if mode == RecordingMode::Call { setting } else { AfterCall::AlwaysTranscribe }
 }
 
 /// The waiting list's preview: the first final caption turn as `Me: …` / `Client: …`, at most 140 characters.
@@ -78,6 +86,14 @@ pub struct PendingItem {
     pub language: Option<String>,
     /// Who the call was with (a meeting window's title), for "Call with <name>" while it has no title.
     pub caller_name: Option<String>,
+    /// Screens kept for this recording on this computer (the after-call card's "3 screens"); they upload with it.
+    pub screens: usize,
+}
+
+/// The name of who the running recording `client_ref` is with, from the caller noted for it (none for a caller noted
+/// for another recording, or a blank name).
+pub fn running_caller_name(noted: Option<&(String, CallerDto)>, client_ref: &str) -> Option<String> {
+    noted.filter(|(r, _)| r == client_ref).and_then(|(_, c)| c.name.as_deref()).map(str::trim).filter(|n| !n.is_empty()).map(str::to_string)
 }
 
 /// What `from_recording` needs besides the finished files.
@@ -145,6 +161,10 @@ pub struct PendingDecision {
     /// When the after-call chip keeps it by itself ("Ask me", v1.5); none = it waits for Keep or Discard.
     #[serde(default)]
     keep_at: Option<DateTime<Utc>>,
+    /// The chip promised to save the audio, not transcribed, at `keep_at` (since v1.8 P1). An entry written by an
+    /// older version has no such mark: its chip promised Keep, so it is kept and transcribed when due.
+    #[serde(default)]
+    saves_audio_when_due: bool,
     /// The account it was made under, once another account signed in here (since v1.5); none = the account this
     /// computer signs in as. Keep passes it on to the upload.
     #[serde(default)]
@@ -193,6 +213,7 @@ impl PendingDecision {
             language_marks: input.language_marks,
             caller: input.caller,
             keep_at: None,
+            saves_audio_when_due: false,
             owner: None,
             recovered: false,
             discard_at: None,
@@ -202,6 +223,7 @@ impl PendingDecision {
     /// The same decision, kept by itself at `at` unless the person answers the chip first.
     pub fn keeping_at(mut self, at: DateTime<Utc>) -> Self {
         self.keep_at = Some(at);
+        self.saves_audio_when_due = true;
         self
     }
 
@@ -279,6 +301,7 @@ impl PendingDecision {
             language_marks: Vec::new(),
             caller: None,
             keep_at: None,
+            saves_audio_when_due: false,
             owner: None,
             recovered: true,
             discard_at: None,
@@ -306,7 +329,13 @@ impl PendingDecision {
             deadline_at: self.keep_at.map(|d| d.to_rfc3339()),
             language: self.language.clone(),
             caller_name: self.caller_name().map(str::to_string),
+            screens: 0,
         }
+    }
+
+    /// [`Self::item`] with the number of screens `screens` holds for this recording.
+    pub fn item_with_screens(&self, screens: &crate::screens::store::ScreenStore) -> PendingItem {
+        PendingItem { screens: screens.count(&self.client_ref), ..self.item() }
     }
 
     /// The open server session captions created for this recording, if any.
@@ -381,9 +410,18 @@ impl PendingStore {
 
     /// The UI list, newest first (a recording on its way out is not on it).
     pub fn ui_items(&self) -> Vec<PendingItem> {
+        self.listed().into_iter().map(PendingDecision::item).collect()
+    }
+
+    /// [`Self::ui_items`] with each recording's screens counted in `screens`.
+    pub fn ui_items_with_screens(&self, screens: &crate::screens::store::ScreenStore) -> Vec<PendingItem> {
+        self.listed().into_iter().map(|d| d.item_with_screens(screens)).collect()
+    }
+
+    fn listed(&self) -> Vec<&PendingDecision> {
         let mut items: Vec<&PendingDecision> = self.items.iter().filter(|d| !d.discarding()).collect();
         items.sort_by_key(|d| std::cmp::Reverse(d.created_at));
-        items.into_iter().map(PendingDecision::item).collect()
+        items
     }
 
     /// Recordings that wait for the person (the tray, the sidebar and the Library's waiting line count these).
@@ -435,9 +473,18 @@ impl DecisionFiles {
     /// Keep: the recording joins the upload queue (once), then leaves `pending.json`, so a crash in between can
     /// never lose it.
     pub fn keep(&self, id: &str) -> AppResult<PendingUpload> {
+        self.keep_as(id, true)
+    }
+
+    /// "Save audio" (contract 1.8.0-e): kept and uploaded as audio only, not transcribed; it lands in "Not transcribed".
+    pub fn keep_audio(&self, id: &str) -> AppResult<PendingUpload> {
+        self.keep_as(id, false)
+    }
+
+    fn keep_as(&self, id: &str, transcribe: bool) -> AppResult<PendingUpload> {
         let mut store = self.load();
         let at = store.items.iter().position(|d| d.id == id).ok_or_else(|| AppError::msg(NOT_WAITING))?;
-        let upload = store.items[at].to_upload();
+        let upload = PendingUpload { transcribe, ..store.items[at].to_upload() };
         let mut queue = UploadQueue::load(&self.uploads);
         if !queue.items.iter().any(|i| i.id() == upload.id()) {
             queue.items.push(upload.clone());
@@ -540,14 +587,16 @@ impl DecisionFiles {
         }
     }
 
-    /// Keeps every recording whose chip time is over at `now` (also one whose time ran out while the app was closed)
-    /// and returns their ids. Recordings that wait for the person are left alone.
+    /// Saves as audio only every recording whose chip time is over at `now` (also one whose time ran out while the app
+    /// was closed) and returns their ids: no answer is "Save audio", never a transcript (v1.8 P1). A chip shown by a
+    /// version before that promised Keep, so its recording is kept and transcribed. Recordings that wait for the
+    /// person are left alone.
     pub fn keep_due(&self, now: DateTime<Utc>) -> AppResult<Vec<String>> {
-        let due: Vec<String> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| d.id.clone()).collect();
-        for id in &due {
-            self.keep(id)?;
+        let due: Vec<(String, bool)> = self.load().items.iter().filter(|d| d.keep_at.is_some_and(|at| at <= now)).map(|d| (d.id.clone(), !d.saves_audio_when_due)).collect();
+        for (id, transcribe) in &due {
+            self.keep_as(id, *transcribe)?;
         }
-        Ok(due)
+        Ok(due.into_iter().map(|(id, _)| id).collect())
     }
 
     /// Discard from the after-call chip: the recording leaves every list and count now, its chip stops counting, and
@@ -568,6 +617,8 @@ impl DecisionFiles {
         self.update(id, |d| {
             d.discard_at = None;
             d.keep_at = Some(keep_at);
+            // The chip is back as this version shows it: "Saves the audio in N s".
+            d.saves_audio_when_due = true;
         })
     }
 

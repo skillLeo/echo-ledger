@@ -107,6 +107,64 @@ fn a_ten_second_pause_leaves_no_gap_and_keeps_both_channels_equal() {
 }
 
 #[test]
+fn a_computer_that_slept_mid_recording_adds_no_hours_of_silence() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut recorder = Recorder::create(dir.path(), false).unwrap();
+    let both = |recorder: &mut Recorder, start: f64, seconds: f64| {
+        for (mic, system) in tone(Channel::Mic, start, seconds).into_iter().zip(tone(Channel::System, start, seconds)) {
+            recorder.push(mic).unwrap();
+            recorder.push(system).unwrap();
+        }
+    };
+    both(&mut recorder, 1.0, 3.0);
+    // The device clock ran on through two hours of sleep.
+    both(&mut recorder, 4.0 + 7_200.0, 3.0);
+    // A short gap (a device that went quiet for 2 s) is still kept as silence.
+    both(&mut recorder, 4.0 + 7_200.0 + 3.0 + 2.0, 1.0);
+    let output = recorder.finish().unwrap();
+    let mic = read_mono_i16(&output.mic_wav).unwrap();
+    let system = read_mono_i16(&output.system_wav).unwrap();
+    assert_eq!(mic.len(), system.len(), "both sides stay aligned across the sleep");
+    assert!((output.duration_ms as i64 - 9_000).abs() < 300, "recorded time and the short gap only, got {} ms", output.duration_ms);
+}
+
+/// The 60-minute soak (Day 5 bug bash): an hour of both channels with a slowly drifting system clock, jitter and a
+/// pause, on the real writer and encoder. Ignored by default (a few hundred MB on disk while it runs):
+/// `cargo test --test recording_lifecycle soak -- --ignored`.
+#[test]
+#[ignore]
+fn soak_an_hour_long_recording_stays_aligned_and_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut recorder = Recorder::create(dir.path(), false).unwrap();
+    let per_chunk = TARGET_RATE as usize / 100; // 10 ms packets, as the capture sends them
+    let packet = |channel: Channel, ts: f64, i: usize| AudioChunk {
+        channel,
+        samples: (0..per_chunk).map(|n| (((i * per_chunk + n) as f32) * 0.05).sin() * 0.2).collect(),
+        ts_ns: Some((ts * 1e9) as u64),
+        discontinuity: false,
+    };
+    let started = std::time::Instant::now();
+    let packets = 360_000; // one hour
+    for i in 0..packets {
+        let t = 1.0 + i as f64 * 0.01;
+        // The system device's clock runs 50 ppm fast, and packets arrive with up to 3 ms of jitter.
+        let jitter = ((i * 7919) % 7) as f64 * 0.0005;
+        recorder.push(packet(Channel::Mic, t + jitter, i)).unwrap();
+        recorder.push(packet(Channel::System, t * 1.000_05, i)).unwrap();
+        if i == 180_000 {
+            recorder.mark_resume().unwrap(); // a pause halfway
+        }
+    }
+    let output = recorder.finish().unwrap();
+    let mic = read_mono_i16(&output.mic_wav).unwrap();
+    let system = read_mono_i16(&output.system_wav).unwrap();
+    assert_eq!(mic.len(), system.len(), "aligned after an hour");
+    assert!((output.duration_ms as i64 - 3_600_000).abs() < 2_000, "an hour, got {} ms", output.duration_ms);
+    assert!(std::fs::metadata(&output.primary).unwrap().len() > 0, "the upload file is written");
+    eprintln!("soak: {} ms of audio written and encoded in {:?}", output.duration_ms, started.elapsed());
+}
+
+#[test]
 fn the_recorder_measures_how_long_each_side_was_heard() {
     let dir = tempfile::tempdir().unwrap();
     let mut recorder = Recorder::create(dir.path(), false).unwrap();
@@ -128,12 +186,18 @@ fn the_recorder_measures_how_long_each_side_was_heard() {
 
 #[test]
 fn after_a_call_applies_to_calls_and_voice_notes_are_always_kept() {
-    assert_eq!(pending::after_call(AfterCall::Ask, RecordingMode::Call), AfterCall::Ask);
-    assert_eq!(pending::after_call(AfterCall::Keep, RecordingMode::Call), AfterCall::Keep);
-    for note in [RecordingMode::VoiceNote, RecordingMode::MicNote] {
-        assert_eq!(pending::after_call(AfterCall::Ask, note), AfterCall::Keep, "a voice note was stopped on purpose");
+    for setting in [AfterCall::Ask, AfterCall::AlwaysTranscribe, AfterCall::AlwaysAudio] {
+        assert_eq!(pending::after_call(setting, RecordingMode::Call), setting);
     }
-    assert_eq!(pending::CHIP_SECONDS, 10, "the chip keeps the recording after 10 s");
+    for note in [RecordingMode::VoiceNote, RecordingMode::MicNote] {
+        for setting in [AfterCall::Ask, AfterCall::AlwaysAudio] {
+            assert_eq!(pending::after_call(setting, note), AfterCall::AlwaysTranscribe, "a voice note was stopped on purpose");
+        }
+    }
+    assert_eq!(AfterCall::Ask.keeps_at_once(), None, "the card asks");
+    assert_eq!(AfterCall::AlwaysTranscribe.keeps_at_once(), Some(true));
+    assert_eq!(AfterCall::AlwaysAudio.keeps_at_once(), Some(false), "kept at once, not transcribed");
+    assert_eq!(pending::CHIP_SECONDS, 12, "v1.8 P1: no answer within 12 s saves the audio");
 }
 
 // ---- pending store -----------------------------------------------------------------------------------------------
@@ -497,12 +561,95 @@ fn the_chip_keeps_only_recordings_whose_time_is_up_and_never_one_that_waits() {
 
     assert_eq!(files.keep_due(now).unwrap(), vec!["due".to_string()], "only the chip whose time is over");
     assert_eq!(UploadQueue::load(&files.uploads).items.len(), 1);
+    assert!(!UploadQueue::load(&files.uploads).items[0].transcribe, "no answer is \"Save audio\": uploaded, not transcribed");
     assert!(root.path().join("recordings/due/recording.flac").exists(), "kept audio stays until the server has it");
 
     let later = now + chrono::Duration::minutes(5);
     assert_eq!(files.keep_due(later).unwrap(), vec!["counting".to_string()]);
     assert_eq!(files.load().items.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), vec!["waiting"], "a waiting recording is never kept by itself");
     assert!(files.keep_due(later).unwrap().is_empty());
+}
+
+#[test]
+fn a_declined_live_assist_start_s_recording_is_discarded_never_saved_or_uploaded() {
+    use desktop_lib::screens::store::{ScreenKey, ScreenStore};
+    let root = tempfile::tempdir().unwrap();
+    let finished = finished_recording(root.path(), "declined");
+    let store = ScreenStore::in_dir(root.path());
+    store.add("ref-declined", &ScreenKey::from_bytes(&[7; 32]), b"webp", 1_000, 1920, 1080, "change", Utc::now()).unwrap();
+    pending::discard_recording_files(root.path(), &finished.output.dir, "ref-declined");
+    assert!(!finished.output.dir.exists(), "its audio is gone");
+    assert_eq!(store.count("ref-declined"), 0, "its screens are gone");
+    let files = DecisionFiles::in_dir(root.path());
+    assert!(files.load().items.is_empty(), "nothing waits to be kept");
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is queued for upload");
+}
+
+#[test]
+fn keep_transcribes_and_save_audio_uploads_without_a_transcript() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "kept", None, now)).unwrap();
+    files.add(decision(root.path(), "audio", None, now).keeping_at(now + chrono::Duration::seconds(12))).unwrap();
+
+    assert!(files.keep("kept").unwrap().transcribe);
+    let audio = files.keep_audio("audio").unwrap();
+    assert!(!audio.transcribe);
+    assert!(files.load().items.is_empty(), "both left the waiting list");
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert_eq!(queued, vec![("ref-kept".to_string(), true), ("ref-audio".to_string(), false)], "the choice survives a restart");
+    assert!(files.keep_audio("audio").is_err(), "a recording that no longer waits");
+}
+
+#[test]
+fn a_chip_shown_before_the_upgrade_keeps_its_promise_and_is_transcribed() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    let due = now - chrono::Duration::seconds(1);
+    files.add(decision(root.path(), "old", None, now).keeping_at(due)).unwrap();
+    files.add(decision(root.path(), "new", None, now).keeping_at(due)).unwrap();
+    // pending.json as an older version wrote it: its chip had no Save audio mark and promised Keep.
+    let path = root.path().join("pending.json");
+    let mut file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for item in file["items"].as_array_mut().unwrap() {
+        if item["id"] == "old" {
+            item.as_object_mut().unwrap().remove("saves_audio_when_due").expect("the mark is written");
+        }
+    }
+    std::fs::write(&path, file.to_string()).unwrap();
+
+    let mut kept = files.keep_due(now).unwrap();
+    kept.sort();
+    assert_eq!(kept, ["new", "old"]);
+    let queued: Vec<(String, bool)> = UploadQueue::load(&files.uploads).items.iter().map(|i| (i.client_ref.clone(), i.transcribe)).collect();
+    assert!(queued.contains(&("ref-old".to_string(), true)), "kept and transcribed, as its chip said: {queued:?}");
+    assert!(queued.contains(&("ref-new".to_string(), false)), "this version's chip saves the audio only: {queued:?}");
+}
+
+#[test]
+fn a_chip_back_from_undo_saves_the_audio_when_due() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    let now = Utc::now();
+    files.add(decision(root.path(), "a", None, now)).unwrap();
+    files.discard_later("a", now + chrono::Duration::seconds(6)).unwrap();
+    files.undo_discard("a", now - chrono::Duration::seconds(1)).unwrap();
+    assert_eq!(files.keep_due(now).unwrap(), ["a"]);
+    assert!(!UploadQueue::load(&files.uploads).items[0].transcribe);
+}
+
+#[test]
+fn an_upload_queued_before_save_audio_existed_is_still_transcribed() {
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "old", None, Utc::now())).unwrap();
+    files.keep("old").unwrap();
+    let mut file: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(&files.uploads).unwrap()).unwrap();
+    file["items"][0].as_object_mut().unwrap().remove("transcribe").expect("the field is written");
+    std::fs::write(&files.uploads, file.to_string()).unwrap();
+    assert!(UploadQueue::load(&files.uploads).items[0].transcribe);
 }
 
 #[test]
@@ -568,6 +715,36 @@ fn a_waiting_recording_carries_the_callers_name_for_its_title() {
     assert_eq!(PendingDecision::from_recording(&finished, input(Some(" Omar Khan "))).item().caller_name.as_deref(), Some("Omar Khan"));
     assert_eq!(PendingDecision::from_recording(&finished, input(Some("  "))).item().caller_name, None);
     assert_eq!(PendingDecision::from_recording(&finished, input(None)).item().caller_name, None);
+}
+
+#[test]
+fn the_pill_names_the_caller_of_the_running_recording_only() {
+    use desktop_lib::net::models::CallerDto;
+    let noted = |name: &str| ("ref-now".to_string(), CallerDto { name: Some(name.into()), number: None, source: Some("window_title".into()) });
+    assert_eq!(pending::running_caller_name(Some(&noted(" Omar ")), "ref-now").as_deref(), Some("Omar"));
+    assert_eq!(pending::running_caller_name(Some(&noted("Omar")), "ref-next"), None, "noted for another recording");
+    assert_eq!(pending::running_caller_name(Some(&noted(" ")), "ref-now"), None);
+    assert_eq!(pending::running_caller_name(None, "ref-now"), None, "not known yet");
+}
+
+#[test]
+fn a_waiting_call_counts_its_own_screens() {
+    use desktop_lib::screens::store::{ScreenKey, ScreenStore};
+    let root = tempfile::tempdir().unwrap();
+    let files = DecisionFiles::in_dir(root.path());
+    files.add(decision(root.path(), "a", None, Utc::now())).unwrap();
+    files.add(decision(root.path(), "b", None, Utc::now() - chrono::Duration::minutes(1))).unwrap();
+    let store = ScreenStore::in_dir(root.path());
+    let key = ScreenKey::from_bytes(&[7; 32]);
+    for at in [1_000, 2_000, 3_000] {
+        store.add("ref-a", &key, format!("webp {at}").as_bytes(), at, 1920, 1080, "change", Utc::now()).unwrap();
+    }
+    let loaded = files.load();
+    assert_eq!(loaded.find("a").unwrap().item_with_screens(&store).screens, 3, "\"3 screens\" on the after-call card");
+    let listed: Vec<(String, usize)> = loaded.ui_items_with_screens(&store).into_iter().map(|i| (i.id, i.screens)).collect();
+    assert_eq!(listed, vec![("a".to_string(), 3), ("b".to_string(), 0)]);
+    let json = serde_json::to_value(loaded.find("a").unwrap().item_with_screens(&store)).unwrap();
+    assert_eq!(json["screens"], 3);
 }
 
 #[test]

@@ -1,0 +1,7 @@
+{
+  "data": [
+    {"id": "01JBPREP0000000000000000P1", "meeting_type": "interview", "title": "Interview at Acme", "status": "scheduled", "scheduled_at": "2026-12-01T10:00:00Z", "documents": []},
+    {"id": "01JBPREP0000000000000000P2", "title": "Weekly with my manager", "status": "draft"},
+    {"title": "no id: left out"}
+  ]
+}

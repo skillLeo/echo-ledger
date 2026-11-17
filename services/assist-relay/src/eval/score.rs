@@ -51,19 +51,41 @@ impl Sources {
     }
 
     /// Whether a quantity in an answer is known: the same value; with a unit, the same unit (and the same rate where
-    /// both say one: "a day" is not "a month"); without one, any mention of the value.
-    pub fn knows(&self, q: &Quantity) -> bool {
-        self.quantities.iter().any(|known| {
-            (known.value - q.value).abs() <= 1e-9 * known.value.abs().max(1.0)
-                && match q.unit {
-                    None => true,
-                    Some(unit) => known.unit == Some(unit) && (q.rate.is_none() || known.rate.is_none() || known.rate == q.rate),
+    /// both say one: "a day" is not "a month"); with a word after it that is not a unit ("6 juniors"), the same word
+    /// after the same number, or else not checkable; bare, any mention of the value.
+    pub fn check(&self, q: &Quantity) -> NumberCheck {
+        let same: Vec<&Quantity> = self.quantities.iter().filter(|k| (k.value - q.value).abs() <= 1e-9 * k.value.abs().max(1.0)).collect();
+        if same.is_empty() {
+            return NumberCheck::Invented;
+        }
+        match (q.unit, &q.noun) {
+            (Some(unit), _) => {
+                if same.iter().any(|k| k.unit == Some(unit) && (q.rate.is_none() || k.rate.is_none() || k.rate == q.rate)) {
+                    NumberCheck::Known
+                } else {
+                    NumberCheck::Invented
                 }
-        })
+            }
+            (None, Some(noun)) => {
+                let named = q.before.is_some() && same.iter().any(|k| k.before == q.before);
+                if named || same.iter().any(|k| k.noun.as_ref() == Some(noun)) { NumberCheck::Known } else { NumberCheck::Unverifiable }
+            }
+            (None, None) => NumberCheck::Known,
+        }
+    }
+
+    /// Known by the rules (see `check`).
+    pub fn knows(&self, q: &Quantity) -> bool {
+        self.check(q) == NumberCheck::Known
+    }
+
+    /// What is known, as text (lowercased), for the model judge.
+    pub fn text(&self) -> &str {
+        &self.text
     }
 
     /// Whether a word (or its singular) is anywhere in what is known.
-    fn has_word(&self, word: &str) -> bool {
+    pub fn has_word(&self, word: &str) -> bool {
         contains_word(&self.text, word) || word.strip_suffix('s').is_some_and(|stem| stem.len() > 2 && contains_word(&self.text, stem))
     }
 }
@@ -98,11 +120,33 @@ pub fn ascii_digits(text: &str) -> String {
 
 /// A number as it is used: its value, what it counts (a unit, folded to one name per meaning), and how often ("a
 /// day", "per month", "monthly").
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Quantity {
     pub value: f64,
     pub unit: Option<&'static str>,
     pub rate: Option<&'static str>,
+    /// Without a unit: the word right after the number when it names something ("6 juniors"), singular.
+    pub noun: Option<String>,
+    /// The word right before the number: with the same word before the same number in the sources, it is a name and
+    /// version ("Odoo 17", "PHP 8"), not a count.
+    pub before: Option<String>,
+}
+
+/// What the rules can say about a quantity in an answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumberCheck {
+    Known,
+    /// The value is not known at all, or not with that unit and rate.
+    Invented,
+    /// The value is known, but not counting this ("6 juniors" when 6 is only known as years): the judge decides.
+    Unverifiable,
+}
+
+fn singular(word: &str) -> String {
+    match word.strip_suffix('s') {
+        Some(stem) if stem.len() > 2 && !stem.ends_with('s') => stem.to_owned(),
+        _ => word.to_owned(),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -198,6 +242,8 @@ fn unit_of(word: &str) -> Option<&'static str> {
         "store" | "stores" | "restaurant" | "restaurants" => "store",
         "city" | "cities" => "city",
         "country" | "countries" => "country",
+        // "a six-figure salary".
+        "figure" | "figures" => "figure",
         _ => return None,
     })
 }
@@ -237,6 +283,13 @@ const LINKS: [&str; 22] = [
     "and", "or", "se", "ke", "ki",
 ];
 
+/// Words after a number that never name what it counts.
+const FUNCTION_WORDS: &[&str] = &[
+    "against", "about", "around", "under", "over", "within", "inside", "after", "before", "than", "you", "your", "we",
+    "our", "it", "its", "is", "are", "was", "were", "be", "has", "have", "had", "will", "can", "but", "not", "only",
+    "more", "less", "total", "each", "this", "that", "mein", "hai", "hain", "tak", "mahana", "so", "too", "all",
+];
+
 const SCALES: [(&str, f64); 7] =
     [("thousand", 1_000.0), ("hazar", 1_000.0), ("lakh", 100_000.0), ("lac", 100_000.0), ("lakhs", 100_000.0), ("million", 1_000_000.0), ("crore", 10_000_000.0)];
 
@@ -271,11 +324,13 @@ pub fn quantities(text: &str, known: bool) -> Vec<Quantity> {
             Token::Stop => continue,
         };
         let mut rest = &tokens[index + 1..];
+        let mut scaled = false;
         if let Some(Token::Word(word)) = rest.first()
             && let Some((_, scale)) = SCALES.iter().find(|(w, _)| w == word)
         {
             value *= scale;
             rest = &rest[1..];
+            scaled = true;
         }
         let before = index.checked_sub(1).and_then(|j| match &tokens[j] {
             Token::Word(w) => unit_of(w).filter(|u| ["pkr", "usd", "gbp", "riyal", "aed"].contains(u)),
@@ -295,10 +350,28 @@ pub fn quantities(text: &str, known: bool) -> Vec<Quantity> {
             })
             .last();
         let unit = if percent { Some("percent") } else { after.or(currency).or(before) };
-        if is_word && unit.is_none() && (urdu || !known) {
+        // A number word counts with a unit, or with a scale ("fifty thousand" is an amount whatever follows).
+        if is_word && unit.is_none() && !scaled && (urdu || !known) {
             continue;
         }
-        found.push(Quantity { value, unit, rate: rate_after(rest) });
+        let noun = match (unit, rest.first()) {
+            (None, Some(Token::Word(w)))
+                if w.chars().count() >= 3
+                    && w.chars().all(char::is_alphabetic)
+                    && !LINKS.contains(&w.as_str())
+                    && !FUNCTION_WORDS.contains(&w.as_str())
+                    && !WORDS.iter().any(|(n, _)| n == w)
+                    && rate_after(rest).is_none() =>
+            {
+                Some(singular(w))
+            }
+            _ => None,
+        };
+        let before_word = index.checked_sub(1).and_then(|j| match &tokens[j] {
+            Token::Word(w) => Some(w.clone()),
+            _ => None,
+        });
+        found.push(Quantity { value, unit, rate: rate_after(rest), noun, before: before_word });
     }
     found
 }
@@ -350,32 +423,79 @@ fn result(category: Category, passed: bool, detail: impl Into<String>) -> CheckR
     CheckResult { category, passed, unchecked: false, detail: if passed { String::new() } else { detail.into() } }
 }
 
-/// First-person claims about experience: the sentences the rules can't verify unless every content word is known.
-const CLAIM_MARKERS: [&str; 34] = [
-    "i've used", "i have used", "i used", "i've worked", "i have worked", "i worked", "i've built", "i have built",
-    "i built", "i've led", "i led", "i've managed", "i managed", "i've done", "i have done", "i know", "i have experience",
-    "my experience", "i've shipped", "i shipped", "we've built", "we have built", "we built", "we've done",
-    "we have done", "we've worked", "we have worked", "we worked", "we've delivered", "we have delivered",
-    "we delivered", "we integrated", "main ne", "hum ne",
+/// The subject of a sentence about Me.
+const SUBJECTS: &[&str] = &["i", "we"];
+
+/// After "I'm" / "we're": words that state an ability or experience.
+const ABILITIES: &[&str] = &[
+    "comfortable", "familiar", "experienced", "certified", "good", "expert", "fluent", "skilled", "proficient", "used",
+    "trained", "qualified", "responsible", "strong", "known", "the",
 ];
 
-const STOPWORDS: [&str; 40] = [
+/// Present-tense verbs that state a habit or a skill ("I know", "I use", "we serve").
+const HABITS: &[&str] = &[
+    "know", "use", "work", "speak", "manage", "mentor", "lead", "run", "handle", "own", "teach", "train", "specialise",
+    "specialize", "build", "write", "code", "develop", "design", "test", "sell", "serve", "support", "maintain", "have",
+    "hold", "do",
+];
+
+/// Irregular past tenses ("-ed" verbs are recognised by their ending).
+const PAST: &[&str] = &[
+    "built", "ran", "led", "taught", "wrote", "made", "did", "won", "sold", "grew", "drove", "brought", "bought", "kept",
+    "held", "set", "went", "met", "spoke", "took", "gave", "got", "had", "was", "were", "began", "became", "found",
+    "built", "dealt", "spent", "sent",
+];
+
+/// Words of ordinary conversation, never a claim by themselves.
+const STOPWORDS: &[&str] = &[
     "with", "that", "this", "these", "those", "from", "have", "been", "were", "they", "them", "their", "there", "what",
     "when", "where", "which", "while", "would", "could", "should", "about", "into", "over", "more", "most", "some",
-    "like", "just", "also", "only", "very", "much", "many", "such", "than", "then", "your", "will", "here",
+    "like", "just", "also", "only", "very", "much", "many", "such", "than", "then", "your", "will", "here", "every",
+    "each", "after", "before", "since", "until", "both", "other", "same", "years", "year",
 ];
 
-/// Claim sentences with a content word (four letters or more, not a common word or a number word) that is nowhere in
-/// what is known: the rules can't tell whether they are true.
+/// Whether a sentence (as words) claims something about Me: a first-person subject followed by a past verb, "have",
+/// an ability after "I'm", or a habitual verb; or Roman Urdu "main ne" / "hum ne". Offers with a modal ("I'd like",
+/// "I can", "we will") are not claims.
+fn claim_verb(words: &[&str]) -> Option<usize> {
+    for (index, word) in words.iter().enumerate() {
+        let next = words.get(index + 1).copied().unwrap_or_default();
+        let claim = match *word {
+            "i've" | "we've" | "ive" => !matches!(next, "to" | "got"),
+            "i'm" | "im" | "we're" => ABILITIES.contains(&next),
+            "main" | "hum" => next == "ne",
+            "maine" => true,
+            w if SUBJECTS.contains(&w) => {
+                let after = if next == "have" || next == "am" || next == "are" { words.get(index + 2).copied().unwrap_or_default() } else { next };
+                match next {
+                    "have" | "has" => !matches!(after, "to" | "no"),
+                    "am" | "are" => ABILITIES.contains(&after),
+                    _ => (next.ends_with("ed") && next.len() > 4) || PAST.contains(&next) || HABITS.contains(&next),
+                }
+            }
+            _ => false,
+        };
+        if claim {
+            return Some(index);
+        }
+    }
+    None
+}
+
+/// First-person claims with a content word (four letters or more, not ordinary conversation, not a number word, not
+/// the claim's own verb) that is nowhere in what is known: the rules can't tell whether they are true.
 fn unverifiable_claims(answer: &str, sources: &Sources) -> Vec<String> {
     let mut found = Vec::new();
-    for sentence in answer.replace('\u{2019}', "'").split(['.', '!', '?', '\n', ';']) {
+    for sentence in answer.replace('\u{2019}', "'").split(['.', '!', '?', '\n', ';', ',', ':']) {
         let lower = sentence.trim().to_lowercase();
-        let Some(marker) = CLAIM_MARKERS.iter().find(|m| contains_word(&lower, m)) else { continue };
-        let unknown: Vec<&str> = lower
-            .split(|c: char| !c.is_alphanumeric())
-            .filter(|w| w.chars().count() >= 4 && !STOPWORDS.contains(w) && !marker.contains(*w))
-            .filter(|w| !WORDS.iter().any(|(n, _)| n == w) && !sources.has_word(w))
+        let words: Vec<&str> = lower.split(|c: char| !(c.is_alphanumeric() || c == '\'')).filter(|w| !w.is_empty()).collect();
+        let Some(at) = claim_verb(&words) else { continue };
+        let unknown: Vec<&str> = words[at + 1..]
+            .iter()
+            .skip(1)
+            .copied()
+            .filter(|w| w.chars().count() >= 4 && w.chars().all(char::is_alphabetic))
+            .filter(|w| !STOPWORDS.contains(w) && !WORDS.iter().any(|(n, _)| n == w) && !sources.has_word(w))
             .collect();
         if !unknown.is_empty() {
             found.push(format!("\"{}\" ({})", sentence.trim(), unknown.join(", ")));
@@ -409,15 +529,17 @@ pub fn score_turn(case: &Case, turn: &Turn, output: &Output, sources: &Sources) 
     let words = first_line(answer).split_whitespace().count();
     results.push(result(Category::FirstLine, words <= 25, format!("first line has {words} words")));
 
-    let unknown: Vec<String> = quantities(answer, false)
-        .into_iter()
-        .filter(|q| !sources.knows(q))
-        .map(|q| match (q.unit, q.rate) {
-            (Some(unit), Some(rate)) => format!("{} {unit} a {rate}", q.value),
-            (Some(unit), None) => format!("{} {unit}", q.value),
-            _ => q.value.to_string(),
-        })
-        .collect();
+    let shown = |q: &Quantity| match (q.unit, q.rate, &q.noun) {
+        (Some(unit), Some(rate), _) => format!("{} {unit} a {rate}", q.value),
+        (Some(unit), None, _) => format!("{} {unit}", q.value),
+        (None, _, Some(noun)) => format!("{} {noun}", q.value),
+        _ => q.value.to_string(),
+    };
+    let answer_quantities = quantities(answer, false);
+    let unknown: Vec<String> =
+        answer_quantities.iter().filter(|q| sources.check(q) == NumberCheck::Invented).map(shown).collect();
+    let unverifiable: Vec<String> =
+        answer_quantities.iter().filter(|q| sources.check(q) == NumberCheck::Unverifiable).map(shown).collect();
     let claims: Vec<&String> = case.invented.iter().filter(|claim| lower.contains(&claim.to_lowercase())).collect();
     let mut invented = Vec::new();
     if !unknown.is_empty() {
@@ -428,7 +550,8 @@ pub fn score_turn(case: &Case, turn: &Turn, output: &Output, sources: &Sources) 
     }
     let mut invented_check = result(Category::NothingInvented, invented.is_empty(), invented.join("; "));
     if invented.is_empty() {
-        let claims = unverifiable_claims(answer, sources);
+        let mut claims = unverifiable_claims(answer, sources);
+        claims.extend(unverifiable.iter().map(|q| format!("{q} (the number is known, not as this)")));
         if !claims.is_empty() {
             invented_check.unchecked = true;
             invented_check.detail = format!("not checkable by rules: {}", claims.join("; "));
@@ -588,6 +711,11 @@ mod tests {
         assert!(q("two for restaurants").is_empty());
         assert_eq!(q("2 for restaurants")[0].unit, None);
         assert_eq!(q("12 city managers")[0].unit, Some("manager"));
+        let mut cv = Sources::default();
+        cv.add("Backend engineer, 6 years. Odoo 17 ERP integration.");
+        assert_eq!(cv.check(&q("I mentor 6 juniors")[0]), NumberCheck::Unverifiable, "6 is known, but as years");
+        assert_eq!(cv.check(&q("your Odoo 17 setup")[0]), NumberCheck::Known, "a name and version");
+        assert_eq!(cv.check(&q("7 juniors")[0]), NumberCheck::Invented);
     }
 
     #[test]
@@ -609,7 +737,13 @@ mod tests {
         let claims = unverifiable_claims("I've used Kotlin on Android side projects, so I can pick it up fast.", &known);
         assert_eq!(claims.len(), 1);
         assert!(claims[0].contains("android"), "{claims:?}");
-        assert!(unverifiable_claims("I mentioned 450,000 rupees a month.", &known).is_empty(), "not a claim about experience");
+        assert!(unverifiable_claims("I mentioned 450,000 rupees a month.", &known).is_empty(), "nothing unknown in it");
+        for claim in ["I'm comfortable with event sourcing.", "I mentored the junior engineers.", "I handled incident response.", "I ran the hiring loop.", "We have shipped Flutter apps."] {
+            assert_eq!(unverifiable_claims(claim, &known).len(), 1, "{claim}");
+        }
+        for offer in ["I'd like to understand the full package first.", "I can join after one month's notice.", "We will send the estimate."] {
+            assert!(unverifiable_claims(offer, &known).is_empty(), "an offer is not a claim: {offer}");
+        }
     }
 
     #[test]

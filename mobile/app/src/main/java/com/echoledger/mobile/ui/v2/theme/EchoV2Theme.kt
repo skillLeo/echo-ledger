@@ -211,6 +211,10 @@ class EchoV2Type(private val family: FontFamily, private val urdu: Boolean) {
     /** Email addresses, links and codes inside any language: the system face, 14 sp. */
     val metaLatin = EchoTokens.Type.body.copy(fontFamily = FontFamily.Default)
 
+    /** Content written in English whatever the screen's language (Live Assist's suggestions): the system face. */
+    val contentStrong = EchoTokens.Type.bodyMobile.copy(fontWeight = EchoTokens.Type.bodyStrong.fontWeight, fontFamily = FontFamily.Default)
+    val contentCaption = EchoTokens.Type.caption.copy(fontFamily = FontFamily.Default)
+
     /** Transcript text in Urdu (urdu.body). */
     val urduBody = EchoTokens.Type.urduBody.copy(fontFamily = UrduNastaliq)
 

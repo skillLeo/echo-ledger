@@ -53,6 +53,16 @@ class EchoToastData internal constructor(
     fun dismiss() {
         if (continuation.isActive) continuation.resume(EchoToastResult.Dismissed)
     }
+
+    /** Set when a toast with an end time took this one's place: it shows again right after, for its full time. */
+    internal var bumped = false
+        private set
+
+    internal fun bump() {
+        if (!continuation.isActive) return
+        bumped = true
+        continuation.resume(EchoToastResult.Dismissed)
+    }
 }
 
 /**
@@ -69,15 +79,18 @@ class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
     private var busy = false
     private val waiting = ArrayDeque<CompletableDeferred<Unit>>()
 
-    private suspend fun takeTurn(first: Boolean) {
-        val wait = synchronized(lock) {
-            if (!busy) {
-                busy = true
-                null
-            } else {
-                CompletableDeferred<Unit>().also { if (first) waiting.addFirst(it) else waiting.addLast(it) }
-            }
-        } ?: return
+    /** Joins the line (at the front when [first]); null when the turn is free and now taken. */
+    private fun joinLine(first: Boolean): CompletableDeferred<Unit>? = synchronized(lock) {
+        if (!busy) {
+            busy = true
+            null
+        } else {
+            CompletableDeferred<Unit>().also { if (first) waiting.addFirst(it) else waiting.addLast(it) }
+        }
+    }
+
+    private suspend fun awaitTurn(wait: CompletableDeferred<Unit>?) {
+        wait ?: return
         try {
             wait.await()
         } catch (e: CancellationException) {
@@ -95,19 +108,33 @@ class EchoToastState(val clock: () -> Long = System::currentTimeMillis) {
     /**
      * Shows [message] (with [actionLabel] when given) until the action is tapped or its time runs out.
      *
-     * With a [deadlineMs] (on [clock]) the toast belongs to a timer kept elsewhere: it never waits in the queue (it
-     * ends the toast on screen and shows at once), it is gone by its deadline, and when its turn comes after the
-     * deadline it is not shown at all ([EchoToastResult.Dismissed]). Without one it takes its turn and its own time.
+     * With a [deadlineMs] (on [clock]) the toast belongs to a timer kept elsewhere: it never waits in the queue (the
+     * toast on screen steps aside and shows again right after it, for its full time), it is gone by its deadline, and
+     * when its turn comes after the deadline it is not shown at all ([EchoToastResult.Dismissed]). Without one it
+     * takes its turn and its own time.
      */
     suspend fun show(message: String, actionLabel: String? = null, deadlineMs: Long? = null): EchoToastResult {
-        if (deadlineMs != null) current?.takeIf { it.deadlineMs == null }?.dismiss()
-        takeTurn(first = deadlineMs != null)
-        try {
-            if (deadlineMs != null && clock() >= deadlineMs) return EchoToastResult.Dismissed
-            return suspendCancellableCoroutine { cont -> current = EchoToastData(message, actionLabel, deadlineMs, cont) }
-        } finally {
-            current = null
-            endTurn()
+        var first = deadlineMs != null
+        // In line before the toast on screen steps aside, so its turn passes to this one, not back to itself.
+        var place = joinLine(first)
+        if (deadlineMs != null) current?.takeIf { it.deadlineMs == null }?.bump()
+        while (true) {
+            awaitTurn(place)
+            var data: EchoToastData? = null
+            try {
+                if (deadlineMs != null && clock() >= deadlineMs) return EchoToastResult.Dismissed
+                val result = suspendCancellableCoroutine { cont ->
+                    data = EchoToastData(message, actionLabel, deadlineMs, cont)
+                    current = data
+                }
+                if (data?.bumped != true) return result
+            } finally {
+                current = null
+                endTurn()
+            }
+            // Made way for a toast with an end time: back at the front of the line, after it.
+            first = true
+            place = joinLine(first)
         }
     }
 

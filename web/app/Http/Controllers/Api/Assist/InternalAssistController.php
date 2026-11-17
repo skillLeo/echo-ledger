@@ -11,12 +11,14 @@ use App\Models\AssistSuggestion;
 use App\Models\AssistUsage;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\UsageLedgerEntry;
+use App\Services\Assist\AssistPlans;
 use App\Services\CredentialVault;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
@@ -49,7 +51,11 @@ final class InternalAssistController extends Controller
         return response()->json(['keys' => (object) $keys, 'models' => $models, 'modes' => $modes])->header('Cache-Control', 'no-store');
     }
 
-    /** POST /api/internal/assist/usage: one suggestion's tokens and cost; the same suggestion_id once only. */
+    /**
+     * POST /api/internal/assist/usage: one model call's tokens and cost, a suggestion's or (since 1.9.0-h) a practice
+     * question's, the facts ledger's or the summary's; the same suggestion_id once only. A Practice session's usage
+     * counts against Practice's allowance (AssistPlans::left).
+     */
     public function usage(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -58,7 +64,8 @@ final class InternalAssistController extends Controller
             'model' => ['required', 'string', 'max:128'],
             'provider' => ['required', 'string', 'max:20'],
             'mode' => ['required', 'string', 'max:10'],
-            'kind' => ['required', 'string', 'max:20'],
+            // Since 1.9.0-h: the relay's suggestion kinds and its background calls (practice_question, facts, summary).
+            'kind' => ['required', Rule::in((array) config('assist.usage_kinds'))],
             'trigger' => ['sometimes', 'nullable', 'string', 'max:20'],
             'outcome' => ['sometimes', 'nullable', 'string', 'max:20'],
             'fallback' => ['sometimes', 'boolean'],
@@ -79,7 +86,7 @@ final class InternalAssistController extends Controller
         }
         $at = isset($data['at']) ? Carbon::parse((string) $data['at'])->utc() : now();
         try {
-            $this->record($session, $data, $at);
+            self::record($session, $data, $at);
         } catch (UniqueConstraintViolationException) {
             // The same suggestion twice at once (the relay's retry racing the first): the first one counts.
             return response()->json(['stored' => false]);
@@ -93,7 +100,7 @@ final class InternalAssistController extends Controller
      *
      * @param  array<string, mixed>  $data
      */
-    private function record(AssistSession $session, array $data, Carbon $at): void
+    public static function record(AssistSession $session, array $data, Carbon $at): void
     {
         DB::transaction(function () use ($data, $session, $at): void {
             AssistUsage::query()->create([
@@ -104,6 +111,9 @@ final class InternalAssistController extends Controller
                 'provider' => $data['provider'],
                 'model' => $data['model'],
                 'mode' => $data['mode'],
+                // The plan the session started on (the workspace's plan now for a session from before it was kept): what the
+                // admin panel's cost per plan counts.
+                'plan' => $session->plan ?? app(AssistPlans::class)->for($session->workspace_id)['key'],
                 'kind' => $data['kind'],
                 'trigger' => $data['trigger'] ?? null,
                 'outcome' => $data['outcome'] ?? null,
@@ -117,28 +127,37 @@ final class InternalAssistController extends Controller
                 'latency' => is_array($data['latency'] ?? null) ? array_filter($data['latency'], 'is_numeric') : null,
                 'occurred_at' => $at,
             ]);
-            // The month's totals (Usage pages, the CSV) count it with every other use.
-            UsageLedgerEntry::query()->create([
-                'workspace_id' => $session->workspace_id,
-                'user_id' => $session->user_id,
-                'device_id' => $session->device_id,
-                'capture_session_id' => $session->capture_session_id,
-                'report_id' => 'assist/'.$data['suggestion_id'],
-                'source' => UsageLedgerEntry::SOURCE_SERVER,
-                'use_case' => 'live_assist',
-                'provider' => (string) $data['provider'],
-                'model' => mb_substr((string) $data['model'], 0, 64),
-                'duration_ms' => 0,
-                'channels' => 1,
-                'billed_ms' => 0,
-                'input_tokens' => (int) $data['tokens']['input'] + (int) $data['tokens']['cached'] + (int) $data['tokens']['written'],
-                'output_tokens' => (int) $data['tokens']['output'],
-                'unit_price_usd' => 0,
-                'cost_usd' => round((float) $data['cost_usd'], 6),
-                'billable' => true,
-                'occurred_at' => $at,
-            ]);
+            self::ledger($session, $data, $at);
         });
+    }
+
+    /**
+     * Counts one model call of [$session] in the month's usage ledger (Usage pages, the CSV), with every other use.
+     *
+     * @param  array<string, mixed>  $data  suggestion_id, provider, model, tokens and cost_usd
+     */
+    public static function ledger(AssistSession $session, array $data, Carbon $at): void
+    {
+        UsageLedgerEntry::query()->create([
+            'workspace_id' => $session->workspace_id,
+            'user_id' => $session->user_id,
+            'device_id' => $session->device_id,
+            'capture_session_id' => $session->capture_session_id,
+            'report_id' => 'assist/'.$data['suggestion_id'],
+            'source' => UsageLedgerEntry::SOURCE_SERVER,
+            'use_case' => 'live_assist',
+            'provider' => (string) $data['provider'],
+            'model' => mb_substr((string) $data['model'], 0, 64),
+            'duration_ms' => 0,
+            'channels' => 1,
+            'billed_ms' => 0,
+            'input_tokens' => (int) $data['tokens']['input'] + (int) $data['tokens']['cached'] + (int) $data['tokens']['written'],
+            'output_tokens' => (int) $data['tokens']['output'],
+            'unit_price_usd' => 0,
+            'cost_usd' => round((float) $data['cost_usd'], 6),
+            'billable' => true,
+            'occurred_at' => $at,
+        ]);
     }
 
     /** POST /api/internal/assist/suggestions: the words of a suggestion that was shown, for the report. */

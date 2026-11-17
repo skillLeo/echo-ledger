@@ -3,7 +3,7 @@
 // read as "off", so an older core or server shows the classic screens.
 //   ui_flags                      → { ui_flags: { "<name>": bool, … }, ui_classic: bool }   (cached; no request)
 //   ui_classic_set { classic }    → PUT /api/account/ui {"classic": bool}, the same shape from its answer
-import { invoke } from "@tauri-apps/api/core";
+import { api } from "../lib/ipc";
 import { useEffect, useRef, useState } from "react";
 
 export const UI_FLAG_NAMES = [
@@ -47,7 +47,7 @@ export async function readUiState(): Promise<UiState> {
   const forced = typeof location !== "undefined" ? devOverride(location.search) : null;
   if (forced) return forced;
   try {
-    return parseUiState(await invoke<unknown>("ui_flags"));
+    return parseUiState(await api.uiFlags());
   } catch {
     return ALL_OFF;
   }
@@ -55,7 +55,7 @@ export async function readUiState(): Promise<UiState> {
 
 /** "Switch back to classic" (or to the new screens): the server's new answer. Errors reach the caller. */
 export async function setClassic(classic: boolean): Promise<UiState> {
-  return parseUiState(await invoke<unknown>("ui_classic_set", { classic }));
+  return parseUiState(await api.uiClassicSet(classic));
 }
 
 /**

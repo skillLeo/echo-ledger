@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use desktop_lib::overlay::{DICTATION, OVERLAY, PILL, REVIEW, WINDOWS};
+use desktop_lib::overlay::{ASSIST, DICTATION, OVERLAY, PILL, REVIEW, WINDOWS};
 
 fn manifest_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -104,20 +104,20 @@ fn capabilities_name_only_windows_that_exist() {
         for window in capability["windows"].as_array().unwrap() {
             let label = window.as_str().unwrap();
             assert!(
-                configured.contains(&label) || [OVERLAY, DICTATION, PILL, REVIEW].contains(&label),
+                configured.contains(&label) || [OVERLAY, DICTATION, PILL, REVIEW, ASSIST].contains(&label),
                 "{file} grants permissions to unknown window `{label}`"
             );
         }
     }
-    assert_eq!(WINDOWS, [OVERLAY, DICTATION, PILL, REVIEW]);
-    assert_eq!((PILL, REVIEW), ("pill", "review"), "the labels the views and the IPC contract use");
+    assert_eq!(WINDOWS, [OVERLAY, DICTATION, PILL, REVIEW, ASSIST]);
+    assert_eq!((PILL, REVIEW, ASSIST), ("pill", "review", "assist"), "the labels the views and the IPC contract use");
 }
 
 #[test]
 fn the_control_windows_get_no_more_than_events_and_dragging() {
     let controls = json("capabilities/controls.json");
     assert_eq!(controls["identifier"], "controls");
-    assert_eq!(controls["windows"], serde_json::json!([PILL, REVIEW]));
+    assert_eq!(controls["windows"], serde_json::json!([PILL, REVIEW, ASSIST]), "the Live Assist card drags like the pill");
     assert_eq!(controls["platforms"], serde_json::json!(["windows", "macOS"]));
     assert_eq!(
         controls["permissions"],

@@ -134,6 +134,9 @@
   border: 0; background: transparent; color: var(--el-role-text-primary);
 }
 .el-input > input:focus-visible { outline: none; }
+.el-input--area { align-items: stretch; padding-block: var(--el-space-8); }
+.el-input > textarea { flex: 1; min-inline-size: 0; border: 0; padding: 0; background: transparent; color: var(--el-role-text-primary); resize: vertical; font: inherit; }
+.el-input > textarea:focus-visible { outline: none; }
 .el-input > input::placeholder { color: var(--el-role-text-secondary); opacity: 1; }
 .el-input > input::-webkit-search-cancel-button { display: none; }
 .el-input .el-button { margin-inline-end: calc(var(--el-space-8) * -1); }
@@ -262,12 +265,10 @@
 .el-toast-region {
   position: fixed; z-index: var(--el-layer-toast);
   inset-block-end: var(--el-space-24);
-  inset-inline-start: 50%;
-  translate: -50% 0;
+  inset-inline: var(--el-space-16);
   display: flex; flex-direction: column; align-items: center; gap: var(--el-space-8);
   pointer-events: none;
 }
-[dir="rtl"] .el-toast-region, .el-toast-region[dir="rtl"] { translate: 50% 0; }
 .el-toast-region--inline { position: absolute; }
 .el-toast {
   pointer-events: auto;
@@ -320,6 +321,20 @@
   display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--el-space-8);
   padding: var(--el-space-16) var(--el-space-24) var(--el-space-24);
 }
+
+/* ---- Banner ---------------------------------------------------------------------------------------------- */
+.el-banner {
+  display: flex; align-items: center; gap: var(--el-space-12);
+  margin: var(--el-space-12) var(--el-space-32) 0;
+  padding: var(--el-space-8) var(--el-space-8) var(--el-space-8) var(--el-space-16);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-card-radius);
+  background: var(--el-role-bg-surface);
+}
+.el-banner--warning { background: var(--el-role-warning-soft); }
+.el-banner--danger { background: var(--el-role-danger-soft); }
+.el-banner__icon { color: var(--el-role-text-secondary); }
+.el-banner__text { flex: 1; min-inline-size: 0; display: flex; flex-direction: column; gap: var(--el-space-2); }
 
 /* ---- Badge and Status --------------------------------------------------------------------------------------- */
 .el-badge {
@@ -400,11 +415,12 @@
 /* ---- EmptyState --------------------------------------------------------------------------------------------- */
 .el-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: var(--el-space-8); padding: var(--el-space-48) var(--el-space-24); }
 .el-empty__icon { color: var(--el-role-text-secondary); margin-block-end: var(--el-space-8); }
-.el-empty__body { max-inline-size: calc(var(--el-space-64) * 6); color: var(--el-role-text-secondary); }
+.el-empty__body { max-inline-size: calc(var(--el-space-64) * 6); color: var(--el-role-text-secondary); text-wrap: pretty; }
 .el-empty__action { margin-block-start: var(--el-space-8); }
 
 /* ---- Tabs and Segmented ------------------------------------------------------------------------------------- */
-.el-tabs__list { display: flex; gap: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); overflow-x: auto; }
+/* Tabs wrap rather than scroll: at large text in a narrow window every tab stays in sight. */
+.el-tabs__list { display: flex; flex-wrap: wrap; gap: var(--el-space-4); border-block-end: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-tab {
   position: relative;
   min-block-size: var(--el-component-button-height);
@@ -570,6 +586,10 @@ button.el-step__head { cursor: pointer; }
   box-shadow: var(--el-shadow-1);
   white-space: nowrap;
 }
+/* A kept screen: one short flash of the accent ring (never a loop); under Reduce motion a still ring instead. */
+.el-pill--captured { box-shadow: var(--el-shadow-1), 0 0 0 var(--el-focus-width) var(--el-role-accent-default); animation: el-captured var(--el-motion-slow) var(--el-motion-ease-out) 2; }
+@keyframes el-captured { 50% { box-shadow: var(--el-shadow-1), 0 0 0 var(--el-focus-width) transparent; } }
+@media (prefers-reduced-motion: reduce) { .el-pill--captured { animation: none; } }
 .el-pill__summary {
   display: inline-flex; align-items: center; gap: var(--el-space-8);
   min-block-size: calc(var(--el-space-24) + var(--el-space-4));
@@ -585,7 +605,7 @@ button.el-step__head { cursor: pointer; }
 .el-pill__controls .el-button[aria-pressed="true"] { background: var(--el-role-accent-soft); color: var(--el-role-accent-text); }
 .el-pill__ask { padding-inline: var(--el-space-8); }
 .el-aftercall-stack { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-8); }
-.el-aftercall-stack .el-toast-region { position: static; translate: none; }
+.el-aftercall-stack .el-toast-region { position: static; }
 .el-aftercall {
   display: flex; flex-direction: column; gap: var(--el-space-12);
   padding: var(--el-space-12);
@@ -603,6 +623,51 @@ button.el-step__head { cursor: pointer; }
 .el-aftercall__title { font-weight: var(--el-text-body-strong-weight); max-inline-size: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .el-aftercall__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-8); }
 .el-aftercall .el-progress { block-size: var(--el-space-2); }
+
+/* ---- Live Assist card (a floating layer) ------------------------------------------------------------------- */
+.el-assist-root { display: flex; justify-content: center; padding: var(--el-space-8); }
+.el-assist {
+  display: flex; flex-direction: column; gap: var(--el-space-8);
+  inline-size: 100%; max-inline-size: calc(var(--el-space-64) * 8);
+  padding: var(--el-space-8) var(--el-space-12) var(--el-space-12);
+  background: var(--el-role-bg-overlay);
+  border: var(--el-border-hairline) solid var(--el-role-border-default);
+  border-radius: var(--el-component-card-radius);
+  box-shadow: var(--el-shadow-2);
+}
+.el-assist__offer { display: flex; flex-direction: column; gap: var(--el-space-8); }
+.el-assist__bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-4); cursor: grab; }
+.el-assist__bar > .el-button--icon:last-child { margin-inline-start: auto; }
+.el-assist__budget { flex: 1 1 var(--el-space-64); min-inline-size: var(--el-space-48); padding-inline: var(--el-space-8); }
+.el-assist__note { display: flex; align-items: center; gap: var(--el-space-8); padding: var(--el-space-8); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); border: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-assist__note > span { flex: 1; }
+.el-assist__body { display: flex; flex-direction: column; gap: var(--el-space-8); min-block-size: var(--el-space-48); }
+.el-assist__question { margin: 0; }
+.el-assist__first {
+  margin: 0;
+  font-size: var(--el-text-title-s-size); line-height: var(--el-text-title-s-line); font-weight: var(--el-text-title-s-weight);
+}
+.el-assist__bullets { margin: 0; padding-inline-start: var(--el-space-20); list-style: disc; display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-assist__next, .el-assist__language { margin: 0; }
+.el-assist__language:lang(ur), .el-assist__language:lang(ar) { font-family: var(--el-text-urdu-body-font); line-height: var(--el-text-urdu-body-line); }
+.el-assist__actions { display: flex; flex-wrap: wrap; gap: var(--el-space-4); }
+.el-assist__captions { margin: 0; padding: var(--el-space-8) 0 0; list-style: none; border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); display: flex; flex-direction: column; gap: var(--el-space-2); }
+.el-assist__who { font-weight: var(--el-text-body-strong-weight); color: var(--el-role-text-secondary); }
+.el-assist__partial { color: var(--el-role-text-secondary); }
+
+/* ---- Forms (Live Assist prep) ------------------------------------------------------------------------------- */
+.el-form { display: flex; flex-direction: column; gap: var(--el-space-16); padding: var(--el-space-16); }
+.el-form__row { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3), 1fr)); gap: var(--el-space-16); }
+.el-consent { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-4); padding: var(--el-space-12); border-radius: var(--el-radius-sm); background: var(--el-role-bg-subtle); }
+.el-consent > p { margin: 0; }
+.el-prep__actions { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--el-space-8); }
+.el-prep__when { inline-size: calc(var(--el-space-64) * 3.5); }
+
+/* ---- Ask ------------------------------------------------------------------------------------------------- */
+.el-ask__row { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: var(--el-space-12); }
+.el-ask--embedded, .el-workspace-memory { display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
+.el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 
 /* ---- Page layout (Library, a recording, Settings in the new look) ------------------------------------------ */
 .el-page { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 14); margin-inline: auto; }
@@ -634,6 +699,11 @@ button.el-step__head { cursor: pointer; }
 .el-group__head { display: flex; align-items: center; justify-content: space-between; gap: var(--el-space-8); }
 .el-health-list { margin: 0; padding: 0; list-style: none; }
 .el-group__note { padding: 0 var(--el-space-12) var(--el-space-12); }
+.el-home-strip { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--el-space-12); padding: var(--el-space-16); }
+.el-home-check { flex-direction: column; gap: var(--el-space-2); }
+.el-home-empty { padding-block-start: var(--el-space-12); }
+.el-home-usage { display: flex; flex-direction: column; align-items: flex-start; gap: var(--el-space-8); padding: var(--el-space-16); }
+.el-step > .el-button { align-self: center; }
 .el-group__progress { padding: 0 var(--el-space-12) var(--el-space-8); }
 .el-settings-top { display: flex; flex-direction: column; gap: var(--el-space-16); max-inline-size: calc(var(--el-space-64) * 11); margin-block-end: var(--el-space-24); }
 

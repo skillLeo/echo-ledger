@@ -178,6 +178,9 @@
     <string name="v2_vm_ws_project_deleted">پروجیکٹ حذف ہو گیا</string>
     <string name="v2_vm_project_deleted_moved">پروجیکٹ حذف ہو گیا · %1$s ان باکس میں منتقل</string>
     <string name="v2_vm_key_refused">Groq نے یہ کی قبول نہیں کی۔ console.groq.com سے دوبارہ کاپی کریں۔</string>
+    <string name="v2_vm_link_not_revoked">لنک منسوخ نہیں ہو سکا۔</string>
+    <string name="v2_vm_not_deleted">ریکارڈنگ حذف نہیں ہو سکی۔</string>
+    <string name="v2_vm_key_not_saved">کی محفوظ نہیں ہو سکی۔</string>
     <string name="v2_vm_sign_in_first">پہلے اس فون پر سائن ان کریں۔</string>
     <string name="v2_vm_signed_in_as">%1$s کے طور پر سائن ان ہو گیا</string>
     <string name="v2_vm_many_deleted">%1$s حذف ہو گئیں</string>

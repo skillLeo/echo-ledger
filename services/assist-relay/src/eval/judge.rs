@@ -62,45 +62,55 @@ fn known_before(case: &Case, turn_id: &str) -> String {
     known
 }
 
+/// The rules for judging a practice question.
+pub const PRACTICE_RULES: &str = "You check practice questions that an AI asks Me while Me prepares for a real \
+meeting. You get what is known (the brief Me prepared, Me's documents, Me's answers so far) and one question. Decide \
+whether the question states or assumes anything about Me or anyone else that the known material does not contain: an \
+employer, a person, a name, a number, an amount, an event, a failure or a fault. Asking about a topic is fine; \
+presenting something as a fact is not. Answer with exactly PASS, or FAIL: followed by the invented part in a few \
+words. Nothing else.";
+
+/// One verdict: `rules` as the system part, `material` as the question. PASS, or the reason it failed.
+pub async fn ask(provider: &Arc<dyn Provider>, model: &str, options: &toml::Table, rules: &str, material: String) -> (bool, String) {
+    let context = Context {
+        segments: vec![
+            Segment { kind: SegmentKind::Rules, role: Role::System, tokens: estimate_tokens(rules), text: rules.to_owned(), cache_after: true },
+            Segment { kind: SegmentKind::Question, role: Role::User, tokens: estimate_tokens(&material), text: material, cache_after: false },
+        ],
+    };
+    let request = CompletionRequest {
+        model: model.to_owned(),
+        context: Arc::new(context),
+        max_output_tokens: 120,
+        options: options.clone(),
+        purpose: Purpose::Answer,
+        question: String::new(),
+    };
+    let mut verdict = String::new();
+    let mut stream = provider.stream(request);
+    while let Some(item) = stream.next().await {
+        match item {
+            Ok(StreamEvent::Text(text)) => verdict.push_str(&text),
+            Ok(StreamEvent::Usage(_)) => {}
+            Err(error) => return (false, format!("FAIL: the judge could not answer ({error})")),
+        }
+    }
+    (verdict.trim().eq_ignore_ascii_case("PASS"), verdict.trim().to_owned())
+}
+
 /// Judges every answer of a scored transcript with `model` at `provider`.
 pub async fn judge_case(provider: &Arc<dyn Provider>, model: &str, options: &toml::Table, case: &Case, score: &CaseScore) -> JudgeTotals {
     let mut totals = JudgeTotals::default();
     for (turn_id, output, _) in &score.turns {
         let Output::Answer(answer) = output else { continue };
-        let question = format!("{}\nThe suggestion:\n{answer}", known_before(case, turn_id));
-        let context = Context {
-            segments: vec![
-                Segment { kind: SegmentKind::Rules, role: Role::System, tokens: estimate_tokens(RULES), text: RULES.to_owned(), cache_after: true },
-                Segment { kind: SegmentKind::Question, role: Role::User, tokens: estimate_tokens(&question), text: question, cache_after: false },
-            ],
-        };
-        let request = CompletionRequest {
-            model: model.to_owned(),
-            context: Arc::new(context),
-            max_output_tokens: 120,
-            options: options.clone(),
-            purpose: Purpose::Answer,
-            question: String::new(),
-        };
-        let mut verdict = String::new();
-        let mut stream = provider.stream(request);
-        while let Some(item) = stream.next().await {
-            match item {
-                Ok(StreamEvent::Text(text)) => verdict.push_str(&text),
-                Ok(StreamEvent::Usage(_)) => {}
-                Err(error) => {
-                    verdict = format!("FAIL: the judge could not answer ({error})");
-                    break;
-                }
-            }
-        }
+        let material = format!("{}\nThe suggestion:\n{answer}", known_before(case, turn_id));
+        let (passed, verdict) = ask(provider, model, options, RULES, material).await;
         totals.total += 1;
-        let passed = verdict.trim().eq_ignore_ascii_case("PASS");
         totals.verdicts.insert(format!("{}/{turn_id}", case.id), passed);
         if passed {
             totals.passed += 1;
         } else {
-            totals.failures.push(format!("{}/{turn_id}: {}", case.id, verdict.trim()));
+            totals.failures.push(format!("{}/{turn_id}: {verdict}", case.id));
         }
     }
     totals

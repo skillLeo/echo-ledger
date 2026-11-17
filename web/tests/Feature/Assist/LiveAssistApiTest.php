@@ -8,9 +8,12 @@ use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
+use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\Workspace;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
+use App\Services\Workspaces\Workspaces;
 use Filament\Facades\Filament;
 use Illuminate\Http\Client\Factory as HttpFactory;
 use Illuminate\Support\Facades\DB;
@@ -135,6 +138,42 @@ describe('preps', function () {
 });
 
 describe('another workspace', function () {
+    it('gives the documents\' text on the single read only, to the prep\'s person only (1.9.0-m)', function () {
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        $project = Fx::client($device->user, 'Acme');
+        $jd = ClientFile::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'client_id' => $project->id,
+            'name' => 'JD.pdf', 'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'ready', 'text' => 'Senior Laravel developer, Lahore.']);
+        $prep = $api->postJson('/api/assist/preps', ['meeting_type' => 'interview', 'project_id' => $project->id])->json('id');
+
+        $attached = $api->postJson("/api/assist/preps/{$prep}/documents", ['file_ids' => [$jd->id]])->assertOk();
+        expect($attached->json('documents.0'))->toBe(['file_id' => $jd->id, 'name' => 'JD.pdf', 'tokens' => 9]);
+        expect($api->getJson("/api/assist/preps/{$prep}")->assertOk()->json('documents'))
+            ->toBe([['file_id' => $jd->id, 'name' => 'JD.pdf', 'tokens' => 9, 'text' => 'Senior Laravel developer, Lahore.']]);
+        // Never in a list, nor after a change.
+        expect($api->getJson('/api/assist/preps')->json('data.0.documents.0'))->not->toHaveKey('text')
+            ->and($api->patchJson("/api/assist/preps/{$prep}", ['title' => 'x'])->json('documents.0'))->not->toHaveKey('text');
+        // Another person: the same 404 as an unknown id, and not a word of it.
+        $other = $this->api(Fx::token(assistPerson('pro')))->getJson("/api/assist/preps/{$prep}")->assertNotFound();
+        expect((string) $other->getContent())->not->toContain('Laravel developer');
+    });
+
+    it('answers 404 for a teammate\'s project and its files in the same workspace (projects are private)', function () {
+        $alice = assistPerson();
+        $bob = Fx::user();
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($alice->workspace_id), $bob);
+        $bobProject = Client::query()->withoutGlobalScopes()->create(['workspace_id' => $alice->workspace_id, 'user_id' => $bob->id, 'name' => 'BOB-PROJECT', 'color' => '#8B5CF6']);
+        $bobFile = ClientFile::query()->create(['workspace_id' => $alice->workspace_id, 'user_id' => $bob->id, 'client_id' => $bobProject->id,
+            'name' => 'Bob.pdf', 'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'ready', 'text' => 'x']);
+        $api = $this->api(Fx::token($alice));
+        $prep = $api->postJson('/api/assist/preps', ['meeting_type' => 'general'])->json('id');
+
+        $api->postJson('/api/assist/preps', ['meeting_type' => 'general', 'project_id' => $bobProject->id])->assertNotFound();
+        $api->patchJson("/api/assist/preps/{$prep}", ['project_id' => $bobProject->id])->assertNotFound();
+        $api->postJson("/api/assist/preps/{$prep}/documents", ['file_ids' => [$bobFile->id]])->assertNotFound();
+        expect(AssistPrep::query()->withoutGlobalScopes()->find($prep)->client_id)->toBeNull();
+    });
+
     it('answers 404 for another person\'s prep, session, project, file and recording', function () {
         $bob = assistPerson();
         $bobApi = $this->api(Fx::token($bob));
@@ -228,8 +267,10 @@ describe('starting a session', function () {
         $device = assistPerson('pro');
         $api = $this->api(Fx::token($device));
         $practice = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated()->json('session.id');
-        // A second Practice, and a live session next to Practice, would spend the month's allowance twice.
-        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->assertJsonPath('code', 'session_active');
+        // A second Practice, and a live session next to Practice, would spend the month's allowance twice. The answer
+        // names the session on, so the app can end it and start again (1.9.0-k).
+        $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->assertJsonPath('code', 'session_active')
+            ->assertJsonPath('session_id', $practice)->assertJsonPath('practice', true)->assertJsonPath('device_id', $device->id);
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertStatus(409)->assertJsonPath('code', 'session_active');
         // From another device of the same person too.
         $this->api(Fx::token(Fx::device($device->user, ['workspace_id' => $device->workspace_id])))
@@ -245,6 +286,55 @@ describe('starting a session', function () {
         $stale = AssistSession::query()->withoutGlobalScopes()->find($first);
         // It ended where its last token did, so the time after counts for nothing.
         expect($stale->status)->toBe('ended')->and($stale->seconds_used)->toBe(900);
+    });
+
+    it('allows one session per person across all their workspaces, and asks the captions\' provider nothing when refusing', function () {
+        $device = assistPerson('pro');
+        $live = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
+        // The same person in a second workspace, signed in there on another device.
+        $user = $device->user->fresh();
+        $team = app(Workspaces::class)->createFor($user, 'Second team');
+        app(Workspaces::class)->switchTo($user, $team);
+        $there = Fx::device($user->fresh(), ['workspace_id' => $team->id]);
+        Http::swap(new HttpFactory);
+        Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:abc', 'expires_at' => '2026-12-01T10:10:00Z'])]);
+
+        $this->api(Fx::token($there))->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])
+            ->assertStatus(409)->assertJsonPath('code', 'session_active')->assertJsonPath('session_id', $live)
+            ->assertJsonPath('practice', false)->assertJsonPath('device_id', $device->id);
+        Http::assertNothingSent();
+        expect(AssistSession::query()->withoutGlobalScopes()->where('user_id', $user->id)->count())->toBe(1);
+    });
+
+    it('ends the person\'s own session in another of their workspaces, so a new one can start (1.9.0-l)', function () {
+        $device = assistPerson('pro');
+        $live = $this->api(Fx::token($device))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast'])->assertCreated()->json('session.id');
+        $user = $device->user->fresh();
+        $team = app(Workspaces::class)->createFor($user, 'Second team');
+        app(Workspaces::class)->switchTo($user, $team);
+        $there = $this->api(Fx::token(Fx::device($user->fresh(), ['workspace_id' => $team->id])));
+
+        $named = $there->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertStatus(409)->json('session_id');
+        $there->postJson("/api/assist/sessions/{$named}/end")->assertOk()->assertExactJson(['report' => 'queued']);
+        expect(AssistSession::query()->withoutGlobalScopes()->find($live)->status)->toBe('ended');
+        $there->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated();
+        // Still only the person's: their other workspace's session stays out of reach for everything else.
+        $there->getJson("/api/assist/sessions/{$live}")->assertNotFound();
+        // Once ended, the other workspace's session is as out of reach as any other there.
+        $there->postJson("/api/assist/sessions/{$live}/end")->assertNotFound();
+    });
+
+    it('answers 404 to ending someone else\'s session, whatever the workspace', function () {
+        $bob = assistPerson('pro');
+        $bobSession = $this->api(Fx::token($bob))->postJson('/api/assist/sessions', ['platform' => 'desktop', 'practice' => true])->json('session.id');
+        $alice = assistPerson('pro');
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($bob->workspace_id), $alice->user);
+        $aliceThere = Fx::device($alice->user->fresh(), ['workspace_id' => $bob->workspace_id]);
+
+        foreach ([$alice, $aliceThere] as $device) {
+            $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$bobSession}/end")->assertNotFound();
+        }
+        expect(AssistSession::query()->withoutGlobalScopes()->find($bobSession)->status)->toBe('active');
     });
 
     it('answers 503 while the relay is not set up, and creates nothing', function () {
@@ -274,6 +364,25 @@ describe('starting a session', function () {
         $recording = Fx::session($device->user, $device, ['status' => SessionStatus::Recording]);
         $api->postJson('/api/assist/sessions', ['platform' => 'desktop', 'mode' => 'fast', 'recording_session_id' => $recording->id])
             ->assertCreated()->assertJsonPath('stt', null);
+    });
+
+    it('never fails a token refresh because the captions are down: stt is null and the session goes on (1.9.0-j)', function () {
+        $api = $this->api(Fx::token(assistPerson('pro')));
+        $id = $api->postJson('/api/assist/sessions', ['platform' => 'android', 'practice' => true])->assertCreated()->assertJsonPath('stt.token', 'temp:abc')->json('session.id');
+
+        Http::swap(new HttpFactory);
+        Http::fake(fn () => Http::response('down', 500));
+        $refresh = $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt', null);
+        expect(relayClaims($refresh->json('relay.token'))['sid'])->toBe($id);
+        app(CredentialVault::class)->forget('soniox', 'api_key');
+        $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt', null);
+        $api->getJson("/api/assist/sessions/{$id}")->assertJsonPath('status', 'active');
+
+        // Back up: the next refresh has captions again.
+        app(CredentialVault::class)->put('soniox', 'api_key', 'snx-test-key-0123456789');
+        Http::swap(new HttpFactory);
+        Http::fake(['api.soniox.com/*' => Http::response(['api_key' => 'temp:back', 'expires_at' => '2026-12-01T10:10:00Z'])]);
+        $api->postJson("/api/assist/sessions/{$id}/token")->assertOk()->assertJsonPath('stt.token', 'temp:back');
     });
 });
 
@@ -332,7 +441,7 @@ describe('a session', function () {
             $api->postJson($uri, ['turns' => $turns])->assertStatus(409)->assertJsonPath('code', 'session_ended');
         }
         $report = $api->getJson("/api/assist/sessions/{$id}/report")->assertOk();
-        expect($report->json('questions'))->toBe([['at_ms' => 81200, 'text' => 'What is your notice period?']])
+        expect($report->json('qa.0'))->toMatchArray(['at_ms' => 81200, 'question' => 'What is your notice period?', 'answer' => 'One month.'])
             ->and($report->json('turns'))->toBe(2);
         expect($api->getJson('/api/assist/sessions')->json('data.0'))->toMatchArray(['id' => $id, 'status' => 'ended', 'report' => 'ready']);
     });

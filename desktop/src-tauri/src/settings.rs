@@ -9,15 +9,33 @@ use serde_json::Value;
 use crate::overlay::geometry::{Corner, PillPosition};
 use crate::shortcuts::{Action, default_map};
 
-/// "After a call" (v1.5): a finished call is kept at once ("Saved · … · Undo" for a few seconds) or a small chip asks,
-/// keeping it by itself after 10 s. Replaces "Ask before saving" and "If I don't choose within 60 s".
+/// "After a call" (contract 1.8.0-e, the same on every app): a call is transcribed only with the person's permission.
+/// `ask` (default): the after-call card asks, and with no answer within 12 s saves the audio, not transcribed;
+/// `always_transcribe`: kept and transcribed at once ("Saved · … · Undo"); `always_audio`: kept at once as audio only.
+/// v1.5's "Keep automatically" (`keep`) and "Ask me" both become `ask`: permission first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AfterCall {
     #[default]
-    Keep,
+    #[serde(alias = "keep")]
     Ask,
+    AlwaysTranscribe,
+    AlwaysAudio,
 }
+
+impl AfterCall {
+    /// Kept at once, without asking: `Some(transcribe)`; `None` when the card asks.
+    pub fn keeps_at_once(self) -> Option<bool> {
+        match self {
+            AfterCall::Ask => None,
+            AfterCall::AlwaysTranscribe => Some(true),
+            AfterCall::AlwaysAudio => Some(false),
+        }
+    }
+}
+
+/// What the person reads once when v1.5's "Keep automatically" became Ask me.
+pub const AFTER_CALL_NOTICE: &str = "After a call now asks before transcribing. To transcribe every call as before, choose Always transcribe";
 
 /// "Hide EchoLedger from screen sharing" (v1.8.1, `privacy`): every window, only the floating ones, or none.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -259,6 +277,9 @@ pub struct Settings {
     pub consent_acknowledged: bool,
     /// What happens when a call ends: kept at once with Undo, or asked about with a chip that keeps it after 10 s.
     pub after_call: AfterCall,
+    /// v1.5's "Keep automatically" became Ask me (contract 1.8.0-e): the person is told once, with Always transcribe one
+    /// tap away ([`AFTER_CALL_NOTICE`]). Cleared once answered.
+    pub after_call_notice: bool,
     /// Automatic call recordings shorter than this many seconds are skipped quietly (0 = never; v1.5, `skipped`).
     pub skip_calls_shorter_than_s: u32,
     /// Offer the "Record / Ignore / Always ignore" chip when an unrecognised app or site holds the mic and plays audio.
@@ -269,6 +290,8 @@ pub struct Settings {
     pub caption_lines: u8,
     /// Physical desktop px of the recording pill's top-left corner; set only when the user drags the pill.
     pub pill_position: Option<PillPosition>,
+    /// Where the Live Assist card was dragged to (its top-left corner, like the pill's); none: top-centre.
+    pub assist_card_position: Option<PillPosition>,
     /// macOS only: read browser tab addresses through Apple Events to identify call sites; ignored on Windows.
     pub browser_automation: bool,
     /// Size, width, opacity, compact mode, auto-hide and speaker colours of the caption overlay.
@@ -335,14 +358,16 @@ impl Default for Settings {
             dictation_output: "type".into(),
             client_id: None,
             consent_acknowledged: false,
-            // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: the user
-            // asked for Keep automatically as the default. The old keys are read and ignored.
-            after_call: AfterCall::Keep,
+            // Also what a file from before v1.5 (askBeforeSaving / decisionTimeout, no afterCall) loads as: permission
+            // first (contract 1.8.0-e). The old keys are read and ignored.
+            after_call: AfterCall::Ask,
+            after_call_notice: false,
             skip_calls_shorter_than_s: crate::skipped::DEFAULT_SHORTER_THAN_S,
             ask_unknown_apps: false,
             site_rules: Vec::new(),
             caption_lines: DEFAULT_CAPTION_LINES,
             pill_position: None,
+            assist_card_position: None,
             browser_automation: false,
             caption_style: CaptionStyle::default(),
             input_device: None,
@@ -395,6 +420,8 @@ impl Settings {
         // v1.8's "Show during screen share" (`contentProtection: false`) kept the floating windows in shares, and the main
         // window was in them anyway: that person keeps seeing both, so Off. Everyone else gets the new default (All).
         let showed_in_shares = !file.contains_key("hideFromSharing") && file.get("contentProtection") == Some(&Value::Bool(false));
+        // v1.5's "Keep automatically" reads as Ask me: the person is told once.
+        let kept_automatically = file.get("afterCall").and_then(Value::as_str) == Some("keep");
         let Ok(Value::Object(mut merged)) = serde_json::to_value(Self::default()) else { return Self::default() };
         for (key, value) in file {
             let value = match key.as_str() {
@@ -431,6 +458,7 @@ impl Settings {
         }
         let mut settings: Settings = serde_json::from_value(Value::Object(merged)).unwrap_or_default();
         settings.onboarding_done |= set_up_before;
+        settings.after_call_notice |= kept_automatically;
         if showed_in_shares {
             settings.hide_from_sharing = ShareHiding::Off;
         }

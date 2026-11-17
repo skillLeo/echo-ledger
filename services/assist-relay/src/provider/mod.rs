@@ -57,6 +57,10 @@ pub enum Purpose {
     Formal,
     Translate,
     Warm,
+    /// The relay's own calls: a practice question, new facts, the running summary.
+    PracticeQuestion,
+    Facts,
+    Summary,
 }
 
 impl fmt::Debug for Purpose {
@@ -69,6 +73,9 @@ impl fmt::Debug for Purpose {
             Purpose::Formal => "Formal",
             Purpose::Translate => "Translate",
             Purpose::Warm => "Warm",
+            Purpose::PracticeQuestion => "PracticeQuestion",
+            Purpose::Facts => "Facts",
+            Purpose::Summary => "Summary",
         };
         f.write_str(name)
     }

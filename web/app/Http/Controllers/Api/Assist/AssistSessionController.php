@@ -16,7 +16,9 @@ use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\Scopes\WorkspaceScope;
 use App\Models\User;
+use App\Services\Assist\AssistAsk;
 use App\Services\Assist\AssistPlans;
+use App\Services\Assist\AssistRecords;
 use App\Services\Assist\AssistStt;
 use App\Services\Assist\RelayToken;
 use Illuminate\Database\Eloquent\Builder;
@@ -56,6 +58,9 @@ final class AssistSessionController extends Controller
         // Practice runs the Practice mode on every plan; a live session the mode asked for, its prep's or Balanced.
         $mode = $practice ? $this->plans->modes($device->workspace_id, true)[0] : (string) ($data['mode'] ?? ($prep !== null ? $prep->mode : 'balanced'));
         $this->plans->assertMode($device->workspace_id, $mode, $practice);
+        // A quick look first, so a refusal asks nothing of the captions' provider; checked again, locked, below. Before
+        // the budget: a session still on holds its token's budget, and the answer should name it.
+        $this->assertNoneActive($device);
         $this->plans->assertLeft($device->workspace_id, $device->user_id, $practice);
         // Refused before anything is created: no relay, or no captions where nothing else gives them (Practice, or a
         // call without a recording; a running recording has its own captions).
@@ -69,10 +74,7 @@ final class AssistSessionController extends Controller
             // One assist session at a time per person, live or Practice: each spends what is left of the month, so two
             // at once would spend it twice. The person's row is locked so two starts at once cannot both pass.
             User::query()->whereKey($device->user_id)->lockForUpdate()->first();
-            $this->endAbandoned($device);
-            if ($this->query($device)->where('status', 'active')->exists()) {
-                throw new ApiError(409, 'session_active', 'Live Assist is already on in another call or Practice. End it there first.');
-            }
+            $this->assertNoneActive($device);
             $session = AssistSession::query()->create([
                 'workspace_id' => $device->workspace_id,
                 'user_id' => $device->user_id,
@@ -80,6 +82,8 @@ final class AssistSessionController extends Controller
                 'assist_prep_id' => $prep?->id,
                 'capture_session_id' => $recording?->id,
                 'mode' => $mode,
+                // The sold plan's key (business and personal are both the ultra tier), for the admin panel's numbers.
+                'plan' => $this->plans->for($device->workspace_id)['key'],
                 'practice' => $practice,
                 'platform' => (string) $data['platform'],
                 'auto_saved' => $prep !== null,
@@ -96,20 +100,20 @@ final class AssistSessionController extends Controller
             'session' => ['id' => $session->id, 'auto_saved' => $session->auto_saved, 'mode' => $session->mode, 'practice' => $session->practice],
             'relay' => $this->relay->block($session),
             'stt' => $stt,
-            'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id)['seconds_left']],
+            'plan' => ['modes' => $this->plans->modes($device->workspace_id, $practice), 'seconds_left' => $this->plans->left($device->workspace_id, $device->user_id, $practice)['seconds_left']],
         ], 201)->header('Cache-Control', 'no-store');
     }
 
-    /** POST /api/assist/sessions/{id}/token — `stt:token`: new relay and captions blocks; the budget as it is now. */
+    /**
+     * POST /api/assist/sessions/{id}/token — `stt:token`: new relay and captions blocks; the budget as it is now. Captions
+     * being down never fails a refresh (1.9.0-j): `stt` is null, the session goes on, and the app asks again in 30 s.
+     */
     public function token(Request $request, string $id): JsonResponse
     {
         $session = $this->active($request, $id);
         $this->relay->assertReady();
         $prep = $session->prep;
         $stt = $this->stt->block($prep instanceof AssistPrep && $prep->language_help !== 'off', $session->id);
-        if ($stt === null && $session->capture_session_id === null) {
-            throw new ApiError(503, 'provider_not_configured', 'Live captions are not set up on the server yet.');
-        }
         $session->forceFill(['last_token_at' => now()])->save();
 
         return response()->json(['relay' => $this->relay->block($session), 'stt' => $stt])->header('Cache-Control', 'no-store');
@@ -142,10 +146,14 @@ final class AssistSessionController extends Controller
         return response()->json(['accepted' => $accepted]);
     }
 
-    /** POST /api/assist/sessions/{id}/end — `sessions:write`. */
+    /**
+     * POST /api/assist/sessions/{id}/end — `sessions:write`. Since 1.9.0-l the person's own session still on in any of
+     * their workspaces (what a 409 session_active named, so the app can end it and start again); otherwise as every
+     * other route: this workspace's own session, 409 session_ended once it ended, anyone else's a 404.
+     */
     public function end(Request $request, string $id): JsonResponse
     {
-        $session = $this->active($request, $id);
+        $session = $this->activeOf($this->device($request)->user_id)->find($id) ?? $this->active($request, $id);
         self::close($session, now());
         MakeAssistReportJob::enqueue($session);
 
@@ -186,14 +194,7 @@ final class AssistSessionController extends Controller
     /** DELETE /api/assist/sessions/{id} — `sessions:write`: the session and every word of it. */
     public function destroy(Request $request, string $id): Response
     {
-        $session = $this->find($request, $id);
-        if (! $session->ended()) {
-            self::close($session, now());
-        }
-        $session->turns()->delete();
-        $session->suggestions()->delete();
-        $session->forceFill(['report' => null, 'summary' => null, 'facts' => null, 'report_status' => 'none'])->save();
-        $session->delete();
+        AssistRecords::eraseSession($this->find($request, $id));
 
         return response()->noContent();
     }
@@ -212,6 +213,17 @@ final class AssistSessionController extends Controller
         );
 
         return response()->noContent();
+    }
+
+    /**
+     * POST /api/assist/sessions/{id}/ask `{"question"}` — `sessions:write`, throttled: a question about the session,
+     * answered from its own lines, summary and facts, with the moments it rests on. Nothing is stored.
+     */
+    public function ask(Request $request, string $id, AssistAsk $ask): JsonResponse
+    {
+        $data = $request->validate(['question' => ['required', 'string', 'max:'.(int) config('assist.ask.question_chars', 500)]]);
+
+        return response()->json($ask->ask($this->find($request, $id), (string) $data['question']));
     }
 
     /** @return array<string, mixed> a session as the apps read it */
@@ -245,13 +257,39 @@ final class AssistSessionController extends Controller
     }
 
     /**
-     * A live session whose app stopped refreshing its token (the last token long expired) is over: it ends where its
-     * last token did, so its time is not counted on.
+     * `409 session_active` while the person has an assist session on, live or Practice, in any of their workspaces
+     * (1.9.0-k: it names that session, its kind and its device, so the app can end it and start again). One whose
+     * app stopped refreshing is ended first.
+     */
+    private function assertNoneActive(Device $device): void
+    {
+        $this->endAbandoned($device);
+        $active = $this->activeOf($device->user_id)->orderByDesc('started_at')->first();
+        if ($active instanceof AssistSession) {
+            throw new ApiError(409, 'session_active', 'Live Assist is already on in another call or Practice. End it there first.', [
+                'session_id' => $active->id, 'practice' => $active->practice, 'device_id' => $active->device_id,
+            ]);
+        }
+    }
+
+    /**
+     * The person's sessions still on, in every workspace (as AssistPlans::left counts their time).
+     *
+     * @return Builder<AssistSession>
+     */
+    private function activeOf(int $userId): Builder
+    {
+        return AssistSession::query()->withoutGlobalScopes()->where('user_id', $userId)->where('status', 'active');
+    }
+
+    /**
+     * A session whose app stopped refreshing its token (the last token long expired) is over, in any workspace: it ends
+     * where its last token did, so its time is not counted on.
      */
     private function endAbandoned(Device $device): void
     {
         $cutoff = now()->subSeconds((int) config('assist.abandoned_after_seconds', 1200));
-        $this->query($device)->where('status', 'active')->where(fn (Builder $q) => $q->where('last_token_at', '<', $cutoff)->orWhere(
+        $this->activeOf($device->user_id)->where(fn (Builder $q) => $q->where('last_token_at', '<', $cutoff)->orWhere(
             fn (Builder $q) => $q->whereNull('last_token_at')->where('started_at', '<', $cutoff)))
             ->each(function (AssistSession $stale): void {
                 $at = ($stale->last_token_at ?? $stale->started_at)->copy()->addSeconds((int) config('assist.token_ttl_seconds', 900));

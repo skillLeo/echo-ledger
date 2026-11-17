@@ -139,7 +139,8 @@ class V2ShellTest : ScreenTest() {
 
     private fun homeWithWaitingCalls(vararg ids: String) {
         seed()
-        ids.forEach { app.storeRecording(id = it, state = "pending_decision") }
+        // Later ids are newer calls, so Home lists them first.
+        ids.forEachIndexed { i, id -> app.storeRecording(id = id, state = "pending_decision", startedAt = "2026-10-24T09:0$i:00Z") }
         vm.reloadLocal()
         shell(UiFlags(mapOf("ui_v2.shell" to true, "ui_v2.home" to true, "ui_v2.library" to true)))
         compose.onNodeWithText("Home").performClick()
@@ -157,9 +158,18 @@ class V2ShellTest : ScreenTest() {
 
     /** Steps frame by frame until [text] is drawn (a few frames, so a toast's own time hardly moves). */
     private fun untilShown(text: String) {
-        compose.waitUntil(5_000) {
-            compose.mainClock.advanceTimeByFrame()
-            runCatching { compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode() }.isSuccess
+        val ok = runCatching {
+            compose.waitUntil(5_000) {
+                compose.mainClock.advanceTimeByFrame()
+                runCatching { compose.onNodeWithText(text, useUnmergedTree = true).fetchSemanticsNode() }.isSuccess
+            }
+        }
+        if (ok.isFailure) {
+            val texts = compose.onAllNodes(androidx.compose.ui.test.hasText("", substring = true), useUnmergedTree = true)
+                .fetchSemanticsNodes().mapNotNull {
+                    it.config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsProperties.Text) { null }?.joinToString()
+                }
+            throw AssertionError("\"$text\" not shown; on screen: $texts", ok.exceptionOrNull())
         }
     }
 
@@ -235,16 +245,17 @@ class V2ShellTest : ScreenTest() {
         discard()
         settle { state() == "discarding" }
         untilShown("Call discarded")
-        // The other toast made way; the discard toast is gone by its own end time.
+        // The other toast made way; the discard toast is gone by its own end time, then the other one shows again.
         assertTrue(!shown("Restored"))
         advanceTo(deadline() + 50)
         assertTrue(!shown("Call discarded"))
+        untilShown("Restored")
     }
 
     @Test
     fun twoDiscardsInARowShareOneToastThatEndsBeforeEitherCall() {
         homeWithWaitingCalls("r-a", "r-b")
-        discard(0)
+        discard(1)
         settle { state("r-a") == "discarding" }
         untilShown("Call discarded")
         compose.mainClock.advanceTimeBy(1_000)
@@ -262,7 +273,7 @@ class V2ShellTest : ScreenTest() {
     @Test
     fun twoDiscardsInARowAreGoneByTheirEndTime() {
         homeWithWaitingCalls("r-a", "r-b")
-        discard(0)
+        discard(1)
         settle { state("r-a") == "discarding" }
         untilShown("Call discarded")
         compose.mainClock.advanceTimeBy(1_000)
@@ -285,5 +296,37 @@ class V2ShellTest : ScreenTest() {
         compose.onNodeWithText("Undo").performClick()
         untilShown("That call was already deleted.")
         assertEquals(null, state())
+    }
+
+    @Test
+    fun aDiscardRightAfterUndoDoesNotStopTheUndo() {
+        homeWithWaitingCalls("r-a", "r-b")
+        discard(1)
+        settle { state("r-a") == "discarding" }
+        untilShown("Call discarded")
+        // r-a was already deleted by the time Undo is tapped; another Discard follows at once.
+        runWorker(DiscardLaterWorker::class.java, "r-a")
+        compose.onNodeWithText("Undo").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        discard(0)
+        settle { state("r-b") == "discarding" }
+        untilShown("Call discarded")
+        // The Undo of r-a still finished and its message comes once r-b's toast has gone.
+        advanceTo(deadline("r-b") + 50)
+        untilShown("That call was already deleted.")
+    }
+
+    @Test
+    fun undoThenAnotherDiscardBringsTheFirstCallBack() {
+        homeWithWaitingCalls("r-a", "r-b")
+        discard(1)
+        settle { state("r-a") == "discarding" }
+        untilShown("Call discarded")
+        compose.onNodeWithText("Undo").performClick()
+        compose.mainClock.advanceTimeByFrame()
+        // r-b is the only call left on Home until r-a is back.
+        discard(0)
+        settle { state("r-a") == "pending_decision" && state("r-b") == "discarding" }
+        settle { vm.pending.value.any { it.id == "r-a" && it.state == "pending_decision" } }
     }
 }

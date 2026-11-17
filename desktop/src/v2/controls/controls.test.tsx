@@ -19,6 +19,32 @@ const actions = (): PillActions => ({
   onCaptions: vi.fn(), onPause: vi.fn(), onStop: vi.fn(), onScreens: vi.fn(), onCapture: vi.fn(), onLanguage: vi.fn(), onDiscard: vi.fn(),
 });
 
+describe("a kept screen on the pill (screens:captured)", () => {
+  it("marks the pill for a moment and says how many screens were kept", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    try {
+      render(<RecordingPill model={MODEL} actions={actions()} />);
+      await act(async () => { await emitEvent("screens:captured", { count: 4 }); });
+      const pill = screen.getByTestId("recording-pill-v2");
+      expect(pill).toHaveClass("el-pill--captured");
+      expect(within(pill).getByRole("status")).toHaveTextContent("Screen kept. 4 screens in this recording.");
+      act(() => vi.advanceTimersByTime(1300));
+      expect(pill).not.toHaveClass("el-pill--captured");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("under Reduce motion the mark is a still ring, never a flash (the stylesheet says so)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { dirname, join } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "..", "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/@media \(prefers-reduced-motion: reduce\) \{ \.el-pill--captured \{ animation: none; \} \}/);
+    expect(css).toMatch(/\.el-pill--captured \{ box-shadow: [^}]*var\(--el-role-accent-default\); animation: el-captured [^;]* 2; \}/);
+  });
+});
+
 describe("the recording pill", () => {
   it("reads '● 02:14 · Omar' and opens its controls on a press", () => {
     render(<RecordingPill model={MODEL} actions={actions()} />);

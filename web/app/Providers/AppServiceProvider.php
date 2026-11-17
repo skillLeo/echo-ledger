@@ -22,6 +22,10 @@ use App\Models\WebhookEvent;
 use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
+use App\Services\Assist\AssistAskAi;
+use App\Services\Assist\AssistReportAi;
+use App\Services\Assist\ClaudeAssistAskAi;
+use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
@@ -96,6 +100,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
+        $this->app->bind(AssistReportAi::class, ClaudeAssistReportAi::class);
+        $this->app->bind(AssistAskAi::class, ClaudeAssistAskAi::class);
         // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);
@@ -219,7 +225,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('missed-recording', fn (Request $request) => Limit::perHour(60)->by('missed-recording:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
-        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Per person, whichever of their devices asks (each answer is a model call on their allowance).
+        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id : ($u?->getAuthIdentifier() ?? $request->ip()))));
         // Send to a teammate: 30 sends an hour per person, whichever of their devices sends (an email goes to each address).
         RateLimiter::for('send', function (Request $request) {
             $device = $request->user();

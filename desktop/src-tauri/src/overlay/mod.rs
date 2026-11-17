@@ -25,11 +25,53 @@ pub const PILL: &str = "pill";
 pub const REVIEW: &str = "review";
 
 /// Every overlay-type window: same builder flags, click-through unless the cursor is over a reported region.
-pub const WINDOWS: [&str; 4] = [OVERLAY, DICTATION, PILL, REVIEW];
+pub const WINDOWS: [&str; 5] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST];
+/// The Live Assist card (the privacy service's name for it).
+pub const ASSIST: &str = crate::privacy::ASSIST;
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
-const PILL_SIZE: (f64, f64) = (352.0, 84.0);
-const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
+pub const PILL_SIZE: (f64, f64) = (352.0, 84.0);
+pub const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
+/// The pill and the after-call card grow with the system's text size (D-141), up to twice their size.
+pub const TEXT_SCALE_MAX: f64 = 2.0;
+
+/// A window's size for the system's text size (pure): `base` at 100 %, grown in proportion, never past
+/// [`TEXT_SCALE_MAX`] times `base`; an unreadable scale is 100 %.
+pub fn scaled_size(base: (f64, f64), text_scale: f64) -> (f64, f64) {
+    let scale = if text_scale.is_finite() { text_scale.clamp(1.0, TEXT_SCALE_MAX) } else { 1.0 };
+    ((base.0 * scale).round(), (base.1 * scale).round())
+}
+
+/// The system's text size as a factor: Windows' "Make text bigger" (Accessibility › Text size, 100–225 %); 1.0 on a
+/// Mac, whose windows follow the display's scale instead.
+pub fn text_scale() -> f64 {
+    #[cfg(windows)]
+    {
+        use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
+        use windows::core::{HSTRING, PCWSTR};
+        let mut value: u32 = 100;
+        let mut size = std::mem::size_of::<u32>() as u32;
+        let status = unsafe {
+            RegGetValueW(
+                HKEY_CURRENT_USER,
+                &HSTRING::from(r"Software\Microsoft\Accessibility"),
+                PCWSTR(HSTRING::from("TextScaleFactor").as_ptr()),
+                RRF_RT_REG_DWORD,
+                None,
+                Some((&mut value as *mut u32).cast()),
+                Some(&mut size),
+            )
+        };
+        if status.is_ok() { f64::from(value) / 100.0 } else { 1.0 }
+    }
+    #[cfg(not(windows))]
+    {
+        1.0
+    }
+}
+/// The Live Assist card's window: the card (at most 512 px wide) and room for a long suggestion; outside the card it
+/// lets clicks through.
+const ASSIST_SIZE: (f64, f64) = (560.0, 440.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;
 
@@ -58,6 +100,7 @@ pub struct OverlaySetup {
     pub caption_size: CaptionSize,
     pub caption_width: CaptionWidth,
     pub pill_position: Option<PillPosition>,
+    pub assist_card_position: Option<PillPosition>,
 }
 
 impl OverlaySetup {
@@ -70,6 +113,7 @@ impl OverlaySetup {
             caption_size: settings.caption_style.size,
             caption_width: settings.caption_style.width,
             pill_position: settings.pill_position,
+            assist_card_position: settings.assist_card_position,
         }
     }
 }
@@ -81,6 +125,7 @@ fn title(label: &str) -> &'static str {
         DICTATION => "EchoLedger dictation",
         PILL => "EchoLedger recording controls",
         REVIEW => "EchoLedger after a call",
+        ASSIST => "EchoLedger Live Assist",
         _ => "EchoLedger",
     }
 }
@@ -130,8 +175,9 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
     let size = match label {
         OVERLAY => caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width),
         DICTATION => DICTATION_SIZE,
-        PILL => PILL_SIZE,
-        _ => REVIEW_SIZE,
+        PILL => scaled_size(PILL_SIZE, text_scale()),
+        ASSIST => ASSIST_SIZE,
+        _ => scaled_size(REVIEW_SIZE, text_scale()),
     };
     let window = build(app, label, size)?;
     #[cfg(target_os = "macos")]
@@ -141,6 +187,8 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         OVERLAY => redock(&window, setup.corner),
         DICTATION => redock(&window, top_center_corner(setup.corner)),
         PILL => place_pill(&window, setup.pill_position),
+        // Top-centre, under the webcam, until the person drags it elsewhere (L4).
+        ASSIST => place_pill(&window, setup.assist_card_position),
         _ => dock_on_primary(&window, Corner::BottomRight),
     }
     Ok(())
@@ -496,6 +544,18 @@ pub fn hide_ask(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_pill_and_the_after_call_card_grow_with_the_text_size_up_to_twice() {
+        assert_eq!(scaled_size(PILL_SIZE, 1.0), PILL_SIZE, "100 %");
+        assert_eq!(scaled_size(REVIEW_SIZE, 1.0), REVIEW_SIZE);
+        assert_eq!(scaled_size(PILL_SIZE, 2.0), (704.0, 168.0), "200 %");
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.0), (720.0, 336.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 1.5), (540.0, 252.0));
+        assert_eq!(scaled_size(REVIEW_SIZE, 2.25), (720.0, 336.0), "Windows goes to 225 %: the card stops at twice");
+        assert_eq!(scaled_size(PILL_SIZE, 0.5), PILL_SIZE, "never smaller than at 100 %");
+        assert_eq!(scaled_size(PILL_SIZE, f64::NAN), PILL_SIZE);
+    }
 
     #[test]
     fn the_other_display_is_the_first_that_is_not_the_main_one() {

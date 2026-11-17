@@ -1095,6 +1095,7 @@ fn lifecycle_router() -> Router {
 
 fn request_for(created: &CreateSessionResponse) -> CreateSessionRequest {
     CreateSessionRequest {
+        transcribe: true,
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],

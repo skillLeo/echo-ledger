@@ -10,6 +10,10 @@ use super::dsp::{f32_to_i16, rms};
 use super::health::HEARD_LEVEL;
 use super::timeline::{Timeline, frames_to_nanos};
 use super::types::{AudioChunk, Channel, TARGET_RATE};
+
+/// The longest gap in a channel's packets that is written as silence (a device that went quiet); longer is the
+/// computer sleeping, and the recording goes on from where it was (`Recorder::push`).
+pub const MAX_GAP_NS: u64 = 60 * 1_000_000_000;
 use super::writer::{MonoWav, encode_mono_flac_from_wav, encode_stereo_flac_from_wavs};
 
 #[derive(Clone, Debug, serde::Serialize)]
@@ -84,6 +88,19 @@ impl Recorder {
     pub fn push(&mut self, chunk: AudioChunk) -> Result<(), String> {
         if chunk.samples.is_empty() {
             return Ok(());
+        }
+        // The computer slept: a packet stamped far past its channel's cursor is not a gap to fill with silence (hours
+        // of it on a device clock that runs through sleep). Like a resume, both channels are evened out and the
+        // timeline re-anchors so this packet lands at the common cursor.
+        if let (Some(t0), Some(ts)) = (self.t0_ns, chunk.ts_ns) {
+            let cursor = match chunk.channel {
+                Channel::Mic => self.mic_tl.cursor(),
+                Channel::System => self.sys_tl.cursor(),
+            };
+            if ts.saturating_sub(t0) > frames_to_nanos(cursor, TARGET_RATE) + MAX_GAP_NS {
+                let total = self.even_out()?;
+                self.t0_ns = Some(ts.saturating_sub(frames_to_nanos(total, TARGET_RATE)));
+            }
         }
         let (timeline, wav) = match chunk.channel {
             Channel::Mic => (&mut self.mic_tl, &mut self.mic),

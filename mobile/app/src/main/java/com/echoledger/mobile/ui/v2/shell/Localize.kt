@@ -78,6 +78,9 @@ object VmMessages {
         "This recording has no audio on the server." to R.string.v2_vm_no_audio_on_server,
         "1 recording updated" to R.string.v2_vm_one_updated,
         "Sign in on this phone first." to R.string.v2_vm_sign_in_first,
+        "The link could not be revoked." to R.string.v2_vm_link_not_revoked,
+        "The recording could not be deleted." to R.string.v2_vm_not_deleted,
+        "The key could not be saved." to R.string.v2_vm_key_not_saved,
         // The one vendor name allowed: the Free plan's own-key step.
         "Groq did not accept that key. Copy it again from console.groq.com." to R.string.v2_vm_key_refused,
         // The workspace calls' own failure sentences (when the server gave no plain one).
