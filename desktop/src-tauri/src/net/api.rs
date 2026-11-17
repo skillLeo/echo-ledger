@@ -609,6 +609,29 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// HTTP mode (contract 1.9.0-q): one app message posted to the session's `live_url`, whose answer is a stream of
+    /// server-sent events. Only an address on this server gets the device token. A refusal before the stream starts
+    /// comes back as the usual error (`426`, `409 session_ended`, `429`, `503` …).
+    pub async fn assist_live(&self, live_url: &str, body: String) -> AppResult<reqwest::Response> {
+        if !live_url.starts_with(&format!("{}/api/", self.base)) {
+            return Err(AppError::msg("Live Assist's address is not on this server."));
+        }
+        let token = self.token.as_deref().ok_or(AppError::NotPaired)?;
+        let resp = self
+            .http
+            .post(live_url)
+            .bearer_auth(token)
+            .header("Accept", "text/event-stream")
+            .header("Content-Type", "application/json")
+            .body(body)
+            .send()
+            .await?;
+        if resp.status().is_success() {
+            return Ok(resp);
+        }
+        Err(Self::error(resp).await)
+    }
+
     /// `POST /api/assist/sessions/{id}/end`: the session ends and its report is made.
     pub async fn assist_end(&self, session_id: &str) -> AppResult<()> {
         let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/end"))))?.send().await?;
