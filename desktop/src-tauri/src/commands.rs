@@ -2819,7 +2819,13 @@ pub async fn translate_start(app: AppHandle, state: State<'_, AppState>, request
         let (api, target, hints) = (api.clone(), target.clone(), hints.clone());
         async move { api.live_translate_token(mode.key(), &target, &hints).await.map_err(|e| e.to_string()) }
     };
-    crate::overlay::create_translate_window(&app, mode == crate::translate::Mode::Watch).map_err(|e| AppError::Message(e.to_string()))?;
+    // Built on a blocking thread: the build waits for the main thread to make its webview, never on an async worker.
+    let builder = app.clone();
+    let watch = mode == crate::translate::Mode::Watch;
+    tauri::async_runtime::spawn_blocking(move || crate::overlay::create_translate_window(&builder, watch))
+        .await
+        .map_err(|e| AppError::Message(e.to_string()))?
+        .map_err(|e| AppError::Message(e.to_string()))?;
     crate::translate::start(app.clone(), pid, name, mode, speed, fetch).map_err(AppError::Message)?;
     Ok(crate::translate::register_hotkeys(&app))
 }

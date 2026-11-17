@@ -134,8 +134,10 @@ mod tests {
 
     /// The closures given to these run later (on the main thread, a task or a thread of their own): each is read as a
     /// unit of its own, with no guard of the code that gave it.
-    const LATER: [&str; 21] = [
+    const LATER: [&str; 22] = [
         "spawn",
+        // The blocking pool's thread (window builds, `lifecycle::spawn_build`): like a thread of its own.
+        "spawn_blocking",
         "init",
         "on_menu_event",
         "on_tray_icon_event",
