@@ -30,6 +30,13 @@ pub const EXIT_WINDOW_FAILED: i32 = 2;
 pub const EXIT_TIMED_OUT: i32 = 3;
 /// A Mac only: the app is not set up as a normal app must be (`mac_app_problem`). Not 4, 5 or 6, the Share Check's.
 pub const EXIT_MAC_APP: i32 = 7;
+/// The async runtime (where windows are built and the pages' commands run) made no progress for [`STALL`].
+pub const EXIT_STALLED: i32 = 8;
+/// How long the async runtime may make no progress before the test says it stalled.
+pub const STALL: Duration = Duration::from_secs(20);
+/// How often a heartbeat on the async runtime counts, and how often a waiting test says so again.
+const HEARTBEAT: Duration = Duration::from_millis(250);
+const SAY_AGAIN: Duration = Duration::from_secs(10);
 
 /// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
 /// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
@@ -100,13 +107,44 @@ pub fn verdict(phases: &[(&str, Phase)]) -> Verdict {
     if waiting.is_empty() { Verdict::AllReady } else { Verdict::Waiting(waiting) }
 }
 
+/// What the watcher does after one look (pure).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Step {
+    /// Every window is ready.
+    Done,
+    /// This window could not be built.
+    Failed(String),
+    /// The async runtime made no progress for [`STALL`]: these were still waited for.
+    Stalled(Vec<String>),
+    /// Still waiting for these; `say` when the list changed or [`SAY_AGAIN`] went by since it was last said.
+    Waiting { waiting: Vec<String>, say: bool },
+}
+
+/// One look of the watcher (pure): the windows' verdict first (all ready ends the test, a window that could not be
+/// built fails it), then whether the async runtime stalled (`since_beat`: since its heartbeat last moved), then whether
+/// to say what is still waited for.
+pub fn step(phases: &[(&str, Phase)], since_beat: Duration, last_said: &[String], since_said: Duration) -> Step {
+    match verdict(phases) {
+        Verdict::AllReady => Step::Done,
+        Verdict::Failed(label) => Step::Failed(label),
+        Verdict::Waiting(waiting) if since_beat >= STALL => Step::Stalled(waiting),
+        Verdict::Waiting(waiting) => {
+            let say = waiting != last_said || since_said >= SAY_AGAIN;
+            Step::Waiting { waiting, say }
+        }
+    }
+}
+
 /// Stops the test: the temporary folder goes and the process ends with `code`.
 fn finish(dir: &Path, code: i32) -> ! {
     let _ = std::fs::remove_dir_all(dir);
     std::process::exit(code);
 }
 
-/// Opens every window and waits for their pages (from the setup, on the async runtime as every window build is).
+/// Opens every window and waits for their pages. The watcher is a thread of its own: it never waits for the async
+/// runtime, where the windows are built and the pages' commands run, so a busy or stalled runtime can never keep it from
+/// seeing windows that are ready (a Server 2025 run saw all six ready in 9 s and the watcher, a task on that runtime,
+/// never looked again). A heartbeat on the runtime tells a stalled runtime apart: it fails at once, saying so.
 pub fn drive(app: tauri::AppHandle) {
     let Some(dir) = DIR.get().cloned() else { return };
 
@@ -118,7 +156,17 @@ pub fn drive(app: tauri::AppHandle) {
         finish(&watched, EXIT_TIMED_OUT);
     });
 
+    // The runtime's heartbeat: counts while the async runtime runs its tasks.
+    let beats = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+    let beating = beats.clone();
     tauri::async_runtime::spawn(async move {
+        loop {
+            beating.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            tokio::time::sleep(HEARTBEAT).await;
+        }
+    });
+
+    let watcher = std::thread::Builder::new().name("el-smoke-watch".into()).spawn(move || {
         let started = Instant::now();
         lifecycle::show_main(&app);
         for label in overlay::WINDOWS {
@@ -126,22 +174,30 @@ pub fn drive(app: tauri::AppHandle) {
         }
         let mut labels = vec![MAIN];
         labels.extend(overlay::WINDOWS);
-        let mut last_waiting = Vec::new();
+        let (mut last_said, mut said_at) = (Vec::new(), Instant::now());
+        let (mut beat, mut beat_at) = (beats.load(std::sync::atomic::Ordering::SeqCst), Instant::now());
         loop {
-            match verdict(&lifecycle::phases(&app, &labels)) {
-                Verdict::AllReady => break,
-                Verdict::Failed(label) => {
+            let now_beat = beats.load(std::sync::atomic::Ordering::SeqCst);
+            if now_beat != beat {
+                (beat, beat_at) = (now_beat, Instant::now());
+            }
+            match step(&lifecycle::phases(&app, &labels), beat_at.elapsed(), &last_said, said_at.elapsed()) {
+                Step::Done => break,
+                Step::Failed(label) => {
                     say(&format!("failed: the {label} window could not be opened"));
                     finish(&dir, EXIT_WINDOW_FAILED);
                 }
-                Verdict::Waiting(waiting) => {
-                    if waiting != last_waiting {
-                        say(&format!("waiting for: {}", waiting.join(", ")));
-                        last_waiting = waiting;
-                    }
+                Step::Stalled(waiting) => {
+                    say(&format!("failed: the async runtime made no progress for {} s (still waiting for: {})", STALL.as_secs(), waiting.join(", ")));
+                    finish(&dir, EXIT_STALLED);
                 }
+                Step::Waiting { waiting, say: true } => {
+                    say(&format!("waiting for: {} ({} ms)", waiting.join(", "), started.elapsed().as_millis()));
+                    (last_said, said_at) = (waiting, Instant::now());
+                }
+                Step::Waiting { .. } => {}
             }
-            tokio::time::sleep(POLL).await;
+            std::thread::sleep(POLL);
         }
         say(&format!("ok: {} windows ready in {} ms", labels.len(), started.elapsed().as_millis()));
         // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
@@ -169,6 +225,9 @@ pub fn drive(app: tauri::AppHandle) {
         let _ = std::fs::remove_dir_all(&dir);
         app.exit(0);
     });
+    if let Err(e) = watcher {
+        say(&format!("failed: the watcher could not start: {e}"));
+    }
 }
 
 /// `--smoke-test --share-check`: the real Share Check in the smoke test's isolation (its own folder, no account, a
@@ -282,6 +341,30 @@ mod tests {
         assert_eq!(mac_app_problem(true, &[crate::mac_check::WindowFacts { activation_setter: false, ..panel("pill") }]), None);
         assert_eq!(EXIT_MAC_APP, 7);
         assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN].contains(&EXIT_MAC_APP), "its own code");
+    }
+
+    #[test]
+    fn the_watcher_sees_ready_windows_whatever_the_async_runtime_does_and_says_when_it_stalls() {
+        let all_ready = [("main", Phase::Ready), ("pill", Phase::Ready)];
+        let one_left = [("main", Phase::Ready), ("pill", Phase::Creating)];
+        let s = Duration::from_secs;
+        // Every window ready ends the test, even with the runtime stalled (the Server 2025 run).
+        assert_eq!(step(&all_ready, s(111), &[], s(0)), Step::Done);
+        assert_eq!(step(&[("main", Phase::Absent), ("pill", Phase::Ready)], s(0), &[], s(0)), Step::Failed("main".into()));
+        // A stalled runtime while a window is still being built is its own failure, at once.
+        assert_eq!(step(&one_left, STALL, &[], s(0)), Step::Stalled(vec!["pill".into()]));
+        assert_eq!(step(&one_left, STALL - Duration::from_millis(1), &["pill".into()], s(1)), Step::Waiting { waiting: vec!["pill".into()], say: false });
+        // Said when the list changed, and again every 10 s, so a log shows when a wait began.
+        assert_eq!(step(&one_left, s(0), &["main".into(), "pill".into()], s(1)), Step::Waiting { waiting: vec!["pill".into()], say: true });
+        assert_eq!(step(&one_left, s(0), &["pill".into()], SAY_AGAIN), Step::Waiting { waiting: vec!["pill".into()], say: true });
+        assert!(STALL < TIMEOUT, "a stall is said before the hang guard");
+        assert!(![EXIT_WINDOW_FAILED, EXIT_TIMED_OUT, EXIT_CHECK_FAILED, EXIT_CHECK_SKIPPED, EXIT_CHECK_BROKEN, EXIT_MAC_APP].contains(&EXIT_STALLED), "its own code");
+        // The watcher is a thread of its own: it never sleeps on the async runtime.
+        let source = include_str!("smoke.rs");
+        let drive = &source[source.find("pub fn drive(").unwrap()..];
+        let drive = &drive[..drive.find("\n}\n").unwrap()];
+        assert!(drive.contains("std::thread::Builder::new().name(\"el-smoke-watch\""), "{drive}");
+        assert!(drive.contains("std::thread::sleep(POLL)") && !drive.contains("tokio::time::sleep(POLL)"));
     }
 
     fn args(list: &[&str]) -> Vec<String> {
