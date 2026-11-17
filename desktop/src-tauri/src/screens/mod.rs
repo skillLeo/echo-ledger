@@ -487,8 +487,10 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
     #[cfg(windows)]
     let mut sampler = Sampler::new(system).with_shield(Box::new(|hidden| hide_own_windows(app, hidden)));
     let show = |pill: Option<ScreensPill>| *lock(&live.pill) = pill;
-    // The last screen kept in this recording: one that repeats it soon after is not kept again (`repeat`).
-    let mut last_kept: Option<repeat::Fingerprint> = None;
+    // The last screen kept in this recording that is not itself a repeat, and its stored file: a repeat of it soon after
+    // is stored marked as one, and sent only if the server does not hold it (`repeat`, `upload`). Repeats never move
+    // it, so a chain of them never reaches past the window.
+    let mut base: Option<(repeat::Fingerprint, String)> = None;
     while !wake.wait(SAMPLE_EVERY) {
         let settings = state.settings();
         let facts = Facts {
@@ -527,23 +529,27 @@ fn capture_loop(app: &AppHandle, recording: &str, live: &Live, project: &AtomicU
         // The moment on the recording's clock, read before encoding takes its time.
         let at_ms = state.capture.elapsed_ms();
         let print = repeat::Fingerprint::of(&frame.bgra, frame.width, frame.height, frame.stride, at_ms);
-        if let (Some(print), Some(last)) = (print.as_ref(), last_kept.as_ref())
-            && print.repeats(last)
-        {
-            // The server would answer with the screen it has: nothing to encode or send. "Capture now" still flashes.
-            if trigger == detect::Trigger::Manual {
-                let _ = app.emit(CAPTURED_EVENT, serde_json::json!({ "count": live.count.load(Ordering::SeqCst) }));
-            }
-            continue;
-        }
+        let repeat_of = match (print.as_ref(), base.as_ref()) {
+            (Some(print), Some((last, file))) if print.repeats(last) => Some(file.clone()),
+            _ => None,
+        };
         if let Some(key) = key.as_ref()
             && !wake.stopped()
         {
             match encode::encode(&frame.bgra, frame.width, frame.height, frame.stride) {
                 Ok(encoded) if encoded.webp.len() <= encode::MAX_BYTES => {
                     match store.add(recording, key, &encoded.webp, at_ms, encoded.width, encoded.height, trigger.as_str(), Utc::now()) {
-                        Ok(_) => {
-                            last_kept = print;
+                        Ok(stored) if repeat_of.is_some() => {
+                            // Not a new screen for the pill: it goes only if the server lacks the one it repeats.
+                            if let Err(e) = store.mark_repeat(recording, &stored.file, repeat_of.as_deref().unwrap_or_default()) {
+                                eprintln!("[echoledger] marking a repeated screen: {e}");
+                            }
+                            if trigger == detect::Trigger::Manual {
+                                let _ = app.emit(CAPTURED_EVENT, serde_json::json!({ "count": live.count.load(Ordering::SeqCst) }));
+                            }
+                        }
+                        Ok(stored) => {
+                            base = print.map(|print| (print, stored.file));
                             let count = live.count.fetch_add(1, Ordering::SeqCst) + 1;
                             // "Capture screen now" kept it: the pill flashes to confirm.
                             if trigger == detect::Trigger::Manual {

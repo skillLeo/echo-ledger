@@ -84,6 +84,8 @@ pub struct Drain {
     pub limited: Vec<String>,
     /// The server was busy decoding pictures: the round stopped, and the screens go again after these seconds.
     pub busy_for: Option<u64>,
+    /// Repeats not sent: the server holds the screen they repeat (`repeat`).
+    pub repeats: usize,
 }
 
 /// Does the session's project keep screens? The Inbox does; a project says with its `screens` switch (missing = on).
@@ -154,7 +156,15 @@ pub async fn drain(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, curren
 
 /// Sends one recording's screens in order; returns the answer that ended it early, if one did.
 async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, manifest: &Manifest, session: &str, drain: &mut Drain) -> Option<Next> {
+    let mut confirmed = manifest.last_confirmed.clone();
     for screen in &manifest.items {
+        // A repeat of the screen the server confirmed last: the server would answer with that one. A repeat of a
+        // screen the server never took (refused, unreadable) goes like any other.
+        if screen.repeat_of.is_some() && screen.repeat_of == confirmed {
+            let _ = store.remove(&manifest.recording, &screen.file);
+            drain.repeats += 1;
+            continue;
+        }
         let image = match store.read(&manifest.recording, screen, key) {
             Ok(image) => image,
             Err(_) => {
@@ -168,6 +178,8 @@ async fn send_recording(api: &ApiClient, store: &ScreenStore, key: &ScreenKey, m
         let result = api.upload_screen(session, &upload, &image).await;
         match next_after(&result) {
             Next::Sent => {
+                confirmed = Some(screen.file.clone());
+                let _ = store.update(&manifest.recording, |m| m.last_confirmed = confirmed.clone());
                 let _ = store.remove(&manifest.recording, &screen.file);
                 drain.sent += 1;
             }

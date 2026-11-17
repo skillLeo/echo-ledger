@@ -1,7 +1,9 @@
 //! Is a screen about to be kept the previous kept screen of this recording again? (pure; unit-tested with synthetic
 //! frames). The server takes a picture that matches the screen before or after it as that screen (docs/API.md 2.0.0-e:
 //! the same claimed size, within 5 minutes, at most 2 pixels differing by more than 12 shades of grey at 640 px) and
-//! answers `200` with it. Skipped here, it costs no encoding, no upload and no decoding on a busy server.
+//! answers `200` with it. A repeat found here is stored marked as one and not sent once the server confirmed the screen
+//! it repeats (`upload`): no upload and no decoding on a busy server. It is never dropped at capture, so a repeat of a
+//! screen the server then refuses still goes.
 //!
 //! The check is stricter than the server's on each of its three counts, so it never drops a screen the server would
 //! keep: within [`WINDOW_MS`] (not 5 minutes), the same size, and no pixel at all differing by more than [`SHADES`]

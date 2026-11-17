@@ -127,6 +127,54 @@ async fn a_screen_s_file_name_and_what_was_said_are_the_server_s() {
     assert_eq!((old.file_name, old.said), (None, None));
 }
 
+/// The stored files of `rec`, in order.
+fn files(store: &ScreenStore) -> Vec<String> {
+    store.load("rec").map(|m| m.items.into_iter().map(|s| s.file).collect()).unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_repeat_of_a_screen_the_server_confirmed_is_not_sent() {
+    let server = MockServer::start(inbox_session().fixed("POST", &screens_path(), Reply::json(201, json!({"data": {}}))));
+    let (dir, store) = stored(3);
+    let f = files(&store);
+    store.mark_repeat("rec", &f[1], &f[0]).unwrap();
+
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
+
+    assert_eq!((result.sent, result.repeats, result.dropped), (2, 1, 0));
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 2, "the first and the third; the second repeats the first");
+    assert_eq!(part(&posts[1], "at_ms"), Some("30000"));
+    assert!(!dir.path().join("screens").join("rec").exists());
+}
+
+#[tokio::test]
+async fn a_repeat_of_a_screen_the_server_refused_goes_and_the_confirmation_outlasts_a_round() {
+    // The first is taken, the second meets a busy server; the next round the second is refused for good.
+    let server = MockServer::start(inbox_session().route("POST", &screens_path(), |_, nth| match nth {
+        0 => Action::Reply(Reply::json(201, json!({"data": {}}))),
+        1 => Action::Reply(Reply::json(503, json!({"message": "Busy.", "code": "server_busy"})).header("Retry-After", "5")),
+        2 => Action::Reply(Reply::json(422, json!({"message": "Not an image.", "code": "validation_failed"}))),
+        _ => Action::Reply(Reply::json(201, json!({"data": {}}))),
+    }));
+    let (_dir, store) = stored(4);
+    let f = files(&store);
+    // The third repeats the first (confirmed in round one); the fourth repeats the second (refused in round two).
+    store.mark_repeat("rec", &f[2], &f[0]).unwrap();
+    store.mark_repeat("rec", &f[3], &f[1]).unwrap();
+    let now = Utc::now();
+
+    let first = drain(&client(&server), &store, &key(), None, now).await;
+    assert_eq!((first.sent, first.busy_for), (1, Some(5)));
+    assert_eq!(store.load("rec").unwrap().last_confirmed.as_deref(), Some(f[0].as_str()), "remembered for the next round");
+
+    let second = drain(&client(&server), &store, &key(), None, now + chrono::Duration::seconds(6)).await;
+    assert_eq!((second.dropped, second.repeats, second.sent), (1, 1, 1), "the third not sent; the fourth sent, as the server never took the second");
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 4);
+    assert_eq!(part(&posts[3], "at_ms"), Some("40000"));
+}
+
 #[tokio::test]
 async fn screens_wait_for_their_session() {
     let server = MockServer::start(inbox_session());
