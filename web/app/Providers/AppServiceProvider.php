@@ -225,7 +225,8 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('missed-recording', fn (Request $request) => Limit::perHour(60)->by('missed-recording:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
-        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Per person, whichever of their devices asks (each answer is a model call on their allowance).
+        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id : ($u?->getAuthIdentifier() ?? $request->ip()))));
         // Send to a teammate: 30 sends an hour per person, whichever of their devices sends (an email goes to each address).
         RateLimiter::for('send', function (Request $request) {
             $device = $request->user();

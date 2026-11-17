@@ -7,6 +7,7 @@ namespace App\Filament\Pages\LiveAssist;
 use App\Exceptions\ApiError;
 use App\Filament\Concerns\LiveAssistOnly;
 use App\Filament\Support\Notice as Notification;
+use App\Filament\Support\NoticeTargets;
 use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Services\Assist\AssistAsk;
@@ -95,7 +96,7 @@ class AssistReportPage extends Page
                     try {
                         $answer = app(AssistAsk::class)->ask($this->session(), (string) $data['question']);
                     } catch (ApiError $e) {
-                        Notification::make()->title($e->getMessage())->danger()->send();
+                        Notification::make()->title($e->getMessage())->danger()->url(NoticeTargets::forError($e))->send();
 
                         throw new Halt;
                     }

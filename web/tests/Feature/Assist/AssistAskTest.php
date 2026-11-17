@@ -2,12 +2,17 @@
 
 declare(strict_types=1);
 
+use App\Exceptions\ApiError;
 use App\Filament\Pages\LiveAssist\AssistReportPage;
 use App\Http\Controllers\Api\Assist\AssistSessionController;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
 use App\Models\Device;
+use App\Models\UsageLedgerEntry;
+use App\Services\Assist\AssistAsk;
+use App\Services\Assist\AssistAskAi;
+use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistReportFailed;
 use App\Services\Assist\ClaudeAssistReportAi;
 use Filament\Facades\Filament;
@@ -108,4 +113,89 @@ it('asks from the console\'s report page and shows the answer with its moments, 
     fakeAssistAskAi(fails: new AssistReportFailed(ClaudeAssistReportAi::UNAVAILABLE));
     Livewire::test(AssistReportPage::class, ['session' => $session->id])->callAction('ask', ['question' => 'Again?'])
         ->assertNotified('The AI could not answer right now. Try again in a minute.')->assertDontSee('Again?');
+});
+
+it('reserves the worst case first: of several asks at once with room for one, exactly one runs, and settling gives the rest back', function () {
+    // An answer of up to 20,000 tokens at $0.50 per million: a worst case of 2 cents; 3 cents left of Practice's $5.
+    config(['assist.ask.max_output_tokens' => 20000]);
+    $device = assistPerson('pro');
+    $session = askableSession($device);
+    AssistUsage::query()->create(['assist_session_id' => $session->id, 'workspace_id' => $device->workspace_id, 'user_id' => $device->user_id,
+        'suggestion_id' => 'spent', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer', 'cost_usd' => 4.97, 'occurred_at' => now()]);
+    $plans = app(AssistPlans::class);
+
+    // While the first ask waits for the model, three more come from other devices: each finds the reservation.
+    $fake = new class($session) implements AssistAskAi
+    {
+        /** @var list<string> */
+        public array $others = [];
+
+        public int $calls = 0;
+
+        public ?int $leftDuring = null;
+
+        public function __construct(private readonly AssistSession $session) {}
+
+        public function promptText(array $input): string
+        {
+            return (string) json_encode($input);
+        }
+
+        public function ask(array $input): array
+        {
+            $this->calls++;
+            $this->leftDuring = app(AssistPlans::class)->left($this->session->workspace_id, $this->session->user_id, true)['cents_left'];
+            foreach (range(1, 3) as $other) {
+                try {
+                    app(AssistAsk::class)->ask($this->session, "At the same time {$other}?");
+                    $this->others[] = 'answered';
+                } catch (ApiError $e) {
+                    $this->others[] = $e->apiCode();
+                }
+            }
+
+            return ['data' => ['answer' => 'Once.', 'lines' => [1]], 'model' => 'claude-haiku-5-5', 'tokens' => ['input' => 2000, 'cached' => 0, 'written' => 0, 'output' => 100]];
+        }
+    };
+    app()->instance(AssistAskAi::class, $fake);
+
+    $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'How much?'])->assertOk()->assertJsonPath('answer', 'Once.');
+
+    expect($fake->calls)->toBe(1)->and($fake->others)->toBe(['budget_exhausted', 'budget_exhausted', 'budget_exhausted'])
+        // While it ran, its 2-cent reservation held the room.
+        ->and($fake->leftDuring)->toBe(1);
+    // Settled to its real cost ($0.00025): the difference is back, and a new ask fits again.
+    $row = AssistUsage::query()->where('kind', 'ask')->sole();
+    expect((float) $row->cost_usd)->toBe(0.00025)->and($row->outcome)->toBe('done')->and($row->estimated)->toBeFalse()
+        ->and($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(2)
+        ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/'.$row->suggestion_id)->value('cost_usd'))->toEqual('0.000250');
+});
+
+it('gives the reservation back when the call was never sent, and keeps it at the worst case when the answer was lost', function () {
+    $device = assistPerson('pro');
+    $session = askableSession($device);
+    $api = $this->api(Fx::token($device));
+
+    fakeAssistAskAi(fails: new AssistReportFailed(ClaudeAssistReportAi::UNAVAILABLE));
+    $api->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'x'])->assertStatus(502);
+    expect(AssistUsage::query()->where('kind', 'ask')->count())->toBe(0);
+
+    fakeAssistAskAi(fails: new AssistReportFailed(ClaudeAssistReportAi::UNAVAILABLE, unknownCost: true));
+    $api->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'x'])->assertStatus(502);
+    $row = AssistUsage::query()->where('kind', 'ask')->sole();
+    expect($row->outcome)->toBe('lost')->and($row->estimated)->toBeTrue()->and((float) $row->cost_usd)->toBeGreaterThan(0.0)
+        ->and(UsageLedgerEntry::query()->withoutGlobalScopes()->where('report_id', 'assist/'.$row->suggestion_id)->count())->toBe(1);
+});
+
+it('counts the Ask limit per person, whichever device asks', function () {
+    fakeAssistAskAi();
+    $device = assistPerson('pro');
+    $session = askableSession($device);
+    $phone = Fx::device($device->user, ['workspace_id' => $device->workspace_id]);
+    foreach (range(1, 20) as $i) {
+        $this->api(Fx::token($i % 2 === 0 ? $device : $phone))->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => "q{$i}"])->assertOk();
+    }
+
+    $this->api(Fx::token(Fx::device($device->user, ['workspace_id' => $device->workspace_id])))->postJson("/api/assist/sessions/{$session->id}/ask", ['question' => 'one more'])
+        ->assertStatus(429);
 });

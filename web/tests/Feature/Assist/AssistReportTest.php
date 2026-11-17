@@ -14,6 +14,7 @@ use App\Models\Device;
 use App\Models\UsageLedgerEntry;
 use App\Services\Assist\AssistPlans;
 use App\Services\Assist\AssistReport;
+use App\Services\Assist\AssistReportAi;
 use App\Services\Assist\AssistReportFailed;
 use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\CredentialVault;
@@ -491,4 +492,38 @@ it('never gives Practice a follow-up email, whatever the model wrote', function 
     $api->postJson("/api/assist/sessions/{$id}/end")->assertOk();
 
     expect($api->getJson("/api/assist/sessions/{$id}/report")->json('follow_up_email'))->toBeNull();
+});
+
+it('reserves the report\'s worst case while the model writes it, and settles it to the real cost', function () {
+    $device = assistPerson('pro');
+    $id = practiceSession($this, $this->api(Fx::token($device)));
+    $plans = app(AssistPlans::class);
+    $fake = new class($device->workspace_id, $device->user_id) implements AssistReportAi
+    {
+        public ?int $leftDuring = null;
+
+        public string $prompt = '';
+
+        public function __construct(private readonly int $workspace, private readonly int $user) {}
+
+        public function promptText(array $input): string
+        {
+            return $this->prompt = (string) json_encode($input, JSON_UNESCAPED_UNICODE);
+        }
+
+        public function write(array $input): array
+        {
+            $this->leftDuring = app(AssistPlans::class)->left($this->workspace, $this->user, true)['cents_left'];
+
+            return ['data' => ['summary' => 'Fine.'], 'model' => 'claude-sonnet-5-5', 'tokens' => ['input' => 10000, 'cached' => 2000, 'written' => 1000, 'output' => 1500]];
+        }
+    };
+    app()->instance(AssistReportAi::class, $fake);
+    $before = $plans->left($device->workspace_id, $device->user_id, true)['cents_left'];
+
+    $this->api(Fx::token($device))->postJson("/api/assist/sessions/{$id}/end")->assertOk();
+
+    expect($fake->leftDuring)->toBe($before - AssistReport::worstCaseCents($fake->prompt))
+        ->and((float) AssistUsage::query()->where('kind', 'report')->sole()->cost_usd)->toBe(0.0377)
+        ->and($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(496);
 });
