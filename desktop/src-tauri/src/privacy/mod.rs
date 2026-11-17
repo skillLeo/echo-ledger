@@ -439,6 +439,11 @@ impl Privacy {
         }
     }
 
+    /// This window is kept off because its flag did not hold.
+    pub fn is_held_back(&self, label: &str) -> bool {
+        lock(&self.held_back).contains(label)
+    }
+
     /// The windows kept off because their flag did not hold, by label.
     pub fn held_back(&self) -> Vec<String> {
         lock(&self.held_back).iter().cloned().collect()
@@ -619,18 +624,9 @@ fn gate<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, may_show: boo
         let Some(privacy) = handle.try_state::<Privacy>() else { return };
         let Some(kind) = privacy.kind_of(target.label()) else { return };
         let protect = wanted_for(&handle, target.label()).unwrap_or(true);
-        let held = flag_held_here(&handle, &target, protect);
-        let visible = target.is_visible().unwrap_or(false);
-        if !may_show && !visible && !privacy.held_back().iter().any(|l| l == target.label()) {
-            return; // off the screen and not this check's to bring on: its flag is set, that is all
-        }
-        // The reasons are read again here: one that came since this was scheduled keeps the window off.
-        let reveal = privacy.reveal_decision(kind, &choice_now(&handle), protect, held);
-        let was_held_back = privacy.held_back().iter().any(|l| l == target.label());
-        privacy.revealed(target.label(), reveal);
-        if let Some(off) = gate_step(reveal, visible, may_show) {
-            put_away(&target, off);
-        }
+        let mut live = LiveWindow { app: &handle, window: &target };
+        let was_held_back = privacy.is_held_back(target.label());
+        let Some(reveal) = run_gate(&privacy, kind, &choice_now(&handle), protect, &mut live, may_show) else { return };
         if reveal == Reveal::HeldBack
             && let Some(state) = handle.try_state::<crate::AppState>()
         {
@@ -644,6 +640,57 @@ fn gate<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, may_show: boo
             }
         }
     });
+}
+
+/// What the gate needs of a window: its label, whether it is on screen, its flag set and read back, and to go off or on.
+/// The app's windows ([`LiveWindow`]); a fake one in the tests.
+pub trait GateWindow {
+    fn label(&self) -> &str;
+    fn visible(&self) -> bool;
+    /// Sets the flag (`protect`: hidden from screen shares) and reads it back; true when it reads as wanted.
+    fn flag_held(&mut self, protect: bool) -> bool;
+    /// Takes the window off the screen (`true`) or brings it on.
+    fn put_away(&mut self, off: bool);
+}
+
+struct LiveWindow<'a, R: Runtime> {
+    app: &'a AppHandle<R>,
+    window: &'a WebviewWindow<R>,
+}
+
+impl<R: Runtime> GateWindow for LiveWindow<'_, R> {
+    fn label(&self) -> &str {
+        self.window.label()
+    }
+    fn visible(&self) -> bool {
+        self.window.is_visible().unwrap_or(false)
+    }
+    fn flag_held(&mut self, protect: bool) -> bool {
+        flag_held_here(self.app, self.window, protect)
+    }
+    fn put_away(&mut self, off: bool) {
+        put_away(self.window, off);
+    }
+}
+
+/// The gate's work on one window, on the main thread (everything it reads is read here, when it runs): the flag set and
+/// read back, the held-back state and the reasons read now, then on, off or left. A window held back may always come
+/// back once its flag holds, whatever pass found it (`may_show` or held back). None when it left the window alone (off
+/// the screen and not this pass's to bring on: only its flag was set).
+pub fn run_gate(privacy: &Privacy, kind: Kind, choice: &Choice, protect: bool, window: &mut impl GateWindow, may_show: bool) -> Option<Reveal> {
+    let held = window.flag_held(protect);
+    let visible = window.visible();
+    let may_show = may_show || privacy.is_held_back(window.label());
+    if !may_show && !visible {
+        return None;
+    }
+    // The reasons are read again here: one that came since this was scheduled keeps the window off.
+    let reveal = privacy.reveal_decision(kind, choice, protect, held);
+    privacy.revealed(window.label(), reveal);
+    if let Some(off) = gate_step(reveal, visible, may_show) {
+        window.put_away(off);
+    }
+    Some(reveal)
 }
 
 /// On the main thread: sets the window's flag and reads it back; true when it reads as wanted.
@@ -733,18 +780,17 @@ pub fn affinity_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<u32> 
 pub fn apply_all<R: Runtime>(app: &AppHandle<R>) {
     let (Some(privacy), Some(state)) = (app.try_state::<Privacy>(), app.try_state::<crate::AppState>()) else { return };
     let settings = state.settings();
-    let held_back = privacy.held_back();
     for (label, kind) in privacy.registered() {
         let Some(window) = app.get_webview_window(&label) else { continue };
         if reveals_itself(kind) {
             // The card and the captions through the gate: one on screen whose flag stops holding goes off at once; one
-            // kept off because its flag did not hold is tried again.
-            gate(app, &window, held_back.contains(&label));
+            // kept off because its flag did not hold is tried again (the gate reads that when it runs).
+            gate(app, &window, false);
         } else if let Some(protect) = wanted_for(app, &label) {
             enforce(app, &window, protect, &settings);
         }
     }
-    for label in held_back {
+    for label in privacy.held_back() {
         if app.get_webview_window(&label).is_none() {
             lock(&privacy.held_back).remove(&label);
         }
@@ -1353,13 +1399,16 @@ mod tests {
         let overlay = include_str!("../overlay/mod.rs");
         assert!(overlay.contains(".visible(!crate::privacy::reveals_itself(crate::privacy::kind_for(label)));"));
         let reveal = body_of(include_str!("mod.rs"), "fn gate<");
-        let (wanted, held, decide, on) = (
-            reveal.find("let protect = wanted_for(&handle, target.label()).unwrap_or(true);").unwrap(),
-            reveal.find("flag_held_here(").unwrap(),
-            reveal.find("privacy.reveal_decision(").unwrap(),
-            reveal.find("put_away(&target, off)").unwrap(),
+        let (wanted, run) = (reveal.find("let protect = wanted_for(&handle, target.label()).unwrap_or(true);").unwrap(), reveal.find("run_gate(").unwrap());
+        assert!(wanted < run, "what it should be is read on the main thread, then the gate runs");
+        let steps = body_of(include_str!("mod.rs"), "pub fn run_gate(");
+        let (held, back, decide, on) = (
+            steps.find("window.flag_held(protect)").unwrap(),
+            steps.find("privacy.is_held_back(window.label())").unwrap(),
+            steps.find("privacy.reveal_decision(").unwrap(),
+            steps.find("window.put_away(off)").unwrap(),
         );
-        assert!(wanted < held && held < decide && decide < on, "what it should be read on the main thread, flag set and read back, the reasons read again, then on or off");
+        assert!(held < back && back < decide && decide < on, "flag set and read back, held-back read now, the reasons read again, then on or off");
         // Every way back on screen for the card and the captions goes through the gate: reconcile too.
         let back = body_of(include_str!("mod.rs"), "pub fn reconcile<");
         let gate = back.find("gate(&handle, &window, true)").expect("reconcile uses the gate");
@@ -1368,7 +1417,7 @@ mod tests {
         // apply_all sends every open card and captions through it (on screen: taken off if the flag stops holding; held
         // back: tried again), never the plain set.
         let all = body_of(include_str!("mod.rs"), "pub fn apply_all<");
-        assert!(all.find("gate(app, &window, held_back.contains(&label))").unwrap() < all.find("enforce(app, &window, protect, &settings)").unwrap());
+        assert!(all.find("gate(app, &window, false)").unwrap() < all.find("enforce(app, &window, protect, &settings)").unwrap());
         assert!(all.contains("if reveals_itself(kind)"));
         let flag = body_of(include_str!("mod.rs"), "fn flag_held_here<");
         assert!(flag.contains("set_and_read_back(app, window.label()"), "Windows: set and read back");
@@ -1428,6 +1477,68 @@ mod tests {
         assert_eq!(gate_step(away_now, true, false), Some(true));
         privacy.revealed(ASSIST, away_now);
         assert!(privacy.held_back().is_empty(), "StayAway clears the held-back line");
+    }
+
+    /// A window as the gate sees it, with a flag that holds or not.
+    struct FakeWindow {
+        label: &'static str,
+        on_screen: bool,
+        holds: bool,
+        sets: usize,
+    }
+
+    impl GateWindow for FakeWindow {
+        fn label(&self) -> &str {
+            self.label
+        }
+        fn visible(&self) -> bool {
+            self.on_screen
+        }
+        fn flag_held(&mut self, _protect: bool) -> bool {
+            self.sets += 1;
+            self.holds
+        }
+        fn put_away(&mut self, off: bool) {
+            self.on_screen = !off;
+        }
+    }
+
+    #[test]
+    fn the_gate_takes_a_card_off_when_its_flag_fails_and_brings_it_back_when_it_holds() {
+        let privacy = Privacy::new();
+        let c = choice(ShareHiding::All, false);
+        let mut card = FakeWindow { label: ASSIST, on_screen: true, holds: true, sets: 0 };
+        // On screen, flag holds: left as it is.
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::Show));
+        assert!(card.on_screen);
+        // A wake re-sets the flag and it fails: off the screen at once, held back.
+        card.holds = false;
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::HeldBack));
+        assert!(!card.on_screen && privacy.is_held_back(ASSIST));
+        // The next lifecycle point (apply_all, may_show false): the flag holds again, and it comes back.
+        card.holds = true;
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::Show));
+        assert!(card.on_screen && !privacy.is_held_back(ASSIST));
+        assert_eq!(card.sets, 3, "the flag is set on every pass");
+        // Off the screen and not held back: apply_all only sets its flag.
+        let mut captions = FakeWindow { label: crate::overlay::OVERLAY, on_screen: false, holds: true, sets: 0 };
+        assert_eq!(run_gate(&privacy, Kind::Captions, &c, true, &mut captions, false), None);
+        assert!(!captions.on_screen && captions.sets == 1);
+    }
+
+    #[test]
+    fn a_window_held_back_comes_back_even_from_a_pass_that_was_queued_as_a_check() {
+        // Two passes queued: the first holds the window back, the second was queued by apply_all (may_show false) before
+        // that happened. It reads the held-back state when it runs, so a flag that now holds brings the window on.
+        let privacy = Privacy::new();
+        let c = choice(ShareHiding::All, false);
+        let mut card = FakeWindow { label: ASSIST, on_screen: true, holds: false, sets: 0 };
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, true), Some(Reveal::HeldBack));
+        assert!(!card.on_screen);
+        card.holds = true;
+        assert_eq!(gate_step(Reveal::Show, false, false || privacy.is_held_back(ASSIST)), Some(false), "shown");
+        assert_eq!(run_gate(&privacy, Kind::Card, &c, true, &mut card, false), Some(Reveal::Show));
+        assert!(card.on_screen && !privacy.is_held_back(ASSIST), "back on screen, the line gone");
     }
 
     #[test]
