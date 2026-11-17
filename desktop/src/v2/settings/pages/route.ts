@@ -6,6 +6,9 @@ import { LEGACY_SECTIONS } from "../../../views/main/SettingsView";
 export const V2_SETTINGS_PAGES: ReadonlySet<string> = new Set([
   "voice", "voice.replacements", "voice.snippets", "voice.history",
   "captions", "captions.style",
+  "calls", "calls.sites",
+  "transcription.language", "words", "key",
+  "privacy", "privacy.consent",
 ]);
 
 /** The page a section opens and the setting to highlight there; null for an unknown section. */
@@ -13,7 +16,8 @@ export function sectionTarget(sectionId: string): { page: string; setting: strin
   const [where, id] = (LEGACY_SECTIONS[sectionId] ?? sectionId).split("#");
   const entry = findSetting(where);
   if (!entry) return null;
-  const page = pageFor(entry);
+  // A root row that is one setting but has a page of its own (Language).
+  const page = entry.id === "transcription.language" ? entry.id : pageFor(entry);
   if (!page) return null;
   return { page, setting: id ?? (entry.kind === "page" ? null : entry.id) };
 }

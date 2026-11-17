@@ -134,9 +134,10 @@ describe("the app with ui_v2.settings", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Settings" }));
     await act(flushAsync);
     await act(flushAsync);
-    fireEvent.click(await screen.findByRole("button", { name: "Calls & meetings" }));
+    // A page without its v2 page yet (Notifications) opens today's page inside the frame.
+    fireEvent.click(await screen.findByRole("button", { name: "Notifications" }));
     await act(flushAsync);
-    expect(await screen.findByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { level: 1, name: "Notifications" })).toBeInTheDocument();
     expect(document.querySelector(".settings-list")).toBeNull();
     fireEvent.click(document.querySelector(".settings-root.page-only .back-link")!);
     await act(flushAsync);

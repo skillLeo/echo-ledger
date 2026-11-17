@@ -4,10 +4,15 @@ import type { ReactElement } from "react";
 import type { Settings, SettingsPatch } from "../../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
-import { collectControls, stale, unmapped, type ControlRole } from "../../../test/parity";
-import { makeItem, makeSettings, makeStatus } from "../../../test/fixtures";
+import { collectControls, findControls, stale, type ControlRole } from "../../../test/parity";
+import { makeItem, makeMicUser, makeSettings, makeStatus, sampleEntitlements } from "../../../test/fixtures";
+import { resetEntitlementsForTests } from "../../../lib/entitlements";
+import { LanguagePage, WordsPage } from "../../../views/main/AppSettings";
+import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
+import { ConsentPage, PrivacyPage } from "../../../views/main/AccountSettings";
+import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
-import { CaptionStylePage, CaptionsPage } from "../../../views/main/CaptureSettings";
+import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage } from "../../../views/main/CaptureSettings";
 import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage } from "../../../views/main/DictationSettings";
 import { SettingsPagesV2 } from "./SettingsPagesV2";
 import { hasV2Page, sectionTarget } from "./route";
@@ -16,9 +21,11 @@ vi.mock("@tauri-apps/api/core", async () => (await import("../../../test/tauri")
 vi.mock("@tauri-apps/api/event", async () => (await import("../../../test/tauri")).eventModule);
 
 const SETTINGS = makeSettings({
+  consentAcknowledged: false,
   dictationReplacements: [{ from: "echo ledger", to: "EchoLedger" }],
   dictationSnippets: [{ trigger: "insert signature", text: "Regards,\nAyesha" }],
 });
+const ACCOUNT: Account = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: true, google: false, created_at: null, workspace: null, deletes_at: null };
 const HISTORY = [{ at: "2026-11-17T08:00:00Z", text: "Send the proforma today." }];
 const run = <T,>(fn: () => Promise<T>) => fn().catch(() => undefined);
 
@@ -28,11 +35,16 @@ beforeEach(() => {
   respondWith("update_settings", ({ patch }) => ({ ...SETTINGS, ...(patch as SettingsPatch) }));
   respond("dictation_history", HISTORY);
   respond("dictation_history_clear", null);
+  respond("mic_users", [makeMicUser()]);
+  respond("mic_last_not_recorded", null);
+  respond("list_clients", { data: [{ id: "c1", name: "Qureshi Textiles" }] });
+  resetEntitlementsForTests(sampleEntitlements("free"));
+  respond("account_get", ACCOUNT);
 });
 
-const show = async (section: string) => {
+const show = async (section: string, platform = "windows") => {
   const onHome = vi.fn();
-  render(<div className="el-root"><SettingsPagesV2 section={{ id: section, seq: 1 }} onHome={onHome} run={run} /></div>);
+  render(<div className="el-root"><SettingsPagesV2 section={{ id: section, seq: 1 }} onHome={onHome} run={run} status={makeStatus({ platform: platform as "windows" })} /></div>);
   await act(flushAsync);
   return onHome;
 };
@@ -45,7 +57,8 @@ describe("which sections open a v2 page", () => {
     expect(sectionTarget("captions.opacity")).toEqual({ page: "captions.style", setting: "captions.opacity" });
     expect(hasV2Page("voice.history")).toBe(true);
     expect(hasV2Page("captions")).toBe(true);
-    expect(hasV2Page("calls")).toBe(false);
+    expect(hasV2Page("calls")).toBe(true);
+    expect(hasV2Page("lock")).toBe(false);
     expect(hasV2Page("nonsense")).toBe(false);
   });
 });
@@ -153,13 +166,159 @@ describe("Captions v2", () => {
   });
 });
 
+describe("Calls & meetings v2", () => {
+  it("auto-record and each call app; unknown apps; after a call; short calls; sites; why a call wasn't recorded", async () => {
+    await show("calls");
+    expect(screen.getByRole("heading", { level: 1, name: "Calls & meetings" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("switch", { name: "Auto-record Zoom" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Ask about unknown apps" }));
+    fireEvent.click(screen.getByRole("combobox", { name: /^Skip calls shorter than/ }));
+    fireEvent.click(screen.getByRole("option", { name: "30 s" }));
+    await act(flushAsync);
+    expect(patches()).toEqual([{ autoRecordApps: { zoom: false } }, { askUnknownApps: !SETTINGS.askUnknownApps }, { skipCallsShorterThanS: 30 }]);
+    expect(screen.queryByRole("switch", { name: "Read browser tab addresses" })).toBeNull();
+    expect(screen.getByTestId("why-not-recorded")).toHaveTextContent(/Google Meet|chrome/i);
+    fireEvent.click(screen.getByRole("button", { name: "Call sites" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Call sites" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Calls & meetings" }));
+    // Not read yet: the notice is a link away.
+    fireEvent.click(screen.getByRole("button", { name: "Read the recording consent notice" }));
+    expect(screen.getByRole("heading", { level: 1, name: "Recording consent" })).toBeInTheDocument();
+  });
+
+  it("with auto-record off, the apps can't be switched; on a Mac, browser tabs", async () => {
+    respond("get_settings", { ...SETTINGS, autoMode: false });
+    await show("calls", "macos");
+    expect(screen.getByRole("switch", { name: "Auto-record Zoom" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Read browser tab addresses" })).toBeInTheDocument();
+  });
+
+  it("call sites: a built-in rule switched off and a site added", async () => {
+    await show("calls.sites");
+    fireEvent.click(screen.getByRole("switch", { name: "Record calls on zoom.us" }));
+    await act(flushAsync);
+    expect(patches()[0].siteRules?.some((r) => r.id === "builtin.zoom" && r.enabled === false)).toBe(true);
+    fireEvent.change(screen.getByRole("textbox", { name: "Address or title contains" }), { target: { value: "meet.jit.si" } });
+    fireEvent.click(screen.getByRole("button", { name: "Add" }));
+    await act(flushAsync);
+    const added = patches()[1].siteRules!;
+    expect(added.some((r) => JSON.stringify(r).includes("meet.jit.si"))).toBe(true);
+    expect(screen.getByRole("textbox", { name: "Address or title contains" })).toHaveValue("");
+  });
+});
+
+describe("Transcription & language v2", () => {
+  it("Language: one choice, saved at once, automatic as null", async () => {
+    await show("transcription.language");
+    expect(screen.getByRole("heading", { level: 1, name: "Language" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("combobox", { name: /^Language/ }));
+    fireEvent.click(screen.getAllByRole("option")[1]);
+    await act(flushAsync);
+    expect(patches()[0].transcriptionLanguage).not.toBeUndefined();
+  });
+
+  it("Custom words: a project's terms, or None", async () => {
+    await show("words");
+    fireEvent.click(screen.getByRole("combobox", { name: /^Use terms from project/ }));
+    fireEvent.click(screen.getByRole("option", { name: "Qureshi Textiles" }));
+    await act(flushAsync);
+    expect(patches()).toEqual([{ clientId: "c1" }]);
+  });
+
+  it("Transcription key: add a key; a saved one is removed after asking", async () => {
+    respond("transcription_key_set", { provider: "groq", set: true, last4: "9xQ2" });
+    respond("groq_console_open", null);
+    respond("entitlements_get", sampleEntitlements("free"));
+    await show("key");
+    fireEvent.click(screen.getByRole("button", { name: "Open console.groq.com" }));
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Groq key"), { target: { value: "gsk_abcdefghijklmnopqrstuvwxyz" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("groq_console_open")).toHaveLength(1);
+    expect(callsOf("transcription_key_set")).toEqual([{ key: "gsk_abcdefghijklmnopqrstuvwxyz" }]);
+    expect(screen.getByRole("status")).toHaveTextContent("Key saved.");
+
+    const withKey = sampleEntitlements("free");
+    withKey.transcription_key = { provider: "groq", set: true, last4: "9xQ2" };
+    resetEntitlementsForTests(withKey);
+    await act(flushAsync);
+    respond("transcription_key_delete", null);
+    expect(screen.getByRole("heading", { name: "Replace the key" })).toBeInTheDocument();
+    const asked = answerConfirm();
+    asked.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Remove key" }));
+    await act(flushAsync);
+    expect(asked).toHaveBeenCalledWith("Remove your Groq key? New recordings won't be transcribed until you add a key or upgrade.");
+    expect(callsOf("transcription_key_delete")).toHaveLength(1);
+  });
+});
+
+describe("Privacy & data v2", () => {
+  it("consent is read and acknowledged, never switched", async () => {
+    await show("privacy");
+    expect(screen.getByRole("button", { name: "Recording consent" })).toHaveAccessibleDescription(/Not yet/);
+    fireEvent.click(screen.getByRole("button", { name: "Recording consent" }));
+    expect(screen.getByTestId("consent-notice")).toBeInTheDocument();
+    expect(screen.queryByRole("switch")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "I understand" }));
+    await act(flushAsync);
+    expect(patches()).toEqual([{ consentAcknowledged: true }]);
+    expect(screen.getByTestId("consent-done")).toBeInTheDocument();
+  });
+
+  it("Export my data: made on the server, asked about, then its link opened once", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    try {
+      respond("account_export_start", { id: "x1", status: "making", url: null });
+      respond("account_export_status", { id: "x1", status: "ready", url: "https://ledger.example.com/x1.zip" });
+      respond("account_export_open", null);
+      await show("privacy");
+      fireEvent.click(screen.getByRole("button", { name: "Export my data" }));
+      await act(flushAsync);
+      expect(screen.getByRole("button", { name: "Making your export…" })).toBeDisabled();
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      await act(flushAsync);
+      expect(callsOf("account_export_open")).toEqual([{ url: "https://ledger.example.com/x1.zip" }]);
+      expect(screen.getByRole("button", { name: "Download your export" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Delete my account: the password or a two-step code; then deletion can be cancelled on the website", async () => {
+    respond("account_delete", "2026-11-24T10:00:00Z");
+    respond("server_page_open", null);
+    await show("privacy");
+    fireEvent.click(screen.getByRole("button", { name: "Delete my account" }));
+    const dialog = screen.getByRole("alertdialog", { name: "Delete your account?" });
+    expect(within(dialog).getByRole("button", { name: "Delete my account" })).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Use a two-step code instead" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Two-step code" }), { target: { value: " 123456 " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete my account" }));
+    await act(flushAsync);
+    expect(callsOf("account_delete")).toEqual([{ password: null, otp: "123456" }]);
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel deletion, opens in browser" }));
+    expect(callsOf("server_page_open")).toEqual([{ page: "app/profile", serverUrl: null }]);
+  });
+
+  it("a server without accounts keeps only the consent notice", async () => {
+    respond("account_get", null);
+    await show("privacy");
+    expect(screen.getByRole("button", { name: "Recording consent" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Export my data" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete my account" })).toBeNull();
+  });
+});
+
 /**
  * Parity with today's pages: every control each page shows (rendered, with the same settings) is on its v2 page.
  * Today's names that differ only in form map to the v2 control by role.
  */
 describe("parity with today's Dictation and Captions pages", () => {
   const patch = async () => true;
-  type Page = { name: string; section: string; today: () => ReactElement; map?: Record<string, [ControlRole, string | RegExp]> };
+  type Page = { name: string; section: string; platform?: string; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account; today: () => ReactElement; map?: Record<string, [ControlRole | "password", string | RegExp]> };
   const PAGES: Page[] = [
     { name: "Voice notes & dictation", section: "voice", today: () => <VoicePage settings={SETTINGS} patch={patch} onOpen={() => undefined} />,
       map: { "combobox: How the shortcut works": ["combobox", /^How the shortcut works/], "combobox: Dictation output": ["combobox", /^Dictation output/],
@@ -168,6 +327,21 @@ describe("parity with today's Dictation and Captions pages", () => {
     { name: "Snippets", section: "voice.snippets", today: () => <SnippetsPage settings={SETTINGS} patch={patch} /> },
     { name: "Recent dictations", section: "voice.history", today: () => <HistoryPage />, map: { "button: Copy": ["button", /^Copy/] } },
     { name: "Captions", section: "captions", today: () => <CaptionsPage settings={SETTINGS} patch={patch} onStyle={() => undefined} /> },
+    { name: "Calls & meetings", section: "calls", today: () => <CallsPage settings={SETTINGS} patch={patch} platform="windows" onSites={() => undefined} consentRead={false} onConsent={() => undefined} />,
+      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] } },
+    { name: "Calls & meetings on a Mac", section: "calls", platform: "macos", today: () => <CallsPage settings={SETTINGS} patch={patch} platform="macos" onSites={() => undefined} consentRead={false} onConsent={() => undefined} />,
+      map: { "combobox: After a call": ["combobox", /^After a call/], "combobox: Skip calls shorter than": ["combobox", /^Skip calls shorter than/], "button: Call sites0 rules": ["button", "Call sites"] } },
+    { name: "Call sites", section: "calls.sites", today: () => <CallSitesPage rules={SETTINGS.siteRules} onSave={async () => true} />, map: { "combobox: App": ["combobox", /^App/] } },
+    { name: "Language", section: "transcription.language", today: () => <LanguagePage settings={SETTINGS} patch={patch} />, map: { "combobox: Language": ["combobox", /^Language/] } },
+    { name: "Custom words", section: "words", today: () => <WordsPage settings={SETTINGS} patch={patch} />, map: { "combobox: Use terms from project": ["combobox", /^Use terms from project/] } },
+    { name: "Transcription key", section: "key", today: () => <TranscriptionKeyPage e={sampleEntitlements("free")} /> },
+    { name: "Transcription key, saved", section: "key", entitlements: (() => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; })(), today: () => <TranscriptionKeyPage e={(() => { const e = sampleEntitlements("free"); e.transcription_key = { provider: "groq", set: true, last4: "9xQ2" }; return e; })()} /> },
+    { name: "Privacy & data", section: "privacy", today: () => <PrivacyPage account={ACCOUNT} settings={SETTINGS} onAccount={() => undefined} onConsent={() => undefined} />,
+      map: { "button: Recording consentNot yet": ["button", "Recording consent"] } },
+    { name: "Privacy & data, deletion pending", section: "privacy", account: { ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" },
+      today: () => <PrivacyPage account={{ ...ACCOUNT, deletes_at: "2026-11-24T10:00:00Z" }} settings={SETTINGS} onAccount={() => undefined} onConsent={() => undefined} />,
+      map: { "button: Recording consentNot yet": ["button", "Recording consent"], "button: Cancel deletion, opens in browser": ["button", "Cancel deletion, opens in browser"] } },
+    { name: "Recording consent", section: "privacy.consent", today: () => <ConsentPage status={makeStatus()} settings={SETTINGS} patch={patch} /> },
     { name: "Style", section: "captions.style", today: () => <CaptionStylePage settings={SETTINGS} patch={patch} />,
       map: { "combobox: Position": ["combobox", /^Position/], "combobox: Hide when nobody speaks": ["combobox", /^Hide when nobody speaks/] } },
   ];
@@ -178,15 +352,16 @@ describe("parity with today's Dictation and Captions pages", () => {
     const today = [...collectControls(new Set())];
     first.unmount();
     expect(today.length).toBeGreaterThan(0);
-    await show(page.section);
+    if (page.entitlements) resetEntitlementsForTests(page.entitlements);
+    if (page.account) respond("account_get", page.account);
+    await show(page.section, page.platform);
     const missing = today.filter((control) => {
       const mapped = page.map?.[control];
-      const [role, name] = mapped ?? [control.split(": ")[0] as ControlRole, control.slice(control.indexOf(": ") + 2)];
-      return screen.queryAllByRole(role, { name }).length === 0;
+      const [role, name] = mapped ?? [control.split(": ")[0] as ControlRole | "password", control.slice(control.indexOf(": ") + 2)];
+      return findControls(role, name).length === 0;
     });
     expect(missing).toEqual([]);
     expect(stale(today, Object.keys(page.map ?? {}))).toEqual([]);
-    expect(unmapped([], [])).toEqual([]);
   });
 });
 

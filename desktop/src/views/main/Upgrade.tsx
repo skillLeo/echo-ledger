@@ -492,7 +492,7 @@ function historyLine(request: UpgradeRequest): string {
   }
 }
 
-const GROQ_KEYS = "console.groq.com";
+export const GROQ_KEYS = "console.groq.com";
 
 /** Transcription › Transcription key (the Free plan): the person's own free Groq key in three steps. */
 export function TranscriptionKeyPage({ e }: { e: Entitlements }) {
