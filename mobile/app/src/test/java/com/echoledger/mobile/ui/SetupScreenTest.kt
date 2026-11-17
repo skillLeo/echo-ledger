@@ -174,12 +174,45 @@ class SetupScreenTest : ScreenTest() {
     }
 
     @Test
-    fun `a running helper is reported with its source and user id`() {
+    fun `how the helper was started is kept at every connection and read by the Ready check`() {
+        assertEquals(null, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        app.graph.helper.attach(StubHelper(), source = "shizuku")
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Shizuku, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        app.graph.helper.attach(StubHelper(), source = "adb")
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Computer, com.echoledger.mobile.recording.ReadinessWatch.lastMethod(app))
+        val readiness = com.echoledger.mobile.core.Readiness.evaluate(
+            com.echoledger.mobile.recording.ReadinessWatch.facts(app, runBlocking { app.graph.settings.current() }, app.graph.helper)
+        )
+        assertEquals(com.echoledger.mobile.privilege.HelperMethod.Computer, readiness.helperMethod)
+    }
+
+    @Test
+    fun `a running helper says call capture is on, without its source or user id (P-020)`() {
         app.graph.helper.attach(StubHelper(), source = "shizuku")
         showSetup(caps(sdk = 34))
 
-        compose.onNodeWithText("Capture helper is running (shizuku, uid 2000).").assertIsDisplayed()
+        compose.onNodeWithText("Call capture is on.").assertIsDisplayed()
+        compose.onAllNodesWithText("uid", substring = true).assertCountEquals(0)
         compose.onAllNodesWithText("Not enabled yet.").assertCountEquals(0)
+    }
+
+    @Test
+    fun `the last capture problem is said in plain words, its details only in diagnostics (P-020)`() {
+        com.echoledger.mobile.recording.CaptureProblems.record(
+            app,
+            "Call capture could not start: mic source 7: did not start; AudioRecord -38"
+        )
+        showSetup(caps(sdk = 34))
+
+        compose.onNodeWithText(
+            "Call capture could not start. Copy diagnostics in Help has the details.",
+            substring = true
+        ).assertIsDisplayed()
+        compose.onAllNodesWithText("mic source 7", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("AudioRecord", substring = true).assertCountEquals(0)
+        val diagnostics = runBlocking { vm.captureDiagnostics() }
+        org.junit.Assert.assertTrue(diagnostics, diagnostics.contains("mic source 7: did not start"))
+        com.echoledger.mobile.recording.CaptureProblems.clear(app)
     }
 
     @Test

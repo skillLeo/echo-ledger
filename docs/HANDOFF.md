@@ -1044,3 +1044,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   keys with mid-stream fallback; refusals never shown (held answers on Sonnet/Opus, streamed refusals ended at once);
   prompt pack 1.0.2; the L9 golden set, the rule scorer (an upper bound) and the judge-required live verdict; the
   latency benchmark. Waiting on keys: the smoke-record release gate (DEPLOY.md §11), the live eval, the latency run.
+- Merged b-phone-sweep at the reviewed a26febd4: batches 2–3 (P-006–P-009, P-018–P-024, P-077), the v2 wiring data
+  side (ui_flags, ui_classic, trash.keep_hours read leniently; setClassicUi; binOrError; deleteAwait) and a discarded
+  call never reaching the server. Next: Undo after a server-side discard (restore), batches 4–6, then the v2 activity
+  hook once b-phone-ui is approved.

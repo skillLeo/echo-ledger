@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit
 object ReadinessWatch {
     private const val PREFS = "readiness"
     private const val KEY_HELPER_SEEN = "helper_seen"
+    private const val KEY_METHOD = "helper_method"
     private const val KEY_ALERTED = "alerted"
     private const val KEY_CHIP = "chip"
     private const val SHIZUKU_PACKAGE = "moe.shizuku.privileged.api"
@@ -35,10 +36,19 @@ object ReadinessWatch {
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
-    /** The helper connected once on this phone: from now on a missing helper "stopped" rather than "was never set up". */
-    fun helperSeen(context: Context) {
-        prefs(context).edit().putBoolean(KEY_HELPER_SEEN, true).apply()
+    /**
+     * The helper connected on this phone: from now on a missing helper "stopped" rather than "was never set up". Since
+     * v1.8.1 the way it was started ([source], Shizuku or a computer) is kept too, at every connection.
+     */
+    fun helperSeen(context: Context, source: String? = null) {
+        prefs(context).edit().putBoolean(KEY_HELPER_SEEN, true).apply {
+            com.echoledger.mobile.privilege.HelperMethod.of(source)?.let { putString(KEY_METHOD, it.name) }
+        }.apply()
     }
+
+    /** How the helper was last started on this phone, or null when it never connected (since v1.8.1). */
+    fun lastMethod(context: Context): com.echoledger.mobile.privilege.HelperMethod? = prefs(context).getString(KEY_METHOD, null)
+        ?.let { name -> com.echoledger.mobile.privilege.HelperMethod.entries.firstOrNull { it.name == name } }
 
     fun shizukuInstalled(context: Context): Boolean = runCatching { context.packageManager.getPackageInfo(SHIZUKU_PACKAGE, 0) }.isSuccess
 
@@ -61,6 +71,7 @@ object ReadinessWatch {
             // Installs from before v1.5 never wrote the flag: Shizuku allowed or auto-record on means it was set up.
             helperEverConnected = prefs(context).getBoolean(KEY_HELPER_SEEN, false) || shizukuAllowed || settings.autoRecordArmed,
             helperStale = state.stale,
+            helperMethod = lastMethod(context),
             armState = helper.armState.value,
             signedIn = settings.paired,
             freeStorageMb = free,

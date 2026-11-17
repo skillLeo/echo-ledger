@@ -144,9 +144,16 @@ fun fileSize(bytes: Long): String {
     return if (unit == 0) "$bytes B" else String.format(java.util.Locale.ROOT, "%.1f %s", value, units[unit])
 }
 
-/** Settings → Storage and retention (B17): the storage meter and how long recordings are kept. */
+/**
+ * Settings → Storage and retention (B17): this person's recordings, the plan's storage meter and how long recordings
+ * are kept. Since v1.8.1 (bug P-023) never the server's own disk; [keepHours] is the server's Trash time (2.0.0-b).
+ */
 @Composable
-fun StorageSection(load: suspend () -> com.echoledger.mobile.data.StorageDto?) {
+fun StorageSection(
+    load: suspend () -> com.echoledger.mobile.data.StorageDto?,
+    planStorage: com.echoledger.mobile.data.LimitDto? = null,
+    keepHours: Int = com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
+) {
     var info by remember { mutableStateOf<com.echoledger.mobile.data.StorageDto?>(null) }
     var loaded by remember { mutableStateOf(false) }
     var attempt by remember { mutableStateOf(0) }
@@ -172,18 +179,23 @@ fun StorageSection(load: suspend () -> com.echoledger.mobile.data.StorageDto?) {
                     )} in ${current.recordingsCount} file${if (current.recordingsCount == 1) "" else "s"}.",
                     fontSize = 13.sp
                 )
-                val total = current.diskTotalBytes
-                val free = current.diskFreeBytes
-                if (total != null && free != null && total > 0) {
-                    val used = 1f - free.toFloat() / total
-                    androidx.compose.material3.LinearProgressIndicator(
-                        progress = { used },
-                        modifier = Modifier.semantics { contentDescription = "Server disk used" }
+                val limit = planStorage?.limit
+                if (planStorage != null && limit != null) {
+                    com.echoledger.mobile.core.PlanFormat.fraction(planStorage.used, limit)?.let { used ->
+                        androidx.compose.material3.LinearProgressIndicator(
+                            progress = { used },
+                            modifier = Modifier.semantics { contentDescription = "Plan storage used" }
+                        )
+                    }
+                    Text(
+                        "Your plan's storage: " + com.echoledger.mobile.core.PlanFormat.limit("storage_bytes", planStorage.used, limit),
+                        color = Brand.Muted,
+                        fontSize = 12.sp
                     )
-                    Text("Server disk ${(used * 100).toInt()}% used · ${fileSize(free)} free", color = Brand.Muted, fontSize = 12.sp)
                 }
                 Text(
-                    "Recordings are deleted after ${current.retentionDays} days unless kept. Deleted recordings can be restored for 48 hours.",
+                    "Recordings are deleted after ${current.retentionDays} days unless kept. Deleted recordings can be restored " +
+                        "for $keepHours hours.",
                     color = Brand.Muted,
                     fontSize = 12.sp
                 )

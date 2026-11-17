@@ -338,19 +338,22 @@ class SettingsScreenTest : AppTest() {
     }
 
     @Test
-    fun `the microphone source toggles between echo-cancelled and raw`() {
+    fun `Microphone and audio says its choices in plain words and each opens its few choices (P-022)`() {
         launch(open = "Microphone & audio")
-        compose.onNodeWithText("Voice communication (echo-cancelled)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Reduce echo").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Standard").performScrollTo().assertIsDisplayed()
+        listOf("Near-end", "echo-cancelled", "One UI", "kbps", "Opus", "kHz").forEach {
+            compose.onAllNodesWithText(it, substring = true).assertCountEquals(0)
+        }
 
-        // The microphone row's Change (the bitrate row below it has one too).
-        compose.onAllNodesWithText("Change")[0].performScrollTo().performClick()
-        pumpUntil("raw microphone") { settings().micSource == "mic" }
-        compose.onNodeWithText("Raw microphone").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Your microphone").performScrollTo().performClick()
+        compose.onNodeWithText("Unprocessed").performClick()
+        pumpUntil("unprocessed") { settings().micSource == "mic" }
+        compose.onNodeWithText("Unprocessed").performScrollTo().assertIsDisplayed()
 
-        // The microphone row's Change (the bitrate row below it has one too).
-        compose.onAllNodesWithText("Change")[0].performScrollTo().performClick()
-        pumpUntil("voice communication") { settings().micSource == "voice_communication" }
-        compose.onNodeWithText("Voice communication (echo-cancelled)").performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText("Recording quality").performScrollTo().performClick()
+        compose.onNodeWithText("Highest (larger files)").performClick()
+        pumpUntil("highest quality") { settings().recordingKbps == 64 }
     }
 
     @Test
@@ -373,21 +376,15 @@ class SettingsScreenTest : AppTest() {
     // ---- device card -----------------------------------------------------------------------------------------------------------
 
     @Test
-    fun `the device card shows the phone name server address and pin status`() {
+    fun `This phone shows the phone's name and the Setup guide, no server or pins and no second Sign out (P-021)`() {
         pairAndSettle()
         launch(open = "About")
 
-        compose.onNodeWithText("Sam's Pixel · ${server.baseUrl}").assertIsDisplayed()
-        compose.onNodeWithText("Server certificate pinned (2 pins)").assertIsDisplayed()
-    }
-
-    @Test
-    fun `a server without pins is flagged as not pinned`() {
-        runBlocking { app.pairLocally(server, pins = emptyList()) }
-        pumpUntil("settings") { vm.settings.value.paired }
-        launch(open = "About")
-
-        compose.onNodeWithText("Certificate pinning not configured on the server").assertIsDisplayed()
+        compose.onNodeWithText("Sam's Pixel").assertIsDisplayed()
+        compose.onNodeWithText("Setup guide").assertIsDisplayed()
+        compose.onAllNodesWithText(server.baseUrl, substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("pinn", substring = true).assertCountEquals(0)
+        compose.onAllNodesWithText("Sign out").assertCountEquals(0)
     }
 
     @Test
@@ -403,11 +400,11 @@ class SettingsScreenTest : AppTest() {
     fun `Unpair forgets the pairing but keeps the preferences`() {
         pairAndSettle()
         runBlocking { app.graph.settings.update { it.copy(captionsEnabled = false) } }
-        launch(open = "About")
+        launch()
 
-        compose.onNodeWithText("Sign out").performClick()
+        compose.onNodeWithText("Sign out").performScrollTo().performClick()
         assertTrue("nothing changes before the user confirms", settings().paired)
-        compose.onNodeWithText("Sign out of this phone? Recordings waiting to upload stay on the phone.").assertExists()
+        compose.onNodeWithText("Sign out of this phone?").assertExists()
         compose.onNode(hasText("Sign out") and hasAnyAncestor(isDialog())).performClick()
         pumpUntil("unpaired") { !settings().paired }
 

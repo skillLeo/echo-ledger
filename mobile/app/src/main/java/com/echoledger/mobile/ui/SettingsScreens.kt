@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.relocation.BringIntoViewRequester
@@ -677,9 +678,13 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
 
         "transcription-key" -> TranscriptionKeySection(vm, settings.plan)
 
-        "this-phone" -> ThisPhoneCard(vm, settings, onSetup)
+        "this-phone" -> ThisPhoneCard(settings, onSetup)
 
-        "storage" -> StorageSection(load = { vm.storage() })
+        "storage" -> StorageSection(
+            load = { vm.storage() },
+            planStorage = settings.plan.limits["storage_bytes"],
+            keepHours = settings.trashKeepHours
+        )
 
         "about" -> AboutSection(vm, settings)
 
@@ -697,41 +702,87 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
     }
 }
 
+/** Microphone & audio's choices in plain words (since v1.8.1, bug P-022): no source names, codec or bit rate. */
+internal object AudioChoices {
+    val MIC = listOf("voice_communication" to "Reduce echo (recommended)", "mic" to "Unprocessed")
+
+    val QUALITY = listOf(32 to "Standard", 48 to "High", 64 to "Highest (larger files)")
+
+    /** The row's value: the choice without its "(recommended)". */
+    fun mic(value: String): String = (MIC.firstOrNull { it.first == value }?.second ?: MIC.first().second).removeSuffix(" (recommended)")
+
+    fun quality(kbps: Int): String = QUALITY.firstOrNull { it.first == kbps }?.second ?: QUALITY.first().second
+}
+
 @Composable
 private fun MicrophoneEntry(vm: MainViewModel, settings: AppSettings, onSetup: () -> Unit) {
     val helper by vm.helper.collectAsState()
     val live by RecordingService.live.collectAsState()
+    var choosing by remember { mutableStateOf<String?>(null) }
     SectionCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Near-end microphone source")
-                Text(
-                    if (settings.micSource == "mic") "Raw microphone" else "Voice communication (echo-cancelled)",
-                    color = Brand.Muted,
-                    fontSize = 12.sp
-                )
-            }
-            TextButton(onClick = {
-                vm.updateSettings { it.copy(micSource = if (it.micSource == "mic") "voice_communication" else "mic") }
-            }) { Text("Change") }
+        ValueLine("Your microphone", "Calls always record your side unprocessed.", AudioChoices.mic(settings.micSource)) {
+            choosing = "mic"
         }
-        Text(
-            "During calls your side always uses the raw microphone (One UI gives the echo-cancelled one silence).",
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
-        // Since v1.3: Opus bitrate per side. Higher keeps more detail for transcription; files grow with it.
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Recording quality")
-                Text("${settings.recordingKbps} kbps per side (Opus, 48 kHz)", color = Brand.Muted, fontSize = 12.sp)
-            }
-            TextButton(onClick = {
-                vm.updateSettings { it.copy(recordingKbps = AppSettings.nextRecordingKbps(it.recordingKbps)) }
-            }) { Text("Change") }
+        ValueLine(
+            "Recording quality",
+            "Higher keeps more detail for the transcript; the files grow with it.",
+            AudioChoices.quality(settings.recordingKbps)
+        ) { choosing = "quality" }
+    }
+    when (choosing) {
+        "mic" -> ChoiceDialog("Your microphone", AudioChoices.MIC, settings.micSource, onDismiss = { choosing = null }) { value ->
+            choosing = null
+            vm.updateSettings { it.copy(micSource = value) }
+        }
+
+        "quality" -> ChoiceDialog("Recording quality", AudioChoices.QUALITY, settings.recordingKbps, onDismiss = {
+            choosing = null
+        }) { value ->
+            choosing = null
+            vm.updateSettings { it.copy(recordingKbps = value) }
         }
     }
     CaptureHealthSection(vm, settings, helperConnected = helper.connected, recording = live.active, onSetup = onSetup)
+}
+
+/** A setting in a card: its title and a line about it, the current value at the end; a tap opens its choices. */
+@Composable
+private fun ValueLine(title: String, summary: String, value: String, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 48.dp).clickable(role = Role.Button, onClick = onClick).padding(vertical = Space.s1),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title)
+            Text(summary, color = Brand.Muted, fontSize = 12.sp)
+        }
+        Text(value, color = Brand.Muted, modifier = Modifier.padding(start = Space.s3))
+    }
+}
+
+/** A setting's few choices, each a row with its radio button; picking one closes it. */
+@Composable
+internal fun <T> ChoiceDialog(title: String, choices: List<Pair<T, String>>, current: T, onDismiss: () -> Unit, onPick: (T) -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(Modifier.selectableGroup()) {
+                choices.forEach { (value, label) ->
+                    Row(
+                        Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                            .selectable(selected = value == current, role = Role.RadioButton, onClick = { onPick(value) }),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = value == current, onClick = null)
+                        Text(label, modifier = Modifier.padding(start = Space.s2))
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
 }
 
 @Composable
@@ -839,38 +890,16 @@ private fun ScreenShareSection(vm: MainViewModel, settings: AppSettings) {
     }
 }
 
+/**
+ * About › This phone: its name and the Setup guide (since v1.8.1, bug P-021: no server address or certificate pins, and
+ * Sign out only once, at the bottom of Settings).
+ */
 @Composable
-private fun ThisPhoneCard(vm: MainViewModel, settings: AppSettings, onSetup: () -> Unit) {
-    var confirmUnpair by remember { mutableStateOf(false) }
+private fun ThisPhoneCard(settings: AppSettings, onSetup: () -> Unit) {
     SectionCard {
         Text("This phone", fontWeight = FontWeight.SemiBold)
-        Text("${settings.deviceName ?: ""} · ${settings.serverUrl ?: ""}", color = Brand.Muted, fontSize = 13.sp)
-        Text(
-            if (settings.pins.isNotEmpty()) {
-                "Server certificate pinned (${settings.pins.size} pins)"
-            } else {
-                "Certificate pinning not configured on the server"
-            },
-            color = Brand.Muted,
-            fontSize = 12.sp
-        )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            OutlinedButton(onClick = onSetup) { Text("Setup guide") }
-            Button(onClick = {
-                confirmUnpair = true
-            }, colors = ButtonDefaults.buttonColors(containerColor = Brand.Danger)) { Text("Sign out") }
-        }
-    }
-    if (confirmUnpair) {
-        ConfirmDialog(
-            text = "Sign out of this phone? Recordings waiting to upload stay on the phone.",
-            confirmLabel = "Sign out",
-            onConfirm = {
-                confirmUnpair = false
-                vm.unpair()
-            },
-            onDismiss = { confirmUnpair = false }
-        )
+        settings.deviceName?.takeIf { it.isNotBlank() }?.let { Text(it, color = Brand.Muted, fontSize = 13.sp) }
+        OutlinedButton(onClick = onSetup) { Text("Setup guide") }
     }
 }
 

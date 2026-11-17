@@ -8,8 +8,10 @@ import androidx.compose.ui.test.performTextInput
 import com.echoledger.mobile.core.PlanState
 import com.echoledger.mobile.data.FeatureDto
 import com.echoledger.mobile.data.PlanOfferDto
+import com.echoledger.mobile.data.TranscriptionKeyDto
 import com.echoledger.mobile.testsupport.FakeServer
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.bodyText
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
@@ -174,5 +176,27 @@ class PlanUiTest : ScreenTest() {
         val body = Json.parseToJsonElement(server.requestsTo("PUT", "/api/me/transcription-key").single().bodyText()).jsonObject
         assertEquals("groq", body["provider"]!!.jsonPrimitive.content)
         assertEquals("3f9a", runBlocking { app.graph.settings.current().plan.transcriptionKey?.last4 })
+    }
+
+    @Test
+    fun `Remove key says transcription stops and asks first (P-009)`() {
+        runBlocking {
+            app.pairLocally(server)
+            app.graph.settings.update { it.copy(plan = plan.copy(transcriptionKey = TranscriptionKeyDto(set = true, last4 = "3f9a"))) }
+        }
+        server.on("DELETE", "/api/me/transcription-key", FakeServer.empty(204))
+        val saved = plan.copy(transcriptionKey = TranscriptionKeyDto(set = true, last4 = "3f9a"))
+        show { TranscriptionKeySection(vm, saved) }
+
+        compose.onNodeWithText("Remove key").performClick()
+        compose.onNodeWithText("Remove your key? New recordings won't be transcribed until you add a key again.").assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        awaitAppIdle()
+        assertTrue("Cancel keeps it", server.requestsTo("DELETE", "/api/me/transcription-key").isEmpty())
+
+        compose.onNodeWithText("Remove key").performClick()
+        compose.onNodeWithText("Remove").performClick()
+        pumpUntil("the key to be removed") { runBlocking { app.graph.settings.current().plan.transcriptionKey == null } }
+        assertEquals(1, server.requestsTo("DELETE", "/api/me/transcription-key").size)
     }
 }

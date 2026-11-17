@@ -384,6 +384,42 @@ object Notifications {
         runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
     }
 
+    /**
+     * "Discarded · Call with Omar · 4:12" with Undo (since v1.8.1, bug P-006), in place of the question after its
+     * Discard: quiet, gone after the 5 s the file waits for ([com.echoledger.mobile.calls.Decisions.discardLater]).
+     */
+    @SuppressLint("MissingPermission") // checked by canPost() first
+    fun discardedWithUndo(context: Context, rec: LocalRecording, title: String) {
+        if (!canPost(context)) return
+        val undo = PendingIntent.getBroadcast(
+            context,
+            rec.id.hashCode() + 3,
+            Intent(context, SaveDecisionReceiver::class.java)
+                .setAction(SaveDecisionReceiver.ACTION_UNDO_DISCARD)
+                .putExtra(SaveDecisionReceiver.EXTRA_ID, rec.id),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        val duration = com.echoledger.mobile.ui.formatDuration(rec.durationMs).ifEmpty { "0:00" }
+        val builder = NotificationCompat.Builder(context, CHANNEL_DECISIONS)
+            .setSmallIcon(R.drawable.ic_stat_rec)
+            .setContentTitle("Discarded · $title · $duration")
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setPriority(NotificationCompat.PRIORITY_DEFAULT)
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(
+                    context,
+                    CHANNEL_DECISIONS
+                ).setSmallIcon(R.drawable.ic_stat_rec).setContentTitle("Call discarded").build()
+            )
+            .setSilent(true)
+            .setAutoCancel(true)
+            .setTimeoutAfter(com.echoledger.mobile.overlay.DecisionPopup.DISCARDED_MS)
+            .setContentIntent(openApp(context))
+            .addAction(0, "Undo", undo)
+        runCatching { NotificationManagerCompat.from(context).notify(rec.id.hashCode(), builder.build()) }
+    }
+
     /** A call started while the capture helper is not running: say so during the call, with the way to fix it. */
     fun captureNotReady(context: Context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&

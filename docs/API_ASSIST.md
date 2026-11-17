@@ -1,4 +1,7 @@
-# Live Assist contract — revision 1.9.0-k (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-l (frozen 2026-11-17 for the sprint)
+
+1.9.0-l: `POST …/end` works on the person's own session in any of their workspaces; the report's shape; the
+server-side usage kind `report`.
 
 1.9.0-k: `409 session_active` names the active session; a start from the same device may end it first.
 
@@ -114,9 +117,16 @@ Errors added by Live Assist:
 - `POST /api/assist/sessions/{id}/turns` — final turns in batches (every 5 s or 10 turns):
   `{"turns": [{"client_ref": "…", "channel": "other", "start_ms": 81200, "end_ms": 86400, "text": "…",
   "language": "en", "is_question": true}]}` → `200 {"accepted": 3}`; a repeated `client_ref` is ignored.
-- `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`.
+- `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`. It ends the person's own session in any of their
+  workspaces (so the app can act on a `409 session_active`); anyone else's answers `404`.
 - `GET /api/assist/sessions?limit=` · `GET /api/assist/sessions/{id}` · `GET /api/assist/sessions/{id}/report`
-  (`404 report_not_ready` until the job is done) · `DELETE /api/assist/sessions/{id}`.
+  (`404 report_not_ready` until the first report exists; a remade report replaces it). The report:
+  `{"version", "mode", "practice", "meeting_type", "title", "started_at", "ended_at", "seconds", "turns",
+  "ai": {"status", "reason", "model", "runs"}, "summary", "summary_translation", "qa": [{question, answer, hint,
+  verdict, better_answer, missed}], "mistakes": [], "promises": [], "coaching": {"words_per_minute", "fillers",
+  "talk_ratio", "pauses", "grammar": []}, "action_items": [], "memory_added", "follow_up_email", "facts",
+  "running_summary", "suggestions", "used"}`; without the model (`ai.status` not `done`) the Q&A table, coaching,
+  running summary and facts are still there · `DELETE /api/assist/sessions/{id}`.
 - `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action` `{"action": "used" | "dismissed" |
   "regenerated" | "shorter" | "formal" | "translated"}` → `204`.
 
@@ -213,7 +223,8 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   the Fast model in the background, within the budget; a call that could cross the budget is skipped.
   `POST /api/internal/assist/facts` `{session_id, facts: [...], at}` and `POST /api/internal/assist/summary`
   `{session_id, summary, at}` replace what the server stored.
-- Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. Practice
+- Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. The
+  server's own report call is usage kind `report`, charged to the session's allowance. Practice
   usage is billed to the plan's Practice allowance.
 
 Rules: a suggestion is never triggered from the `me` channel; a speculative start on an `other` partial that looks
