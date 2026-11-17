@@ -92,13 +92,36 @@ data class AssistSessionInfoDto(
 @Serializable
 data class AssistPlanDto(val modes: List<String> = emptyList(), @SerialName("seconds_left") val secondsLeft: Long? = null)
 
-/** `POST /api/assist/sessions` → `201`; the phone follows its own recording's captions, so `stt` is not read. */
+/**
+ * Live Assist HTTP mode (contract 1.9.0-q): where each app message is POSTed, and the relay's `ready` as it is now (the
+ * mode, the allowed modes and the limits).
+ */
 @Serializable
-data class AssistStartDto(val session: AssistSessionInfoDto, val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
+data class AssistHttpDto(@SerialName("live_url") val liveUrl: String, val ready: kotlinx.serialization.json.JsonObject? = null) {
+    override fun toString(): String = "AssistHttpDto($liveUrl)"
+}
 
-/** `POST /api/assist/sessions/{id}/token`. */
+/**
+ * `POST /api/assist/sessions` → `201`; the phone follows its own recording's captions, so `stt` is not read. [transport]
+ * says which block is set: `relay` (also from a server before 1.9.0-q, which sends no `transport`) or `http`.
+ */
 @Serializable
-data class AssistTokenDto(val relay: AssistRelayDto, val plan: AssistPlanDto? = null)
+data class AssistStartDto(
+    val session: AssistSessionInfoDto,
+    val transport: String = "relay",
+    val relay: AssistRelayDto? = null,
+    val http: AssistHttpDto? = null,
+    val plan: AssistPlanDto? = null
+)
+
+/** `POST /api/assist/sessions/{id}/token`: a fresh `relay` or `http` block, as [transport] says. */
+@Serializable
+data class AssistTokenDto(
+    val transport: String = "relay",
+    val relay: AssistRelayDto? = null,
+    val http: AssistHttpDto? = null,
+    val plan: AssistPlanDto? = null
+)
 
 /** Help (contract 2.0.0-d): `GET /api/help/guides?q=` rows. */
 @Serializable

@@ -11,8 +11,8 @@ use App\Services\Assist\AssistBudget;
 use Illuminate\Console\Command;
 
 /**
- * Live Assist's leftovers (v1.9, every 5 minutes): a reservation whose call never settled (its process died) is settled
- * at its worst case, marked lost, so it reaches the month's ledger; a report stuck in the queue past its wait and its
+ * Live Assist's leftovers (v1.9, every 5 minutes): a reservation whose call never settled (its process died, or an HTTP-mode
+ * stream was cut) is settled at its worst case, marked lost, so it reaches the month's ledger; a report stuck in the queue past its wait and its
  * time is queued once more, then marked failed.
  */
 final class SweepAssist extends Command
@@ -21,8 +21,15 @@ final class SweepAssist extends Command
 
     protected $description = 'Settle Live Assist reservations left behind and queue reports again that never came';
 
-    /** A call's limit and a margin, in seconds: Ask 60 s, a report 420 s (its job's timeout). */
-    public const PENDING_AFTER = ['ask' => 60 + 60, 'report' => 420 + 60];
+    /**
+     * A call's limit and a margin, in seconds: Ask 60 s, a report 420 s (its job's timeout), and a suggestion of HTTP mode
+     * (and its upgrade) 60 s, the longest a stream lasts, with its margin.
+     */
+    public const PENDING_AFTER = [
+        'ask' => 60 + 60, 'report' => 420 + 60,
+        'answer' => 60 + 60, 'help_now' => 60 + 60, 'regenerate' => 60 + 60, 'shorter' => 60 + 60, 'formal' => 60 + 60, 'translate' => 60 + 60,
+        'upgrade' => 60 + 60, 'practice_question' => 60 + 60, 'facts' => 60 + 60, 'summary' => 60 + 60,
+    ];
 
     public function handle(AssistBudget $budget): int
     {

@@ -1336,6 +1336,24 @@ pub struct AssistStartRequest {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub recording_session_id: Option<String>,
     pub practice: bool,
+    /// The transports this app can use (contract 1.9.0-q): the server picks one for the session. Left out when empty
+    /// (the server then reads `["relay"]`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub transports: Vec<String>,
+}
+
+impl AssistStartRequest {
+    /// What this app can use: the relay's WebSocket and HTTP mode.
+    pub fn transports() -> Vec<String> {
+        vec!["relay".into(), "http".into()]
+    }
+}
+
+/// HTTP mode's block (contract 1.9.0-q): where each message is posted, and the session as `ready` would say it.
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize)]
+pub struct AssistHttpDto {
+    pub live_url: String,
+    pub ready: crate::assist::protocol::Ready,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Deserialize)]
@@ -1378,7 +1396,13 @@ pub struct AssistPlanDto {
 #[derive(Clone, Debug, Deserialize)]
 pub struct AssistStartAnswer {
     pub session: AssistSessionDto,
-    pub relay: AssistRelayDto,
+    /// `relay` or `http` (contract 1.9.0-q); a server before it answers none, which is the relay.
+    #[serde(default)]
+    pub transport: Option<String>,
+    #[serde(default)]
+    pub relay: Option<AssistRelayDto>,
+    #[serde(default)]
+    pub http: Option<AssistHttpDto>,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
     #[serde(default, deserialize_with = "lenient")]
@@ -1388,7 +1412,10 @@ pub struct AssistStartAnswer {
 /// `200` of `POST /api/assist/sessions/{id}/token`: new relay and speech tokens.
 #[derive(Clone, Debug, Deserialize)]
 pub struct AssistTokenAnswer {
-    pub relay: AssistRelayDto,
+    #[serde(default)]
+    pub relay: Option<AssistRelayDto>,
+    #[serde(default)]
+    pub http: Option<AssistHttpDto>,
     #[serde(default)]
     pub stt: Option<serde_json::Value>,
     /// The assist time left now, when the server says.

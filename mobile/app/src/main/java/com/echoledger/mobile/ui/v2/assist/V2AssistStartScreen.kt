@@ -158,6 +158,15 @@ fun V2AssistStart(
     var busy by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val notSetUp = stringResource(R.string.v2_assist_error_not_set_up)
+    val updateApp = stringResource(R.string.v2_assist_error_update_app)
+    val cantConnect = stringResource(R.string.v2_assist_error_cant_connect)
+
+    // The hub's own sentences for 426 and 503 (contract 1.9.0-q) read in the screen's language.
+    fun words(said: String): String = when (said) {
+        AssistHub.UPDATE_APP -> updateApp
+        AssistHub.RELAY_DOWN -> cantConnect
+        else -> said
+    }
     val ui = when {
         active != null -> AssistStartUi.On(cardAllowed())
         recording == null -> AssistStartUi.NeedsRecording
@@ -177,8 +186,8 @@ fun V2AssistStart(
                     problem = when (result) {
                         is AssistHub.Start.Started -> null.also { showCard() }
                         AssistHub.Start.NotSetUp -> notSetUp
-                        is AssistHub.Start.Refused -> result.words
-                        is AssistHub.Start.Failed -> result.words
+                        is AssistHub.Start.Refused -> words(result.words)
+                        is AssistHub.Start.Failed -> words(result.words)
                         AssistHub.Start.Busy, AssistHub.Start.NoRecording -> null
                     }
                 }

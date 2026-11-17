@@ -30,8 +30,8 @@ data class RelayGrant(
     val expiresAt: String?,
     val pins: List<String>,
     /** This month's assist time left (`plan.seconds_left`), when the answer gave it. */
-    val secondsLeft: Long? = null
-) {
+    override val secondsLeft: Long? = null
+) : LiveGrant {
     override fun toString(): String = "RelayGrant($url, expires $expiresAt, ${pins.size} pins)"
 }
 
@@ -136,7 +136,7 @@ class RelayClient(
     private val onEnded: (RelayEnd) -> Unit,
     /** The base HTTP client (tests: their own certificates); TCP_NODELAY and the pins are added to it. */
     private val http: OkHttpClient? = null
-) {
+) : LiveTransport {
     @Volatile private var grant = grant
     private val outbox = AssistOutbox()
     private val context = AssistContext()
@@ -162,12 +162,12 @@ class RelayClient(
     }
 
     /** Opens the connection and keeps it, until [stop] or an end. */
-    fun start() {
+    override fun start() {
         job = scope.launch { run() }
     }
 
     /** Queues [message]: it leaves now when the relay is ready, else when it is again. */
-    fun send(message: ClientMessage) {
+    override fun send(message: ClientMessage) {
         val down = !ready
         val queued = if (message is ClientMessage.ContextUpdate) {
             context.update(message.fields)
@@ -181,7 +181,7 @@ class RelayClient(
     }
 
     /** Ends the connection; nothing reconnects. */
-    fun stop() {
+    override fun stop() {
         if (stopped) return
         stopped = true
         refreshJob?.cancel()

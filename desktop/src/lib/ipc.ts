@@ -728,7 +728,7 @@ export type AssistMessage =
   | { type: "budget"; seconds_left: number | null; seconds_total: number | null }
   | { type: "session_active"; session_id: string; practice: boolean; text: string; action: string }
   | { type: "offer"; prep_id: string; title: string; caller: string | null; question: string; client_ref: string }
-  | { type: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up" | "token_rejected"; message: string | null };
+  | { type: "ended"; reason: "closed" | "replaced" | "wrong_session" | "insecure" | "gave_up" | "token_rejected" | "app_update_required"; message: string | null };
 /** `assist_state`: the session so far, for a window opened mid-session. */
 export interface AssistSnapshot {
   messages: AssistMessage[];
