@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (ask). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_ask_title">پوچھیں</string>
+    <string name="v2_ask_scope">کس بارے میں پوچھیں</string>
+    <string name="v2_ask_scope_all">تمام ریکارڈنگز</string>
+    <string name="v2_ask_scope_all_soon">تمام ریکارڈنگز (ابھی دستیاب نہیں)</string>
+    <string name="v2_ask_question">آپ کا سوال</string>
+    <string name="v2_ask_question_hint">بلال ٹریڈرز نے ادائیگی پر کیا طے کیا؟</string>
+    <string name="v2_ask_ask_button">پوچھیں</string>
+    <string name="v2_ask_asking">پوچھا جا رہا ہے</string>
+    <string name="v2_ask_sources">ماخذ</string>
+    <string name="v2_ask_no_projects_title">ابھی کوئی پروجیکٹ نہیں</string>
+    <string name="v2_ask_no_projects_body">پوچھیں کسی پروجیکٹ کی ریکارڈنگز پر کام کرتا ہے۔ پہلے لائبریری سے ریکارڈنگز کسی پروجیکٹ میں رکھیں۔</string>
+    <string name="v2_ask_error">جواب نہیں بن سکا۔ انٹرنیٹ کنکشن چیک کریں اور دوبارہ کوشش کریں۔</string>
+    <string name="v2_ask_empty_title">اپنی ریکارڈنگز سے پوچھیں</string>
+    <string name="v2_ask_empty_body">پروجیکٹ چنیں، پھر اپنے الفاظ میں پوچھیں۔ جواب بتاتے ہیں کہ وہ کس ریکارڈنگ سے ہے۔</string>
+</resources>
