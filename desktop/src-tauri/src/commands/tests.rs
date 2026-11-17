@@ -423,3 +423,22 @@ fn permissions_status_answers_on_one_thread_and_never_waits_on_itself() {
     // And the memory is free afterwards.
     assert!(state.permission_memory.try_lock().is_ok());
 }
+
+#[test]
+fn transcribe_selected_and_its_estimate_take_1_to_50_recordings() {
+    let ids = |n: usize| (0..n).map(|i| format!("01JB{i:022}")).collect::<Vec<_>>();
+    assert!(check_transcribe(&ids(1)).is_ok() && check_transcribe(&ids(50)).is_ok());
+    for n in [0, 51] {
+        assert_eq!(check_transcribe(&ids(n)).unwrap_err().to_string(), "Choose between 1 and 50 recordings.");
+    }
+}
+
+#[test]
+fn a_recording_s_language_is_one_of_the_keys_its_patch_sends() {
+    let mut patch = serde_json::Map::new();
+    patch.insert("language".into(), json!("ur"));
+    patch.insert("status".into(), json!("completed"));
+    let sent = allowed_patch(&patch, &SESSION_PATCH_KEYS);
+    assert_eq!(serde_json::Value::Object(sent), json!({"language": "ur"}), "language goes, anything unknown does not");
+    assert!(EXPORT_VIEWS.contains(&"roman") && !EXPORT_VIEWS.contains(&"original"), "the views an export takes");
+}
