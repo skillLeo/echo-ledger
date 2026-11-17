@@ -14,6 +14,9 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Pages\Page;
+use Filament\Schemas\Components\Actions;
+use Filament\Schemas\Components\EmbeddedSchema;
+use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Text;
@@ -24,13 +27,17 @@ use UnitEnum;
 /**
  * Live Assist's settings (v1.9 L8): for each meeting type the mode, the hint level and the language help a new prep
  * starts with (App\Services\Assist\AssistDefaults), here and in the apps. The shortcuts are the desktop app's own
- * (Settings → Shortcuts there), as its other shortcuts are.
+ * (Settings → Shortcuts there), as its other shortcuts are. The small read-only console reads them and changes nothing.
+ *
+ * @property-read Schema $form
  */
 class AssistSettings extends Page
 {
     use LiveAssistOnly;
 
     protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedAdjustmentsHorizontal;
+
+    protected static string|BackedEnum|null $activeNavigationIcon = Heroicon::AdjustmentsHorizontal;
 
     protected static string|UnitEnum|null $navigationGroup = 'Live Assist';
 
@@ -42,8 +49,8 @@ class AssistSettings extends Page
 
     protected static ?string $slug = 'live-assist/settings';
 
-    /** @var array<string, array<string, string>> meeting type => mode, hint level, language help */
-    public array $data = [];
+    /** @var array<string, mixed>|null meeting type => mode, hint level, language help */
+    public ?array $data = [];
 
     public function getSubheading(): string
     {
@@ -75,28 +82,22 @@ class AssistSettings extends Page
         ])->statePath('data')->disabled(fn (): bool => ! self::canChange());
     }
 
-    protected function getFormActions(): array
-    {
-        return [];
-    }
-
-    protected function getHeaderActions(): array
-    {
-        return [
-            Action::make('save')->label('Save')->visible(fn (): bool => self::canChange())->action(function (): void {
-                $user = self::user();
-                if ($user === null) {
-                    return;
-                }
-                AssistDefaults::save($user, $this->form->getState());
-                Notification::make()->title('Live Assist settings saved')->success()->send();
-            }),
-        ];
-    }
-
     public function content(Schema $schema): Schema
     {
-        return $schema->components([\Filament\Schemas\Components\Form::make([\Filament\Schemas\Components\EmbeddedSchema::make('form')])]);
+        return $schema->components([
+            Form::make([EmbeddedSchema::make('form')])->id('form')->livewireSubmitHandler('save')
+                ->footer([Actions::make([Action::make('save')->label('Save')->submit('save')->visible(fn (): bool => self::canChange())])]),
+        ]);
+    }
+
+    public function save(): void
+    {
+        $user = self::user();
+        if ($user === null || ! self::canChange()) {
+            return;
+        }
+        AssistDefaults::save($user, $this->form->getState());
+        Notification::make()->title('Live Assist settings saved')->success()->send();
     }
 
     private static function user(): ?User
