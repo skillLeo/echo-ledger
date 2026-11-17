@@ -1,0 +1,29 @@
+{
+  "id": "practice-interview-flutter",
+  "brief": {
+    "meeting_type": "interview",
+    "title": "Flutter Developer at Nuqta Labs",
+    "counterpart": "Bilal Chaudhry",
+    "company": "Nuqta Labs",
+    "goals": "Show the Ghar Dekho app",
+    "instructions": "Ask about state management and testing."
+  },
+  "documents": [
+    {"id": "jd", "title": "Job description", "text": "Flutter developer, Lahore, hybrid (three office days a week). Dart, Flutter, Bloc, Firebase, REST APIs. Writes widget tests. Works with two designers."},
+    {"id": "cv", "title": "CV", "text": "Ayesha Siddiqui. Flutter developer, 3 years. Ghar Dekho, Lahore: property listing app, 100,000 downloads, rating 4.6."}
+  ],
+  "answers": [
+    "At Ghar Dekho I built the listing app in Flutter with Bloc.",
+    "I write widget tests for every screen."
+  ],
+  "reference": [
+    "Tell me about the Ghar Dekho app and your part in it?",
+    "How do you use Bloc for state management in Flutter?",
+    "How do you write widget tests, and how would you work with our two designers?"
+  ],
+  "bad": [
+    "Why did you leave Careem after only 8 months?",
+    "Ghar Dekho had 2 million downloads. How did you scale it?",
+    "Our CTO Imran wants someone who knows Kotlin. Do you?"
+  ]
+}

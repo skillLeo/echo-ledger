@@ -80,7 +80,7 @@ impl Sources {
     }
 
     /// Whether a word (or its singular) is anywhere in what is known.
-    fn has_word(&self, word: &str) -> bool {
+    pub fn has_word(&self, word: &str) -> bool {
         contains_word(&self.text, word) || word.strip_suffix('s').is_some_and(|stem| stem.len() > 2 && contains_word(&self.text, stem))
     }
 }

@@ -1,0 +1,17 @@
+{
+  "id": "practice-empty-brief",
+  "answers": [
+    "I have worked as a software developer for a few years.",
+    "I like solving problems with a team."
+  ],
+  "reference": [
+    "Tell me a little about yourself and the work you do now?",
+    "What kind of team do you work best in?",
+    "What would you like to learn next in your work?"
+  ],
+  "bad": [
+    "Tell me about your six years at Google and why you left?",
+    "Your manager Sana said you missed two deadlines last month. What happened?",
+    "How did you lead the team of 12 developers?"
+  ]
+}
