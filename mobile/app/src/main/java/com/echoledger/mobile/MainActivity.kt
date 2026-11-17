@@ -119,6 +119,10 @@ import com.echoledger.mobile.ui.isDarkTheme
 import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.promptUnlock
 import com.echoledger.mobile.ui.reconnectUnlockPrompt
+import com.echoledger.mobile.ui.v2.shell.ClassicScreens
+import com.echoledger.mobile.ui.v2.shell.EchoV2Shell
+import com.echoledger.mobile.ui.v2.shell.UiFlagLatch
+import com.echoledger.mobile.ui.v2.shell.UiFlags
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -446,7 +450,20 @@ class MainActivity : FragmentActivity() {
                 openSession = null
             }
         }
+        // Interface flags (contract 2.0.0-a): the server decides them; a change applies on the next screen the person
+        // opens, never in the middle of a recording.
+        val flagLatch = remember { UiFlagLatch() }
+        flagLatch.offer(UiFlags(settings.uiFlags, settings.uiClassic))
+        // The person's own "Switch back to classic" (or its undo) is a screen they open at once.
+        val flags = remember(loaded, tab, openItemId, showSetup, showWaiting, sharedNotes, recheck, settings.uiClassic) {
+            flagLatch.screenOpened(recording = RecordingService.live.value.active)
+        }
+        val shellOn = flags.shell
+        var shellPlans by rememberSaveable { mutableStateOf(false) }
+
         LaunchedEffect(message) {
+            // The v2 shell shows the messages as its own toasts.
+            if (shellOn) return@LaunchedEffect
             message?.let {
                 notices.show(com.echoledger.mobile.core.Notice(it, target = vm.messageTarget.value))
                 vm.consumeMessage()
@@ -462,6 +479,84 @@ class MainActivity : FragmentActivity() {
             showSetup = false
         }
 
+        // The classic tabs, the same in the classic layout and inside the v2 shell (where an area's flag is off).
+        val activityTab: @Composable () -> Unit = {
+            ActivityScreen(
+                load = { vm.activity() },
+                markRead = { vm.markActivityRead(it) },
+                onOpen = { id -> openSession = id },
+                onUnread = { activityUnread = it },
+                waiting = pending.filter { it.state == "pending_decision" },
+                onOpenWaiting = { showWaiting = true },
+                scrollToTop = reselected,
+                skipped = pending.filter { it.state == com.echoledger.mobile.calls.SkippedCalls.STATE },
+                onRestore = { vm.restoreSkipped(it) },
+                missed = missed,
+                onFix = { fix ->
+                    when (fix) {
+                        com.echoledger.mobile.calls.MissedFix.TEST -> {
+                            showItem(null)
+                            showSetup = true
+                        }
+
+                        com.echoledger.mobile.calls.MissedFix.PLANS -> if (shellOn) {
+                            shellPlans = true
+                        } else {
+                            settingsPage = "plan"
+                            tab = TAB_YOU
+                        }
+
+                        // Auto-record was not running: the Ready check turns it on.
+                        com.echoledger.mobile.calls.MissedFix.TURN_ON -> {
+                            readyFix = ReadyFix.TURN_ON
+                            showReady = true
+                        }
+
+                        else -> showReady = true
+                    }
+                },
+                onMissedRead = { vm.readMissed(it) },
+                onMissedDismiss = { vm.dismissMissed(it) }
+            )
+        }
+        val libraryTab: @Composable () -> Unit = {
+            LibraryScreen(
+                vm,
+                readiness = readiness,
+                onReady = { showReady = true },
+                onOpenAt = { item, ms ->
+                    openAtMs = ms
+                    showItem(item)
+                },
+                waiting = pending.filter { it.state == "pending_decision" },
+                onOpenWaiting = { showWaiting = true },
+                onSelecting = { librarySelecting = it },
+                scrollToTop = reselected
+            ) { showItem(it) }
+        }
+        val recordTab: @Composable () -> Unit = {
+            RecordScreen(
+                vm,
+                caps,
+                onSetup = { showSetup = true },
+                mode = recordMode,
+                onReviewWaiting = { showWaiting = true }
+            )
+        }
+        val projectsTab: @Composable () -> Unit = {
+            ProjectsScreen(vm, onOpenItem = {
+                showItem(it)
+            }, scrollToTop = reselected, onOpenAt = { id, ms ->
+                // A call note or an answer's source: the recording opens at that moment.
+                val item = libraryItems.firstOrNull { it.id == id && !it.deleted }
+                if (item != null) {
+                    openAtMs = ms
+                    showItem(item)
+                } else {
+                    openSession = id
+                }
+            })
+        }
         CompositionLocalProvider(LocalUnlockPrompter provides prompter, com.echoledger.mobile.ui.design.LocalNotices provides notices) {
             upgradeLock?.let { lock -> com.echoledger.mobile.ui.UpgradeSheet(vm, settings.plan, lock) { upgradeLock = null } }
             if (showReady) {
@@ -533,7 +628,7 @@ class MainActivity : FragmentActivity() {
                 bottomBar = {
                     val selectingNow = librarySelecting && tab == TAB_LIBRARY
                     if (unlocked && settings.onboardingDone && settings.paired && openItem == null && !showSetup && sharedNotes == null &&
-                        !selectingNow
+                        !selectingNow && !shellOn
                     ) {
                         Column {
                             if (live.active && tab != TAB_RECORD) {
@@ -636,7 +731,7 @@ class MainActivity : FragmentActivity() {
 
                         // A row opens its recording with a shared transition (since v1.3): the app tile and the title
                         // move into place; the rest fades.
-                        else -> SharedTransitionLayout {
+                        !shellOn -> SharedTransitionLayout {
                             AnimatedContent(
                                 targetState = openItem,
                                 contentKey = { it?.id },
@@ -663,62 +758,11 @@ class MainActivity : FragmentActivity() {
                                             label = "tab"
                                         ) { current ->
                                             when (current) {
-                                                TAB_CLIENTS -> ProjectsScreen(vm, onOpenItem = {
-                                                    showItem(it)
-                                                }, scrollToTop = reselected, onOpenAt = { id, ms ->
-                                                    // A call note or an answer's source: the recording opens at that moment.
-                                                    val item = libraryItems.firstOrNull { it.id == id && !it.deleted }
-                                                    if (item != null) {
-                                                        openAtMs = ms
-                                                        showItem(item)
-                                                    } else {
-                                                        openSession = id
-                                                    }
-                                                })
+                                                TAB_CLIENTS -> projectsTab()
 
-                                                TAB_RECORD -> RecordScreen(
-                                                    vm,
-                                                    caps,
-                                                    onSetup = { showSetup = true },
-                                                    mode = recordMode,
-                                                    onReviewWaiting = { showWaiting = true }
-                                                )
+                                                TAB_RECORD -> recordTab()
 
-                                                TAB_ACTIVITY -> ActivityScreen(
-                                                    load = { vm.activity() },
-                                                    markRead = { vm.markActivityRead(it) },
-                                                    onOpen = { id -> openSession = id },
-                                                    onUnread = { activityUnread = it },
-                                                    waiting = pending.filter { it.state == "pending_decision" },
-                                                    onOpenWaiting = { showWaiting = true },
-                                                    scrollToTop = reselected,
-                                                    skipped = pending.filter { it.state == com.echoledger.mobile.calls.SkippedCalls.STATE },
-                                                    onRestore = { vm.restoreSkipped(it) },
-                                                    missed = missed,
-                                                    onFix = { fix ->
-                                                        when (fix) {
-                                                            com.echoledger.mobile.calls.MissedFix.TEST -> {
-                                                                showItem(null)
-                                                                showSetup = true
-                                                            }
-
-                                                            com.echoledger.mobile.calls.MissedFix.PLANS -> {
-                                                                settingsPage = "plan"
-                                                                tab = TAB_YOU
-                                                            }
-
-                                                            // Auto-record was not running: the Ready check turns it on.
-                                                            com.echoledger.mobile.calls.MissedFix.TURN_ON -> {
-                                                                readyFix = ReadyFix.TURN_ON
-                                                                showReady = true
-                                                            }
-
-                                                            else -> showReady = true
-                                                        }
-                                                    },
-                                                    onMissedRead = { vm.readMissed(it) },
-                                                    onMissedDismiss = { vm.dismissMissed(it) }
-                                                )
+                                                TAB_ACTIVITY -> activityTab()
 
                                                 TAB_YOU -> SettingsScreen(
                                                     vm,
@@ -728,25 +772,51 @@ class MainActivity : FragmentActivity() {
                                                     onPageOpened = { settingsPage = null }
                                                 )
 
-                                                else -> LibraryScreen(
-                                                    vm,
-                                                    readiness = readiness,
-                                                    onReady = { showReady = true },
-                                                    onOpenAt = { item, ms ->
-                                                        openAtMs = ms
-                                                        showItem(item)
-                                                    },
-                                                    waiting = pending.filter { it.state == "pending_decision" },
-                                                    onOpenWaiting = { showWaiting = true },
-                                                    onSelecting = { librarySelecting = it },
-                                                    scrollToTop = reselected
-                                                ) { showItem(it) }
+                                                else -> libraryTab()
                                             }
                                         }
                                     }
                                 }
                             }
                         }
+
+                        // The v2 shell (behind `ui_v2.shell`, contract 2.0.0-a): its own navigation and toasts; every area whose own
+                        // flag is off shows the classic screen here.
+                        shellPlans -> {
+                            BackHandler { shellPlans = false }
+                            SettingsScreen(vm, onSetup = { showSetup = true }, openPage = "plan")
+                        }
+
+                        openItem != null -> SessionScreen(vm, openItem, onBack = {
+                            showItem(null)
+                            openAtMs = null
+                        }, startAtMs = openAtMs, onCaptureTest = {
+                            showItem(null)
+                            showSetup = true
+                        })
+
+                        else -> EchoV2Shell(
+                            vm,
+                            flags,
+                            darkTheme = isDarkTheme(settings.themeMode),
+                            classic = ClassicScreens(
+                                home = activityTab,
+                                library = libraryTab,
+                                live = recordTab,
+                                ask = projectsTab,
+                                settings = { onBack ->
+                                    BackHandler(onBack = onBack)
+                                    SettingsScreen(vm, onSetup = { showSetup = true })
+                                },
+                                upgrade = { shellPlans = true },
+                                settingsPage = { page, onBack ->
+                                    BackHandler(onBack = onBack)
+                                    SettingsScreen(vm, onSetup = { showSetup = true }, openPage = page)
+                                },
+                                setup = { onBack -> SetupScreen(vm, caps, onBack = onBack, onRecheck = { recheck++ }) }
+                            ),
+                            onSwitchToClassic = vm::setClassicUi
+                        )
                     }
                 }
             }

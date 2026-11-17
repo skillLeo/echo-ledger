@@ -62,7 +62,15 @@ data class LocalRecording(
     /** Since v1.8.1, for state "discarding": when the after-call chip's Undo time is over and the file goes (an instant). */
     val discardAt: String? = null,
     /** Since v1.8.1, for state "discarding": the state Undo brings back ("pending_decision", or "queued" for a kept call). */
-    val discardedFrom: String? = null
+    val discardedFrom: String? = null,
+    /**
+     * Since v1.8.1: the server session an upload reached while the call was being discarded; it is deleted with the
+     * call, and an Undo brings it back ([restoreServerCopy]: its delete may have run, so the server restores it first).
+     */
+    val serverCopy: String? = null,
+    val restoreServerCopy: Boolean = false,
+    /** Since v1.8.1: the reference a fresh upload uses when its first server copy could no longer be restored. */
+    val clientRef: String? = null
 )
 
 /**

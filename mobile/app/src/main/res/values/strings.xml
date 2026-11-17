@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources>
+<!-- The classic screens' strings: English only on purpose until v2 replaces those screens. Lint's MissingTranslation is
+     off for this file alone; every v2_* string (the strings_v2_*.xml files) keeps the check. -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:ignore="MissingTranslation">
     <string name="app_name">EchoLedger</string>
     <string name="share_label">Transcribe with EchoLedger</string>
     <string name="tile_label">EchoLedger record</string>

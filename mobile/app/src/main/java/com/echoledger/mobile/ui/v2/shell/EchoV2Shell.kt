@@ -107,21 +107,12 @@ fun EchoV2Shell(
         val toasts = remember { EchoToastState(clock) }
         CompositionLocalProvider(LocalEchoToasts provides toasts) {
             MessagesToToasts(vm, toasts)
-            RememberHelperMethod(vm)
             Box(modifier.fillMaxSize().background(EchoV2.colors.bgCanvas)) {
                 ShellBody(vm, flags, classic, onSwitchToClassic)
                 EchoToastHost(toasts, Modifier.align(Alignment.BottomCenter))
             }
         }
     }
-}
-
-/** Keeps how the capture helper was started (Shizuku or the computer), for Setup & health after a restart. */
-@Composable
-private fun RememberHelperMethod(vm: MainViewModel) {
-    val helper by vm.helper.collectAsState()
-    val context = LocalContext.current
-    LaunchedEffect(helper) { HelperMethodMemory.remember(context.applicationContext, helper) }
 }
 
 /** The view model's one-line messages ("Restored", "Offline …") become toasts, so there is one feedback system. */
@@ -180,14 +171,14 @@ private fun ShellBody(vm: MainViewModel, flags: UiFlags, classic: ClassicScreens
 
                 V2Route.ClassicSettings -> classic.settings { route = V2Route.Settings }
 
-                // TODO(phone core): pass the config's trash.keep_hours (contract 2.0.0-b) once the data layer parses it.
                 V2Route.Setup -> SetupPage(vm, flags, classic, null) { route = V2Route.Tabs }
 
                 is V2Route.ClassicPage -> classic.settingsPage(r.id) { route = V2Route.Tabs }
 
                 is V2Route.Live -> classic.liveEntry(r.entry) { route = V2Route.Tabs }
 
-                V2Route.Trash -> V2TrashScreen(vm, configKeepHours = null, onBack = { route = V2Route.Tabs })
+                // The server's Trash time (contract 2.0.0-b, trash.keep_hours; 48 on an older server).
+                V2Route.Trash -> V2TrashScreen(vm, configKeepHours = settings.trashKeepHours, onBack = { route = V2Route.Tabs })
 
                 is V2Route.Recording -> {
                     val item = library.firstOrNull { it.id == r.id }

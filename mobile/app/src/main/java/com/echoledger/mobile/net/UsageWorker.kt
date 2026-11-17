@@ -100,8 +100,24 @@ class DiscardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         }
     }
 
+    /** Whether a server delete was stopped before it ran, or may have run (finished or under way). */
+    enum class Stopped { NOT_RUN, MAYBE_RAN }
+
     companion object {
         const val KEY_SESSION = "session_id"
+
+        /** Stops the delete of [recordingId]'s server session (an Undo, since v1.8.1); says whether it may have run. */
+        fun cancelBeforeItRuns(context: Context, recordingId: String): Stopped {
+            val work = WorkManager.getInstance(context)
+            val states = runCatching {
+                work.getWorkInfosForUniqueWork(workName(recordingId)).get().map { it.state }
+            }.getOrDefault(emptyList())
+            work.cancelUniqueWork(workName(recordingId))
+            val ran = states.any { it == androidx.work.WorkInfo.State.SUCCEEDED || it == androidx.work.WorkInfo.State.RUNNING }
+            return if (ran) Stopped.MAYBE_RAN else Stopped.NOT_RUN
+        }
+
+        fun workName(recordingId: String) = "discard-$recordingId"
 
         fun enqueue(context: Context, recordingId: String, sessionId: String) {
             val request = OneTimeWorkRequestBuilder<DiscardWorker>()
@@ -109,7 +125,7 @@ class DiscardWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 60, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork("discard-$recordingId", ExistingWorkPolicy.KEEP, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(workName(recordingId), ExistingWorkPolicy.KEEP, request)
         }
     }
 }

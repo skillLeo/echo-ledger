@@ -77,7 +77,6 @@ fun rememberSetupFacts(vm: MainViewModel, recheck: Int): SetupFacts {
     val settings by vm.settings.collectAsState()
     var resumed by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { resumed++ }
-    LaunchedEffect(helper) { HelperMethodMemory.remember(context, helper) }
     return remember(helper, arm, settings, recheck, resumed) {
         SetupFacts(
             ready = ReadinessWatch.facts(context, settings, app.graph.helper),
