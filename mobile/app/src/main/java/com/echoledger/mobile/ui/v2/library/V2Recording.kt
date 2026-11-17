@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -115,7 +116,11 @@ fun V2RecordingScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
     startAtMs: Long? = null,
-    backToSource: Pair<String, () -> Unit>? = null
+    backToSource: Pair<String, () -> Unit>? = null,
+    /** No audio's Run capture test. */
+    onCaptureTest: () -> Unit = {},
+    /** Opens a Settings page by its id ("Check your key" opens the Transcription key page). */
+    onOpenSettings: (String) -> Unit = {}
 ) {
     val text = v2Text
     val page = rememberRecordingPage(vm, item, startAtMs)
@@ -136,7 +141,7 @@ fun V2RecordingScreen(
             )
             return@CompositionLocalProvider
         }
-        V2RecordingPage(vm, page, text, { viewing = it }, onBack, modifier, backToSource)
+        V2RecordingPage(vm, page, text, { viewing = it }, onBack, modifier, backToSource, onCaptureTest, onOpenSettings)
     }
 }
 
@@ -151,7 +156,9 @@ private fun V2RecordingPage(
     onOpenScreen: (Int) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier,
-    backToSource: Pair<String, () -> Unit>?
+    backToSource: Pair<String, () -> Unit>?,
+    onCaptureTest: () -> Unit,
+    onOpenSettings: (String) -> Unit
 ) {
     val context = LocalContext.current
     val toasts = LocalEchoToasts.current
@@ -367,7 +374,9 @@ private fun V2RecordingPage(
         onFindClose = {
             finding = false
             findQuery = ""
-        }
+        },
+        top = transcriptTop(vm, page, scope),
+        instead = transcriptInstead(vm, page, settings, onCaptureTest, onOpenSettings) { sheet = RecordingSheet.Delete }
     )
 
     // The page keeps showing the recording as the Library has it now (its labels, pin and project change here).
@@ -393,6 +402,16 @@ private fun V2RecordingPage(
         onMore = { sheet = RecordingSheet.Menu },
         onRename = { sheet = RecordingSheet.Rename },
         tools = tools,
+        summary = {
+            SummaryPane(
+                vm,
+                live,
+                ready = finalReady,
+                notesOnPlan = settings.plan.aiNotes,
+                onPlay = { page.playFrom(it) },
+                onPlans = { upgrading = true }
+            )
+        },
         head = RecordingHead(
             device = item.sourceDeviceLabel ?: item.device?.name,
             bookmarks = page.bookmarks,
@@ -410,6 +429,81 @@ private val SPEEDS = com.echoledger.mobile.ui.PLAYER_SPEEDS
 fun nextSpeed(current: Float): Float = SPEEDS.firstOrNull { it > current + 0.01f } ?: SPEEDS.first()
 
 fun speedLabel(speed: Float): String = java.math.BigDecimal(speed.toString()).stripTrailingZeros().toPlainString() + "×"
+
+/** Above a readable transcript (classic's order): Improving…, the backup engine's offer, suggested fixes. */
+private fun transcriptTop(vm: MainViewModel, page: RecordingPage, scope: kotlinx.coroutines.CoroutineScope): (@Composable () -> Unit)? {
+    val t = page.transcript ?: return null
+    val steps = page.steps
+    val improving = steps != null && steps.onlyImproving
+    val backup = t.backupEngine && t.kind == "final"
+    if (!improving && !backup && t.suggestions.isEmpty()) return null
+    return {
+        Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+            if (improving && steps != null) ImprovingLine(page.item, t, steps)
+            if (backup) BackupBanner { vm.retranscribe(page.item.id, t.language) }
+            if (t.suggestions.isNotEmpty()) {
+                SuggestedFixesCard(t.suggestions, t.segments, onPlay = { page.playFrom(it) }) { id, accept ->
+                    scope.launch { vm.decideSuggestion(t.id, id, accept)?.let { page.transcript = it } }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The transcript's state when there are no lines to read (classic's order): no audio, the steps on its way, a failure
+ * (Retry, or Check your key), still being transcribed, or empty; null leaves it to the lines or the loading states.
+ */
+private fun transcriptInstead(
+    vm: MainViewModel,
+    page: RecordingPage,
+    settings: com.echoledger.mobile.data.AppSettings,
+    onCaptureTest: () -> Unit,
+    onOpenSettings: (String) -> Unit,
+    onDelete: () -> Unit
+): (@Composable () -> Unit)? {
+    val t = page.transcript
+    val steps = page.steps
+    val item = page.item
+    return when {
+        page.noAudio -> ({ NoAudioCard(onCaptureTest, onDelete) })
+
+        !page.loaded -> null
+
+        t == null && page.loadFailed -> null
+
+        t == null && steps != null && steps.working -> ({ StepsBlock(item, null, steps) { vm.notifyWhenReady(item.id) } })
+
+        t == null -> null
+
+        t.status == "failed" -> (
+            {
+                val checkKey = t.errorCode == "own_key_rejected" &&
+                    !com.echoledger.mobile.ui.KeyRetry.newerKey(settings.ownKeySavedAt, item.updatedAt)
+                FailedBanner(
+                    t,
+                    checkKey,
+                    onRetry = { vm.retranscribe(item.id, t.language) },
+                    onCheckKey = { onOpenSettings(com.echoledger.mobile.ui.TRANSCRIPTION_KEY_PAGE) }
+                )
+            }
+            )
+
+        t.status in RecordingPage.IN_PROGRESS && steps != null && steps.working -> (
+            {
+                StepsBlock(item, t, steps) { vm.notifyWhenReady(item.id) }
+            }
+            )
+
+        t.status !in RecordingPage.IN_PROGRESS && t.segments.isEmpty() -> (
+            {
+                Text(stringResource(R.string.v2_rec_empty), style = EchoV2.type.body, color = EchoV2.colors.textSecondary)
+            }
+            )
+
+        else -> null
+    }
+}
 
 /**
  * The transcript's toolbar and lines on the recording page: the view switch (or the views locked on this plan), Current /
@@ -440,7 +534,11 @@ data class TranscriptTools(
     val foundIndex: Int? = null,
     val onFindQuery: (String) -> Unit = {},
     val onFindStep: (Int) -> Unit = {},
-    val onFindClose: () -> Unit = {}
+    val onFindClose: () -> Unit = {},
+    /** Above the lines: Improving…, the backup engine's offer, suggested fixes. */
+    val top: (@Composable () -> Unit)? = null,
+    /** In place of the transcript's own state: no audio, the steps on its way, a failure, an empty transcript. */
+    val instead: (@Composable () -> Unit)? = null
 )
 
 /** The recording page without the view model or the player (tests). */
@@ -471,7 +569,9 @@ fun V2RecordingContent(
     /** The transcript's toolbar and lines (views, find, playing from a line, speaker names); defaults draw plain lines. */
     tools: TranscriptTools = TranscriptTools(),
     /** The head's extras: the device, bookmarks, skip silence. */
-    head: RecordingHead = RecordingHead()
+    head: RecordingHead = RecordingHead(),
+    /** The Summary tab (call notes); null: says there is no summary here. */
+    summary: (@Composable () -> Unit)? = null
 ) {
     val res = LocalContext.current.resources
     val c = EchoV2.colors
@@ -587,9 +687,30 @@ fun V2RecordingContent(
             if (screens.isNotEmpty()) {
                 item { ScreensStrip(screens, onOpen = onOpenScreen, modifier = Modifier.padding(bottom = EchoTokens.Space.s8)) }
             }
-            item { EchoTabs(listOf(text.transcript, text.details), tab, onSelect = { tab = it }) }
+            item {
+                EchoTabs(
+                    listOf(
+                        text.transcript,
+                        stringResource(R.string.v2_rec_tab_summary),
+                        stringResource(R.string.v2_rec_tab_moments),
+                        text.details
+                    ),
+                    tab,
+                    onSelect = { tab = it }
+                )
+            }
             if (tab == 1) {
+                item { summary?.invoke() ?: SummaryUnavailable() }
+            } else if (tab == 2) {
+                item { MomentsPane(head.bookmarks, screens, head.onBookmark, onOpenScreen) }
+            } else if (tab == 3) {
                 item { DetailRows(item, row, text, head) }
+            } else if (tools.instead != null) {
+                item {
+                    Box(Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s12)) {
+                        tools.instead.invoke()
+                    }
+                }
             } else {
                 when (transcript) {
                     TranscriptState.Loading -> item { EchoSkeletonList(4, avatar = false) }
@@ -618,6 +739,7 @@ fun V2RecordingContent(
                                     tools.available.isNotEmpty() -> ViewSwitch(tools.available, tools.showAs, tools.views, tools.onView)
                                 }
                                 tools.final?.let { TranscriptKind(it) }
+                                tools.top?.invoke()
                             }
                         }
                         // Each screen sits after the last line that started at or before its moment.
@@ -647,6 +769,14 @@ fun V2RecordingContent(
         }
     }
 }
+
+@Composable
+private fun SummaryUnavailable() = Text(
+    stringResource(R.string.v2_rec_notes_need_project),
+    style = EchoV2.type.body,
+    color = EchoV2.colors.textSecondary,
+    modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s12)
+)
 
 @Composable
 private fun DetailRows(item: LibraryItem, row: V2Row, text: V2Text, head: RecordingHead) {

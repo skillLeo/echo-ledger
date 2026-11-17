@@ -469,4 +469,116 @@ class RecordingPageTest : ScreenTest() {
         listOf("Device", "Pixel 9", "Length", "Recorded", "Project", "Acme Holdings", "Labels", "urgent", "Kept", "Forever", "Pinned")
             .forEach { compose.onAllNodesWithText(it).onFirst().assertExists() }
     }
+
+    private fun transcriptJson(extra: String = "", status: String = "completed", errorCode: String? = null, segments: String? = null) =
+        ServerFixtures.transcript(status = status, errorCode = errorCode, segments = segments ?: ServerFixtures.DEFAULT_SEGMENTS)
+            .trimEnd().removeSuffix("}") + extra + "}"
+
+    private fun serveTranscript(json: String) =
+        server.on("GET", "/api/transcripts/${ServerFixtures.TRANSCRIPT_ID}", FakeServer.json(200, json))
+
+    private var settingsOpened: String? = null
+    private var captureTests = 0
+
+    private fun openWithCallbacks(item: LibraryItem = item()) = show {
+        EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
+            val toasts = rememberEchoToastState()
+            CompositionLocalProvider(LocalEchoToasts provides toasts) {
+                V2RecordingScreen(vm, item, onBack = {
+                    backs++
+                }, onCaptureTest = { captureTests++ }, onOpenSettings = { settingsOpened = it })
+            }
+        }
+    }
+
+    @Test
+    fun openingTheRecordingMarksItOpened() {
+        open()
+        pumpUntil("opened") { ServerFixtures.SESSION_ID in vm.settings.value.libraryOpened }
+    }
+
+    @Test
+    fun aRecordingWithNoAudioSaysSoAndOffersTheCaptureTestAndDelete() {
+        serveTranscript(transcriptJson(status = "failed", errorCode = "no_audio", segments = "[]"))
+        openWithCallbacks()
+        awaitText("Nothing was heard in this recording")
+        press("Run capture test")
+        assertEquals(1, captureTests)
+        press("Delete")
+        compose.onNodeWithText("Delete this recording?").assertExists()
+    }
+
+    @Test
+    fun aRecordingOnItsWayShowsTheStepsAndNotifyMe() {
+        server.on("GET", "/api/transcripts/.+", FakeServer.json(404, """{"message":"No query results."}"""))
+        openWithCallbacks(item().let { it.copy(transcript = it.transcript!!.copy(finalStatus = "processing")) })
+        awaitText("Notify me when ready")
+        compose.onNode(hasContentDescription("Progress: Uploaded, Transcribing, Improve"), useUnmergedTree = true).assertExists()
+        press("Notify me when ready")
+        awaitText("You will get a notification when it is ready.")
+    }
+
+    @Test
+    fun aFailedTranscriptSaysWhyAndRetries() {
+        serveTranscript(transcriptJson(status = "failed", errorCode = "provider_timeout", segments = "[]"))
+        openWithCallbacks()
+        awaitText("Transcription took too long and was stopped.")
+        press("Retry")
+        pumpUntil("retried") { server.requestsTo("POST", "/api/sessions/.+/retranscribe").isNotEmpty() }
+    }
+
+    @Test
+    fun aRefusedOwnKeyOpensTheKeyPageInsteadOfRetrying() {
+        serveTranscript(transcriptJson(status = "failed", errorCode = "own_key_rejected", segments = "[]"))
+        openWithCallbacks()
+        awaitText("Groq did not accept your key.")
+        press("Check your key")
+        assertEquals("key", settingsOpened)
+        assertTrue(server.requestsTo("POST", "/api/sessions/.+/retranscribe").isEmpty())
+    }
+
+    @Test
+    fun anEmptyTranscriptSaysNoSpeechWasDetected() {
+        serveTranscript(transcriptJson(segments = "[]"))
+        openWithCallbacks()
+        awaitText("The transcript is empty: no speech was detected.")
+    }
+
+    @Test
+    fun aBackupEngineTranscriptOffersTheBestOneAndFixesCanBeAccepted() {
+        serveTranscript(
+            transcriptJson(
+                ""","backup_engine":true,"suggestions":[{"id":7,"index":1,"from":"Akme","to":"Acme","reason":"A project name"}]"""
+            )
+        )
+        server.on("POST", "/api/transcripts/.+/suggestions/7", FakeServer.json(200, ServerFixtures.transcript()))
+        openWithCallbacks()
+        awaitText("Made with a backup service.")
+        press("Re-transcribe")
+        pumpUntil("best engine asked") { server.requestsTo("POST", "/api/sessions/.+/retranscribe").isNotEmpty() }
+        awaitText("Suggested fixes")
+        press("Accept")
+        pumpUntil("fix accepted") { server.requestsTo("POST", "/api/transcripts/.+/suggestions/7").isNotEmpty() }
+    }
+
+    @Test
+    fun summaryAndMomentsTabsSayWhatTheyHave() {
+        server.on(
+            "GET",
+            "/api/sessions/${ServerFixtures.SESSION_ID}",
+            FakeServer.json(
+                200,
+                ServerFixtures.sessionDetail(playbackUrl = null).trimEnd().removeSuffix("}") +
+                    ""","markers":[{"id":"m1","at_ms":83000,"tag":"Price"}]}"""
+            )
+        )
+        open()
+        awaitText("Hi, thanks for calling.")
+        press("Summary")
+        awaitText("Write call notes")
+        press("Write call notes")
+        pumpUntil("notes asked") { server.requestsTo("POST", "/api/sessions/.+/notes").isNotEmpty() }
+        press("Moments")
+        awaitText("Bookmark · Price")
+    }
 }
