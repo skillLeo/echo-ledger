@@ -12,6 +12,7 @@ package com.echoledger.mobile.e2e
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.echoledger.mobile.e2e.support.AppState
 import com.echoledger.mobile.e2e.support.E2eTest
+import com.echoledger.mobile.e2e.support.Library
 import com.echoledger.mobile.e2e.support.Shell
 import com.echoledger.mobile.e2e.support.Ui
 import org.junit.After
@@ -115,7 +116,7 @@ class AppLockTest : E2eTest() {
         Ui.awaitText("EchoLedger is locked", Ui.NORMAL)
         assertFalse(
             "screen content must not be readable through accessibility while the cover is shown",
-            Ui.has("Recordings from your phone, computer and the web") || Ui.has("All")
+            Ui.has(Library.SEARCH_HINT) || Ui.has("No recordings yet") || Ui.has("All")
         )
     }
 

@@ -40,7 +40,8 @@ class EmptyLibraryTest : E2eTest() {
         Ui.awaitText("No recordings yet")
         Ui.snapshot("library-empty")
         assertTrue(Ui.has("Calls, meetings and voice notes you capture will appear here."))
-        assertTrue(Ui.has("Recordings from your phone, computer and the web"))
+        // The Library's own title bar (its old subtitle went with the v1.3 redesign).
+        assertTrue(Ui.has("Library"))
         listOf("All", "Phone", "Desktop", "Web").forEach { assertTrue("filter chip $it", Ui.has(it)) }
         Ui.awaitDescription("Sync")
         Ui.awaitText(Library.SEARCH_HINT)
