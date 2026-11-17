@@ -1,4 +1,7 @@
-# Live Assist contract — revision 1.9.0-n (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-o (frozen 2026-11-17 for the sprint)
+
+1.9.0-o: Ask over a session; usage kind `ask`; a prep's mode, hint level and language help default to the person's
+Live Assist settings.
 
 1.9.0-n: what the apps must handle as the relay behaves (ends of a suggestion, every error code, context replaces,
 limits, reconnect, slow readers, practice ends, aliases), one relay connection per session, the "shown" report.
@@ -87,7 +90,8 @@ Errors added by Live Assist:
   `meeting_type`: `interview` | `boss` | `existing_client` | `new_client` | `general`; `hint_level`: `keywords` |
   `outline` | `full` (interview defaults to `outline`); `mode`: `fast` | `balanced` | `deep` | `max` (refused per
   plan at start, not at save); `language_help`: `off` | `urdu` | `roman_urdu` | `arabic`; `status`: `draft` |
-  `scheduled` | `armed` | `done` | `cancelled`. Text fields at most 4,000 characters each. Soft deleted.
+  `scheduled` | `armed` | `done` | `cancelled`. Text fields at most 4,000 characters each. Soft deleted. A prep created without `mode`, `hint_level` or
+  `language_help` takes the person's Live Assist settings for that meeting type (Live Assist → Settings).
 - `POST /api/assist/preps/{id}/documents` `{"file_ids": ["…"]}` attaches project files (the server extracts text and
   counts tokens); `GET /api/assist/preps/{id}` returns `documents: [{"file_id", "name", "tokens", "text"}]` (the
   text only on this single read, never in lists), and the app sends them in its first `context_update`; `DELETE /api/assist/preps/{id}/documents/{fileId}`.
@@ -133,6 +137,12 @@ Errors added by Live Assist:
   "talk_ratio", "pauses", "grammar": []}, "action_items": [], "memory_added", "follow_up_email", "facts",
   "running_summary", "suggestions", "used"}`; without the model (`ai.status` not `done`) the Q&A table, coaching,
   running summary and facts are still there · `DELETE /api/assist/sessions/{id}`.
+- `POST /api/assist/sessions/{id}/ask` — `sessions:write`, 20 a minute per person. `{"question": "…"}` (at most 500
+  characters) → `200 {"answer": "…", "citations": [{"at_ms", "channel", "text"}]}`: the answer comes only from the
+  session's own lines, summary and facts; citations are the session's own lines, never the model's words; nothing is
+  stored. Billed as usage kind `ask` to the session's allowance (reserved at the worst case before the call). `402
+  budget_exhausted`, `503 provider_not_configured`, `502` when the call fails, `422` for a question over the limit or a
+  session with nothing said.
 - `POST /api/assist/sessions/{id}/suggestions/{suggestionId}/action` `{"action": "shown" | "used" | "dismissed" |
   "regenerated" | "shorter" | "formal" | "translated"}` → `204`.
 
@@ -230,7 +240,7 @@ downgrade: `max → deep → balanced → fast → captions_only`, with `reason`
   `POST /api/internal/assist/facts` `{session_id, facts: [...], at}` and `POST /api/internal/assist/summary`
   `{session_id, summary, at}` replace what the server stored.
 - Usage kinds posted by the relay: `suggestion`, `practice_question`, `facts`, `summary`; idempotent per id. The
-  server's own report call is usage kind `report`, charged to the session's allowance. Practice
+  server's own calls are usage kinds `report` and `ask`, charged to the session's allowance. Practice
   usage is billed to the plan's Practice allowance.
 
 ### What the apps must handle (since 1.9.0-n)
