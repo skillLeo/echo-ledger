@@ -111,8 +111,9 @@ final class InternalAssistController extends Controller
                 'provider' => $data['provider'],
                 'model' => $data['model'],
                 'mode' => $data['mode'],
-                // The plan as it is now (the session's own if it changed since): what the admin panel's cost per plan counts.
-                'plan' => app(AssistPlans::class)->for($session->workspace_id)['claim'],
+                // The plan the session started on (the workspace's plan now for a session from before it was kept): what the
+                // admin panel's cost per plan counts.
+                'plan' => $session->plan ?? app(AssistPlans::class)->for($session->workspace_id)['key'],
                 'kind' => $data['kind'],
                 'trigger' => $data['trigger'] ?? null,
                 'outcome' => $data['outcome'] ?? null,

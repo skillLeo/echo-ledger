@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property string|null $assist_prep_id
  * @property string|null $capture_session_id
  * @property string $mode
- * @property string|null $plan the plan it started on (free, pro, ultra)
+ * @property string|null $plan the sold plan's key it started on (free, pro, business, personal, …)
  * @property bool $practice
  * @property string $platform
  * @property bool $auto_saved
