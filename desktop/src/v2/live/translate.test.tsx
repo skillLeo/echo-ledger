@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TRANSLATE_FEED, type TranslateFeed } from "../../lib/translate";
-import { callsOf, emitEvent, flushAsync, listenerCount, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, listenerCount, resetTauriMock, respond } from "../../test/tauri";
 import { collectControls, stale, unmapped, type ControlRole } from "../../test/parity";
 import { makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
@@ -150,6 +150,22 @@ describe("Live Translate v2", () => {
     fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
     await act(flushAsync);
     expect(callsOf("translate_apps")).toHaveLength(2);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a list that could not be read says so, never that nothing is playing; Refresh that works clears it", async () => {
+    fail("translate_apps", "Core Audio did not answer");
+    render(<LiveTranslateV2 run={run} />);
+    await act(flushAsync);
+    const list = screen.getByRole("combobox", { name: /^App to translate/ });
+    expect(list).toHaveTextContent("The apps playing sound could not be listed");
+    expect(list).not.toHaveTextContent("Nothing is playing sound");
+    expect(screen.getByRole("alert")).toHaveTextContent("The apps playing sound could not be listed: Core Audio did not answer. Press Refresh to try again.");
+    respond("translate_apps", [{ pid: 77, name: "Chrome" }]);
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await act(flushAsync);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("combobox", { name: /^App to translate/ })).toHaveTextContent("Choose an app playing sound");
   });
 });
 

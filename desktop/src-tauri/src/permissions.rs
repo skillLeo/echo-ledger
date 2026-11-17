@@ -544,4 +544,205 @@ mod tests {
         std::fs::write(&path, "not json").unwrap();
         assert_eq!(Memory::load(&path), Memory::default());
     }
+
+    /// Where the app locks a mutex field: per function, the names it calls (fn and method calls, by name) and whether
+    /// it locks the field itself.
+    struct Locks<'f> {
+        field: &'f str,
+        calls: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+        locks: std::collections::BTreeSet<String>,
+        /// How many functions of the app have each name: only a name defined once is followed.
+        defined: std::collections::BTreeMap<String, usize>,
+        current: Vec<String>,
+    }
+
+    /// `x.<field>.lock()`.
+    fn locks_field(e: &syn::Expr, field: &str) -> bool {
+        matches!(e, syn::Expr::MethodCall(m) if m.method == "lock" && matches!(&*m.receiver, syn::Expr::Field(f) if matches!(&f.member, syn::Member::Named(n) if n == field)))
+    }
+
+    /// The names of the calls in an expression or statement, and how many times it locks the field.
+    #[derive(Default)]
+    struct CallsIn<'f> {
+        field: &'f str,
+        names: Vec<String>,
+        field_locks: usize,
+        /// Leave nested blocks out: their statements are read on their own (a guard made in one dies at its end).
+        shallow: bool,
+        depth: usize,
+    }
+
+    impl<'ast> syn::visit::Visit<'ast> for CallsIn<'_> {
+        fn visit_expr_method_call(&mut self, m: &'ast syn::ExprMethodCall) {
+            if locks_field(&syn::Expr::MethodCall(m.clone()), self.field) {
+                self.field_locks += 1;
+            }
+            self.names.push(m.method.to_string());
+            syn::visit::visit_expr_method_call(self, m);
+        }
+        fn visit_expr_call(&mut self, c: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(p) = &*c.func {
+                self.names.extend(p.path.segments.last().map(|s| s.ident.to_string()));
+            }
+            syn::visit::visit_expr_call(self, c);
+        }
+        // A closure runs later, not where its guard lives.
+        fn visit_expr_closure(&mut self, _: &'ast syn::ExprClosure) {}
+        fn visit_block(&mut self, b: &'ast syn::Block) {
+            if self.shallow && self.depth > 0 {
+                return;
+            }
+            self.depth += 1;
+            syn::visit::visit_block(self, b);
+            self.depth -= 1;
+        }
+    }
+
+    fn calls_in<'f>(field: &'f str, visit: impl FnOnce(&mut CallsIn<'f>)) -> CallsIn<'f> {
+        let mut found = CallsIn { field, ..Default::default() };
+        visit(&mut found);
+        found
+    }
+
+    impl<'ast> syn::visit::Visit<'ast> for Locks<'_> {
+        fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+            let test = m.attrs.iter().any(|a| a.path().is_ident("cfg") && a.parse_args::<syn::Ident>().is_ok_and(|i| i == "test"));
+            if !test {
+                syn::visit::visit_item_mod(self, m);
+            }
+        }
+        fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+            self.function(f.sig.ident.to_string(), |v| syn::visit::visit_item_fn(v, f), |c| syn::visit::Visit::visit_block(c, &f.block));
+        }
+        fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+            self.function(f.sig.ident.to_string(), |v| syn::visit::visit_impl_item_fn(v, f), |c| syn::visit::Visit::visit_block(c, &f.block));
+        }
+    }
+
+    impl<'f> Locks<'f> {
+        fn function<'a>(&mut self, name: String, visit: impl FnOnce(&mut Self), body: impl FnOnce(&mut CallsIn<'f>)) {
+            let found = calls_in(self.field, body);
+            if found.field_locks > 0 {
+                self.locks.insert(name.clone());
+            }
+            *self.defined.entry(name.clone()).or_default() += 1;
+            self.calls.entry(name.clone()).or_default().extend(found.names);
+            self.current.push(name);
+            visit(self);
+            self.current.pop();
+        }
+
+        /// Every function that locks the field, itself or through calls (by name; a name the app gives several
+        /// functions, `run` or `new`, is not followed: the lockers have their own).
+        fn lockers(&self) -> std::collections::BTreeSet<String> {
+            let mut found = self.locks.clone();
+            loop {
+                let more: Vec<String> = self
+                    .calls
+                    .iter()
+                    .filter(|(f, c)| !found.contains(*f) && self.defined.get(*f) == Some(&1) && c.iter().any(|n| found.contains(n)))
+                    .map(|(f, _)| f.clone())
+                    .collect();
+                if more.is_empty() {
+                    return found;
+                }
+                found.extend(more);
+            }
+        }
+    }
+
+    /// `<field>.lock()` bound by a `let` (with `.unwrap…`/`.expect…` after it): the guard lives to the end of the block.
+    fn binds_guard(local: &syn::Local, field: &str) -> bool {
+        let Some(init) = &local.init else { return false };
+        let mut e = &*init.expr;
+        while let syn::Expr::MethodCall(m) = e {
+            if locks_field(e, field) {
+                return true;
+            }
+            if !["unwrap_or_else", "unwrap", "expect"].contains(&m.method.to_string().as_str()) {
+                return false;
+            }
+            e = &m.receiver;
+        }
+        false
+    }
+
+    /// Every place a guard on `field` is alive while something that locks `field` again runs: a temporary guard and
+    /// such a call in one statement (a struct literal's fields, an argument list), or a bound guard and such a call
+    /// later in its block.
+    fn guards_alive_while_locked_again(field: &str) -> (Vec<String>, usize) {
+        fn files(dir: &std::path::Path, out: &mut Vec<(String, syn::File)>) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    files(&path, out);
+                } else if path.extension().is_some_and(|e| e == "rs") && path.file_name().is_some_and(|n| n != "tests.rs") {
+                    out.push((path.display().to_string(), syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap()));
+                }
+            }
+        }
+        let mut all = Vec::new();
+        files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut all);
+        let mut locks = Locks { field, calls: Default::default(), locks: Default::default(), defined: Default::default(), current: Vec::new() };
+        for (_, file) in &all {
+            syn::visit::Visit::visit_file(&mut locks, file);
+        }
+        let lockers = locks.lockers();
+
+        struct Blocks<'a, 'f> {
+            field: &'f str,
+            lockers: &'a std::collections::BTreeSet<String>,
+            file: String,
+            found: Vec<String>,
+            sites: usize,
+        }
+        impl<'ast> syn::visit::Visit<'ast> for Blocks<'_, '_> {
+            fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+                let test = m.attrs.iter().any(|a| a.path().is_ident("cfg") && a.parse_args::<syn::Ident>().is_ok_and(|i| i == "test"));
+                if !test {
+                    syn::visit::visit_item_mod(self, m);
+                }
+            }
+            fn visit_block(&mut self, block: &'ast syn::Block) {
+                for (i, stmt) in block.stmts.iter().enumerate() {
+                    let here = calls_in(self.field, |c| {
+                        (c.shallow, c.depth) = (true, 1);
+                        syn::visit::Visit::visit_stmt(c, stmt)
+                    });
+                    if here.field_locks == 0 {
+                        continue;
+                    }
+                    self.sites += here.field_locks;
+                    let bound = matches!(stmt, syn::Stmt::Local(l) if binds_guard(l, self.field));
+                    let again: Vec<String> = if bound {
+                        // Alive to the end of the block.
+                        block.stmts[i + 1..].iter().flat_map(|s| calls_in(self.field, |c| syn::visit::Visit::visit_stmt(c, s)).names).filter(|n| self.lockers.contains(n)).collect()
+                    } else {
+                        here.names.iter().filter(|n| self.lockers.contains(*n)).cloned().collect()
+                    };
+                    let twice = if bound { 0 } else { here.field_locks.saturating_sub(1) };
+                    if !again.is_empty() || twice > 0 {
+                        let text = quote::ToTokens::to_token_stream(stmt).to_string();
+                        self.found.push(format!("{}: {} lock again while its guard lives ({:?}{}): {}", self.file, self.field, again, if twice > 0 { ", locked twice in one statement" } else { "" }, &text[..text.len().min(160)]));
+                    }
+                }
+                syn::visit::visit_block(self, block);
+            }
+        }
+        let mut blocks = Blocks { field, lockers: &lockers, file: String::new(), found: Vec::new(), sites: 0 };
+        for (path, file) in &all {
+            blocks.file = path.rsplit("/src/").next().unwrap_or(path).to_string();
+            syn::visit::Visit::visit_file(&mut blocks, file);
+        }
+        (blocks.found, blocks.sites)
+    }
+
+    #[test]
+    fn no_permission_memory_guard_lives_while_it_is_locked_again() {
+        // A guard left alive in permissions_status's struct literal while a later field locked the memory again froze
+        // the app: a std mutex never lets its own holder in. Each read takes a copy (permission_memory_now) instead.
+        let (found, sites) = guards_alive_while_locked_again("permission_memory");
+        assert!(found.is_empty(), "{}", found.join("\n"));
+        assert!(sites >= 3, "the check sees the memory's locks ({sites})");
+    }
 }

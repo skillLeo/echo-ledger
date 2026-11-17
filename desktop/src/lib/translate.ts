@@ -109,6 +109,18 @@ export interface TranslateStartRequest {
   speed: TranslateSpeed;
 }
 
+/** The app list's first line (pure): what to do, or why there is nothing to pick. A list that could not be read says
+ * so: "Nothing is playing sound" is said only when the list came back empty. */
+export function appsPrompt(count: number, failed: boolean): string {
+  if (failed) return "The apps playing sound could not be listed";
+  return count ? "Choose an app playing sound" : "Nothing is playing sound";
+}
+
+/** Why the app list could not be read, and what to do (pure). */
+export function appsFailure(message: string): string {
+  return `The apps playing sound could not be listed: ${message}. Press Refresh to try again.`;
+}
+
 /** The Live Translate commands (wrapped in ipc.ts with the others, where the contract test checks them). */
 export const translateApi = {
   apps: () => api.translateApps(),

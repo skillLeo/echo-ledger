@@ -4,9 +4,9 @@
 // it on screen, and Stop.
 import { useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import type { LiveTranslateAvailability } from "../../lib/ipc";
+import { errorMessage, type LiveTranslateAvailability } from "../../lib/ipc";
 import {
-  TRANSLATE_FEED, TRANSLATE_TARGETS, UNAVAILABLE_WORDS, endedWords, translateApi, translatePhase, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed,
+  TRANSLATE_FEED, TRANSLATE_TARGETS, UNAVAILABLE_WORDS, appsFailure, appsPrompt, endedWords, translateApi, translatePhase, type TranslateApp, type TranslateFeed, type TranslateMode, type TranslateSpeed,
 } from "../../lib/translate";
 import { Button, Card, Icons, Select, Status } from "../components";
 
@@ -47,13 +47,24 @@ export function LiveTranslateV2({ run, unavailable = null, planBadge }: {
 
 function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string) => Promise<T | undefined> }) {
   const [apps, setApps] = useState<TranslateApp[]>([]);
+  const [appsError, setAppsError] = useState<string | null>(null);
   const [pid, setPid] = useState<number | null>(null);
   const [mode, setMode] = useState<TranslateMode>("game");
   const [target, setTarget] = useState("en");
   const [speed, setSpeed] = useState<TranslateSpeed>("fastest");
   const [feed, setFeed] = useState<TranslateFeed | null>(null);
   const [taken, setTaken] = useState<string[]>([]);
-  const refresh = () => void translateApi.apps().then(setApps).catch(() => setApps([]));
+  const refresh = () =>
+    void translateApi
+      .apps()
+      .then((list) => {
+        setApps(list);
+        setAppsError(null);
+      })
+      .catch((e: unknown) => {
+        setApps([]);
+        setAppsError(errorMessage(e));
+      });
   useEffect(() => {
     refresh();
     void translateApi.status().then(setFeed).catch(() => undefined);
@@ -99,9 +110,10 @@ function LiveTranslateForm({ run }: { run: <T>(fn: () => Promise<T>, ok?: string
       <div className="el-translate__app">
         <Select label="App to translate" value={pid === null ? "" : String(pid)} disabled={busy}
           onChange={(v) => setPid(v ? Number(v) : null)}
-          options={[{ value: "", label: apps.length ? "Choose an app playing sound" : "Nothing is playing sound" }, ...apps.map((a) => ({ value: String(a.pid), label: a.name }))]} />
+          options={[{ value: "", label: appsPrompt(apps.length, appsError !== null) }, ...apps.map((a) => ({ value: String(a.pid), label: a.name }))]} />
         <Button variant="quiet" icon={Icons.RefreshIcon} disabled={busy} onClick={refresh}>Refresh</Button>
       </div>
+      {appsError !== null && <p dir="auto" className="el-field__error" role="alert">{appsFailure(appsError)}</p>}
       <div className="el-translate__choices">
         <Select label="Mode" value={mode} disabled={busy} onChange={(v) => setMode(v as TranslateMode)} options={MODES} />
         <Select label="Translate to" value={target} disabled={busy} onChange={setTarget} options={TRANSLATE_TARGETS.map(([value, label]) => ({ value, label }))} />

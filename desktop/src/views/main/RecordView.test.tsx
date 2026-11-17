@@ -320,7 +320,11 @@ describe("RecordView pause, resume and cancel", () => {
 });
 
 describe("RecordView upload errors", () => {
-  beforeEach(() => resetTauriMock());
+  beforeEach(() => {
+    resetTauriMock();
+    // The Live Translate card on the page asks for the apps playing sound: answered, so its error is not counted here.
+    respond("translate_apps", []);
+  });
 
   it("has no error card when nothing failed", async () => {
     await setup();
