@@ -103,6 +103,46 @@ it('judges the same picture the same and a changed one different, in grey at 640
         ->and(ScreenSimilarity::signature('not a picture'))->toBeNull();
 });
 
+/** A PNG of [$width] × [$height] in one colour, made with GD. */
+function plainPng(int $width, int $height): string
+{
+    $image = imagecreatetruecolor($width, $height);
+    ob_start();
+    imagepng($image, null, 9);
+
+    return (string) ob_get_clean();
+}
+
+/** A PNG whose header claims [$width] × [$height] but holds no picture: only its header can be read. */
+function claimedPng(int $width, int $height): string
+{
+    $chunk = fn (string $type, string $data) => pack('N', strlen($data)).$type.$data.pack('N', crc32($type.$data));
+
+    return "\x89PNG\r\n\x1a\n".$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 2, 0, 0, 0)).$chunk('IEND', '');
+}
+
+it('never enlarges a picture to compare it, and leaves strips, huge and mis-sized pictures uncompared, quickly', function () {
+    $started = microtime(true);
+    expect(ScreenSimilarity::signature(plainPng(1, 100000)))->toBeNull()
+        ->and(ScreenSimilarity::signature(plainPng(100000, 1)))->toBeNull()
+        // Refused from the header alone, before GD decodes it.
+        ->and(ScreenSimilarity::signature(claimedPng(30000, 30000)))->toBeNull()
+        ->and(ScreenSimilarity::signature(appScreen(orders()), 1280, 720))->toBeNull()
+        ->and(ScreenSimilarity::signature(appScreen(orders()), 1920, 1080))->not->toBeNull()
+        ->and(microtime(true) - $started)->toBeLessThan(2.0);
+    // A small picture keeps its size; a 4 to 1 one is still compared, at most 640 × 2560.
+    [$w, $h, $grey] = ScreenSimilarity::signature(plainPng(320, 200));
+    [$tallW, $tallH] = ScreenSimilarity::signature(plainPng(1000, 4000));
+    expect([$w, $h, strlen($grey)])->toBe([320, 200, 64000])->and([$tallW, $tallH])->toBe([640, 2560]);
+});
+
+it('keeps a picture that is not the size it claims as a screen of its own', function () {
+    $first = keepScreen($this->session, appScreen(orders()), ['at_ms' => 60000, 'width' => 1280, 'height' => 720]);
+    // The same 1920 × 1080 picture again, re-compressed, claiming 1280 × 720 like its neighbour: never compared.
+    $again = keepScreen($this->session, appScreen(orders(), type: 'jpeg', quality: 92), ['at_ms' => 61000, 'width' => 1280, 'height' => 720]);
+    expect($again->id)->not->toBe($first->id)->and($again->wasRecentlyCreated)->toBeTrue();
+});
+
 it('keeps at most 120 screens in any hour of a recording, on top of 400 in all', function () {
     foreach (range(1, 120) as $i) {
         Screen::query()->withoutGlobalScopes()->create(['workspace_id' => $this->session->workspace_id, 'capture_session_id' => $this->session->id,

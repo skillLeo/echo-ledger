@@ -302,14 +302,15 @@ class ScreenStore
         return $id.'/thumb';
     }
 
-    /** The 320 px wide WebP thumbnail (narrower pictures keep their width), made with GD. */
-    public static function writeThumbnail(string $plainPath, string $targetPath): void
+    /** The [$width] (a screen's: 320 px) wide WebP thumbnail (narrower pictures keep their width), made with GD. */
+    public static function writeThumbnail(string $plainPath, string $targetPath, int $width = self::THUMB_WIDTH): void
     {
+        $maxWidth = $width;
         $image = @imagecreatefromstring((string) file_get_contents($plainPath));
         if ($image === false) {
             throw new UnreadablePicture('The picture could not be read.');
         }
-        $width = min(self::THUMB_WIDTH, imagesx($image));
+        $width = min($maxWidth, imagesx($image));
         $height = max(1, (int) round(imagesy($image) * $width / max(1, imagesx($image))));
         // Resampled by hand: imagescale() refuses its bicubic modes on some GD builds.
         $thumb = imagecreatetruecolor($width, $height);
@@ -358,12 +359,13 @@ class ScreenStore
         if ($neighbours === []) {
             return null;
         }
-        $mine = ScreenSimilarity::signature((string) file_get_contents($plainPath));
+        // The size it claims, checked against the picture; one out of bounds is kept, never compared.
+        $mine = ScreenSimilarity::signature((string) file_get_contents($plainPath), (int) $meta['width'], (int) $meta['height']);
         if ($mine === null) {
             return null;
         }
         foreach ($neighbours as $neighbour) {
-            $theirs = ($picture = $this->picture($neighbour)) !== null ? ScreenSimilarity::signature($picture) : null;
+            $theirs = ($picture = $this->picture($neighbour)) !== null ? ScreenSimilarity::signature($picture, $neighbour->width, $neighbour->height) : null;
             if ($theirs !== null && ScreenSimilarity::same($mine, $theirs)) {
                 return $neighbour;
             }

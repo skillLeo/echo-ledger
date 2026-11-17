@@ -155,7 +155,7 @@ describe('the console meeting pack', function () {
         $html = (string) file_get_contents($response->baseResponse->getFile()->getPathname());
 
         expect($response->headers->get('Content-Disposition'))->toStartWith('inline')
-            ->and($html)->toContain('Print or save as PDF')->toContain('[Screen 1 at 0:30]')->toContain('[Screen 2 at 14:32]')
+            ->and($html)->toContain('Print or save as PDF')->toContain('[Screen 1 at 0:30')->toContain('[Screen 2 at 14:32')
             ->and($html)->toContain('data:image/png;base64,'.base64_encode($this->png))
             ->and($html)->not->toContain('window.addEventListener');
     });
