@@ -326,8 +326,8 @@ it('runs its migration up, down and up again', function () {
     // Since v1.7 the payment receipts' migration comes after it, since v1.8.1 the Share Check results', since v1.8 (0.2)
     // the missed recordings', then the v1.8.1 audit's index on the Share Check results and the plain words in the Pro
     // plan's description (D-129), in the "Transcription failed" notifications (D-131) and in the AI's stored reasons,
-    // then 2.0.0-a's interface flags, Live Assist's tables, its reports' columns, its settings and its claims.
-    $run('migrate:rollback', ['--step' => 13]);
+    // then 2.0.0-a's interface flags, Live Assist's tables, its reports' columns, its settings and its claims, and the invite links.
+    $run('migrate:rollback', ['--step' => 14]);
     expect(Schema::connection('promo_cycle')->hasTable('promo_codes'))->toBeFalse()->and(Schema::connection('promo_cycle')->hasTable('promo_code_uses'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'promo_code'))->toBeFalse()
         ->and(Schema::connection('promo_cycle')->hasColumn('upgrade_requests', 'plan'))->toBeTrue();

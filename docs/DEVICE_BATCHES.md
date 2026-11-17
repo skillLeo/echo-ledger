@@ -6,6 +6,36 @@ development Mac. Results go into [SCREEN_SHARE_MATRIX.md](SCREEN_SHARE_MATRIX.md
 
 Phone rules for every batch: `pm install -r` only; never uninstall, never clear data; check `mCallState=0` first.
 
+## Tonight 20:00–21:30 PKT (2026-11-17) — the v1.8.1 release candidate, about 85 minutes
+
+Builds: the v1.8.1 release candidate from CI on `release/v1.8.1` (desktop 1.8.1; Android 1.8.1, code 18). Windows
+first: it gates the release.
+
+**1. Windows laptop, about 50 minutes**
+1. Install the 1.8.1 Windows build from CI over the old one; open it; note the version under Help › About.
+2. Run the batch above ("Windows laptop — v1.8.1 S0/S6/S7"), steps 1–6, with the phone as the viewer.
+3. DC-02, the recording clock after sleep:
+   1. Start a recording with both sides heard (play a video for the other side) and let it run 1 minute.
+   2. Sleep the laptop (Start › Power › Sleep) for 5 minutes, then wake it and sign in.
+   3. Pass if the pill's time carries on from about 1:00; fail if it jumped to about 6:00. Note it if the recording
+      stopped by itself.
+   4. Press Capture screen now, then Bookmark; wait 30 seconds; stop.
+   5. After upload, open the recording: pass if it is about 1:30 long with the screen and bookmark at about 1:00.
+      Send a photo of the pill after waking and of the recording page.
+4. DC-03, if a second monitor is at hand: open the main window and the pill on the second display, unplug it, check
+   both come back on screen; plug it back and drag the pill across.
+
+**2. Gate 3, about 15 minutes**
+Look at the 24 sample screens (phone and desktop, light and dark, English and Urdu) in `docs/v2/gate3/` and choose the
+look, or say what to change.
+
+**3. Decisions, 5 minutes**
+Trash 48 hours or 30 days; the Live Assist plan numbers; who deploys the website (the lead with backup and rollback).
+
+**4. Mac, if time is left, about 15 minutes**
+DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build (the first self-signed build asks once
+for the microphone, system audio and Screen Recording; allow them, then they stay).
+
 ## Phone (S25, Android 17) — v1.8.1 S5 retest + v1.8 0.3, about 35 minutes
 
 Before: the charger plugged in; not on a call; the new build installed (`pm install -r`). Measured on 2026-11-16 with

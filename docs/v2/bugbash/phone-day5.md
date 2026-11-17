@@ -43,17 +43,17 @@ The tokens-only check (`TokensOnlyTest`) stays at 0.
 
 | Id | Sev | Where | What | Status |
 |---|---|---|---|---|
-| P-078 | S2 | After-call card | At 200 %, Save audio and Delete squeezed Transcribe into a sliver with its letters stacked, in English and Urdu | Fixed in a31dc027 |
-| P-079 | S2 | Live Assist card | The buttons scrolled sideways, so More formal and Urdu were out of sight; at 200 % only two showed | Fixed in 5812e0a7 |
-| P-080 | S2 | Settings › Appearance | At 200 %, "System" broke mid-word in the theme picker | Fixed in a31dc027 |
-| P-081 | S2 | Ask, Library rows, pickers (Urdu) | English content took the Urdu font's Latin letters and a mirrored full stop (".Payment in 45 days as usual") | Fixed in a31dc027 |
-| P-082 | S3 | Avatars | At 200 %, the initials grew out of their circle | Fixed in a31dc027 |
-| P-083 | S3 | Ask sources (Urdu) | A source's moment was in the Urdu face, not the clock face | Fixed in a31dc027 |
-| P-084 | S3 | Library rows | At 200 %, a title shows about 10 to 12 characters | Logged |
-| P-085 | S3 | Settings profile card | At 200 %, Upgrade squeezes the usage lines to a few words each (Urdu worst) | Logged |
-| P-086 | S3 | Live Assist card | At 200 %, the three-line limit hides most of a suggestion behind an ellipsis | Logged (needs a decision) |
-| P-087 | S4 | Live tab (Urdu) | At 200 %, the row explanations end with one word alone on a line | Logged |
-| P-088 | S3 | Ask | The view model's ask() gives no failure back, and "Request failed (502)" is not words for a person | Logged (core) |
+| P-079 | S2 | After-call card | At 200 %, Save audio and Delete squeezed Transcribe into a sliver with its letters stacked, in English and Urdu | Fixed in a31dc027 |
+| P-080 | S2 | Live Assist card | The buttons scrolled sideways, so More formal and Urdu were out of sight; at 200 % only two showed | Fixed in 5812e0a7 |
+| P-081 | S2 | Settings › Appearance | At 200 %, "System" broke mid-word in the theme picker | Fixed in a31dc027 |
+| P-082 | S2 | Ask, Library rows, pickers (Urdu) | English content took the Urdu font's Latin letters and a mirrored full stop (".Payment in 45 days as usual") | Fixed in a31dc027 |
+| P-083 | S3 | Avatars | At 200 %, the initials grew out of their circle | Fixed in a31dc027 |
+| P-084 | S3 | Ask sources (Urdu) | A source's moment was in the Urdu face, not the clock face | Fixed in a31dc027 |
+| P-085 | S3 | Library rows | At 200 %, a title shows about 10 to 12 characters | Logged |
+| P-086 | S3 | Settings profile card | At 200 %, Upgrade squeezes the usage lines to a few words each (Urdu worst) | Logged |
+| P-087 | S3 | Live Assist card | At 200 %, the three-line limit hides most of a suggestion behind an ellipsis | Logged (needs a decision) |
+| P-088 | S4 | Live tab (Urdu) | At 200 %, the row explanations end with one word alone on a line | Logged |
+| P-089 | S3 | Ask | The view model's ask() gives no failure back, and "Request failed (502)" is not words for a person | Logged (core) |
 
 No S0 or S1. All S2s are fixed. After the fixes, `LargeTextTest` passes on all 12 screens (no control under 48 dp at
 200 %). The Gate 3 and component screenshots were recorded again where the fixes changed them.
@@ -62,20 +62,20 @@ No S0 or S1. All S2s are fixed. After the fixes, `LargeTextTest` passes on all 1
 
 Fixed:
 
-- P-078, the after-call card at 200 % in Urdu, buttons wrapping (the pill and its menu above): ![](phone-day5/pill-after-call-200-light-ur.png)
-- P-078 in English: ![](phone-day5/pill-after-call-200-light-en.png)
-- P-079, the Live Assist card's buttons at 200 %: ![](phone-day5/assist-200-light-en.png)
-- P-079 in Urdu at 130 %: ![](phone-day5/assist-130-light-ur.png)
-- P-080, the theme picker at 200 %: ![](phone-day5/settings-appearance-200-light-en.png)
-- P-081 and P-083, Ask in Urdu with an English answer, sources and project: ![](phone-day5/ask-130-light-ur.png)
-- P-082, the avatar at 200 % in Urdu: ![](phone-day5/home-200-light-ur.png)
+- P-079, the after-call card at 200 % in Urdu, buttons wrapping (the pill and its menu above): ![](phone-day5/pill-after-call-200-light-ur.png)
+- P-079 in English: ![](phone-day5/pill-after-call-200-light-en.png)
+- P-080, the Live Assist card's buttons at 200 %: ![](phone-day5/assist-200-light-en.png)
+- P-080 in Urdu at 130 %: ![](phone-day5/assist-130-light-ur.png)
+- P-081, the theme picker at 200 %: ![](phone-day5/settings-appearance-200-light-en.png)
+- P-082 and P-084, Ask in Urdu with an English answer, sources and project: ![](phone-day5/ask-130-light-ur.png)
+- P-083, the avatar at 200 % in Urdu: ![](phone-day5/home-200-light-ur.png)
 
 Logged:
 
-- P-084, Library at 200 %: ![](phone-day5/library-200-light-en.png)
-- P-085, the profile card at 200 % in Urdu: ![](phone-day5/settings-200-light-ur.png)
-- P-086, the Live Assist card at 200 % (same picture as P-079): ![](phone-day5/assist-200-light-en.png)
-- P-087, the Live tab at 200 % in Urdu: ![](phone-day5/live-tab-200-light-ur.png)
+- P-085, Library at 200 %: ![](phone-day5/library-200-light-en.png)
+- P-086, the profile card at 200 % in Urdu: ![](phone-day5/settings-200-light-ur.png)
+- P-087, the Live Assist card at 200 % (same picture as P-080): ![](phone-day5/assist-200-light-en.png)
+- P-088, the Live tab at 200 % in Urdu: ![](phone-day5/live-tab-200-light-ur.png)
 
 Clean, for reference:
 

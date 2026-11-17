@@ -515,18 +515,20 @@ pub struct Attempt {
     pub captions_turned_on: bool,
 }
 
-/// What undoing an attempt does (pure): its recording stops (and its captions with it); captions it turned on for
-/// the person's own recording go off; nothing when that recording has ended or another runs.
+/// What undoing an attempt does (pure): the person declined, so the recording it started is discarded (the pill's
+/// Discard: its files, its screens and its open server session go; nothing is saved or uploaded) and its captions with
+/// it; captions it turned on for the person's own recording go off, that recording untouched; nothing when that
+/// recording has ended or another runs.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Undo {
-    StopRecording,
+    Discard,
     CaptionsOff,
     Nothing,
 }
 
 pub fn undo_for(attempt: &Attempt, running: Option<&str>) -> Undo {
     match running {
-        Some(running) if attempt.started_recording.as_deref() == Some(running) => Undo::StopRecording,
+        Some(running) if attempt.started_recording.as_deref() == Some(running) => Undo::Discard,
         Some(_) if attempt.captions_turned_on && attempt.started_recording.is_none() => Undo::CaptionsOff,
         _ => Undo::Nothing,
     }
@@ -547,9 +549,9 @@ async fn undo(app: &AppHandle, attempt: &Attempt) {
     let state = app.state::<crate::AppState>();
     let running = state.capture.info().map(|i| i.client_ref);
     match undo_for(attempt, running.as_deref()) {
-        Undo::StopRecording => {
-            if let Err(e) = crate::actions::stop_recording(app, false).await {
-                eprintln!("[echoledger] stopping the recording Live Assist started: {}", e.code().unwrap_or("error"));
+        Undo::Discard => {
+            if let Err(e) = crate::actions::cancel_recording(app).await {
+                eprintln!("[echoledger] discarding the recording Live Assist started: {}", e.code().unwrap_or("error"));
             }
         }
         Undo::CaptionsOff => crate::actions::stop_captions(app),
@@ -1075,7 +1077,7 @@ mod tests {
     fn a_start_answered_session_active_then_keep_running_leaves_no_recording() {
         // This start began rec-1 with its captions; the server said another session is active.
         let attempt = carried(None, &Attempt { started_recording: Some("rec-1".into()), captions_turned_on: true }, Some("rec-1"));
-        assert_eq!(undo_for(&attempt, Some("rec-1")), Undo::StopRecording, "Keep running: the recording it started stops");
+        assert_eq!(undo_for(&attempt, Some("rec-1")), Undo::Discard, "Keep running: the recording it started is discarded");
         // A start beside the person's own recording only turned captions on: they go off, the recording goes on.
         let beside = Attempt { started_recording: None, captions_turned_on: true };
         assert_eq!(undo_for(&beside, Some("rec-0")), Undo::CaptionsOff);
@@ -1095,7 +1097,7 @@ mod tests {
         // A retry whose recording is gone carries nothing from it.
         assert_eq!(carried(Some(&first), &Attempt::default(), Some("rec-2")).started_recording, None);
         // The retry failing too undoes all of it.
-        assert_eq!(undo_for(&owned, Some("rec-1")), Undo::StopRecording);
+        assert_eq!(undo_for(&owned, Some("rec-1")), Undo::Discard);
     }
 
     #[test]

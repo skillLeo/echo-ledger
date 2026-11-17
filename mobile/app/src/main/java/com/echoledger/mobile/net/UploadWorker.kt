@@ -31,9 +31,12 @@ import java.io.IOException
 import java.security.MessageDigest
 import java.util.UUID
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 
 /**
  * Resumable upload of one encrypted local recording (WorkManager; survives restarts, waits for network).
@@ -63,8 +66,12 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
         return try {
             val started = keep(id) { it.copy(state = "uploading", lastError = null) }
             if (started?.state == Decisions.DISCARDING) return Result.success()
-            when (upload(api, rec)) {
+            val current = bringBackServerCopy(api, started ?: rec)
+            when (upload(api, current)) {
                 Outcome.READY -> {
+                    // After an Undo that brought a server copy back, a delete that landed late may have trashed the
+                    // session this run finished into: the phone's copy stays until the server has it out of the bin.
+                    if (broughtBack && !confirmedOnServer(api, id)) return Result.retry()
                     // The server now holds the (encrypted) copy, so the phone's goes, in one step with the check that
                     // it was not discarded meanwhile; if it was, the server's copy goes too (the phone's with the Discard).
                     if (graph.recordings.deleteIf(id) { it.state != Decisions.DISCARDING } == null) {
@@ -138,22 +145,102 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
     private fun keep(id: String, change: (LocalRecording) -> LocalRecording): LocalRecording? =
         (applicationContext as EchoLedgerApp).graph.recordings.update(id) { if (it.state == Decisions.DISCARDING) it else change(it) }
 
+    /**
+     * After an Undo of a Discard whose upload had reached the server (since v1.8.1): a delete that may have run is undone
+     * (`POST /api/sessions/{id}/restore`), and the upload then finds that session again by its reference and finishes
+     * against it. Restore answers 404 for a session that was never deleted too (the delete was stopped before it
+     * landed): the session is looked up, and while it exists the old reference stays, so the server never gets a second
+     * copy. Only a session really gone, or `410 restore_expired`, is sent again fresh under a new reference.
+     */
+    private suspend fun bringBackServerCopy(api: ApiClient, rec: LocalRecording): LocalRecording {
+        val copy = rec.serverCopy ?: return rec
+        // A delete still queued is stopped (an Undo did that already, unless it ran meanwhile).
+        DiscardWorker.cancelBeforeItRuns(applicationContext, rec.id)
+        val fresh = if (rec.restoreServerCopy) {
+            try {
+                api.restoreSession(copy)
+                false
+            } catch (e: ApiException) {
+                when (e.status) {
+                    410 -> true
+                    404 -> !stillThere(api, copy)
+                    else -> throw e
+                }
+            }
+        } else {
+            false
+        }
+        // The old session goes on, and a delete that started may still land on it: it is checked again at the end.
+        broughtBack = rec.restoreServerCopy && !fresh
+        return keep(rec.id) {
+            it.copy(serverCopy = null, restoreServerCopy = false, clientRef = if (fresh) UUID.randomUUID().toString() else it.clientRef)
+        } ?: rec
+    }
+
+    /** This run goes on with a session whose delete may have started ([bringBackServerCopy]); checked at the end. */
+    private var broughtBack = false
+
+    /**
+     * Whether the session this run finished into is on the server and not in its bin. A delete that landed after the
+     * restore check trashed it: it is restored. Gone for good (`410`, or not in the bin either), the next run sends the
+     * recording fresh under a new reference, so the phone's copy is never deleted while the server has none.
+     */
+    private suspend fun confirmedOnServer(api: ApiClient, id: String): Boolean {
+        val reached = session ?: return true
+        if (stillThere(api, reached)) return true
+        try {
+            api.restoreSession(reached)
+            return true // it was in the bin and is back
+        } catch (e: ApiException) {
+            if (e.status != 404 && e.status != 410) throw e
+        }
+        keep(id) { it.copy(clientRef = UUID.randomUUID().toString(), state = "queued") }
+        return false
+    }
+
+    /** Whether the server still has session [id] (not deleted): a 404 says it is gone; any other failure is retried. */
+    private suspend fun stillThere(api: ApiClient, id: String): Boolean = try {
+        api.sessionDetail(id)
+        true
+    } catch (e: ApiException) {
+        if (e.status == 404) false else throw e
+    }
+
     /** The server session this run created or finished, once it has one. */
     private var session: String? = null
 
+    /** This run asked the server for its session: the request may have arrived even when no answer did. */
+    private var asked: Pair<ApiClient, LocalRecording>? = null
+
     /**
      * Whether the call was discarded while this run sent it (since v1.8.1). Then the session the run reached on the
-     * server is deleted too ([DiscardWorker]); the phone's copy is the Discard's to delete once its Undo time is over.
+     * server is deleted too ([DiscardWorker]); the phone's copy is the Discard's to delete once its Undo time is over. A
+     * run stopped while it asked for its session (no answer yet) looks the session up by the call's reference first: the
+     * server answers the same request with the session it made, so none is left with the call's title and caller.
      */
-    private fun discardedMeanwhile(id: String): Boolean {
+    private suspend fun discardedMeanwhile(id: String): Boolean {
         val graph = (applicationContext as EchoLedgerApp).graph
-        if (graph.recordings.get(id)?.state != Decisions.DISCARDING) return false
-        (session ?: graph.recordings.get(id)?.serverSessionId)?.let { DiscardWorker.enqueue(applicationContext, id, it) }
+        val now = graph.recordings.get(id)
+        if (now?.state != Decisions.DISCARDING) return false
+        val known = session ?: now.serverSessionId ?: asked?.let { (api, rec) -> lookUp(api, rec) }
+        known?.let { reached ->
+            // Kept with the call, so an Undo can stop the delete or bring the session back.
+            graph.recordings.update(id) { it.copy(serverCopy = reached) }
+            DiscardWorker.enqueue(applicationContext, id, reached)
+        }
         return true
+    }
+
+    /** The session the server made for [rec]'s reference, by asking again (idempotent); null when it cannot say. */
+    private suspend fun lookUp(api: ApiClient, rec: LocalRecording): String? = withContext(NonCancellable) {
+        runCatching {
+            withTimeout(LOOKUP_TIMEOUT_MS) { api.createSession(oneShot(rec, rec.clientRef ?: rec.id, listOf(artifactOf(rec)))).session.id }
+        }.getOrNull()
     }
 
     private suspend fun upload(api: ApiClient, rec: LocalRecording): Outcome {
         val graph = (applicationContext as EchoLedgerApp).graph
+        if (rec.serverSessionId == null) asked = api to rec
         val created = createOrFinish(api, rec)
         session = created.session.id
         // A voice note shared from another app: its page follows the server recording once the local copy is gone.
@@ -226,7 +313,7 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
                 return api.createSession(oneShot(rec, UUID.randomUUID().toString(), artifacts))
             }
         }
-        return api.createSession(oneShot(rec, rec.id, artifacts))
+        return api.createSession(oneShot(rec, rec.clientRef ?: rec.id, artifacts))
     }
 
     private fun oneShot(rec: LocalRecording, clientRef: String, artifacts: List<ArtifactDto>) = CreateSessionRequest(
@@ -374,6 +461,9 @@ class UploadWorker(context: Context, params: WorkerParameters) : CoroutineWorker
 
             else -> FAILED
         }
+
+        /** How long a stopped run may take to find the session it asked for (a discarded call's lookup). */
+        private const val LOOKUP_TIMEOUT_MS = 15_000L
 
         /** A `Retry-After` up to this long is left to WorkManager's back-off; longer waits are scheduled exactly. */
         const val SHORT_RETRY_SECONDS = 30L

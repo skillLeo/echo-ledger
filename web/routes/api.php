@@ -40,6 +40,7 @@ use App\Http\Controllers\Api\TranscriptViewsController;
 use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
+use App\Http\Controllers\Api\WorkspaceInvitesController;
 use App\Http\Middleware\EnsureCanRecord;
 use App\Http\Middleware\EnsureLiveAssist;
 use App\Http\Middleware\EnsureNotSuspended;
@@ -98,6 +99,12 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::put('account/ui', [AccountController::class, 'ui'])->middleware('abilities:config:read')->name('api.account.ui');
         // Entitlements (v1.6): the plan, features, limits and engines of this device's person; the apps show only this.
         Route::get('me/entitlements', [EntitlementsController::class, 'show'])->middleware('abilities:config:read')->name('api.me.entitlements');
+        // Since v1.8 P6.3 (docs/API.md 2.0.0-d): inviting people, for owners and admins.
+        Route::get('workspace/invitations', [WorkspaceInvitesController::class, 'index'])->middleware('abilities:config:read')->name('api.workspace.invitations');
+        Route::post('workspace/invitations', [WorkspaceInvitesController::class, 'store'])->middleware(['abilities:sessions:write', 'throttle:invites'])->name('api.workspace.invitations.store');
+        Route::delete('workspace/invitations/{id}', [WorkspaceInvitesController::class, 'destroy'])->middleware('abilities:sessions:write')->name('api.workspace.invitations.destroy');
+        Route::post('workspace/invite-links', [WorkspaceInvitesController::class, 'storeLink'])->middleware(['abilities:sessions:write', 'throttle:invites'])->name('api.workspace.invite-links.store');
+        Route::delete('workspace/invite-links/{id}', [WorkspaceInvitesController::class, 'destroyLink'])->middleware('abilities:sessions:write')->name('api.workspace.invite-links.destroy');
         // Upgrade requests (v1.6): the newest one of this device's person.
         Route::get('upgrade-requests/latest', [UpgradeRequestController::class, 'latest'])->middleware('abilities:config:read')->name('api.upgrade-requests.latest');
         // Payment receipts (v1.7): a receipt of the person's own request, decrypted for this answer only.

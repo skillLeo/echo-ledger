@@ -15,6 +15,9 @@ use App\Models\SentItem;
 use App\Models\ShareLink;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
+use App\Services\AuditLog;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use InvalidArgumentException;
@@ -172,6 +175,26 @@ final class Workspaces
         }
         $workspace->members()->updateExistingPivot($user->getKey(), ['role' => $role->value]);
         $this->roles = [];
+        // Since v1.8 P6.3: a role that no longer invites takes back what they invited with and nobody used yet.
+        if (! $role->manages()) {
+            $this->revokeInvites($workspace, $user);
+        }
+    }
+
+    /**
+     * The invite links [$user] made in [$workspace] stop working and their pending email invitations go (since v1.8
+     * P6.3): once they may no longer invite (removed, or a role that does not invite), nobody joins on their word. The
+     * join and the acceptance check it again (InviteLinks::join(), Invitations::accept()).
+     */
+    private function revokeInvites(Workspace $workspace, User $user): void
+    {
+        $links = WorkspaceInviteLink::query()->where('workspace_id', $workspace->id)->where('created_by', $user->getKey())->whereNull('revoked_at')
+            ->update(['revoked_at' => now()]);
+        $invitations = WorkspaceInvitation::query()->where('workspace_id', $workspace->id)->where('invited_by', $user->getKey())->whereNull('accepted_at')->delete();
+        if ($links + $invitations > 0) {
+            app(AuditLog::class)->record('invitation_revoked', null, $workspace, "{$user->email} may no longer invite to {$workspace->name}: "
+                ."{$invitations} pending invitations taken back, {$links} invite links revoked", ['by_user_id' => $user->getKey(), 'invitations' => $invitations, 'links' => $links]);
+        }
     }
 
     public function removeMember(Workspace $workspace, User $user): void
@@ -198,6 +221,7 @@ final class Workspaces
             // What was sent to them from here, and what they shared by link here.
             SentItem::query()->where('workspace_id', $workspace->id)->where('to_user_id', $user->getKey())->delete();
             $this->revokeLinks($workspace, $user);
+            $this->revokeInvites($workspace, $user);
             if ((int) $user->current_workspace_id === $workspace->id) {
                 $user->forceFill(['current_workspace_id' => null])->save();
                 $this->current($user);

@@ -598,6 +598,34 @@ class RecordingServiceTest : AppTest() {
     }
 
     @Test
+    @org.robolectric.annotation.Config(sdk = [34])
+    fun `the pill's look is read when a recording starts, never during it`() {
+        runBlocking { app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.recording_controls" to true)) } }
+        app.graph.helper.attach(OneTrackHelper(seconds = 4), source = "adb")
+        app.getSystemService(android.media.AudioManager::class.java).mode = android.media.AudioManager.MODE_IN_COMMUNICATION
+        val toggle = Intent(app, RecordingService::class.java).setAction(RecordingService.ACTION_TOGGLE)
+        val controller = buildService(RecordingService::class.java, toggle).create()
+        controller.startCommand(0, 1)
+        pumpUntil("the recording to start") { RecordingService.isRecording }
+        assertTrue("on when it started", RecordingService.pillV2)
+
+        // The server turns it off during the recording: the pill stays as it began.
+        runBlocking { app.graph.settings.update { it.copy(uiFlags = emptyMap()) } }
+        Thread.sleep(300)
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(200, java.util.concurrent.TimeUnit.MILLISECONDS)
+        assertTrue("never changed during it", RecordingService.pillV2)
+        controller.get().onStartCommand(toggle, 0, 2)
+        pumpUntil("the recording to be saved") { !RecordingService.isRecording && app.graph.recordings.all().isNotEmpty() }
+
+        // The next recording reads the flags again.
+        controller.get().onStartCommand(toggle, 0, 3)
+        pumpUntil("the next recording to start") { RecordingService.isRecording }
+        assertFalse(RecordingService.pillV2)
+        controller.get().onStartCommand(toggle, 0, 4)
+        pumpUntil("the next recording to be saved") { !RecordingService.isRecording }
+    }
+
+    @Test
     fun `recording without the microphone permission ends quietly`() {
         shadowOf(app).denyPermissions(android.Manifest.permission.RECORD_AUDIO)
         val service = start(RecordingService.ACTION_TOGGLE)

@@ -111,12 +111,272 @@ class UploadWorkerTest : AppTest() {
         assertEquals(ListenableWorker.Result.success(), run())
         assertEquals("never put back to queued or uploading", com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
         assertTrue("the phone's copy waits for the Discard's own end", app.graph.recordings.encryptedFile(id).exists())
-        // The server's session is deleted (DiscardWorker waits for a connection, so it is still queued here).
+        // The server's session is deleted (DiscardWorker waits for a connection, so it is still queued here)...
         assertEquals(androidx.work.WorkInfo.State.ENQUEUED, discardWork().single().state)
+        // ...and it is the session this upload reached.
+        assertEquals(serverSession, runServerDelete())
 
         // Then the Discard ends: the phone's copy goes, and nothing kept the server's.
         runBlocking { com.echoledger.mobile.calls.Decisions.finishDiscard(app, id) }
         assertNull(recording())
+    }
+
+    /** Runs the queued server delete (as with a connection) and answers which session it deleted. */
+    private fun runServerDelete(): String {
+        server.on("DELETE", "/api/sessions/.+", FakeServer.empty(204))
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setAllConstraintsMet(discardWork().single().id)
+        pumpUntil("the server delete to run") { discardWork().single().state == androidx.work.WorkInfo.State.SUCCEEDED }
+        return server.requestsTo("DELETE", "/api/sessions/.+").single().url.encodedPath.substringAfterLast('/')
+    }
+
+    @Test
+    fun `a call discarded while the server still verifies it has its server session deleted too`() {
+        val (poll, wait) = UploadWorker.pollIntervalMs to UploadWorker.verifyWaitMs
+        UploadWorker.pollIntervalMs = 10
+        UploadWorker.verifyWaitMs = 100
+        try {
+            app.storeRecording(bytes = payload, state = "queued")
+            serveHealthyUpload()
+            server.on(
+                "GET",
+                "/api/recordings/$serverRecording",
+                FakeServer.json(200, ServerFixtures.recordingStatus(status = "assembling"))
+            )
+            server.on("POST", completeRoute()) {
+                runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+                FakeServer.json(202, """{"status":"assembling"}""")
+            }
+
+            assertEquals("no retry for a call on its way out", ListenableWorker.Result.success(), run())
+            assertEquals(com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
+            assertEquals(serverSession, runServerDelete())
+        } finally {
+            UploadWorker.pollIntervalMs = poll
+            UploadWorker.verifyWaitMs = wait
+        }
+    }
+
+    @Test
+    fun `a run stopped after its session was made has that session deleted with the call`() {
+        app.storeRecording(bytes = payload, state = "queued")
+        serveHealthyUpload()
+        val reached = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        server.on("POST", chunkRoute()) { request ->
+            reached.countDown()
+            release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+        val future = TestListenableWorkerBuilder<UploadWorker>(app).setInputData(workDataOf("recording_id" to id)).build().startWork()
+        assertTrue(reached.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+        future.cancel(true)
+        release.countDown()
+        pumpUntil("the stopped run to settle") { future.isDone && discardWork().isNotEmpty() }
+
+        assertEquals(com.echoledger.mobile.calls.Decisions.DISCARDING, recording()?.state)
+        assertEquals(serverSession, runServerDelete())
+    }
+
+    @Test
+    fun `a run stopped while it asked for its session finds that session by the call's reference and deletes it`() {
+        app.storeRecording(bytes = payload, state = "queued")
+        serveHealthyUpload()
+        val reached = java.util.concurrent.CountDownLatch(1)
+        val release = java.util.concurrent.CountDownLatch(1)
+        val asks = java.util.concurrent.atomic.AtomicInteger()
+        server.on("POST", "/api/sessions") {
+            // The first request arrives and makes the session, but its answer comes only after the run was stopped.
+            if (asks.incrementAndGet() == 1) {
+                reached.countDown()
+                release.await(10, java.util.concurrent.TimeUnit.SECONDS)
+            }
+            FakeServer.json(201, ServerFixtures.sessionCreated(chunkSize = 1_000, totalChunks = 3))
+        }
+        val future = TestListenableWorkerBuilder<UploadWorker>(app).setInputData(workDataOf("recording_id" to id)).build().startWork()
+        assertTrue(reached.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+        future.cancel(true)
+        release.countDown()
+        pumpUntil("the stopped run to find its session") { future.isDone && discardWork().isNotEmpty() }
+
+        assertEquals("asked again with the same reference", listOf(id, id), clientRefs())
+        assertEquals("the session holding the call's title and caller is deleted", serverSession, runServerDelete())
+        assertTrue("no chunk was sent", chunks().isEmpty())
+    }
+
+    /** A call discarded while its upload finished on the server: the server's delete is queued, the phone's copy kept. */
+    private fun discardDuringUpload() {
+        app.storeRecording(bytes = payload, state = "queued")
+        serveHealthyUpload()
+        server.on("POST", chunkRoute()) { request ->
+            if (request.headers["Upload-Chunk-Index"] == "1") runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals(serverSession, recording()?.serverCopy)
+        // From here on the chunks go up as usual.
+        server.on("POST", chunkRoute()) { request ->
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+        server.on("DELETE", "/api/sessions/$serverSession", FakeServer.empty(204))
+    }
+
+    private fun clientRefs() = server.requestsTo("POST", "/api/sessions").map {
+        com.echoledger.mobile.data.ApiJson.parseToJsonElement(it.bodyText()).jsonObject["client_ref"]!!.toString().trim('"')
+    }
+
+    @Test
+    fun `Undo before the server delete ran stops it, and the upload finishes against the same session`() {
+        discardDuringUpload()
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id) }
+        assertEquals(androidx.work.WorkInfo.State.CANCELLED, discardWork().single().state)
+        assertEquals("queued", recording()?.state)
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertTrue("nothing was deleted or restored", server.requestsTo("DELETE", "/api/sessions/$serverSession").isEmpty())
+        assertTrue(server.requestsTo("POST", "/api/sessions/$serverSession/restore").isEmpty())
+        assertEquals("the same session, found by its reference", listOf(id, id), clientRefs())
+        assertNull("the server has it, so the phone's copy goes", recording())
+    }
+
+    @Test
+    fun `Undo after the server delete ran restores the session first, then finishes against it`() {
+        discardDuringUpload()
+        val delete = discardWork().single()
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setAllConstraintsMet(delete.id)
+        pumpUntil("the server delete to run") { discardWork().single().state == androidx.work.WorkInfo.State.SUCCEEDED }
+        assertEquals(1, server.requestsTo("DELETE", "/api/sessions/$serverSession").size)
+        server.on("POST", "/api/sessions/$serverSession/restore", FakeServer.json(200, """{"data":{"id":"$serverSession"}}"""))
+        // Restored, so the server has it again when the upload checks at the end.
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id) }
+        assertTrue(recording()!!.restoreServerCopy)
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        assertEquals(1, server.requestsTo("POST", "/api/sessions/$serverSession/restore").size)
+        val order = server.requests.map { it.method + " " + it.url.encodedPath }
+        assertTrue(
+            "restored before the upload asks for it: $order",
+            order.indexOf("POST /api/sessions/$serverSession/restore") < order.lastIndexOf("POST /api/sessions")
+        )
+        assertEquals(listOf(id, id), clientRefs())
+        assertNull(recording())
+    }
+
+    @Test
+    fun `a server copy that can no longer be restored is sent again fresh, never lost`() {
+        discardDuringUpload()
+        val delete = discardWork().single()
+        androidx.work.testing.WorkManagerTestInitHelper.getTestDriver(app)!!.setAllConstraintsMet(delete.id)
+        pumpUntil("the server delete to run") { discardWork().single().state == androidx.work.WorkInfo.State.SUCCEEDED }
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(410, """{"message":"The undo period has ended.","code":"restore_expired"}""")
+        )
+
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id) }
+        assertEquals(ListenableWorker.Result.success(), run())
+
+        val refs = clientRefs()
+        assertEquals(2, refs.size)
+        assertNotEquals("a new reference, so the server makes a new session", id, refs.last())
+        assertNull("sent, so the phone's copy goes", recording())
+    }
+
+    /** Undo after a delete that may have run (it started, so the phone can't know whether it landed). */
+    private fun undoAfterAMaybeDelete() {
+        discardDuringUpload()
+        runBlocking { com.echoledger.mobile.calls.Decisions.undoDiscard(app, id) }
+        app.graph.recordings.update(id) { it.copy(restoreServerCopy = true) }
+        server.on(
+            "POST",
+            "/api/sessions/$serverSession/restore",
+            FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+        )
+    }
+
+    @Test
+    fun `a delete that never landed is not restored into a second copy`() {
+        undoAfterAMaybeDelete()
+        // The session was never deleted, so restore can't find it in the bin; the server still has it.
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertEquals("the old reference, so the server keeps its one session", listOf(id, id), clientRefs())
+        assertNull(recording())
+    }
+
+    @Test
+    fun `a session really gone after a 404 is sent again fresh`() {
+        undoAfterAMaybeDelete()
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}"""))
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        val refs = clientRefs()
+        assertEquals(2, refs.size)
+        assertNotEquals(id, refs.last())
+        assertNull(recording())
+    }
+
+    @Test
+    fun `a delete that lands after the restore check is undone before the phone's copy goes`() {
+        undoAfterAMaybeDelete()
+        // The server as it is: in the bin or not. The restore check finds the session alive; then the late delete
+        // lands while the chunks go up, so the upload finishes into a trashed session.
+        val trashed = java.util.concurrent.atomic.AtomicBoolean(false)
+        val restores = java.util.concurrent.atomic.AtomicInteger()
+        server.on("POST", "/api/sessions/$serverSession/restore") {
+            restores.incrementAndGet()
+            if (trashed.getAndSet(false)) {
+                FakeServer.json(200, """{"data":{"id":"$serverSession"}}""")
+            } else {
+                FakeServer.json(404, """{"message":"Not found","code":"session_not_found"}""")
+            }
+        }
+        server.on("GET", "/api/sessions/$serverSession") {
+            if (trashed.get()) {
+                FakeServer.json(
+                    404,
+                    """{"message":"Not found"}"""
+                )
+            } else {
+                FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null))
+            }
+        }
+        server.on("POST", chunkRoute()) { request ->
+            if (request.headers["Upload-Chunk-Index"] == "1") trashed.set(true) // the delete lands now
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+
+        assertEquals(ListenableWorker.Result.success(), run())
+        assertFalse("the session is out of the bin again", trashed.get())
+        assertEquals("the restore check, then the one after the upload", 2, restores.get())
+        assertNull("the server has it, so the phone's copy goes", recording())
+    }
+
+    @Test
+    fun `a session gone for good after the upload keeps the phone's copy for a fresh upload`() {
+        undoAfterAMaybeDelete()
+        server.on("GET", "/api/sessions/$serverSession", FakeServer.json(200, ServerFixtures.sessionDetail(playbackUrl = null)))
+        server.on("POST", chunkRoute()) { request ->
+            if (request.headers["Upload-Chunk-Index"] == "1") {
+                // Gone for good while it uploaded: the bin's time ended.
+                server.on("GET", "/api/sessions/$serverSession", FakeServer.json(404, """{"message":"Not found"}"""))
+                server.on(
+                    "POST",
+                    "/api/sessions/$serverSession/restore",
+                    FakeServer.json(410, """{"message":"Ended","code":"restore_expired"}""")
+                )
+            }
+            FakeServer.json(200, ServerFixtures.chunkAck(listOf(request.headers["Upload-Chunk-Index"]!!.toInt()), 3))
+        }
+
+        assertEquals(ListenableWorker.Result.retry(), run())
+        assertTrue("never deleted while the server has none", app.graph.recordings.encryptedFile(id).exists())
+        assertNotEquals("the next run uses a new reference", id, recording()?.clientRef)
     }
 
     @Test
