@@ -39,8 +39,8 @@ describe("the filter rules", () => {
     // Classic's status groups: a recording not transcribed yet counts as Transcribing; failed ones need you.
     expect(applyFilters(ITEMS, { status: ["Needs you"] }).map((i) => i.id)).toEqual(["d"]);
     expect(applyFilters(ITEMS, { status: ["Needs you", "Transcribing"] }).map((i) => i.id)).toEqual(["c", "d"]);
-    expect(applyFilters(ITEMS, { label: ["Q4"] }).map((i) => i.id)).toEqual(["a"]);
-    expect(applyFilters(ITEMS, { tag: ["Price"], device: ["desktop"] }).map((i) => i.id)).toEqual(["d"]);
+    expect(applyFilters(ITEMS, { label: ["q4"] }).map((i) => i.id)).toEqual(["a"]);
+    expect(applyFilters(ITEMS, { tag: ["price"], device: ["desktop"] }).map((i) => i.id)).toEqual(["d"]);
   });
 
   it("what each filter offers, with counts, the no-project kind last; a chip's words", () => {
@@ -50,11 +50,29 @@ describe("the filter rules", () => {
     expect(filterOptions(ITEMS, "project").map((o) => o.label)).toEqual(["Acme", "No project"]);
     expect(filterOptions(ITEMS, "status").map((o) => o.label)).toEqual(["Needs you", "Transcribing", "Ready"]);
     expect(filterOptions(ITEMS, "device").map((o) => [o.label, o.count])).toEqual([["Desktop", 2], ["Phone", 2]]);
+    const source = filterOptions(ITEMS, "source");
     let f = toggleFilter({}, "source", "zoom");
-    expect(chipLabel(ITEMS, f, "source")).toBe("Source: Zoom");
+    expect(chipLabel(source, f, "source")).toBe("Source: Zoom");
     f = toggleFilter(f, "source", "whatsapp");
-    expect(chipLabel(ITEMS, f, "source")).toBe("Source · 2");
-    expect(chipLabel(ITEMS, toggleFilter(f, "source", "zoom"), "source")).toBe("Source: WhatsApp");
+    expect(chipLabel(source, f, "source")).toBe("Source · 2");
+    expect(chipLabel(source, toggleFilter(f, "source", "zoom"), "source")).toBe("Source: WhatsApp");
+    // A ticked project this view doesn't offer keeps its name from when it was ticked; never its id.
+    expect(chipLabel([], { project: ["c1"] }, "project", { "project:c1": "Acme" })).toBe("Project: Acme");
+    expect(chipLabel([], { project: ["c1"] }, "project")).toBe("Project: 1 chosen");
+  });
+
+  it("labels and tags match whatever their case, offered once in the first spelling met (classic)", () => {
+    const mixed = [makeItem("x", { labels: ["Q4"] }), makeItem("y", { labels: ["q4", "VIP"] }), makeItem("z", { tags: ["price"] }), makeItem("w", { tags: ["Price"] })];
+    expect(filterOptions(mixed, "label")).toEqual([{ value: "q4", label: "Q4", count: 2 }, { value: "vip", label: "VIP", count: 1 }]);
+    expect(applyFilters(mixed, { label: ["q4"] }).map((i) => i.id)).toEqual(["x", "y"]);
+    expect(filterOptions(mixed, "tag")).toEqual([{ value: "price", label: "price", count: 2 }]);
+  });
+
+  it("Name A–Z with Urdu and mixed-script titles: Latin first whatever the case, then Urdu in its own order", () => {
+    const names = ["علی", "Bilal", "ali 2", "بلال", "Ali", "Zeeshan", "آصف", "Ahmad علی"].map((title, i) => makeItem(`n${i}`, { title, started_at: at(18, 9) }));
+    expect(sections(names, "none", "title", {}, true, NOW)[0].items.map((i) => i.title)).toEqual([
+      "Ahmad علی", "Ali", "ali 2", "Bilal", "Zeeshan", "آصف", "بلال", "علی",
+    ]);
   });
 
   it("sections: pinned first when grouped by date, then the days; any other group or sort", () => {
@@ -178,6 +196,60 @@ describe("Find in the Library", () => {
     expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("Select recordings");
     fireEvent.click(screen.getByRole("button", { name: "Ali" }));
     expect((screen.getByRole("checkbox", { name: "Select all in Today" }) as HTMLInputElement).indeterminate).toBe(true);
+  });
+
+  it("a picked row a filter, the search or a folded section takes off screen leaves the selection: Delete, export and Copy for AI act on the rows shown", async () => {
+    respond("sessions_bulk", 2);
+    respond("sessions_export", "/tmp/x.zip");
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.assign(navigator, { clipboard: { writeText } });
+    respond("session_detail", { playback_url: null });
+    respond("transcript_detail", { id: "t", kind: "final", provider: "x", status: "completed", language: "en", text: null, segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1000, text: "Hello" }] });
+    await show();
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("4 selected");
+    // A filter hides Bina and Dawood: they leave the selection.
+    tick(/^Source$/, /^WhatsApp/);
+    fireEvent.keyDown(screen.getByRole("menu", { name: "Source" }), { key: "Escape" });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
+    fireEvent.click(screen.getByRole("button", { name: "Share or export" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Text (.txt)" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_export")).toEqual([{ ids: ["c", "a"], format: "txt", view: undefined }]);
+    fireEvent.click(screen.getByRole("button", { name: "Share or export" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Copy for AI" }));
+    await act(flushAsync);
+    expect(callsOf("transcript_detail").map((c) => c.id)).toEqual(["tr-one"]);
+    // Search narrows further: only Ali stays picked; Delete takes only Ali.
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search recordings" }), { target: { value: "Ali" } });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("1 selected");
+    respond("delete_session", null);
+    fireEvent.click(within(screen.getByRole("toolbar", { name: "Selected recordings" })).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(callsOf("delete_session")).toEqual([{ id: "a" }]);
+    expect(callsOf("sessions_bulk")).toEqual([]);
+  });
+
+  it("a folded section's rows can't be reached: Cmd+A, Shift-range and the Delete key take only the rows on screen", async () => {
+    respond("sessions_bulk", 2);
+    await show();
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Chand" }), { metaKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Dawood" }), { shiftKey: true });
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("2 selected");
+    fireEvent.keyDown(screen.getByRole("button", { name: "Dawood" }), { key: "Delete" });
+    // Both rows on screen: deleting everything shown asks first.
+    fireEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Move to Trash" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["c", "d"], action: "delete", clientId: null, label: null }]);
+    // Folding a section with picked rows drops them from the selection.
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    fireEvent.click(screen.getByRole("button", { name: "Ali" }), { metaKey: true });
+    fireEvent.click(screen.getByRole("button", { name: "Today · 2" }));
+    expect(screen.getByRole("toolbar", { name: "Selected recordings" })).toHaveTextContent("Select recordings");
   });
 
   it("Sync reads the list from the server again; \"/\" puts the cursor in search", async () => {

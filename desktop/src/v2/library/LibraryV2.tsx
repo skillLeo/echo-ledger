@@ -2,7 +2,7 @@
 // reloaded on library:updated), as WhatsApp-style rows with the saved views All, Today, Untranscribed and Trash. One
 // feedback system: the Toast, one at a time, with Undo after a delete. Selection mode (Select, a Cmd/Ctrl- or Shift-click,
 // Cmd/Ctrl+A or X) picks several; the row ⋮, a right-click and the selection bar's ⋮ are one menu (organise.tsx).
-import { useCallback, useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { api, errorMessage, type BinItem, type BulkAction, type LibraryItem } from "../../lib/ipc";
 import { formatDuration, rowDate } from "../../lib/format";
@@ -67,6 +67,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     setOpenIdNow(id);
   }, []);
   const [filters, setFilters] = useState<Filters>({});
+  /** The words of each value when it was ticked, for a chip whose value this view doesn't offer. */
+  const knownValues = useRef<Record<string, string>>({});
   // Sort and group, remembered per view on this computer (classic's View menu).
   const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
@@ -149,11 +151,16 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     }
   };
   /** The list as drawn: the view, the filters, the search, then sorted and in sections. */
+  /**
+   * The list as drawn: the view, the filters, the search, then sorted and in sections. `rows` are the rows on screen
+   * (folded sections left out): the only ones selection, Select all, a Shift-range and Delete can reach. `matching`
+   * counts every recording that fits, folded or not.
+   */
   const listOf = (all: readonly LibraryItem[] | null) => {
-    if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[] };
+    if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[], matching: 0 };
     const inThis = applyFilters(all.filter((i) => inView(i, view as ListView)), filters);
     const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
-    return { groups, rows: groups.flatMap((g) => g.items) };
+    return { groups, rows: groups.filter((g) => !collapsed.has(g.key)).flatMap((g) => g.items), matching: groups.reduce((n, g) => n + g.items.length, 0) };
   };
   useEffect(() => {
     if (viewRequest) {
@@ -332,11 +339,22 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
 
   const open = openId ? items?.find((i) => i.id === openId) ?? null : null;
   const counts = items ? viewCounts(items) : null;
-  const { groups, rows: shown } = listOf(items);
+  const { groups, rows: shown, matching } = useMemo(() => listOf(items),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, view, filters, query, choice, opened, collapsed]);
   // What the filters offer: the recordings of this view before the filters, so a tick never hides its own choice.
-  const inThisView = items && view !== "trash" ? items.filter((i) => inView(i, view as ListView)) : [];
+  // Worked out once per change, for the chips' menus and their words alike.
+  const options = useMemo(() => {
+    const inThisView = items && view !== "trash" ? items.filter((i) => inView(i, view as ListView)) : [];
+    return Object.fromEntries(FILTER_KEYS.map((k) => [k, filterOptions(inThisView, k)])) as Record<FilterKey, ReturnType<typeof filterOptions>>;
+  }, [items, view]);
   const filtersOn = filterCount(filters);
-  const shownIds = shown.map((i) => i.id);
+  const shownIds = useMemo(() => shown.map((i) => i.id), [shown]);
+  // A row that leaves the screen (a filter, the search, a folded section, another view) leaves the selection too.
+  useEffect(() => {
+    const visible = new Set(shownIds);
+    setPicked((p) => ([...p].every((id) => visible.has(id)) ? p : new Set([...p].filter((id) => visible.has(id)))));
+  }, [shownIds]);
   const pickedIds = shownIds.filter((id) => picked.has(id));
   const allPicked = shownIds.length > 0 && pickedIds.length === shownIds.length;
   shownCount.current = shownIds.length;
@@ -473,9 +491,12 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const viewMenu: MenuItem[] = [
     ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
   ];
-  const filterMenu = (key: FilterKey): MenuItem[] => filterOptions(inThisView, key).map((o) => ({
+  const filterMenu = (key: FilterKey): MenuItem[] => options[key].map((o) => ({
     label: o.label, checked: (filters[key] ?? []).includes(o.value), count: o.count, keepOpen: true,
-    onPick: () => setFilters((f) => toggleFilter(f, key, o.value)),
+    onPick: () => {
+      knownValues.current[`${key}:${o.value}`] = o.label;
+      setFilters((f) => toggleFilter(f, key, o.value));
+    },
   }));
   const sortMenu: MenuItem[] = [
     ...(Object.keys(SORT_NAMES) as SortKey[]).map((k) => ({ label: SORT_NAMES[k], group: "Sort by", checked: choice.sort === k, radio: true,
@@ -490,7 +511,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   };
   const subtitle = view === "trash" || !counts ? null
     : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
-      : `${recordingsWord(shown.length)} shown`;
+      : `${recordingsWord(matching)} shown`;
 
   return (
     <div className="el-root el-embedded" data-v2="library" ref={root}>
@@ -513,7 +534,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               {pickedIds.length > 0 && !tooMany && (
                 <Menu label="Share or export" button={{ variant: "quiet", icon: Icons.ShareIcon, title: "Share or export" }}
                   items={[...exportMenu((format) => void exportRecordings(pickedIds, format, say)).items!.map((i) => ({ ...i, group: "Export transcripts" })),
-                    { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => picked.has(i.id)), say) }]} />
+                    { label: "Copy for AI", icon: Icons.SparkleIcon, group: "Copy", onPick: () => void copyForAiToClipboard((items ?? []).filter((i) => pickedIds.includes(i.id)), say) }]} />
               )}
               <Button variant="quiet" icon={Icons.TrashIcon} aria-label="Delete" title={`Delete (Del)`} aria-keyshortcuts="Delete" disabled={!pickedIds.length || tooMany}
                 onClick={() => deleteOrAsk(pickedIds)} />
@@ -530,6 +551,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
             </div>
             <div className="el-page__actions">
+              <Button variant="quiet" icon={Icons.TrashIcon} aria-pressed={view === "trash"} title="Recently deleted recordings"
+                onClick={() => setView(view === "trash" ? "all" : "trash")}>Trash</Button>
               {view !== "trash" && (
                 <Button variant="quiet" icon={Icons.RefreshIcon} loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Sync</Button>
               )}
@@ -558,13 +581,13 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
               <>
                 <Menu label="Views" items={viewMenu} chip={{ text: view === "all" ? "Views" : VIEW_NAMES[view as ListView], on: view !== "all" }} />
                 {FILTER_KEYS.map((key) => {
-                  const options = filterMenu(key);
+                  const menuItems = filterMenu(key);
                   const on = (filters[key]?.length ?? 0) > 0;
                   // Label and Bookmark tag only when there are some; the rest always, as classic's panel.
-                  if (!options.length && !on && (key === "label" || key === "tag" || key === "device")) return null;
+                  if (!menuItems.length && !on && (key === "label" || key === "tag" || key === "device")) return null;
                   return (
                     <span key={key} className="el-chip-group">
-                      <Menu label={FILTER_NAMES[key]} items={options} chip={{ text: chipLabel(inThisView, filters, key), on }} />
+                      <Menu label={FILTER_NAMES[key]} items={menuItems} chip={{ text: chipLabel(options[key], filters, key, knownValues.current), on }} />
                       {on && (
                         <Button variant="quiet" size="sm" className="el-chip-clear" icon={Icons.CloseIcon} aria-label={`Clear ${FILTER_NAMES[key]}`}
                           onClick={() => setFilters((f) => ({ ...f, [key]: [] }))} />
@@ -574,7 +597,6 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
                 })}
               </>
             )}
-            <Chip label="Trash" selected={view === "trash"} onToggle={() => setView(view === "trash" ? "all" : "trash")} />
           </FilterBar>
         </div>
         {view === "trash" ? (
@@ -611,7 +633,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
           <EmptyState icon={Icons.LibraryIcon} title="No recordings yet"
             body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
             action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
-        ) : shown.length === 0 ? (
+        ) : matching === 0 ? (
           <EmptyState icon={Icons.SearchIcon}
             title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
             body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."

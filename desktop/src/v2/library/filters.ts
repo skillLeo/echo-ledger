@@ -3,8 +3,7 @@
 // the rules are tested without a window.
 import type { LibraryItem } from "../../lib/ipc";
 import { itemState, sortItems, type SortKey } from "../../lib/library";
-import { groupBy, type GroupKey, type ItemGroup } from "../../lib/libraryGroups";
-import { sourceAppLabel } from "../../lib/format";
+import { groupBy, sourceLabel, type GroupKey, type ItemGroup } from "../../lib/libraryGroups";
 
 export type FilterKey = "source" | "device" | "project" | "language" | "status" | "label" | "tag";
 export type Filters = Partial<Record<FilterKey, readonly string[]>>;
@@ -21,10 +20,8 @@ const STATUS_ORDER = ["Needs you", "Transcribing", "Ready"];
 /** A recording's values for one filter: its value ids and the words the menu shows for each. */
 function valuesOf(item: LibraryItem, key: FilterKey): { value: string; label: string }[] {
   switch (key) {
-    case "source": {
-      const app = item.source_app ?? "other";
-      return [{ value: app, label: app === "voice_note" ? "Voice notes" : item.source_app_label || (item.source_app ? sourceAppLabel(item.source_app) : "Other") }];
-    }
+    case "source":
+      return [{ value: item.source_app ?? "other", label: sourceLabel(item) }];
     case "device": {
       const d = item.source_device ?? "";
       return d ? [{ value: d, label: DEVICE_NAMES[d] ?? d }] : [];
@@ -40,10 +37,11 @@ function valuesOf(item: LibraryItem, key: FilterKey): { value: string; label: st
       const label = state === "ready" ? "Ready" : state === "processing" ? "Transcribing" : "Needs you";
       return [{ value: label, label }];
     }
+    // Labels and tags match whatever their case ("Q4" and "q4" are one), shown in the first spelling met (classic).
     case "label":
-      return (item.labels ?? []).map((l) => ({ value: l, label: l }));
+      return (item.labels ?? []).map((l) => ({ value: l.toLowerCase(), label: l }));
     case "tag":
-      return (item.tags ?? []).map((t) => ({ value: t, label: t }));
+      return (item.tags ?? []).map((t) => ({ value: t.toLowerCase(), label: t }));
   }
 }
 
@@ -82,11 +80,14 @@ export function toggleFilter(filters: Filters, key: FilterKey, value: string): F
   return { ...filters, [key]: next };
 }
 
-/** A chip's words: its name alone, the one value ticked, or the name and how many. */
-export function chipLabel(items: readonly LibraryItem[], filters: Filters, key: FilterKey): string {
+/**
+ * A chip's words: its name alone, the one value ticked, or the name and how many. A ticked value this view doesn't
+ * offer keeps the words it had when ticked (`known`), never a raw id.
+ */
+export function chipLabel(options: readonly { value: string; label: string }[], filters: Filters, key: FilterKey, known: Readonly<Record<string, string>> = {}): string {
   const on = filters[key] ?? [];
   if (on.length === 0) return FILTER_NAMES[key];
-  if (on.length === 1) return `${FILTER_NAMES[key]}: ${filterOptions(items, key).find((o) => o.value === on[0])?.label ?? on[0]}`;
+  if (on.length === 1) return `${FILTER_NAMES[key]}: ${options.find((o) => o.value === on[0])?.label ?? known[`${key}:${on[0]}`] ?? "1 chosen"}`;
   return `${FILTER_NAMES[key]} · ${on.length}`;
 }
 
