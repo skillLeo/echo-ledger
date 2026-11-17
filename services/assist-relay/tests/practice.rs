@@ -316,3 +316,24 @@ async fn facts_and_summary_due_together_with_room_for_one_start_only_one() {
     });
     assert!(facts.is_some_and(|f| f.facts.iter().any(|x| x.contains("35 dollars"))), "the lines waited for the call");
 }
+
+#[tokio::test(start_paused = true)]
+async fn practice_stops_after_three_failed_tries_at_a_question() {
+    let h = harness(config_with(8));
+    let mut s = h.connect(practice_claims("s-practice-fails"));
+    ready_now(&mut s).await;
+    let fail = || assist_relay::provider::MockBehavior::Fail(assist_relay::provider::ProviderError::Unavailable);
+    for _ in 0..3 {
+        h.mock(assist_relay::domain::ProviderKind::Anthropic).push(fail());
+        h.mock(assist_relay::domain::ProviderKind::Groq).push(fail());
+    }
+    for attempt in 1..=3 {
+        s.send(json!({"type": "practice_next"})).await;
+        let error = s.until("error").await.pop().unwrap();
+        assert_eq!(error["code"], "provider_unavailable");
+        assert_eq!(error["retry"], attempt < 3, "try {attempt}: {error}");
+    }
+    // Practice has stopped: the next request ends it.
+    s.send(json!({"type": "practice_next"})).await;
+    assert_eq!(s.next().await, json!({"type": "practice_done", "asked": 0}));
+}

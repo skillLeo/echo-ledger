@@ -49,6 +49,9 @@ pub mod close {
     pub const REPLACED: u16 = 4409;
 }
 
+/// Tries at one practice question before practice stops.
+const PRACTICE_ATTEMPTS: u32 = 3;
+
 /// A provider keeps a written prefix about this long after its last use.
 const CACHE_TTL: Duration = Duration::from_secs(300);
 /// After the first token, a stream that sends nothing for this long has failed.
@@ -355,6 +358,9 @@ pub(crate) struct Engine {
     /// Practice: the questions asked, and one being written.
     practice_asked: Vec<String>,
     practice_busy: bool,
+    /// Failed attempts at the current question; at the cap, practice stops (practice_done).
+    practice_failures: u32,
+    practice_stopped: bool,
     /// Final lines since the last facts call and the last summary, and whether one is running.
     facts_lines: LineBuffer,
     facts_busy: bool,
@@ -423,6 +429,8 @@ impl Engine {
             suggestions: 0,
             practice_asked: Vec::new(),
             practice_busy: false,
+            practice_failures: 0,
+            practice_stopped: false,
             facts_lines: LineBuffer::default(),
             facts_busy: false,
             summary_lines: LineBuffer::default(),
@@ -1640,7 +1648,7 @@ impl Engine {
         let config = self.config();
         let total = config.practice.questions;
         let asked = u32::try_from(self.practice_asked.len()).unwrap_or(u32::MAX);
-        if asked >= total {
+        if asked >= total || self.practice_stopped {
             self.emit(ServerMessage::PracticeDone(PracticeDone { asked }));
             return;
         }
@@ -1693,8 +1701,7 @@ impl Engine {
                     error: Some(error.code()),
                 });
                 if let TaskKind::PracticeQuestion { .. } = kind {
-                    let message = ErrorMessage::new(error.code(), plain_error(error));
-                    self.error(if retryable(error) { message.retry() } else { message });
+                    self.practice_failed(ErrorMessage::new(error.code(), plain_error(error)), retryable(error));
                 }
                 self.evaluate_mode(Why::Spend);
                 return;
@@ -1716,9 +1723,10 @@ impl Engine {
         match kind {
             TaskKind::PracticeQuestion { question_id, index } => {
                 let Some(question) = background::clean_question(&outcome.text) else {
-                    self.error(ErrorMessage::new("provider_unavailable", plain_error(ProviderError::Protocol)).retry());
+                    self.practice_failed(ErrorMessage::new("provider_unavailable", plain_error(ProviderError::Protocol)), true);
                     return;
                 };
+                self.practice_failures = 0;
                 let turn_id = format!("q-{index}");
                 self.emit(ServerMessage::PracticeQuestion(PracticeQuestion {
                     question_id,
@@ -1764,6 +1772,18 @@ impl Engine {
             }
         }
         self.evaluate_mode(Why::Spend);
+    }
+
+    /// A practice question could not be written. Up to [`PRACTICE_ATTEMPTS`] tries per question the app may ask again;
+    /// then practice stops: this error says so (`retry: false`) and the next `practice_next` gets `practice_done`.
+    fn practice_failed(&mut self, message: ErrorMessage, retryable: bool) {
+        self.practice_failures += 1;
+        if self.practice_failures >= PRACTICE_ATTEMPTS {
+            self.practice_stopped = true;
+            self.error(message);
+        } else {
+            self.error(if retryable { message.retry() } else { message });
+        }
     }
 
     /// The usage of one of the relay's own calls, for the server's ledger (kind practice_question, facts or summary):
