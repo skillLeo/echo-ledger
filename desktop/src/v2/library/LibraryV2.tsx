@@ -37,15 +37,19 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const [message, setMessage] = useState<Message | null>(null);
   const seq = useRef(0);
   // Keyboard focus after a change that takes away the focused control: the next row after a delete, the recording
-  // again after Undo, else the search field. Applied once the list has been drawn.
+  // again after Undo, else the search field. Applied once, when the list has been drawn, and only if focus was lost
+  // (on nothing or the page): never taken from where the person has moved it since.
   const [focusAfter, setFocusAfter] = useState<{ rowId: string | null; seq: number } | null>(null);
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!focusAfter) return;
+    setFocusAfter(null);
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
     const el = root.current;
     const row = focusAfter.rowId ? el?.querySelector<HTMLElement>(`[data-row-id="${CSS.escape(focusAfter.rowId)}"]`) : null;
     (row ?? el?.querySelector<HTMLElement>('input[type="search"]'))?.focus();
-  }, [focusAfter, items]);
+  }, [focusAfter]);
   const keepHours = useTrashKeepHours();
 
   const say = useCallback((text: string, action?: Message["action"]) => setMessage({ id: ++seq.current, text, action }), []);
