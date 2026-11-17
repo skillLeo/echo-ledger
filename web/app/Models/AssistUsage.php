@@ -21,6 +21,8 @@ use Illuminate\Support\Carbon;
  * @property string $mode
  * @property string|null $plan the plan the call ran on (free, pro, ultra), as the relay token named it
  * @property string $kind
+ * @property string|null $outcome
+ * @property array<string, mixed>|null $latency the relay's latency stages in ms (AssistStats::STAGES)
  * @property string $cost_usd
  * @property Carbon $occurred_at
  */

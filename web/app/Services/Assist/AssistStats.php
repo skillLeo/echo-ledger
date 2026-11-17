@@ -40,7 +40,7 @@ final class AssistStats
         $usage = fn () => AssistUsage::query()->where('occurred_at', '>=', $from->copy()->utc())->where('occurred_at', '<', $to->copy()->utc());
         $tokens = 'SUM(input_tokens) AS input, SUM(cached_tokens) AS cached, SUM(written_tokens) AS written, SUM(output_tokens) AS output, SUM(cost_usd) AS cost, COUNT(*) AS calls';
 
-        $models = $usage()->selectRaw("model, provider, {$tokens}")->groupBy('model', 'provider')->get()
+        $models = $usage()->selectRaw("model, provider, {$tokens}")->groupBy('model', 'provider')->toBase()->get()
             ->map(fn ($row): array => ['model' => (string) $row->model, 'provider' => (string) $row->provider, ...self::sums($row)])
             ->sortByDesc('cost_usd')->values()->all();
 
@@ -56,7 +56,7 @@ final class AssistStats
             });
 
         $plans = [];
-        foreach ($usage()->selectRaw("COALESCE(plan, 'unknown') AS plan, {$tokens}")->groupBy('plan')->get() as $row) {
+        foreach ($usage()->selectRaw("COALESCE(plan, 'unknown') AS plan, {$tokens}")->groupBy('plan')->toBase()->get() as $row) {
             $plans[(string) $row->plan] = self::sums($row);
         }
         $byPlan = [];
@@ -68,7 +68,7 @@ final class AssistStats
         $modes = [];
         foreach ($usage()->join('assist_sessions', 'assist_sessions.id', '=', 'assist_usage.assist_session_id')
             ->selectRaw("CASE WHEN assist_sessions.practice THEN 'practice' ELSE assist_sessions.mode END AS session_mode, SUM(assist_usage.cost_usd) AS cost, COUNT(*) AS calls")
-            ->groupBy('session_mode')->get() as $row) {
+            ->groupBy('session_mode')->toBase()->get() as $row) {
             $modes[(string) $row->session_mode] = ['cost_usd' => round((float) $row->cost, 4), 'calls' => (int) $row->calls];
         }
         $byMode = [];
@@ -82,7 +82,7 @@ final class AssistStats
             ->map(fn ($n): int => (int) $n)->sortDesc()->all();
         $timed = array_sum($outcomes);
 
-        $totals = self::sums($usage()->selectRaw($tokens)->first());
+        $totals = self::sums($usage()->selectRaw($tokens)->toBase()->first());
 
         return [
             'totals' => $totals + [
