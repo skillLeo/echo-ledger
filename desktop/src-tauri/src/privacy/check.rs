@@ -259,6 +259,16 @@ fn build_patch(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> taur
     Ok(window)
 }
 
+/// [`build_patch`] on a blocking thread: a build waits for the main thread to make its webview, never on an async worker
+/// (the check runs at a cold start after an update, when WebView2 is slowest).
+async fn build_patch_blocking(app: &AppHandle, label: &'static str, kind: Kind, at: (f64, f64)) -> Result<tauri::WebviewWindow, String> {
+    let app = app.clone();
+    match tauri::async_runtime::spawn_blocking(move || build_patch(&app, label, kind, at)).await {
+        Ok(built) => built.map_err(|e| e.to_string()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 fn build_patch_window(app: &AppHandle, label: &str, kind: Kind, at: (f64, f64)) -> tauri::Result<tauri::WebviewWindow> {
     let builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("index.html".into()))
         .title(if kind == Kind::Test { "EchoLedger screen-share privacy test" } else { "EchoLedger screen-share privacy control" })
@@ -446,8 +456,8 @@ async fn run_inner(app: &AppHandle, why: Why) -> AppResult<View> {
     } else {
         privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner()).clear();
         let (test_at, control_at) = places(app);
-        let test = build_patch(app, CHECK_TEST, Kind::Test, test_at).map_err(|e| AppError::msg(format!("The test window could not open: {e}")))?;
-        let control = build_patch(app, CHECK_CONTROL, Kind::Control, control_at).map_err(|e| AppError::msg(format!("The control window could not open: {e}")))?;
+        let test = build_patch_blocking(app, CHECK_TEST, Kind::Test, test_at).await.map_err(|e| AppError::msg(format!("The test window could not open: {e}")))?;
+        let control = build_patch_blocking(app, CHECK_CONTROL, Kind::Control, control_at).await.map_err(|e| AppError::msg(format!("The control window could not open: {e}")))?;
         // Both of the check's own windows by name: the guided card's page says it drew too, and must not count.
         let both_drawn = || {
             let drawn = privacy.drawn_labels.lock().unwrap_or_else(|p| p.into_inner());

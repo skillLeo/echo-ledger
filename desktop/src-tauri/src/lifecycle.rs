@@ -444,6 +444,156 @@ fn build_main(app: &AppHandle) -> tauri::Result<()> {
 mod tests {
     use super::*;
 
+    /// The app's calls made outside a `spawn_blocking(…)`'s arguments, by name (the last part of the path), per function
+    /// (`file::name`), and those its async code makes (`async fn` bodies and `async` blocks).
+    #[derive(Default)]
+    struct Calls {
+        /// `file::function` → the names it calls.
+        by_fn: std::collections::BTreeMap<String, std::collections::BTreeSet<String>>,
+        /// (`file::function`, name) of every call made by async code.
+        from_async: Vec<(String, String)>,
+        file: String,
+        current: Vec<String>,
+        in_async: bool,
+        in_blocking: usize,
+    }
+
+    impl Calls {
+        fn function(&mut self, name: String, is_async: bool, visit: impl FnOnce(&mut Self)) {
+            let key = format!("{}::{name}", self.file);
+            self.by_fn.entry(key.clone()).or_default();
+            self.current.push(key);
+            // A sync function's body runs where it is called; an async one's is async code.
+            let saved = (self.in_async, self.in_blocking);
+            (self.in_async, self.in_blocking) = (is_async, 0);
+            visit(self);
+            (self.in_async, self.in_blocking) = saved;
+            self.current.pop();
+        }
+
+        /// The function a call by `name` from `file` reaches: the one of that name in the same file, or else the only
+        /// one of the app (`run`, `create` and `build` name several and are not followed).
+        fn resolve(&self, file: &str, name: &str) -> Option<String> {
+            let here = format!("{file}::{name}");
+            if self.by_fn.contains_key(&here) {
+                return Some(here);
+            }
+            let suffix = format!("::{name}");
+            let mut all = self.by_fn.keys().filter(|k| k.ends_with(&suffix));
+            match (all.next(), all.next()) {
+                (Some(only), None) => Some(only.clone()),
+                _ => None,
+            }
+        }
+
+        fn file_of(key: &str) -> &str {
+            key.rsplit_once("::").map_or(key, |(file, _)| file)
+        }
+
+        /// Whether a call by `name` from `key`'s file builds a window on the calling thread.
+        fn builds(&self, builders: &std::collections::BTreeSet<String>, key: &str, name: &str) -> bool {
+            name == "window!" || self.resolve(Self::file_of(key), name).is_some_and(|f| builders.contains(&f))
+        }
+
+        /// The app's functions that build a window on the thread that calls them: those that call `privacy::window` /
+        /// `super::window`, or one of these, outside spawn_blocking.
+        fn builders(&self) -> std::collections::BTreeSet<String> {
+            let mut found = std::collections::BTreeSet::new();
+            loop {
+                let more: Vec<String> = self.by_fn.iter().filter(|(f, called)| !found.contains(*f) && called.iter().any(|c| self.builds(&found, f, c))).map(|(f, _)| f.clone()).collect();
+                if more.is_empty() {
+                    return found;
+                }
+                found.extend(more);
+            }
+        }
+    }
+
+    impl<'ast> syn::visit::Visit<'ast> for Calls {
+        fn visit_item_mod(&mut self, m: &'ast syn::ItemMod) {
+            // The app's own code: test modules are left out.
+            let test = m.attrs.iter().any(|a| a.path().is_ident("cfg") && a.parse_args::<syn::Ident>().is_ok_and(|i| i == "test"));
+            if !test {
+                syn::visit::visit_item_mod(self, m);
+            }
+        }
+        fn visit_item_fn(&mut self, f: &'ast syn::ItemFn) {
+            self.function(f.sig.ident.to_string(), f.sig.asyncness.is_some(), |v| syn::visit::visit_item_fn(v, f));
+        }
+        fn visit_impl_item_fn(&mut self, f: &'ast syn::ImplItemFn) {
+            self.function(f.sig.ident.to_string(), f.sig.asyncness.is_some(), |v| syn::visit::visit_impl_item_fn(v, f));
+        }
+        fn visit_expr_closure(&mut self, c: &'ast syn::ExprClosure) {
+            // A closure is read as part of its function, but as sync code: the callbacks async code hands on (menu,
+            // shortcut and main-thread closures) run elsewhere.
+            let saved = std::mem::take(&mut self.in_async);
+            syn::visit::visit_expr_closure(self, c);
+            self.in_async = saved;
+        }
+        fn visit_expr_async(&mut self, e: &'ast syn::ExprAsync) {
+            let saved = std::mem::replace(&mut self.in_async, true);
+            syn::visit::visit_expr_async(self, e);
+            self.in_async = saved;
+        }
+        fn visit_expr_call(&mut self, call: &'ast syn::ExprCall) {
+            if let syn::Expr::Path(path) = &*call.func {
+                let segments: Vec<String> = path.path.segments.iter().map(|s| s.ident.to_string()).collect();
+                let last = segments.last().cloned().unwrap_or_default();
+                if last == "spawn_blocking" {
+                    self.in_blocking += 1;
+                    syn::visit::visit_expr_call(self, call);
+                    self.in_blocking -= 1;
+                    return;
+                }
+                if let (0, Some(f)) = (self.in_blocking, self.current.last().cloned()) {
+                    // privacy::window / super::window build the window; no other `window` call is one.
+                    let qualifier = segments.len().checked_sub(2).map(|i| segments[i].as_str());
+                    let name = if last == "window" && matches!(qualifier, Some("privacy" | "super")) { "window!".to_string() } else { last };
+                    if self.in_async {
+                        self.from_async.push((f.clone(), name.clone()));
+                    }
+                    self.by_fn.entry(f).or_default().insert(name);
+                }
+            }
+            syn::visit::visit_expr_call(self, call);
+        }
+    }
+
+    fn app_calls() -> Calls {
+        fn walk(root: &std::path::Path, dir: &std::path::Path, calls: &mut Calls) {
+            for entry in std::fs::read_dir(dir).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    walk(root, &path, calls);
+                } else if path.extension().is_some_and(|e| e == "rs") && path.file_name().is_some_and(|n| n != "tests.rs") {
+                    let file = syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap();
+                    calls.file = path.strip_prefix(root).unwrap().to_string_lossy().into_owned();
+                    syn::visit::Visit::visit_file(calls, &file);
+                }
+            }
+        }
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+        let mut calls = Calls::default();
+        walk(&root, &root, &mut calls);
+        calls
+    }
+
+    #[test]
+    fn no_async_code_reaches_a_window_build_but_through_spawn_blocking() {
+        // A build waits for the main thread to make its webview: on an async worker it holds the worker for as long, and
+        // a few at once starve the runtime (the Server 2022 stall). Async code reaches a build only through spawn_blocking.
+        let calls = app_calls();
+        let builders = calls.builders();
+        let found: Vec<String> = calls.from_async.iter().filter(|(f, name)| calls.builds(&builders, f, name)).map(|(f, name)| format!("{f}: {name}(…) outside spawn_blocking")).collect();
+        assert!(found.is_empty(), "{}", found.join("\n"));
+        for known in ["overlay/mod.rs::build_window", "overlay/mod.rs::create_overlay", "overlay/mod.rs::create_translate_window", "lifecycle.rs::build_main", "privacy/check.rs::build_patch"] {
+            assert!(builders.contains(known), "{known} builds a window ({builders:?})");
+        }
+        for hands_on in ["lifecycle.rs::spawn_build", "privacy/check.rs::build_patch_blocking", "commands.rs::translate_start"] {
+            assert!(calls.by_fn.contains_key(hands_on) && !builders.contains(hands_on), "{hands_on} hands its build to spawn_blocking");
+        }
+    }
+
     #[test]
     fn windows_are_built_on_blocking_threads_never_on_the_async_workers() {
         // A build waits for the main thread to make its webview; on the async workers six of them starved the runtime
