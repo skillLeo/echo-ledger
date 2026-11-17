@@ -91,6 +91,15 @@ export function WorkspaceV2({
   const say = useCallback((text: string, action?: { label: string; run: () => void }) => setMessage({ id: Date.now(), text, action }), []);
   const update: WorkspaceUpdate = useCallback((change) => setWs((cur) => (cur ? change(cur) : cur)), []);
   const askLocked = useLocked("ai_notes");
+  // The brief, memory and recent call notes as one text for another AI chat, as today.
+  const copyForAi = async () => {
+    try {
+      await navigator.clipboard.writeText(await api.clientBundle(project.id));
+      say("Copied the brief, memory and recent call notes for AI");
+    } catch (e) {
+      say(typeof e === "string" ? e : "The project couldn't be copied. Try again.");
+    }
+  };
 
   useEffect(() => {
     setItemsFailed(false);
@@ -139,6 +148,7 @@ export function WorkspaceV2({
         </div>
         <div className="el-page__actions">
           {onShare && <Button icon={Icons.ShareIcon} onClick={onShare}>Share</Button>}
+          <Button title="The brief, memory and recent call notes as one text, ready to paste into a chat" onClick={() => void copyForAi()}>Copy for AI</Button>
           {menu.length > 0 && <Menu label="Project menu" items={menu} button={{ variant: "quiet", icon: Icons.MoreIcon }} />}
         </div>
       </header>
@@ -207,7 +217,7 @@ function CallNotesTab({ ws, projectName, onOpenRecording }: { ws: ClientWorkspac
           <div className="el-group__head">
             <span className="el-body-strong" dir="auto">{note.session?.title ?? "Call"}</span>
             <span className="el-caption">{formatWhen(note.session?.started_at ?? note.created_at ?? undefined)}{note.session?.duration_ms ? ` · ${formatDuration(note.session.duration_ms)}` : ""}</span>
-            <Button size="sm" variant="quiet" onClick={() => onOpenRecording(note.session_id)}>Open</Button>
+            <Button size="sm" variant="quiet" aria-label={`Open ${note.session?.title ?? "the call"}`} onClick={() => onOpenRecording(note.session_id)}>Open</Button>
           </div>
           {note.status === "pending" && <p className="el-caption" role="status">Writing the notes…</p>}
           {(note.status === "failed" || note.status === "skipped") && <p className="el-caption">{note.error ?? "No notes were written for this call."}</p>}
@@ -378,9 +388,10 @@ function Memory({ projectId, projectName, ws, onChanged, onOpenRecording, say, a
                     control={
                       <span className="el-row__buttons">
                         {line.source?.type === "call" && line.source.id && (
-                          <Button size="sm" variant="quiet" onClick={() => onOpenRecording(line.source!.id!, line.source!.at_ms ?? 0)}>Open</Button>
+                          <Button size="sm" variant="quiet" aria-label={`Open the call${line.source.at_ms != null ? ` at ${timestamp(line.source.at_ms)}` : ""}`}
+                            onClick={() => onOpenRecording(line.source!.id!, line.source!.at_ms ?? 0)}>Open</Button>
                         )}
-                        <Button size="sm" variant="quiet" aria-pressed={line.pinned} disabled={busy(line.id)}
+                        <Button size="sm" variant="quiet" aria-label={`${line.pinned ? "Unpin" : "Pin"} “${line.text}”`} disabled={busy(line.id)}
                           onClick={() => void run(line.id, async () => {
                             const next = (await api.updateClientMemory(projectId, line.id, { pinned: !line.pinned })).data;
                             onChanged((cur) => ({ ...cur, memory: cur.memory.map((l) => (l.id === line.id ? next : l)) }));

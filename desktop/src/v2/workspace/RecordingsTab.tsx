@@ -89,7 +89,7 @@ export function RecordingsTab({ project, projects, items, itemsFailed, folders, 
             <ListSection title="In transcripts" />
             {found.flatMap((r) => r.hits.slice(0, 3).map((h) => (
               <ListRow key={`${h.transcript_id}-${h.segment_index}`} compact iconStyle="plain" icon={Icons.PlayIcon}
-                title={recordingName(r.session.title)}
+                title={recordingName(r.session.title)} label={`Play ${recordingName(r.session.title)} from ${timestamp(h.start_ms)}`}
                 meta={<>{h.speaker}: {snippetParts(h.snippet, h.highlights).map((p, i) => (p.hit ? <mark key={i} className="el-mark">{p.text}</mark> : <span key={i}>{p.text}</span>))}</>}
                 value={timestamp(h.start_ms)} onClick={() => onOpenRecording(r.session.id, h.start_ms)} />
             )))}

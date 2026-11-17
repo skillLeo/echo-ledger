@@ -36,6 +36,8 @@ export type ListRowProps = {
   badge?: ReactNode;
   /** What the row stands for (a recording's id): a page can give it keyboard focus back after a change. */
   rowId?: string;
+  /** The row button's name when the title alone isn't enough ("Play Kick-off from 0:31"); it starts with the title. */
+  label?: string;
   /** A press that may start a drag (recordings dragged onto a project in the sidebar). */
   onPointerDown?: (e: PointerEvent<HTMLButtonElement>) => void;
 };
@@ -45,7 +47,7 @@ export type ListRowProps = {
  * by the rest; with a control the row is a label for it.
  */
 export function ListRow({
-  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId,
+  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -56,7 +58,7 @@ export function ListRow({
   return (
     <li className={cls}>
       {interactive && (
-        <button type="button" className="el-row__hit" aria-labelledby={`${id}-title`} aria-describedby={describedBy}
+        <button type="button" className="el-row__hit" aria-label={label} aria-labelledby={label ? undefined : `${id}-title`} aria-describedby={describedBy}
           aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} />
       )}
       {leading ?? (icon && (
