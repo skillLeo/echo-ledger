@@ -183,8 +183,15 @@ class WorkspaceTest : ScreenTest() {
                     else -> if (l == EchoLanguage.Urdu) "کال نوٹس" else tab
                 }
                 press(label)
-                // A new language composes the page again, and the rules are read again.
-                if (tab == "Recordings") waitFor("“Qureshi”")
+                // A new language composes the page again, so what it shows is read again: wait for this tab's.
+                waitFor(
+                    when (tab) {
+                        "Recordings" -> "“Qureshi”"
+                        "Files" -> "Proforma March.pdf"
+                        "Memory & instructions" -> "Ship 40,000"
+                        else -> "40% advance"
+                    }
+                )
                 val name = "workspace-" + tab.substringBefore(' ').lowercase()
                 val file = "$name-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}.png"
                 compose.onRoot().captureRoboImage(File(out, file))
