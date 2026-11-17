@@ -14,6 +14,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextReplacement
@@ -224,5 +225,16 @@ class AppearanceNotificationsParityTest : ScreenTest() {
         pumpUntil("to") { vm.settings.value.quietTo == "06:45" }
         compose.onNode(hasSetTextAction() and hasText("From")).assertTextContains("22:30")
         assertEquals(listOf("22:30", "07:5", "07:00", "12:34"), listOf("2230", "07:5", " 07:00 ", "12:345").map(::quietTime))
+        // A leading zero is kept.
+        assertEquals("06:30", quietTime("0630"))
+        compose.onNode(hasSetTextAction() and hasText("To")).performTextReplacement("0630")
+        pumpUntil("to, a leading zero") { vm.settings.value.quietTo == "06:30" }
+        // Four digits that are no time: the field says so and the stored time stays.
+        for (typed in listOf("2400", "9999")) {
+            compose.onNode(hasSetTextAction() and hasText("From")).performTextReplacement(typed)
+            compose.waitForIdle()
+            compose.onNodeWithText("Write the time like 22:00").assertExists()
+            assertEquals(typed, "22:30", kotlinx.coroutines.runBlocking { app.graph.settings.current() }.quietFrom)
+        }
     }
 }

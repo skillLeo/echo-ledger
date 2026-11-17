@@ -871,7 +871,8 @@ private fun NotesTab(project: ClientDto, notes: List<CallNotesDto>, onOpenAt: (S
                     }
                 }
                 note.sections.forEach { section ->
-                    Text(section.heading, style = EchoV2.type.captionStrong, color = c.textSecondary)
+                    // The note's own heading (the server's words): its own direction and face.
+                    Text(section.heading, style = EchoV2.type.content(section.heading, EchoV2.type.captionStrong), color = c.textSecondary)
                     section.items.forEach { item ->
                         Row(
                             Modifier.fillMaxWidth().clickable(role = Role.Button) { onOpenAt(note.sessionId, item.atMs) },

@@ -86,7 +86,8 @@ class AskTest {
         question = "What did Bilal Traders agree on payment?"
         compose.onNode(hasText("Ask") and hasClickAction()).assertIsEnabled().performClick()
         assertEquals(listOf("01JC1"), asked)
-        compose.onNodeWithText("All recordings (not available yet)").assertExists()
+        // Asking across all recordings isn't on the server yet: no such choice is shown, not even as unavailable (as on desktop).
+        compose.onNodeWithText("All recordings", substring = true).assertDoesNotExist()
     }
 
     @Test

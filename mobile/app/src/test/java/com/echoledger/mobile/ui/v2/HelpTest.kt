@@ -65,6 +65,31 @@ class HelpTest {
     }
 
     @Test
+    fun eachBlockTakesItsDirectionFromItsFirstStrongLetter() {
+        val ltr = androidx.compose.ui.unit.LayoutDirection.Ltr
+        val rtl = androidx.compose.ui.unit.LayoutDirection.Rtl
+        // The user guide's section 12 (web/resources/help/user-guide.md): an English item quoting Urdu stays left to right.
+        val quoting = "**Urdu** always allows English words inside, the way people speak in Pakistan (\"کل کی meeting reschedule کر دیں\")."
+        assertEquals(ltr, Markdown.direction(MdBlock.ListBlock(false, listOf(quoting, "Arabic does too."))))
+        assertEquals(ltr, Markdown.firstStrong(quoting))
+        // Each item its own: an Urdu item in an English list is right to left.
+        assertEquals(rtl, Markdown.firstStrong("کل کی میٹنگ"))
+        // A table goes by its header row: an English table with one Urdu cell stays left to right.
+        assertEquals(ltr, Markdown.direction(MdBlock.Table(listOf("Button", "What it does"), listOf(listOf("Keep", "محفوظ کرتا ہے")))))
+        assertEquals(rtl, Markdown.direction(MdBlock.Table(listOf("بٹن", "Button"), emptyList())))
+        // Marks, quotes, digits and punctuation are passed over.
+        assertEquals(rtl, Markdown.direction(MdBlock.Paragraph("**\"3.** میٹنگ کل ساڑھے دس بجے ہے۔")))
+        assertEquals(ltr, Markdown.direction(MdBlock.Paragraph("`10` «Keep» کے بعد")))
+        // The first letter decides, whatever follows.
+        assertEquals(ltr, Markdown.direction(MdBlock.Heading(2, "After a call: کال کے بعد")))
+        assertEquals(ltr, Markdown.direction(MdBlock.Paragraph("Meeting کل ساڑھے دس بجے ہے۔")))
+        assertEquals(rtl, Markdown.direction(MdBlock.Paragraph("کال کے بعد: After a call")))
+        // No letter: the screen's direction; code is always left to right.
+        assertEquals(null, Markdown.direction(MdBlock.Paragraph("1. — 2.")))
+        assertEquals(ltr, Markdown.direction(MdBlock.Code("کوڈ")))
+    }
+
+    @Test
     fun theReaderMakesBlocksAndKeepsALinksWordsOnly() {
         val blocks = Markdown.blocks(
             "# Title\n\nSome **bold** and `code`.\n\n- one\n- two\n  more\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n> quote\n\n```\nx = 1\n```"

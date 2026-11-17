@@ -88,11 +88,11 @@ class ThemeTest : E2eTest() {
     fun switchingTheSystemThemeWhileTheAppIsOpenKeepsTheScreenAndItsState() {
         Ui.launchApp()
         Ui.awaitText(SignInScreen.TITLE)
-        Ui.fillField("Sign-in code", "ABCD-EFGH")
+        Ui.fillField("One-time sign-in code", "ABCD-EFGH")
         Shell.setNightMode(true)
         Thread.sleep(2_500)
         Ui.awaitText(SignInScreen.TITLE)
-        assertEquals("ABCD-EFGH", Ui.field("Sign-in code").text)
+        assertEquals("ABCD-EFGH", Ui.field("One-time sign-in code").text)
     }
 }
 
@@ -104,14 +104,14 @@ class RotationTest : E2eTest() {
         Ui.launchApp()
         Ui.awaitText(SignInScreen.TITLE)
         SignInScreen.otherWays(server = "http://10.0.2.2:8113")
-        Ui.fillField("Sign-in code", "ABCD-EFGH")
+        Ui.fillField("One-time sign-in code", "ABCD-EFGH")
         Ui.hideKeyboard()
         Ui.device.setOrientationLeft()
         Thread.sleep(2_500)
         Ui.awaitText(SignInScreen.TITLE)
         assertEquals("http://10.0.2.2:8113", Ui.field("Server address").text)
-        Ui.scrollDownTo("Sign-in code")
-        assertEquals("ABCD-EFGH", Ui.field("Sign-in code").text)
+        Ui.scrollDownTo("One-time sign-in code")
+        assertEquals("ABCD-EFGH", Ui.field("One-time sign-in code").text)
         Ui.device.setOrientationNatural()
     }
 
@@ -120,10 +120,10 @@ class RotationTest : E2eTest() {
     fun theSelectedTabIsKeptWhenThePhoneIsRotated() {
         launchPaired()
         Ui.openTab("Settings")
-        Ui.awaitText("Privacy & security")
+        Ui.awaitText("Privacy & data")
         Ui.device.setOrientationLeft()
         Thread.sleep(2_500)
-        assertFalse("rotating must not send the user back to the Library", Ui.has("Recordings from your phone, computer and the web"))
+        assertFalse("rotating must not send the user back to the Library", Ui.has(Library.SEARCH_HINT))
         Ui.device.setOrientationNatural()
     }
 

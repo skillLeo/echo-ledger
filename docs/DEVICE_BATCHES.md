@@ -50,21 +50,42 @@ DC-03 on the Mac, and the MAC-32 Dock and quit check with the 1.8.1 Mac build. L
 Undo toast undoes the delete, and Edit › Undo still works in text fields (D-150) (the first self-signed build asks once
 for the microphone, system audio and Screen Recording; allow them, then they stay).
 
-**5. Mac, Live Translate (next free Mac slot, about 25 minutes)**
-macOS 14.2 or later, the build from `b-desktop-core-5`, a plan with Live Translate; allow System Audio Recording;
-start the app from Terminal for its log.
+**5. Mac, Live Translate (next free Mac slot, about 35 minutes)**
+macOS 14.2 or later. The account signed in to EchoLedger on this Mac needs a plan with Live Translate, and its server
+a Soniox key: Start asks the server for a 10-minute key. Check first in the installed app: the Live tab shows Live
+Translate's app list, not "Not in your plan".
+
+Build (about 10 minutes; ad-hoc signed, same app id as the installed EchoLedger, so it opens on the same account):
+    cd /Applications/XAMPP/htdocs/echoledger
+    git fetch origin
+    git worktree add --detach /tmp/el-lt origin/v1.1
+    cd /tmp/el-lt/desktop && npm install
+    export PATH=/opt/homebrew/opt/rustup/bin:$PATH
+    npx tauri build --bundles app --no-sign
+    APP=/tmp/el-lt/desktop/src-tauri/target/release/bundle/macos/EchoLedger.app
+    sh scripts/smoke-mac.sh "$APP" 180                   # expect "Smoke test passed"
+Run:
+    Quit the installed EchoLedger first (menu bar icon > Quit EchoLedger): a second EchoLedger hands over to it.
+    "$APP/Contents/MacOS/echoledger-desktop" 2>&1 | tee ~/Desktop/echoledger-live-translate.log
+    The build is not Developer-ID signed: macOS asks once for System Audio Recording on the first Start, and the
+    keychain may ask for the signed-in account (Always Allow).
+
 1. Chrome: play a YouTube video with speech, open Live Translate, pick "Google Chrome", start Watch. Subtitles appear
    bottom-centre within a few seconds; the video still sounds normal; no orange microphone dot. Stop: the window
    closes and Cmd+Shift+T reopens a closed tab in Chrome again.
-2. While it runs: Cmd+Shift+T unlocks (drag it) and locks (clicks pass through); Cmd+Shift+H hides and shows the
-   content, and something visible still says it is listening.
+2. While it runs: Cmd+Shift+T unlocks (drag it) and locks (clicks pass through). Cmd+Shift+H hides it: a small pill
+   "Live Translate is listening" stays; Cmd+Shift+H brings it back. The menu bar menu says "Live Translate is
+   listening · Stop" the whole time, and its Stop stops it.
 3. Only the app picked: also play Music or Spotify; none of their words appear.
 4. Safari: play a video; Safari is expected not to be listed. Note what the list shows.
 5. Zoom: join zoom.us/test, play its audio, pick "zoom.us", start Game: captions top-centre.
 6. A full-screen app or game: the window stays above it, in its full-screen Space too.
 7. AirPods as output: repeat step 1; no microphone indicator at any point.
-8. Pause the video, then Start: the window says the app stopped playing sound, or the app is no longer listed.
-Send the "[echoledger]" log lines and any notice with an OSStatus number.
+8. It ends on its own: while it runs on Chrome, quit Chrome. The overlay closes, the menu bar line goes, and the Live
+   tab says it ended and why, with Close. Then pause a video and Start: either the app is no longer listed or the
+   Live tab says the app stopped playing sound.
+After: Quit from the menu bar, reopen the installed EchoLedger, then: git worktree remove /tmp/el-lt
+Send the "[echoledger]" lines from ~/Desktop/echoledger-live-translate.log and any notice with an OSStatus number.
 
 ## Phone (S25, Android 17) — v1.8.1 S5 retest + v1.8 0.3, about 35 minutes
 

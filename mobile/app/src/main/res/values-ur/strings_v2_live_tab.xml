@@ -3,15 +3,15 @@
 <resources>
     <string name="v2_livetab_title">لائیو</string>
     <string name="v2_livetab_record">کالز اور میٹنگز ریکارڈ کریں</string>
-    <string name="v2_livetab_record_help">واٹس ایپ اور فون کالز، ہوتے ہی ریکارڈ</string>
+    <string name="v2_livetab_record_help">واٹس ایپ اور فون کالز، ساتھ ساتھ ریکارڈ</string>
     <string name="v2_livetab_voice_note">وائس نوٹ</string>
-    <string name="v2_livetab_voice_note_help">ابھی اپنی آواز ریکارڈ کریں</string>
+    <string name="v2_livetab_voice_note_help">ابھی اپنی آواز ریکارڈ کریں</string>
     <string name="v2_livetab_translate">لائیو ترجمہ</string>
-    <string name="v2_livetab_translate_help">گیمز اور ویڈیوز کا اسکرین پر ترجمہ</string>
+    <string name="v2_livetab_translate_help">گیمز اور ویڈیوز کا اسکرین پر ترجمہ</string>
     <string name="v2_livetab_dictation">ڈکٹیشن</string>
-    <string name="v2_livetab_dictation_help">کسی بھی ایپ میں ٹائپ کی جگہ بولیں</string>
+    <string name="v2_livetab_dictation_help">کسی بھی ایپ میں ٹائپ کی جگہ بولیں</string>
     <string name="v2_livetab_captions">کیپشنز</string>
-    <string name="v2_livetab_captions_help">کال کے الفاظ اسکرین پر</string>
+    <string name="v2_livetab_captions_help">کال کے الفاظ اسکرین پر</string>
     <string name="v2_livetab_assist_section">کال کے دوران</string>
     <string name="v2_livetab_tools_section">ٹولز</string>
 </resources>

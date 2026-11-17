@@ -18,8 +18,13 @@ import org.robolectric.annotation.Config
  */
 @Config(sdk = [34], qualifiers = "w411dp-h2400dp-mdpi")
 abstract class ScreenTest : AppTest() {
+    /**
+     * Effects (a LaunchedEffect's load, a rememberCoroutineScope's call) resume on the main thread, as in the app: the
+     * test dispatcher otherwise lets an effect resume on the background thread its `withContext(Dispatchers.IO)` call
+     * finished on, and the screen state it writes there may never reach the screen (P-078).
+     */
     @get:Rule
-    val compose = createComposeRule()
+    val compose = createComposeRule(kotlinx.coroutines.Dispatchers.Main)
 
     protected lateinit var vm: MainViewModel
     private var showing by mutableStateOf(true)
