@@ -166,6 +166,22 @@ class AssistCardTest {
         assertEquals("Half an ans", play(ready, from = before).shown?.text)
     }
 
+    /** HTTP mode (1.9.0-q): a dropped stream lets go only what it was writing, as a resumed ready would. */
+    @Test
+    fun aDroppedStreamClearsOnlyTheSuggestionItWasWriting() {
+        val two = play(ready, start("s-1"), Token("s-1", "First"), start("s-2", turn = "t-2"), Token("s-2", "Sec"))
+        val lost = play(AssistMessage.Lost(setOf("s-2")), from = two)
+        val s2 = lost.suggestions.first { it.id == "s-2" }
+        assertEquals(SuggestionStatus.Cancelled, s2.status)
+        assertEquals("", s2.text)
+        assertNull(lost.shownId)
+        assertEquals("First", lost.suggestions.first { it.id == "s-1" }.text)
+        assertEquals(SuggestionStatus.Streaming, lost.suggestions.first { it.id == "s-1" }.status)
+        // A finished suggestion is not let go.
+        val done = play(ready, start("s-1"), Token("s-1", "Done."), SuggestionEnd("s-1", EndStatus.Done))
+        assertEquals(done, play(AssistMessage.Lost(setOf("s-1")), from = done))
+    }
+
     @Test
     fun aFinishedSuggestionAndNoReplyNeededStayAcrossAResumedReady() {
         val done = play(ready, start("s-1"), Token("s-1", "Delivery by Thursday."), SuggestionEnd("s-1", EndStatus.Done))

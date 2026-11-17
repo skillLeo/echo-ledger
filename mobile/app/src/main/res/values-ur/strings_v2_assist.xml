@@ -41,6 +41,9 @@
     <string name="v2_assist_error_bad_message">یہ درخواست نہیں پہنچی۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_assist_error_budget_off">تجاویز بند ہیں: اس مہینے کے اسسٹ کے گھنٹے ختم ہو گئے۔ کیپشنز چلتے رہیں گے۔</string>
     <string name="v2_assist_error_budget_wait">تھوڑی دیر میں دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_error_update_app">لائیو اسسٹ کے لیے ایپ کا تازہ ترین ورژن چاہیے۔</string>
+    <string name="v2_assist_error_cant_connect">لائیو اسسٹ ابھی رابطہ نہیں کر پا رہا۔ چند منٹ بعد دوبارہ کوشش کریں۔</string>
+    <string name="v2_assist_error_unreachable">لائیو اسسٹ سرور تک نہیں پہنچ سکا۔ دوبارہ کوشش کریں۔</string>
     <string name="v2_assist_error_other">لائیو اسسٹ میں کچھ گڑبڑ ہو گئی۔ ریکارڈنگ جاری ہے۔</string>
     <string name="v2_assist_practice_question">سوال %2$d میں سے %1$d</string>
     <string name="v2_assist_practice_done">مشق مکمل: %1$d سوالات۔</string>
