@@ -1,7 +1,7 @@
 // Live Assist prep (v1.9 L4): who the meeting is with and what kind (templates per type), a linked project and its
 // documents, the brief (goals, done, not done, to discuss, instructions), mode, hint level and language help, the
 // consent line with Copy, then Start now (recording and assist at once) or Schedule.
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, errorMessage, type ClientFile } from "../../lib/ipc";
 import { Badge, Button, Card, Checkbox, EmptyState, Icons, Loading, Segmented, Select, Skeleton, TextArea, TextField } from "../components";
 import { assist, type AssistMode, type HintLevel, type LanguageHelp, type MeetingType, type Prep, type PrepDraft } from "./adapter";
@@ -70,6 +70,12 @@ export function PrepScreen({ prep = null, projects, onBack, onStarted }: {
   const [scheduleAt, setScheduleAt] = useState(prep?.scheduled_at?.slice(0, 16) ?? "");
   /** 409 session_active on Start now: the prep to start once the running session has ended. */
   const [activeFor, setActiveFor] = useState<{ prepId: string; running: SessionActive } | null>(null);
+  // Leaving the prep while it asks about a running session keeps that session, as Keep running does.
+  const asking = useRef(false);
+  asking.current = activeFor !== null;
+  useEffect(() => () => {
+    if (asking.current) void assist.keepRunning().catch(() => undefined);
+  }, []);
   /** documents_too_large (1.9.0-n): from attaching, or from the relay when the session sends them; the old ones stay. */
   const [docsTooLarge, setDocsTooLarge] = useState(false);
 
