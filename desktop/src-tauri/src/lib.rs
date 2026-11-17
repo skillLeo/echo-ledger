@@ -6,6 +6,7 @@ pub mod activity;
 pub mod after_call;
 pub mod app_life;
 pub mod app_menu;
+pub mod assist;
 pub mod audio;
 pub mod call_guard;
 mod commands;
@@ -44,6 +45,7 @@ pub mod spaces;
 pub mod stt;
 pub mod translate;
 pub mod tray;
+pub mod ui_flags;
 pub mod updates;
 pub mod whatsapp;
 pub mod server_notice;
@@ -69,6 +71,12 @@ pub struct AppState {
     pub token: Mutex<Option<String>>,
     pub token_store: Box<dyn TokenStore>,
     pub server_config: Mutex<Option<ServerConfig>>,
+    /// The interface flags last announced as `ui:flags` (contract 2.0.0-a).
+    pub ui_announced: ui_flags::Announced,
+    /// The Live Assist session that runs, if any.
+    pub assist: assist::Registry,
+    /// The recording a Live Assist session from a prep saves without the after-call card (its `client_ref`).
+    pub assist_auto_saved: Mutex<Option<String>>,
     pub capture: audio::CaptureController,
     pub live: stt::LiveCaptions,
     pub dictation_live: stt::LiveCaptions,
@@ -162,6 +170,9 @@ impl AppState {
             token: Mutex::new(token),
             token_store,
             server_config: Mutex::new(None),
+            ui_announced: ui_flags::Announced::default(),
+            assist: assist::Registry::default(),
+            assist_auto_saved: Mutex::new(None),
             capture: audio::CaptureController::default(),
             live: stt::LiveCaptions::default(),
             dictation_live: stt::LiveCaptions::default(),
@@ -481,6 +492,8 @@ pub fn run() {
             // notification area of Windows, see `ExitRequested`); the next open builds a new one on the same page
             // (main_view_get).
             WindowEvent::CloseRequested { .. } if window.label() == lifecycle::MAIN => lifecycle::main_closing(window.app_handle()),
+            // The Live Assist card was dragged: its place is kept for the next session.
+            WindowEvent::Moved(_) if window.label() == assist::live::WINDOW => assist::live::card_moved(window.app_handle()),
             WindowEvent::Destroyed => {
                 privacy::destroyed(window.app_handle(), window.label());
                 lifecycle::on_destroyed(window.app_handle(), window.label());
@@ -568,6 +581,26 @@ pub fn run() {
             commands::mic_users,
             commands::mic_last_not_recorded,
             commands::quit_and_reopen,
+            commands::ui_flags,
+            commands::trash_keep_hours,
+            commands::after_call_notice_answer,
+            commands::ui_classic_set,
+            commands::assist_preps_list,
+            commands::assist_prep_save,
+            commands::assist_prep_delete,
+            commands::assist_prep_documents_add,
+            commands::assist_prep_document_remove,
+            commands::assist_schedule,
+            commands::assist_start,
+            commands::assist_start_replacing,
+            commands::assist_keep_running,
+            commands::assist_end,
+            commands::assist_send,
+            commands::assist_set,
+            commands::assist_feedback,
+            commands::assist_shown,
+            commands::assist_card_hide,
+            commands::assist_state,
             commands::ask_answer,
             commands::import_voice_notes,
             commands::import_pick,
@@ -653,6 +686,7 @@ pub fn run() {
             commands::link_open,
             commands::screens_status,
             commands::screens_pause,
+            commands::screens_capture_now,
             commands::screens_permission,
             commands::session_screens,
             commands::client_screens,
@@ -687,6 +721,7 @@ pub fn run() {
             commands::recording_state,
             commands::pending_list,
             commands::pending_keep,
+            commands::pending_keep_audio,
             commands::pending_discard,
             commands::pending_rename,
             commands::pending_assign_client,

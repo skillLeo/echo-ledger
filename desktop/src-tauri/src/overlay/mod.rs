@@ -25,11 +25,16 @@ pub const PILL: &str = "pill";
 pub const REVIEW: &str = "review";
 
 /// Every overlay-type window: same builder flags, click-through unless the cursor is over a reported region.
-pub const WINDOWS: [&str; 4] = [OVERLAY, DICTATION, PILL, REVIEW];
+pub const WINDOWS: [&str; 5] = [OVERLAY, DICTATION, PILL, REVIEW, ASSIST];
+/// The Live Assist card (the privacy service's name for it).
+pub const ASSIST: &str = crate::privacy::ASSIST;
 
 const DICTATION_SIZE: (f64, f64) = (420.0, 110.0);
 const PILL_SIZE: (f64, f64) = (352.0, 84.0);
 const REVIEW_SIZE: (f64, f64) = (360.0, 168.0);
+/// The Live Assist card's window: the card (at most 512 px wide) and room for a long suggestion; outside the card it
+/// lets clicks through.
+const ASSIST_SIZE: (f64, f64) = (560.0, 440.0);
 const MARGIN_LOGICAL: f64 = 18.0;
 const PILL_MARGIN_LOGICAL: f64 = 12.0;
 
@@ -58,6 +63,7 @@ pub struct OverlaySetup {
     pub caption_size: CaptionSize,
     pub caption_width: CaptionWidth,
     pub pill_position: Option<PillPosition>,
+    pub assist_card_position: Option<PillPosition>,
 }
 
 impl OverlaySetup {
@@ -70,6 +76,7 @@ impl OverlaySetup {
             caption_size: settings.caption_style.size,
             caption_width: settings.caption_style.width,
             pill_position: settings.pill_position,
+            assist_card_position: settings.assist_card_position,
         }
     }
 }
@@ -81,6 +88,7 @@ fn title(label: &str) -> &'static str {
         DICTATION => "EchoLedger dictation",
         PILL => "EchoLedger recording controls",
         REVIEW => "EchoLedger after a call",
+        ASSIST => "EchoLedger Live Assist",
         _ => "EchoLedger",
     }
 }
@@ -131,6 +139,7 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         OVERLAY => caption_overlay_size_for(setup.caption_lines, setup.caption_size, setup.caption_width),
         DICTATION => DICTATION_SIZE,
         PILL => PILL_SIZE,
+        ASSIST => ASSIST_SIZE,
         _ => REVIEW_SIZE,
     };
     let window = build(app, label, size)?;
@@ -141,6 +150,8 @@ pub fn create_overlay<R: Runtime>(app: &AppHandle<R>, label: &str, setup: Overla
         OVERLAY => redock(&window, setup.corner),
         DICTATION => redock(&window, top_center_corner(setup.corner)),
         PILL => place_pill(&window, setup.pill_position),
+        // Top-centre, under the webcam, until the person drags it elsewhere (L4).
+        ASSIST => place_pill(&window, setup.assist_card_position),
         _ => dock_on_primary(&window, Corner::BottomRight),
     }
     Ok(())

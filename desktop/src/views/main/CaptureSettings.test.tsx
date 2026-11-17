@@ -1,10 +1,11 @@
 // Settings › Recording (v1.7 rows): Calls & meetings, Microphone & audio and Captions › Style.
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { CallsPage, CaptionStylePage, MicrophonePage, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
+import { CallsPage, CaptionStylePage, MicrophonePage, afterCallHint, appRecords, callAppsValue, captionsShareLine, testVerdict } from "./CaptureSettings";
 import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondAll, respondWith } from "../../test/tauri";
 import { makeMicUser, makeSettings } from "../../test/fixtures";
 import { answerConfirm, confirmAsked } from "../../test/confirm";
+import { SETTINGS } from "../../lib/settingsRegistry";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -19,6 +20,18 @@ describe("Captions and screen share", () => {
 });
 
 describe("Calls & meetings", () => {
+  it("says that Ask me saves the audio, not transcribed, after 12 seconds", () => {
+    expect(afterCallHint("ask", "windows")).toBe("A small prompt near the tray asks Keep or Discard, and saves the audio by itself after 12 seconds (not transcribed; transcribe it later from the Library).");
+    expect(afterCallHint("ask", "macos")).toContain("in the corner of the screen");
+  });
+
+  it("offers Ask me (the default), Always transcribe and Always save audio", () => {
+    const entry = SETTINGS.find((e) => e.id === "calls.after")!;
+    expect(entry.options!.map((o) => [o.value, o.label, !!o.default])).toEqual([["ask", "Ask me", true], ["always_transcribe", "Always transcribe", false], ["always_audio", "Always save audio", false]]);
+    expect(afterCallHint("always_audio", "windows")).toContain("audio only (not transcribed");
+    expect(afterCallHint("always_transcribe", "windows")).toContain("saved and transcribed at once");
+  });
+
   it("treats apps without a stored switch as on, and says which record by themselves", () => {
     expect(appRecords({}, "zoom")).toBe(true);
     expect(appRecords({ zoom: false }, "zoom")).toBe(false);
@@ -53,7 +66,7 @@ describe("Calls & meetings", () => {
     answerConfirm().mockReturnValue(true);
     fireEvent.click(screen.getByRole("button", { name: "Reset to defaults" }));
     expect(confirmAsked).toHaveBeenCalledWith("Reset Calls & meetings to defaults?");
-    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "keep", skipCallsShorterThanS: 10 })));
+    await waitFor(() => expect(patch).toHaveBeenLastCalledWith(expect.objectContaining({ autoMode: true, afterCall: "ask", skipCallsShorterThanS: 10 })));
   });
 });
 

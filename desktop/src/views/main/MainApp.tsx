@@ -19,6 +19,7 @@ import { roleOf } from "./AccountSettings";
 import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
+import { AfterCallNotice } from "./AfterCallNotice";
 import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
@@ -708,6 +709,8 @@ export default function MainApp() {
       <BannerSlot>
       <UpdateBanner appStatus={status} notify={notify} onOpen={() => openAccount("about")} />
       <ServerBanners server={status.server} notify={notify} />
+      {/* The new shell shows its own (ui_v2.shell). */}
+      {!ui.flags["ui_v2.shell"] && <AfterCallNotice text={status.afterCallNotice} notify={notify} />}
       <ShareNotice />
       {status.platform === "macos" && <PermissionLossNotice />}
       {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}

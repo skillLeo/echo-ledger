@@ -1,0 +1,25 @@
+{
+  "data": {
+    "id": "01JBPREP0000000000000000P1",
+    "meeting_type": "interview",
+    "title": "Interview at Acme",
+    "counterpart": "Sara Khan",
+    "company": "Acme",
+    "project_id": "01JBPROJECT000000000000001",
+    "goals": "Show the payments work.",
+    "done": "Screening call.",
+    "not_done": null,
+    "to_discuss": "Notice period.",
+    "instructions": "Keep answers short.",
+    "hint_level": "outline",
+    "mode": "balanced",
+    "language_help": "roman_urdu",
+    "scheduled_at": "2026-12-01T10:00:00Z",
+    "status": "draft",
+    "documents": [
+      {"file_id": "01JBFILE000000000000000001", "name": "CV.pdf", "tokens": 2140, "text": "Payments engineer, six years at a bank."},
+      {"file_id": "01JBFILE000000000000000002", "name": "Job description.docx", "tokens": null, "text": null}
+    ],
+    "created_at": "2026-11-17T08:00:00Z"
+  }
+}

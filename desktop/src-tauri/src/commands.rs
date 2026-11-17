@@ -55,6 +55,8 @@ pub struct AppStatus {
     /// What the server says to every app (v1.6, P2.7): an update this version needs, an announcement, maintenance,
     /// and why uploads are waiting.
     pub server: crate::server_notice::ServerNotices,
+    /// Said once after "Keep automatically" became Ask me ([`crate::settings::AFTER_CALL_NOTICE`]); none otherwise.
+    pub after_call_notice: Option<&'static str>,
 }
 
 pub fn status(app: &AppHandle) -> AppStatus {
@@ -113,7 +115,21 @@ pub fn status(app: &AppHandle) -> AppStatus {
         ready_problems,
         device_note: state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()),
         server: state.server_notices(),
+        after_call_notice: settings.after_call_notice.then_some(crate::settings::AFTER_CALL_NOTICE),
     }
+}
+
+/// The answer to the After a call notice: Always transcribe (one tap), or closed (Ask me stays). Said once either way.
+#[tauri::command]
+pub fn after_call_notice_answer(app: AppHandle, always_transcribe: bool) -> AppResult<AppStatus> {
+    let settings = app.state::<AppState>().update_settings(|s| {
+        s.after_call_notice = false;
+        if always_transcribe {
+            s.after_call = crate::settings::AfterCall::AlwaysTranscribe;
+        }
+    })?;
+    let _ = app.emit("settings:changed", &settings);
+    Ok(status(&app))
 }
 
 /// Main-window material and system accent (C2).
@@ -786,7 +802,8 @@ impl SettingsPatch {
         if let Some(v) = self.ask_unknown_apps { s.ask_unknown_apps = v; }
         if let Some(v) = &self.site_rules { s.site_rules = v.clone(); }
         if let Some(v) = self.browser_automation { s.browser_automation = v; }
-        if let Some(v) = self.after_call { s.after_call = v; }
+        // Choosing After a call answers the one-time notice about it.
+        if let Some(v) = self.after_call { s.after_call = v; s.after_call_notice = false; }
         if let Some(v) = self.skip_calls_shorter_than_s && crate::skipped::SHORTER_THAN_CHOICES.contains(&v) { s.skip_calls_shorter_than_s = v; }
         if let Some(v) = self.caption_lines { s.caption_lines = v; }
         if let Some(v) = &self.caption_style { s.caption_style = v.clone(); }
@@ -1226,6 +1243,8 @@ pub struct RecordingState {
     pub missing: Vec<crate::permissions::Missing>,
     /// One of its devices is gone, or changed a moment ago (Phase 1B).
     pub device_note: Option<crate::audio::devices::DeviceNote>,
+    /// Who the call is with, once its meeting window's title says (since v1.2's caller names); none until then.
+    pub caller_name: Option<String>,
 }
 
 /// `main:navigate`: which view the main window opens on.
@@ -1263,6 +1282,7 @@ pub fn recording_state_now(app: &AppHandle) -> RecordingState {
         screens: info.as_ref().and_then(|_| state.screens.pill()),
         missing: if info.is_some() { state.recording_missing.lock().unwrap_or_else(|p| p.into_inner()).clone() } else { Vec::new() },
         device_note: if info.is_some() { state.device_status.lock().unwrap_or_else(|p| p.into_inner()).note(std::time::Instant::now()) } else { None },
+        caller_name: info.as_ref().and_then(|i| crate::pending::running_caller_name(state.recording_caller.lock().unwrap_or_else(|p| p.into_inner()).as_ref(), &i.client_ref)),
     }
 }
 
@@ -2077,6 +2097,16 @@ pub fn screens_pause(app: AppHandle, paused: bool) -> RecordingState {
     now
 }
 
+/// "Capture now" in the pill: the running recording keeps the screen at its next sample (about a second), whatever it
+/// shows; `recording:state` then carries the new count. A press while screens are paused or held keeps nothing.
+#[tauri::command]
+pub fn screens_capture_now(app: AppHandle) -> RecordingState {
+    let _ = crate::actions::capture_screen_now(&app);
+    let now = recording_state_now(&app);
+    let _ = app.emit("recording:state", &now);
+    now
+}
+
 /// macOS: asks for Screen Recording (the system asks once; after that only System Settings changes it, which opens
 /// then). True when it is allowed now; always true on Windows.
 #[tauri::command]
@@ -2506,6 +2536,145 @@ pub async fn quit_and_reopen(app: AppHandle) -> AppResult<()> {
     app.restart()
 }
 
+/// The interface flags (contract 2.0.0-a) from the last config read, with no request: all off before the first one or
+/// from an older server. `{"ui_flags": {"<name>": bool, …}, "ui_classic": bool}`.
+#[tauri::command]
+pub fn ui_flags(state: State<'_, AppState>) -> crate::ui_flags::UiFlags {
+    crate::ui_flags::cached(&state)
+}
+
+/// How many hours a deleted recording can be restored (contract 2.0.0-b), from the last config read, with no request:
+/// 48 before the first one or from an older server. "Recently deleted" says this number, never a fixed one.
+#[tauri::command]
+pub fn trash_keep_hours(state: State<'_, AppState>) -> u64 {
+    state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_ref().map_or(crate::net::models::TRASH_KEEP_HOURS, crate::net::models::ServerConfig::trash_keep_hours)
+}
+
+/// "Switch back to classic" on or off: `PUT /api/account/ui`, its answer kept in the cached config and returned in the
+/// same shape; the config is then read again in the background, as the contract asks.
+#[tauri::command]
+pub async fn ui_classic_set(app: AppHandle, classic: bool) -> AppResult<crate::ui_flags::UiFlags> {
+    let state = app.state::<AppState>();
+    let api = state.api()?;
+    let answer = api.set_ui_classic(classic).await?;
+    if let Some(config) = state.server_config.lock().unwrap_or_else(|p| p.into_inner()).as_mut() {
+        config.ui_flags = answer.ui_flags.clone();
+        config.ui_classic = answer.ui_classic;
+    }
+    crate::actions::emit_status(&app);
+    let reader = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let state = reader.state::<AppState>();
+        if let Ok(api) = state.api()
+            && let Ok(config) = api.config().await
+        {
+            state.apply_config(config);
+            crate::actions::emit_status(&reader);
+        }
+    });
+    Ok(crate::ui_flags::UiFlags::read(answer.ui_flags.as_ref(), answer.ui_classic))
+}
+
+// ---- Live Assist (docs/API_ASSIST.md 1.9.0-g; the card's commands, desktop/src/v2/assist/adapter.ts) ----------------
+
+/// The person's preps (`GET /api/assist/preps?status=`), all of them without a status.
+#[tauri::command]
+pub async fn assist_preps_list(app: AppHandle, status: Option<String>) -> AppResult<Vec<crate::net::models::Prep>> {
+    crate::assist::live::preps(&app, status).await
+}
+
+/// Saves a prep: a new one, or the one its id names.
+#[tauri::command]
+pub async fn assist_prep_save(app: AppHandle, prep: crate::net::models::PrepDraft) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_save(&app, prep).await
+}
+
+#[tauri::command]
+pub async fn assist_prep_delete(app: AppHandle, id: String) -> AppResult<()> {
+    crate::assist::live::prep_delete(&app, &id).await
+}
+
+/// Project files join a prep; the prep as it is now.
+#[tauri::command]
+pub async fn assist_prep_documents_add(app: AppHandle, id: String, file_ids: Vec<String>) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_documents_add(&app, &id, &file_ids).await
+}
+
+#[tauri::command]
+pub async fn assist_prep_document_remove(app: AppHandle, id: String, file_id: String) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::prep_document_remove(&app, &id, &file_id).await
+}
+
+/// Schedules a prep for `at` (RFC 3339); it is armed 2 minutes before and waits up to 10 minutes for the meeting.
+#[tauri::command]
+pub async fn assist_schedule(app: AppHandle, prep_id: String, at: String) -> AppResult<crate::net::models::Prep> {
+    crate::assist::live::schedule(&app, &prep_id, &at).await
+}
+
+/// Starts Live Assist, only while the server's `live_assist` flag is on: the recording first (Practice has none), then
+/// the server session linked to it, then the relay pinned with the config's `relay_pins` (none refuses the connection
+/// in plain words). The card opens and hears the session as `assist:message`. `client_ref`: the recording an offer was
+/// about; refused when another recording runs now.
+#[tauri::command]
+pub async fn assist_start(app: AppHandle, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>, client_ref: Option<String>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start(&app, prep_id, mode, practice.unwrap_or(false), client_ref).await
+}
+
+/// "End it and start this one" after a `session_active`: the named session ends, then this start is tried once more.
+#[tauri::command]
+pub async fn assist_start_replacing(app: AppHandle, session_id: String, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>, client_ref: Option<String>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start_replacing(&app, &session_id, prep_id, mode, practice.unwrap_or(false), client_ref).await
+}
+
+/// "Keep running" after `session_active`: the other session goes on, and the recording and captions this start
+/// turned on are undone.
+#[tauri::command]
+pub async fn assist_keep_running(app: AppHandle) {
+    crate::assist::live::keep_running(&app).await;
+}
+
+/// Ends the session that runs (`POST /api/assist/sessions/{id}/end`) and stops the recording.
+#[tauri::command]
+pub async fn assist_end(app: AppHandle) -> AppResult<()> {
+    crate::assist::live::end(&app).await
+}
+
+/// A button on the card: `help_now`, `regenerate`, `shorter`, `formal`, `translate` or `cancel`.
+#[tauri::command]
+pub fn assist_send(app: AppHandle, kind: String) -> AppResult<()> {
+    crate::assist::live::send(&app, &kind)
+}
+
+/// The card's mode, hint level, pause or mute (`context_update.settings`); the card's state comes back.
+#[tauri::command]
+pub fn assist_set(app: AppHandle, settings: crate::assist::live::CardSettings) -> AppResult<crate::assist::card::Snapshot> {
+    crate::assist::live::set(&app, settings)
+}
+
+/// What the person did with a suggestion: `used` or `dismissed` (and the rewrites' names).
+#[tauri::command]
+pub async fn assist_feedback(app: AppHandle, suggestion_id: String, action: String) -> AppResult<()> {
+    crate::assist::live::feedback(&app, &suggestion_id, &action).await
+}
+
+/// The card drew a suggestion's first text `render_ms` after its `suggestion_start` (`POST …/action` `shown`).
+#[tauri::command]
+pub async fn assist_shown(app: AppHandle, suggestion_id: String, render_ms: u64) -> AppResult<()> {
+    crate::assist::live::shown(&app, &suggestion_id, render_ms).await
+}
+
+/// The card hides; the session goes on.
+#[tauri::command]
+pub fn assist_card_hide(app: AppHandle) {
+    crate::assist::live::hide_card(&app);
+}
+
+/// The card's state for a window opened mid-session (with the prep's `meeting_type`); `null` when none runs.
+#[tauri::command]
+pub fn assist_state(app: AppHandle) -> Option<crate::assist::card::Snapshot> {
+    crate::assist::live::snapshot(&app)
+}
+
 /// "Once per loss": the person has read the sentence.
 #[tauri::command]
 pub fn permission_notice_dismiss(app: AppHandle) {
@@ -2714,6 +2883,13 @@ pub fn pending_list(app: AppHandle) -> Vec<PendingItem> {
 #[tauri::command]
 pub async fn pending_keep(app: AppHandle, id: String) -> AppResult<()> {
     crate::actions::keep_decision(&app, &id)
+}
+
+/// "Save audio" on a waiting call: kept and uploaded as audio only, not transcribed (contract 1.8.0-e); it lands in
+/// "Not transcribed", where "Transcribe" starts its transcript later.
+#[tauri::command]
+pub async fn pending_keep_audio(app: AppHandle, id: String) -> AppResult<()> {
+    crate::actions::keep_decision_audio(&app, &id)
 }
 
 #[tauri::command]

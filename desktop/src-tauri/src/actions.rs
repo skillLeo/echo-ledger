@@ -19,12 +19,29 @@ use crate::net::uploader::{
     AfterAttempt, DiscardQueue, PendingUpload, UploadOutcome, UploadQueue, UploadTiming, UsageQueue, after_attempt, delete_local_audio, states,
 };
 use crate::overlay::{OVERLAY, set_overlay_visible};
-use crate::settings::AfterCall;
 use crate::shortcuts::Action;
 use crate::skipped::{SkipReason, SkippedCall, SkippedFiles, SkippedItem};
 use crate::stt::captions::{CaptionEvent, CaptionHub};
 
 const CAPTION_TARGETS: &[&str] = &[OVERLAY, "main"];
+
+/// "Capture screen now" (the shortcut and the pill): the running recording keeps the screen at its next sample;
+/// `screens:captured` follows once it is kept (the flash). Refused in plain words when nothing can be captured.
+pub fn capture_screen_now(app: &AppHandle) -> AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    if !state.capture.is_recording() {
+        return Err(AppError::msg(CAPTURE_NEEDS_RECORDING));
+    }
+    if !state.screens.capture_now() {
+        return Err(AppError::msg(CAPTURE_SCREENS_OFF));
+    }
+    Ok(())
+}
+
+/// Capture screen now with no recording running.
+pub const CAPTURE_NEEDS_RECORDING: &str = "Start a recording to capture its screen.";
+/// Capture screen now while screen moments are off for this recording (Settings, the plan or a voice note).
+pub const CAPTURE_SCREENS_OFF: &str = "Screen moments are off for this recording.";
 
 pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
     let result = match (action, pressed) {
@@ -38,6 +55,7 @@ pub async fn on_shortcut(app: AppHandle, action: Action, pressed: bool) {
             crate::privacy::toggle_hide_all(&app);
             Ok(())
         }
+        (Action::CaptureScreen, true) => capture_screen_now(&app),
         (Action::TranslateLock, true) => {
             crate::translate::toggle_lock(&app);
             Ok(())
@@ -103,6 +121,8 @@ pub fn mark_moment(app: &AppHandle, tag: Option<&str>, note: Option<&str>) -> Ap
 
 pub fn emit_status(app: &AppHandle) {
     let _ = app.emit("app:status", crate::commands::status(app));
+    // A config read that changed the interface flags is announced with the status (contract 2.0.0-a).
+    crate::ui_flags::announce(app);
 }
 
 /// Live captions on/off. Captions need audio, so turning them on while idle starts a recording (captions on);
@@ -181,7 +201,7 @@ pub async fn start_captions(app: &AppHandle) -> AppResult<()> {
 }
 
 /// The open server session of the running recording, opened on first use (live captions on a v1.1 server).
-async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingInfo) -> AppResult<String> {
+pub(crate) async fn ensure_server_session(app: &AppHandle, info: &crate::audio::RecordingInfo) -> AppResult<String> {
     let state = app.state::<crate::AppState>();
     if let Some(id) = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).session_for(&info.client_ref) {
         return Ok(id);
@@ -359,6 +379,8 @@ fn on_recording_started(app: &AppHandle, info: &crate::audio::RecordingInfo) {
     emit_recording_state(app);
     check_bluetooth_mic(app, info);
     crate::screens::on_recording_started(app, info);
+    // A prep armed for this meeting starts its Live Assist session, or the card asks (`assist::live::decide`).
+    crate::assist::live::on_recording_started(app, info);
 }
 
 /// Whether the recording's microphone is Bluetooth (v1.5), asked of the system beside the start so the start does not
@@ -527,11 +549,14 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
     if let Some(reason) = crate::skipped::reason(auto, mode, output.duration_ms, settings.skip_calls_shorter_than_s, output.speech_ms) {
         return skip_finished(app, decision, late, reason, now);
     }
-    let ask = pending::after_call(settings.after_call, mode) == AfterCall::Ask;
+    // A Live Assist session from a prep saves its call without the after-call card (docs/API_ASSIST.md `auto_saved`).
+    let assist_saved = take_assist_saved(&state, &client_ref);
+    let at_once = if assist_saved { Some(true) } else { pending::after_call(settings.after_call, mode).keeps_at_once() };
+    let ask = at_once.is_none();
     let decision = if ask && interactive { decision.keeping_at(now + chrono::Duration::seconds(pending::CHIP_SECONDS)) } else { decision };
     let id = decision.id.clone();
     let keep_at = decision.keep_at();
-    let toast = (!ask && interactive).then(|| SavedToast::of(&decision, now));
+    let toast = (!ask && interactive && !assist_saved).then(|| SavedToast::of(&decision, now));
     {
         let files = DecisionFiles::in_dir(&state.data_dir);
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
@@ -540,8 +565,8 @@ fn decide_finished(app: &AppHandle, finished: FinishedRecording, session: Option
             files.set_server_session(&id, &late)?;
         }
     }
-    if !ask {
-        keep_decision(app, &id)?;
+    if let Some(transcribe) = at_once {
+        keep_decision_as(app, &id, transcribe)?;
         if let Some(toast) = toast {
             show_saved(app, toast);
         }
@@ -638,10 +663,20 @@ fn schedule_purge(app: &AppHandle, at: chrono::DateTime<Utc>) {
 
 /// Keep: the recording moves to the upload queue and the final transcript follows.
 pub fn keep_decision(app: &AppHandle, id: &str) -> AppResult<()> {
+    keep_decision_as(app, id, true)
+}
+
+/// "Save audio" (contract 1.8.0-e): kept and uploaded as audio only, not transcribed.
+pub fn keep_decision_audio(app: &AppHandle, id: &str) -> AppResult<()> {
+    keep_decision_as(app, id, false)
+}
+
+fn keep_decision_as(app: &AppHandle, id: &str, transcribe: bool) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     {
         let _guard = state.queue_lock.lock().unwrap_or_else(|p| p.into_inner());
-        DecisionFiles::in_dir(&state.data_dir).keep(id)?;
+        let files = DecisionFiles::in_dir(&state.data_dir);
+        if transcribe { files.keep(id)? } else { files.keep_audio(id)? };
     }
     state.upload_notify.notify_one();
     after_decision(app, id);
@@ -775,7 +810,7 @@ fn after_decision(app: &AppHandle, id: &str) {
 
 pub fn pending_items(app: &AppHandle) -> Vec<pending::PendingItem> {
     let state = app.state::<crate::AppState>();
-    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items();
+    let mut items = DecisionFiles::in_dir(&state.data_dir).load().ui_items_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir));
     items.sort_by(|a, b| b.ended_at.cmp(&a.ended_at));
     items
 }
@@ -793,7 +828,8 @@ pub fn after_call_state(app: &AppHandle) -> AfterCallState {
         let now = Instant::now();
         (surfaces.saved(now).cloned(), surfaces.discarded(now).cloned(), surfaces.chip().map(str::to_string))
     };
-    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(PendingDecision::item));
+    let screens = crate::screens::store::ScreenStore::in_dir(&state.data_dir);
+    let ask = chip.and_then(|id| DecisionFiles::in_dir(&state.data_dir).load().find(&id).filter(|d| d.counting()).map(|d| d.item_with_screens(&screens)));
     AfterCallState { saved, discarded, ask }
 }
 
@@ -889,8 +925,9 @@ fn schedule_keep(app: &AppHandle, at: chrono::DateTime<Utc>) {
     });
 }
 
-/// At start: a recording whose chip time ran out while the app was closed is kept, one whose chip still counts (a
-/// restart within 10 s) gets its timer (`keep_due`); a chip's Discard is finished once its Undo time is over
+/// At start: a recording whose chip time ran out while the app was closed is kept as its chip promised (audio only, or
+/// kept and transcribed for a chip shown before v1.8), one whose chip still counts (a restart within 12 s) gets its
+/// timer (`keep_due`); a chip's Discard is finished once its Undo time is over
 /// (`discard_due`). Recordings that wait for the person stay as they are, whatever
 /// the setting. Skipped calls past their 24 hours are deleted; the others get their timers.
 pub fn restore_pending(app: &AppHandle) {
@@ -907,12 +944,13 @@ pub fn restore_pending(app: &AppHandle) {
 }
 
 /// Recordings recovered at start (since v1.3) wait in the Library. One stopped in the middle of the recording follows
-/// "After a call" (`cut_short`): under "Keep automatically" it is kept at once. One that was already finished waits
-/// whatever the setting, as it may have been discarded, undone or uploaded before (`recovery::Recovery`).
+/// "After a call" (`cut_short`): under "Always transcribe" or "Always save audio" it is kept at once, that way. One that
+/// was already finished waits whatever the setting, as it may have been discarded, undone or uploaded before
+/// (`recovery::Recovery`).
 pub fn after_recovery(app: &AppHandle, cut_short: &[String]) {
-    if app.state::<crate::AppState>().settings().after_call == AfterCall::Keep {
+    if let Some(transcribe) = app.state::<crate::AppState>().settings().after_call.keeps_at_once() {
         for id in cut_short {
-            if let Err(e) = keep_decision(app, id) {
+            if let Err(e) = keep_decision_as(app, id, transcribe) {
                 eprintln!("[echoledger] keeping the recovered recording {id}: {e}");
             }
         }
@@ -934,7 +972,7 @@ pub fn pending_rename(app: &AppHandle, id: &str, title: &str) -> AppResult<pendi
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// The account a finished recording was made under, when another account signed in while it ran (cleared with it).
@@ -947,6 +985,16 @@ fn take_recording_owner(state: &crate::AppState, client_ref: &str) -> Option<cra
             None
         }
     }
+}
+
+/// Whether a Live Assist session from a prep saved this recording (cleared with it).
+fn take_assist_saved(state: &crate::AppState, client_ref: &str) -> bool {
+    let mut saved = state.assist_auto_saved.lock().unwrap_or_else(|p| p.into_inner());
+    if saved.as_deref() == Some(client_ref) {
+        *saved = None;
+        return true;
+    }
+    false
 }
 
 /// Who a finished recording was with (cleared with it).
@@ -995,7 +1043,7 @@ pub fn pending_set_language(app: &AppHandle, id: &str, language: Option<String>)
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// The pill's language chip. With live captions on, the caption stream reconnects in the new language; the
@@ -1047,7 +1095,7 @@ pub async fn pending_assign_client(app: &AppHandle, id: &str, client_id: Option<
     };
     emit_pending(app);
     refresh_after_call(app);
-    Ok(updated.item())
+    Ok(updated.item_with_screens(&crate::screens::store::ScreenStore::in_dir(&state.data_dir)))
 }
 
 /// Shows the main window on a view (tray "Review recordings", the chip's title).

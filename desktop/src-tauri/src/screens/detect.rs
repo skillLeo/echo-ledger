@@ -3,7 +3,8 @@
 //! screen that then stays settled for [`SETTLE_MS`] keeps the frame; a frame whose hash is within [`NEAR_BITS`] of the
 //! last saved screen is the same screen and is dropped (unless a fifth of its cells moved, which the coarse hash of
 //! one slide template can miss). Pointing words in the captions ("look at this page") keep the current frame at once
-//! when it differs from the last saved one. At most [`CAP_PER_HOUR`] screens an hour.
+//! when it differs from the last saved one; "Capture now" keeps it whatever it shows, unless it is blank. At most
+//! [`CAP_PER_HOUR`] screens an hour.
 
 use std::collections::VecDeque;
 
@@ -160,6 +161,8 @@ pub enum Trigger {
     Change,
     /// Someone said "this page", "click here", "yeh dekhein" …
     Words,
+    /// The person pressed "Capture now".
+    Manual,
 }
 
 impl Trigger {
@@ -167,6 +170,7 @@ impl Trigger {
         match self {
             Trigger::Change => "change",
             Trigger::Words => "words",
+            Trigger::Manual => "manual",
         }
     }
 }
@@ -213,6 +217,12 @@ impl Detector {
     /// Looks at one sample. `words`: pointing words were heard since the last sample. `Some` means keep this frame
     /// now (it is remembered as the last saved screen).
     pub fn observe(&mut self, now_ms: u64, frame: &Luma, words: bool) -> Option<Trigger> {
+        self.observe_asked(now_ms, frame, words, false)
+    }
+
+    /// [`Self::observe`], and `manual`: the person pressed "Capture now", which keeps this frame whether or not it
+    /// changed (a blank frame still keeps nothing).
+    pub fn observe_asked(&mut self, now_ms: u64, frame: &Luma, words: bool, manual: bool) -> Option<Trigger> {
         let hash = frame.hash();
         let settled = self.previous.as_ref().is_some_and(|p| p.changed_share(frame) <= STABLE_SHARE);
         if !settled {
@@ -223,7 +233,9 @@ impl Detector {
         if frame.is_blank() || self.capped(now_ms) {
             return None;
         }
-        let trigger = if words && self.differs(frame, hash, WORDS_SHARE) {
+        let trigger = if manual {
+            Some(Trigger::Manual)
+        } else if words && self.differs(frame, hash, WORDS_SHARE) {
             Some(Trigger::Words)
         } else if now_ms.saturating_sub(since) >= SETTLE_MS && self.differs(frame, hash, CHANGE_SHARE) {
             Some(Trigger::Change)
@@ -394,6 +406,18 @@ mod tests {
         // Another slide while the words are heard: kept at once.
         let b = slide(30);
         assert_eq!(d.observe(3_000, &b, true), Some(Trigger::Words));
+    }
+
+    #[test]
+    fn capture_now_keeps_the_frame_at_once_even_unchanged_but_never_a_blank_one() {
+        let mut d = Detector::new();
+        let a = slide(9);
+        assert_eq!(d.observe_asked(0, &a, false, true), Some(Trigger::Manual), "no settling needed");
+        assert_eq!(d.observe_asked(500, &a, true, true), Some(Trigger::Manual), "the same screen again, because it was asked for");
+        assert_eq!(d.observe(1_000, &a, true), None, "words alone still need a new picture");
+        let black = Luma::from_fn(|_, _| 0);
+        assert_eq!(d.observe_asked(2_000, &black, false, true), None);
+        assert_eq!(Trigger::Manual.as_str(), "manual", "the contract's word");
     }
 
     #[test]

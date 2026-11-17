@@ -289,6 +289,7 @@ async fn an_open_session_is_a_session_request_without_artifacts() {
 
 fn finish_request(client_id: Option<Option<String>>) -> FinishSessionRequest {
     FinishSessionRequest {
+        transcribe: true,
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],
@@ -555,6 +556,7 @@ async fn create_session_posts_the_request_as_json() {
         Reply::json(201, fixture("session_created.json")),
     ));
     let request = CreateSessionRequest {
+        transcribe: true,
         markers: vec![],
         pauses: vec![],
         language_marks: vec![],

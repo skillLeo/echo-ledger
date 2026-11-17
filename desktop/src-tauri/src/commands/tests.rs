@@ -51,8 +51,24 @@ fn after_a_call_and_the_caption_lines_are_applied() {
     let mut s = Settings::default();
     patch(json!({"afterCall": "ask", "captionLines": 2})).apply(&mut s);
     assert_eq!((s.after_call, s.caption_lines), (AfterCall::Ask, 2));
+    patch(json!({"afterCall": "always_audio"})).apply(&mut s);
+    assert_eq!(s.after_call, AfterCall::AlwaysAudio);
+    patch(json!({"afterCall": "always_transcribe"})).apply(&mut s);
+    assert_eq!(s.after_call, AfterCall::AlwaysTranscribe);
     patch(json!({"afterCall": "keep"})).apply(&mut s);
-    assert_eq!(s.after_call, AfterCall::Keep);
+    assert_eq!(s.after_call, AfterCall::Ask, "v1.5's Keep automatically, from an older window, is permission first");
+}
+
+#[test]
+fn choosing_after_a_call_answers_its_notice() {
+    let mut s = Settings { after_call_notice: true, ..Settings::default() };
+    patch(json!({"captionLines": 5})).apply(&mut s);
+    assert!(s.after_call_notice, "another setting leaves it");
+    patch(json!({"afterCall": "always_audio"})).apply(&mut s);
+    assert!(!s.after_call_notice, "the person chose: nothing more to tell");
+    let mut same = Settings { after_call_notice: true, ..Settings::default() };
+    patch(json!({"afterCall": "ask"})).apply(&mut same);
+    assert!(!same.after_call_notice, "choosing Ask me again answers it too");
 }
 
 #[test]

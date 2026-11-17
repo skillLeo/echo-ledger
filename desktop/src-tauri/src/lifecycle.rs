@@ -29,7 +29,7 @@ use crate::overlay::{self, DICTATION, OVERLAY, PILL, REVIEW};
 pub const MAIN: &str = "main";
 
 /// Every window built on demand.
-pub const LABELS: [&str; 5] = [MAIN, OVERLAY, DICTATION, PILL, REVIEW];
+pub const LABELS: [&str; 6] = [MAIN, OVERLAY, DICTATION, PILL, REVIEW, overlay::ASSIST];
 
 /// How long an overlay stays built after it was hidden (a call often brings the pill or captions back soon).
 pub const HIDE_GRACE: Duration = Duration::from_secs(30);
