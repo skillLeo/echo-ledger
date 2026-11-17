@@ -35,6 +35,7 @@ final class SettingsRepository
         'languages.auto_fallback' => 'ur',          // what Auto is forced into when it hears a language it may not pick
         'assemblyai.region' => 'us',                // us | eu
         'assemblyai.streaming_model' => 'universal-3-6-pro',
+        'assemblyai.streaming_mode' => 'min_latency',   // min_latency | balanced | max_accuracy (caption speed)
         'assemblyai.async_models' => ['universal-3-5-pro', 'universal-2'],
         'elevenlabs.base_url' => 'https://api.elevenlabs.io',
         'elevenlabs.model_id' => 'scribe_v2',

@@ -62,7 +62,8 @@ describe('AssemblyAI', function () {
         expect($url)->toStartWith('wss://streaming.assemblyai.com/v3/ws?')
             ->and(wsQuery($url))->toBe([
                 'speech_model' => 'universal-3-6-pro', 'encoding' => 'pcm_s16le', 'sample_rate' => '48000',
-                'inactivity_timeout' => '120', 'token' => 'tmp_stream_token',
+                'inactivity_timeout' => '120', 'mode' => 'min_latency', 'min_turn_silence' => '128',
+                'max_turn_silence' => '640', 'token' => 'tmp_stream_token',
             ]);
     });
 

@@ -66,6 +66,7 @@ final class SettingsTransfer
         'markers.tags',
         'assemblyai.region',
         'assemblyai.streaming_model',
+        'assemblyai.streaming_mode',
         'assemblyai.async_models',
         'groq.plan',
         'gemini.model',
