@@ -14,6 +14,7 @@ use App\Services\Help\SupportMessages;
 use App\Services\SettingsRepository;
 use App\Services\SettingsTransfer;
 use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -123,6 +124,8 @@ describe('the device API', function () {
         }
         expect($outcomes)->toBe(['sent', 'too_many_attempts']);
         Mail::assertQueued(SupportMessageMail::class, 1);
+        // The check and the count run under the person's lock, released after each send.
+        expect(Cache::lock('support:u'.$user->id.':lock', 10)->get())->toBeTrue();
     });
 
     it('asks for a confirmed email first: the reply goes to it', function () {

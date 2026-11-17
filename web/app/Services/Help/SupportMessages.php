@@ -11,6 +11,8 @@ use App\Models\DeviceReport;
 use App\Models\User;
 use App\Services\AuditLog;
 use App\Services\SettingsRepository;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 
@@ -50,10 +52,21 @@ final class SupportMessages
             throw new ApiError(403, 'email_not_verified', 'Confirm your email first: support answers it.');
         }
         $key = 'support:u'.$user->id;
-        // Counted first, refused above the limit: two sends at the same moment cannot both pass the last place.
-        if (RateLimiter::hit($key, 3600) > self::PER_HOUR) {
-            $wait = RateLimiter::availableIn($key);
+        // Checked and counted under the person's lock, so two sends at the same moment can never both take the last
+        // place, whatever cache store the server uses.
+        try {
+            $wait = Cache::lock($key.':lock', 10)->block(5, function () use ($key): ?int {
+                if (RateLimiter::attempts($key) >= self::PER_HOUR) {
+                    return max(1, RateLimiter::availableIn($key));
+                }
+                RateLimiter::hit($key, 3600);
 
+                return null;
+            });
+        } catch (LockTimeoutException) {
+            $wait = 60;
+        }
+        if ($wait !== null) {
             throw new ApiError(429, 'too_many_attempts', 'Too many messages for now. Try again in '.max(1, (int) ceil($wait / 60)).' minutes, or write to '.$this->address().'.', [], ['Retry-After' => (string) $wait]);
         }
         $reports = [];

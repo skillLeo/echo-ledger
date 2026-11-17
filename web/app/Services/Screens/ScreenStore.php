@@ -104,6 +104,7 @@ class ScreenStore
         $thumbPlain = $this->uploads->tempPath('screen-thumb');
         $written = [];
         try {
+            self::roomToDecode();
             self::writeThumbnail($plainPath, $thumbPlain);
             // Since v1.8 P4.1: the same screen sent again a moment later (re-compressed, so another sha256) is the one
             // kept already, as an exact repeat is (ScreenSimilarity, conservative).
@@ -323,6 +324,27 @@ class ScreenStore
         }
     }
 
+    /** Memory for decoding the largest picture taken (25 MP at 4 bytes a pixel, with room to spare). */
+    public const DECODE_MEMORY = 512 * 1024 * 1024;
+
+    /** Raises PHP's memory limit to DECODE_MEMORY for this request where it is lower (a 128M default would fail). */
+    public static function roomToDecode(): void
+    {
+        $limit = trim((string) ini_get('memory_limit'));
+        if ($limit === '' || $limit === '-1') {
+            return;
+        }
+        $bytes = (int) $limit * match (strtolower(substr($limit, -1))) {
+            'g' => 1024 ** 3,
+            'm' => 1024 ** 2,
+            'k' => 1024,
+            default => 1,
+        };
+        if ($bytes < self::DECODE_MEMORY) {
+            ini_set('memory_limit', (string) self::DECODE_MEMORY);
+        }
+    }
+
     private function twin(CaptureSession $session, string $sha): ?Screen
     {
         $screen = Screen::query()->withoutGlobalScope(WorkspaceScope::class)->where('capture_session_id', $session->id)->where('sha256', $sha)->first();
@@ -364,11 +386,15 @@ class ScreenStore
         if ($mine === null) {
             return null;
         }
+        // One neighbour decoded at a time, each freed before the next.
         foreach ($neighbours as $neighbour) {
-            $theirs = ($picture = $this->picture($neighbour)) !== null ? ScreenSimilarity::signature($picture, $neighbour->width, $neighbour->height) : null;
+            $picture = $this->picture($neighbour);
+            $theirs = $picture !== null ? ScreenSimilarity::signature($picture, $neighbour->width, $neighbour->height) : null;
+            unset($picture);
             if ($theirs !== null && ScreenSimilarity::same($mine, $theirs)) {
                 return $neighbour;
             }
+            unset($theirs);
         }
 
         return null;

@@ -8,16 +8,21 @@ use GdImage;
 
 /**
  * Whether two screen pictures are the same screen (v1.8 P4.1), kept conservative so a genuinely different screen is
- * never dropped. Both full pictures are shrunk to 640 px wide in grey (never enlarged, and only within the bounds of
- * signature()); they are the same only when at most 2 of those pixels differ by more than 12 shades: the same picture sent again after another compression (WebP, JPEG or PNG
- * give 0), nothing more. One changed digit in a table of a 1920 px screen changes about 8 of them, a changed word 25,
- * a moved box thousands. A thumbnail is too small for this (one changed word vanishes in it), so the pictures
- * themselves are compared. A moving mouse pointer changes a few, so two pictures that differ by it may both be kept:
- * the safe side.
+ * never dropped. Both full pictures are shrunk in grey by at most 3 times (to 640 px wide, or a third of a wider
+ * picture's width: 1280 px for a 4K screen, so a changed digit or a 2 px line still shows), never enlarged, and only
+ * within the bounds of signature(). They are the same only when at most 2 of those pixels differ by more than 12
+ * shades: the same picture sent again after another compression (WebP, JPEG or PNG give 0), nothing more. One changed
+ * digit in a table of a 1920 px screen changes about 8 of them, a changed word 25, a moved box thousands. A thumbnail
+ * is too small for this (one changed word vanishes in it), so the pictures themselves are compared. A moving mouse
+ * pointer changes a few, so two pictures that differ by it may both be kept: the safe side.
  */
 final class ScreenSimilarity
 {
+    /** Pictures are shrunk to this width, or by 3 times when that is wider. */
     public const WIDTH = 640;
+
+    /** The most a picture is shrunk: more would average a real change away. */
+    public const MAX_SHRINK = 3;
 
     /** A pixel counts as changed past this many shades of grey (of 255). */
     public const SHADES = 12;
@@ -25,18 +30,23 @@ final class ScreenSimilarity
     /** At most this many changed pixels for the same screen. */
     public const MAX_CHANGED = 2;
 
-    /** A picture is compared only within these bounds; anything else is kept as a screen, never compared. */
-    public const MAX_PIXELS = ScreenStore::MAX_PIXELS;
+    /**
+     * Larger pictures are kept as screens of their own, never compared: a decoded picture takes 4 bytes a pixel, and
+     * shrunk by 3 times this is at most 1.3 million pixels of grey.
+     */
+    public const MAX_PIXELS = 12_000_000;
 
     /** The longer side at most this many times the shorter: a screen, not a strip. */
     public const MAX_ASPECT = 4;
 
     /**
-     * The picture shrunk (never enlarged) to at most 640 px wide in grey, or null when it is not compared: unreadable,
-     * not the size it claims ([$width] × [$height]), over 25 megapixels, or a strip (more than 4 to 1). Its size is
-     * read from its header before GD decodes it, so no picture can make the work large.
+     * The picture in grey, shrunk to 640 px wide or by 3 times (never enlarged), or null when it is not compared:
+     * unreadable, not the size it claims ([$width] × [$height]), over 12 megapixels, or a strip (more than 4 to 1). Its
+     * size is read from its header before GD decodes it, so no picture can make the work large; the decoded picture is
+     * freed as soon as it is shrunk.
      *
-     * @return array{0: int, 1: int, 2: string}|null width, height and one byte of grey a pixel, row by row
+     * @return array{0: int, 1: int, 2: string}|null width, height and one byte of grey a pixel, row by row (at most
+     *                                               about 1.6 million)
      */
     public static function signature(string $picture, ?int $width = null, ?int $height = null): ?array
     {
@@ -53,10 +63,9 @@ final class ScreenSimilarity
         if (! $image instanceof GdImage || imagesx($image) !== $w || imagesy($image) !== $h) {
             return null;
         }
-        // Down only: a picture narrower than 640 px keeps its size (at most 640 × 2560 by the aspect bound).
-        $scale = min(1.0, self::WIDTH / $w);
-        $outW = max(1, (int) round($w * $scale));
-        $outH = max(1, (int) round($h * $scale));
+        // Down only, and by at most 3 times: 640 px wide, or a third of a wider picture (5120 → 1707).
+        $outW = min($w, max(self::WIDTH, (int) ceil($w / self::MAX_SHRINK)));
+        $outH = max(1, (int) round($h * $outW / $w));
         $small = imagecreatetruecolor($outW, $outH);
         imagecopyresampled($small, $image, 0, 0, 0, 0, $outW, $outH, $w, $h);
         unset($image);
@@ -67,6 +76,7 @@ final class ScreenSimilarity
                 $grey .= chr((int) round(0.299 * (($rgb >> 16) & 0xFF) + 0.587 * (($rgb >> 8) & 0xFF) + 0.114 * ($rgb & 0xFF)));
             }
         }
+        unset($small);
 
         return [$outW, $outH, $grey];
     }
