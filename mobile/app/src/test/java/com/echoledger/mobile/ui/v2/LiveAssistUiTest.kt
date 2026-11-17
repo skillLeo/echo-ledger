@@ -7,26 +7,35 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.ui.v2.assist.AssistCard
 import com.echoledger.mobile.ui.v2.assist.AssistFixtures
 import com.echoledger.mobile.ui.v2.assist.AssistMessage
 import com.echoledger.mobile.ui.v2.assist.CardState
+import com.echoledger.mobile.ui.v2.assist.EndStatus
 import com.echoledger.mobile.ui.v2.assist.FixtureAssistAdapter
 import com.echoledger.mobile.ui.v2.assist.LiveMode
 import com.echoledger.mobile.ui.v2.assist.MeetingType
 import com.echoledger.mobile.ui.v2.assist.ModeReason
 import com.echoledger.mobile.ui.v2.assist.SendKind
+import com.echoledger.mobile.ui.v2.assist.SuggestionKind
+import com.echoledger.mobile.ui.v2.assist.TEXT_TAG
 import com.echoledger.mobile.ui.v2.assist.V2AssistCard
 import com.echoledger.mobile.ui.v2.assist.V2AssistHost
 import com.echoledger.mobile.ui.v2.live.LiveEntry
@@ -81,9 +90,12 @@ class LiveAssistUiTest {
         compose.onNodeWithText("Delivery to the Hyderabad godown by Thursday", substring = true).assertExists()
         compose.onNodeWithText("Help me now").performClick()
         compose.onNodeWithText("Shorter").performClick()
+        compose.onNodeWithText("More formal").performClick()
         // The language line's label also says Urdu; the button is the one that clicks.
-        compose.onNode(androidx.compose.ui.test.hasText("Urdu") and androidx.compose.ui.test.hasClickAction()).performClick()
-        assertEquals(listOf(SendKind.HelpNow, SendKind.Shorter, SendKind.Translate), adapter.sent)
+        compose.onNode(
+            androidx.compose.ui.test.hasText("Urdu") and androidx.compose.ui.test.hasClickAction()
+        ).performClick()
+        assertEquals(listOf(SendKind.HelpNow, SendKind.Shorter, SendKind.Formal, SendKind.Translate), adapter.sent)
         // "shown" once, when the first text was drawn.
         assertEquals(listOf("s-1"), adapter.shown.map { it.first })
         assertTrue(adapter.shown.single().second >= 0)
@@ -117,6 +129,39 @@ class LiveAssistUiTest {
         compose.onNodeWithText("budget_exhausted").assertDoesNotExist()
         state = AssistCard.reduce(state, AssistMessage.ModeChanged(LiveMode.Fast, ModeReason.Budget))
         compose.onNodeWithText("Switched to Fast to stay within your assist hours.").assertExists()
+    }
+
+    @Test
+    fun atLargeTextNothingIsCutAndTheTextScrollsPastSixLines() {
+        val long = "Yes, 4,200 holds for sixty cartons if payment stays at 45 days and the order is confirmed by Friday.\n" +
+            "- Delivery to the Hyderabad godown by Thursday, unloading by their own labour\n" +
+            "- Their PO number on every invoice, and the Sukkur order on the same terms\n" +
+            "- Rate held until the end of the month, then reviewed with the new freight charges"
+        val state = AssistCard.reduce(
+            listOf(
+                AssistMessage.Ready("01JS", LiveMode.Balanced, listOf(LiveMode.Balanced), resumed = false, meetingType = null),
+                AssistMessage.SuggestionStart("s-1", null, SuggestionKind.Answer, false, null, LiveMode.Balanced, false),
+                AssistMessage.Token("s-1", long),
+                AssistMessage.SuggestionEnd("s-1", EndStatus.Done)
+            )
+        )
+        var scale by mutableStateOf(1f)
+        show {
+            val d = LocalDensity.current
+            CompositionLocalProvider(LocalDensity provides Density(d.density, scale)) { V2AssistCard(state, true, {}, {}, {}) }
+        }
+        val scrolls = { compose.onNodeWithTag(TEXT_TAG).fetchSemanticsNode().config.contains(SemanticsActions.ScrollBy) }
+        // Normal text: three lines, no scrolling.
+        assertTrue(!scrolls())
+        compose.onNodeWithText("Rate held", substring = true).assertDoesNotExist()
+        // 200 %: every bullet is there, the area is at most six lines high and scrolls to the last one.
+        scale = 2f
+        compose.waitForIdle()
+        assertTrue(scrolls())
+        val node = compose.onNodeWithTag(TEXT_TAG).fetchSemanticsNode()
+        val sixLines = EchoTokens.Type.bodyMobile.lineHeight.value * 6 * 2f * node.layoutInfo.density.density
+        assertTrue("${node.size.height} > $sixLines", node.size.height <= sixLines + 1)
+        compose.onNodeWithText("Rate held", substring = true).performScrollTo().assertIsDisplayed()
     }
 
     @Composable

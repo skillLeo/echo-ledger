@@ -147,7 +147,9 @@ class ControlPill(
     private val onEvent: (PillEvent) -> Unit,
     private val onMoved: (edge: String, yFraction: Float) -> Unit,
     edge: String,
-    yFraction: Float
+    yFraction: Float,
+    /** The v2 pill (`ui_v2.recording_controls`, decided at the recording's start; since 2.0.0-a). */
+    private val v2: Boolean = false
 ) {
     private val window = PillWindow(context, edge, yFraction)
 
@@ -232,6 +234,17 @@ class ControlPill(
                 // Hidden, or in a screen share Android reports: a plain grey dot, no clock, language or buttons. A tap
                 // shows the windows the person hid; while Android reports a screen share they stay a dot until it ends.
                 PrivateDot(onShow = { ShareGuard.setHidden(false) }, modifier = drags)
+                return
+            }
+            if (v2) {
+                // Its own clock for the Undo countdown ("Undo · 4 s").
+                val now by androidx.compose.runtime.produceState(System.currentTimeMillis()) {
+                    while (true) {
+                        value = System.currentTimeMillis()
+                        kotlinx.coroutines.delay(V2_TICK_MS)
+                    }
+                }
+                com.echoledger.mobile.ui.v2.live.V2RecordingPill(s, now, title = null, onEvent = onEvent, modifier = drags)
                 return
             }
             when (s.mode) {
@@ -381,3 +394,6 @@ private fun CaptionText(line: BubbleLine, style: CaptionStyle) {
         modifier = Modifier.padding(vertical = 3.dp).widthIn(max = 420.dp)
     )
 }
+
+/** How often the v2 pill reads the clock for its Undo countdown. */
+private const val V2_TICK_MS = 250L

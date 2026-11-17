@@ -22,14 +22,19 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
@@ -85,10 +90,11 @@ fun EchoListRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
                 Text(
                     title,
-                    style = type.bodyStrong,
+                    style = type.content(title, type.bodyStrong),
                     color = c.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    textAlign = startAlign(),
                     modifier = Modifier.weight(1f)
                 )
                 titleEnd?.let { Text(it, style = type.mono, color = c.textSecondary, maxLines = 1) }
@@ -98,10 +104,11 @@ fun EchoListRow(
                     status?.invoke()
                     Text(
                         meta.orEmpty(),
-                        style = type.meta,
+                        style = type.content(meta.orEmpty(), type.meta),
                         color = c.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
+                        textAlign = startAlign(),
                         modifier = Modifier.weight(1f)
                     )
                     metaEnd?.invoke()
@@ -124,6 +131,8 @@ fun EchoSettingRow(
     subtitle: String? = null,
     icon: ImageVector? = null,
     trailing: (@Composable () -> Unit)? = null,
+    /** The title and subtitle are people's own words (an Ask source), not the app's. */
+    content: Boolean = false,
     onClick: (() -> Unit)? = null
 ) {
     val c = EchoV2.colors
@@ -143,13 +152,19 @@ fun EchoSettingRow(
         ) {
             icon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.lg), tint = c.textSecondary) }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s2)) {
-                Text(title, style = type.body, color = c.textPrimary)
-                subtitle?.let { Text(it, style = type.meta, color = c.textSecondary) }
+                if (content) {
+                    Text(title, style = type.content(title, type.body), color = c.textPrimary, textAlign = startAlign())
+                    subtitle?.let { Text(it, style = type.content(it, type.meta), color = c.textSecondary, textAlign = startAlign()) }
+                } else {
+                    Text(title, style = type.body, color = c.textPrimary)
+                    subtitle?.let { Text(it, style = type.meta, color = c.textSecondary) }
+                }
             }
             value?.let {
                 Text(
                     it,
-                    style = type.meta,
+                    // A people's-words row's value is a moment in a recording: a clock.
+                    style = if (content) type.mono else type.meta,
                     color = c.textSecondary,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
@@ -175,7 +190,11 @@ fun EchoAvatar(modifier: Modifier = Modifier, icon: ImageVector? = null, initial
     ) {
         when {
             icon != null -> Icon(icon, null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary)
-            initials != null -> Text(initials, style = EchoV2.type.label, color = c.textPrimary, maxLines = 1)
+
+            // The circle has a fixed size, so its initials don't grow with the text size (the name beside it does).
+            initials != null -> CompositionLocalProvider(LocalDensity provides Density(LocalDensity.current.density)) {
+                Text(initials, style = EchoV2.type.label, color = c.textPrimary, maxLines = 1)
+            }
         }
     }
 }
@@ -228,3 +247,7 @@ fun EchoCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() 
 
 /** Where an inset divider starts: after the page padding, the avatar and the gap. */
 private val DividerInset = EchoTokens.Layout.pagePaddingMobile + EchoTokens.Component.avatarSize + EchoTokens.Space.s16
+
+/** The screen's start side as a fixed side, so a line whose direction comes from its words still lines up with the rest. */
+@Composable
+internal fun startAlign(): TextAlign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) TextAlign.Right else TextAlign.Left

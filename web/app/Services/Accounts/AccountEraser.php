@@ -20,6 +20,8 @@ use App\Models\RequestLink;
 use App\Models\RequestUpload;
 use App\Models\User;
 use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
 use App\Services\AuditLog;
 use App\Services\Connector\ConnectedApps;
 use App\Services\Entitlements\PaymentProofs;
@@ -107,6 +109,11 @@ final class AccountEraser
         foreach ($solo as $workspaceId) {
             $proofs->eraseFilesOf(workspaceId: $workspaceId);
         }
+
+        // Since v1.8 P6.3: the invitations they sent and nobody used (their invite links too), and those waiting for
+        // their address: nobody joins on the word of an account that is gone.
+        WorkspaceInvitation::query()->whereNull('accepted_at')->where(fn ($q) => $q->where('invited_by', $user->id)->orWhere('email', $user->email))->delete();
+        WorkspaceInviteLink::query()->where('created_by', $user->id)->whereNull('revoked_at')->update(['revoked_at' => now()]);
 
         // Since v1.9: Live Assist, in every workspace, deleted sessions too: every line, suggestion, report, fact,
         // summary and usage row, every prep with its documents' links, and the memory lines its reports added.

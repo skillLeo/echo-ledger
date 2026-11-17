@@ -1,0 +1,1905 @@
+{
+  "about": "Live Assist card sequences (contract 1.9.0-n): relay messages in order, and the card after each one. shown_id is the suggestion on the card (null: none), text and status are that suggestion's (status null with no suggestion), skipped is \"No reply needed\", and also (when present) checks suggestions by id that may be off the card. The phone (AssistCardTest) and the desktop (card.test.ts) reducers both run these.",
+  "sequences": [
+    {
+      "name": "A suggestion streams token by token and ends done",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Yes, "
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Yes, ",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "text": "4,200 holds."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Yes, 4,200 holds.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 5,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Yes, 4,200 holds.",
+            "status": "done",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A finished answer stays across a resumed ready",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Delivery by Thursday."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Delivery by Thursday.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Delivery by Thursday.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "ready",
+            "seq": 5,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": true,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Delivery by Thursday.",
+            "status": "done",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A resumed ready clears a suggestion still streaming",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Done one."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Done one.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Done one.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-2",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "text": "Half an ans"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "Half an ans",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "ready",
+            "seq": 7,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": true,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "No reply needed stays across a resumed ready",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "skip",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1"
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": true
+          }
+        },
+        {
+          "message": {
+            "type": "ready",
+            "seq": 4,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": true,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": true
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-2",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement waits off the card until its first token; the replaced one keeps its text",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": true
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Draft answer."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft answer.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft answer.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-1",
+            "kind": "upgrade",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft answer.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "text": "Yes, it holds for sixty."
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "Yes, it holds for sixty.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 7,
+            "suggestion_id": "s-2",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "Yes, it holds for sixty.",
+            "status": "done",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A superseded end hands the card to its replacement at once",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "I promise delivery tomorrow"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 4,
+            "suggestion_id": "s-2",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 5,
+            "suggestion_id": "s-1",
+            "status": "superseded"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "text": "Delivery by Thursday."
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "Delivery by Thursday.",
+            "status": "streaming",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A superseded end with no replacement clears the card's text",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Speculative"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Speculative",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "superseded"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "superseded",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cancelled puts back what the card showed before",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "First answer."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "First answer.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "First answer.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-2",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "status": "cancelled"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "First answer.",
+            "status": "done",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A failed suggestion is cleared",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Partial"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Partial",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "error",
+            "seq": 4,
+            "code": "provider_timeout",
+            "message": "",
+            "retry": true,
+            "suggestion_id": "s-1",
+            "in_reply_to": null,
+            "fatal": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "failed",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement that fails before its first token leaves the replaced one on the card",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": true
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Draft."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-1",
+            "kind": "upgrade",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "error",
+            "seq": 6,
+            "code": "provider_timeout",
+            "message": "",
+            "retry": true,
+            "suggestion_id": "s-2",
+            "in_reply_to": null,
+            "fatal": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Draft.",
+            "status": "done",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "A start replacing a suggestion that isn't on the card takes the card",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "A."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-2",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "text": "B."
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "B.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 7,
+            "suggestion_id": "s-2",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "B.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 8,
+            "suggestion_id": "s-3",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-3",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        }
+      ]
+    },
+    {
+      "name": "Skip ends the suggestion it names; a skip without one only says no reply is needed",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "Answer."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Answer.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Answer.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "skip",
+            "seq": 5,
+            "suggestion_id": null,
+            "turn_id": "t-2"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "Answer.",
+            "status": "done",
+            "skipped": true
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "turn_id": "t-3",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "skip",
+            "seq": 7,
+            "suggestion_id": "s-2",
+            "turn_id": "t-3"
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": true
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement of a suggestion not on the card, cancelled before any token, gives the card back to the one shown before it",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "A."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "turn_id": "t-2",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 6,
+            "suggestion_id": "s-2",
+            "text": "B."
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "B.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 7,
+            "suggestion_id": "s-2",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "B.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 8,
+            "suggestion_id": "s-3",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-3",
+            "text": "",
+            "status": "streaming",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-1",
+                "text": "A.",
+                "status": "done"
+              },
+              {
+                "id": "s-2",
+                "text": "B.",
+                "status": "done"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 9,
+            "suggestion_id": "s-3",
+            "status": "cancelled"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "B.",
+            "status": "done",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-1",
+                "text": "A.",
+                "status": "done"
+              },
+              {
+                "id": "s-3",
+                "text": "",
+                "status": "cancelled"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement of the suggestion on the card, cancelled before any token, leaves that one on the card",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "A."
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 4,
+            "suggestion_id": "s-1",
+            "status": "done"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "done",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 5,
+            "suggestion_id": "s-3",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "done",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-3",
+                "text": "",
+                "status": "streaming"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 6,
+            "suggestion_id": "s-3",
+            "status": "cancelled"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "A.",
+            "status": "done",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-3",
+                "text": "",
+                "status": "cancelled"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement that failed still takes the card, empty, at the replaced one's superseded end",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "I promise delivery tomorrow"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 4,
+            "suggestion_id": "s-2",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-2",
+                "text": "",
+                "status": "streaming"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "error",
+            "seq": 5,
+            "code": "provider_timeout",
+            "message": "",
+            "retry": true,
+            "suggestion_id": "s-2",
+            "in_reply_to": null,
+            "fatal": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-2",
+                "text": "",
+                "status": "failed"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 6,
+            "suggestion_id": "s-1",
+            "status": "superseded"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "failed",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-1",
+                "text": "",
+                "status": "superseded"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "A replacement that was cancelled still takes the card, empty, at the replaced one's superseded end",
+      "steps": [
+        {
+          "message": {
+            "type": "ready",
+            "seq": 1,
+            "protocol": 1,
+            "session_id": "01JSESSION",
+            "mode": "balanced",
+            "requested_mode": "balanced",
+            "allowed_modes": [
+              "balanced",
+              "fast"
+            ],
+            "expires_at": "2026-11-17T12:00:00+00:00",
+            "resumed": false,
+            "practice": false,
+            "meeting_type": null
+          },
+          "expect": {
+            "shown_id": null,
+            "text": "",
+            "status": null,
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 2,
+            "suggestion_id": "s-1",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": null,
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "token",
+            "seq": 3,
+            "suggestion_id": "s-1",
+            "text": "I promise delivery tomorrow"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_start",
+            "seq": 4,
+            "suggestion_id": "s-2",
+            "turn_id": "t-1",
+            "kind": "answer",
+            "speculative": false,
+            "replaces": "s-1",
+            "mode": "balanced",
+            "model": "m",
+            "draft": false
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-2",
+                "text": "",
+                "status": "streaming"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 5,
+            "suggestion_id": "s-2",
+            "status": "cancelled"
+          },
+          "expect": {
+            "shown_id": "s-1",
+            "text": "I promise delivery tomorrow",
+            "status": "streaming",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-2",
+                "text": "",
+                "status": "cancelled"
+              }
+            ]
+          }
+        },
+        {
+          "message": {
+            "type": "suggestion_end",
+            "seq": 6,
+            "suggestion_id": "s-1",
+            "status": "superseded"
+          },
+          "expect": {
+            "shown_id": "s-2",
+            "text": "",
+            "status": "cancelled",
+            "skipped": false,
+            "also": [
+              {
+                "id": "s-1",
+                "text": "",
+                "status": "superseded"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

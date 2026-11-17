@@ -102,7 +102,7 @@ class AskTest {
     @Test
     fun aFailedAskOffersToAskAgainAndNoProjectsSaysWhatToDo() {
         val asked = mutableListOf<String>()
-        var state by mutableStateOf<AskState>(AskState.Failed)
+        var state by mutableStateOf<AskState>(AskState.Failed())
         var list by mutableStateOf(projects)
         compose.setContent {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) { Ask(state, "q", asked, mutableListOf(), list) }

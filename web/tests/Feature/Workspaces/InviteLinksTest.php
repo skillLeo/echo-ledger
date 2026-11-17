@@ -1,0 +1,379 @@
+<?php
+
+declare(strict_types=1);
+
+use App\Enums\WorkspaceRole;
+use App\Exceptions\ApiError;
+use App\Filament\Auth\Login;
+use App\Filament\Auth\Register;
+use App\Filament\Pages\GetTheApps;
+use App\Filament\Pages\WorkspaceSettings;
+use App\Mail\EmailCodeMail;
+use App\Mail\InvitationMail;
+use App\Models\AuditEvent;
+use App\Models\Plan;
+use App\Models\User;
+use App\Models\Workspace;
+use App\Models\WorkspaceInvitation;
+use App\Models\WorkspaceInviteLink;
+use App\Services\Accounts\AccountEraser;
+use App\Services\Accounts\Invitations;
+use App\Services\Accounts\InviteLinks;
+use App\Services\Accounts\JoinSession;
+use App\Services\Accounts\SignUp;
+use App\Services\SettingsRepository;
+use App\Services\Workspaces\PlanLimits;
+use App\Services\Workspaces\Workspaces;
+use Filament\Facades\Filament;
+use Illuminate\Support\Facades\Mail;
+use Livewire\Livewire;
+use Tests\Feature\Security\Support\ApiClient;
+use Tests\Feature\Security\Support\SecurityFixtures as Fx;
+
+uses(ApiClient::class);
+
+/*
+ * Inviting people (v1.8 P6.3): email invitations for 1, 7 or 30 days, invite links for members or viewers (shown
+ * once, revocable, a number of people or any), the seats, "Join Acme on EchoLedger", then the apps.
+ */
+
+beforeEach(function () {
+    Filament::setCurrentPanel('app');
+    Mail::fake();
+});
+
+/** An owner of a team with a device, and the team. */
+function inviteTeam(): array
+{
+    $owner = Fx::user(['name' => 'Omar Owner']);
+    $team = Workspace::query()->findOrFail($owner->current_workspace_id);
+    $team->forceFill(['name' => 'Acme'])->save();
+
+    return [$owner, $team, Fx::device($owner, ['workspace_id' => $team->id])];
+}
+
+/** The token of an invite link's address. */
+function linkToken(string $url): string
+{
+    return (string) basename((string) parse_url($url, PHP_URL_PATH));
+}
+
+describe('the device API', function () {
+    it('makes an invite link shown once, lists it with the seats and invitations, and revokes it', function () {
+        [, $team, $device] = inviteTeam();
+        $api = $this->api(Fx::token($device));
+
+        $made = $api->postJson('/api/workspace/invite-links', ['role' => 'viewer', 'days' => 30, 'max_uses' => 3])->assertCreated()->assertHeader('Cache-Control', 'no-store, private');
+        expect($made->json('url'))->toStartWith(url('/join/'))
+            ->and($made->json('link'))->toMatchArray(['role' => 'viewer', 'max_uses' => 3, 'uses' => 0, 'open' => true, 'revoked_at' => null]);
+        $api->postJson('/api/workspace/invitations', ['email' => 'Sara@Example.test', 'role' => 'member', 'days' => 1])->assertCreated()
+            ->assertJsonPath('invitation.email', 'sara@example.test')->assertJsonPath('invitation.role', 'member');
+        expect(WorkspaceInvitation::query()->sole()->expires_at->diffInHours(now(), true))->toBeLessThanOrEqual(24.0);
+        Mail::assertQueued(InvitationMail::class, fn (InvitationMail $m): bool => $m->hasTo('sara@example.test'));
+
+        $list = $api->getJson('/api/workspace/invitations')->assertOk();
+        expect($list->json('seats.used'))->toBe(2)->and($list->json('invitations.0.email'))->toBe('sara@example.test')
+            ->and($list->json('links.0.id'))->toBe($made->json('link.id'))
+            // The address is never shown again.
+            ->and((string) $list->getContent())->not->toContain(linkToken($made->json('url')));
+
+        $api->deleteJson('/api/workspace/invite-links/'.$made->json('link.id'))->assertNoContent();
+        $this->get($made->json('url'))->assertStatus(410)->assertSee('This invite link is no longer open');
+        expect($api->getJson('/api/workspace/invitations')->json('links'))->toBe([]);
+        $api->deleteJson('/api/workspace/invitations/'.$list->json('invitations.0.id'))->assertNoContent();
+        expect(WorkspaceInvitation::query()->count())->toBe(0);
+    });
+
+    it('gives links to members and viewers only, lets only owners and admins invite, and admins give no admin', function () {
+        [$owner, $team, $device] = inviteTeam();
+        $this->api(Fx::token($device))->postJson('/api/workspace/invite-links', ['role' => 'admin'])->assertStatus(422);
+
+        $admin = Fx::user();
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        $adminApi = $this->api(Fx::token(Fx::device($admin, ['workspace_id' => $team->id])));
+        $adminApi->postJson('/api/workspace/invitations', ['email' => 'boss@example.test', 'role' => 'admin'])->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        $adminApi->postJson('/api/workspace/invite-links', ['role' => 'member'])->assertCreated();
+
+        $member = Fx::user();
+        app(Workspaces::class)->addMember($team, $member, WorkspaceRole::Member);
+        $memberApi = $this->api(Fx::token(Fx::device($member, ['workspace_id' => $team->id])));
+        foreach ([['GET', '/api/workspace/invitations', []], ['POST', '/api/workspace/invite-links', ['role' => 'viewer']], ['POST', '/api/workspace/invitations', ['email' => 'x@example.test', 'role' => 'viewer']]] as [$method, $uri, $body]) {
+            $memberApi->json($method, $uri, $body)->assertForbidden()->assertJsonPath('code', 'not_allowed');
+        }
+        expect(WorkspaceInviteLink::query()->count())->toBe(1);
+    });
+});
+
+describe('joining with a link', function () {
+    it('shows "Join Acme on EchoLedger" with who invited and as what, joins a signed-in account, then the apps', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url, 'link' => $link] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, 2);
+
+        $this->get($url)->assertOk()->assertSee('Join Acme on')->assertSee('Omar Owner')->assertSee('as member')
+            ->assertSee('Create your account', false)->assertSee('I have an account: sign in');
+
+        $guest = Fx::user(['email' => 'guest@example.test']);
+        $this->actingAs($guest, 'web');
+        $this->get($url)->assertOk()->assertSee('Join Acme');
+        $this->post(route('join.accept'))->assertRedirect(GetTheApps::getUrl(panel: 'app'));
+        expect($team->roleOf($guest))->toBe(WorkspaceRole::Member)->and($guest->fresh()->current_workspace_id)->toBe($team->id)
+            ->and($link->fresh()->uses)->toBe(1);
+        // Again: already in, nothing more used.
+        $this->get($url)->assertOk()->assertSee('You are in Acme already');
+        $this->post(route('join.accept'))->assertRedirect();
+        expect($link->fresh()->uses)->toBe(1);
+
+        // Its last place, then closed (each one opens the link first: it waits in their session).
+        $this->actingAs(Fx::user(), 'web');
+        $this->get($url)->assertOk();
+        $this->post(route('join.accept'))->assertRedirect();
+        $this->actingAs(Fx::user(), 'web');
+        $this->get($url)->assertStatus(410);
+        $this->post(route('join.accept'))->assertStatus(410);
+        expect($link->fresh()->uses)->toBe(2);
+    });
+
+    it('refuses an ended link, and a join once the plan\'s seats are taken', function () {
+        [$owner, $team] = inviteTeam();
+        ['url' => $ended] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 1, null);
+        $this->travel(25)->hours();
+        $this->get($ended)->assertStatus(410);
+
+        ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
+        $this->actingAs($joiner = Fx::user(), 'web');
+        $this->get($url)->assertOk();
+        $this->post(route('join.accept'))->assertForbidden()->assertSee('This team is full');
+        expect($team->roleOf($joiner))->toBeNull();
+    });
+
+    it('lets a new person sign up with the link while sign-up is by invitation, joins the team, then the apps', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url, 'link' => $link] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
+        // The page links to the plain sign-up page: the link waits in the session, never in another address.
+        $this->get($url)->assertOk()->assertHeader('Referrer-Policy', 'no-referrer')->assertDontSee('register?join', false);
+
+        // The same visitor's session (a Livewire test has its own): the link the page kept.
+        JoinSession::put(linkToken($url));
+        $page = Livewire::test(Register::class)->assertDontSee('Sign-up on this server is by invitation');
+        $page->fillForm(['email' => 'new.person@example.test'])->call('authenticate')->assertHasNoFormErrors();
+        $code = null;
+        Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use (&$code): bool {
+            $code = $mail->hasTo('new.person@example.test') ? $mail->code : $code;
+
+            return true;
+        });
+        $page->fillForm(['code' => $code])->call('authenticate')->assertSet('step', Login::STEP_PROFILE)
+            ->fillForm(['name' => 'New Person', 'accept_terms' => true])->call('authenticate')->assertRedirect(GetTheApps::getUrl(panel: 'app'));
+
+        $person = User::query()->where('email', 'new.person@example.test')->sole();
+        expect($team->roleOf($person))->toBe(WorkspaceRole::Viewer)->and($link->fresh()->uses)->toBe(1);
+        // Used: forgotten; without it, sign-up stays by invitation.
+        expect(session()->has('join.link'))->toBeFalse();
+        auth('web')->logout();
+        Livewire::test(Register::class)->assertSee('Sign-up on this server is by invitation');
+    });
+});
+
+describe('the console', function () {
+    it('invites by email for the days picked, shows the seats, makes a link shown once and revokes it', function () {
+        [$owner, $team] = inviteTeam();
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 10]);
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        $this->actingAs($owner, 'web');
+
+        Livewire::test(WorkspaceSettings::class)->callAction('addMember', ['email' => 'mina@example.test', 'role' => 'viewer', 'days' => '30'])->assertHasNoActionErrors();
+        expect((int) round(WorkspaceInvitation::query()->sole()->expires_at->diffInDays(now(), true)))->toBe(30);
+
+        $page = Livewire::test(WorkspaceSettings::class)->assertSee('2 of 10 seats taken')
+            ->callAction('inviteLink', ['role' => 'member', 'days' => '7', 'max_uses' => '5'])->assertHasNoActionErrors()
+            ->assertActionMounted('inviteLinkShown');
+        $url = (string) $page->instance()->getSchema($page->instance()->getMountedActionSchemaName())->getState()['url'];
+        expect($url)->toStartWith(url('/join/'))->and($page->get('newInviteLink'))->toBeNull();
+        $link = WorkspaceInviteLink::query()->sole();
+        Livewire::test(WorkspaceSettings::class)->assertSee('0 of 5 joined')->call('revokeLink', $link->id)->assertNotified('Invite link revoked');
+        expect($link->fresh()->revoked_at)->not->toBeNull();
+    });
+});
+
+describe('when whoever invited may no longer invite', function () {
+    /** An admin of the team with an invite link and an email invitation of theirs. */
+    function adminInvites(Workspace $team): array
+    {
+        $admin = Fx::user(['name' => 'Ada Admin']);
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        ['url' => $url, 'link' => $link] = app(InviteLinks::class)->create($team, $admin, WorkspaceRole::Member, 7, null);
+        $emailUrl = app(Invitations::class)->invite($team, $admin, 'invitee@example.test', WorkspaceRole::Member);
+
+        return [$admin, $url, $link, $emailUrl];
+    }
+
+    it('revokes the links and takes back the invitations of an admin who is removed, and says so in the audit log', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, $url, $link] = adminInvites($team);
+
+        app(Workspaces::class)->removeMember($team, $admin);
+
+        expect($link->fresh()->revoked_at)->not->toBeNull()->and(WorkspaceInvitation::query()->where('invited_by', $admin->id)->count())->toBe(0)
+            ->and(AuditEvent::query()->where('event', 'invitation_revoked')->latest('id')->value('summary'))->toContain('1 pending invitations taken back, 1 invite links revoked');
+        $this->get($url)->assertStatus(410)->assertSee('This invite link is no longer open');
+    });
+
+    it('does the same for an admin made a member, and keeps them for one who still invites', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, , $link] = adminInvites($team);
+        app(Workspaces::class)->setRole($team, $admin, WorkspaceRole::Admin);
+        expect($link->fresh()->revoked_at)->toBeNull()->and(WorkspaceInvitation::query()->count())->toBe(1);
+
+        app(Workspaces::class)->setRole($team, $admin, WorkspaceRole::Member);
+        expect($link->fresh()->revoked_at)->not->toBeNull()->and(WorkspaceInvitation::query()->count())->toBe(0);
+    });
+
+    it('lets nobody in on the word of someone who can no longer invite, even where nothing was revoked', function () {
+        [$owner, $team] = inviteTeam();
+        [$admin, $url, $link, $emailUrl] = adminInvites($team);
+        // Demoted behind the service's back (an old row, a direct change): the join and the acceptance check it again.
+        $team->members()->updateExistingPivot($admin->id, ['role' => WorkspaceRole::Member->value]);
+        app()->forgetInstance(Workspaces::class);
+
+        $this->actingAs($joiner = Fx::user(), 'web');
+        expect(fn () => app(InviteLinks::class)->join($link, $joiner))->toThrow(ApiError::class, 'no longer open');
+        $this->get($url)->assertStatus(410);
+        $invitation = WorkspaceInvitation::query()->sole();
+        expect(fn () => app(Invitations::class)->accept($invitation, Fx::user(['email' => 'invitee@example.test'])))
+            ->toThrow(ApiError::class, 'can no longer invite');
+        expect($team->roleOf($joiner))->toBeNull();
+
+        // A creator who is gone altogether.
+        ['link' => $orphan] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Viewer, 7, null);
+        $orphan->forceFill(['created_by' => null])->save();
+        expect(fn () => app(InviteLinks::class)->join($orphan, Fx::user()))->toThrow(ApiError::class);
+    });
+
+    it('refuses an email invitation carrying the admin role from someone who can no longer give it', function () {
+        [$owner, $team] = inviteTeam();
+        $coOwner = Fx::user();
+        app(Workspaces::class)->addMember($team, $coOwner, WorkspaceRole::Admin);
+        $team->members()->updateExistingPivot($coOwner->id, ['role' => WorkspaceRole::Owner->value]);
+        app()->forgetInstance(Workspaces::class);
+        $boss = Fx::user(['email' => 'boss@example.test']);
+        $emailUrl = app(Invitations::class)->invite($team, $coOwner, 'boss@example.test', WorkspaceRole::Admin);
+        // Now an admin: still invites, but may no longer make admins; the invitation stays and cannot be used.
+        app(Workspaces::class)->setRole($team, $coOwner, WorkspaceRole::Admin);
+        $invitation = WorkspaceInvitation::query()->sole();
+
+        $this->actingAs($boss, 'web');
+        $this->get($emailUrl)->assertStatus(410)->assertSee('This invitation is no longer valid');
+        expect(fn () => app(Invitations::class)->accept($invitation, $boss))->toThrow(ApiError::class);
+        expect($team->roleOf($boss))->toBeNull();
+    });
+});
+
+describe('a sign-up by invitation that cannot join', function () {
+    it('makes no account when the team is full: the whole sign-up goes back and says why', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, null);
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
+        JoinSession::put(linkToken($url));
+
+        $page = Livewire::test(Register::class)->fillForm(['email' => 'late@example.test'])->call('authenticate')->assertHasNoFormErrors();
+        $code = null;
+        Mail::assertQueued(EmailCodeMail::class, function (EmailCodeMail $mail) use (&$code): bool {
+            $code = $mail->hasTo('late@example.test') ? $mail->code : $code;
+
+            return true;
+        });
+        $page->fillForm(['code' => $code])->call('authenticate')->fillForm(['name' => 'Late', 'accept_terms' => true])->call('authenticate')
+            ->assertNotified(PlanLimits::SEATS_MESSAGE);
+        expect(User::query()->where('email', 'late@example.test')->exists())->toBeFalse();
+    });
+
+    it('leaves exactly the account that joined when two sign-ups race for a one-use link', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        ['link' => $link] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, 1);
+        // Both passed the check while the link was open; the first one takes its only use.
+        SignUp::withLink($link);
+        $first = app(SignUp::class)->create(['name' => 'First', 'email' => 'first@example.test', 'password' => 'x'], emailVerified: true, via: 'code');
+        expect(fn () => app(SignUp::class)->create(['name' => 'Second', 'email' => 'second@example.test', 'password' => 'x'], emailVerified: true, via: 'code'))
+            ->toThrow(ApiError::class, 'no longer open');
+
+        expect($team->roleOf($first))->toBe(WorkspaceRole::Member)->and(User::query()->where('email', 'second@example.test')->exists())->toBeFalse()
+            ->and($link->fresh()->uses)->toBe(1);
+        // Open to anyone, the account is made all the same, without joining.
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        $third = app(SignUp::class)->create(['name' => 'Third', 'email' => 'third@example.test', 'password' => 'x'], emailVerified: true, via: 'code');
+        expect($team->roleOf($third))->toBeNull();
+    });
+});
+
+describe('the link\'s token stays out of addresses', function () {
+    it('keeps the link encrypted in the session, comes back to /join after signing in, and sends no referrer', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::ANYONE);
+        [$owner, $team] = inviteTeam();
+        ['url' => $url] = app(InviteLinks::class)->create($team, $owner, WorkspaceRole::Member, 7, null);
+        $token = linkToken($url);
+
+        $this->get($url)->assertOk()->assertHeader('Referrer-Policy', 'no-referrer');
+        expect(session('url.intended'))->toBe(route('join.resume'))->and(session('join.link'))->toBeString()->not->toContain($token);
+        $this->get(route('join.resume'))->assertOk()->assertSee('Join Acme')->assertHeader('Referrer-Policy', 'no-referrer');
+        $this->get('/app/register')->assertOk()->assertHeader('Referrer-Policy', 'no-referrer');
+        $this->get('/app/register?invite=x')->assertHeader('Referrer-Policy', 'no-referrer');
+
+        $this->actingAs($member = Fx::user(), 'web');
+        $this->post(route('join.accept'))->assertRedirect(GetTheApps::getUrl(panel: 'app'));
+        expect($team->roleOf($member))->toBe(WorkspaceRole::Member)->and(session()->has('join.link'))->toBeFalse();
+        // Used and forgotten: /join has nothing to show.
+        $this->get(route('join.resume'))->assertStatus(410);
+    });
+});
+
+describe('email invitations while sign-up is by invitation', function () {
+    it('lets nobody in on an invitation whose sender is gone', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        $admin = Fx::user();
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        app(Invitations::class)->invite($team, $admin, 'orphan@example.test', WorkspaceRole::Member);
+        WorkspaceInvitation::query()->update(['invited_by' => null]);
+
+        expect(app(SignUp::class)->allows('orphan@example.test'))->toBeFalse()
+            ->and(app(Invitations::class)->pendingFor('orphan@example.test'))->toBeNull();
+        Livewire::test(Login::class)->fillForm(['email' => 'orphan@example.test'])->call('authenticate')->assertHasFormErrors(['email']);
+        expect(User::query()->where('email', 'orphan@example.test')->exists())->toBeFalse();
+    });
+
+    it('makes no account when the team filled before the invited person signed up', function () {
+        app(SettingsRepository::class)->set('signup.mode', SignUp::INVITED);
+        [$owner, $team] = inviteTeam();
+        app(Invitations::class)->invite($team, $owner, 'full@example.test', WorkspaceRole::Member);
+        Plan::query()->whereKey($team->plan_id)->update(['seats' => 1]);
+
+        expect(fn () => app(SignUp::class)->create(['name' => 'Full', 'email' => 'full@example.test', 'password' => 'x'], emailVerified: true, via: 'code'))
+            ->toThrow(ApiError::class);
+        expect(User::query()->where('email', 'full@example.test')->exists())->toBeFalse();
+    });
+
+    it('takes back an erased account\'s pending invitations, sent and received, and revokes its links', function () {
+        [$owner, $team] = inviteTeam();
+        $admin = Fx::user(['email' => 'leaving@example.test']);
+        app(Workspaces::class)->addMember($team, $admin, WorkspaceRole::Admin);
+        app(Invitations::class)->invite($team, $admin, 'sent@example.test', WorkspaceRole::Member);
+        ['link' => $link] = app(InviteLinks::class)->create($team, $admin, WorkspaceRole::Member, 7, null);
+        $other = Fx::user();
+        app(Invitations::class)->invite(Workspace::query()->findOrFail($other->current_workspace_id), $other, 'leaving@example.test', WorkspaceRole::Viewer);
+        app(Workspaces::class)->removeMember($team, $admin);
+        // The removal took back what they sent; the erasure takes the rest (one waiting for them, a link restored).
+        $link->forceFill(['revoked_at' => null])->save();
+        WorkspaceInvitation::query()->create(['workspace_id' => $team->id, 'email' => 'later@example.test', 'role' => 'member', 'token_hash' => hash('sha256', 'later'),
+            'invited_by' => $admin->id, 'expires_at' => now()->addDay()]);
+
+        app(AccountEraser::class)->erase($admin->fresh());
+
+        expect(WorkspaceInvitation::query()->whereIn('email', ['sent@example.test', 'later@example.test', 'leaving@example.test'])->count())->toBe(0)
+            ->and($link->fresh()->revoked_at)->not->toBeNull();
+    });
+});

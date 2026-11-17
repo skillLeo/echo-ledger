@@ -12,7 +12,11 @@
     <string name="v2_ask_sources">From</string>
     <string name="v2_ask_no_projects_title">No projects yet</string>
     <string name="v2_ask_no_projects_body">Ask works on a project\'s recordings. Put recordings in a project from Library first.</string>
-    <string name="v2_ask_error">The answer couldn\'t be made. Check the internet connection and try again.</string>
+    <string name="v2_ask_error">The answer couldn\'t be made. Try again.</string>
+    <string name="v2_ask_offline">You\'re offline. Check the internet connection and ask again.</string>
+    <string name="v2_ask_answer_in">Answer in</string>
+    <string name="v2_ask_lang_en">English</string>
+    <string name="v2_ask_lang_roman_urdu">Roman Urdu</string>
     <string name="v2_ask_empty_title">Ask your recordings</string>
     <string name="v2_ask_empty_body">Pick a project, then ask in your own words. Answers say which recording they come from.</string>
 </resources>

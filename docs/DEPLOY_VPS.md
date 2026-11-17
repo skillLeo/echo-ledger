@@ -180,6 +180,36 @@ but no longer starts workers.
 
 ## Nginx
 
+Since v1.8 P6.3 an invite link (`/join/<token>`), an email invitation (`/invitations/<token>?…signature=…`) and the
+sign-up page opened with one (`/app/register?invite=…`) carry a secret in their address: the access log keeps them
+masked. Put this in the `http {}` block (`/etc/nginx/conf.d/echoledger-log.conf`):
+
+```
+map $request_uri $echoledger_uri {
+    ~^/join/[^/?]+(?<rest>.*)$          /join/***$rest;
+    ~^/invitations/[^/?]+                /invitations/***;
+    ~^(?<path>/app/register)\?.*        $path?***;
+    default                              $request_uri;
+}
+log_format echoledger '$remote_addr - $remote_user [$time_local] "$request_method $echoledger_uri $server_protocol" $status $body_bytes_sent "$http_user_agent"';
+```
+
+and in the console's `server {}` block below: `access_log /var/log/nginx/echoledger.access.log echoledger;` (the format
+leaves out `$http_referer`, which can carry the same addresses). The app itself sends `Referrer-Policy: no-referrer`
+from those pages; so that nginx adds no second, weaker one there, its own header comes from a map that is empty for
+them (nginx sends no header with an empty value), in the same `http {}` file:
+
+```
+map $request_uri $echoledger_referrer {
+    ~^/join(/|\?|$)                "";
+    ~^/invitations/                 "";
+    ~^/app/register(\?|$)           "";
+    default                         "strict-origin-when-cross-origin";
+}
+```
+
+`$request_uri` is the address as asked, so the map holds after the request goes on to `index.php`.
+
 The first block closes the connection for any address that is not yours, so a made-up `Host` header never reaches the
 app (the app refuses one too, and `APP_URL` must be the address in `server_name`: see `web/DEPLOY.md`).
 
@@ -204,8 +234,9 @@ server {
     root /var/www/echoledger/web/public;
     index index.php;
     client_max_body_size 8m;          # upload chunks are at most 5 MiB
+    access_log /var/log/nginx/echoledger.access.log echoledger;   # invitation tokens masked (above)
     add_header X-Content-Type-Options nosniff always;
-    add_header Referrer-Policy strict-origin-when-cross-origin always;
+    add_header Referrer-Policy $echoledger_referrer always;   # none on invitation pages: the app's no-referrer stands
     location / { try_files $uri $uri/ /index.php?$query_string; }
     location ~ \.php$ {
         include snippets/fastcgi-php.conf;

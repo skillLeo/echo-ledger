@@ -525,7 +525,7 @@ someone joins with it. `403 seat_limit_reached` when a seat is needed and none i
 
 ### Help (since 2.0.0-d, v1.8 P6.4)
 - `GET /api/help/guides?q=` — `config:read` → `{"data": [{"id": "after-a-call", "title": "After a call", "excerpt"}]}`:
-  the user guide's sections; with `q`, those that match, best first (at most 20).
+  the user guide's sections: without `q`, all of them; with `q`, those that match, best first (at most 20).
 - `GET /api/help/guides/{id}` — `config:read` → `{"id", "title", "markdown"}`; `404` for an unknown id.
 - `GET /api/help/whats-new?platform=android|windows|mac` — `config:read` → `{"data": [{"version", "platform",
   "released_at", "notes"}]}`: the platform's last 10 releases that have notes, newest first.

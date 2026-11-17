@@ -34,6 +34,7 @@ import com.echoledger.mobile.testsupport.storeRecording
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -130,6 +131,31 @@ class MainActivityTest : AppTest() {
             compose.onNodeWithContentDescription(it).assertIsDisplayed()
         }
         compose.onNodeWithContentDescription("Library").assertIsSelected()
+    }
+
+    @Test
+    fun `with the interface flags off the phone shows the classic screens exactly`() {
+        // Another area's flag alone never brings the v2 shell.
+        runBlocking { app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.library" to true, "ui_v2.home" to true)) } }
+        launch(preload = true)
+        awaitText("Weekly sync")
+
+        listOf("Library", "Projects", "Record", "Activity", "Settings").forEach {
+            compose.onNodeWithContentDescription(it).assertIsDisplayed()
+        }
+        assertFalse("no v2 tab", present("Ask"))
+    }
+
+    @Test
+    fun `with ui_v2 shell on the phone opens the v2 shell`() {
+        runBlocking { app.graph.settings.update { it.copy(uiFlags = mapOf("ui_v2.shell" to true)) } }
+        launch(preload = true)
+        pumpUntil("the v2 shell") { present("Home") && present("Ask") && present("Live") }
+
+        compose.onAllNodesWithContentDescription("Projects").assertCountEquals(0)
+        // "Switch back to classic": the classic screens again.
+        runBlocking { app.graph.settings.update { it.copy(uiClassic = true) } }
+        pumpUntil("the classic tabs") { compose.onAllNodesWithContentDescription("Projects").fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

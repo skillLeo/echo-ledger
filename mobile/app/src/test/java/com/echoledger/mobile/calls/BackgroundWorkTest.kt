@@ -9,6 +9,7 @@ import com.echoledger.mobile.data.SegmentDto
 import com.echoledger.mobile.net.UploadWorker
 import com.echoledger.mobile.notify.Notifications
 import com.echoledger.mobile.testsupport.AppTest
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.peekRecording
 import com.echoledger.mobile.testsupport.pumpUntil
@@ -184,6 +185,8 @@ class BackgroundWorkTest : AppTest() {
 
         app.sendBroadcast(decision(SaveDecisionReceiver.ACTION_KEEP, "call-1"))
         pumpUntil("the decision") { app.peekRecording("call-1")?.state == "queued" }
+        // The receiver saves the decision, then queues the upload: wait until it has finished, not for the first step.
+        awaitAppIdle()
 
         assertEquals(listOf(WorkInfo.State.ENQUEUED), infos("call-1").map { it.state })
         assertTrue("the question is withdrawn", shadowOf(app.getSystemService(NotificationManager::class.java)).allNotifications.isEmpty())

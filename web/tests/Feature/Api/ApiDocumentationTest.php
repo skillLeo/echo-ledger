@@ -86,10 +86,6 @@ function registeredApiRoutes(): array
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
 const SERVED_BEFORE_DOCUMENTED = [
-    // Live Assist (v1.9): docs/API_ASSIST.md names these two together as `GET|PATCH|DELETE /api/assist/preps/{id}`, which
-    // the reader above does not split.
-    'DELETE /api/assist/preps/{}',
-    'PATCH /api/assist/preps/{}',
 ];
 
 const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];

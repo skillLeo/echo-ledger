@@ -115,6 +115,8 @@ final class SettingsRepository
         'mail.encryption' => 'tls',                  // tls (STARTTLS) | ssl | none
         'mail.username' => null,
         'mail.from_address' => null,
+        // Since v1.8 P6.4: where Contact support writes to; null = contact@<the app's domain> (SupportMessages::address).
+        'support.email' => null,
         'mail.from_name' => null,                    // null = the product's name (MailSettings::from), so a rename follows
         // Monthly transcription limit (whole server). Minutes = billable provider minutes (audio minutes × channels).
         'budget.monthly_minutes' => null,            // int >= 1, or null = no minutes limit

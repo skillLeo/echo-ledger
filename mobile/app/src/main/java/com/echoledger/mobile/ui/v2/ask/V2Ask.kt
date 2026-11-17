@@ -18,11 +18,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalResources
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextDirection
 import com.echoledger.mobile.R
 import com.echoledger.mobile.data.AskAnswerDto
 import com.echoledger.mobile.data.CitationDto
@@ -34,12 +34,14 @@ import com.echoledger.mobile.ui.v2.components.EchoButton
 import com.echoledger.mobile.ui.v2.components.EchoEmptyState
 import com.echoledger.mobile.ui.v2.components.EchoIcons
 import com.echoledger.mobile.ui.v2.components.EchoSectionHeader
+import com.echoledger.mobile.ui.v2.components.EchoSegmented
 import com.echoledger.mobile.ui.v2.components.EchoSelect
 import com.echoledger.mobile.ui.v2.components.EchoSettingRow
 import com.echoledger.mobile.ui.v2.components.EchoSkeletonList
 import com.echoledger.mobile.ui.v2.components.EchoTextField
 import com.echoledger.mobile.ui.v2.components.EchoTopBar
 import com.echoledger.mobile.ui.v2.components.formatClock
+import com.echoledger.mobile.ui.v2.shell.VmMessages
 import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
 import com.echoledger.mobile.ui.v2.theme.systemEchoLanguage
@@ -51,7 +53,23 @@ sealed interface AskState {
     data object Idle : AskState
     data object Asking : AskState
     data class Answer(val answer: AskAnswerDto) : AskState
-    data object Failed : AskState
+
+    /** [offline]: the phone had no connection; else the server's plain [words], when it gave any. */
+    data class Failed(val offline: Boolean = false, val words: String? = null) : AskState
+}
+
+/** What the API client says when the server gave no message ("Request failed (502)"): not words for a person. */
+private const val NO_WORDS = "Request failed ("
+
+/** The answer's language (`language` on `POST /api/clients/{id}/ask`: en or roman_urdu). */
+enum class AskLanguage(val wire: String) {
+    English("en"),
+    RomanUrdu("roman_urdu");
+
+    companion object {
+        /** From the phone's language: Roman Urdu on an Urdu phone (the server writes no Urdu script yet), else English. */
+        fun from(language: EchoLanguage) = if (language == EchoLanguage.Urdu) RomanUrdu else English
+    }
 }
 
 /**
@@ -66,23 +84,38 @@ fun V2AskScreen(vm: MainViewModel, onOpenAt: (sessionId: String, atMs: Long) -> 
     var selected by rememberSaveable { mutableStateOf<String?>(null) }
     var question by rememberSaveable { mutableStateOf("") }
     var state by remember { mutableStateOf<AskState>(AskState.Idle) }
+    val phoneLanguage = systemEchoLanguage()
+    var answerIn by rememberSaveable { mutableStateOf(AskLanguage.from(phoneLanguage)) }
     val scope = rememberCoroutineScope()
-    val language = if (systemEchoLanguage() == EchoLanguage.Urdu) "ur" else "en"
+    val res = LocalResources.current
     V2AskContent(
         projects = projects,
         selectedId = selected ?: projects.firstOrNull()?.id,
-        onSelect = { selected = it },
+        onSelect = {
+            // Another project: the answer on screen was about the last one.
+            if (it != selected) state = AskState.Idle
+            selected = it
+        },
         question = question,
         onQuestion = { question = it },
         state = state,
         onAsk = { id ->
             state = AskState.Asking
             scope.launch {
-                val answer = vm.ask(id, question.trim(), language)
-                state = if (answer != null) AskState.Answer(answer) else AskState.Failed
+                val answer = vm.ask(id, question.trim(), answerIn.wire)
+                state = if (answer != null) {
+                    AskState.Answer(answer)
+                } else {
+                    // The view model put its plain words in its message; they show here instead of as a toast.
+                    // TODO(phone core): return the failure from ask() so the screen needn't take the message.
+                    val words = vm.message.value?.also { vm.consumeMessage() }?.takeUnless { it.startsWith(NO_WORDS) }
+                    AskState.Failed(offline = vm.offline.value, words = words?.let { VmMessages.localize(res, it) })
+                }
             }
         },
         onOpenAt = onOpenAt,
+        answerIn = answerIn,
+        onAnswerIn = { answerIn = it },
         modifier = modifier
     )
 }
@@ -98,6 +131,8 @@ fun V2AskContent(
     state: AskState,
     onAsk: (projectId: String) -> Unit,
     onOpenAt: (sessionId: String, atMs: Long) -> Unit,
+    answerIn: AskLanguage = AskLanguage.English,
+    onAnswerIn: (AskLanguage) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val c = EchoV2.colors
@@ -132,6 +167,14 @@ fun V2AskContent(
                     placeholder = stringResource(R.string.v2_ask_question_hint),
                     singleLine = false
                 )
+                Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+                    Text(stringResource(R.string.v2_ask_answer_in), style = EchoV2.type.label, color = c.textPrimary)
+                    EchoSegmented(
+                        options = listOf(stringResource(R.string.v2_ask_lang_en), stringResource(R.string.v2_ask_lang_roman_urdu)),
+                        selectedIndex = answerIn.ordinal,
+                        onSelect = { onAnswerIn(AskLanguage.entries[it]) }
+                    )
+                }
                 EchoButton(
                     stringResource(R.string.v2_ask_ask_button),
                     { onAsk(chosen.id) },
@@ -150,8 +193,12 @@ fun V2AskContent(
 
                 AskState.Asking -> EchoSkeletonList(3, avatar = false)
 
-                AskState.Failed -> EchoBanner(
-                    stringResource(R.string.v2_ask_error),
+                is AskState.Failed -> EchoBanner(
+                    when {
+                        state.offline -> stringResource(R.string.v2_ask_offline)
+                        state.words != null -> state.words
+                        else -> stringResource(R.string.v2_ask_error)
+                    },
                     EchoBannerKind.Error,
                     Modifier.padding(EchoTokens.Layout.pagePaddingMobile),
                     actionLabel = stringResource(R.string.v2_ask_ask_button),
@@ -170,7 +217,7 @@ private fun AnswerPart(answer: AskAnswerDto, onOpenAt: (String, Long) -> Unit) {
     Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }) {
         Text(
             answer.answer,
-            style = EchoV2.type.body.copy(textDirection = TextDirection.Content),
+            style = EchoV2.type.content(answer.answer, EchoV2.type.body),
             color = c.textPrimary,
             modifier = Modifier.padding(horizontal = EchoTokens.Layout.pagePaddingMobile, vertical = EchoTokens.Space.s16)
         )
@@ -189,6 +236,7 @@ private fun CitationRow(citation: CitationDto, onOpenAt: (String, Long) -> Unit)
         value = citation.atMs?.let { formatClock(it) },
         subtitle = citation.quote.takeIf { it.isNotBlank() },
         icon = if (citation.type == "file") EchoIcons.Folder else EchoIcons.Play,
+        content = true,
         onClick = session?.let { { onOpenAt(it, citation.atMs ?: 0) } }
     )
 }
