@@ -20,6 +20,12 @@ use Illuminate\Support\Carbon;
  */
 final class AssistPlans
 {
+    /** The relay accepts a token this long past its expiry (services/assist-relay/src/auth.rs leeway). */
+    public const RELAY_LEEWAY_SECONDS = 60;
+
+    /** Spending this soon after a claim may predate it (clocks and posts lag): it does not count against the claim. */
+    public const CLAIM_SKEW_SECONDS = 5;
+
     public function __construct(private readonly PlanLimits $limits, private readonly SettingsRepository $settings) {}
 
     /**
@@ -73,19 +79,21 @@ final class AssistPlans
 
     /**
      * What the relay may still spend of what its tokens granted, in cents: for each session still on (of this kind),
-     * the budget its last token claimed less what the session spent since, never below 0; a token past its lifetime
-     * holds nothing. [$except] is the session whose own claim is being made again (a token refresh).
+     * the budget its last token claimed less what the session spent since, never below 0. Both ends lean to holding
+     * more, never less: a claim holds for the token's lifetime plus the relay's 60 s of leeway on its expiry, and only
+     * spending from 5 s after the claim counts against it (the relay's clock and its posts may lag the server's, so a
+     * call stamped just after the claim may have been made under the token before). [$except] is the session whose own
+     * claim is being made again (a token refresh).
      */
     private function held(int $userId, bool $practice, ?string $except): int
     {
         $held = 0;
         AssistSession::query()->withoutGlobalScopes()->where('user_id', $userId)->where('practice', $practice)->where('status', 'active')
-            ->whereNotNull('claimed_cents')->where('claimed_at', '>', now()->subSeconds((int) config('assist.token_ttl_seconds', 900)))
+            ->whereNotNull('claimed_cents')->where('claimed_at', '>', now()->subSeconds((int) config('assist.token_ttl_seconds', 900) + self::RELAY_LEEWAY_SECONDS))
             ->when($except !== null, fn ($q) => $q->whereKeyNot($except))
             ->each(function (AssistSession $session) use (&$held): void {
-                // After the claim, strictly: a call in the same second may predate it, and counting it as spent from the
-                // claim would hold back too little.
-                $since = (float) AssistUsage::query()->where('assist_session_id', $session->id)->where('occurred_at', '>', $session->claimed_at)->sum('cost_usd');
+                $since = (float) AssistUsage::query()->where('assist_session_id', $session->id)
+                    ->where('occurred_at', '>', $session->claimed_at->copy()->addSeconds(self::CLAIM_SKEW_SECONDS))->sum('cost_usd');
                 $held += max(0, (int) $session->claimed_cents - (int) ceil($since * 100));
             });
 

@@ -222,12 +222,12 @@ it('holds back what a session still on was granted by its token: Asks cannot spe
     }
 
     // The relay spends 3 cents of it: 2 still held, nothing left for anyone else; a refresh grants the session what is left.
-    $this->travel(5)->seconds();
+    $this->travel(10)->seconds();
     AssistUsage::query()->create(['assist_session_id' => $running->id, 'workspace_id' => $device->workspace_id, 'user_id' => $device->user_id,
         'suggestion_id' => 'relay-1', 'provider' => 'anthropic', 'model' => 'claude-haiku-5-5', 'mode' => 'fast', 'kind' => 'answer', 'cost_usd' => 0.03, 'occurred_at' => now()]);
     expect($plans->left($device->workspace_id, $device->user_id, true)['cents_left'])->toBe(0)
         ->and(relayClaims($api->postJson("/api/assist/sessions/{$running->id}/token")->assertOk()->json('relay.token'))['budget']['cents_left'])->toBe(2);
-    $this->travel(5)->seconds();
+    $this->travel(10)->seconds();
     $api->postJson("/api/assist/sessions/{$asked->id}/ask", ['question' => 'now?'])->assertStatus(402);
 
     // Once it ends, the 2 cents are free again.

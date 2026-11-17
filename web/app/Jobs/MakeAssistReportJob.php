@@ -82,6 +82,12 @@ final class MakeAssistReportJob implements ShouldQueue
         if ($session->report_status === 'ready') {
             return;
         }
+        // A report made again (a late post from the relay) that did not come: the one made before stays, ready.
+        if ($session->report !== null) {
+            $session->forceFill(['report_status' => 'ready', 'report_requeued_at' => null])->save();
+
+            return;
+        }
         if ($session->report_requeued_at === null) {
             $session->forceFill(['report_requeued_at' => now(), 'report_status' => 'queued'])->save();
             self::enqueue($session);
@@ -106,7 +112,8 @@ final class MakeAssistReportJob implements ShouldQueue
             }
             // The relay posted while this report was being made: keep it for now and make it again.
             $changed = $locked->report_rev !== $rev;
-            $locked->forceFill(['report' => $report, 'report_status' => $changed ? 'queued' : 'ready'])->save();
+            // Ready: a requeue before it no longer counts (a later failure may be queued once more).
+            $locked->forceFill(['report' => $report, 'report_status' => $changed ? 'queued' : 'ready', 'report_requeued_at' => $changed ? $locked->report_requeued_at : null])->save();
 
             return $changed;
         });
