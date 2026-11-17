@@ -3,7 +3,9 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-c (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-d (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-d: inviting people (email invitations with 1/7/30 days, invite links, seats) and help (guides, what's new,
+support messages), v1.8 P6.3 and P6.4.
 2.0.0-c: the account export includes Live Assist; deleting the account erases it.
 2.0.0-b: `GET /api/config` gains `"trash": {"keep_hours": 48}`, how long a deleted recording can be restored; the apps
 show this number and never a fixed one (missing on an older server: 48).
@@ -499,6 +501,39 @@ make codes; customers can never list them. Every use is in the activity log.
   (`errors.pairing_code`: "This code signs in <device name> again; use it on that device"). A bound code for a row
   that was removed from the list meanwhile is `422` too. The person's device limit counts the row once (it was
   already theirs). Another person's device is never offered and its id is never accepted (`404`).
+
+### Inviting people (since 2.0.0-d, v1.8 P6.3)
+Owners and admins only (admins give members and viewers): anyone else gets `403 not_allowed`. A team is a paid feature
+(`403 feature_not_in_plan`, `feature: "team"`). An open email invitation takes a seat; an invite link takes none until
+someone joins with it. `403 seat_limit_reached` when a seat is needed and none is left.
+
+- `GET /api/workspace/invitations` — `config:read` →
+  `{"seats": {"used": 3, "limit": 10}, "invitations": [{"id": 12, "email": "sara@example.com", "role": "member",
+  "expires_at": "…", "created_at": "…"}], "links": [<link>]}`; only open ones, at most 100 each.
+- `POST /api/workspace/invitations` — `sessions:write`, 20 an hour per person. `{"email", "role": "admin" | "member" |
+  "viewer", "days": 1 | 7 | 30}` (7 by default) → `201 {"invitation": {…}}`. The address gets an email with a link
+  that works once, for that address, for those days; one waiting for the same address is replaced. `422
+  validation_failed` for someone already in the workspace.
+- `DELETE /api/workspace/invitations/{id}` — `sessions:write` → `204`; its link stops working, its seat is free.
+- `POST /api/workspace/invite-links` — `sessions:write`, 20 an hour per person. `{"role": "member" | "viewer",
+  "days": 1 | 7 | 30, "max_uses": 1-500 | null}` → `201 {"link": <link>, "url": "https://…/join/…"}`, `Cache-Control:
+  no-store`. The `url` is in this answer only: show it once with Copy and Share.
+- `DELETE /api/workspace/invite-links/{id}` — `sessions:write` → `204`; it stops working at once, people who joined stay.
+- `<link>`: `{"id", "role", "expires_at", "max_uses", "uses", "open", "revoked_at", "created_at"}`.
+- The link opens "Join Acme on EchoLedger" on the web: sign in or create an account (email code or Google), then the
+  apps. A link that ended, was revoked or was used up answers `410`.
+
+### Help (since 2.0.0-d, v1.8 P6.4)
+- `GET /api/help/guides?q=` — `config:read` → `{"data": [{"id": "after-a-call", "title": "After a call", "excerpt"}]}`:
+  the user guide's sections; with `q`, those that match, best first (at most 20).
+- `GET /api/help/guides/{id}` — `config:read` → `{"id", "title", "markdown"}`; `404` for an unknown id.
+- `GET /api/help/whats-new?platform=android|windows|mac` — `config:read` → `{"data": [{"version", "platform",
+  "released_at", "notes"}]}`: the platform's last 10 releases that have notes, newest first.
+- `POST /api/support/messages` — `sessions:write`, 5 an hour per person. `{"subject": ≤ 120, "message": ≤ 5000,
+  "include_device_report": false}` → `202`. Emails the server's support address (Admin → Settings, default
+  contact@<app domain>) with the person's name and email as reply-to; the device's last report (`POST
+  /api/devices/report`) is attached only when `include_device_report` is true. The audit log records that a message
+  was sent, never its text.
 
 ### Upgrade requests (since v1.6, P1)
 - `POST /api/upgrade-requests` — `sessions:write`, throttled (5/day): `{"plan": "pro", "message": "…" | null}` →
