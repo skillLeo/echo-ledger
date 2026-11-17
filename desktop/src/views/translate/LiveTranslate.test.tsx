@@ -98,6 +98,10 @@ describe("Live Translate overlay", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Live Translate is listening · ⌘⇧H to show");
     await act(async () => emitEvent(TRANSLATE_FEED, feed({ hidden: false, locked: false, lock_keys: "⌘⇧T" })));
     expect(screen.getByRole("button", { name: "Done (⌘⇧T)" })).toBeInTheDocument();
+    // Ended on its own: the window keeps the reason, never the listening pill.
+    await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "ended", hidden: false, notice: "This app stopped playing sound. Play something in it, then start Live Translate again." })));
+    expect(screen.getByText(/This app stopped playing sound/)).toBeInTheDocument();
+    expect(screen.queryByText(/is listening/)).toBeNull();
     await act(async () => emitEvent(TRANSLATE_FEED, feed({ status: "stopped" })));
     expect(container).toBeEmptyDOMElement();
   });

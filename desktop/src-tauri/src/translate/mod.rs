@@ -372,15 +372,46 @@ fn spawn_capture(
                     let _ = tx.blocking_send(frame);
                 }
             };
-            if let Err(message) = hear(&stop, &mut send)
-                && let Ok(mut f) = feed.lock()
-            {
-                f.notice = Some(message);
+            let result = hear(&stop, &mut send);
+            // Stopped by the person (Stop, the window going): they already ended the session. Otherwise the capture
+            // ended on its own: the session ends too, the window keeps the reason and the tray stops saying "listening".
+            let Some(reason) = ended_reason(stop.load(Ordering::SeqCst), result) else { return };
+            stop.store(true, Ordering::SeqCst);
+            // Its keys go back with it, unless a newer session holds them now.
+            if end_if_current(&stop) {
+                unregister_hotkeys(&app);
+            }
+            if let Ok(mut f) = feed.lock() {
+                f.status = "ended".into();
+                f.notice = Some(reason);
+                // Hidden, the window said it was listening: it shows why it stopped instead.
+                f.hidden = false;
                 let _ = app.emit(FEED_EVENT, &*f);
             }
+            crate::actions::emit_status(&app);
         })
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+/// What Live Translate says when the app's sound ended without a reason given.
+pub const STOPPED_HEARING: &str = "Live Translate stopped hearing this app. Start it again to go on.";
+
+/// Why the capture ended on its own (pure): none when the person stopped it; the capture's reason, else
+/// [`STOPPED_HEARING`].
+pub fn ended_reason(stopped_by_person: bool, result: Result<(), String>) -> Option<String> {
+    if stopped_by_person {
+        return None;
+    }
+    Some(result.err().unwrap_or_else(|| STOPPED_HEARING.to_string()))
+}
+
+/// Takes the session out of `running` when it is still the one `stop` belongs to (a newer one is left alone).
+fn end_if_current(stop: &Arc<AtomicBool>) -> bool {
+    match running().lock() {
+        Ok(mut r) if r.as_ref().is_some_and(|run| Arc::ptr_eq(&run.stop, stop)) => r.take().is_some(),
+        _ => false,
+    }
 }
 
 /// Starts Live Translate for `pid`; `fetch_token` asks the server for a temporary Soniox key.
@@ -604,8 +635,39 @@ mod tests {
         assert_eq!(keys(Action::TranslateLock, true), "⌘⇧T");
     }
 
+    /// The tests that set the one running session, one at a time.
+    static SESSION: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_capture_that_ends_on_its_own_ends_its_session_and_says_why() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(ended_reason(true, Ok(())), None, "Stop: nothing more to say");
+        assert_eq!(ended_reason(true, Err("x".into())), None);
+        assert_eq!(ended_reason(false, Err(STOPPED_PLAYING.into())).as_deref(), Some(STOPPED_PLAYING), "the capture's reason");
+        assert_eq!(ended_reason(false, Ok(())).as_deref(), Some(STOPPED_HEARING));
+
+        let mine = Arc::new(AtomicBool::new(true));
+        *running().lock().unwrap() = Some(Running { stop: mine.clone(), feed: Arc::default(), window: 3 });
+        assert!(end_if_current(&mine), "its own session ends: the tray stops saying listening");
+        assert!(running().lock().unwrap().is_none());
+        // A newer session started meanwhile is left alone.
+        let newer = Arc::new(AtomicBool::new(false));
+        *running().lock().unwrap() = Some(Running { stop: newer.clone(), feed: Arc::default(), window: 4 });
+        assert!(!end_if_current(&mine));
+        assert!(running().lock().unwrap().is_some() && !newer.load(Ordering::SeqCst));
+        *running().lock().unwrap() = None;
+        // The capture thread does it, and says it.
+        let source = include_str!("mod.rs");
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        let thread = &thread[..thread.find("\n}").unwrap()];
+        for step in ["ended_reason(", "if end_if_current(&stop) {\n                unregister_hotkeys(&app);", "status = \"ended\"", "f.hidden = false", "emit_status(&app)"] {
+            assert!(thread.contains(step), "{step}");
+        }
+    }
+
     #[test]
     fn a_window_gone_any_way_ends_the_session_and_its_keys() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
         let stop = Arc::new(AtomicBool::new(false));
         *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default(), window: 1 });
         stop_session();
