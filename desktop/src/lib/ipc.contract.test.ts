@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import ipcTs from "./ipc.ts?raw";
 import { MAINTENANCE_TEXT, UPDATE_REQUIRED_TEXT } from "./ipc";
+import { AWAITING_CORE } from "./awaitingCore";
 import settingsViewTsx from "../views/main/SettingsView.tsx?raw";
 import recordViewTsx from "../views/main/RecordView.tsx?raw";
 import screenSettingsTsx from "../views/main/ScreenSettings.tsx?raw";
@@ -69,25 +70,43 @@ function balanced(source: string, from: number, open: string, close: string): st
 
 interface RustCommand {
   name: string;
+  /** Where it is declared ("commands", "net::api"); generate_handler! names it by that path. */
+  module: string;
   /** Arguments the webview must send (State / AppHandle / Window are injected by Tauri). */
   args: { name: string; optional: boolean }[];
 }
 
+/** The module a Rust source file is: "src-tauri/src/net/api.rs" → "net::api", "…/audio/mod.rs" → "audio". */
+function moduleOf(path: string): string {
+  const rel = path.replace(/^.*src-tauri\/src\//, "").replace(/\.rs$/, "").replace(/\/mod$/, "");
+  return rel === "lib" || rel === "main" ? "" : rel.split("/").join("::");
+}
+
+/** Every `#[tauri::command]` in the core, whichever file declares it, with its module. */
 function rustCommands(): Map<string, RustCommand> {
   const found = new Map<string, RustCommand>();
-  const re = /#\[tauri::command\]\s*pub\s+(?:async\s+)?fn\s+(\w+)\s*(?:<[^>]*>)?\s*\(/g;
-  for (const match of commandsRs.matchAll(re)) {
-    const params = splitTopLevel(balanced(commandsRs, match.index! + match[0].length - 1, "(", ")"));
-    const args = params
-      .map((p) => {
-        const [name, ...type] = p.split(":");
-        return { name: name.trim(), type: type.join(":").trim() };
-      })
-      .filter((p) => !/^(AppHandle|State\b|WebviewWindow|Window)/.test(p.type))
-      .map((p) => ({ name: camel(p.name), optional: p.type.startsWith("Option<") }));
-    found.set(match[1], { name: match[1], args });
+  const re = /#\[tauri::command(?:\([^)]*\))?\]\s*pub\s+(?:async\s+)?fn\s+(\w+)\s*(?:<[^>]*>)?\s*\(/g;
+  for (const [path, source] of Object.entries(allRustSources)) {
+    for (const match of source.matchAll(re)) {
+      const params = splitTopLevel(balanced(source, match.index! + match[0].length - 1, "(", ")"));
+      const args = params
+        .map((p) => {
+          const [name, ...type] = p.split(":");
+          return { name: name.trim(), type: type.join(":").trim() };
+        })
+        .filter((p) => !/^(AppHandle|State\b|WebviewWindow|Window)/.test(p.type))
+        .map((p) => ({ name: camel(p.name), optional: p.type.startsWith("Option<") }));
+      found.set(match[1], { name: match[1], module: moduleOf(path), args });
+    }
   }
   return found;
+}
+
+/** The paths listed in `generate_handler![…]`: "commands::app_status", "screens::capture". */
+function handlerPaths(): string[] {
+  const at = libRs.indexOf("generate_handler![");
+  if (at < 0) throw new Error("lib.rs has no generate_handler!");
+  return splitTopLevel(balanced(libRs, at, "[", "]")).map((p) => p.replace(/^crate::/, "").trim());
 }
 
 interface TsInvocation {
@@ -145,14 +164,18 @@ function tsFieldUnion(field: string): string[] {
 
 const sorted = (values: string[]) => [...values].sort();
 
-/**
- * Commands the UI wraps before the core has them (Help, docs/API.md 2.0.0-d: GET /api/help/guides, /guides/{id},
- * /whats-new and POST /api/support/messages). The page says plainly that help isn't available until they are there.
- */
-const AWAITING_CORE: readonly string[] = ["help_guides", "help_guide", "help_whats_new", "support_send"];
-
 describe("command names and arguments", () => {
   const commands = rustCommands();
+
+  it("reads commands from every core source, and generate_handler! by module path", () => {
+    expect(moduleOf("../../src-tauri/src/commands.rs")).toBe("commands");
+    expect(moduleOf("../../src-tauri/src/net/api.rs")).toBe("net::api");
+    expect(moduleOf("../../src-tauri/src/audio/mod.rs")).toBe("audio");
+    expect(handlerPaths()).toContain("commands::app_status");
+    // Every registered path names a command the core declares, in the module it is declared in.
+    const declared = new Set([...commands.values()].map((c) => (c.module ? `${c.module}::${c.name}` : c.name)));
+    expect(handlerPaths().filter((p) => !declared.has(p))).toEqual([]);
+  });
   const calls = tsInvocations();
 
   it("finds every wrapper in ipc.ts and every command in commands.rs", () => {
@@ -161,13 +184,15 @@ describe("command names and arguments", () => {
   });
 
   it.each(calls.map((c) => [c.command, c] as const))("%s exists in Rust and is registered in the invoke handler", (name) => {
-    if (AWAITING_CORE.includes(name)) {
+    if (AWAITING_CORE.commands.includes(name)) {
       // Fails the day the core has it: take it off AWAITING_CORE, and the checks below then hold it to Rust's arguments.
-      expect(commands.has(name), `${name} is in commands.rs now: remove it from AWAITING_CORE`).toBe(false);
+      expect(commands.has(name), `${name} is in the core now: remove it from AWAITING_CORE (lib/awaitingCore.ts)`).toBe(false);
       return;
     }
-    expect(commands.has(name), `commands.rs has no #[tauri::command] ${name}`).toBe(true);
-    expect(libRs, `${name} missing from generate_handler!`).toMatch(new RegExp(`commands::${name}\\b`));
+    const rust = commands.get(name);
+    expect(rust, `the core has no #[tauri::command] ${name}`).toBeDefined();
+    const path = rust!.module ? `${rust!.module}::${name}` : name;
+    expect(handlerPaths(), `${path} missing from generate_handler!`).toContain(path);
   });
 
   it.each(calls.map((c) => [c.command, c] as const))("%s sends exactly the arguments Rust declares", (name, call) => {
