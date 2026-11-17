@@ -1,4 +1,6 @@
-# Live Assist contract — revision 1.9.0-o (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-p (frozen 2026-11-17 for the sprint)
+
+1.9.0-p: a report that could not be made shows `"report": "failed"` on the session; prep routes one per line.
 
 1.9.0-o: Ask over a session; usage kind `ask`; a prep's mode, hint level and language help default to the person's
 Live Assist settings.
@@ -80,7 +82,10 @@ Errors added by Live Assist:
 | 409 | `session_active` | A second live session from the same person while one runs |
 
 ### Preps
-- `GET /api/assist/preps?status=` · `POST /api/assist/preps` · `GET|PATCH|DELETE /api/assist/preps/{id}`
+- `GET /api/assist/preps?status=` · `POST /api/assist/preps`
+- `GET /api/assist/preps/{id}`
+- `PATCH /api/assist/preps/{id}`
+- `DELETE /api/assist/preps/{id}`
   ```json
   {"meeting_type": "interview", "title": "Interview at Acme", "counterpart": "Sara Khan", "company": "Acme",
    "project_id": "01JB…", "goals": "…", "done": "…", "not_done": "…", "to_discuss": "…", "instructions": "…",
@@ -130,7 +135,8 @@ Errors added by Live Assist:
 - `POST /api/assist/sessions/{id}/end` → `200 {"report": "queued"}`. It ends the person's own session in any of their
   workspaces (so the app can act on a `409 session_active`); anyone else's answers `404`.
 - `GET /api/assist/sessions?limit=` · `GET /api/assist/sessions/{id}` · `GET /api/assist/sessions/{id}/report`
-  (`404 report_not_ready` until the first report exists; a remade report replaces it). The report:
+  (`404 report_not_ready` until the first report exists; a remade report replaces it; a session whose report could
+  not be made shows `"report": "failed"`, and the report itself still answers `404 report_not_ready`). The report:
   `{"version", "mode", "practice", "meeting_type", "title", "started_at", "ended_at", "seconds", "turns",
   "ai": {"status", "reason", "model", "runs"}, "summary", "summary_translation", "qa": [{question, answer, hint,
   verdict, better_answer, missed}], "mistakes": [], "promises": [], "coaching": {"words_per_minute", "fillers",

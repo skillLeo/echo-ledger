@@ -3,7 +3,8 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-b (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-c (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-c: the account export includes Live Assist; deleting the account erases it.
 2.0.0-b: `GET /api/config` gains `"trash": {"keep_hours": 48}`, how long a deleted recording can be restored; the apps
 show this number and never a fixed one (missing on an older server: 48).
 2.0.0-a: `GET /api/config` gains `ui_flags` and the new `PUT /api/account/ui`; see "Interface flags (since 2.0.0-a)". The
@@ -280,7 +281,8 @@ account in the console (Profile → Devices → "Sign in a device", the QR of `P
 - `POST /api/account/export` — `library:read` → `202 {"id": "01JF…", "status": "making"}`; `GET
   /api/account/export/{id}` → `{"id", "status": "making" | "ready" | "failed", "url": "…" | null, "expires_at"}`:
   one ZIP with every recording's audio, transcripts (all views made), screens, project files and notes, and a
-  `manifest.json`. The link works for 24 hours; the account's email gets it too.
+  `manifest.json`; since 2.0.0-c also a `live-assist/` folder (settings, preps, and every Live Assist session with its
+  lines, suggestions, facts, summary, report and usage, from every workspace). The link works for 24 hours; the account's email gets it too.
 
 ### Workspaces, roles and privacy (since v1.5)
 Every account has its own personal workspace (it is the owner). A team is a workspace with members; a person can
