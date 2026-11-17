@@ -3,7 +3,11 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-f (2026-11-17, frozen for the sprint)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-g (2026-11-18, proposed by the web lane)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+2.0.0-g: the design switch both ways (docs/PLAN_V2_PARITY.md section 0): each `ui_v2.*` flag has an availability (`off`,
+`opt_in`, `everyone`); a person's own design choice (`classic`, `v2` or none); `GET /api/config` and the new `GET
+/api/account/ui` carry `ui_design`; `PUT /api/account/ui` takes `{"design": …}` (the 2.0.0-a `{"classic": …}` still works).
+See "The design switch (since 2.0.0-g)".
 2.0.0-f: `503 server_busy` on picture uploads when the server is decoding as many pictures as it allows.
 2.0.0-e: meeting assets (v1.8 P4): screens' `file_name` and `said`, near-duplicates, 120 an hour, 320 px thumbnails,
 the pack's `text` format, `screens/` in the ZIP, parts of the printed pack.
@@ -726,6 +730,50 @@ and never decide them on the device.
   `ui_classic`. The web console uses the same setting for the signed-in person.
 - The apps re-read `GET /api/config` at start, on resume after 15 minutes, and right after `PUT /api/account/ui`;
   a change applies on the next screen the person opens, never in the middle of a recording.
+
+### The design switch (since 2.0.0-g)
+
+Classic is the design everyone sees until the new one (v2) has every classic feature and the owner approves it
+(docs/PLAN_V2_PARITY.md). Until then v2 is **opt-in**: a person can try it and go back, both ways, on every app.
+
+**What the super admin sets** (Admin › Interface flags): each `ui_v2.*` flag has an **availability**:
+
+| `availability` | Who gets the flag |
+|---|---|
+| `off` | Not available: nobody by choosing it. Only the admin's own lists (people, workspaces, a share of accounts) get it, for testing. |
+| `opt_in` | Everyone who chose the new design (`design: "v2"`), and the admin's lists. |
+| `everyone` | Everyone, unless the person chose classic. |
+
+`live_assist` is not a design and has no `opt_in`: `off` (its lists only) or `everyone`. The admin page sets the nine
+console flags (`ui_v2.shell` … `ui_v2.setup_health`) together or one by one, and `ui_v2.admin` and `ui_v2.website` on
+their own. From 2.0.0-g every `ui_v2.*` flag that was not on for everyone starts on `opt_in` (the owner, 2026-11-18),
+so nothing changes for anyone who does not choose.
+
+**What the person sets:** `design` is `null` (never chose: classic, unless a flag is `everyone` or lists them),
+`"v2"` (tried the new design) or `"classic"` (went back). For each `ui_v2.*` flag, the first that applies wins:
+1. `design` is `"classic"` → off (whatever the admin set; this is 2.0.0-a's `ui_classic`).
+2. availability `everyone` → on.
+3. `design` is `"v2"` and availability `opt_in` → on.
+4. the person, their workspace or their share is on the admin's lists → on.
+5. otherwise off.
+
+- `GET /api/config` gains, next to `ui_flags` and `ui_classic`:
+  ```json
+  "ui_design": {"choice": null, "current": "classic", "can_try": true, "can_switch_back": false}
+  ```
+  `choice` is the person's `design`. `current` is `"v2"` when any of the nine console flags is on for them, else
+  `"classic"`. `can_try` (show **Try the new design**): `current` is `"classic"` and choosing `"v2"` would turn at
+  least one console flag on. `can_switch_back` (show **Switch back to classic**): `current` is `"v2"`. `ui_classic` stays
+  and equals `choice == "classic"`. Missing on an older server: show only 2.0.0-a's switch, as before.
+- `GET /api/account/ui` — `config:read` → `200 {"ui_flags": {…}, "ui_classic": false, "ui_design": {…}}`.
+- `PUT /api/account/ui` — `config:read`. Body `{"design": "v2" | "classic" | null}` (`null`: back to the default) →
+  `200`, the same document as the GET, already showing the new answers. `422 design_not_available` for `"v2"` when
+  `can_try` is false and `current` is not already `"v2"` (nothing is open to try); `422` for any other value. The
+  2.0.0-a body `{"classic": true | false}` still works: `true` is `"classic"`, `false` is `null`.
+- The web console uses the same setting for the signed-in person: classic Settings › Appearance shows **Try the new
+  design** while `can_try`, and v2 Settings › Appearance shows **Switch back to classic** while `can_switch_back`.
+  The phone and desktop apps show the same two rows in their Settings › Appearance, re-read `GET /api/config` right
+  after the `PUT`, and switch on the next screen the person opens, never in the middle of a recording.
 
 ### `GET /api/clients` — `library:read`
 `200 {"data": [{"id": "01JB…", "name": "Acme Holdings", "color": "#8B5CF6", "avatar": "AH", "pinned": true, "retention_days": null, "keyterm_count": 12, "session_count": 40, "updated_at": "…"}]}`
