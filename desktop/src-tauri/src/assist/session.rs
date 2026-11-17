@@ -99,9 +99,37 @@ pub async fn start(
         return Err(crate::error::AppError::msg("Live Assist isn't on for you yet."));
     }
     let answer = api.assist_start(&request).await?;
-    let refresh = refresh(api, answer.session.id.clone(), pins.clone(), on_plan);
-    let handle = super::client::spawn(grant(&answer.relay, &pins), refresh, super::client::Policy::default(), on_event);
+    let handle = connect(api, &answer, pins, on_plan, on_event);
     Ok((answer, handle))
+}
+
+/// The relay connection of a session the server started, pinned with `pins`, its tokens refreshed from the server.
+pub fn connect(
+    api: Arc<crate::net::api::ApiClient>,
+    answer: &AssistStartAnswer,
+    pins: Vec<String>,
+    on_plan: OnPlan,
+    on_event: impl Fn(AssistEvent) + Send + Sync + 'static,
+) -> super::client::AssistHandle {
+    let refresh = refresh(api, answer.session.id.clone(), pins.clone(), on_plan);
+    super::client::spawn(grant(&answer.relay, &pins), refresh, super::client::Policy::default(), on_event)
+}
+
+/// "End it and start this one" (contract 1.9.0-k): the active session `active` ends (already ended or gone is
+/// fine), then the start is tried once more; never a loop.
+pub async fn end_then_start<T, E, S, EF, SF>(active: &str, end: E, start: S) -> crate::error::AppResult<T>
+where
+    E: FnOnce(String) -> EF,
+    EF: std::future::Future<Output = crate::error::AppResult<()>>,
+    S: FnOnce() -> SF,
+    SF: std::future::Future<Output = crate::error::AppResult<T>>,
+{
+    match end(active.to_string()).await {
+        Ok(()) => {}
+        Err(e) if matches!(e.code(), Some("session_ended") | Some("not_found") | Some("session_not_found")) => {}
+        Err(e) => return Err(e),
+    }
+    start().await
 }
 
 #[cfg(test)]

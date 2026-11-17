@@ -2618,6 +2618,12 @@ pub async fn assist_start(app: AppHandle, prep_id: Option<String>, mode: Option<
     crate::assist::live::start(&app, prep_id, mode, practice.unwrap_or(false)).await
 }
 
+/// "End it and start this one" after a `session_active`: the named session ends, then this start is tried once more.
+#[tauri::command]
+pub async fn assist_start_replacing(app: AppHandle, session_id: String, prep_id: Option<String>, mode: Option<String>, practice: Option<bool>) -> AppResult<crate::assist::session::AssistStarted> {
+    crate::assist::live::start_replacing(&app, &session_id, prep_id, mode, practice.unwrap_or(false)).await
+}
+
 /// Ends the session that runs (`POST /api/assist/sessions/{id}/end`) and stops the recording.
 #[tauri::command]
 pub async fn assist_end(app: AppHandle) -> AppResult<()> {

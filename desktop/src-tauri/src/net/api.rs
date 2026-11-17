@@ -560,6 +560,20 @@ impl ApiClient {
         Self::parse(resp).await
     }
 
+    /// `POST /api/assist/sessions`, where `409 session_active` (contract 1.9.0-k) comes back as the session that is
+    /// active, so the person can end it and start this one.
+    pub async fn assist_start_or_active(&self, request: &AssistStartRequest) -> AppResult<Result<AssistStartAnswer, ActiveAssist>> {
+        let resp = self.authed(self.http.post(self.url("assist/sessions")))?.json(request).send().await?;
+        if resp.status().as_u16() != 409 {
+            return Self::parse(resp).await.map(Ok);
+        }
+        let body: serde_json::Value = resp.json().await.unwrap_or_default();
+        match (body["code"].as_str(), serde_json::from_value::<ActiveAssist>(body.clone())) {
+            (Some("session_active"), Ok(active)) if !active.session_id.is_empty() => Ok(Err(active)),
+            (code, _) => Err(AppError::Server { status: 409, message: body["message"].as_str().unwrap_or("request failed").to_string(), code: code.map(str::to_string), retry_after_secs: None }),
+        }
+    }
+
     /// `POST /api/assist/sessions/{id}/token`: new tokens before the old ones expire.
     pub async fn assist_token(&self, session_id: &str) -> AppResult<AssistTokenAnswer> {
         let resp = self.authed(self.http.post(self.url(&format!("assist/sessions/{session_id}/token"))))?.send().await?;

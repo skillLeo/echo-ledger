@@ -318,14 +318,24 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
             emit(&plan_app, &message);
         }
     });
-    let (answer, handle) = session::start(api, &flags, pins, request, on_plan, move |event| {
+    let answer = match api.assist_start_or_active(&request).await? {
+        Ok(answer) => answer,
+        Err(active) => {
+            // Another session of this person is active: the card offers to end it and start this one.
+            let this_device = state.settings().device_id.clone();
+            let message = active_message(&active, this_device.as_deref());
+            crate::lifecycle::show(app, WINDOW, "assist");
+            emit(app, &message);
+            return Err(AppError::msg(message["text"].as_str().unwrap_or_default()));
+        }
+    };
+    let handle = session::connect(api, &answer, pins, on_plan, move |event| {
         let mut early = events.lock().unwrap_or_else(|p| p.into_inner());
         match early.id.clone() {
             Some(id) => on_event(&events_app, &id, meeting.as_deref(), event),
             None => early.waiting.push(event),
         }
-    })
-    .await?;
+    });
     let started = AssistStarted::from_answer(&answer);
     let plan = answer.plan.clone().unwrap_or_default();
     let budget = Budget { left_at_start: plan.seconds_left, total: plan.seconds_total, started: Instant::now() };
@@ -358,6 +368,22 @@ pub async fn start(app: &AppHandle, prep_id: Option<String>, mode: Option<String
     crate::lifecycle::show(app, WINDOW, "assist");
     spawn_upkeep(app, started.session_id.clone());
     Ok(started)
+}
+
+/// The card's offer when another session of this person is active (pure): what it says, and the action that ends it
+/// and starts this one (`assist_start_replacing` with `session_id`).
+pub fn active_message(active: &crate::net::models::ActiveAssist, this_device: Option<&str>) -> serde_json::Value {
+    let here = this_device.is_some() && active.device_id.as_deref() == this_device;
+    let what = if active.practice { "A Live Assist practice" } else { "Live Assist" };
+    let text = format!("{what} is already running for you {}.", if here { "on this computer" } else { "on another device" });
+    serde_json::json!({"type": "session_active", "session_id": active.session_id, "practice": active.practice, "text": text, "action": "End it and start this one"})
+}
+
+/// "End it and start this one": the active session ends, then this start is tried once more.
+pub async fn start_replacing(app: &AppHandle, active_id: &str, prep_id: Option<String>, mode: Option<String>, practice: bool) -> AppResult<AssistStarted> {
+    let api = app.state::<crate::AppState>().api()?;
+    let active = checked(active_id)?.to_string();
+    session::end_then_start(&active, |id| async move { api.assist_end(&id).await }, || start(app, prep_id, mode, practice)).await
 }
 
 /// The relay's events of a session that is not in the registry yet.
@@ -866,6 +892,58 @@ mod tests {
         assert!(ends_with_flags(&off, true));
         assert!(!ends_with_flags(&on, true), "still on: it runs");
         assert!(!ends_with_flags(&off, false), "nothing runs");
+    }
+
+    #[test]
+    fn an_active_session_is_offered_to_be_ended_and_this_one_started() {
+        let active = crate::net::models::ActiveAssist { session_id: "01JCOLD".into(), practice: false, device_id: Some("dev-1".into()) };
+        let here = active_message(&active, Some("dev-1"));
+        assert_eq!(here, json!({"type": "session_active", "session_id": "01JCOLD", "practice": false, "text": "Live Assist is already running for you on this computer.", "action": "End it and start this one"}));
+        assert_eq!(active_message(&active, Some("dev-2"))["text"], "Live Assist is already running for you on another device.");
+        let practice = crate::net::models::ActiveAssist { practice: true, ..active };
+        assert_eq!(active_message(&practice, None)["text"], "A Live Assist practice is already running for you on another device.");
+    }
+
+    #[tokio::test]
+    async fn ending_the_active_session_then_starting_tries_the_start_once() {
+        use std::sync::atomic::AtomicU32;
+        let (ends, starts) = (Arc::new(AtomicU32::new(0)), Arc::new(AtomicU32::new(0)));
+        let (e, s) = (ends.clone(), starts.clone());
+        let started: AppResult<&str> = session::end_then_start("old", |id| async move {
+            assert_eq!(id, "old");
+            e.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }, || async move {
+            s.fetch_add(1, Ordering::SeqCst);
+            Ok("new")
+        })
+        .await;
+        assert_eq!(started.unwrap(), "new");
+        assert_eq!((ends.load(Ordering::SeqCst), starts.load(Ordering::SeqCst)), (1, 1));
+        // Already ended elsewhere: still started.
+        let gone = AppError::Server { status: 409, message: "Ended".into(), code: Some("session_ended".into()), retry_after_secs: None };
+        assert_eq!(session::end_then_start("old", |_| async move { Err(gone) }, || async { Ok(1) }).await.unwrap(), 1);
+        // The end failed for another reason: nothing is started.
+        let tried = Arc::new(AtomicU32::new(0));
+        let t = tried.clone();
+        let refused = AppError::Server { status: 403, message: "No".into(), code: Some("forbidden".into()), retry_after_secs: None };
+        let result = session::end_then_start("old", |_| async move { Err(refused) }, || async move {
+            t.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        })
+        .await;
+        assert!(result.is_err() && tried.load(Ordering::SeqCst) == 0);
+        // A second 409 is the start's own error: tried once, never again.
+        let again = AppError::Server { status: 409, message: "Active".into(), code: Some("session_active".into()), retry_after_secs: None };
+        let tries = Arc::new(AtomicU32::new(0));
+        let n = tries.clone();
+        let second: AppResult<()> = session::end_then_start("old", |_| async { Ok(()) }, || async move {
+            n.fetch_add(1, Ordering::SeqCst);
+            Err(again)
+        })
+        .await;
+        assert!(second.is_err());
+        assert_eq!(tries.load(Ordering::SeqCst), 1);
     }
 
     #[test]

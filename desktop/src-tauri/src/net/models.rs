@@ -1390,6 +1390,16 @@ pub struct AssistTokenAnswer {
     pub plan: Option<AssistPlanDto>,
 }
 
+/// `409 session_active` (contract 1.9.0-k): the person's Live Assist session that is active now.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ActiveAssist {
+    pub session_id: String,
+    #[serde(default)]
+    pub practice: bool,
+    #[serde(default)]
+    pub device_id: Option<String>,
+}
+
 /// A text field that may come as `null`: read as empty.
 fn text<'de, D>(deserializer: D) -> Result<String, D::Error>
 where

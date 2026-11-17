@@ -92,6 +92,23 @@ async fn refusals_read_in_plain_words() {
 }
 
 #[tokio::test]
+async fn an_active_session_comes_back_named_so_it_can_be_ended() {
+    let server = MockServer::start(Router::new().fixed(
+        "POST",
+        "/api/assist/sessions",
+        Reply::json(409, json!({"code": "session_active", "message": "You already have a Live Assist session.", "session_id": "01JCOLD", "practice": false, "device_id": "01JBDEVICE"})),
+    ));
+    let active = client(&server).assist_start_or_active(&request()).await.unwrap().unwrap_err();
+    assert_eq!(active, desktop_lib::net::models::ActiveAssist { session_id: "01JCOLD".into(), practice: false, device_id: Some("01JBDEVICE".into()) });
+    // Another 409 stays an error in plain words.
+    let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(409, json!({"code": "session_ended", "message": "Ended"}))));
+    let other = client(&server).assist_start_or_active(&request()).await.unwrap_err();
+    assert_eq!(other.code(), Some("session_ended"));
+    let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(201, fixture("assist_session_start.json"))));
+    assert!(client(&server).assist_start_or_active(&request()).await.unwrap().is_ok());
+}
+
+#[tokio::test]
 async fn nothing_reaches_the_server_while_live_assist_is_off() {
     let server = MockServer::start(Router::new().fixed("POST", "/api/assist/sessions", Reply::json(201, fixture("assist_session_start.json"))));
     let off = UiFlags::read(Some(&json!({"live_assist": false})), false);
