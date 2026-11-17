@@ -1,4 +1,6 @@
-# Live Assist contract — revision 1.9.0-h (frozen 2026-11-17 for the sprint)
+# Live Assist contract — revision 1.9.0-i (frozen 2026-11-17 for the sprint)
+
+1.9.0-i: one active assist session per person; `stt` may be `null` only when a recording is running.
 
 1.9.0-h: practice messages over the relay, the facts ledger and running summary from the relay, and the usage kinds.
 
@@ -91,6 +93,9 @@ Errors added by Live Assist:
    "stt": {"provider": "soniox", "ws_url": "…", "token": "…", "expires_at": "…", "translate_other": true},
    "plan": {"modes": ["fast", "balanced"], "seconds_left": 31200}}
   ```
+  One active session (live or practice) per person: a second start answers `409 session_active`. `stt` is `null`
+  when the server can't issue a captions token; that is allowed only with a running recording (the app then uses its
+  own captions through `POST /api/stt/token`). Otherwise the start is refused with `503 provider_not_configured`.
   `auto_saved` is true when the session started from a prep: that call gets no after-call card. `recording_session_id`
   links the recording made at the same time (a session in status `recording` of this device). Practice:
   `"practice": true` without `recording_session_id`; the AI asks the questions.
