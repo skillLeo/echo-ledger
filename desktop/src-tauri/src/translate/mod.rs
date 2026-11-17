@@ -242,6 +242,13 @@ pub fn stop(app: &AppHandle) {
     }
 }
 
+/// The window went, however (closed, destroyed by the system): nothing is heard without it, and Ctrl+Shift+T / H go back
+/// to other apps. Run off the main thread: giving the keys back waits for it.
+pub fn window_gone(app: &AppHandle) {
+    stop_session();
+    unregister_hotkeys(app);
+}
+
 fn stop_session() {
     if let Ok(mut r) = running().lock()
         && let Some(run) = r.take()
@@ -542,6 +549,24 @@ mod tests {
         assert_eq!(keys(Action::TranslateLock, false), "Ctrl+Shift+T");
         assert_eq!(keys(Action::TranslateHide, true), "⌘⇧H");
         assert_eq!(keys(Action::TranslateLock, true), "⌘⇧T");
+    }
+
+    #[test]
+    fn a_window_gone_any_way_ends_the_session_and_its_keys() {
+        let stop = Arc::new(AtomicBool::new(false));
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default() });
+        stop_session();
+        assert!(stop.load(Ordering::SeqCst), "the capture is told to stop");
+        assert!(running().lock().unwrap().is_none(), "nothing runs");
+        // The window's destruction is handled whatever closed it, off the main thread.
+        let lib = include_str!("../lib.rs");
+        let destroyed = &lib[lib.find("WindowEvent::Destroyed =>").unwrap()..];
+        let arm = &destroyed[..destroyed.find("\n            }").unwrap()];
+        assert!(arm.contains("translate::WINDOW") && arm.contains("translate::window_gone"), "{arm}");
+        assert!(arm.contains("async_runtime::spawn"), "never on the main thread: {arm}");
+        let gone = include_str!("mod.rs");
+        let body = &gone[gone.find("pub fn window_gone").unwrap()..];
+        assert!(body[..body.find('}').unwrap()].contains("unregister_hotkeys(app)"));
     }
 
     #[test]

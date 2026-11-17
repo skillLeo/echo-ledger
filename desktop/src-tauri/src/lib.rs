@@ -500,6 +500,11 @@ pub fn run() {
             WindowEvent::Destroyed => {
                 privacy::destroyed(window.app_handle(), window.label());
                 lifecycle::on_destroyed(window.app_handle(), window.label());
+                // Live Translate's window went, however: its capture and its keys go with it (off the main thread).
+                if window.label() == translate::WINDOW {
+                    let app = window.app_handle().clone();
+                    tauri::async_runtime::spawn(async move { translate::window_gone(&app) });
+                }
             }
             // Files dropped on the main window are heard by its page, which opens the import sheet (one client and
             // language for the batch), so nothing is imported here.
