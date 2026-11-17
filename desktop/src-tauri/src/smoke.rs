@@ -37,6 +37,10 @@ pub const STALL: Duration = Duration::from_secs(20);
 /// How often a heartbeat on the async runtime counts, and how often a waiting test says so again.
 const HEARTBEAT: Duration = Duration::from_millis(250);
 const SAY_AGAIN: Duration = Duration::from_secs(10);
+/// The runtime is alive when its heartbeat moved within this long.
+pub const ALIVE: Duration = Duration::from_millis(4 * 250);
+/// Once every window is ready, the runtime must stay alive this long before the test passes.
+pub const SETTLE: Duration = Duration::from_secs(5);
 
 /// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
 /// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
@@ -69,6 +73,8 @@ pub fn begin() -> PathBuf {
     let dir = temp_data_dir(&std::env::temp_dir(), std::process::id());
     let _ = std::fs::remove_dir_all(&dir);
     DIR.set(dir.clone()).ok();
+    // What ran, and on which thread, for a stall report (`stall`).
+    crate::stall::start();
     say("started, with a temporary folder and no account");
     dir
 }
@@ -120,13 +126,16 @@ pub enum Step {
     Waiting { waiting: Vec<String>, say: bool },
 }
 
-/// One look of the watcher (pure): the windows' verdict first (all ready ends the test, a window that could not be
-/// built fails it), then whether the async runtime stalled (`since_beat`: since its heartbeat last moved), then whether
-/// to say what is still waited for.
+/// One look of the watcher (pure). A window that could not be built fails the test. Every window ready is done only
+/// while the async runtime is alive (`since_beat`, since its heartbeat last moved, within [`ALIVE`]): ready windows on a
+/// stalled runtime are a freeze a person would see, and fail as a stall. A runtime that made no progress for [`STALL`]
+/// fails the test whatever the windows say; between, the watcher waits.
 pub fn step(phases: &[(&str, Phase)], since_beat: Duration, last_said: &[String], since_said: Duration) -> Step {
     match verdict(phases) {
-        Verdict::AllReady => Step::Done,
         Verdict::Failed(label) => Step::Failed(label),
+        Verdict::AllReady if since_beat <= ALIVE => Step::Done,
+        Verdict::AllReady if since_beat >= STALL => Step::Stalled(Vec::new()),
+        Verdict::AllReady => Step::Waiting { waiting: Vec::new(), say: false },
         Verdict::Waiting(waiting) if since_beat >= STALL => Step::Stalled(waiting),
         Verdict::Waiting(waiting) => {
             let say = waiting != last_said || since_said >= SAY_AGAIN;
@@ -135,16 +144,45 @@ pub fn step(phases: &[(&str, Phase)], since_beat: Duration, last_said: &[String]
     }
 }
 
+/// The settle period after every window is ready (pure): passed once the runtime stayed alive for [`SETTLE`] in a row
+/// (`alive_for`); a [`STALL`]-length gap fails it; else it goes on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Settle {
+    Passed,
+    Stalled,
+    Going,
+}
+
+pub fn settle(since_beat: Duration, alive_for: Duration) -> Settle {
+    if since_beat >= STALL {
+        Settle::Stalled
+    } else if alive_for >= SETTLE {
+        Settle::Passed
+    } else {
+        Settle::Going
+    }
+}
+
+/// A stall: says it with the stall report (the runtime, what the main thread is in, the last commands, every thread's
+/// stack in a file), and ends the test with [`EXIT_STALLED`].
+fn stalled(dir: &Path, what: &str) -> ! {
+    say(&format!("failed: the async runtime made no progress for {} s ({what})", STALL.as_secs()));
+    say(&crate::stall::report());
+    finish(dir, EXIT_STALLED);
+}
+
 /// Stops the test: the temporary folder goes and the process ends with `code`.
 fn finish(dir: &Path, code: i32) -> ! {
     let _ = std::fs::remove_dir_all(dir);
     std::process::exit(code);
 }
 
-/// Opens every window and waits for their pages. The watcher is a thread of its own: it never waits for the async
-/// runtime, where the windows are built and the pages' commands run, so a busy or stalled runtime can never keep it from
-/// seeing windows that are ready (a Server 2025 run saw all six ready in 9 s and the watcher, a task on that runtime,
-/// never looked again). A heartbeat on the runtime tells a stalled runtime apart: it fails at once, saying so.
+/// Opens every window and waits for their pages, then for a runtime that stays alive. The watcher is a thread of its
+/// own, apart from the async runtime where the windows are built and the pages' commands run, and a heartbeat on that
+/// runtime says whether it runs. A Server 2025 run (aab16d95) saw all six windows ready in 9 s while the runtime made no
+/// progress for 111 s: the old watcher, a task on that runtime, never looked again and the run ended at the 120 s guard.
+/// Here that run fails as a stall (exit 8) after 20 s, with a report of where it stalled; windows ready on a stalled
+/// runtime never pass.
 pub fn drive(app: tauri::AppHandle) {
     let Some(dir) = DIR.get().cloned() else { return };
 
@@ -187,10 +225,8 @@ pub fn drive(app: tauri::AppHandle) {
                     say(&format!("failed: the {label} window could not be opened"));
                     finish(&dir, EXIT_WINDOW_FAILED);
                 }
-                Step::Stalled(waiting) => {
-                    say(&format!("failed: the async runtime made no progress for {} s (still waiting for: {})", STALL.as_secs(), waiting.join(", ")));
-                    finish(&dir, EXIT_STALLED);
-                }
+                Step::Stalled(waiting) if waiting.is_empty() => stalled(&dir, "every window was ready"),
+                Step::Stalled(waiting) => stalled(&dir, &format!("still waiting for: {}", waiting.join(", "))),
                 Step::Waiting { waiting, say: true } => {
                     say(&format!("waiting for: {} ({} ms)", waiting.join(", "), started.elapsed().as_millis()));
                     (last_said, said_at) = (waiting, Instant::now());
@@ -199,7 +235,23 @@ pub fn drive(app: tauri::AppHandle) {
             }
             std::thread::sleep(POLL);
         }
-        say(&format!("ok: {} windows ready in {} ms", labels.len(), started.elapsed().as_millis()));
+        // Then the runtime must stay alive for a while: a freeze right after the windows came up fails too.
+        let mut alive_since = Instant::now();
+        loop {
+            let now_beat = beats.load(std::sync::atomic::Ordering::SeqCst);
+            if now_beat != beat {
+                (beat, beat_at) = (now_beat, Instant::now());
+            }
+            if beat_at.elapsed() > ALIVE {
+                alive_since = Instant::now();
+            }
+            match settle(beat_at.elapsed(), alive_since.elapsed()) {
+                Settle::Passed => break,
+                Settle::Stalled => stalled(&dir, "after every window was ready"),
+                Settle::Going => std::thread::sleep(POLL),
+            }
+        }
+        say(&format!("ok: {} windows ready in {} ms, the async runtime alive {} s after", labels.len(), started.elapsed().as_millis(), SETTLE.as_secs()));
         // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
         #[cfg(target_os = "macos")]
         {
@@ -344,12 +396,21 @@ mod tests {
     }
 
     #[test]
-    fn the_watcher_sees_ready_windows_whatever_the_async_runtime_does_and_says_when_it_stalls() {
+    fn ready_windows_pass_only_on_a_runtime_that_stays_alive_and_a_stall_says_where() {
         let all_ready = [("main", Phase::Ready), ("pill", Phase::Ready)];
         let one_left = [("main", Phase::Ready), ("pill", Phase::Creating)];
         let s = Duration::from_secs;
-        // Every window ready ends the test, even with the runtime stalled (the Server 2025 run).
-        assert_eq!(step(&all_ready, s(111), &[], s(0)), Step::Done);
+        // Every window ready on a stalled runtime is a freeze: the Server 2025 run (ready at 9 s, then 111 s of nothing)
+        // fails as a stall. With a fresh heartbeat it is done; a short gap waits.
+        assert_eq!(step(&all_ready, s(111), &[], s(0)), Step::Stalled(Vec::new()));
+        assert_eq!(step(&all_ready, Duration::from_millis(250), &[], s(0)), Step::Done);
+        assert_eq!(step(&all_ready, ALIVE, &[], s(0)), Step::Done);
+        assert_eq!(step(&all_ready, s(3), &[], s(0)), Step::Waiting { waiting: Vec::new(), say: false });
+        // Then the settle period: the runtime alive 5 s in a row passes; a stall there fails.
+        assert_eq!(settle(Duration::from_millis(250), SETTLE), Settle::Passed);
+        assert_eq!(settle(Duration::from_millis(250), s(2)), Settle::Going);
+        assert_eq!(settle(STALL, s(4)), Settle::Stalled, "a stall during the settle period");
+        assert!(ALIVE == HEARTBEAT * 4 && SETTLE < TIMEOUT - STALL);
         assert_eq!(step(&[("main", Phase::Absent), ("pill", Phase::Ready)], s(0), &[], s(0)), Step::Failed("main".into()));
         // A stalled runtime while a window is still being built is its own failure, at once.
         assert_eq!(step(&one_left, STALL, &[], s(0)), Step::Stalled(vec!["pill".into()]));
@@ -365,6 +426,9 @@ mod tests {
         let drive = &drive[..drive.find("\n}\n").unwrap()];
         assert!(drive.contains("std::thread::Builder::new().name(\"el-smoke-watch\""), "{drive}");
         assert!(drive.contains("std::thread::sleep(POLL)") && !drive.contains("tokio::time::sleep(POLL)"));
+        // A stall says where: the stall report goes with exit 8.
+        let stalled = &source[source.find("fn stalled(").unwrap()..];
+        assert!(stalled[..stalled.find("\n}").unwrap()].contains("crate::stall::report()"));
     }
 
     fn args(list: &[&str]) -> Vec<String> {
