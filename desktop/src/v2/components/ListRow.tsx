@@ -38,6 +38,8 @@ export type ListRowProps = {
   mark?: ReactNode;
   /** What the row stands for (a recording's id): a page can give it keyboard focus back after a change. */
   rowId?: string;
+  /** A setting this row is the home of: search and links scroll to it and highlight it (id "setting-<id>"). */
+  anchor?: string;
   /** The row button's name when the title alone isn't enough ("Play Kick-off from 0:31"); it starts with the title. */
   label?: string;
   /** A press that may start a drag (recordings dragged onto a project in the sidebar). */
@@ -49,7 +51,7 @@ export type ListRowProps = {
  * by the rest; with a control the row is a label for it.
  */
 export function ListRow({
-  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark,
+  title, meta, icon, iconStyle = "avatar", leading, endTop, endBottom, value, control, chevron, onClick, selected, compact, badge, onPointerDown, rowId, label, mark, anchor,
 }: ListRowProps) {
   const id = useId();
   const interactive = Boolean(onClick) && !control;
@@ -58,7 +60,7 @@ export function ListRow({
   const describedBy = [mark && `${id}-mark`, meta && `${id}-meta`, (endTop || endBottom) && `${id}-end`, value && `${id}-value`, badge && `${id}-badge`]
     .filter(Boolean).join(" ") || undefined;
   return (
-    <li className={cls}>
+    <li className={cls} {...(anchor ? { id: `setting-${anchor}`, "data-setting": anchor, tabIndex: -1 } : {})}>
       {interactive && (
         <button type="button" className="el-row__hit" aria-label={label} aria-labelledby={label ? undefined : `${id}-title`} aria-describedby={describedBy}
           aria-current={selected || undefined} onClick={onClick} onPointerDown={onPointerDown} data-row-id={rowId} />

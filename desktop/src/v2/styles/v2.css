@@ -834,3 +834,22 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-translate__app { display: flex; align-items: flex-end; gap: var(--el-space-8); flex-wrap: wrap; }
 .el-translate__app > .el-select { flex: 1; min-inline-size: calc(var(--el-space-64) * 3); }
 .el-translate__choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 2.5), 1fr)); gap: var(--el-space-12); }
+
+/* Settings pages in the new look: rows' controls, colour swatches, a pair of fields, reset. */
+.el-settings-v2 { display: flex; flex-direction: column; gap: var(--el-space-16); }
+.el-settings-v2 .el-group { margin: 0; }
+.el-setting__select { min-inline-size: calc(var(--el-space-64) * 3.5); max-inline-size: calc(var(--el-space-64) * 5); }
+.el-range { inline-size: calc(var(--el-space-64) * 2.5); accent-color: var(--el-role-accent-default); cursor: pointer; margin: 0; }
+.el-swatches { display: flex; flex-wrap: wrap; align-items: center; gap: var(--el-space-8); }
+.el-swatch {
+  inline-size: var(--el-space-24); block-size: var(--el-space-24); padding: 0; cursor: pointer;
+  border-radius: var(--el-radius-full); border: var(--el-border-hairline) solid var(--el-role-border-strong);
+}
+.el-swatch--auto {
+  inline-size: auto; padding-inline: var(--el-space-8);
+  background: var(--el-role-bg-subtle); color: var(--el-role-text-primary); font: inherit; font-size: var(--el-text-caption-size);
+}
+.el-swatch[aria-checked="true"] { outline: var(--el-focus-width) solid var(--el-role-accent-default); outline-offset: var(--el-focus-offset); }
+.el-settings-v2__pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(calc(var(--el-space-64) * 3), 1fr)); gap: var(--el-space-12); }
+.el-settings-v2__reset { display: flex; justify-content: flex-start; }
+.el-settings-v2 .set-preview { margin: 0; }

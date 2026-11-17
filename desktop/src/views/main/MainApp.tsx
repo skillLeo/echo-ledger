@@ -50,6 +50,7 @@ import { confirmAction, isConfirmOpen } from "../../lib/confirm";
 import { anyV2, useUiFlags } from "../../v2/flags";
 import { shellStatus as shellStatusOf } from "../../v2/shell/status";
 import { helpV2Reachable } from "../../v2/help/route";
+import { hasV2Page } from "../../v2/settings/pages/route";
 
 // The redesigned screens (docs/API.md "Interface flags"): loaded only when the server turns their flag on.
 const v2 = () => import("../../v2/app");
@@ -60,6 +61,7 @@ const ClassicSwitchV2 = lazy(() => v2().then((m) => ({ default: m.ClassicSwitch 
 const SettingsV2 = lazy(() => v2().then((m) => ({ default: m.SettingsV2 })));
 const SetupHealthV2 = lazy(() => v2().then((m) => ({ default: m.SetupHealth })));
 const HelpV2 = lazy(() => v2().then((m) => ({ default: m.HelpV2 })));
+const SettingsPagesV2 = lazy(() => v2().then((m) => ({ default: m.SettingsPagesV2 })));
 const HomeV2 = lazy(() => v2().then((m) => ({ default: m.HomeV2 })));
 const LiveV2 = lazy(() => v2().then((m) => ({ default: m.LiveV2 })));
 const AskV2 = lazy(() => v2().then((m) => ({ default: m.AskV2 })));
@@ -800,7 +802,9 @@ export default function MainApp() {
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />
                 : section.id === "help" && helpV2Reachable(ui.flags)
                   ? <HelpV2 platform={status.platform} onBack={onHome} onMacCheck={() => setSettingsSection({ id: "help.mac_check", seq: ++navigations.current })} />
-                  : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
+                  : hasV2Page(section.id)
+                    ? <SettingsPagesV2 section={section} onHome={onHome} run={run} />
+                    : <SettingsView status={status} run={run} onUnpaired={setStatus} theme={theme} onTheme={chooseTheme} section={section} pageOnly={{ onHome }} />} />
           </div>
         </Suspense>
       )}
