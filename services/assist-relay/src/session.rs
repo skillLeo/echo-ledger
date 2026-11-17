@@ -285,6 +285,21 @@ enum Feed {
     Task { kind: TaskKind, run: TaskRun },
 }
 
+/// Sends a background task's failure to its session when the task ends without sending its result (it panicked).
+struct TaskGuard {
+    feed: mpsc::Sender<Feed>,
+    kind: Option<TaskKind>,
+}
+
+impl Drop for TaskGuard {
+    fn drop(&mut self) {
+        if let Some(kind) = self.kind.take() {
+            let run = TaskRun { result: Err(ProviderError::Unavailable), abandoned: Vec::new() };
+            let _ = self.feed.try_send(Feed::Task { kind, run });
+        }
+    }
+}
+
 enum Item {
     Event(StreamEvent),
     Error(ProviderError),
@@ -1600,8 +1615,13 @@ impl Engine {
         let (providers, config, feed) = (self.deps.providers.clone(), self.config(), self.feed_tx.clone());
         let purpose = kind.purpose();
         tokio::spawn(async move {
+            // Whatever ends the task (a panic included), the session hears back: its busy flag and its reservation
+            // must not stay set for good.
+            let mut guard = TaskGuard { feed: feed.clone(), kind: Some(kind) };
             let run = background::run(providers, config, models, Arc::new(context), purpose, question, max_output_tokens).await;
-            let _ = feed.send(Feed::Task { kind, run }).await;
+            if let Some(kind) = guard.kind.take() {
+                let _ = feed.send(Feed::Task { kind, run }).await;
+            }
         });
         true
     }

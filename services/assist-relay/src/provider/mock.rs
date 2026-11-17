@@ -52,6 +52,8 @@ pub enum MockBehavior {
     Break(usize),
     /// The usual answer, complete, but no token counts (some providers send none).
     NoUsage,
+    /// The stream panics when it is first read (a bug in a provider client).
+    Panic,
 }
 
 #[derive(Debug)]
@@ -234,6 +236,12 @@ impl Provider for MockProvider {
                     Err(ProviderError::Unavailable)
                 });
                 return texts.chain(broken).boxed();
+            }
+            Some(MockBehavior::Panic) => {
+                return stream::poll_fn(|_| -> std::task::Poll<Option<Result<StreamEvent, ProviderError>>> {
+                    panic!("the mock provider panics, as asked")
+                })
+                .boxed();
             }
             Some(MockBehavior::NoUsage) => {
                 let next = Duration::from_millis(latency.token_ms);

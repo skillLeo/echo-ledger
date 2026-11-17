@@ -361,3 +361,24 @@ async fn a_background_call_in_flight_never_moves_the_mode() {
     assert!(of_type(&seen, "mode_changed").is_empty(), "the reservation moved the mode: {:?}", of_type(&seen, "mode_changed"));
     assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_background_task_that_panics_frees_its_reservation_and_its_busy_flag() {
+    let h = harness(pricey_output());
+    let mut token = practice_claims("s-panic");
+    // 10 cents: one practice question at its worst (8 cents) fits beside a Fast suggestion; a leaked reservation would
+    // leave no room for the next.
+    token.budget.cents_left = 10;
+    let mut s = h.connect(token);
+    ready_now(&mut s).await;
+    s.send(json!({"type": "context_update", "settings": {"assist": "paused"}})).await;
+    s.drain(Duration::from_millis(100)).await;
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Panic);
+    s.send(json!({"type": "practice_next"})).await;
+    let error = s.next().await;
+    assert_eq!((error["code"].as_str(), error["retry"].as_bool()), (Some("provider_unavailable"), Some(true)), "{error}");
+    // Not busy, and the reservation is back: the next question comes.
+    s.send(json!({"type": "practice_next"})).await;
+    let question = s.next().await;
+    assert_eq!((question["type"].as_str(), question["index"].as_u64()), (Some("practice_question"), Some(1)), "{question}");
+}
