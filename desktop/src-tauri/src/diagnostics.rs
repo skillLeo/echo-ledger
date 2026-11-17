@@ -64,7 +64,7 @@ pub fn report_text(d: &DiagnosticInputs) -> String {
         None => out.push("Ready check: not run yet".into()),
     }
     out.push(String::new());
-    out.push(format!("Hidden from screen sharing: {}", d.protection));
+    out.push(format!("Screen share protection (last Share Check): {}", d.protection));
     out.push(match &d.share_check {
         Some(c) if c.methods.is_empty() => format!("Last Share Check: {} on {}", c.result, c.at.format("%Y-%m-%d %H:%M UTC")),
         Some(c) => format!("Last Share Check: {} on {} ({})", c.result, c.at.format("%Y-%m-%d %H:%M UTC"), c.methods.join(", ")),
@@ -168,7 +168,7 @@ mod tests {
             "EchoLedger diagnostic report\nApp: 1.6.0\nSystem: Windows 11 (26100.2314)\nMade: 2026-11-17 10:00 UTC\n\n\
              Ready check (09:00 UTC): not ready\n  Signed in - needs action\n  Microphone - needs action: No microphone is connected.\n  \
              Shortcuts - worth a look: Another app holds the keys of: Record now.\n  Hidden from screen sharing - ok\n\n\
-             Hidden from screen sharing: private\nLast Share Check: pass on 2026-11-17 08:00 UTC (window pass, display pass)\n\n\
+             Screen share protection (last Share Check): private\nLast Share Check: pass on 2026-11-17 08:00 UTC (window pass, display pass)\n\n\
              Shortcuts:\n  Record now: Ctrl+Alt+R, held by another app\n  Bookmark this moment: Ctrl+Shift+B, registered\n  Capture a voice note: not set\n"
         );
     }

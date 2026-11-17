@@ -107,6 +107,9 @@ pub struct ReadyInputs {
     pub protection: Option<Protection>,
 }
 
+/// What the Private state says: what the last Share Check found, never more.
+pub const PRIVATE_DETAIL: &str = "The last Share Check on this computer found EchoLedger's windows left out of a screen share.";
+
 /// Whether EchoLedger's windows stay out of a screen share on this computer (the privacy badge, and the setting).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Protection {
@@ -227,7 +230,7 @@ pub fn evaluate(inputs: &ReadyInputs, now: chrono::DateTime<chrono::Utc>) -> Rea
         const LABEL: &str = "Hidden from screen sharing";
         let privacy = Fix { label: "Open Share privacy", action: FixAction::OpenSharePrivacy };
         checks.push(advisory(match protection {
-            Protection::Private => ok("overlay_protection", LABEL, None),
+            Protection::Private => ok("overlay_protection", LABEL, Some(PRIVATE_DETAIL.into())),
             Protection::BlackBox => ok("overlay_protection", LABEL, Some("This Windows version shows a black box where EchoLedger is: its text stays private.".into())),
             Protection::NotChecked => ok("overlay_protection", LABEL, Some("Not checked on this computer yet: EchoLedger checks it by itself.".into())),
             Protection::Visible => problem("overlay_protection", LABEL, "The last check saw EchoLedger's windows in a screen share on this computer.", Some(privacy), false),
@@ -484,6 +487,9 @@ mod tests {
             (c.ok, c.fix.map(|f| f.action), c.advisory)
         };
         assert_eq!(protection(Protection::Private), (true, None, true));
+        let private = evaluate(&ReadyInputs { protection: Some(Protection::Private), ..good(true) }, at());
+        let row = private.checks.iter().find(|c| c.id == "overlay_protection").unwrap();
+        assert_eq!(row.detail.as_deref(), Some("The last Share Check on this computer found EchoLedger's windows left out of a screen share."), "says what was checked, never more");
         assert_eq!(protection(Protection::BlackBox), (true, None, true));
         assert_eq!(protection(Protection::NotChecked), (true, None, true), "it checks by itself: nothing to do yet");
         assert_eq!(protection(Protection::Visible), (false, Some(FixAction::OpenSharePrivacy), true));
