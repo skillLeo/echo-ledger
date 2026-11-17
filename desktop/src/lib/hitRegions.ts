@@ -23,11 +23,12 @@ export function useHitRegions(deps: unknown[]): void {
     let last = "";
     let frame = 0;
     const report = () => {
-      const regions = collectRegions(document, window.devicePixelRatio || 1, HIT_PADDING);
-      const key = JSON.stringify(regions);
+      const dpr = window.devicePixelRatio || 1;
+      const regions = collectRegions(document, dpr, HIT_PADDING);
+      const key = JSON.stringify([regions, dpr]);
       if (key !== last) {
         last = key;
-        api.setHitRegions(regions).catch(() => undefined);
+        api.setHitRegions(regions, dpr).catch(() => undefined);
       }
     };
     const schedule = () => {

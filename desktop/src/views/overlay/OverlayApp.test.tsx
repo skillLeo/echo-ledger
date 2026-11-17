@@ -429,12 +429,12 @@ describe("overlay hit regions", () => {
     vi.unstubAllGlobals();
   });
 
-  const lastRegions = () => callsOf("overlay_set_hit_regions").at(-1);
+  const lastRegions = () => callsOf("overlay_set_hit_regions").at(-1)?.regions;
 
   it("reports the toolbar rectangle in physical pixels with padding on mount", async () => {
     await renderOverlay();
     await waitFor(() => expect(callsOf("overlay_set_hit_regions").length).toBeGreaterThan(0));
-    expect(callsOf("overlay_set_hit_regions")[0]).toEqual({ regions: [{ x: (300 - 6) * 2, y: (8 - 6) * 2, w: (90 + 12) * 2, h: (28 + 12) * 2 }] });
+    expect(callsOf("overlay_set_hit_regions")[0]).toEqual({ regions: [{ x: (300 - 6) * 2, y: (8 - 6) * 2, w: (90 + 12) * 2, h: (28 + 12) * 2 }], scale: 2 });
   });
 
   it("re-reports when the toolbar moves after the captions grow", async () => {
@@ -443,7 +443,7 @@ describe("overlay hit regions", () => {
     toolsRect = rect(300, 40, 90, 28);
     await pushChannelMessage(final(1, "Me", "A long sentence that wraps onto a second line and pushes the toolbar upward."));
     await waitFor(() => expect(callsOf("overlay_set_hit_regions").length).toBe(2));
-    expect(callsOf("overlay_set_hit_regions")[1]).toEqual({ regions: [{ x: (300 - 6) * 2, y: (40 - 6) * 2, w: (90 + 12) * 2, h: (28 + 12) * 2 }] });
+    expect(callsOf("overlay_set_hit_regions")[1]).toEqual({ regions: [{ x: (300 - 6) * 2, y: (40 - 6) * 2, w: (90 + 12) * 2, h: (28 + 12) * 2 }], scale: 2 });
   });
 
   it("does not resend an unchanged region when other content changes", async () => {
@@ -458,7 +458,7 @@ describe("overlay hit regions", () => {
     toolsRect = rect(0, 0, 0, 0);
     await renderOverlay();
     await waitFor(() => expect(callsOf("overlay_set_hit_regions").length).toBe(1));
-    expect(callsOf("overlay_set_hit_regions")[0]).toEqual({ regions: [] });
+    expect(callsOf("overlay_set_hit_regions")[0]).toEqual({ regions: [], scale: 2 });
   });
 
   it("stops reporting after unmount", async () => {
@@ -473,15 +473,15 @@ describe("overlay hit regions", () => {
   it("adds the scroll area while the captions are visible, so the wheel scrolls them; nothing else is clickable", async () => {
     await renderOverlay();
     await emitEvent("overlay:visibility", true);
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]));
     await emitEvent("overlay:visibility", false);
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect)]));
   });
 
   it("re-reports on a scroll of the caption body within a frame (no waiting for the safety timer)", async () => {
     await renderOverlay();
     await emitEvent("overlay:visibility", true);
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]));
     const before = callsOf("overlay_set_hit_regions").length;
 
     toolsRect = rect(300, 20, 90, 28);
@@ -491,7 +491,7 @@ describe("overlay hit regions", () => {
     fireEvent.scroll(body());
     await new Promise((resolve) => setTimeout(resolve, 80));
     expect(callsOf("overlay_set_hit_regions").length).toBeGreaterThan(before);
-    expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] });
+    expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]);
   });
 
   it("re-reports when the window is resized", async () => {
@@ -500,16 +500,16 @@ describe("overlay hit regions", () => {
     toolsRect = rect(260, 8, 90, 28);
     window.dispatchEvent(new Event("resize"));
     await new Promise((resolve) => setTimeout(resolve, 80));
-    expect(lastRegions()).toEqual({ regions: [region(toolsRect)] });
+    expect(lastRegions()).toEqual([region(toolsRect)]);
   });
 
   it("re-reports when the Caption lines setting resizes the body", async () => {
     await renderOverlay();
     await emitEvent("overlay:visibility", true);
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]));
     bodyRect = rect(12, 44, 436, 124);
     await emitEvent("settings:changed", makeSettings({ captionLines: 5 }));
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]));
   });
 
   it("makes Jump to live clickable while it is shown", async () => {
@@ -519,9 +519,9 @@ describe("overlay hit regions", () => {
     setScrollMetrics(body(), { scrollHeight: 1_500, clientHeight: 74 });
     userScroll(body(), 200);
     await screen.findByRole("button", { name: "Jump to live" });
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect), region(jumpRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect), region(jumpRect)]));
     fireEvent.click(screen.getByRole("button", { name: "Jump to live" }));
-    await waitFor(() => expect(lastRegions()).toEqual({ regions: [region(toolsRect), region(bodyRect)] }));
+    await waitFor(() => expect(lastRegions()).toEqual([region(toolsRect), region(bodyRect)]));
   });
 });
 

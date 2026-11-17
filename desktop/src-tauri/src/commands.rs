@@ -988,8 +988,10 @@ pub fn main_view_set(view: String, state: State<'_, crate::lifecycle::WindowLife
 }
 
 #[tauri::command]
-pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, state: State<'_, HitRegions>) {
-    state.0.lock().unwrap().insert(window.label().to_string(), regions);
+pub fn overlay_set_hit_regions(window: WebviewWindow, regions: Vec<RectPx>, scale: f64, state: State<'_, HitRegions>) {
+    // Kept in CSS px: the poll makes them physical at the window's scale then (`geometry::scale_regions`).
+    let css = crate::overlay::geometry::scale_regions(&regions, 1.0 / scale);
+    state.0.lock().unwrap().insert(window.label().to_string(), css);
     state.1.notify_one(); // wake the idle click-through poll at once (C9)
 }
 
@@ -2808,6 +2810,21 @@ pub async fn mac_check_run(app: AppHandle) -> AppResult<crate::mac_check::CheckR
     }
 }
 
+/// Setup & health › the diagnostic report (both platforms): the Ready check, screen-sharing privacy and the last Share
+/// Check, the shortcuts and the versions, as plain text with no secrets, audio or transcripts.
+#[tauri::command]
+pub fn diagnostic_report(app: AppHandle) -> String {
+    crate::diagnostics::report_text(&crate::diagnostics::gather(&app))
+}
+
+/// Setup & health › Copy the report.
+#[tauri::command]
+pub fn diagnostic_report_copy(app: AppHandle) -> AppResult<()> {
+    use tauri_plugin_clipboard_manager::ClipboardExt;
+    let text = crate::diagnostics::report_text(&crate::diagnostics::gather(&app));
+    app.clipboard().write_text(text).map_err(|e| AppError::msg(e.to_string()))
+}
+
 /// The last Mac check of this run, to show it again when the page opens.
 #[tauri::command]
 pub fn mac_check_last(state: State<'_, AppState>) -> Option<crate::mac_check::CheckReport> {
@@ -3011,6 +3028,12 @@ pub fn skipped_restore(app: AppHandle, id: String) -> AppResult<()> {
 #[tauri::command]
 pub fn translate_apps() -> Vec<crate::translate::TranslateApp> {
     crate::translate::apps()
+}
+
+/// Whether Live Translate can start on this computer, and why not: `platform` (a Mac, for now) or `plan`.
+#[tauri::command]
+pub fn live_translate_status(state: State<'_, AppState>) -> crate::translate::Availability {
+    crate::translate::availability(crate::translate::PLATFORM_SUPPORTED, state.plan_info().live_translate)
 }
 
 /// What Live Translate shows now (null when it is off).

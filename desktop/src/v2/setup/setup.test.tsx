@@ -15,8 +15,9 @@ const READY: ReadyReport = {
   ready: false,
   checkedAt: "2026-11-17T10:00:00Z",
   checks: [
-    { id: "account", label: "Signed in", ok: true, detail: null, fix: null },
-    { id: "other_side", label: "The other side of calls", ok: false, detail: "System audio is off, so a recording has only your voice.", fix: { label: "Allow system audio", action: "allow_system_audio" } },
+    { id: "account", label: "Signed in", ok: true, detail: null, fix: null, advisory: false },
+    { id: "other_side", label: "The other side of calls", ok: false, detail: "System audio is off, so a recording has only your voice.", fix: { label: "Allow system audio", action: "allow_system_audio" }, advisory: false },
+    { id: "shortcuts", label: "Shortcuts", ok: false, detail: "Another app holds the keys of: Record now.", fix: { label: "Change shortcuts", action: "open_shortcuts" }, advisory: true },
   ],
 };
 const MAC: CheckReport = {
@@ -136,6 +137,8 @@ describe("the health checks", () => {
     await show();
     const ready = screen.getByRole("list", { name: "Ready check" });
     expect(within(ready).getAllByRole("listitem")[1]).toHaveAccessibleDescription(/Needs a fix System audio is off/);
+    // An advisory row (calls are recorded whatever it says) is worth a look, not a fix the computer needs.
+    expect(within(ready).getAllByRole("listitem")[2]).toHaveAccessibleDescription(/Worth a look Another app holds the keys of: Record now/);
     fireEvent.click(within(ready).getByRole("button", { name: "Allow system audio" }));
     await act(flushAsync);
     expect(callsOf("ready_fix")).toEqual([{ action: "allow_system_audio" }]);

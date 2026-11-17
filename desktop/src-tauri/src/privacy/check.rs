@@ -864,6 +864,29 @@ pub struct PrivacyStatus {
     pub displays: usize,
 }
 
+/// What the badge is made of now: the system, the setting, what the watch saw and the last Share Check here.
+fn facts_now(app: &AppHandle, settings: &crate::settings::Settings, last: Option<&Record>) -> (Facts, bool) {
+    let privacy = app.state::<Privacy>();
+    let platform = Platform::here();
+    let build = windows_build();
+    let remote = remote_session();
+    let watch = privacy.watch.lock().unwrap_or_else(|p| p.into_inner());
+    let (mismatch, held, changed_outside) = (watch.any_mismatch(), watch.any_held(), watch.changed_outside());
+    drop(watch);
+    let black_box = platform == Platform::Windows && build.is_none_or(|b| b < super::win::EXCLUDE_BUILD) && settings.old_windows_sharing == crate::settings::OldWindowsSharing::BlackBox;
+    let demo = privacy.demo_active(std::time::Instant::now());
+    (Facts { platform, hiding: settings.hide_from_sharing, demo, build, remote, mismatch, held, check: last.map(|r| r.result), black_box }, changed_outside)
+}
+
+/// The privacy badge now, without the rest of the status (the Ready check reads it every few seconds; nothing here
+/// waits for the main thread).
+pub fn badge_now(app: &AppHandle) -> Badge {
+    let state = app.state::<crate::AppState>();
+    let settings = state.settings();
+    let store = Store::load(&state.data_dir);
+    status::badge(&facts_now(app, &settings, store.last_for(&os_build(), app_version())).0)
+}
+
 pub fn status(app: &AppHandle) -> PrivacyStatus {
     let state = app.state::<crate::AppState>();
     let privacy = app.state::<Privacy>();
@@ -871,15 +894,9 @@ pub fn status(app: &AppHandle) -> PrivacyStatus {
     let store = Store::load(&state.data_dir);
     let (os, version) = (os_build(), app_version());
     let last = store.last_for(&os, version);
-    let platform = Platform::here();
-    let build = windows_build();
-    let remote = remote_session();
-    let watch = privacy.watch.lock().unwrap_or_else(|p| p.into_inner());
-    let (mismatch, held, changed_outside) = (watch.any_mismatch(), watch.any_held(), watch.changed_outside());
-    drop(watch);
+    let (facts, changed_outside) = facts_now(app, &settings, last);
+    let (platform, build, remote, mismatch) = (facts.platform, facts.build, facts.remote, facts.mismatch);
     let now = std::time::Instant::now();
-    let black_box = platform == Platform::Windows && build.is_none_or(|b| b < super::win::EXCLUDE_BUILD) && settings.old_windows_sharing == crate::settings::OldWindowsSharing::BlackBox;
-    let facts = Facts { platform, hiding: settings.hide_from_sharing, demo: privacy.demo_active(now), build, remote, mismatch, held, check: last.map(|r| r.result), black_box };
     let badge = status::badge(&facts);
     #[cfg(target_os = "macos")]
     let permission = crate::screens::platform::macos::permission();

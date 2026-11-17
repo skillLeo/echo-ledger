@@ -264,13 +264,15 @@ export interface OfferedPlan {
 
 /** The Ready check (Phase 1C): one check per thing that can stop the next call from being recorded. */
 export type ReadyFixAction = "sign_in" | "allow_microphone" | "allow_system_audio" | "open_sound_settings" | "software_update"
-  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection";
+  | "turn_on_auto_mode" | "turn_on_apps" | "restart_detection" | "open_shortcuts" | "open_share_privacy";
 export interface ReadyCheck {
-  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection";
+  id: "account" | "microphone" | "microphone_permission" | "other_side" | "detection" | "shortcuts" | "overlay_protection";
   label: string;
   ok: boolean;
   detail: string | null;
   fix: { label: string; action: ReadyFixAction } | null;
+  /** Shown with its state and fix, but never makes the computer "Not ready" (shortcuts, screen sharing; since v2.0). */
+  advisory: boolean;
 }
 export interface ReadyReport {
   ready: boolean;
@@ -1362,6 +1364,16 @@ export interface HelpGuide {
   markdown: string;
 }
 
+/** Why Live Translate cannot start here: this system has no capture of one app's sound for it yet (a Mac), or the plan
+ * leaves it out. */
+export type LiveTranslateUnavailable = "platform" | "plan";
+
+/** `live_translate_status`: whether Live Translate can start on this computer, and why not. */
+export interface LiveTranslateStatus {
+  available: boolean;
+  reason: LiveTranslateUnavailable | null;
+}
+
 /** What a message to support attaches when the person asks for the device report (`last_device_report`): the last
  * report this computer sent for this account with Send to my admin, and when the server took it; null when none yet. */
 export interface LastDeviceReport {
@@ -1678,6 +1690,12 @@ export const api = {
   // Live Translate (v1.3, lib/translate.ts holds its types).
   translateApps: () => invoke<import("./translate").TranslateApp[]>("translate_apps"),
   translateStatus: () => invoke<import("./translate").TranslateFeed | null>("translate_status"),
+  /** Setup & health (both platforms): the diagnostic report as plain text (no secrets, audio or transcripts). */
+  diagnosticReport: () => invoke<string>("diagnostic_report"),
+  /** Setup & health › Copy the report. */
+  diagnosticReportCopy: () => invoke<void>("diagnostic_report_copy"),
+  /** Whether Live Translate can start here, and why not, so the page shows it disabled with the reason. */
+  liveTranslateStatus: () => invoke<LiveTranslateStatus>("live_translate_status"),
   translateStart: (request: import("./translate").TranslateStartRequest) => invoke<string[]>("translate_start", { request }),
   translateStop: () => invoke<void>("translate_stop"),
   translateToggleLock: () => invoke<void>("translate_toggle_lock"),
@@ -1773,7 +1791,9 @@ export const api = {
   addReplacement: (from: string, to: string, clientId: string | null) => invoke<{ replacements: unknown[] }>("vocabulary_replace_add", { from, to, clientId }),
   /** Accepts or dismisses a suggested fix; the answer is the transcript. */
   decideSuggestion: (id: string, suggestion: number, accept: boolean) => invoke<TranscriptDetail>("transcript_suggestion", { id, suggestion, accept }),
-  setHitRegions: (regions: RectPx[]) => invoke<void>("overlay_set_hit_regions", { regions }),
+  /** The window's interactive parts in physical pixels, and the device pixel ratio they were measured at (the core
+   * keeps them at the window's current scale, so a move to a monitor with another scale never leaves them stale). */
+  setHitRegions: (regions: RectPx[], scale = 1) => invoke<void>("overlay_set_hit_regions", { regions, scale }),
   snapOverlay: () => invoke<void>("overlay_snap"),
   pauseRecording: () => invoke<AppStatus>("pause_recording"),
   resumeRecording: () => invoke<AppStatus>("resume_recording"),
