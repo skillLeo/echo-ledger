@@ -138,6 +138,26 @@ describe('preps', function () {
 });
 
 describe('another workspace', function () {
+    it('gives the documents\' text on the single read only, to the prep\'s person only (1.9.0-m)', function () {
+        $device = assistPerson('pro');
+        $api = $this->api(Fx::token($device));
+        $project = Fx::client($device->user, 'Acme');
+        $jd = ClientFile::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $device->user_id, 'client_id' => $project->id,
+            'name' => 'JD.pdf', 'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'ready', 'text' => 'Senior Laravel developer, Lahore.']);
+        $prep = $api->postJson('/api/assist/preps', ['meeting_type' => 'interview', 'project_id' => $project->id])->json('id');
+
+        $attached = $api->postJson("/api/assist/preps/{$prep}/documents", ['file_ids' => [$jd->id]])->assertOk();
+        expect($attached->json('documents.0'))->toBe(['file_id' => $jd->id, 'name' => 'JD.pdf', 'tokens' => 9]);
+        expect($api->getJson("/api/assist/preps/{$prep}")->assertOk()->json('documents'))
+            ->toBe([['file_id' => $jd->id, 'name' => 'JD.pdf', 'tokens' => 9, 'text' => 'Senior Laravel developer, Lahore.']]);
+        // Never in a list, nor after a change.
+        expect($api->getJson('/api/assist/preps')->json('data.0.documents.0'))->not->toHaveKey('text')
+            ->and($api->patchJson("/api/assist/preps/{$prep}", ['title' => 'x'])->json('documents.0'))->not->toHaveKey('text');
+        // Another person: the same 404 as an unknown id, and not a word of it.
+        $other = $this->api(Fx::token(assistPerson('pro')))->getJson("/api/assist/preps/{$prep}")->assertNotFound();
+        expect((string) $other->getContent())->not->toContain('Laravel developer');
+    });
+
     it('answers 404 for a teammate\'s project and its files in the same workspace (projects are private)', function () {
         $alice = assistPerson();
         $bob = Fx::user();

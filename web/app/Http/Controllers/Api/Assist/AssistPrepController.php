@@ -62,7 +62,7 @@ final class AssistPrepController extends Controller
     /** GET /api/assist/preps/{id} */
     public function show(Request $request, string $id): JsonResponse
     {
-        return response()->json(self::payload($this->find($request, $id)->load('documents')));
+        return response()->json(self::payload($this->find($request, $id)->load('documents'), withText: true));
     }
 
     /** PATCH /api/assist/preps/{id} */
@@ -136,7 +136,7 @@ final class AssistPrepController extends Controller
     }
 
     /** @return array<string, mixed> a prep as the apps read it */
-    public static function payload(AssistPrep $prep): array
+    public static function payload(AssistPrep $prep, bool $withText = false): array
     {
         return [
             'id' => $prep->id,
@@ -156,8 +156,10 @@ final class AssistPrepController extends Controller
             'scheduled_at' => $prep->scheduled_at?->toAtomString(),
             'armed_until' => $prep->armed_until?->toAtomString(),
             'status' => $prep->currentStatus(),
+            // Since 1.9.0-m the extracted text too, on the single read only (the app sends it to the relay), never in lists.
             'documents' => $prep->documents->map(fn (ClientFile $f): array => [
                 'file_id' => $f->id, 'name' => $f->name, 'tokens' => (int) $f->getRelationValue('pivot')?->getAttribute('tokens'),
+                ...($withText ? ['text' => (string) $f->text] : []),
             ])->values()->all(),
             'created_at' => $prep->created_at?->toAtomString(),
             'updated_at' => $prep->updated_at?->toAtomString(),
