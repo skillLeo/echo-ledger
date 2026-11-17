@@ -1084,3 +1084,5 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - 2026-11-17 owner decisions: Gate 3 v2 look approved (ships behind ui_v2 flags); Trash keep 48 h, admin-editable; Live Assist limits Free 30 min/$1, Pro 5 h/$15, Ultra 10 h/$60, admin-editable per plan; desktop Urdu UI later (after v2.0). Release 1.8.1 now includes the Windows start-up stall fix (4a5628b2).
 
 - 2026-11-17: owner added PLAN_CALL_RULES (call rules, calm after-call card, auto clean-up). Local plan doc, excluded. Order: web contract and retention job, then phone and desktop. Trash period follows trash.keep_hours.
+
+- 2026-11-18: owner set PLAN_V2_PARITY (local, excluded) as top priority: v2 must have every classic feature; classic is the default until 100% parity and owner approval; the design switch works both ways first. Other v2 module work (call rules) pauses after its current commit.
