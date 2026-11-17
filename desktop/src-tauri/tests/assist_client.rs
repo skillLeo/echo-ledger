@@ -765,6 +765,13 @@ async fn the_captions_turns_reach_the_relay_the_microphone_s_as_context_only() {
         }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+    {
+        let frames = got.lock().unwrap();
+        // The other person's partial carries silence_ms; finals carry their times on the recording's clock.
+        assert_eq!(frames[0]["silence_ms"], 0, "{}", frames[0]);
+        assert_eq!((frames[1]["start_ms"].as_u64(), frames[1]["end_ms"].as_u64()), (Some(81_200), Some(86_400)));
+        assert!(frames[1].get("silence_ms").is_none() && frames[2].get("silence_ms").is_none());
+    }
     let got: Vec<(String, String, String)> = got
         .lock()
         .unwrap()

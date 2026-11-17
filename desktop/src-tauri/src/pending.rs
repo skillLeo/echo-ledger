@@ -31,6 +31,13 @@ const MAX_FIRST_LINE_CHARS: usize = 140;
 /// The title of a recording recovered after a restart (since v1.3).
 pub const RECOVERED_TITLE: &str = "Recovered recording";
 
+/// A discarded recording's files on this computer (the pill's Discard, a declined Live Assist start): its folder and
+/// its screens. It is never added to the waiting list or the upload queue.
+pub fn discard_recording_files(data_dir: &Path, dir: &Path, client_ref: &str) {
+    crate::recovery::delete_recording_folder(dir);
+    crate::screens::store::ScreenStore::in_dir(data_dir).forget(client_ref);
+}
+
 /// What "After a call" means for a finished recording: calls (automatic or by hand) follow the setting; voice notes
 /// were stopped on purpose and are always kept and transcribed, with the same Undo.
 pub fn after_call(setting: AfterCall, mode: RecordingMode) -> AfterCall {

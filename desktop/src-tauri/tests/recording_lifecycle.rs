@@ -107,6 +107,64 @@ fn a_ten_second_pause_leaves_no_gap_and_keeps_both_channels_equal() {
 }
 
 #[test]
+fn a_computer_that_slept_mid_recording_adds_no_hours_of_silence() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut recorder = Recorder::create(dir.path(), false).unwrap();
+    let both = |recorder: &mut Recorder, start: f64, seconds: f64| {
+        for (mic, system) in tone(Channel::Mic, start, seconds).into_iter().zip(tone(Channel::System, start, seconds)) {
+            recorder.push(mic).unwrap();
+            recorder.push(system).unwrap();
+        }
+    };
+    both(&mut recorder, 1.0, 3.0);
+    // The device clock ran on through two hours of sleep.
+    both(&mut recorder, 4.0 + 7_200.0, 3.0);
+    // A short gap (a device that went quiet for 2 s) is still kept as silence.
+    both(&mut recorder, 4.0 + 7_200.0 + 3.0 + 2.0, 1.0);
+    let output = recorder.finish().unwrap();
+    let mic = read_mono_i16(&output.mic_wav).unwrap();
+    let system = read_mono_i16(&output.system_wav).unwrap();
+    assert_eq!(mic.len(), system.len(), "both sides stay aligned across the sleep");
+    assert!((output.duration_ms as i64 - 9_000).abs() < 300, "recorded time and the short gap only, got {} ms", output.duration_ms);
+}
+
+/// The 60-minute soak (Day 5 bug bash): an hour of both channels with a slowly drifting system clock, jitter and a
+/// pause, on the real writer and encoder. Ignored by default (a few hundred MB on disk while it runs):
+/// `cargo test --test recording_lifecycle soak -- --ignored`.
+#[test]
+#[ignore]
+fn soak_an_hour_long_recording_stays_aligned_and_whole() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut recorder = Recorder::create(dir.path(), false).unwrap();
+    let per_chunk = TARGET_RATE as usize / 100; // 10 ms packets, as the capture sends them
+    let packet = |channel: Channel, ts: f64, i: usize| AudioChunk {
+        channel,
+        samples: (0..per_chunk).map(|n| (((i * per_chunk + n) as f32) * 0.05).sin() * 0.2).collect(),
+        ts_ns: Some((ts * 1e9) as u64),
+        discontinuity: false,
+    };
+    let started = std::time::Instant::now();
+    let packets = 360_000; // one hour
+    for i in 0..packets {
+        let t = 1.0 + i as f64 * 0.01;
+        // The system device's clock runs 50 ppm fast, and packets arrive with up to 3 ms of jitter.
+        let jitter = ((i * 7919) % 7) as f64 * 0.0005;
+        recorder.push(packet(Channel::Mic, t + jitter, i)).unwrap();
+        recorder.push(packet(Channel::System, t * 1.000_05, i)).unwrap();
+        if i == 180_000 {
+            recorder.mark_resume().unwrap(); // a pause halfway
+        }
+    }
+    let output = recorder.finish().unwrap();
+    let mic = read_mono_i16(&output.mic_wav).unwrap();
+    let system = read_mono_i16(&output.system_wav).unwrap();
+    assert_eq!(mic.len(), system.len(), "aligned after an hour");
+    assert!((output.duration_ms as i64 - 3_600_000).abs() < 2_000, "an hour, got {} ms", output.duration_ms);
+    assert!(std::fs::metadata(&output.primary).unwrap().len() > 0, "the upload file is written");
+    eprintln!("soak: {} ms of audio written and encoded in {:?}", output.duration_ms, started.elapsed());
+}
+
+#[test]
 fn the_recorder_measures_how_long_each_side_was_heard() {
     let dir = tempfile::tempdir().unwrap();
     let mut recorder = Recorder::create(dir.path(), false).unwrap();
@@ -510,6 +568,21 @@ fn the_chip_keeps_only_recordings_whose_time_is_up_and_never_one_that_waits() {
     assert_eq!(files.keep_due(later).unwrap(), vec!["counting".to_string()]);
     assert_eq!(files.load().items.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(), vec!["waiting"], "a waiting recording is never kept by itself");
     assert!(files.keep_due(later).unwrap().is_empty());
+}
+
+#[test]
+fn a_declined_live_assist_start_s_recording_is_discarded_never_saved_or_uploaded() {
+    use desktop_lib::screens::store::{ScreenKey, ScreenStore};
+    let root = tempfile::tempdir().unwrap();
+    let finished = finished_recording(root.path(), "declined");
+    let store = ScreenStore::in_dir(root.path());
+    store.add("ref-declined", &ScreenKey::from_bytes(&[7; 32]), b"webp", 1_000, 1920, 1080, "change", Utc::now()).unwrap();
+    pending::discard_recording_files(root.path(), &finished.output.dir, "ref-declined");
+    assert!(!finished.output.dir.exists(), "its audio is gone");
+    assert_eq!(store.count("ref-declined"), 0, "its screens are gone");
+    let files = DecisionFiles::in_dir(root.path());
+    assert!(files.load().items.is_empty(), "nothing waits to be kept");
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is queued for upload");
 }
 
 #[test]
