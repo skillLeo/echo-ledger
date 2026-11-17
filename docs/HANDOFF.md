@@ -1062,3 +1062,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 - Merged b-desktop-ui at the reviewed 9bed4da6: desktop v2 Home, the Live tab, the Live Assist card and prep (contract
   1.9.0-n; prepared meetings only start after the person taps Start), the screens-captured flash, the After-a-call
   notice in the new shell, the trash time from the server, designed load/error states.
+- Merged b-web-l7 at the reviewed ea959798: reserve-and-settle for report and Ask, relay claims held back in
+  left(), assist:sweep every 5 minutes (needs the scheduler), Ask over a session, the super-admin Live Assist stats,
+  Live Assist settings, export and erasure of Live Assist data. Migration 2026_12_10_000003 changed after its first
+  merge: local and test databases that ran it need migrate:fresh (never deployed; not in release/v1.8.1).
