@@ -152,6 +152,29 @@ describe("Shared with me", () => {
     expect(callsOf("transcript_views_make")).toHaveLength(0);
   });
 
+  it("a view pressed the moment the transcript shows is kept (nothing set back to Original after it)", async () => {
+    // The press lands as soon as the buttons are in the page, before React has run anything that follows that render:
+    // the moment a fast click, or a slow test machine, can hit.
+    await renderShared();
+    respond("transcript_detail", makeTranscript({ id: "tr-o", views: { available: ["roman"], status: "ready" } }));
+    respond("transcript_views", ROMAN);
+    const pressed = new Promise<void>((done) => {
+      const watch = new MutationObserver(() => {
+        const group = screen.queryByRole("group", { name: "Show as" });
+        const roman = group && within(group).queryByRole("button", { name: "Roman Urdu" });
+        if (!roman) return;
+        watch.disconnect();
+        roman.click();
+        done();
+      });
+      watch.observe(document.body, { childList: true, subtree: true });
+    });
+    fireEvent.click(within(screen.getByRole("list", { name: "Shared with me" })).getByRole("button", { name: "Open" }));
+    await pressed;
+    expect(await screen.findByText("Salaam, main Sam hoon.")).toBeInTheDocument();
+    expect(within(screen.getByRole("group", { name: "Show as" })).getByRole("button", { name: "Roman Urdu" })).toHaveAttribute("aria-pressed", "true");
+  });
+
   it("stays on the original words when a view is no longer made, without asking for it", async () => {
     await renderShared();
     respond("transcript_detail", makeTranscript({ id: "tr-o", views: { available: ["roman"], status: "ready" } }));

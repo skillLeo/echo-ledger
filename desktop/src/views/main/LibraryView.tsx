@@ -616,12 +616,24 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const [showAs, setShowAs] = useState<"original" | TranscriptView>("original");
   const [views, setViews] = useState<TranscriptViewsState | null>(null);
   const transcriptId = transcript?.id ?? null;
+  // The transcript and recording on screen, for answers that come back late: an answer for another one is dropped
+  // (D-157), never written over the one now open.
+  const shownTranscript = useRef(transcriptId);
+  shownTranscript.current = transcriptId;
+  const shownSession = useRef(current?.id ?? null);
+  shownSession.current = current?.id ?? null;
   // The person picked a view (or Original) on this recording: views that become ready never switch it for them.
   const viewPicked = useRef(false);
-  useEffect(() => {
+  // Another transcript starts on its original words. Set back while rendering it, not in an effect after: a view
+  // pressed the moment its buttons show would otherwise be set back to Original once its views had already come.
+  const [viewsOf, setViewsOf] = useState<string | null>(transcriptId);
+  if (viewsOf !== transcriptId) {
+    setViewsOf(transcriptId);
     setShowAs("original");
     setViews(null);
     viewPicked.current = false;
+  }
+  useEffect(() => {
     // Open in the default view (console setting) when it is made for this recording.
     const summary = transcript?.views;
     if (summary?.status === "ready" && summary.default && summary.default !== "original" && summary.available.includes(summary.default)) void chooseView(summary.default);
@@ -638,10 +650,15 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const barPercent = barView ? viewPercent(viewsProgress, barView) : null;
   useEffect(() => {
     if (!transcriptId || !viewsMaking || (showAs === "original" && readOnly)) return;
+    let alive = true;
     const timer = window.setTimeout(() => {
-      api.transcriptViews(transcriptId).then((v) => setViews(v)).catch(() => undefined);
+      // Only for the transcript still on screen: another recording opened meanwhile drops it.
+      api.transcriptViews(transcriptId).then((v) => { if (alive && shownTranscript.current === transcriptId) setViews(v); }).catch(() => undefined);
     }, views ? VIEWS_POLL_MS : 0);
-    return () => window.clearTimeout(timer);
+    return () => {
+      alive = false;
+      window.clearTimeout(timer);
+    };
   }, [transcriptId, showAs, views, viewsMaking, readOnly]);
   // Views that become ready swap in where the reader is (C3): the default view, unless the person chose one.
   const anchor = useRef<{ index: number; top: number } | null>(null);
@@ -672,21 +689,32 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [views]);
+  // The latest press: a failure only sets Original back when nothing was pressed since (D-157).
+  const viewPress = useRef(0);
   const chooseView = async (view: "original" | TranscriptView) => {
+    const press = ++viewPress.current;
     setShowAs(view);
-    if (view === "original" || !transcriptId || views?.status === "ready") return;
+    const id = transcriptId;
+    if (view === "original" || !id || views?.status === "ready") return;
+    const stillHere = () => shownTranscript.current === id;
+    const backToOriginal = () => {
+      if (stillHere() && viewPress.current === press) setShowAs("original");
+    };
     try {
-      let state = await api.transcriptViews(transcriptId);
+      let state = await api.transcriptViews(id);
+      if (!stillHere()) return;
       // A recording a teammate sent is only read: its views show once its owner has them made.
       if (readOnly && (state.status === "none" || state.status === "failed")) {
-        setShowAs("original");
+        backToOriginal();
         return;
       }
-      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(transcriptId);
+      if (state.status === "none" || state.status === "failed") state = await api.makeTranscriptViews(id);
+      if (!stillHere()) return;
       setViews(state);
     } catch (e) {
+      if (!stillHere()) return;
       notify(errorMessage(e), true);
-      setShowAs("original");
+      backToOriginal();
     }
   };
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
@@ -881,8 +909,10 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const saveLine = async (index: number, text: string) => {
     if (!transcript || text.trim() === transcript.segments[index].text) return;
     const before = transcript.segments[index].text;
+    const id = transcript.id;
     try {
-      const { learn: offers, ...edited } = await api.editTranscript(transcript.id, index, text);
+      const { learn: offers, ...edited } = await api.editTranscript(id, index, text);
+      if (shownTranscript.current !== id) return;
       setTranscript(edited);
       // For a client's recording the server names the words worth a rule ("always write X as Y"); that offer takes
       // the place of the keyterm hint.
@@ -912,10 +942,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
     if (!transcript) return;
     setSuggestBusy(true);
     try {
-      const next = await api.decideSuggestion(transcript.id, suggestion.id, accept);
-      setTranscript(next);
-      // The next open fix (if any) stays one click away; the decided one closes.
-      setOpenSuggestion(null);
+      const id = transcript.id;
+      const next = await api.decideSuggestion(id, suggestion.id, accept);
+      if (shownTranscript.current === id) {
+        setTranscript(next);
+        // The next open fix (if any) stays one click away; the decided one closes.
+        setOpenSuggestion(null);
+      }
       notify(accept ? `Changed to “${suggestion.to}”` : "Suggestion dismissed", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
@@ -927,8 +960,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const replaceAll = async (find: string, replace: string, matchCase: boolean, wholeWord: boolean): Promise<number | null> => {
     if (!transcript) return null;
     try {
-      const result = await api.replaceInTranscript(transcript.id, find, replace, matchCase, wholeWord);
-      setTranscript(result.transcript);
+      const id = transcript.id;
+      const result = await api.replaceInTranscript(id, find, replace, matchCase, wholeWord);
+      if (shownTranscript.current === id) setTranscript(result.transcript);
       return result.replaced;
     } catch (e) {
       notify(errorMessage(e), true);
@@ -939,8 +973,13 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const restore = async () => {
     if (!transcript) return;
     try {
-      setTranscript(await api.restoreTranscript(transcript.id));
-      setPanel(null);
+      const id = transcript.id;
+      const restored = await api.restoreTranscript(id);
+      // Done either way; shown only while that transcript is still open.
+      if (shownTranscript.current === id) {
+        setTranscript(restored);
+        setPanel(null);
+      }
       notify("The original transcript is back", false, NO_TARGET);
     } catch (e) {
       notify(errorMessage(e), true);
@@ -950,7 +989,9 @@ export function LibraryView({ notify, focus = null, onFocusHandled, openRequest 
   const saveSpeakers = async (names: Record<string, string | null>, remember: boolean): Promise<boolean> => {
     if (!current) return false;
     try {
-      setSpeakerNames((await api.renameSpeakers(current.id, names, remember)).speaker_names ?? {});
+      const id = current.id;
+      const saved = await api.renameSpeakers(id, names, remember);
+      if (shownSession.current === id) setSpeakerNames(saved.speaker_names ?? {});
       notify("Speaker names saved", false, NO_TARGET);
       return true;
     } catch (e) {

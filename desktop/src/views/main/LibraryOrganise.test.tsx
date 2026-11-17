@@ -126,17 +126,23 @@ describe("organise panel", () => {
   };
 
   it("pins, moves and edits labels with one change each", async () => {
-    respondWith("session_organise", () => ({ data: item }));
+    // The server answers a little late, as under load: the panel's controls are off while a change is saved, so each
+    // step waits for the change to be sent and then for the panel to be ready again (D-156).
+    respondWith("session_organise", () => new Promise((r) => setTimeout(() => r({ data: item }), 40)));
     renderPanel();
+    const saved = async (count: number) => {
+      await waitFor(() => expect(callsOf("session_organise")).toHaveLength(count));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Pinned" })).toBeEnabled());
+    };
     fireEvent.click(screen.getByRole("button", { name: "Pinned" }));
-    await waitFor(() => expect(callsOf("session_organise")).toHaveLength(1));
+    await saved(1);
     fireEvent.change(screen.getByRole("combobox", { name: "Project" }), { target: { value: "c2" } });
-    await waitFor(() => expect(callsOf("session_organise")).toHaveLength(2));
+    await saved(2);
     fireEvent.click(screen.getByRole("button", { name: "Remove label Invoice" }));
-    await waitFor(() => expect(callsOf("session_organise")).toHaveLength(3));
+    await saved(3);
     fireEvent.change(screen.getByLabelText("Add a label"), { target: { value: " Follow up " } });
     fireEvent.keyDown(screen.getByLabelText("Add a label"), { key: "Enter" });
-    await waitFor(() => expect(callsOf("session_organise")).toHaveLength(4));
+    await saved(4);
     expect(callsOf("session_organise").map((c) => c.patch)).toEqual([
       { pinned: false }, { client_id: "c2" }, { labels: [] }, { labels: ["Invoice", "Follow up"] },
     ]);

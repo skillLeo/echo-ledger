@@ -1250,6 +1250,26 @@ describe("transcript tools in the library (B6-B12)", () => {
     expect(rows[2].querySelector(".seg-spk")).toHaveTextContent("Jane");
   });
 
+  it("a line saved on one recording, answered after another opened, never replaces the open one's transcript (D-157)", async () => {
+    await renderLibrary();
+    let answer: (v: unknown) => void = () => undefined;
+    respondWith("transcript_edit", () => new Promise((r) => { answer = r; }));
+    TRANSCRIPTS["tr-d"] = makeTranscript({ id: "tr-d", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "Remember to call back." }] });
+    await selectItem("Zoom with Acme", TRANSCRIPTS["tr-a"].segments[0].text);
+    fireEvent.click(within(detail()).getByRole("button", { name: "Edit text" }));
+    const line = within(detail()).getAllByRole("textbox")[0];
+    fireEvent.change(line, { target: { value: "Hello, this is Farah." } });
+    fireEvent.blur(line);
+    await flushAsync();
+    expect(callsOf("transcript_edit")).toHaveLength(1);
+    await selectItem("Voice note from Sam", "Remember to call back.");
+    const t = TRANSCRIPTS["tr-a"];
+    await act(async () => answer({ ...t, segments: t.segments.map((seg, i) => (i === 0 ? { ...seg, text: "Hello, this is Farah." } : seg)) }));
+    await flushAsync();
+    expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
+    expect(within(detail()).queryByText("Hello, this is Farah.")).toBeNull();
+  });
+
   it("edits a line, then offers its new name for the client's vocabulary", async () => {
     await renderLibrary();
     respondWith("transcript_edit", ({ index, text }) => {
@@ -1627,6 +1647,72 @@ describe("LibraryView Show as", () => {
     { channel: 2, speaker: "Client", start_ms: 1_500, end_ms: 3_000, text: "میں ٹھیک ہوں" },
   ];
   const ready = { status: "ready", available: ["roman", "english"], roman: ["aap kaise hain", "main theek hoon"], english: ["How are you?", "I am fine."], model: "claude-opus-5-5", made_at: null, error: null };
+
+  it("a view that comes back after another recording opened never shows on that recording's lines (D-157)", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    TRANSCRIPTS["tr-d"] = makeTranscript({ id: "tr-d", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "Remember to call back." }],
+      views: { available: ["roman"], status: "ready" } });
+    let answer: (v: unknown) => void = () => undefined;
+    const ROMAN_D = { status: "ready", available: ["roman"], roman: ["Yaad se wapas call karna."], english: null, urdu: null, model: "m", made_at: null, error: null };
+    respondWith("transcript_views", ({ id }) => (id === "tr-a" ? new Promise((r) => { answer = r; }) : ROMAN_D));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    await flushAsync();
+    expect(callsOf("transcript_views")).toEqual([{ id: "tr-a" }]);
+    await selectItem("Voice note from Sam", "Remember to call back.");
+    await act(async () => answer(ready));
+    await flushAsync();
+    expect(within(detail()).getByText("Remember to call back.")).toBeInTheDocument();
+    expect(within(detail()).queryByText("aap kaise hain")).toBeNull();
+    expect(within(detail()).getByRole("button", { name: "Original" })).toHaveAttribute("aria-pressed", "true");
+    // Its own view, asked for its own transcript: never the first recording's words.
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    await flushAsync();
+    expect(callsOf("transcript_views")).toEqual([{ id: "tr-a" }, { id: "tr-d" }]);
+    expect(within(detail()).getByText("Yaad se wapas call karna.")).toBeInTheDocument();
+    expect(within(detail()).queryByText("aap kaise hain")).toBeNull();
+  });
+
+  it("a poll for views being made that comes back after another recording opened is dropped (D-157)", async () => {
+    // A's views are being made, so the page asks about them; its answer arrives once B is open.
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "making", progress: { roman: 40 } } });
+    TRANSCRIPTS["tr-d"] = makeTranscript({ id: "tr-d", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 1_000, text: "Remember to call back." }],
+      views: { available: ["roman"], status: "ready" } });
+    let answer: (v: unknown) => void = () => undefined;
+    const ROMAN_D = { status: "ready", available: ["roman"], roman: ["Yaad se wapas call karna."], english: null, urdu: null, model: "m", made_at: null, error: null };
+    respondWith("transcript_views", ({ id }) => (id === "tr-a" ? new Promise((r) => { answer = r; }) : ROMAN_D));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    await waitFor(() => expect(callsOf("transcript_views")).toEqual([{ id: "tr-a" }]));
+    await selectItem("Voice note from Sam", "Remember to call back.");
+    await act(async () => answer(ready));
+    await flushAsync();
+    // B shows no bar for A's views, and its own Roman Urdu is asked for and shown, never A's words.
+    expect(within(detail()).queryByText(/Improving/)).toBeNull();
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    await flushAsync();
+    expect(callsOf("transcript_views")).toEqual([{ id: "tr-a" }, { id: "tr-d" }]);
+    expect(within(detail()).getByText("Yaad se wapas call karna.")).toBeInTheDocument();
+    expect(within(detail()).queryByText("aap kaise hain")).toBeNull();
+  });
+
+  it("a view that fails after another was chosen leaves that newer choice (D-157)", async () => {
+    TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
+    const answers: { ok: (v: unknown) => void; no: (e: unknown) => void }[] = [];
+    respondWith("transcript_views", () => new Promise((ok, no) => { answers.push({ ok, no }); }));
+    await renderLibrary();
+    await selectItem("Zoom with Acme", "آپ کیسے ہیں");
+    fireEvent.click(within(detail()).getByRole("button", { name: "Roman Urdu" }));
+    fireEvent.click(within(detail()).getByRole("button", { name: "English" }));
+    await flushAsync();
+    expect(answers).toHaveLength(2);
+    await act(async () => answers[1].ok(ready));
+    await act(async () => answers[0].no("The views couldn't be read."));
+    await flushAsync();
+    expect(within(detail()).getByRole("button", { name: "English" })).toHaveAttribute("aria-pressed", "true");
+    expect(within(detail()).getByText("How are you?")).toBeInTheDocument();
+  });
 
   it("switches to the Roman Urdu and English views and back, and says the transcript is unchanged", async () => {
     TRANSCRIPTS["tr-a"] = makeTranscript({ id: "tr-a", language: "ur", segments: urdu(), views: { available: ["roman", "english"], status: "ready" } });
