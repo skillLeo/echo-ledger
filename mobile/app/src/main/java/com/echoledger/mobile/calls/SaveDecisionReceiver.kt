@@ -56,8 +56,9 @@ class SaveDecisionReceiver : BroadcastReceiver() {
     private suspend fun undoDiscard(context: Context, id: String) {
         Notifications.cancelDecision(context, id)
         val back = Decisions.undoDiscard(context, id) ?: return
-        val theme = (context.applicationContext as EchoLedgerApp).graph.settings.current().themeMode
-        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, theme) }
+        val settings = (context.applicationContext as EchoLedgerApp).graph.settings.current()
+        val flags = com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
+        withContext(Dispatchers.Main) { PostCallPrompt.again(context, back, settings.themeMode, flags) }
     }
 
     companion object {

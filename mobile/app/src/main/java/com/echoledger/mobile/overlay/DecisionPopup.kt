@@ -102,8 +102,15 @@ object DecisionPopup {
         ?: rec.callerNumber?.takeIf { it.any(Char::isDigit) }?.let { "Call with $it" }
         ?: SourceApp.from(rec.sourceApp).let { if (it == SourceApp.PHONE_CALL) "Phone call" else "${it.label} call" }
 
-    /** Shows the chip; false when it could not be added (the caller then relies on the notification). */
-    fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode): Boolean {
+    /** The chip on screen is the v2 after-call card (`ui_v2.after_call`). */
+    var showingV2: Boolean = false
+        private set
+
+    /**
+     * Shows the chip; false when it could not be added (the caller then relies on the notification). [v2]: the v2
+     * after-call card (`ui_v2.after_call`, since 2.0.0-a) with the same decisions and the same delayed delete.
+     */
+    fun show(context: Context, rec: LocalRecording, themeMode: String, mode: Mode, v2: Boolean = false): Boolean {
         hide()
         val app = context.applicationContext
         val wm = app.getSystemService(WindowManager::class.java) ?: return false
@@ -121,6 +128,32 @@ object DecisionPopup {
                 // the timeout still runs.
                 if (!ShareGuard.textVisible.collectAsState().value) {
                     PrivateDot(onShow = { ShareGuard.setHidden(false) })
+                    return@setContent
+                }
+                val openWaiting = {
+                    hide()
+                    app.startActivity(
+                        android.content.Intent(app, com.echoledger.mobile.MainActivity::class.java)
+                            .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+                            .putExtra(com.echoledger.mobile.MainActivity.EXTRA_OPEN, com.echoledger.mobile.MainActivity.OPEN_PENDING)
+                    )
+                }
+                if (v2) {
+                    val actions = v2Actions(app, rec, themeMode, mode, openWaiting)
+                    com.echoledger.mobile.ui.v2.theme.EchoV2Theme(darkTheme = true) {
+                        com.echoledger.mobile.ui.v2.live.V2AfterCallCard(
+                            title = com.echoledger.mobile.ui.v2.live.afterCallTitle(app.resources, rec),
+                            durationMs = rec.durationMs,
+                            sourceWire = rec.sourceApp,
+                            mode = v2Mode(mode),
+                            visibleMs = visibleMs,
+                            onSave = actions.onSave,
+                            onDelete = actions.onDelete,
+                            onUndo = actions.onUndo,
+                            onTitle = actions.onTitle,
+                            onTranscribe = null
+                        )
+                    }
                     return@setContent
                 }
                 EchoLedgerTheme(themeMode) {
@@ -173,6 +206,7 @@ object DecisionPopup {
         windowManager = wm
         showingFor = rec.id
         showingMode = mode
+        showingV2 = v2
         // Saved: the chip only goes (the call is kept already); Discarded too (the file goes a little later). Ask: nobody
         // chose, so the call is kept.
         val task = Runnable { if (mode == Mode.ASK) decide(app, rec.id, keep = true) else hide() }
@@ -192,6 +226,7 @@ object DecisionPopup {
         windowManager = null
         showingFor = null
         showingMode = null
+        showingV2 = false
     }
 
     private fun decide(context: Context, id: String, keep: Boolean) {
@@ -200,8 +235,8 @@ object DecisionPopup {
     }
 
     /** The chip's Discard: "Discarded · … · Undo" at once; the file goes only when that is over. */
-    internal fun discard(context: Context, rec: LocalRecording, themeMode: String) {
-        show(context, rec, themeMode, Mode.DISCARDED)
+    internal fun discard(context: Context, rec: LocalRecording, themeMode: String, v2: Boolean = false) {
+        show(context, rec, themeMode, Mode.DISCARDED, v2)
         CoroutineScope(Dispatchers.IO).launch {
             // Decided meanwhile (a notification, the app): nothing was discarded, so the chip does not say so.
             if (Decisions.discardLater(context, rec.id) == null) {
@@ -214,12 +249,52 @@ object DecisionPopup {
      * Undo on "Discarded": the call is back on its chip as after the call: asked again (kept by itself after 10 s), or
      * "Saved" again for a call that was kept.
      */
-    internal fun undoDiscard(context: Context, id: String, themeMode: String) {
+    internal fun undoDiscard(context: Context, id: String, themeMode: String, v2: Boolean = false) {
         hide()
         CoroutineScope(Dispatchers.IO).launch {
             val back = Decisions.undoDiscard(context, id) ?: return@launch
-            handler.post { com.echoledger.mobile.calls.PostCallPrompt.again(context, back, themeMode) }
+            val flags = if (v2) {
+                com.echoledger.mobile.ui.v2.shell.UiFlags(
+                    mapOf(com.echoledger.mobile.ui.v2.shell.UiFlags.AFTER_CALL to true)
+                )
+            } else {
+                null
+            }
+            handler.post {
+                com.echoledger.mobile.calls.PostCallPrompt.again(
+                    context,
+                    back,
+                    themeMode,
+                    flags ?: com.echoledger.mobile.ui.v2.shell.UiFlags.Off
+                )
+            }
         }
+    }
+
+    /** What the v2 card's buttons do: the chip's own decisions, Delete through the delayed discard. */
+    internal class CardActions(val onSave: () -> Unit, val onDelete: () -> Unit, val onUndo: () -> Unit, val onTitle: () -> Unit)
+
+    internal fun v2Actions(app: Context, rec: LocalRecording, themeMode: String, mode: Mode, onTitle: () -> Unit) = CardActions(
+        onSave = { decide(app, rec.id, keep = true) },
+        // Delete is the delayed discard: "Deleted · Undo", the file only after that.
+        onDelete = { discard(app, rec, themeMode, v2 = true) },
+        onUndo = {
+            if (mode ==
+                Mode.DISCARDED
+            ) {
+                undoDiscard(app, rec.id, themeMode, v2 = true)
+            } else {
+                discard(app, rec, themeMode, v2 = true)
+            }
+        },
+        onTitle = onTitle
+    )
+
+    /** The v2 card's mode for the chip's: Ask, Saved, and Discarded as "Deleted". */
+    internal fun v2Mode(mode: Mode): com.echoledger.mobile.ui.v2.live.AfterCallMode = when (mode) {
+        Mode.ASK -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Ask
+        Mode.SAVED -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Saved
+        Mode.DISCARDED -> com.echoledger.mobile.ui.v2.live.AfterCallMode.Deleted
     }
 
     private const val BOTTOM_MARGIN_DP = 72

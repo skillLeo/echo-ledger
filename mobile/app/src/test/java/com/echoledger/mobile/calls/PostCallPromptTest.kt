@@ -106,6 +106,36 @@ class PostCallPromptTest : AppTest() {
     }
 
     @Test
+    fun `the v2 after-call card's Delete goes through the delayed discard`() {
+        overlayAllowed(true)
+        val rec = call(state = "pending_decision")
+        PostCallPrompt.show(
+            app,
+            rec,
+            PostCallPrompt.ASK,
+            "dark",
+            com.echoledger.mobile.ui.v2.shell.UiFlags(mapOf("ui_v2.after_call" to true))
+        )
+        assertTrue("the v2 card", DecisionPopup.showingV2)
+
+        // The card in the after-call window itself.
+        compose.onNodeWithText("Delete").performClick()
+
+        pumpUntil("the call to be on its way out") { app.peekRecording("call-1")?.state == Decisions.DISCARDING }
+        assertTrue("nothing deleted by the tap", app.graph.recordings.encryptedFile("call-1").exists())
+        assertEquals("Deleted · Undo on the card", DecisionPopup.Mode.DISCARDED, DecisionPopup.showingMode)
+        assertTrue(DecisionPopup.showingV2)
+        assertEquals(WorkInfo.State.ENQUEUED, discardWork("call-1").single().state)
+    }
+
+    @Test
+    fun `without the flag the after-call chip is the classic one`() {
+        overlayAllowed(true)
+        PostCallPrompt.show(app, call(state = "pending_decision"), PostCallPrompt.ASK, "dark")
+        assertFalse(DecisionPopup.showingV2)
+    }
+
+    @Test
     fun `a longer Undo time keeps the file that much longer`() {
         call(state = "pending_decision")
         val now = System.currentTimeMillis()

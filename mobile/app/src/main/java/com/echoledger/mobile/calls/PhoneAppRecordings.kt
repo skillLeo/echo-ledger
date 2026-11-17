@@ -871,7 +871,15 @@ object PhoneAppRecordings {
             val now = graph.recordings.update(rec.id) { it.copy(state = PostCallPrompt.stateFor(settings.afterCall)) } ?: return@forEach
             log(context, "the Phone app's copy did not come: EchoLedger's own recording (your voice only) is kept as usual.")
             if (cardNow(h.endMs, nowMs, MissedRecordingWorker.ongoing(context))) {
-                withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, now, settings.afterCall, settings.themeMode) }
+                withContext(Dispatchers.Main.immediate) {
+                    PostCallPrompt.show(
+                        context,
+                        now,
+                        settings.afterCall,
+                        settings.themeMode,
+                        com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
+                    )
+                }
             } else {
                 PostCallPrompt.quietly(context, now)
             }
@@ -1261,7 +1269,15 @@ object PhoneAppRecordings {
         }
         val callEnd = maxOf(call.dateMs + call.talkS * 1000, span.first + file.durationMs)
         if (prompt && cardNow(callEnd, nowMs, MissedRecordingWorker.ongoing(context))) {
-            withContext(Dispatchers.Main.immediate) { PostCallPrompt.show(context, stored, settings.afterCall, settings.themeMode) }
+            withContext(Dispatchers.Main.immediate) {
+                PostCallPrompt.show(
+                    context,
+                    stored,
+                    settings.afterCall,
+                    settings.themeMode,
+                    com.echoledger.mobile.ui.v2.shell.UiFlags(settings.uiFlags, settings.uiClassic)
+                )
+            }
             return false
         }
         PostCallPrompt.quietly(context, stored)
