@@ -205,6 +205,7 @@ class AssistProtocolTest {
         assertEquals(RelayPolicy.After.End(RelayEnd.Replaced), RelayPolicy.afterClose(4409))
         assertEquals(RelayPolicy.After.End(RelayEnd.WrongSession), RelayPolicy.afterClose(4403))
         assertEquals(RelayPolicy.After.End(RelayEnd.NotTrusted), RelayPolicy.afterClose(RelayPolicy.PINS_REFUSED))
+        assertEquals(RelayPolicy.After.End(RelayEnd.Refused), RelayPolicy.afterClose(RelayPolicy.BAD_REQUEST))
         assertEquals(RelayPolicy.After.RefreshThenReconnect, RelayPolicy.afterClose(4401))
         for (code in listOf(null, 1006, 1012, 4408, 1009)) assertEquals(RelayPolicy.After.Reconnect, RelayPolicy.afterClose(code))
     }
