@@ -86,6 +86,9 @@ function registeredApiRoutes(): array
 /** v1.6 P1: the contract is written first; each route leaves this list when it is served. */
 /** Routes served before docs/API.md names them (a branch ahead of the contract); empty when they agree. */
 const SERVED_BEFORE_DOCUMENTED = [
+    // Since 1.9.0-q: HTTP mode. docs/API_ASSIST.md ("HTTP mode") documents it as `POST {http.live_url}`, which is this route;
+    // its own heading line comes with the contract's move into API.md, and this line goes with it.
+    'POST /api/assist/sessions/{}/live',
 ];
 
 const NOT_SERVED_YET = ['POST /api/sessions/{}/transcribe', 'POST /api/sessions/transcribe', 'POST /api/sessions/transcribe-estimate'];

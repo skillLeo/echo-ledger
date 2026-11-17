@@ -359,6 +359,7 @@ function isoApiCases(array $b): array
         'api.assist.sessions.destroy' => ['DELETE', "/api/assist/sessions/{$b['assistSession']->id}", [], 404],
         'api.assist.sessions.suggestions.action' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/suggestions/s1/action", ['action' => 'used'], 404],
         'api.assist.sessions.ask' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/ask", ['question' => 'What did they say?'], 404],
+        'api.assist.sessions.live' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/live", ['type' => 'turn_final', 'turn_id' => 'x', 'channel' => 'other', 'text' => 'HIJACK'], 404],
     ];
 }
 
