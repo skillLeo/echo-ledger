@@ -513,6 +513,21 @@ fn the_chip_keeps_only_recordings_whose_time_is_up_and_never_one_that_waits() {
 }
 
 #[test]
+fn a_declined_live_assist_start_s_recording_is_discarded_never_saved_or_uploaded() {
+    use desktop_lib::screens::store::{ScreenKey, ScreenStore};
+    let root = tempfile::tempdir().unwrap();
+    let finished = finished_recording(root.path(), "declined");
+    let store = ScreenStore::in_dir(root.path());
+    store.add("ref-declined", &ScreenKey::from_bytes(&[7; 32]), b"webp", 1_000, 1920, 1080, "change", Utc::now()).unwrap();
+    pending::discard_recording_files(root.path(), &finished.output.dir, "ref-declined");
+    assert!(!finished.output.dir.exists(), "its audio is gone");
+    assert_eq!(store.count("ref-declined"), 0, "its screens are gone");
+    let files = DecisionFiles::in_dir(root.path());
+    assert!(files.load().items.is_empty(), "nothing waits to be kept");
+    assert!(UploadQueue::load(&files.uploads).items.is_empty(), "nothing is queued for upload");
+}
+
+#[test]
 fn keep_transcribes_and_save_audio_uploads_without_a_transcript() {
     let root = tempfile::tempdir().unwrap();
     let files = DecisionFiles::in_dir(root.path());

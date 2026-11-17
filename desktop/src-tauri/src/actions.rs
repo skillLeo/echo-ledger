@@ -486,6 +486,8 @@ pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
 }
 
 /// Stop and discard at once (the pill's Cancel): nothing is kept, uploaded or transcribed; no card.
+/// The pill's Discard (also a Live Assist start the person declined): the recording ends and nothing of it is kept or
+/// uploaded; its open server session is queued for deletion.
 pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if !state.capture.is_recording() {
@@ -493,8 +495,7 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     }
     if let Some((finished, session, _)) = end_capture(app).await? {
         let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
-        crate::recovery::delete_recording_folder(&finished.output.dir);
-        crate::screens::forget(app, &finished.info.client_ref);
+        pending::discard_recording_files(&state.data_dir, &finished.output.dir, &finished.info.client_ref);
         for id in session.into_iter().chain(late) {
             queue_discard(app, id)?;
         }
