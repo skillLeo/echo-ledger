@@ -432,8 +432,8 @@ Captions show what you and the other person say, while you talk.
 
 ### Private notes (since v1.8.1)
 
-Your notes stay on your screen. When you share your screen in Zoom, Meet or Teams, people see your other apps, not
-EchoLedger. EchoLedger checks this on your computer and tells you if it can't.
+Your notes stay on your screen. EchoLedger keeps its windows out of screen shares in Zoom, Meet and Teams, checks this
+on your computer, and tells you what the last check saw.
 
 - **Settings → Screen-share privacy → Hide from screen sharing:** *All EchoLedger windows* (the default), *Only floating
   windows* (captions, the recording controls, dictation, the after-call card, Live Translate; the main window shows), or
