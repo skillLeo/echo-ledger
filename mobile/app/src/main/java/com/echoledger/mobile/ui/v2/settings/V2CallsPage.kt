@@ -339,7 +339,11 @@ private fun PhoneAppRecordingsGroup(settings: AppSettings, update: ((AppSettings
             )
         }
     }
-    note?.let { (at, words) -> Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), words)) }
+    // The last call's outcome in the screen's language; a note with no code isn't shown in other words.
+    note?.let { (at, words) -> LastCallNote.code(words)?.let { code -> at to code } }?.let { (at, code) ->
+        val said = stringResource(code.words, *code.args.toTypedArray())
+        Note(stringResource(R.string.v2_calls_pa_last, clock.format(Instant.ofEpochMilli(at)), said))
+    }
     confirm?.let { candidate ->
         // Today's dialog (the file's name and length, and Play to listen first).
         ImportRecordingDialog(candidate, clock.format(Instant.ofEpochMilli(candidate.callAtMs)), null, onDismiss = { confirm = null }) {

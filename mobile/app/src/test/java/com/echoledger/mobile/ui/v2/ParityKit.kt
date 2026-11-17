@@ -4,8 +4,6 @@ import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsNode
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.hasContentDescription
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.isRoot
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 
@@ -45,7 +43,39 @@ object ParityKit {
     private fun firstIn(node: SemanticsNode, pick: (SemanticsNode) -> String?): String? =
         pick(node) ?: node.children.firstNotNullOfOrNull { firstIn(it, pick) }
 
-    /** Is a control with this name on screen (its words, its screen-reader name or its click label)? */
-    fun has(compose: ComposeContentTestRule, name: String): Boolean =
-        compose.onAllNodes(hasText(name) or hasContentDescription(name), useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty()
+    /**
+     * Walks [steps] in order, running each one and collecting after it: each control ("kind: name") with the first step
+     * it was seen in. A control seen only later, or already earlier, than its mapped step is a different page.
+     */
+    fun <S> firstSeen(compose: ComposeContentTestRule, steps: List<S>, run: (S) -> Unit): Map<String, S> {
+        val first = linkedMapOf<String, S>()
+        for (step in steps) {
+            run(step)
+            val now = mutableSetOf<String>()
+            collect(compose, now)
+            now.forEach { first.putIfAbsent(it, step) }
+        }
+        return first
+    }
+
+    /**
+     * The parity check: every control today's page shows is mapped (to the v2 control, "kind: name", or to a reason in
+     * [reasons]), nothing mapped is missing from today's page, and each mapped pair is first seen in the same step on
+     * both pages. Returns the problems, empty when the pages match.
+     */
+    fun <S> problems(today: Map<String, S>, v2: Map<String, S>, where: Map<String, String>, reasons: Map<String, String>): List<String> {
+        val out = mutableListOf<String>()
+        today.keys.filter { it !in where && it !in reasons }.sorted().forEach { out += "unmapped today: $it" }
+        (where.keys + reasons.keys).filter { it !in today }.sorted().forEach { out += "mapped but not on today's page: $it" }
+        for ((old, new) in where) {
+            val step = today[old] ?: continue
+            val seen = v2[new]
+            if (seen == null) {
+                out += "missing on v2: $new (for $old, step $step)"
+            } else if (seen != step) {
+                out += "on v2 first in step $seen, today in step $step: $new (for $old)"
+            }
+        }
+        return out
+    }
 }
