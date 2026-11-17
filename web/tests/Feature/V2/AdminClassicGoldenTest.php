@@ -51,7 +51,7 @@ it('renders the classic admin page exactly as before the re-theme while ui_v2.ad
         ->and($html)->toBe(file_get_contents($file), "the classic admin {$name} page changed");
 })->with('classic admin pages');
 
-it('changes only the head under ui_v2.admin: the saved dashboard plus the design values, no layout change', function () {
+it('changes only the head under ui_v2.admin: the saved dashboard plus the design values, no markup change', function () {
     $admin = classicAdmin($this);
     app(InterfaceFlags::class)->set('ui_v2.admin', false, 0, [], [$admin->id]);
 

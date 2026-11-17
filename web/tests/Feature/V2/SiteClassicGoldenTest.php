@@ -19,7 +19,10 @@ dataset('classic site pages', [
 
 it('renders the classic site page exactly as before the rebuild while ui_v2.website is off', function (string $name, string $path) {
     Carbon::setTestNow(Carbon::parse('2026-11-17 11:42:00', 'UTC'));
-    $html = normaliseClassic((string) $this->get($path)->assertOk()->getContent());
+    // Livewire adds its own assets to any page once a test before this one in the same process rendered a component;
+    // the site has none of its own, so they are left out.
+    $page = (string) preg_replace('/<!-- Livewire Styles -->.*?<\/style>\n?|<script src="[^"]*livewire[^"]*"[^>]*><\/script>\n?|<!-- Livewire Scripts -->.*?<\/script>\n?/s', '', (string) $this->get($path)->assertOk()->getContent());
+    $html = normaliseClassic($page);
     $file = __DIR__."/golden/site-{$name}.html";
     if (getenv('UPDATE_GOLDEN') === '1') {
         file_put_contents($file, $html);

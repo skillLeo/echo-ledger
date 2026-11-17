@@ -1,6 +1,6 @@
 /*
  * The admin panel on Echo DS's values (ui_v2.admin, docs/v2/DESIGN_SYSTEM.md): the same colours, type, radii and flat
- * surfaces as the v2.0 console (values.css), and no change to the panel's layout, its navigation or its pages. Loaded
+ * surfaces as the v2.0 console (values.css), and no markup change: the panel's HTML stays exactly as it is (only its head gains this sheet). Loaded
  * only while ui_v2.admin is on for the member of staff (filament.v2.head). Values from tokens only.
  */
 @import './values.css';
@@ -50,4 +50,17 @@
     border-radius: var(--el-radius-full);
     background-color: var(--el-role-accent-default);
     color: var(--el-role-text-on-accent);
+}
+
+/* A plan's badge keeps its stored colour in the data; on the design values it reads in the accent's soft pair, so no
+   palette colour is left. The badge's inline palette only sets variables; these set the colours. */
+.fi-badge.fi-color[style*='--color-50'] {
+    background-color: var(--el-role-accent-soft);
+    color: var(--el-role-accent-text);
+    --tw-ring-color: var(--el-role-accent-soft);
+}
+
+/* The sidebar's brand is the name and the ADMIN tag, as the console's sidebar shows the name alone: no blue mark. */
+.el-sb-logo img[src$='mark.svg'] {
+    display: none;
 }
