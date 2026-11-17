@@ -377,10 +377,12 @@ fn spawn_capture(
             // ended on its own: the session ends too, the window keeps the reason and the tray stops saying "listening".
             let Some(reason) = ended_reason(stop.load(Ordering::SeqCst), result) else { return };
             stop.store(true, Ordering::SeqCst);
-            // Its keys go back with it, unless a newer session holds them now.
-            if end_if_current(&stop) {
-                unregister_hotkeys(&app);
+            // Only the session still current says anything: an older one's thread never flashes "ended" on a newer
+            // session's window, and never takes its keys.
+            if !end_if_current(&stop) {
+                return;
             }
+            unregister_hotkeys(&app);
             if let Ok(mut f) = feed.lock() {
                 f.status = "ended".into();
                 f.notice = Some(reason);
@@ -660,8 +662,13 @@ mod tests {
         let source = include_str!("mod.rs");
         let thread = &source[source.find("fn spawn_capture(").unwrap()..];
         let thread = &thread[..thread.find("\n}").unwrap()];
-        for step in ["ended_reason(", "if end_if_current(&stop) {\n                unregister_hotkeys(&app);", "status = \"ended\"", "f.hidden = false", "emit_status(&app)"] {
+        for step in ["ended_reason(", "status = \"ended\"", "f.hidden = false", "emit_status(&app)"] {
             assert!(thread.contains(step), "{step}");
+        }
+        // A session no longer current says nothing: the check comes before the keys, the feed and the status.
+        let gate = thread.find("if !end_if_current(&stop) {\n                return;\n            }").expect("an old session's thread returns first");
+        for step in ["unregister_hotkeys(&app)", "app.emit(FEED_EVENT", "emit_status(&app)"] {
+            assert!(thread.find(step).is_some_and(|at| at > gate), "{step} only for the current session");
         }
     }
 
