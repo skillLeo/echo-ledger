@@ -66,3 +66,52 @@ export function screenPicture(url: string): Promise<string> {
 export function forgetPictures(): void {
   pictures.clear();
 }
+
+// ---- Meeting assets (v1.8 P4.2) ---------------------------------------------------------------------------------
+// The server names each screen and says what was said around it (`file_name`, `said`). Until a server sends them the
+// app works them out the same way from what it has, so the screens read the same either way.
+
+/** What was said this long before and after a screen. */
+export const SAID_WINDOW_MS = 15_000;
+/** At most this many characters of it. */
+export const SAID_CHARS = 600;
+const SLUG_CHARS = 40;
+
+/** "orders-page": the description in lowercase Latin letters and digits joined by dashes, cut at a word. */
+export function screenSlug(description: string | null | undefined): string {
+  let slug = (description ?? "").slice(0, 120).normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  if (slug.length > SLUG_CHARS) slug = slug.slice(0, SLUG_CHARS + 1).replace(/-[^-]*$/, "").replace(/-+$/, "");
+  return slug || "screen";
+}
+
+/** "S07_14-32_orders-page.webp": its number (as many digits as the last one needs, at least two), moment and slug. */
+export function screenFileName(screen: Pick<ScreenMoment, "index" | "at_ms" | "description" | "file_name">, count: number): string {
+  if (screen.file_name) return screen.file_name;
+  const digits = Math.max(2, String(Math.max(count, screen.index)).length);
+  return `S${String(screen.index).padStart(digits, "0")}_${timestamp(screen.at_ms).replace(/:/g, "-")}_${screenSlug(screen.description)}.webp`;
+}
+
+/** The lines said within 15 s of a screen, as "Speaker: words" lines, at most 600 characters; null when none. */
+export function saidAround(atMs: number, lines: readonly { speaker: string; start_ms: number; end_ms: number; text: string }[]): string | null {
+  const said = lines
+    .filter((l) => l.end_ms >= atMs - SAID_WINDOW_MS && l.start_ms <= atMs + SAID_WINDOW_MS)
+    .map((l) => `${l.speaker.trim() ? `${l.speaker.trim()}: ` : ""}${l.text.trim()}`);
+  if (said.length === 0) return null;
+  const text = said.join("\n");
+  return text.length > SAID_CHARS ? `${text.slice(0, SAID_CHARS - 1).trimEnd()}…` : text;
+}
+
+/** What was said around a screen: the server's when it sends it (null = nothing), else from the transcript at hand. */
+export function screenSaid(screen: Pick<ScreenMoment, "at_ms" | "said">, lines: Parameters<typeof saidAround>[1]): string | null {
+  return screen.said !== undefined ? screen.said : saidAround(screen.at_ms, lines);
+}
+
+/** "Me: Here is the price." → { speaker: "Me", text: "Here is the price." }, one per line. */
+export function saidLines(said: string | null): { speaker: string | null; text: string }[] {
+  if (!said) return [];
+  return said.split("\n").filter((l) => l.trim()).map((l) => {
+    const m = /^([^:]{1,60}):\s(.*)$/.exec(l);
+    return m ? { speaker: m[1], text: m[2] } : { speaker: null, text: l };
+  });
+}

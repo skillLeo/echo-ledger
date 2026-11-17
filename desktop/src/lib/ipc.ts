@@ -1335,6 +1335,10 @@ export interface ScreenMoment {
   image_url: string;
   thumb_url: string;
   created_at?: string;
+  /** Since v1.8 P4.2 (docs/API.md 2.0.0-e): its name in the meeting folder, "S07_14-32_orders-page.webp". */
+  file_name?: string;
+  /** Since v1.8 P4.2: what was said within 15 s of it, a "Speaker: words" line each; null when nothing was. */
+  said?: string | null;
 }
 
 /** `GET /api/sessions/{id}/screens`. */
