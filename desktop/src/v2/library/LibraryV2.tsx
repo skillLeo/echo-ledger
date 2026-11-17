@@ -13,7 +13,13 @@ import {
   Toast, ToastRegion,
 } from "../components";
 import { ScreensMark } from "./screens";
-import { binHours, binSentence, dayGroups, isUntranscribed, rowModel, viewCounts, viewItems, type SavedView } from "./model";
+import { binHours, binSentence, inView, isUntranscribed, LIST_VIEWS, rowModel, viewCounts, VIEW_NAMES, type ListView, type SavedView } from "./model";
+import {
+  applyFilters, chipLabel, FILTER_KEYS, FILTER_NAMES, filterCount, filterOptions, GROUP_NAMES, sections, SORT_NAMES, toggleFilter,
+  type FilterKey, type Filters,
+} from "./filters";
+import { groupPick, loadChoice, loadOpened, rememberOpened, saveChoice, toggleGroup, type GroupKey, type LibraryViewChoice } from "../../lib/libraryGroups";
+import { searchItems, type SortKey } from "../../lib/library";
 import { RecordingPage } from "./RecordingPage";
 import { ContextMenu, Menu, menuPointFor, type MenuItem } from "../components/Menu";
 import {
@@ -53,7 +59,18 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<SavedView>("all");
   const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenIdNow] = useState<string | null>(null);
+  // Recently opened (Sort by) remembers each recording opened here.
+  const [opened, setOpened] = useState<Record<string, number>>(() => loadOpened());
+  const setOpenId = useCallback((id: string | null) => {
+    if (id) setOpened(rememberOpened(id));
+    setOpenIdNow(id);
+  }, []);
+  const [filters, setFilters] = useState<Filters>({});
+  // Sort and group, remembered per view on this computer (classic's View menu).
+  const [choice, setChoiceNow] = useState<LibraryViewChoice>(() => loadChoice("all"));
+  const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
   const [bin, setBin] = useState<BinItem[] | null>(null);
   const [binError, setBinError] = useState<string | null>(null);
   const [erase, setErase] = useState<BinItem | null>(null);
@@ -113,8 +130,31 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
   }, [load]);
   useEffect(() => {
     if (view === "trash") void loadBin();
+    else setChoiceNow(loadChoice(view));
     endSelection();
   }, [view, loadBin, endSelection]);
+  const setChoice = (next: LibraryViewChoice) => {
+    setChoiceNow(next);
+    if (view !== "trash") saveChoice(view, next);
+  };
+  const sync = async () => {
+    setSyncing(true);
+    try {
+      setItems(await api.refreshLibrary());
+      setError(null);
+    } catch (e) {
+      say(errorMessage(e));
+    } finally {
+      setSyncing(false);
+    }
+  };
+  /** The list as drawn: the view, the filters, the search, then sorted and in sections. */
+  const listOf = (all: readonly LibraryItem[] | null) => {
+    if (!all || view === "trash") return { groups: [], rows: [] as LibraryItem[] };
+    const inThis = applyFilters(all.filter((i) => inView(i, view as ListView)), filters);
+    const groups = sections(searchItems(inThis, query), choice.group, choice.sort, opened, view !== "pinned");
+    return { groups, rows: groups.flatMap((g) => g.items) };
+  };
   useEffect(() => {
     if (viewRequest) {
       setOpenId(null);
@@ -132,7 +172,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     const title = item.title?.trim() || "Recording";
     try {
       await api.deleteSession(item.id);
-      const order = items ? viewItems(items, view === "trash" ? "all" : view, query) : [];
+      const order = listOf(items).rows;
       const at = order.findIndex((i) => i.id === item.id);
       const next = order[at + 1] ?? order[at - 1] ?? null;
       setItems((list) => list?.filter((i) => i.id !== item.id) ?? list);
@@ -197,15 +237,24 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       const kept = `kept there for ${hoursWords(keepHours)}`;
       if (gone !== ids.length) {
         // Only some went: the server's list says which. Undo brings back only those that are gone from it.
-        const before = new Set((items ?? []).map((i) => i.id));
-        const now = await api.library();
+        // When the list can't be read, Undo tries every picked one (those still in the Library just stay).
+        const text = `${gone} of ${ids.length} moved to Trash · ${kept}`;
+        const now = await api.library().catch(() => null);
+        if (!now) {
+          say(text, { label: "Undo", run: () => void restoreMany(ids) });
+          return;
+        }
         const still = new Set(now.filter((i) => !i.deleted).map((i) => i.id));
-        const moved = ids.filter((id) => before.has(id) && !still.has(id));
+        const moved = ids.filter((id) => !still.has(id));
+        const order = listOf(items).rows;
+        const next = order.find((i) => still.has(i.id) && !moved.includes(i.id) && !ids.includes(i.id))
+          ?? order.find((i) => still.has(i.id)) ?? null;
         setItems(now);
-        say(`${gone} of ${ids.length} moved to Trash · ${kept}`, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined);
+        setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
+        say(text, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined);
         return;
       }
-      const order = items ? viewItems(items, view === "trash" ? "all" : view, query) : [];
+      const order = listOf(items).rows;
       const next = order.find((i) => !ids.includes(i.id)) ?? null;
       setItems((list) => list?.filter((i) => !ids.includes(i.id)) ?? list);
       setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
@@ -283,7 +332,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
 
   const open = openId ? items?.find((i) => i.id === openId) ?? null : null;
   const counts = items ? viewCounts(items) : null;
-  const shown = items && view !== "trash" ? viewItems(items, view, query) : [];
+  const { groups, rows: shown } = listOf(items);
+  // What the filters offer: the recordings of this view before the filters, so a tick never hides its own choice.
+  const inThisView = items && view !== "trash" ? items.filter((i) => inView(i, view as ListView)) : [];
+  const filtersOn = filterCount(filters);
   const shownIds = shown.map((i) => i.id);
   const pickedIds = shownIds.filter((id) => picked.has(id));
   const allPicked = shownIds.length > 0 && pickedIds.length === shownIds.length;
@@ -335,6 +387,11 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       return;
     }
     if (open || view === "trash" || !items) return;
+    if (e.key === "/" && !e.metaKey && !e.ctrlKey) {
+      e.preventDefault();
+      root.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+      return;
+    }
     const focused = (document.activeElement as HTMLElement | null)?.closest<HTMLElement>("[data-row-id]")?.dataset.rowId
       ?? (document.activeElement as HTMLElement | null)?.dataset?.rowId;
     if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !e.shiftKey) {
@@ -413,10 +470,27 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     );
   }
 
-  const chip = (v: SavedView, label: string) => (
-    <Chip label={label} selected={view === v} count={v !== "all" && v !== "trash" && counts ? counts[v] : undefined}
-      onToggle={() => setView(view === v && v !== "all" ? "all" : v)} />
-  );
+  const viewMenu: MenuItem[] = [
+    ...LIST_VIEWS.map((v) => ({ label: VIEW_NAMES[v], checked: view === v, radio: true, count: counts?.[v], onPick: () => setView(v) })),
+  ];
+  const filterMenu = (key: FilterKey): MenuItem[] => filterOptions(inThisView, key).map((o) => ({
+    label: o.label, checked: (filters[key] ?? []).includes(o.value), count: o.count, keepOpen: true,
+    onPick: () => setFilters((f) => toggleFilter(f, key, o.value)),
+  }));
+  const sortMenu: MenuItem[] = [
+    ...(Object.keys(SORT_NAMES) as SortKey[]).map((k) => ({ label: SORT_NAMES[k], group: "Sort by", checked: choice.sort === k, radio: true,
+      onPick: () => setChoice({ ...choice, sort: k }) })),
+    ...(Object.keys(GROUP_NAMES) as GroupKey[]).map((k) => ({ label: GROUP_NAMES[k], group: "Group by", checked: choice.group === k, radio: true,
+      onPick: () => setChoice({ ...choice, group: k }) })),
+  ];
+  const clearAll = () => {
+    setFilters({});
+    setQuery("");
+    setView("all");
+  };
+  const subtitle = view === "trash" || !counts ? null
+    : view === "all" && !filtersOn && !query ? `${recordingsWord(counts.all)} from your phone, this computer and the web.`
+      : `${recordingsWord(shown.length)} shown`;
 
   return (
     <div className="el-root el-embedded" data-v2="library" ref={root}>
@@ -451,8 +525,14 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
           </header>
         ) : (
           <header className="el-page__head">
-            <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
+            <div className="el-page__titles">
+              <h1 className="el-title-l">{view === "trash" ? "Trash" : "Library"}</h1>
+              {subtitle && <p className="el-secondary" aria-live="polite">{subtitle}</p>}
+            </div>
             <div className="el-page__actions">
+              {view !== "trash" && (
+                <Button variant="quiet" icon={Icons.RefreshIcon} loading={syncing} loadingLabel="Syncing…" onClick={() => void sync()}>Sync</Button>
+              )}
               {view !== "trash" && (counts?.all ?? 0) > 0 && (
                 <Button variant="quiet" icon={Icons.SelectIcon} title={`Select (${MOD}A selects all)`} onClick={() => setSelecting(true)}>Select</Button>
               )}
@@ -462,12 +542,39 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
           </header>
         )}
         <div className="el-page__tools">
-          {view !== "trash" && <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} />}
-          <FilterBar label="Saved views">
-            {chip("all", "All")}
-            {chip("today", "Today")}
-            {chip("untranscribed", "Untranscribed")}
-            {chip("trash", "Trash")}
+          {view !== "trash" && (
+            <div className="el-search-row">
+              <SearchField label="Search recordings" value={query} onChange={setQuery} disabled={!items} aria-keyshortcuts="/" />
+              <Menu label="Sort and group" items={sortMenu}
+                button={{ variant: "quiet", icon: Icons.SortIcon, title: `Sort: ${SORT_NAMES[choice.sort]} · Group: ${GROUP_NAMES[choice.group]}` }} />
+            </div>
+          )}
+          <FilterBar label="Filter recordings" end={(filtersOn > 0 || (view !== "all" && view !== "trash")) && (
+            <Button variant="quiet" size="sm" onClick={clearAll}>Clear all</Button>
+          )}>
+            {view === "trash" ? (
+              <Chip label="All recordings" onToggle={() => setView("all")} />
+            ) : (
+              <>
+                <Menu label="Views" items={viewMenu} chip={{ text: view === "all" ? "Views" : VIEW_NAMES[view as ListView], on: view !== "all" }} />
+                {FILTER_KEYS.map((key) => {
+                  const options = filterMenu(key);
+                  const on = (filters[key]?.length ?? 0) > 0;
+                  // Label and Bookmark tag only when there are some; the rest always, as classic's panel.
+                  if (!options.length && !on && (key === "label" || key === "tag" || key === "device")) return null;
+                  return (
+                    <span key={key} className="el-chip-group">
+                      <Menu label={FILTER_NAMES[key]} items={options} chip={{ text: chipLabel(inThisView, filters, key), on }} />
+                      {on && (
+                        <Button variant="quiet" size="sm" className="el-chip-clear" icon={Icons.CloseIcon} aria-label={`Clear ${FILTER_NAMES[key]}`}
+                          onClick={() => setFilters((f) => ({ ...f, [key]: [] }))} />
+                      )}
+                    </span>
+                  );
+                })}
+              </>
+            )}
+            <Chip label="Trash" selected={view === "trash"} onToggle={() => setView(view === "trash" ? "all" : "trash")} />
           </FilterBar>
         </div>
         {view === "trash" ? (
@@ -505,14 +612,23 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
             body="Calls and meetings you record on this computer or your phone, and files you import, appear here."
             action={onImport ? <Button onClick={onImport}>Import</Button> : undefined} />
         ) : shown.length === 0 ? (
-          <EmptyState icon={Icons.SearchIcon} title={query ? "No recordings match" : view === "today" ? "Nothing recorded today" : "Everything is transcribed"}
-            body={query ? "Try another word, or clear the search to see every recording." : view === "today" ? "Today's calls and meetings appear here as they are recorded." : "Recordings without a transcript appear here."}
-            action={<Button onClick={() => { setQuery(""); setView("all"); }}>{query ? "Clear search" : "Show all"}</Button>} />
+          <EmptyState icon={Icons.SearchIcon}
+            title={query || filtersOn ? "No recordings match" : view === "today" ? "Nothing recorded today" : view === "untranscribed" ? "Everything is transcribed" : `Nothing in ${VIEW_NAMES[view as ListView]}`}
+            body={query ? "Try another word, or clear the search to see every recording." : filtersOn ? "Take a filter off, or clear them all to see every recording."
+              : view === "today" ? "Today's calls and meetings appear here as they are recorded." : view === "untranscribed" ? "Recordings without a transcript appear here." : "Recordings appear here when they fit this view."}
+            action={<Button onClick={clearAll}>{query && !filtersOn ? "Clear search" : filtersOn ? "Clear filters" : "Show all"}</Button>} />
         ) : (
           <List label="Recordings">
-            {dayGroups(shown).map((g) => [
-              <ListSection key={g.label} title={g.label} />,
-              ...g.items.map((item) => {
+            {groups.map((g) => [
+              g.label ? (
+                <ListSection key={g.key} title={g.label} count={g.items.length} collapsed={collapsed.has(g.key)}
+                  onToggle={() => setCollapsed((c) => { const n = new Set(c); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); return n; })}
+                  pick={selecting ? {
+                    state: groupPick(g.items, picked), label: groupPick(g.items, picked) === "all" ? `Clear ${g.label}` : `Select all in ${g.label}`,
+                    onToggle: () => setPicked((p) => toggleGroup(g.items, p)),
+                  } : undefined} />
+              ) : null,
+              ...(collapsed.has(g.key) ? [] : g.items).map((item) => {
                 const r = rowModel(item);
                 return (
                   <ListRow key={item.id} icon={(p) => <Icons.SourceAppIcon app={r.app} {...p} />} title={r.title} meta={r.meta}
@@ -520,7 +636,7 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
                     endTop={r.when} endBottom={r.duration ? <span className="el-num">{r.duration}</span> : undefined}
                     rowId={item.id} onClick={(e) => rowClick(item, e)} onContextMenu={(e) => rowMenu(item, e)}
                     checked={selecting ? picked.has(item.id) : undefined}
-                    actions={selecting ? undefined : <Menu label={`More for ${r.title}`} items={menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
+                    actions={selecting ? undefined : <Menu label={`More for ${r.title}`} items={() => menuFor([item.id])} button={{ variant: "quiet", size: "sm", icon: Icons.MoreIcon }} />} />
                 );
               }),
             ])}

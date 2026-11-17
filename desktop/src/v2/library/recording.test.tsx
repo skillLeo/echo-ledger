@@ -61,7 +61,6 @@ describe("the recording page", () => {
     fireEvent.click(menuItem("Export"));
     expect(within(screen.getByRole("menu", { name: "Export" })).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
       "Word (.docx)", "PDF (print)", "Text (.txt)", "Markdown (.md)", "Subtitles (.srt)", "Web subtitles (.vtt)", "JSON (.json)",
-      "Meeting pack (PDF)", "Meeting pack (.zip)", "Meeting pack with audio (.zip)",
     ]);
   });
 
@@ -69,6 +68,11 @@ describe("the recording page", () => {
     respond("transcript_views", VIEWS);
     respond("export_transcript", "/Users/me/Downloads/Bilal.docx");
     respond("meeting_pack", "/Users/me/Downloads/Bilal pack.zip");
+    // The meeting packs only for a recording with screens.
+    const withScreens = { ...BILAL, screen_count: 2 } as LibraryItem;
+    respond("library_list", [withScreens]);
+    respond("library_refresh", [withScreens]);
+    respond("session_screens", null);
     await open();
     const tools = screen.getByRole("toolbar", { name: "Share, copy and export" });
     fireEvent.click(within(tools).getByRole("button", { name: "Export" }));
@@ -183,6 +187,16 @@ describe("the recording page", () => {
     await open(makeTranscript({ id: "tr-bilal", status: "failed", segments: [] }));
     fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
     expect(screen.queryByRole("menuitem", { name: "Change language and re-transcribe…" })).toBeNull();
+  });
+
+  it("no Change language on a recording that has no final transcript yet (final_status null)", async () => {
+    const pending = { ...BILAL, status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } } as LibraryItem;
+    respond("library_list", [pending]);
+    respond("library_refresh", [pending]);
+    await open();
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    expect(within(screen.getByRole("menu", { name: "Recording actions" })).getAllByRole("menuitem").map((m) => m.textContent)).not.toContain("Change language and re-transcribe…");
+    expect(screen.getByRole("menuitem", { name: "Transcribe…" })).toBeInTheDocument();
   });
 
   it("Skip silence jumps a gap while playing; Follow keeps the playing line in view", async () => {

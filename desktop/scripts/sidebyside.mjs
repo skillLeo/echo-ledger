@@ -86,6 +86,20 @@ export const PAIRS = [
       await page.getByRole("button", { name: "Export", exact: true }).click();
       await page.waitForTimeout(400);
     })]],
+  ["filters", "Find: classic's Filters panel | the new design's chips (Views ▾, Source ▾ open with two ticks), sections with counts",
+    [classic("library"), steps(click("Filters"))],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Source", exact: true }).click();
+      await page.getByRole("menuitemcheckbox").nth(0).click();
+      await page.getByRole("menuitemcheckbox").nth(1).click();
+      await page.waitForTimeout(400);
+    })]],
+  ["sort-group", "Sort and group: classic's View menu | the new design's Sort and group menu",
+    [classic("library"), steps(async (page) => { await page.getByRole("button", { name: /^View:/ }).first().click(); await page.waitForTimeout(400); })],
+    [v2("library"), steps(async (page) => {
+      await page.getByRole("button", { name: "Sort and group" }).click();
+      await page.waitForTimeout(400);
+    })]],
 ];
 
 const server = await createServer({ root: desktop, configFile: join(desktop, "vite.config.ts"), server: { port: 1480, strictPort: false }, logLevel: "error" });

@@ -19,7 +19,7 @@ const done = (preview: string, id: string) => ({ final_status: "completed", fina
 const ITEMS: LibraryItem[] = [
   makeItem("bilal", { title: "Bilal Qureshi", source_app: "whatsapp", source_app_label: "WhatsApp", started_at: at(17, 11, 42), duration_ms: 1_104_000, transcript: done("Payment terms", "tr-bilal") }),
   makeItem("voice", { title: "Voice note", source_app: "voice_note", started_at: at(17, 9, 18), duration_ms: 134_000, status: "uploaded", transcript: { final_status: null, final_transcript_id: null, live_available: false, preview: null } }),
-  makeItem("usman", { title: "Usman Chaudhry", source_app: "phone_call", started_at: at(17, 8, 47), duration_ms: 452_000, pinned: true, transcript: done("Steel prices", "tr-usman") }),
+  makeItem("usman", { title: "Usman Chaudhry", source_app: "phone_call", started_at: at(17, 8, 47), duration_ms: 452_000, transcript: done("Steel prices", "tr-usman") }),
   makeItem("habib", { title: "Habib & Co.", source_app: "zoom", started_at: at(16, 16, 30), duration_ms: 2_282_000, labels: ["Audit"], transcript: done("Sales tax", "tr-habib") }),
 ];
 
@@ -129,6 +129,9 @@ describe("selection mode", () => {
 
   it("the bar's ⋮: Pin, Unpin, Keep forever, Allow auto clean-up and Transcribe, grouped, with Export ▸ every format", async () => {
     respond("sessions_export", "/Users/me/Downloads/EchoLedger transcripts.zip");
+    const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
+    respond("library_list", pinned);
+    respond("library_refresh", pinned);
     await show();
     fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
     fireEvent.click(row("Usman Chaudhry"));
@@ -138,7 +141,8 @@ describe("selection mode", () => {
     expect(within(menu).getByText("Organise")).toBeInTheDocument();
     fireEvent.click(menuItem("Pin"));
     await act(flushAsync);
-    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["bilal", "usman"], action: "pin", clientId: null, label: null }]);
+    // Ids go in the list's order: Usman is pinned, so first.
+    expect(callsOf("sessions_bulk")).toEqual([{ ids: ["usman", "bilal"], action: "pin", clientId: null, label: null }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Pinned · 2 recordings");
 
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
@@ -148,7 +152,7 @@ describe("selection mode", () => {
     expect(ZIP_FORMATS.map((f) => f.format)).toEqual(["docx", "txt", "md", "srt", "vtt", "json"]);
     fireEvent.click(within(formats).getByRole("menuitem", { name: "Subtitles (.srt)" }));
     await act(flushAsync);
-    expect(callsOf("sessions_export")).toEqual([{ ids: ["bilal", "usman"], format: "srt", view: undefined }]);
+    expect(callsOf("sessions_export")).toEqual([{ ids: ["usman", "bilal"], format: "srt", view: undefined }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Saved /Users/me/Downloads/EchoLedger transcripts.zip");
   });
 
@@ -203,7 +207,8 @@ describe("selection mode", () => {
     fireEvent.click(row("Habib & Co."));
     fireEvent.click(within(bar()).getByRole("button", { name: "Move to project" }));
     await act(flushAsync);
-    const move = screen.getByRole("dialog", { name: "Move 2 recordings" });
+    const move = screen.getByRole("dialog", { name: "Move to project" });
+    expect(move).toHaveAccessibleDescription("2 recordings");
     fireEvent.click(within(move).getByRole("combobox", { name: /^Move to/ }));
     fireEvent.click(screen.getByRole("option", { name: "Qureshi Textiles" }));
     fireEvent.click(within(move).getByRole("button", { name: "Move" }));
@@ -255,6 +260,9 @@ describe("the row ⋮ and the right-click menu", () => {
   };
 
   it("a row's ⋮: Open, Rename, Move, Label, Pin or Unpin, Keep, Export, Copy for AI, WhatsApp, then Delete last and red", async () => {
+    const pinned = ITEMS.map((i) => (i.id === "usman" ? { ...i, pinned: true } : i));
+    respond("library_list", pinned);
+    respond("library_refresh", pinned);
     await show();
     fireEvent.click(screen.getByRole("button", { name: "More for Usman Chaudhry" }));
     const menu = screen.getByRole("menu", { name: "More for Usman Chaudhry" });
@@ -447,6 +455,21 @@ describe("menus stay inside the window", () => {
     spy.mockRestore();
   });
 
+  it("a sub-menu taller than the window scrolls inside it", async () => {
+    Object.assign(window, { innerHeight: 200 });
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("el-menu--sub") ? box(0, 260, 600) : box(0, 0);
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
+    fireEvent.click(menuItem("Export"));
+    const sub = screen.getByRole("menu", { name: "Export" });
+    expect(sub.style.maxBlockSize).toBe("184px");
+    expect(sub.style.overflowY).toBe("auto");
+    spy.mockRestore();
+  });
+
   it("a right-click menu taller than the window scrolls inside it", async () => {
     Object.assign(window, { innerHeight: 300 });
     const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
@@ -526,6 +549,8 @@ describe("Trash, Undo and the limits", () => {
     fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
     await act(flushAsync);
     expect(rows().map((r) => r.dataset.rowId)).toEqual(["voice", "usman", "habib"]);
+    // Focus goes to the next row still in the list, never lost on the page.
+    expect(row("Voice note")).toHaveFocus();
     const toast = screen.getByRole("status", { name: "Notifications" });
     expect(toast).toHaveTextContent("1 of 2 moved to Trash · kept there for 36 hours");
     respond("library_list", ITEMS);
@@ -533,6 +558,23 @@ describe("Trash, Undo and the limits", () => {
     await act(flushAsync);
     expect(callsOf("session_restore")).toEqual([{ id: "bilal" }]);
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("1 recording back");
+  });
+
+  it("when only some moved and the list can't be read, it still says N of M and keeps Undo", async () => {
+    respond("sessions_bulk", 1);
+    respondWith("session_restore", () => ({ data: ITEMS[0] }));
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    respondWith("library_list", () => { throw new Error("The server is out of reach"); });
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent("1 of 2 moved to Trash");
+    respond("library_list", ITEMS);
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "bilal" }, { id: "usman" }]);
   });
 
   it("deleting every recording shown asks first; Cancel leaves them", async () => {

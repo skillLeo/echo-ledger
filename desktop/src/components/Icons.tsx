@@ -378,6 +378,8 @@ export const LucideSendIcon = L(["M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.49
 /** Back and forward 10 seconds in the player (Lucide rotate-ccw, rotate-cw). */
 export const LucideRotateCcwIcon = L(["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5"]);
 export const LucideRotateCwIcon = L(["M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8", "M21 3v5h-5"]);
+/** Sort and group (Lucide arrow-up-down). */
+export const LucideArrowUpDownIcon = L(["m21 16-4 4-4-4", "M17 20V4", "m3 8 4-4 4 4", "M7 4v16"]);
 export const LucideLaptopIcon = L(["M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16"]);
 export const LucideSearchIcon = (p: IconProps) => (
   <Svg {...p}><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></Svg>

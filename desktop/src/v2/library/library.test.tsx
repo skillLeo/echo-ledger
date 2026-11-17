@@ -46,7 +46,7 @@ describe("the Library's rules", () => {
     expect(viewItems(ITEMS, "today", "", NOW).map((i) => i.id)).toEqual(["bilal", "voice", "usman"]);
     expect(viewItems(ITEMS, "untranscribed", "", NOW).map((i) => i.id)).toEqual(["voice", "usman"]);
     expect(viewItems(ITEMS, "all", "march shipment", NOW).map((i) => i.id)).toEqual(["bilal"]);
-    expect(viewCounts(ITEMS, NOW)).toEqual({ all: 4, today: 3, untranscribed: 2 });
+    expect(viewCounts(ITEMS, NOW)).toMatchObject({ all: 4, today: 3, untranscribed: 2 });
     expect(isUntranscribed(ITEMS[0])).toBe(false);
   });
 
@@ -103,12 +103,16 @@ describe("LibraryV2", () => {
     expect(callsOf("library_refresh")).toHaveLength(1);
   });
 
-  it("the saved views Today and Untranscribed, with their counts", async () => {
+  it("the saved views Today and Untranscribed, with their counts, from Views ▾", async () => {
     await show();
-    fireEvent.click(screen.getByRole("button", { name: "Untranscribed 2" }));
+    const pick = (name: RegExp) => {
+      fireEvent.click(screen.getByRole("button", { name: /^(Views|Today|Untranscribed)$/ }));
+      fireEvent.click(screen.getByRole("menuitemradio", { name }));
+    };
+    pick(/^Untranscribed/);
     const list = screen.getByRole("list", { name: "Recordings" });
     expect(rowButtons(list)).toHaveLength(2);
-    fireEvent.click(screen.getByRole("button", { name: "Today 3" }));
+    pick(/^Today/);
     expect(rowButtons(screen.getByRole("list", { name: "Recordings" }))).toHaveLength(3);
   });
 

@@ -1,6 +1,6 @@
 import { useId, type KeyboardEvent, type MouseEvent, type PointerEvent, type ReactNode } from "react";
 import { Icon, type IconType } from "./Button";
-import { CheckIcon, ChevronEndIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
 /** A list of rows with an accessible name. */
 export function List({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
@@ -8,8 +8,32 @@ export function List({ label, children, className }: { label: string; children: 
 }
 
 /** A plain heading between groups of rows (Today, Yesterday; Recording, Privacy). */
-export function ListSection({ title, id }: { title: ReactNode; id?: string }) {
-  return <li className="el-list-section el-caption el-body-strong" id={id}>{title}</li>;
+export function ListSection({ title, id, count, collapsed, onToggle, pick }: {
+  title: ReactNode;
+  id?: string;
+  /** How many rows the section has, after its title ("Today · 3"). */
+  count?: number;
+  /** With onToggle the title folds and unfolds the section (aria-expanded). */
+  collapsed?: boolean;
+  onToggle?: () => void;
+  /** Selection mode: a box that picks or unpicks the whole section (mixed when some are picked). */
+  pick?: { state: "all" | "some" | "none"; label: string; onToggle: () => void };
+}) {
+  const words = <>{title}{count !== undefined && <span className="el-list-section__count">{" · "}<span className="el-num">{count}</span></span>}</>;
+  return (
+    <li className={`el-list-section el-caption el-body-strong${pick ? " el-list-section--pick" : ""}`} id={id}>
+      {pick && (
+        <input type="checkbox" className="el-check" aria-label={pick.label} checked={pick.state === "all"}
+          ref={(el) => { if (el) el.indeterminate = pick.state === "some"; }} onChange={pick.onToggle} />
+      )}
+      {onToggle ? (
+        <button type="button" className="el-list-section__button" aria-expanded={!collapsed} onClick={onToggle}
+          aria-label={typeof title === "string" && count !== undefined ? `${title} · ${count}` : undefined}>
+          <Icon icon={ChevronDownIcon} />{words}
+        </button>
+      ) : words}
+    </li>
+  );
 }
 
 export type ListRowProps = {

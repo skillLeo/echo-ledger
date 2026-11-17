@@ -212,7 +212,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
   exportsRef.current = { exportAs, packAs };
   const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
     exportAs: (f) => void exportsRef.current.exportAs(f),
-    packAs: item.screen_count !== undefined ? (f, a) => void exportsRef.current.packAs(f, a) : undefined,
+    packAs: (item.screen_count ?? 0) > 0 ? (f, a) => void exportsRef.current.packAs(f, a) : undefined,
     view: exportView ? VIEW_LABELS[exportView] : null,
   }), [exportView, item.screen_count]);
   const recordingMenu = useMemo(() => menu({

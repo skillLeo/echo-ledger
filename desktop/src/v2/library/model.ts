@@ -2,10 +2,27 @@
 // views, the WhatsApp-style row and the day groups. Pure functions, so the rules are tested without a window.
 import type { BinItem, LibraryItem } from "../../lib/ipc";
 import { TRASH_KEEP_HOURS_FALLBACK, hoursWords } from "../../lib/trash";
+import { inSmartView } from "../../lib/organise";
 import { dayGroup, itemState, recordingName, searchItems, sortItems, type ItemState } from "../../lib/library";
 import { formatDuration, formatTime, rowDate, sourceAppLabel } from "../../lib/format";
 
-export type SavedView = "all" | "today" | "untranscribed" | "trash";
+/** The saved views (classic's smart views and the new design's Untranscribed), and Trash. */
+export type SavedView = "all" | "today" | "this_week" | "untranscribed" | "waiting" | "pinned" | "bookmarked" | "failed" | "trash";
+export type ListView = Exclude<SavedView, "trash">;
+/** The Views ▾ menu: names in classic's words, in its order (Untranscribed after the dates). */
+export const VIEW_NAMES: Record<ListView, string> = {
+  all: "All recordings", today: "Today", this_week: "This week", untranscribed: "Untranscribed", waiting: "Waiting for decision",
+  pinned: "Pinned", bookmarked: "Bookmarked", failed: "Failed",
+};
+export const LIST_VIEWS = Object.keys(VIEW_NAMES) as ListView[];
+
+/** Whether a recording is in a view (classic's smart view rules; Untranscribed is the new design's). */
+export function inView(item: LibraryItem, view: ListView, now: Date = new Date()): boolean {
+  if (item.deleted) return false;
+  if (view === "today") return sameDay(item.started_at, now);
+  if (view === "untranscribed") return isUntranscribed(item);
+  return inSmartView(item, view, now);
+}
 
 const sameDay = (iso: string | undefined, now: Date) => {
   const t = iso ? new Date(iso) : null;
@@ -18,20 +35,12 @@ export function isUntranscribed(item: Pick<LibraryItem, "status" | "transcript">
 }
 
 /** The recordings of a saved view (not Trash, which has its own list), searched, newest first. */
-export function viewItems(items: LibraryItem[], view: Exclude<SavedView, "trash">, query: string, now: Date = new Date()): LibraryItem[] {
-  const live = items.filter((i) => !i.deleted);
-  const inView = view === "today" ? live.filter((i) => sameDay(i.started_at, now))
-    : view === "untranscribed" ? live.filter(isUntranscribed) : live;
-  return sortItems(searchItems(inView, query), "newest");
+export function viewItems(items: LibraryItem[], view: ListView, query: string, now: Date = new Date()): LibraryItem[] {
+  return sortItems(searchItems(items.filter((i) => inView(i, view, now)), query), "newest");
 }
 
-export function viewCounts(items: LibraryItem[], now: Date = new Date()): Record<"all" | "today" | "untranscribed", number> {
-  const live = items.filter((i) => !i.deleted);
-  return {
-    all: live.length,
-    today: live.filter((i) => sameDay(i.started_at, now)).length,
-    untranscribed: live.filter(isUntranscribed).length,
-  };
+export function viewCounts(items: LibraryItem[], now: Date = new Date()): Record<ListView, number> {
+  return Object.fromEntries(LIST_VIEWS.map((v) => [v, items.filter((i) => inView(i, v, now)).length])) as Record<ListView, number>;
 }
 
 /** Recordings under day headings: Today, Yesterday, This week, Earlier. */

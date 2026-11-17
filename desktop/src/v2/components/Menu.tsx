@@ -1,6 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent, type MutableRefObject, type Ref } from "react";
 import { Button, Icon, type ButtonProps, type IconType } from "./Button";
-import { ChevronEndIcon } from "./icons";
+import { CheckIcon, ChevronDownIcon, ChevronEndIcon } from "./icons";
 
 /**
  * One action in a menu. `group` puts a small header above the first item of each group (Organise, Export, Danger);
@@ -15,7 +15,16 @@ export type MenuItem = {
   group?: string;
   items?: readonly MenuItem[];
   disabled?: boolean;
+  /** A filter's tick (menuitemcheckbox) or one choice of several (menuitemradio, with `radio`). */
+  checked?: boolean;
+  radio?: boolean;
+  /** Picking it leaves the menu open (ticking several filters in a row). */
+  keepOpen?: boolean;
+  /** A number on the end side (how many recordings a filter value has). */
+  count?: number;
 };
+
+const ITEM_ROLES = '[role="menuitem"], [role="menuitemcheckbox"], [role="menuitemradio"]';
 
 type ListProps = {
   label: string;
@@ -62,9 +71,12 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     if (!box.height) return;
     const bottom = window.innerHeight - EDGE;
     if (className.includes("el-menu--sub")) {
+      // Moved up as far as the top edge allows; still taller than the window, it scrolls.
+      const room = window.innerHeight - 2 * EDGE;
       setFit({
         flip: box.right > window.innerWidth || box.left < 0,
         shift: box.bottom > bottom ? Math.min(box.bottom - bottom, Math.max(0, box.top - EDGE)) : undefined,
+        room: box.height > room ? room : undefined,
       });
       return;
     }
@@ -90,7 +102,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
   };
   useEffect(() => {
     if (sub !== null) return;
-    own.current?.querySelectorAll<HTMLElement>(':scope > li > [role="menuitem"]')[active]?.focus();
+    own.current?.querySelectorAll<HTMLElement>(`:scope > li > :is(${ITEM_ROLES})`)[active]?.focus();
   }, [active, sub]);
 
   const openSub = (i: number) => {
@@ -100,6 +112,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     const item = items[i];
     if (!item || item.disabled) return;
     if (item.items?.length) openSub(i);
+    else if (item.keepOpen) item.onPick?.();
     else onPick(item);
   };
   const keyDown = (e: KeyboardEvent<HTMLUListElement>) => {
@@ -128,15 +141,17 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
         return [
           header && <li key={`g-${header}`} role="presentation" className="el-menu__group el-caption">{header}</li>,
           <li key={item.label} role="none" className="el-menu__item">
-            <div role="menuitem" tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
+            <div role={item.checked === undefined ? "menuitem" : item.radio ? "menuitemradio" : "menuitemcheckbox"} aria-checked={item.checked} tabIndex={i === active && sub === null ? 0 : -1} aria-disabled={item.disabled || undefined}
               aria-haspopup={item.items ? "menu" : undefined} aria-expanded={item.items ? subOpen : undefined}
               aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
               className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
               data-active={i === active || undefined}
               onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
               onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
-              {item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
+              {item.checked !== undefined ? <span className="el-menu__check" aria-hidden="true">{item.checked && <Icon icon={CheckIcon} />}</span>
+                : item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
               <span className="el-menu__label">{item.label}</span>
+              {item.count !== undefined && <span className="el-menu__shortcut el-caption el-num" aria-hidden="true">{item.count}</span>}
               {item.shortcut && <kbd className="el-menu__shortcut el-caption" aria-hidden="true">{item.shortcut}</kbd>}
               {item.items && <Icon icon={ChevronEndIcon} directional />}
             </div>
@@ -160,9 +175,18 @@ function keyNames(shortcut: string): string {
  * A button that opens a list of actions (a project's menu, a recording's ⋮). The list is a menu: arrow keys, Home and
  * End move, Enter picks, Esc closes and gives focus back to the button; a press outside closes it.
  */
-export function Menu({ label, items, button }: { label: string; items: readonly MenuItem[]; button: Omit<ButtonProps, "onClick" | "children"> & { text?: string } }) {
+export function Menu({ label, items: given, button, chip }: {
+  label: string;
+  /** The items, or a function that makes them when the menu opens (a row's ⋮ in a long list). */
+  items: readonly MenuItem[] | (() => readonly MenuItem[]);
+  button?: Omit<ButtonProps, "onClick" | "children"> & { text?: string };
+  /** A filter chip opens it instead of a button: its words, and filled while the filter is on. */
+  chip?: { text: string; on: boolean };
+}) {
   const id = useId();
-  const [open, setOpen] = useState<false | { at: number }>(false);
+  // The items are made when the menu opens and kept while it is open.
+  const [open, setOpen] = useState<false | { at: number; items: readonly MenuItem[] }>(false);
+  const make = () => (typeof given === "function" ? given() : given);
   const root = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
 
@@ -188,16 +212,25 @@ export function Menu({ label, items, button }: { label: string; items: readonly 
   const openerKey = (e: KeyboardEvent<HTMLButtonElement>) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    setOpen({ at: e.key === "ArrowDown" ? 0 : items.length - 1 });
+    const items = make();
+    setOpen({ at: e.key === "ArrowDown" ? 0 : items.length - 1, items });
   };
-  const { text, ...buttonProps } = button;
+  const { text, ...buttonProps } = button ?? {};
+  const press = () => setOpen(open ? false : { at: 0, items: make() });
 
   return (
     <div className="el-menu-anchor" ref={root}>
-      <Button {...buttonProps} ref={opener} aria-label={text ? undefined : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
-        onClick={() => setOpen(open ? false : { at: 0 })} onKeyDown={openerKey}>{text}</Button>
+      {chip ? (
+        <button type="button" ref={opener} className={`el-chip el-chip--menu${chip.on ? " el-chip--on" : ""}`} dir="auto" aria-haspopup="menu"
+          aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined} onClick={press} onKeyDown={openerKey}>
+          {chip.text}<Icon icon={ChevronDownIcon} />
+        </button>
+      ) : (
+        <Button {...buttonProps} ref={opener} aria-label={text ? undefined : label} aria-haspopup="menu" aria-expanded={!!open} aria-controls={open ? `${id}-menu` : undefined}
+          onClick={press} onKeyDown={openerKey}>{text}</Button>
+      )}
       {open && (
-        <MenuList label={label} items={items} id={`${id}-menu`} className="el-menu el-menu--end" initial={open.at}
+        <MenuList label={label} items={typeof given === "function" ? open.items : given} id={`${id}-menu`} className={chip ? "el-menu el-menu--start" : "el-menu el-menu--end"} initial={open.at}
           onBack={close} onLeave={() => setOpen(false)} onPick={pick} />
       )}
     </div>

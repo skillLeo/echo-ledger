@@ -163,7 +163,7 @@
   inset-block-start: calc(100% + var(--el-space-4));
   inset-inline-start: 0;
   min-inline-size: 100%;
-  max-block-size: calc(var(--el-space-64) * 5);
+  max-block-size: calc(var(--el-space-64) * 9);
   overflow-y: auto;
   padding: var(--el-space-4);
   background: var(--el-role-bg-overlay);
@@ -183,6 +183,7 @@
 .el-menu__option[aria-selected="true"] { font-weight: var(--el-text-body-strong-weight); }
 .el-menu-anchor { position: relative; }
 .el-menu--end { inset-inline-start: auto; inset-inline-end: 0; min-inline-size: calc(var(--el-space-64) * 3.5); }
+.el-menu--start { min-inline-size: calc(var(--el-space-64) * 3.5); }
 .el-menu__option--danger { color: var(--el-role-danger-default); }
 .el-menu__check { inline-size: var(--el-space-16); color: var(--el-role-accent-text); }
 /* Grouped menus with icons, shortcuts and sub-menus (a recording's ⋮, Export ▸), and the same menu at the pointer. */
@@ -276,6 +277,17 @@
   color: var(--el-role-accent-text);
   font-weight: var(--el-text-body-strong-weight);
 }
+.el-chip--menu { padding-inline-end: var(--el-space-8); }
+.el-chip--on { background: var(--el-role-accent-soft); border-color: var(--el-role-accent-default); color: var(--el-role-accent-text); font-weight: var(--el-text-body-strong-weight); }
+.el-chip-group { display: inline-flex; align-items: center; }
+.el-chip-clear { margin-inline-start: calc(-1 * var(--el-space-4)); }
+.el-list-section__button { display: inline-flex; align-items: center; gap: var(--el-space-8); border: 0; padding: 0; background: transparent; color: inherit; font: inherit; cursor: pointer; }
+.el-list-section__button .el-icon { transition: transform var(--el-motion-fast); }
+.el-list-section__button[aria-expanded="false"] .el-icon { transform: rotate(-90deg); }
+.el-list-section__count { color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
+.el-list-section--pick { display: flex; align-items: center; gap: var(--el-space-8); }
+.el-search-row { display: flex; gap: var(--el-space-8); align-items: center; }
+.el-search-row > .el-search, .el-search-row > :first-child { flex: 1; }
 .el-chip__count { color: var(--el-role-text-secondary); font-weight: var(--el-text-body-weight); }
 .el-chip--removable { padding-inline-end: var(--el-space-4); cursor: default; background: var(--el-role-bg-subtle); border-color: transparent; }
 .el-chip__remove {

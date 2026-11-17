@@ -42,6 +42,7 @@ export {
   LucideInfinityIcon as KeepIcon,
   LucideListChecksIcon as SelectIcon,
   LucideSendIcon as SendIcon,
+  LucideArrowUpDownIcon as SortIcon,
   LucideRotateCcwIcon as BackIcon,
   LucideRotateCwIcon as ForwardIcon,
 } from "../../components/Icons";

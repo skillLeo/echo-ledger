@@ -42,7 +42,7 @@ export function exportMenu(run: (format: BulkExportFormat) => void, group = "Exp
   };
 }
 
-/** One recording's Export items: every format in the view on screen, then the meeting packs when it has screens. */
+/** One recording's Export items: every format in the view on screen, then the meeting packs (given only for a recording with at least one screen). */
 export function recordingExportItems({ exportAs, packAs, view }: {
   exportAs: (format: ExportFormat) => void;
   packAs?: (format: MeetingPackFormat, withAudio: boolean) => void;
@@ -169,8 +169,8 @@ export function MoveDialog({ ids, title, current, onClose, say }: {
   };
   const ready = target !== "" && (target !== "new" || name.trim() !== "");
   return (
-    <Dialog open title={ids.length === 1 ? `Move “${title || "recording"}”` : `Move ${recordingsWord(ids.length)}`} onClose={onClose}
-      description={error ?? undefined}
+    <Dialog open title="Move to project" onClose={onClose}
+      description={error ?? (ids.length === 1 ? `“${title || "Recording"}”` : recordingsWord(ids.length))}
       actions={<><Button onClick={onClose}>Cancel</Button><Button variant="primary" disabled={!ready} loading={busy} loadingLabel="Moving…" onClick={() => void move()}>Move</Button></>}>
       <Select label="Move to" options={options} value={target} onChange={setTarget} disabled={!projects} />
       {target === "new" && <TextField label="New project name" maxLength={120} value={name} onChange={(e) => setName(e.target.value)} autoFocus />}
