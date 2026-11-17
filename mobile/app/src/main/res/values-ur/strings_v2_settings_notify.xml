@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (settings_notify). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_ntf_quiet_from">سے</string>
+    <string name="v2_ntf_quiet_to">تک</string>
+    <string name="v2_ntf_quiet_bad">وقت 22:00 کی طرح لکھیں</string>
+    <string name="v2_ntf_kinds">نوٹیفکیشن کی قسمیں</string>
+    <string name="v2_ntf_always_on">ہمیشہ آن</string>
+    <string name="v2_ntf_android_off">Android کی ترتیبات میں بند ہے، اس لیے ان میں سے کوئی نظر نہیں آتا۔</string>
+    <string name="v2_ntf_critical_off">کالز ریکارڈ ہونا بند ہوں تو آپ کو پتا نہیں چلے گا۔</string>
+    <string name="v2_ntf_test">آزمائیں</string>
+    <string name="v2_ntf_test_cd">%1$s آزمائیں</string>
+    <string name="v2_ntf_sound">آواز اور تھرتھراہٹ</string>
+    <string name="v2_ntf_sound_cd">%1$s کی آواز اور تھرتھراہٹ</string>
+    <string name="v2_ntf_turn_on">Android میں آن کریں</string>
+    <string name="v2_ntf_allow_first">پہلے EchoLedger کے لیے نوٹیفکیشنز کی اجازت دیں۔</string>
+    <string name="v2_ntf_open_settings">ترتیبات کھولیں</string>
+    <string name="v2_ntf_recording">ریکارڈنگ</string>
+    <string name="v2_ntf_recording_help">ابھی ریکارڈنگ، اور کال کے بعد کا سوال</string>
+    <string name="v2_ntf_transcription">ٹرانسکرپشن</string>
+    <string name="v2_ntf_transcription_help">ٹرانسکرپٹ تیار ہے، یا نہیں بن سکا</string>
+    <string name="v2_ntf_enhancement">بہتری</string>
+    <string name="v2_ntf_enhancement_help">رومن اردو اور دوسرے انداز تیار ہیں</string>
+    <string name="v2_ntf_uploads">اپ لوڈز</string>
+    <string name="v2_ntf_uploads_help">کوئی ریکارڈنگ اپ لوڈ نہیں ہو سکی</string>
+    <string name="v2_ntf_readiness">کال ریکارڈنگ اور تیاری</string>
+    <string name="v2_ntf_readiness_help">کالز کی ریکارڈنگ رک گئی، اور اسے کیسے ٹھیک کریں۔ خاموش اوقات میں بھی آتا ہے۔</string>
+    <string name="v2_ntf_sharing">شیئرنگ</string>
+    <string name="v2_ntf_sharing_help">کسی نے آپ کے ساتھ ریکارڈنگ یا پروجیکٹ شیئر کیا</string>
+    <string name="v2_ntf_account">اکاؤنٹ اور سیکیورٹی</string>
+    <string name="v2_ntf_account_help">کسی نئے ڈیوائس سے سائن ان، اور اکاؤنٹ کی دوسری تبدیلیاں</string>
+    <string name="v2_ntf_usage">استعمال اور حدیں</string>
+    <string name="v2_ntf_usage_help">ماہانہ حد کے قریب یا اس تک</string>
+    <string name="v2_ntf_live_translate">لائیو ترجمہ</string>
+    <string name="v2_ntf_live_translate_help">لائیو ترجمہ چل رہا ہے</string>
+    <string name="v2_ntf_updates">ایپ اپ ڈیٹس</string>
+    <string name="v2_ntf_updates_help">EchoLedger کا نیا ورژن</string>
+    <string name="v2_ntf_other">دیگر</string>
+    <string name="v2_ntf_other_help">باقی سب کچھ</string>
+</resources>

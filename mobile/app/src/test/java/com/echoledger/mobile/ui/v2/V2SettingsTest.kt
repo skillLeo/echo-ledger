@@ -94,7 +94,10 @@ class V2SettingsTest {
         var settings by mutableStateOf(AppSettings())
         compose.setContent {
             EchoV2Theme(darkTheme = false, language = EchoLanguage.English) {
-                AppearancePage(settings, { t -> settings = t(settings) }, UiFlags.Off, {}, "appearance.theme", {})
+                val toasts = com.echoledger.mobile.ui.v2.components.rememberEchoToastState()
+                androidx.compose.runtime.CompositionLocalProvider(com.echoledger.mobile.ui.v2.shell.LocalEchoToasts provides toasts) {
+                    AppearancePage(settings, { t -> settings = t(settings) }, UiFlags.Off, {}, "appearance.theme", {})
+                }
             }
         }
         compose.onNodeWithText("Dark").performClick()
