@@ -678,6 +678,8 @@ button.el-step__head { cursor: pointer; }
 .el-drop { display: flex; flex-direction: column; gap: var(--el-space-12); padding: var(--el-space-16); border-style: dashed; }
 .el-drop--over { border-color: var(--el-role-accent-default); background: var(--el-role-accent-soft); }
 .el-mark { background: var(--el-role-accent-soft); color: inherit; border-radius: var(--el-radius-sm); }
+/* A switch with its words across a card: the words at the start, the switch at the end. */
+.el-form > .el-check-row { display: flex; justify-content: space-between; gap: var(--el-space-16); }
 .el-ai-off { flex-direction: row; align-items: center; justify-content: space-between; }
 .el-workspace-add { border-block-start: var(--el-border-hairline) solid var(--el-role-border-default); }
 .el-ask__answer { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
