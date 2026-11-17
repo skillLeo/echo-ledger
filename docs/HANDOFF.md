@@ -1080,3 +1080,5 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
 
 - 2026-11-17: merged phone Help v2 (63d2056e, reviewer B approve) as 7bebd4ee. Desktop UI 9c3f5000 sent back: parity tests must walk dialog/form/switch states. Phone core owns the real HelpSource.
 - 2026-11-17: website v2 (b-web-v2 56b1b21f) sent to reviewer A. Disk cleanup: removed review-core/-dui/-phone/-relay/-pui/-core2 and b-web-l1 worktrees (branches kept), phone build outputs in main and rel-181.
+
+- 2026-11-17 owner decisions: Gate 3 v2 look approved (ships behind ui_v2 flags); Trash keep 48 h, admin-editable; Live Assist limits Free 30 min/$1, Pro 5 h/$15, Ultra 10 h/$60, admin-editable per plan; desktop Urdu UI later (after v2.0). Release 1.8.1 now includes the Windows start-up stall fix (4a5628b2).
