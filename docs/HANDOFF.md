@@ -1071,3 +1071,7 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   from screen share); prepared meetings only offer, never start; the After a call setting (ask / always transcribe /
   always audio, 12 s → audio only, a one-time notice for former "keep" users); Capture now (Ctrl/⌘+Alt+S);
   trash_keep_hours; callerName and the screens count.
+- Disk: to keep builds running, build outputs (Rust target folders) were deleted and nine finished worktrees were
+  removed (b-web-181, b-web-fix, b-desktop, b-desktop-reopen, b-web, review-a, -dock, -sign, -desk2). Their branches
+  stay in git; `git worktree add .claude/worktrees/<name> <branch>` brings any of them back. Nothing tracked was
+  deleted.
