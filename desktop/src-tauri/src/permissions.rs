@@ -667,24 +667,51 @@ mod tests {
         false
     }
 
-    /// Every place a guard on `field` is alive while something that locks `field` again runs: a temporary guard and
-    /// such a call in one statement (a struct literal's fields, an argument list), or a bound guard and such a call
-    /// later in its block.
-    fn guards_alive_while_locked_again(field: &str) -> (Vec<String>, usize) {
+    /// The app's own sources, parsed (`tests.rs` files left out).
+    fn app_files() -> Vec<(String, syn::File)> {
         fn files(dir: &std::path::Path, out: &mut Vec<(String, syn::File)>) {
             for entry in std::fs::read_dir(dir).unwrap().flatten() {
                 let path = entry.path();
                 if path.is_dir() {
                     files(&path, out);
                 } else if path.extension().is_some_and(|e| e == "rs") && path.file_name().is_some_and(|n| n != "tests.rs") {
-                    out.push((path.display().to_string(), syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap()));
+                    let name = path.display().to_string();
+                    out.push((name.rsplit("/src/").next().unwrap_or(&name).to_string(), syn::parse_file(&std::fs::read_to_string(&path).unwrap()).unwrap()));
                 }
             }
         }
         let mut all = Vec::new();
         files(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut all);
+        all
+    }
+
+    /// The app's sources: [`guards_alive_in`].
+    fn guards_alive_while_locked_again(field: &str) -> (Vec<String>, usize) {
+        guards_alive_in(&app_files(), field)
+    }
+
+    /// The calls (by name) anywhere in an expression, nested blocks included.
+    fn all_calls_in(field: &str, e: &syn::Expr) -> Vec<String> {
+        calls_in(field, |c| syn::visit::Visit::visit_expr(c, e)).names
+    }
+
+    /// How many times an expression itself locks the field (its nested blocks left out).
+    fn locks_in(field: &str, e: &syn::Expr) -> usize {
+        calls_in(field, |c| {
+            (c.shallow, c.depth) = (true, 1);
+            syn::visit::Visit::visit_expr(c, e)
+        })
+        .field_locks
+    }
+
+    /// Every place a guard on `field` is alive while something that locks `field` again runs (pure, over parsed
+    /// files): a temporary guard and such a call in one statement (a struct literal's fields, an argument list); a
+    /// bound guard and such a call later in its block; or a guard in an `if let`, `while let` or `match` scrutinee and
+    /// such a call in the block it guards (edition 2024: an `if let`'s guard is gone in its `else`, a `match`'s lives
+    /// through every arm). Gives the findings and how many locks of the field it saw.
+    fn guards_alive_in(all: &[(String, syn::File)], field: &str) -> (Vec<String>, usize) {
         let mut locks = Locks { field, calls: Default::default(), locks: Default::default(), defined: Default::default(), current: Vec::new() };
-        for (_, file) in &all {
+        for (_, file) in all {
             syn::visit::Visit::visit_file(&mut locks, file);
         }
         let lockers = locks.lockers();
@@ -702,6 +729,25 @@ mod tests {
                 if !test {
                     syn::visit::visit_item_mod(self, m);
                 }
+            }
+            fn visit_expr_if(&mut self, e: &'ast syn::ExprIf) {
+                if let syn::Expr::Let(l) = &*e.cond {
+                    let guarded = syn::Expr::Block(syn::ExprBlock { attrs: Vec::new(), label: None, block: e.then_branch.clone() });
+                    self.scrutinee("if let", &l.expr, &[&guarded]);
+                }
+                syn::visit::visit_expr_if(self, e);
+            }
+            fn visit_expr_while(&mut self, e: &'ast syn::ExprWhile) {
+                if let syn::Expr::Let(l) = &*e.cond {
+                    let guarded = syn::Expr::Block(syn::ExprBlock { attrs: Vec::new(), label: None, block: e.body.clone() });
+                    self.scrutinee("while let", &l.expr, &[&guarded]);
+                }
+                syn::visit::visit_expr_while(self, e);
+            }
+            fn visit_expr_match(&mut self, e: &'ast syn::ExprMatch) {
+                let arms: Vec<&syn::Expr> = e.arms.iter().map(|a| &*a.body).collect();
+                self.scrutinee("match", &e.expr, &arms);
+                syn::visit::visit_expr_match(self, e);
             }
             fn visit_block(&mut self, block: &'ast syn::Block) {
                 for (i, stmt) in block.stmts.iter().enumerate() {
@@ -729,12 +775,91 @@ mod tests {
                 syn::visit::visit_block(self, block);
             }
         }
+        impl Blocks<'_, '_> {
+            /// A scrutinee that locks the field: its guard lives through `guarded`.
+            fn scrutinee(&mut self, kind: &str, scrutinee: &syn::Expr, guarded: &[&syn::Expr]) {
+                if locks_in(self.field, scrutinee) == 0 {
+                    return;
+                }
+                let again: Vec<String> = guarded.iter().flat_map(|e| all_calls_in(self.field, e)).filter(|n| self.lockers.contains(n)).collect();
+                let twice = guarded.iter().any(|e| calls_in(self.field, |c| syn::visit::Visit::visit_expr(c, e)).field_locks > 0);
+                if !again.is_empty() || twice {
+                    let text = quote::ToTokens::to_token_stream(scrutinee).to_string();
+                    self.found.push(format!("{}: {} lock again while its {kind} guard lives ({again:?}{}): {}", self.file, self.field, if twice { ", locked again inside" } else { "" }, &text[..text.len().min(160)]));
+                }
+            }
+        }
         let mut blocks = Blocks { field, lockers: &lockers, file: String::new(), found: Vec::new(), sites: 0 };
-        for (path, file) in &all {
-            blocks.file = path.rsplit("/src/").next().unwrap_or(path).to_string();
+        for (path, file) in all {
+            blocks.file.clone_from(path);
             syn::visit::Visit::visit_file(&mut blocks, file);
         }
         (blocks.found, blocks.sites)
+    }
+
+    /// The app's two lockers as they are, then `body`: what the checker says about it.
+    fn checked(body: &str) -> Vec<String> {
+        let source = format!(
+            "impl AppState {{
+                fn permission_memory_now(&self) -> Memory {{ self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).clone() }}
+                fn permissions_allowed_before(&self, now: &Permissions) -> Vec<Kind> {{ self.permission_memory_now().allowed_before(now, true) }}
+            }}
+            {body}"
+        );
+        guards_alive_in(&[("sample.rs".into(), syn::parse_file(&source).unwrap())], "permission_memory").0
+    }
+
+    #[test]
+    fn the_checker_reports_a_guard_alive_while_the_memory_is_locked_again() {
+        // The struct literal that froze the app.
+        let literal = checked(
+            "fn status(state: &AppState, now: &Permissions) -> Status {
+                Status {
+                    lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(true),
+                    allowed_before: state.permissions_allowed_before(now),
+                }
+            }",
+        );
+        assert_eq!(literal.len(), 1, "{literal:?}");
+        assert!(literal[0].contains("permissions_allowed_before"), "{literal:?}");
+        // A guard bound by a let, then a locker later in its block.
+        let bound = checked(
+            "fn status(state: &AppState, now: &Permissions) {
+                let memory = state.permission_memory.lock().unwrap();
+                let lost = memory.sentence(true);
+                let before = state.permissions_allowed_before(now);
+            }",
+        );
+        assert_eq!(bound.len(), 1, "{bound:?}");
+        // Guards in a scrutinee: if let, while let, match.
+        for body in [
+            "fn f(state: &AppState, now: &Permissions) { if let Some(k) = state.permission_memory.lock().unwrap().notice.first() { state.permissions_allowed_before(now); } }",
+            "fn f(state: &AppState, now: &Permissions) { while let Some(k) = state.permission_memory.lock().unwrap().notice.pop() { state.permissions_allowed_before(now); } }",
+            "fn f(state: &AppState, now: &Permissions) { match state.permission_memory.lock().unwrap().notice.len() { 0 => {} _ => { state.permissions_allowed_before(now); } } }",
+            "fn f(state: &AppState) { match state.permission_memory.lock().unwrap().notice.len() { 0 => {} _ => { let m = state.permission_memory.lock().unwrap(); } } }",
+        ] {
+            assert_eq!(checked(body).len(), 1, "{body}");
+        }
+    }
+
+    #[test]
+    fn the_checker_passes_copies_and_guards_that_are_gone() {
+        // Two copies in one literal: each lock is let go before the next.
+        assert!(checked(
+            "fn status(state: &AppState, now: &Permissions) -> Status {
+                Status { lost: state.permission_memory_now().sentence(true), seen: state.permission_memory_now().seen() }
+            }"
+        )
+        .is_empty());
+        // A guard in its own statement, then the locker; and an if let's guard is gone in its else (edition 2024).
+        assert!(checked(
+            "fn status(state: &AppState, now: &Permissions) {
+                let lost = state.permission_memory.lock().unwrap().sentence(true);
+                let before = state.permissions_allowed_before(now);
+                if let Some(k) = state.permission_memory.lock().unwrap().notice.first() { } else { state.permissions_allowed_before(now); }
+            }"
+        )
+        .is_empty());
     }
 
     #[test]

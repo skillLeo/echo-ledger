@@ -161,10 +161,9 @@ impl AppState {
     fn load(data_dir: PathBuf, smoke: bool) -> Self {
         let settings = Settings::load(&data_dir.join("settings.json"));
         let token_store: Box<dyn TokenStore> = if smoke { Box::new(MemoryStore::default()) } else { Box::new(KeyringStore) };
-        let token = token_store.load().unwrap_or_else(|e| {
-            eprintln!("[echoledger] keychain unavailable: {e}");
-            None
-        });
+        // The token is read by `load_token`, once this state is managed: the keychain may wait on its prompt (a build
+        // without a Developer ID), and nothing that asks for the state may find it missing meanwhile.
+        let token = None;
         let library = LibraryCache::load(&paths::library(&data_dir));
         let settings_locked = settings.app_lock && lock::LockFile::load(&paths::app_lock(&data_dir)).pin_hash.is_some();
         let permission_memory = permissions::Memory::load(&permissions::Memory::path(&data_dir));
@@ -221,6 +220,16 @@ impl AppState {
             ready_wake: tokio::sync::Notify::new(),
             notify_ready: Mutex::new(std::collections::HashSet::new()),
         }
+    }
+
+    /// Reads the account's token from the keychain (it may wait on the keychain's prompt): right after the state is
+    /// managed, in the setup.
+    pub fn load_token(&self) {
+        let token = self.token_store.load().unwrap_or_else(|e| {
+            eprintln!("[echoledger] keychain unavailable: {e}");
+            None
+        });
+        *self.token.lock().unwrap_or_else(|p| p.into_inner()) = token;
     }
 
     pub fn settings(&self) -> Settings {
@@ -418,6 +427,8 @@ pub fn run() {
             };
             std::fs::create_dir_all(paths::recordings(&data_dir))?;
             app.manage(AppState::load(data_dir, smoke_test));
+            // Managed first, then the keychain (it may wait on its prompt): a second launch meanwhile finds the state.
+            app.state::<AppState>().load_token();
             let handle = app.handle().clone();
             // The smoke test opens the windows and quits (smoke.rs): nothing below this runs in it.
             if smoke_test {
@@ -498,6 +509,8 @@ pub fn run() {
             // v1.5). A sign-in link that starts the app finds no sign-in waiting (its verifier was in the memory of the
             // run that opened the browser) and says so.
             actions::handle_links(&handle, &std::env::args().collect::<Vec<_>>());
+            // Started: a second launch or a reopen that came during the start-up is answered now.
+            actions::started(&handle);
             Ok(())
         })
         .on_window_event(|window, event| {
