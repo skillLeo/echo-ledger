@@ -8,6 +8,7 @@ use App\Models\Screen;
 use App\Services\Screens\ScreenSimilarity;
 use App\Services\Screens\ScreenStore;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Tests\Feature\Api\Support\Fixtures;
 use Tests\Feature\Api\Support\InteractsWithDeviceApi;
 
@@ -216,39 +217,68 @@ function lowMemoryLimit(): string
     return $megabytes.'M';
 }
 
-it('stores a 25 megapixel screen on a server with a 128M memory limit, raising it to decode', function () {
+it('stores a 25 megapixel screen on a server with a 128M memory limit, and puts the limit back', function () {
     // GD counts its pixels toward memory_limit only when PHP is built with its own (bundled) GD, as many servers are;
-    // a system libgd (Homebrew's) does not, so the raise itself is checked too.
+    // a system libgd (Homebrew's) does not, so the raise itself is checked below too.
     $bytes = largePng(5000, 5000);
     $limit = ini_get('memory_limit');
     try {
-        expect(ini_set('memory_limit', lowMemoryLimit()))->not->toBeFalse();
+        $low = lowMemoryLimit();
+        expect(ini_set('memory_limit', $low))->not->toBeFalse();
         $response = $this->post("/api/sessions/{$this->session->id}/screens", [
             'image' => UploadedFile::fake()->createWithContent('screen.png', $bytes),
             'at_ms' => 1000, 'width' => 5000, 'height' => 5000, 'trigger' => 'change', 'sha256' => hash('sha256', $bytes),
         ], ['Accept' => 'application/json']);
-        $during = ini_get('memory_limit');
+        $after = ini_get('memory_limit');
     } finally {
         ini_set('memory_limit', (string) $limit);
     }
     $response->assertCreated();
-    expect(Screen::query()->withoutGlobalScopes()->count())->toBe(1)->and($during)->toBe((string) ScreenStore::DECODE_MEMORY);
+    expect(Screen::query()->withoutGlobalScopes()->count())->toBe(1)->and($after)->toBe($low);
 });
 
-it('raises a lower memory limit to 512M for decoding, and leaves a higher or no limit alone', function () {
+it('decodes with the memory limit raised to 512M and put back after, a higher or no limit left alone', function () {
     $limit = ini_get('memory_limit');
     try {
-        $after = [];
+        $seen = [];
         $low = lowMemoryLimit();
         foreach ([$low, ((int) $low * 1024).'K', '2G', '-1'] as $set) {
             ini_set('memory_limit', $set);
-            ScreenStore::roomToDecode();
-            $after[] = ini_get('memory_limit');
+            $seen[] = [ScreenStore::decoding(fn () => ini_get('memory_limit')), ini_get('memory_limit')];
         }
+        // Put back after a failure too.
+        ini_set('memory_limit', $low);
+        expect(fn () => ScreenStore::decoding(fn () => throw new RuntimeException('broken picture')))->toThrow(RuntimeException::class);
+        $afterFailure = ini_get('memory_limit');
     } finally {
         ini_set('memory_limit', (string) $limit);
     }
-    expect($after)->toBe([(string) ScreenStore::DECODE_MEMORY, (string) ScreenStore::DECODE_MEMORY, '2G', '-1']);
+    $raised = (string) ScreenStore::DECODE_MEMORY;
+    expect($seen)->toBe([[$raised, $low], [$raised, ((int) $low * 1024).'K'], ['2G', '2G'], ['-1', '-1']])->and($afterFailure)->toBe($low);
+});
+
+it('decodes at most 2 pictures at a time: a third waits, then answers 503 server_busy', function () {
+    config(['echoledger.picture_decodes.wait_seconds' => 0.3]);
+    $held = [Cache::lock('pictures:decode:0', 60), Cache::lock('pictures:decode:1', 60)];
+    expect($held[0]->get())->toBeTrue()->and($held[1]->get())->toBeTrue();
+    $started = microtime(true);
+    try {
+        ScreenStore::decoding(fn () => 'decoded');
+        $this->fail('A third decode ran.');
+    } catch (ApiError $e) {
+        expect($e->getStatusCode())->toBe(503)->and($e->apiCode())->toBe('server_busy')->and(microtime(true) - $started)->toBeGreaterThan(0.25);
+    }
+    // A slot freed: the next one runs, and frees its slot after.
+    $held[1]->release();
+    expect(ScreenStore::decoding(fn () => 'decoded'))->toBe('decoded')
+        ->and(Cache::lock('pictures:decode:1', 60)->get())->toBeTrue();
+    // Through the API: the screen is not kept, and the app can send it again.
+    $response = $this->post("/api/sessions/{$this->session->id}/screens", [
+        'image' => UploadedFile::fake()->createWithContent('screen.webp', $bytes = appScreen(orders())),
+        'at_ms' => 1000, 'width' => 1920, 'height' => 1080, 'trigger' => 'change', 'sha256' => hash('sha256', $bytes),
+    ], ['Accept' => 'application/json']);
+    $response->assertStatus(503)->assertJsonPath('code', 'server_busy')->assertHeader('Retry-After', '5');
+    expect(Screen::query()->withoutGlobalScopes()->count())->toBe(0);
 });
 
 it('keeps at most 120 screens in any hour of a recording, on top of 400 in all', function () {
