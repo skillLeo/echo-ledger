@@ -64,14 +64,12 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -104,6 +102,8 @@ import com.echoledger.mobile.core.SharedNotes
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.dictation.DictationHistory
 import com.echoledger.mobile.recording.RecordingService
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 import java.time.LocalDate
 
 private fun pageIcon(id: String): ImageVector = when (id) {

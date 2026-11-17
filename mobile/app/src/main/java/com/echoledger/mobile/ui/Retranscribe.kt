@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -20,6 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.LibraryItem
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /** Which version of the transcript the recording screen shows: the newest (the default) or the previous one. */

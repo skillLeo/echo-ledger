@@ -20,7 +20,6 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -44,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import com.echoledger.mobile.core.Languages
 import com.echoledger.mobile.data.SearchItemDto
+import com.echoledger.mobile.ui.design.OutlinedTextField
 import java.io.File
 import kotlinx.coroutines.launch
 

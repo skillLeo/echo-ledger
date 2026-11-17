@@ -44,7 +44,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -96,6 +95,7 @@ import com.echoledger.mobile.ui.design.InlineBanner
 import com.echoledger.mobile.ui.design.SectionHeader
 import com.echoledger.mobile.ui.design.SettingsRow
 import com.echoledger.mobile.ui.design.SourceAppTile
+import com.echoledger.mobile.ui.design.TextButton
 import com.echoledger.mobile.ui.design.tabular
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch

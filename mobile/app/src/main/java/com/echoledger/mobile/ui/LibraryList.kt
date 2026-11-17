@@ -27,9 +27,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,6 +50,8 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.CompactBarIcon
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 
 /** The Library's filter facets (since v1.3): one chip each; a chip opens a sheet of choices with Clear and Apply. */
 enum class Facet(val label: String) {

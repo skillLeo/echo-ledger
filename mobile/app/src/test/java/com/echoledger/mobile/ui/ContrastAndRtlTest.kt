@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.test.core.app.ApplicationProvider
+import com.echoledger.mobile.ui.design.ReadableAccent
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -35,22 +36,52 @@ class ContrastAndRtlTest {
     }
 
     @Test
-    fun `dark mode's stock text buttons are 4_5 to 1 or more on the page, on cards and in dialogs`() {
-        val scheme = DarkColors.toScheme()
-        listOf(DarkColors.bg, DarkColors.surface, DarkColors.surface2, DarkColors.surface3).forEach { under ->
-            assertTrue("primary on $under: ${contrast(scheme.primary, under)}", contrast(scheme.primary, under) >= 4.5f)
-        }
-        assertTrue("a stock filled button's text", contrast(scheme.onPrimary, scheme.primary) >= 4.5f)
-        // Light mode keeps its brand primary, which already passes on white.
+    fun `dark mode's text buttons and focused labels reach 7 to 1, while the scheme's primary stays the brand fill`() {
+        // Filled buttons, switches, checkboxes, radios, sliders and progress keep the brand colour in both themes.
+        assertEquals(DarkColors.accentStrong, DarkColors.toScheme().primary)
+        assertEquals(DarkColors.onAccent, DarkColors.toScheme().onPrimary)
         assertEquals(LightColors.accentStrong, LightColors.toScheme().primary)
-        assertTrue(contrast(LightColors.toScheme().primary, LightColors.surface) >= 4.5f)
+        assertEquals(LightColors.onAccent, LightColors.toScheme().onPrimary)
+
+        val words = ReadableAccent.of(DarkColors)
+        listOf(DarkColors.bg, DarkColors.surface, DarkColors.surface2, DarkColors.surface3).forEach { under ->
+            // As contrast checkers report it, to one decimal: 7.0:1 on the lightest dark surface, more on the others.
+            val ratio = kotlin.math.round(contrast(words, under) * 10) / 10
+            assertTrue("text button words on $under: $ratio", ratio >= 7f)
+        }
+        // The brand fill as words was the bug: under 4.5 to 1 on the dark page.
+        assertTrue(contrast(DarkColors.accentStrong, DarkColors.bg) < 4.5f)
+        // Light mode keeps its brand colour, which passes on white.
+        assertEquals(LightColors.accentStrong, ReadableAccent.of(LightColors))
+        assertTrue(contrast(ReadableAccent.of(LightColors), LightColors.surface) >= 4.5f)
+    }
+
+    @Test
+    fun `the classic screens use the readable text button and field, never Material's own`() {
+        val material =
+            Regex(
+                """import androidx\.compose\.material3\.(TextButton|OutlinedTextField)$|androidx\.compose\.material3\.(TextButton|OutlinedTextField)\(""",
+                RegexOption.MULTILINE
+            )
+        val offenders = java.io.File("src/main/java/com/echoledger/mobile").walkTopDown()
+            .filter { it.extension == "kt" && "/ui/v2/" !in it.path && it.name != "ReadableAccent.kt" }
+            .filter { material.containsMatchIn(it.readText()) }
+            .map { it.name }.toList()
+        assertEquals(emptyList<String>(), offenders)
     }
 
     @Test
     fun `right to left, a touch counts from the right where the track starts`() {
+        // The exact ends: left to right the track starts at x = 0; right to left it starts at x = width.
+        assertEquals(0f, ScrubberMath.fraction(0f, 100, rtl = false), 0f)
+        assertEquals(1f, ScrubberMath.fraction(100f, 100, rtl = false), 0f)
+        assertEquals(1f, ScrubberMath.fraction(0f, 100, rtl = true), 0f)
+        assertEquals(0f, ScrubberMath.fraction(100f, 100, rtl = true), 0f)
         assertEquals(0.1f, ScrubberMath.fraction(10f, 100, rtl = false), 0.001f)
         assertEquals(0.9f, ScrubberMath.fraction(10f, 100, rtl = true), 0.001f)
-        assertEquals(0f, ScrubberMath.fraction(150f, 100, rtl = true), 0.001f)
+        // A finger past either end stays at that end.
+        assertEquals(0f, ScrubberMath.fraction(150f, 100, rtl = true), 0f)
+        assertEquals(1f, ScrubberMath.fraction(-20f, 100, rtl = true), 0f)
 
         val state = RecordingPlayerState(ApplicationProvider.getApplicationContext())
         state.knownMs = 100_000

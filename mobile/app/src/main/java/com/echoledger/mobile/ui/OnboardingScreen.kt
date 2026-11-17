@@ -26,7 +26,6 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,6 +53,7 @@ import com.echoledger.mobile.core.OnboardingStep
 import com.echoledger.mobile.core.PhoneBrand
 import com.echoledger.mobile.recording.CaptureHealth
 import com.echoledger.mobile.recording.MicTestResult
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /**

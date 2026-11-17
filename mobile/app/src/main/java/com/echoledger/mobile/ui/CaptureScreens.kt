@@ -41,12 +41,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +90,8 @@ import com.echoledger.mobile.ui.design.ButtonKind
 import com.echoledger.mobile.ui.design.EchoButton
 import com.echoledger.mobile.ui.design.EchoFilterChip
 import com.echoledger.mobile.ui.design.InlineBanner
+import com.echoledger.mobile.ui.design.OutlinedTextField
+import com.echoledger.mobile.ui.design.TextButton
 import kotlinx.coroutines.launch
 
 /** Sends an action to the running recording service (pause, resume, mark, tag, undo). */
