@@ -448,6 +448,8 @@ export default function MainApp() {
   const entitlements = useEntitlements();
   // "Add my Groq key" on a recording (and other places): Settings → Account → that section.
   const [settingsSection, setSettingsSection] = useState<{ id: string; seq: number } | null>(null);
+  /** Counts the times Settings was pressed again while open: the v2 Settings starts again from its list. */
+  const [settingsVisit, setSettingsVisit] = useState(0);
   const [libraryViewV2, setLibraryViewV2] = useState<{ view: "untranscribed"; seq: number } | null>(null);
   useEffect(() => {
     const open = (e: Event) => {
@@ -643,7 +645,17 @@ export default function MainApp() {
     setSharedTab(next);
   };
   /** A page from the sidebar or the command palette: the whole Library, the list of projects, or another page. */
-  const goTo = (id: Tab) => (id === "projects" ? openProject(null) : id === "library" ? openFolder(null) : setTab(id));
+  const goTo = (id: Tab) => {
+    // Settings again from inside one of its pages (the sidebar's Settings or the profile button): its list, not nothing.
+    if (id === "settings" && tab === "settings") {
+      setSettingsSection(null);
+      setSettingsVisit((n) => n + 1);
+      return;
+    }
+    if (id === "projects") openProject(null);
+    else if (id === "library") openFolder(null);
+    else setTab(id);
+  };
   /** Where a notice goes when it is clicked (v1.6.1): the recording, the page or setting, the fix. */
   goRef.current = (target: NoticeTarget) => {
     switch (target.kind) {
@@ -796,7 +808,7 @@ export default function MainApp() {
       {tab === "settings" && ui.flags["ui_v2.settings"] && (
         <Suspense fallback={null}>
           <div className="el-root el-embedded">
-            <SettingsV2 available={settingsAvailable} section={settingsSection} onSignOut={() => void signOut()} setupHealth={ui.flags["ui_v2.setup_health"]}
+            <SettingsV2 key={settingsVisit} available={settingsAvailable} section={settingsSection} onSignOut={() => void signOut()} setupHealth={ui.flags["ui_v2.setup_health"]}
               footer={<ClassicSwitchV2 state={ui} onState={setUi} />}
               renderPage={(section, onHome) => section.id === "setup_health" && ui.flags["ui_v2.setup_health"]
                 ? <SetupHealthV2 platform={status.platform} onBack={onHome} />

@@ -190,6 +190,34 @@ export function strayCalls(sources: Record<string, string>, awaited: readonly Aw
   return stray;
 }
 
+/** Source files other than lib/ipc.ts that call Tauri's invoke, or import it to call it (aliased or not). */
+export function invokeOutsideIpc(sources: Record<string, string>): string[] {
+  const calls = /(^|[^\w.])invoke\s*(<[^>]*>)?\s*\(/m;
+  const imports = /import\s*\{[^}]*\binvoke\b[^}]*\}\s*from\s*["']@tauri-apps\/api\/core["']/;
+  const namespace = /import\s*\*\s*as\s+\w+\s+from\s*["']@tauri-apps\/api\/core["']/;
+  return Object.entries(sources)
+    .filter(([path, text]) => path !== "lib/ipc.ts" && (calls.test(text) || imports.test(text) || namespace.test(text)))
+    .map(([path]) => path).sort();
+}
+
+describe("every command goes through lib/ipc.ts", () => {
+  // So each one is held to the core's commands and arguments, and to the awaited-list rules, by the tests here.
+  it("no file under src/ but lib/ipc.ts calls invoke(", () => {
+    expect(invokeOutsideIpc(appSources)).toEqual([]);
+  });
+
+  it("finds a call, a typed call, an import of it and the module imported whole; a wrapper's name is not a call", () => {
+    expect(invokeOutsideIpc({
+      "lib/ipc.ts": 'invoke<string>("x")',
+      "a.ts": 'await invoke("app_status");',
+      "b.tsx": 'const s = await invoke<Settings>("get_settings");',
+      "c.ts": 'import { invoke as call } from "@tauri-apps/api/core";',
+      "d.ts": 'import * as core from "@tauri-apps/api/core";',
+      "e.ts": "api.invokeLater(); x.invoke(); invokeAll();",
+    })).toEqual(["a.ts", "b.tsx", "c.ts", "d.ts"]);
+  });
+});
+
 describe("commands awaited from the core are called only where their fallback says", () => {
   it("finds the app's sources and each awaited command's wrappers", () => {
     expect(Object.keys(appSources)).toContain("lib/ipc.ts");
