@@ -1,8 +1,9 @@
-//! Screen-share privacy (v1.8.1): one service owns the capture flag of every EchoLedger window. Each window is
-//! registered with its kind before it is built ([`prepare`] sets the flag on the builder, so it holds before the first
-//! show) and gets the flag again whenever the setting changes ([`apply_all`]). The setting "Hide EchoLedger from screen
-//! sharing" chooses every window (default), only the floating ones, or none; the tray's "Show EchoLedger in screen
-//! share for 10 minutes" lifts it for a demo and returns to it by itself.
+//! Screen-share privacy (v1.8.1, per window since v2.0): one service owns the capture flag of every EchoLedger window.
+//! Each window is registered with its kind before it is built ([`prepare`] sets the flag on the builder, so it holds
+//! before the first show) and gets the flag again whenever a choice changes ([`apply_all`]). Since v2.0 ([`share`]):
+//! the main window is shown in screen shares unless the person hides it for a time they choose; the Live Assist card and
+//! the captions are hidden unless the person shows that one window, on that window; the other floating windows follow
+//! "Hide from screen shares" (`hideFromSharing`), which Settings' 10-minute demo lifts for them alone.
 //!
 //! Scope (permanent): EchoLedger leaves its own windows out of screen shares and nothing else. It never renames its
 //! process, never leaves window lists, the Dock or task switchers, and does nothing about proctoring apps, lockdown
@@ -21,6 +22,7 @@ pub mod capture;
 pub mod check;
 pub mod diag;
 pub mod pixels;
+pub mod share;
 pub mod status;
 pub mod watch;
 pub mod win;
@@ -39,10 +41,14 @@ use crate::settings::{Settings, ShareHiding};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Kind {
-    /// The main window: hidden from shares when the setting is "All EchoLedger windows".
+    /// The main window: shown in shares unless the person hid it ([`share::MainHide`]).
     Main,
-    /// Captions, dictation, the pill, the after-call card, Live Translate, the Assist card, any later overlay.
+    /// Dictation, the pill, the after-call card, Live Translate, any later overlay: they follow `hideFromSharing`.
     Floating,
+    /// The Live Assist answer card: hidden from shares unless the person showed it, on the card.
+    Card,
+    /// The live captions: hidden from shares unless the person showed them, on the captions.
+    Captions,
     /// The Share Check's test window and the guided test card: always protected, like a floating window would be.
     Test,
     /// The Share Check's control window: never protected, so the capture must show it.
@@ -59,16 +65,65 @@ pub const GUIDED_CARD: &str = "share-check-card";
 /// unknown label is refused there in debug builds, so it cannot be forgotten).
 pub const KNOWN: [(&str, Kind); 10] = [
     (crate::lifecycle::MAIN, Kind::Main),
-    (crate::overlay::OVERLAY, Kind::Floating),
+    (crate::overlay::OVERLAY, Kind::Captions),
     (crate::overlay::DICTATION, Kind::Floating),
     (crate::overlay::PILL, Kind::Floating),
     (crate::overlay::REVIEW, Kind::Floating),
     (crate::translate::WINDOW, Kind::Floating),
-    (ASSIST, Kind::Floating),
+    (ASSIST, Kind::Card),
     (CHECK_TEST, Kind::Test),
     (CHECK_CONTROL, Kind::Control),
     (GUIDED_CARD, Kind::Test),
 ];
+
+/// The kind a window is built with: its entry in [`KNOWN`], else a floating window.
+pub fn kind_for(label: &str) -> Kind {
+    KNOWN.iter().find(|(l, _)| *l == label).map_or(Kind::Floating, |(_, k)| *k)
+}
+
+/// Every choice that decides whether a window is left out of screen shares, at one moment.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Choice {
+    /// `hideFromSharing`: the other floating windows.
+    pub hiding: ShareHiding,
+    /// Settings' 10-minute demo: the other floating windows only.
+    pub demo: bool,
+    /// The person hid the main window, and its time has not come.
+    pub main_hidden: bool,
+    /// The person showed the Live Assist card in screen shares, on the card.
+    pub show_card: bool,
+    /// The person showed the captions in screen shares, on the captions.
+    pub show_captions: bool,
+}
+
+impl Choice {
+    pub fn of(settings: &Settings, demo: bool, now_ms: i64) -> Self {
+        Self {
+            hiding: settings.hide_from_sharing,
+            demo,
+            main_hidden: share::main_hidden(settings.main_share_hide.as_ref(), now_ms),
+            show_card: settings.show_card_in_shares,
+            show_captions: settings.show_captions_in_shares,
+        }
+    }
+
+    /// The safety net has something to keep out of a whole-screen share: a window other than the main one is hidden.
+    pub fn any_floating_hidden(&self) -> bool {
+        [Kind::Floating, Kind::Card, Kind::Captions].into_iter().any(|k| protected(k, self))
+    }
+}
+
+/// Now, by the wall clock (Unix milliseconds).
+pub fn now_ms() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
+/// The choices now.
+pub fn choice_now<R: Runtime>(app: &AppHandle<R>) -> Choice {
+    let demo = app.try_state::<Privacy>().is_some_and(|p| p.demo_active(Instant::now()));
+    let now = now_ms();
+    app.try_state::<crate::AppState>().map_or_else(|| Choice::of(&Settings::default(), demo, now), |s| s.settings_with(|s| Choice::of(s, demo, now)))
+}
 
 /// How long the tray's demo lasts.
 pub const DEMO: Duration = Duration::from_secs(10 * 60);
@@ -137,16 +192,19 @@ pub fn window_name(label: &str) -> &'static str {
     }
 }
 
-/// Whether a window of `kind` is left out of screen shares (pure). Live Translate follows the floating windows: its
-/// history (`git log -S create_translate_window`) shows the window was built unprotected with the same builder and no
-/// reason given, not as a choice, so it follows the setting like the others.
-pub fn protected(kind: Kind, hiding: ShareHiding, demo: bool) -> bool {
+/// Whether a window of `kind` is left out of screen shares (pure). The main window only while the person hides it; the
+/// Live Assist card and the captions always, unless the person showed that one window (no other choice, the demo
+/// included, ever shows them); the other floating windows by `hideFromSharing` and the demo. Live Translate follows the
+/// floating windows: its history (`git log -S create_translate_window`) shows the window was built unprotected with the
+/// same builder and no reason given, not as a choice, so it follows the setting like the others.
+pub fn protected(kind: Kind, choice: &Choice) -> bool {
     match kind {
         Kind::Test => true,
         Kind::Control => false,
-        _ if demo => false,
-        Kind::Floating => hiding != ShareHiding::Off,
-        Kind::Main => hiding == ShareHiding::All,
+        Kind::Main => choice.main_hidden,
+        Kind::Card => !choice.show_card,
+        Kind::Captions => !choice.show_captions,
+        Kind::Floating => !choice.demo && choice.hiding != ShareHiding::Off,
     }
 }
 
@@ -161,13 +219,16 @@ pub enum HideReason {
 }
 
 /// Whether a window of `kind` must be off the screen for these reasons (pure): "Hide EchoLedger windows" takes every
-/// one off; a whole-screen share the floating windows, and the main window only when it is hidden from screen share too
-/// ("All EchoLedger windows") and the person did not open it during the share (`main_asked`, see
-/// [`Privacy::person_opened`]). The Share Check's windows are never put away.
-pub fn away(kind: Kind, reasons: &BTreeSet<HideReason>, hiding: ShareHiding, main_asked: bool) -> bool {
+/// one off; a whole-screen share the floating windows, the Live Assist card and the captions unless the person showed
+/// them in screen shares, and the main window only while the person hides it from screen shares and did not open it
+/// during the share (`main_asked`, see [`Privacy::person_opened`]). The Share Check's windows are never put away.
+pub fn away(kind: Kind, reasons: &BTreeSet<HideReason>, choice: &Choice, main_asked: bool) -> bool {
+    let person = reasons.contains(&HideReason::Person);
+    let share = reasons.contains(&HideReason::Share);
     match kind {
         Kind::Floating => !reasons.is_empty(),
-        Kind::Main => reasons.contains(&HideReason::Person) || (reasons.contains(&HideReason::Share) && hiding == ShareHiding::All && !main_asked),
+        Kind::Card | Kind::Captions => person || (share && protected(kind, choice)),
+        Kind::Main => person || (share && choice.main_hidden && !main_asked),
         Kind::Test | Kind::Control => false,
     }
 }
@@ -190,8 +251,8 @@ pub struct Opened {
 /// Whether the windows the system makes in EchoLedger's process are left out of screen share (pure): TextInputUI's
 /// `TUINSWindow` (the Caps Lock and input-language indicator next to the text cursor), a tooltip, a menu. They sit over
 /// EchoLedger's own windows, so they follow the floating windows.
-pub fn others_protected(hiding: ShareHiding, demo: bool) -> bool {
-    protected(Kind::Floating, hiding, demo)
+pub fn others_protected(choice: &Choice) -> bool {
+    protected(Kind::Floating, choice)
 }
 
 /// The command that puts a window away or back on Windows (pure; `ShowWindow`'s values): `SW_HIDE`, then `SW_SHOWNA`,
@@ -224,6 +285,10 @@ pub struct Privacy {
     guided_answers: AtomicU64,
     /// How many whole-screen shares took the windows off in this run: the main window's notice belongs to one share.
     shares: AtomicU64,
+    /// Ends the main window's hide by itself ([`spawn_main_hide_timer`]).
+    pub hide_timer: Mutex<share::MainHideTimer>,
+    /// macOS: windows whose flag the system refused to set when EchoLedger last set it (the badge says it couldn't hide).
+    pub set_failed: Mutex<BTreeSet<String>>,
     /// The safety net's last look saw a sharing bar on screen: "Show EchoLedger windows" can't bring them back now.
     bar_on_screen: AtomicBool,
 }
@@ -277,8 +342,8 @@ impl Privacy {
     }
 
     /// Whether `label` should be left out of shares now (none for a window that never registered).
-    pub fn wants(&self, label: &str, settings: &Settings, now: Instant) -> Option<bool> {
-        Some(protected(self.kind_of(label)?, settings.hide_from_sharing, self.demo_active(now)))
+    pub fn wants(&self, label: &str, settings: &Settings, now: Instant, now_ms: i64) -> Option<bool> {
+        Some(protected(self.kind_of(label)?, &Choice::of(settings, self.demo_active(now), now_ms)))
     }
 
     /// Adds or removes a reason to keep the windows off the screen; true when that changed whether the floating windows
@@ -339,13 +404,14 @@ impl Privacy {
     /// The main window may come on screen now: nothing keeps it off, or the person opened it during the share. A quiet
     /// open (something the person did not ask to see it for) never counts their open: it stays off while a reason keeps
     /// the main window off.
-    pub fn may_show_main(&self, hiding: ShareHiding, quiet: bool) -> bool {
-        !away(Kind::Main, &self.reasons(), hiding, self.main_asked() && !quiet)
+    pub fn may_show_main(&self, choice: &Choice, quiet: bool) -> bool {
+        !away(Kind::Main, &self.reasons(), choice, self.main_asked() && !quiet)
     }
 
-    /// The main window is on screen during a whole-screen share because the person opened it: it says so.
-    pub fn main_in_share(&self, hiding: ShareHiding) -> bool {
-        self.hidden_for(HideReason::Share) && self.main_asked() && hiding == ShareHiding::All
+    /// The main window is on screen during a whole-screen share because the person opened it while it is hidden from
+    /// screen shares: it says so.
+    pub fn main_in_share(&self, main_hidden: bool) -> bool {
+        self.hidden_for(HideReason::Share) && self.main_asked() && main_hidden
     }
 
     pub fn hidden_for(&self, reason: HideReason) -> bool {
@@ -403,9 +469,7 @@ fn prepare<'a, R: Runtime, M: Manager<R>>(app: &AppHandle<R>, builder: WebviewWi
     };
     debug_assert!(privacy.kind_of(label) == Some(kind), "the {label} window is not in privacy::KNOWN as {kind:?}");
     privacy.register(label, kind);
-    let demo = privacy.demo_active(Instant::now());
-    let hiding = app.try_state::<crate::AppState>().map_or(ShareHiding::All, |s| s.settings().hide_from_sharing);
-    builder.content_protected(protected(kind, hiding, demo))
+    builder.content_protected(protected(kind, &choice_now(app)))
 }
 
 /// Whether `label` is left out of shares now: the setting and the demo, and the main window whatever they say while
@@ -414,7 +478,7 @@ pub fn wanted_for<R: Runtime>(app: &AppHandle<R>, label: &str) -> Option<bool> {
     let (privacy, state) = (app.try_state::<Privacy>()?, app.try_state::<crate::AppState>()?);
     let kind = privacy.kind_of(label)?;
     let shielded = kind == Kind::Main && state.screens.own_hidden();
-    Some(shielded || protected(kind, state.settings().hide_from_sharing, privacy.demo_active(Instant::now())))
+    Some(shielded || protected(kind, &choice_now(app)))
 }
 
 /// After a window was built: Windows sets and reads back its display affinity; a window built while its kind is off
@@ -425,7 +489,7 @@ fn built<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>) {
     if let (Some(state), Some(kind), Some(protect)) = (app.try_state::<crate::AppState>(), privacy.kind_of(&label), wanted_for(app, &label)) {
         let settings = state.settings();
         enforce(app, window, protect, &settings);
-        if away(kind, &privacy.reasons(), settings.hide_from_sharing, privacy.main_asked()) {
+        if away(kind, &privacy.reasons(), &choice_now(app), privacy.main_asked()) {
             lock(&privacy.put_away).insert(label);
             put_away(window, true);
         }
@@ -449,8 +513,12 @@ fn enforce<R: Runtime>(app: &AppHandle<R>, window: &WebviewWindow<R>, protect: b
     }
     #[cfg(not(windows))]
     {
-        let _ = (app, settings);
-        let _ = window.set_content_protected(protect);
+        let _ = settings;
+        let refused = window.set_content_protected(protect).is_err();
+        if let Some(privacy) = app.try_state::<Privacy>() {
+            let mut failed = lock(&privacy.set_failed);
+            if refused { failed.insert(window.label().to_string()) } else { failed.remove(window.label()) };
+        }
     }
 }
 
@@ -633,6 +701,166 @@ pub fn end_demo(app: &AppHandle) {
     crate::actions::emit_status(app);
 }
 
+// ---- Per-window choices (v2.0) ------------------------------------------------------------------------------------
+
+/// How often the main window's hide is looked at: it shows again within this of its time.
+pub const MAIN_HIDE_TICK: Duration = Duration::from_secs(2);
+
+/// A call is detected now (the meeting app the detector sees, refreshed every second).
+pub fn call_detected<R: Runtime>(app: &AppHandle<R>) -> bool {
+    app.try_state::<crate::AppState>().is_some_and(|s| s.detect.meeting().is_some())
+}
+
+/// A choice changed: every flag follows it, every page and the tray hear of it.
+fn choices_changed(app: &AppHandle, settings: &Settings) {
+    let _ = app.emit("settings:changed", settings);
+    apply_all(app);
+    crate::actions::emit_status(app);
+}
+
+/// "Hide from screen shares" for the main window (Settings, the notice, the tray), until the time chosen. Answers the
+/// one-time notice too.
+pub fn hide_main(app: &AppHandle, choice: share::HideFor) -> crate::error::AppResult<share::MainHide> {
+    let hide = share::hide_until(choice, chrono::Local::now(), call_detected(app)).map_err(|e| crate::error::AppError::msg(e.message()))?;
+    *lock(&app.state::<Privacy>().hide_timer) = share::MainHideTimer::default();
+    let updated = app.state::<crate::AppState>().update_settings(|s| {
+        s.main_share_hide = Some(hide);
+        s.share_notice = false;
+    })?;
+    choices_changed(app, &updated);
+    Ok(hide)
+}
+
+/// "Show now": the main window is in screen shares again. `only`: clears that hide alone (the timer, so a hide chosen
+/// meanwhile is never cleared by an older one's end).
+pub fn show_main_in_shares(app: &AppHandle, only: Option<share::MainHide>) -> crate::error::AppResult<()> {
+    let state = app.state::<crate::AppState>();
+    let mut cleared = false;
+    let updated = state.update_settings(|s| {
+        if s.main_share_hide.is_some() && only.is_none_or(|h| s.main_share_hide == Some(h)) {
+            s.main_share_hide = None;
+            cleared = true;
+        }
+    })?;
+    if cleared {
+        choices_changed(app, &updated);
+    }
+    Ok(())
+}
+
+/// The Live Assist card's or the captions' own switch: shown in screen shares only by this explicit choice.
+pub fn set_shown_in_shares(app: &AppHandle, which: share::Pinned, shown: bool) -> crate::error::AppResult<()> {
+    let updated = app.state::<crate::AppState>().update_settings(|s| match which {
+        share::Pinned::Card => s.show_card_in_shares = shown,
+        share::Pinned::Captions => s.show_captions_in_shares = shown,
+    })?;
+    choices_changed(app, &updated);
+    Ok(())
+}
+
+/// The one-time notice was closed.
+pub fn dismiss_share_notice(app: &AppHandle) -> crate::error::AppResult<()> {
+    app.state::<crate::AppState>().update_settings(|s| s.share_notice = false)?;
+    crate::actions::emit_status(app);
+    Ok(())
+}
+
+/// Ends the main window's hide by itself: at its time (by the wall clock, so a sleep never stretches it), or a few
+/// seconds after the call is over.
+pub fn spawn_main_hide_timer(app: AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(MAIN_HIDE_TICK).await;
+            let hide = app.state::<crate::AppState>().settings_with(|s| s.main_share_hide);
+            let over = lock(&app.state::<Privacy>().hide_timer).tick(hide.as_ref(), now_ms(), call_detected(&app));
+            if over && let Some(hide) = hide {
+                let _ = show_main_in_shares(&app, Some(hide));
+            }
+        }
+    });
+}
+
+/// What a card or captions badge shows, with the window's own switch.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WindowShareView {
+    pub which: share::Pinned,
+    /// The person showed this window in screen shares (the saved choice).
+    pub shown: bool,
+    /// What the system reads back now.
+    pub state: share::WindowShare,
+    pub badge: &'static str,
+    pub switch_label: &'static str,
+}
+
+/// The real state of one window's flag, read back from the system on the main thread (never call it there).
+pub struct SystemFlag<R: Runtime> {
+    pub app: AppHandle<R>,
+}
+
+impl<R: Runtime> share::ShareFlag for SystemFlag<R> {
+    /// Setting goes through [`apply_all`]; what the system answered then is kept (macOS) or in the watch (Windows).
+    fn set_share_flag(&self, label: &str, _hidden: bool) -> bool {
+        let Some(privacy) = self.app.try_state::<Privacy>() else { return false };
+        if lock(&privacy.set_failed).contains(label) {
+            return false;
+        }
+        !matches!(lock(&privacy.watch).last.get(label), Some(win::Readback::Mismatch { .. }))
+    }
+
+    fn read_share_flag(&self, label: &str) -> Option<bool> {
+        let window = self.app.get_webview_window(label)?;
+        let (tx, rx) = std::sync::mpsc::channel();
+        let target = window.clone();
+        window
+            .run_on_main_thread(move || {
+                let _ = tx.send(read_flag_here(&target));
+            })
+            .ok()?;
+        rx.recv_timeout(Duration::from_secs(2)).ok().flatten()
+    }
+}
+
+/// On the main thread: whether the system leaves this window out of screen shares (macOS `NSWindow.sharingType` is
+/// none; Windows `GetWindowDisplayAffinity` is not `WDA_NONE`); none when the system did not say.
+fn read_flag_here<R: Runtime>(window: &WebviewWindow<R>) -> Option<bool> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSWindow, NSWindowSharingType};
+        let pointer = window.ns_window().ok()?;
+        // SAFETY: Tauri hands out the window's own NSWindow, alive while `window` is, on the main thread here.
+        let ns_window: &NSWindow = unsafe { &*(pointer as *const NSWindow) };
+        Some(ns_window.sharingType() == NSWindowSharingType::None)
+    }
+    #[cfg(windows)]
+    {
+        use win::Affinity;
+        let hwnd = window.hwnd().ok()?.0 as isize;
+        win::System.get(hwnd).map(|a| a != win::WDA_NONE)
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let _ = window;
+        None
+    }
+}
+
+/// The badge of the card or the captions now (asynchronous: the system is asked on the main thread).
+pub async fn window_share_now<R: Runtime>(app: &AppHandle<R>, which: share::Pinned) -> WindowShareView {
+    let shown = app.try_state::<crate::AppState>().is_some_and(|s| s.settings_with(|s| which.shown(s)));
+    let wanted_hidden = wanted_for(app, which.label()).unwrap_or(true);
+    let flag = SystemFlag { app: app.clone() };
+    let label = which.label();
+    let state = tauri::async_runtime::spawn_blocking(move || {
+        use share::ShareFlag;
+        let set_ok = flag.set_share_flag(label, wanted_hidden);
+        share::window_share(wanted_hidden, set_ok, flag.read_share_flag(label))
+    })
+    .await
+    .unwrap_or(if wanted_hidden { share::WindowShare::CouldNotHide } else { share::WindowShare::Shown });
+    WindowShareView { which, shown, state, badge: state.badge(), switch_label: which.switch_label(shown) }
+}
+
 /// "Show EchoLedger windows" (the tray, Settings): "Hide EchoLedger windows" ends; during a whole-screen share the
 /// safety net lets go at its next look. While the sharing bar is on screen it is not offered (the tray and Settings say
 /// the windows come back when the screen share ends), since the next look would take them off again.
@@ -687,8 +915,8 @@ pub fn opened_by_person(app: &AppHandle) {
 /// page drawing) never brings it back while windows are kept off, and a quiet open stays off while a reason keeps the
 /// main window off, even when the person opened it earlier in the share.
 pub fn may_show_main<R: Runtime>(app: &AppHandle<R>, quiet: bool) -> bool {
-    let (Some(privacy), Some(state)) = (app.try_state::<Privacy>(), app.try_state::<crate::AppState>()) else { return true };
-    privacy.may_show_main(state.settings_with(|s| s.hide_from_sharing), quiet)
+    let Some(privacy) = app.try_state::<Privacy>() else { return true };
+    privacy.may_show_main(&choice_now(app), quiet)
 }
 
 /// Puts every window where the reasons want it, on the main thread: there a window's state is read without a round trip
@@ -697,11 +925,11 @@ pub fn may_show_main<R: Runtime>(app: &AppHandle<R>, quiet: bool) -> bool {
 pub fn reconcile<R: Runtime>(app: &AppHandle<R>) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let (Some(privacy), Some(state)) = (handle.try_state::<Privacy>(), handle.try_state::<crate::AppState>()) else { return };
-        let (reasons, hiding, main_asked) = (privacy.reasons(), state.settings_with(|s| s.hide_from_sharing), privacy.main_asked());
+        let Some(privacy) = handle.try_state::<Privacy>() else { return };
+        let (reasons, choice, main_asked) = (privacy.reasons(), choice_now(&handle), privacy.main_asked());
         for (label, kind) in privacy.registered() {
             let Some(window) = handle.get_webview_window(&label) else { continue };
-            let (off, taken) = (away(kind, &reasons, hiding, main_asked), lock(&privacy.put_away).contains(&label));
+            let (off, taken) = (away(kind, &reasons, &choice, main_asked), lock(&privacy.put_away).contains(&label));
             if off && !taken && window.is_visible().unwrap_or(false) {
                 put_away(&window, true);
                 lock(&privacy.put_away).insert(label);
@@ -723,9 +951,9 @@ pub fn seal_others<R: Runtime>(app: &AppHandle<R>) {
     let _ = app.run_on_main_thread(move || {
         use objc2::MainThreadMarker;
         use objc2_app_kit::{NSApplication, NSWindowSharingType};
-        let (Some(privacy), Some(state), Some(mtm)) = (handle.try_state::<Privacy>(), handle.try_state::<crate::AppState>(), MainThreadMarker::new()) else { return };
+        let (Some(privacy), Some(mtm)) = (handle.try_state::<Privacy>(), MainThreadMarker::new()) else { return };
         let ours: BTreeSet<usize> = privacy.registered().iter().filter_map(|(label, _)| handle.get_webview_window(label)?.ns_window().ok()).map(|p| p as usize).collect();
-        let protect = others_protected(state.settings_with(|s| s.hide_from_sharing), privacy.demo_active(Instant::now()));
+        let protect = others_protected(&choice_now(&handle));
         let sharing = if protect { NSWindowSharingType::None } else { NSWindowSharingType::ReadOnly };
         let windows = NSApplication::sharedApplication(mtm).windows();
         for i in 0..windows.count() {
@@ -812,6 +1040,11 @@ pub fn spawn_recheck(app: AppHandle) {
 mod tests {
     use super::*;
 
+    /// The choices with the main window hidden or not, the card and the captions at their default (hidden).
+    fn choice(hiding: ShareHiding, main_hidden: bool) -> Choice {
+        Choice { hiding, demo: false, main_hidden, show_card: false, show_captions: false }
+    }
+
     #[test]
     fn every_window_echoledger_builds_is_registered_with_its_kind() {
         let privacy = Privacy::new();
@@ -819,11 +1052,15 @@ mod tests {
             assert!(privacy.kind_of(label).is_some(), "{label} is not registered");
         }
         assert_eq!(privacy.kind_of(crate::translate::WINDOW), Some(Kind::Floating), "Live Translate");
-        assert_eq!(privacy.kind_of(ASSIST), Some(Kind::Floating), "the Assist card, before it exists");
+        assert_eq!(privacy.kind_of(ASSIST), Some(Kind::Card), "the Assist card, before it exists");
+        assert_eq!(privacy.kind_of(crate::overlay::OVERLAY), Some(Kind::Captions));
         assert_eq!(privacy.kind_of(crate::lifecycle::MAIN), Some(Kind::Main));
         for label in crate::overlay::WINDOWS {
-            assert_eq!(privacy.kind_of(label), Some(Kind::Floating), "{label}");
+            let kind = if label == ASSIST { Kind::Card } else if label == crate::overlay::OVERLAY { Kind::Captions } else { Kind::Floating };
+            assert_eq!(privacy.kind_of(label), Some(kind), "{label}");
+            assert_eq!(kind_for(label), kind, "{label} is built with its kind");
         }
+        assert_eq!(kind_for("notes"), Kind::Floating, "a window added later");
         // A window added later registers itself.
         privacy.register("notes", Kind::Floating);
         assert_eq!(privacy.kind_of("notes"), Some(Kind::Floating));
@@ -832,15 +1069,77 @@ mod tests {
     #[test]
     fn the_setting_decides_which_windows_are_protected() {
         use ShareHiding::*;
-        for (hiding, floating, main) in [(All, true, true), (Floating, true, false), (Off, false, false)] {
-            assert_eq!(protected(Kind::Floating, hiding, false), floating, "{hiding:?}");
-            assert_eq!(protected(Kind::Main, hiding, false), main, "{hiding:?}");
-            assert!(protected(Kind::Test, hiding, false), "the test window is always protected");
-            assert!(!protected(Kind::Control, hiding, false), "the control never is");
+        for (hiding, floating) in [(All, true), (Floating, true), (Off, false)] {
+            let c = choice(hiding, false);
+            assert_eq!(protected(Kind::Floating, &c), floating, "{hiding:?}");
+            assert!(!protected(Kind::Main, &c), "{hiding:?}: the main window is shown unless the person hides it");
+            assert!(protected(Kind::Main, &choice(hiding, true)), "{hiding:?}: hidden by the person");
+            assert!(protected(Kind::Card, &c) && protected(Kind::Captions, &c), "{hiding:?}: the card and the captions stay hidden");
+            assert!(protected(Kind::Test, &c), "the test window is always protected");
+            assert!(!protected(Kind::Control, &c), "the control never is");
         }
-        assert!(!protected(Kind::Floating, All, true), "the demo shows every window");
-        assert!(!protected(Kind::Main, All, true));
-        assert!(protected(Kind::Test, All, true), "even during a demo the Share Check measures the flag");
+        let demo = Choice { demo: true, ..choice(All, true) };
+        assert!(!protected(Kind::Floating, &demo), "the demo shows the other floating windows");
+        assert!(protected(Kind::Main, &demo), "the demo never shows a main window the person hid");
+        assert!(protected(Kind::Card, &demo) && protected(Kind::Captions, &demo), "the demo never shows the card or the captions");
+        assert!(protected(Kind::Test, &demo), "even during a demo the Share Check measures the flag");
+    }
+
+    #[test]
+    fn defaults_show_the_main_window_and_hide_the_card_and_the_captions() {
+        let privacy = Privacy::new();
+        let (settings, now, ms) = (Settings::default(), Instant::now(), 0);
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, now, ms), Some(false), "the main window is in screen shares");
+        assert_eq!(privacy.wants(ASSIST, &settings, now, ms), Some(true), "the Live Assist card is hidden");
+        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &settings, now, ms), Some(true), "the captions are hidden");
+    }
+
+    #[test]
+    fn the_card_and_the_captions_are_never_shown_by_the_main_window_s_choice() {
+        let privacy = Privacy::new();
+        let now = Instant::now();
+        let t = chrono::Local::now();
+        // Every main-window state, every hideFromSharing value, the demo on or off: the card and the captions stay hidden.
+        let hides = [None, Some(share::hide_until(share::HideFor::UntilOff, t, false).unwrap()), Some(share::hide_until(share::HideFor::Minutes15, t, false).unwrap())];
+        for hiding in [ShareHiding::All, ShareHiding::Floating, ShareHiding::Off] {
+            for hide in hides {
+                for demo in [false, true] {
+                    let settings = Settings { hide_from_sharing: hiding, main_share_hide: hide, ..Settings::default() };
+                    privacy.set_demo(demo.then(|| Demo::starting(now, SystemTime::now(), DEMO)));
+                    for label in [ASSIST, crate::overlay::OVERLAY] {
+                        assert_eq!(privacy.wants(label, &settings, now, t.timestamp_millis()), Some(true), "{label} {hiding:?} {hide:?} demo {demo}");
+                    }
+                }
+            }
+        }
+        // Only their own switch shows them, each on its own.
+        privacy.set_demo(None);
+        let card = Settings { show_card_in_shares: true, ..Settings::default() };
+        assert_eq!(privacy.wants(ASSIST, &card, now, 0), Some(false));
+        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &card, now, 0), Some(true), "the card's switch is not the captions'");
+        let captions = Settings { show_captions_in_shares: true, ..Settings::default() };
+        assert_eq!(privacy.wants(crate::overlay::OVERLAY, &captions, now, 0), Some(false));
+        assert_eq!(privacy.wants(ASSIST, &captions, now, 0), Some(true));
+        // The main window's commands never touch them: its hide and show change `mainShareHide` alone.
+        for name in ["pub fn hide_main(", "pub fn show_main_in_shares("] {
+            let body = body_of(include_str!("mod.rs"), name);
+            assert!(!body.contains("show_card_in_shares") && !body.contains("show_captions_in_shares"), "{name}");
+        }
+        let set = body_of(include_str!("mod.rs"), "pub fn set_shown_in_shares(");
+        assert!(set.contains("share::Pinned::Card => s.show_card_in_shares = shown") && set.contains("share::Pinned::Captions => s.show_captions_in_shares = shown"));
+    }
+
+    #[test]
+    fn the_main_window_s_hide_ends_by_the_clock() {
+        let privacy = Privacy::new();
+        let now = Instant::now();
+        let t = chrono::Local::now();
+        let hide = share::hide_until(share::HideFor::Minutes15, t, false).unwrap();
+        let settings = Settings { main_share_hide: Some(hide), ..Settings::default() };
+        let ms = t.timestamp_millis();
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, now, ms), Some(true));
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, now, ms + 15 * 60_000 - 1), Some(true));
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, now, ms + 15 * 60_000), Some(false), "shown again by itself");
     }
 
     #[test]
@@ -848,14 +1147,15 @@ mod tests {
         let privacy = Privacy::new();
         let settings = Settings::default();
         let start = Instant::now();
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start), Some(true));
+        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start, 0), Some(true));
         privacy.set_demo(Some(Demo::starting(start, SystemTime::now(), DEMO)));
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start), Some(false), "shown during the demo");
-        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + Duration::from_secs(9 * 60)), Some(false));
+        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start, 0), Some(false), "shown during the demo");
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + Duration::from_secs(9 * 60), 0), Some(false));
+        assert_eq!(privacy.wants(ASSIST, &settings, start + Duration::from_secs(9 * 60), 0), Some(true), "never the card");
         assert!(privacy.demo_left(start + Duration::from_secs(60)).is_some_and(|d| d == Duration::from_secs(9 * 60)));
         // Ten minutes later the setting holds again, without anyone touching it.
-        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start + DEMO), Some(true));
-        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + DEMO), Some(true));
+        assert_eq!(privacy.wants(crate::overlay::PILL, &settings, start + DEMO, 0), Some(true));
+        assert_eq!(privacy.wants(crate::lifecycle::MAIN, &settings, start + DEMO, 0), Some(false), "the main window is shown unless the person hides it");
         assert_eq!(privacy.demo_left(start + DEMO), None);
         assert_eq!(DEMO, Duration::from_secs(600));
     }
@@ -864,48 +1164,54 @@ mod tests {
     fn a_share_takes_the_main_window_off_only_with_all_windows_and_the_person_takes_all() {
         use HideReason::*;
         let reasons = |list: &[HideReason]| list.iter().copied().collect::<BTreeSet<_>>();
-        for hiding in [ShareHiding::All, ShareHiding::Floating] {
-            assert!(away(Kind::Floating, &reasons(&[Share]), hiding, false), "{hiding:?}: the floating windows leave a share");
-            assert!(away(Kind::Main, &reasons(&[Person]), hiding, false), "{hiding:?}: Hide EchoLedger windows takes every window");
-            assert!(away(Kind::Floating, &reasons(&[Person]), hiding, true));
+        for main_hidden in [true, false] {
+            let c = choice(ShareHiding::All, main_hidden);
+            assert!(away(Kind::Floating, &reasons(&[Share]), &c, false), "the floating windows leave a share");
+            assert!(away(Kind::Card, &reasons(&[Share]), &c, false) && away(Kind::Captions, &reasons(&[Share]), &c, false), "so do the card and the captions");
+            assert!(away(Kind::Main, &reasons(&[Person]), &c, false), "Hide EchoLedger windows takes every window");
+            assert!(away(Kind::Floating, &reasons(&[Person]), &c, true));
         }
-        assert!(away(Kind::Main, &reasons(&[Share]), ShareHiding::All, false));
-        assert!(!away(Kind::Main, &reasons(&[Share]), ShareHiding::Floating, false), "Only floating windows: the main window stays");
-        for kind in [Kind::Main, Kind::Floating, Kind::Test, Kind::Control] {
-            assert!(!away(kind, &reasons(&[]), ShareHiding::All, false), "{kind:?}: nothing keeps it off");
+        assert!(away(Kind::Main, &reasons(&[Share]), &choice(ShareHiding::All, true), false), "a main window hidden from shares leaves the share");
+        assert!(!away(Kind::Main, &reasons(&[Share]), &choice(ShareHiding::All, false), false), "a main window shown in shares stays");
+        let shown = Choice { show_card: true, show_captions: true, ..choice(ShareHiding::All, false) };
+        assert!(!away(Kind::Card, &reasons(&[Share]), &shown, false) && !away(Kind::Captions, &reasons(&[Share]), &shown, false), "shown on purpose: they stay");
+        assert!(away(Kind::Card, &reasons(&[Person]), &shown, false), "Hide EchoLedger windows still takes them");
+        for kind in [Kind::Main, Kind::Floating, Kind::Card, Kind::Captions, Kind::Test, Kind::Control] {
+            assert!(!away(kind, &reasons(&[]), &choice(ShareHiding::All, true), false), "{kind:?}: nothing keeps it off");
         }
-        assert!(!away(Kind::Test, &reasons(&[Person, Share]), ShareHiding::All, false), "the Share Check's windows are never put away");
-        assert!(!away(Kind::Control, &reasons(&[Person, Share]), ShareHiding::All, false));
+        assert!(!away(Kind::Test, &reasons(&[Person, Share]), &choice(ShareHiding::All, true), false), "the Share Check's windows are never put away");
+        assert!(!away(Kind::Control, &reasons(&[Person, Share]), &choice(ShareHiding::All, true), false));
     }
 
     #[test]
     fn opening_echoledger_during_a_hide_shows_the_main_window_and_automatic_reveals_do_not() {
         use HideReason::*;
-        let floating_away = |p: &Privacy| away(Kind::Floating, &p.reasons(), ShareHiding::All, p.main_asked());
-        // A whole-screen share took the windows off ("All EchoLedger windows").
+        let hidden = choice(ShareHiding::All, true);
+        let floating_away = |p: &Privacy| away(Kind::Floating, &p.reasons(), &hidden, p.main_asked());
+        // A whole-screen share took the windows off (the main window hidden from screen shares).
         let p = Privacy::new();
         p.set_hidden(Share, true);
-        assert!(!p.may_show_main(ShareHiding::All, false), "a rebuilt main window's page drawing does not bring it back");
-        assert!(!p.main_in_share(ShareHiding::All));
+        assert!(!p.may_show_main(&hidden, false), "a rebuilt main window's page drawing does not bring it back");
+        assert!(!p.main_in_share(true));
         // The person opens EchoLedger again (the Dock, Finder, the tray's Open, a clicked notification).
         assert_eq!(p.person_opened(), Opened { end_person_hide: false, during_share: true });
-        assert!(p.may_show_main(ShareHiding::All, false), "shown anyway: the person asked");
-        assert!(p.main_in_share(ShareHiding::All), "with the line that it may be in the screen share");
+        assert!(p.may_show_main(&hidden, false), "shown anyway: the person asked");
+        assert!(p.main_in_share(true), "with the line that it may be in the screen share");
         assert!(floating_away(&p), "the floating windows stay off");
         // The share is over: the next share starts without that open.
         p.set_hidden(Share, false);
         assert!(!p.main_asked());
         p.set_hidden(Share, true);
-        assert!(!p.may_show_main(ShareHiding::All, false));
+        assert!(!p.may_show_main(&hidden, false));
 
         // Hide EchoLedger windows: an open by the person ends it (`opened_by_person` turns the reason off).
         let p = Privacy::new();
         p.set_hidden(Person, true);
-        assert!(!p.may_show_main(ShareHiding::Floating, false));
+        assert!(!p.may_show_main(&choice(ShareHiding::Floating, false), false));
         assert_eq!(p.person_opened(), Opened { end_person_hide: true, during_share: false });
         p.set_hidden(Person, false);
-        assert!(p.may_show_main(ShareHiding::Floating, false) && !floating_away(&p), "everything comes back");
-        assert!(!p.main_in_share(ShareHiding::All));
+        assert!(p.may_show_main(&choice(ShareHiding::Floating, false), false) && !floating_away(&p), "everything comes back");
+        assert!(!p.main_in_share(true));
     }
 
     #[test]
@@ -944,10 +1250,10 @@ mod tests {
 
     #[test]
     fn the_system_s_own_windows_follow_the_floating_windows() {
-        assert!(others_protected(ShareHiding::All, false), "TUINSWindow is left out of screen share");
-        assert!(others_protected(ShareHiding::Floating, false), "it sits over EchoLedger's text fields");
-        assert!(!others_protected(ShareHiding::Off, false));
-        assert!(!others_protected(ShareHiding::All, true), "the demo shows everything");
+        assert!(others_protected(&choice(ShareHiding::All, false)), "TUINSWindow is left out of screen share");
+        assert!(others_protected(&choice(ShareHiding::Floating, false)), "it sits over EchoLedger's text fields");
+        assert!(!others_protected(&choice(ShareHiding::Off, false)));
+        assert!(!others_protected(&Choice { demo: true, ..choice(ShareHiding::All, false) }), "the demo shows the floating windows");
     }
 
     /// Every `.rs` file under `dir`.
@@ -989,24 +1295,25 @@ mod tests {
     fn closing_the_main_window_during_a_share_ends_the_person_s_open_and_quiet_opens_stay_off() {
         use HideReason::*;
         let p = Privacy::new();
+        let hidden = choice(ShareHiding::All, true);
         p.set_hidden(Share, true);
         p.person_opened();
-        assert!(p.may_show_main(ShareHiding::All, false));
-        assert!(!p.may_show_main(ShareHiding::All, true), "a quiet open never counts the person's open");
+        assert!(p.may_show_main(&hidden, false));
+        assert!(!p.may_show_main(&hidden, true), "a quiet open never counts the person's open");
         // The person closes the main window while the share goes on; something else opens it again later.
         p.main_closed();
-        assert!(!p.main_asked() && !p.main_in_share(ShareHiding::All));
-        assert!(!p.may_show_main(ShareHiding::All, false), "a rebuilt window's page drawing stays off");
-        assert!(!p.may_show_main(ShareHiding::All, true));
+        assert!(!p.main_asked() && !p.main_in_share(true));
+        assert!(!p.may_show_main(&hidden, false), "a rebuilt window's page drawing stays off");
+        assert!(!p.may_show_main(&hidden, true));
         // Hide EchoLedger windows: quiet opens stay off too; with nothing hidden they show.
         let p = Privacy::new();
         p.set_hidden(Person, true);
-        assert!(!p.may_show_main(ShareHiding::Off, true));
+        assert!(!p.may_show_main(&choice(ShareHiding::Off, false), true));
         p.set_hidden(Person, false);
-        assert!(p.may_show_main(ShareHiding::All, true));
-        // "Only floating windows": a share never kept the main window off.
+        assert!(p.may_show_main(&hidden, true));
+        // The main window shown in screen shares: a share never keeps it off.
         p.set_hidden(Share, true);
-        assert!(p.may_show_main(ShareHiding::Floating, true));
+        assert!(p.may_show_main(&choice(ShareHiding::Floating, false), true));
     }
 
     #[test]

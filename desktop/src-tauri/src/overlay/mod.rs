@@ -209,7 +209,7 @@ fn build_window<R: Runtime>(app: &AppHandle<R>, label: &str, size: (f64, f64)) -
         .focusable(false)
         .accept_first_mouse(true)
         .visible(true);
-    crate::privacy::window(app, builder, label, crate::privacy::Kind::Floating, |b| b)
+    crate::privacy::window(app, builder, label, crate::privacy::kind_for(label), |b| b)
 }
 
 /// Builds one overlay-type window when it does not exist yet, click-through and docked or placed from the settings

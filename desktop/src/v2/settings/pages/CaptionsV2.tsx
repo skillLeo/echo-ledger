@@ -12,7 +12,7 @@ export function CaptionsPageV2({ settings, patch, onStyle }: { settings: Setting
   return (
     <>
       <CaptionPreview style={settings.captionStyle} />
-      <Group footer={<><p>{captionsShareLine(settings.hideFromSharing)}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
+      <Group footer={<><p>{captionsShareLine(settings.showCaptionsInShares)}</p><p>You can also right-click the captions while recording to change their style.</p></>}>
         <SwitchSetting id="captions.enabled" on={settings.captionsOnRecord} onChange={(v) => void patch({ captionsOnRecord: v })} />
         <LinkSetting id="captions.style" onOpen={onStyle} />
       </Group>

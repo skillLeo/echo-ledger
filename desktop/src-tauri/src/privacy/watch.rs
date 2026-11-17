@@ -22,7 +22,6 @@ use serde::Serialize;
 use super::apps::MeetingApp;
 use super::bars::{Found, Listed, Mode, Patterns};
 use crate::detect::classify::SourceApp;
-use crate::settings::ShareHiding;
 
 /// How often the window list is read while a meeting is detected: a bar appearing just after a look is seen one period
 /// later, inside the 300 ms budget with the read and the ordering out.
@@ -79,11 +78,12 @@ pub fn should_hide(found: Option<&Found>, meeting: Option<SourceApp>, one_window
     Some(Seen { app, mode: found.mode, hid })
 }
 
-/// Whether the safety net works now (pure): the setting, "I share one window or a tab", the tray's demo (EchoLedger is
-/// shown on purpose) and the guided test (it shares the whole screen on purpose, and its answer is given in the main
-/// window).
-pub fn allowed(hiding: ShareHiding, one_window: bool, demo: bool, guided: bool) -> bool {
-    hiding != ShareHiding::Off && !one_window && !demo && !guided
+/// Whether the safety net works now (pure): some window is hidden from screen shares (none is while every window is
+/// shown on purpose: `hideFromSharing` Off or the demo, the card and the captions shown by the person, the main window
+/// not hidden), "I share one window or a tab", and the guided test (it shares the whole screen on purpose, and its
+/// answer is given in the main window).
+pub fn allowed(choice: &super::Choice, one_window: bool, guided: bool) -> bool {
+    (choice.main_hidden || choice.any_floating_hidden()) && !one_window && !guided
 }
 
 /// What the loop knows before a look, gathered cheaply each time.
@@ -310,10 +310,10 @@ pub fn spawn(app: tauri::AppHandle) {
                     patterns = super::bars::current(&state.data_dir);
                     patterns_at = now;
                 }
-                let (hiding, one_window) = state.settings_with(|s| (s.hide_from_sharing, s.share_one_window));
+                let one_window = state.settings_with(|s| s.share_one_window);
                 let guided = app.get_webview_window(super::GUIDED_CARD).is_some();
                 let situation = Situation {
-                    allowed: allowed(hiding, one_window, privacy.demo_active(now), guided),
+                    allowed: allowed(&super::choice_now(&app), one_window, guided),
                     permission: permission.0,
                     meeting: state.detect.meeting().map(|m| (m.root_pid, m.app)),
                 };
@@ -421,13 +421,17 @@ mod tests {
 
     #[test]
     fn the_demo_the_setting_one_window_and_the_guided_test_turn_the_safety_net_off() {
-        use ShareHiding::*;
-        assert!(allowed(All, false, false, false));
-        assert!(allowed(Floating, false, false, false), "the floating windows still leave");
-        assert!(!allowed(All, false, true, false), "Show in screen share for 10 minutes: shown on purpose");
-        assert!(!allowed(Off, false, false, false));
-        assert!(!allowed(All, true, false, false), "I share one window or a tab");
-        assert!(!allowed(All, false, false, true), "the guided test shares the whole screen on purpose");
+        use crate::settings::ShareHiding::*;
+        let choice = |hiding, demo, shown: bool, main_hidden| super::super::Choice { hiding, demo, main_hidden, show_card: shown, show_captions: shown };
+        assert!(allowed(&choice(All, false, false, false), false, false));
+        assert!(allowed(&choice(Floating, false, false, false), false, false), "the floating windows still leave");
+        assert!(allowed(&choice(Off, false, false, false), false, false), "the card and the captions are hidden whatever the setting");
+        assert!(allowed(&choice(All, true, false, false), false, false), "the demo never shows the card or the captions");
+        assert!(!allowed(&choice(All, true, true, false), false, false), "Show in screen share for 10 minutes with the card and captions shown: shown on purpose");
+        assert!(!allowed(&choice(Off, false, true, false), false, false), "every window shown on purpose");
+        assert!(allowed(&choice(Off, false, true, true), false, false), "the main window is hidden");
+        assert!(!allowed(&choice(All, false, false, false), true, false), "I share one window or a tab");
+        assert!(!allowed(&choice(All, false, false, false), false, true), "the guided test shares the whole screen on purpose");
     }
 
     #[test]

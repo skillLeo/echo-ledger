@@ -266,13 +266,45 @@ struct MenuShape {
     calls_ready: Option<bool>,
     /// A viewer's computer records nothing (v1.5): the sentence the menu shows instead of the recording lines.
     viewer: Option<String>,
-    /// Screen-share privacy (v1.8.1): the demo is on (`Some(true)`), off (`Some(false)`), or EchoLedger is not hidden
-    /// from shares at all (none: no line).
-    share_demo: Option<bool>,
+    /// The main window in screen shares (v2.0): shown, with "Hide from screen shares" and its durations, or hidden with
+    /// "Hidden until 14:30 · Show now". None: no line (before the first status).
+    main_share: Option<MainShare>,
     /// EchoLedger's windows are off the screen, and why.
     hidden: Option<Hidden>,
     /// Live Translate is listening ([`TRANSLATE_LISTENING`]).
     translate: bool,
+}
+
+/// The main window in screen shares, as the tray says it (v2.0).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum MainShare {
+    /// Shown: "Hide from screen shares" opens the durations; `call`: "Until this call ends" is offered.
+    Shown { call: bool },
+    /// Hidden: the line ("Hidden until 14:30 · Show now", [`crate::privacy::share::tray_line`]) shows it now.
+    Hidden(String),
+}
+
+/// The durations under "Hide from screen shares", by menu id, in order.
+pub const HIDE_CHOICES: [(&str, &str); 6] = [
+    ("share_hide_call", "Until this call ends"),
+    ("share_hide_15", "15 min"),
+    ("share_hide_60", "1 hour"),
+    ("share_hide_tomorrow", "Until tomorrow"),
+    ("share_hide_off", "Until I turn it off"),
+    ("share_hide_custom", "Custom…"),
+];
+
+/// The choice a duration's menu id stands for; none for "Custom…" (it opens Settings) and other ids.
+pub fn hide_choice(id: &str) -> Option<crate::privacy::share::HideFor> {
+    use crate::privacy::share::HideFor;
+    match id {
+        "share_hide_call" => Some(HideFor::CallEnds),
+        "share_hide_15" => Some(HideFor::Minutes15),
+        "share_hide_60" => Some(HideFor::Hour1),
+        "share_hide_tomorrow" => Some(HideFor::Tomorrow),
+        "share_hide_off" => Some(HideFor::UntilOff),
+        _ => None,
+    }
 }
 
 /// Why EchoLedger's windows are off the screen, as the tray says it.
@@ -350,6 +382,7 @@ impl TrayCache {
 enum Entry {
     Item { id: &'static str, label: String, enabled: bool, checked: Option<bool> },
     Separator,
+    Submenu { label: String, items: Vec<Entry> },
 }
 
 fn item(id: &'static str, label: impl Into<String>) -> Entry {
@@ -413,9 +446,12 @@ fn menu_entries(shape: &MenuShape) -> Vec<Entry> {
     entries.push(Entry::Separator);
     entries.push(Entry::Item { id: "captions", label: "Live captions".into(), enabled: true, checked: Some(shape.captions) });
     entries.push(Entry::Item { id: "auto", label: "Record calls automatically".into(), enabled: true, checked: Some(shape.auto) });
-    match shape.share_demo {
-        Some(false) => entries.push(item("share_demo", "Show EchoLedger in screen share for 10 minutes")),
-        Some(true) => entries.push(item("share_demo", "Hide EchoLedger from screen share again")),
+    match &shape.main_share {
+        Some(MainShare::Shown { call }) => entries.push(Entry::Submenu {
+            label: "Hide from screen shares".into(),
+            items: HIDE_CHOICES.iter().filter(|(id, _)| *call || *id != "share_hide_call").map(|(id, label)| item(id, *label)).collect(),
+        }),
+        Some(MainShare::Hidden(line)) => entries.push(item("share_show_now", line.clone())),
         None => {}
     }
     if shape.review > 0 {
@@ -435,6 +471,15 @@ fn build_menu(app: &AppHandle, shape: &MenuShape) -> tauri::Result<Menu<tauri::W
                 menu.append(&CheckMenuItem::with_id(app, id, label, enabled, checked, None::<&str>)?)?
             }
             Entry::Item { id, label, enabled, checked: None } => menu.append(&MenuItem::with_id(app, id, label, enabled, None::<&str>)?)?,
+            Entry::Submenu { label, items } => {
+                let submenu = tauri::menu::Submenu::new(app, label, true)?;
+                for entry in items {
+                    if let Entry::Item { id, label, enabled, .. } = entry {
+                        submenu.append(&MenuItem::with_id(app, id, label, enabled, None::<&str>)?)?;
+                    }
+                }
+                menu.append(&submenu)?
+            }
         }
     }
     Ok(menu)
@@ -503,14 +548,12 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                         crate::privacy::show_windows(&app);
                         Ok(())
                     }
-                    "share_demo" => {
-                        if app.state::<crate::privacy::Privacy>().demo_active(std::time::Instant::now()) {
-                            crate::privacy::end_demo(&app);
-                        } else {
-                            crate::privacy::show_in_shares_for(&app, crate::privacy::DEMO);
-                        }
+                    "share_show_now" => crate::privacy::show_main_in_shares(&app, None),
+                    "share_hide_custom" => {
+                        crate::actions::open_settings(&app, "share_privacy.main");
                         Ok(())
                     }
+                    id if hide_choice(id).is_some() => hide_choice(id).map_or(Ok(()), |choice| crate::privacy::hide_main(&app, choice).map(|_| ())),
                     "quit" => {
                         // Never lose audio on quit: a running recording is kept first (the Dock's Quit does the same). When
                         // macOS's own quit waits for that keeping too, its answer ends the app.
@@ -573,14 +616,14 @@ pub fn show_main(app: &AppHandle) {
 }
 
 /// The two tray switches: live captions and automatic call recording.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct Switches {
     pub captions: bool,
     pub auto: bool,
     /// The Ready check (Phase 1C): none before the first check or while signed out.
     pub calls_ready: Option<bool>,
-    /// The screen-share demo is on; none while EchoLedger is not hidden from shares.
-    pub share_demo: Option<bool>,
+    /// The main window in screen shares (v2.0).
+    pub main_share: Option<MainShare>,
     /// EchoLedger's windows are off the screen, and why.
     pub hidden: Option<Hidden>,
     /// Live Translate is listening to an app now.
@@ -607,7 +650,7 @@ pub fn update(app: &AppHandle, generation: u64, state: TrayState, paused: bool, 
         auto: switches.auto,
         calls_ready: switches.calls_ready,
         viewer,
-        share_demo: switches.share_demo,
+        main_share: switches.main_share,
         hidden: switches.hidden,
         translate: switches.translate,
     };
@@ -658,6 +701,7 @@ mod tests {
                 Entry::Item { label, checked: Some(true), .. } => format!("[x] {label}"),
                 Entry::Item { label, checked: Some(false), .. } => format!("[ ] {label}"),
                 Entry::Item { label, .. } => label,
+                Entry::Submenu { label, items } => format!("{label} ▸ {}", items.iter().map(|i| match i { Entry::Item { label, .. } => label.as_str(), _ => "" }).collect::<Vec<_>>().join(" | ")),
             })
             .collect()
     }
@@ -675,7 +719,7 @@ mod tests {
 
     #[test]
     fn recording_menu_shows_its_state_and_the_review_queue() {
-        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, share_demo: Some(false), hidden: None, translate: false };
+        let shape = MenuShape { recording: true, paused: true, show_controls: true, mic_note: false, review: 2, captions: true, auto: false, calls_ready: None, viewer: None, main_share: Some(MainShare::Shown { call: false }), hidden: None, translate: false };
         let labels = labels(&shape);
         assert!(labels.contains(&"Stop recording".to_string()));
         assert!(labels.contains(&"Resume recording".to_string()));
@@ -688,13 +732,26 @@ mod tests {
     }
 
     #[test]
-    fn the_screen_share_demo_is_one_line_that_turns_itself_back() {
-        let off = labels(&MenuShape { share_demo: Some(false), ..MenuShape::default() });
-        assert!(off.contains(&"Show EchoLedger in screen share for 10 minutes".to_string()));
-        let on = labels(&MenuShape { share_demo: Some(true), ..MenuShape::default() });
-        assert!(on.contains(&"Hide EchoLedger from screen share again".to_string()));
-        let shown_anyway = labels(&MenuShape { share_demo: None, ..MenuShape::default() });
-        assert!(!shown_anyway.iter().any(|l| l.contains("screen share")), "nothing to lift while the setting is Off");
+    fn the_main_window_is_hidden_from_screen_shares_for_a_chosen_time_and_shown_with_one_line() {
+        let shown = labels(&MenuShape { main_share: Some(MainShare::Shown { call: false }), ..MenuShape::default() });
+        assert!(shown.contains(&"Hide from screen shares ▸ 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "{shown:?}");
+        let in_call = labels(&MenuShape { main_share: Some(MainShare::Shown { call: true }), ..MenuShape::default() });
+        assert!(in_call.contains(&"Hide from screen shares ▸ Until this call ends | 15 min | 1 hour | Until tomorrow | Until I turn it off | Custom…".to_string()), "offered only while a call is detected");
+        let hidden = labels(&MenuShape { main_share: Some(MainShare::Hidden("Hidden until 14:30 · Show now".into())), ..MenuShape::default() });
+        assert!(hidden.contains(&"Hidden until 14:30 · Show now".to_string()));
+        assert!(!hidden.iter().any(|l| l.starts_with("Hide from screen shares")));
+        let none = labels(&MenuShape::default());
+        assert!(!none.iter().any(|l| l.contains("screen share")), "nothing before the first status");
+        // Each duration's id stands for its choice; Custom… opens Settings.
+        use crate::privacy::share::HideFor;
+        assert_eq!(hide_choice("share_hide_call"), Some(HideFor::CallEnds));
+        assert_eq!(hide_choice("share_hide_15"), Some(HideFor::Minutes15));
+        assert_eq!(hide_choice("share_hide_60"), Some(HideFor::Hour1));
+        assert_eq!(hide_choice("share_hide_tomorrow"), Some(HideFor::Tomorrow));
+        assert_eq!(hide_choice("share_hide_off"), Some(HideFor::UntilOff));
+        assert_eq!(hide_choice("share_hide_custom"), None);
+        let source = include_str!("tray.rs");
+        assert!(source.contains("\"share_show_now\" => crate::privacy::show_main_in_shares(&app, None)"));
     }
 
     #[test]
@@ -713,7 +770,7 @@ mod tests {
         assert_eq!(broken[3], "Calls: Not ready — Fix");
         let ids: Vec<&str> = menu_entries(&MenuShape { calls_ready: Some(false), ..MenuShape::default() })
             .into_iter()
-            .filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None })
+            .filter_map(|e| match e { Entry::Item { id, .. } => Some(id), _ => None })
             .collect();
         assert_eq!(ids[2], "ready", "the line opens the Ready check");
         assert!(!labels(&MenuShape::default()).iter().any(|l| l.starts_with("Calls:")), "nothing before the first check");
@@ -754,9 +811,9 @@ mod tests {
 
     #[test]
     fn menu_ids_keep_their_actions() {
-        let shape = MenuShape { recording: true, show_controls: true, review: 1, share_demo: Some(false), ..MenuShape::default() };
-        let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), Entry::Separator => None }).collect();
-        assert_eq!(ids, ["open", "hide_windows", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "share_demo", "review", "quit"]);
+        let shape = MenuShape { recording: true, show_controls: true, review: 1, main_share: Some(MainShare::Hidden("Hidden until you show it · Show now".into())), ..MenuShape::default() };
+        let ids: Vec<&str> = menu_entries(&shape).into_iter().filter_map(|e| match e { Entry::Item { id, .. } => Some(id), _ => None }).collect();
+        assert_eq!(ids, ["open", "hide_windows", "record", "pause", "controls", "voice_note", "mic_note", "captions", "auto", "share_show_now", "review", "quit"]);
     }
 
     #[test]

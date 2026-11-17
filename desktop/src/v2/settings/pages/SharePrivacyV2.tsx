@@ -12,8 +12,9 @@ import { setting } from "../../../lib/settingsRegistry";
 import { prettyShortcut } from "../../../lib/format";
 import { useCopied } from "../../../views/main/SettingsControls";
 import { PrivacyBadgeView } from "../../../components/PrivacyBadge";
+import { MainShareControl, PinnedShareControl, mainShareValue } from "../../../components/ShareVisibility";
 import {
-  GUIDED_ALONE, HIDDEN_WHILE_SHARING, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
+  GUIDED_ALONE, HIDDEN_WHILE_SHARING, SHARE_PRIVACY_MAIN, sharePrivacyTop, LIMITS, LINE_FIX_LABEL, ONE_WINDOW_TIP, OPEN_SYSTEM_SETTINGS, ZOOM_SETTING,
   displaysValue, hiddenReason, hiddenValue, lastCheckValue, statusValue, useCountdown, versionLine,
 } from "../../../views/main/PrivacySettings";
 import { Badge, Button, Card, Icons, List, ListRow } from "../../components";
@@ -60,6 +61,11 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
   return (
     <div className="el-settings-v2" data-testid="share-privacy">
       <div className="el-share-top">{sharePrivacyTop(settings.hideFromSharing, status?.badge).map((l) => <p key={l} className="el-secondary">{l}</p>)}</div>
+      <Group footer={<p>{SHARE_PRIVACY_MAIN}</p>}>
+        <ListRow compact anchor="share_privacy.main" title={setting("share_privacy.main").title} value={mainShareValue(status)} control={<MainShareControl status={status} />} />
+        <ListRow compact anchor="share_privacy.card" title={setting("share_privacy.card").title} control={<PinnedShareControl which="card" />} />
+        <ListRow compact anchor="share_privacy.captions" title={setting("share_privacy.captions").title} control={<PinnedShareControl which="captions" />} />
+      </Group>
       <Group footer={notes.length || lines.length ? <>
         {notes.map((l) => <p key={l}>{l}</p>)}
         {lines.length > 0 && (
@@ -72,7 +78,7 @@ export function SharePrivacyPageV2({ settings, patch, onCheck }: { settings: Set
           </div>
         )}
       </> : undefined}>
-        <SelectSetting<ShareHiding> id="share_privacy.hiding" value={settings.hideFromSharing} onChange={(v) => void patch({ hideFromSharing: v })} />
+        <SelectSetting<ShareHiding> id="share_privacy.hiding" value={settings.hideFromSharing === "off" ? "off" : "all"} onChange={(v) => void patch({ hideFromSharing: v })} />
         <ListRow compact anchor="share_privacy.status" title={setting("share_privacy.status").title}
           value={value ? <span className={value.tone ? "el-privacy-value el-privacy-value--warning" : "el-privacy-value"}>{value.text}</span> : undefined}
           control={status ? <PrivacyBadgeView badge={status.badge} compact /> : undefined} />

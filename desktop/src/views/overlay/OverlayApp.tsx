@@ -3,7 +3,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { announceReady, api, listenTo, subscribeCaptions, type CaptionEvent, type CaptionSize, type CaptionStyle } from "../../lib/ipc";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
-import { PrivacyBadge } from "../../components/PrivacyBadge";
+import { WindowShareBadge } from "../../components/ShareVisibility";
 import { CloseIcon, CopyIcon, GripIcon } from "../../components/Icons";
 import { devanagariToUrdu } from "../../lib/devanagari";
 import { missingShort } from "../../lib/controls";
@@ -226,8 +226,9 @@ export default function OverlayApp() {
         <div className="overlay-head" data-testid="caption-header">
           <span className={`status-dot ${state.live ? "live" : ""}`} />
           <span>{state.live ? "Live" : "Captions"}</span>
-          {/* Next to "Live", at full strength: what people watching a screen share see of these captions. */}
-          <PrivacyBadge compact />
+          {/* Next to "Live", at full strength: whether people watching a screen share see these captions, as the system
+              reads it back, with the captions' own switch. */}
+          <WindowShareBadge />
           <div className="overlay-tools" data-hit={(!idle && !concealed) || undefined}>
             <button className="icon-btn grip" title="Drag" onMouseDown={startDrag}><GripIcon size={14} /></button>
             <button className="icon-btn" title="Copy last 2 minutes" onClick={() => api.copyLastMinutes(2).catch(() => undefined)}><CopyIcon size={13} /></button>

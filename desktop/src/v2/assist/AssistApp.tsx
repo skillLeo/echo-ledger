@@ -4,7 +4,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { useHitRegions } from "../../lib/hitRegions";
 import { useConcealed } from "../../lib/privacy";
-import { PrivacyBadge } from "../../components/PrivacyBadge";
+import { WindowShareBadge } from "../../components/ShareVisibility";
 import { announceReady, errorMessage } from "../../lib/ipc";
 import { useUiFlags } from "../flags";
 import { assist, type AssistMessage, type AssistMode, type HintLevel, type SendKind } from "./adapter";
@@ -111,7 +111,7 @@ export default function AssistApp() {
   return (
     <div className="el-root el-embedded el-assist-root">
       <h1 className="el-visually-hidden">Live Assist</h1>
-      <AssistCard state={state} hint={local.hint} muted={local.mutedUntil > now} badge={<PrivacyBadge compact />}
+      <AssistCard state={state} hint={local.hint} muted={local.mutedUntil > now} badge={<WindowShareBadge />}
         actions={{
           onSend: (kind: SendKind) => run(() => assist.send(kind)),
           onMode: (mode: AssistMode) => run(() => assist.set({ mode })),

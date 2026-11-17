@@ -31,6 +31,15 @@ describe("the words the apps share", () => {
     expect(found).toEqual([]);
   });
 
+  it("never says undetectable, stealth or bypass anywhere: it is Hide from screen shares / Show in screen shares", () => {
+    // Every file of the app, comments included; only the tests that list these words as banned may name them.
+    const all = [...files(here), ...files(join(here, "../src-tauri/src")), ...files(join(here, "../src-tauri/tests")), ...files(join(here, "../../.github/workflows")).filter((f) => /desktop-/.test(f))]
+      .filter((f) => /\.(tsx?|rs|ya?ml|css|html)$/.test(f))
+      .filter((f) => !/wording\.test\.ts$|privacy\.test\.ts$|sharePrivacy\.test\.tsx$/.test(f));
+    const found = all.filter((f) => /undetectable|stealth|bypass/i.test(readFileSync(f, "utf8"))).map((f) => relative(here, f));
+    expect(found).toEqual([]);
+  });
+
   it("never claims more privacy than the app gives: a private card is hidden from screen share, not invisible", () => {
     // The new screens (v2/) talk about the Live Assist card and the overlays: "private" and "hidden from screen share".
     const found = sources.filter(([name, text]) => /^v2[/\\]/.test(name) && /only you can see|invisible/i.test(text)).map(([name]) => name);

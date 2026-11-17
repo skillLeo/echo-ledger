@@ -25,6 +25,10 @@ fn customised() -> Settings {
         captions_on_record: false,
         auto_mode: false,
         hide_from_sharing: ShareHiding::Floating,
+        main_share_hide: Some(crate::privacy::share::MainHide { until: crate::privacy::share::HideUntil::At { at_ms: 1_795_000_000_000 }, since_ms: 1_794_999_100_000 }),
+        show_card_in_shares: true,
+        show_captions_in_shares: true,
+        share_notice: true,
         old_windows_sharing: OldWindowsSharing::Show,
         share_one_window: true,
         send_diagnostics: true,
@@ -183,6 +187,7 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "inputDevice",
             "installId",
             "lockAfterMinutes",
+            "mainShareHide",
             "notificationCategories",
             "notificationSounds",
             "oldWindowsSharing",
@@ -198,14 +203,18 @@ fn keys_are_camel_case_and_shortcut_names_snake_case() {
             "screenTarget",
             "sendDiagnostics",
             "serverUrl",
+            "shareNotice",
             "shareOneWindow",
             "shortcuts",
+            "showCaptionsInShares",
+            "showCardInShares",
             "siteRules",
             "skipCallsShorterThanS",
             "transcriptionLanguage"
         ]
     );
-    assert_eq!(keys.len(), 48, "section 4.7 of the IPC contract");
+    assert_eq!(keys.len(), 52, "section 4.7 of the IPC contract");
+    assert_eq!(v["mainShareHide"], json!({"until": {"kind": "at", "at_ms": 1_795_000_000_000_i64}, "sinceMs": 1_794_999_100_000_i64}));
     assert_eq!(v["dictationMode"], "push_to_talk");
     assert_eq!(v["dictationReplacements"][0]["to"], "as soon as possible");
     assert_eq!(v["transcriptionLanguage"], "ur");
@@ -467,6 +476,54 @@ fn show_during_screen_share_from_v1_8_keeps_echoledger_visible_in_shares() {
     let saved = serde_json::to_value(&s).unwrap();
     assert!(saved.get("contentProtection").is_none(), "the old key is not written again");
     assert_eq!(saved["hideFromSharing"], "off");
+}
+
+#[test]
+fn defaults_show_the_main_window_and_hide_the_card_and_the_captions() {
+    let s = Settings::default();
+    assert_eq!(s.main_share_hide, None, "the main window is shown in screen shares");
+    assert!(!s.show_card_in_shares, "the Live Assist card is hidden from screen shares");
+    assert!(!s.show_captions_in_shares, "the captions are hidden from screen shares");
+    assert!(!s.share_notice, "a new install has nothing to be told");
+    let fresh = Settings::from_value(json!({}));
+    assert!(fresh.main_share_hide.is_none() && !fresh.show_card_in_shares && !fresh.show_captions_in_shares && !fresh.share_notice);
+}
+
+#[test]
+fn the_old_share_setting_migrates_to_main_shown_and_card_and_captions_hidden() {
+    // The table: "all", "floating" and "off" (and v1.8's key) all become the main window shown; the card and the captions
+    // are hidden after every migration, and the person is told once.
+    let table = [
+        json!({"serverUrl": "https://ledger.example.com", "hideFromSharing": "all"}),
+        json!({"serverUrl": "https://ledger.example.com", "hideFromSharing": "floating"}),
+        json!({"serverUrl": "https://ledger.example.com", "hideFromSharing": "off"}),
+        json!({"serverUrl": "https://ledger.example.com", "contentProtection": false}),
+        json!({"serverUrl": "https://ledger.example.com", "contentProtection": true}),
+        // Even a file that somehow carries a hide or a shown card without the new switches: a migration never shows them.
+        json!({"hideFromSharing": "off", "showCaptionsInShares": true, "mainShareHide": {"until": {"kind": "until_off"}, "sinceMs": 1}}),
+    ];
+    for file in table {
+        let s = Settings::from_value(file.clone());
+        assert_eq!(s.main_share_hide, None, "{file}: the main window is shown");
+        assert!(!s.show_card_in_shares, "{file}: the card is hidden");
+        assert!(!s.show_captions_in_shares, "{file}: the captions are hidden");
+        assert!(s.share_notice, "{file}: told once");
+    }
+    // The other floating windows keep what the person had.
+    assert_eq!(Settings::from_value(json!({"hideFromSharing": "off"})).hide_from_sharing, ShareHiding::Off);
+    assert_eq!(Settings::from_value(json!({"hideFromSharing": "floating"})).hide_from_sharing, ShareHiding::Floating);
+    // Once saved by this version, nothing migrates again: the person's own choices are kept, the notice stays answered.
+    let dir = dir();
+    let path = dir.path().join("settings.json");
+    let mut s = Settings::from_value(json!({"hideFromSharing": "all"}));
+    s.share_notice = false;
+    s.show_card_in_shares = true;
+    s.main_share_hide = Some(crate::privacy::share::MainHide { until: crate::privacy::share::HideUntil::UntilOff, since_ms: 5 });
+    s.save(&path).unwrap();
+    let again = Settings::load(&path);
+    assert!(!again.share_notice, "shown once, remembered");
+    assert!(again.show_card_in_shares, "the person's own choice on the card is kept");
+    assert_eq!(again.main_share_hide, s.main_share_hide);
 }
 
 #[test]

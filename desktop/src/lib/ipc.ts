@@ -82,6 +82,8 @@ export interface AppStatus {
   server?: ServerNotices;
   /** Said once after "Keep automatically" became Ask me; null otherwise (missing from an older core). */
   afterCallNotice?: string | null;
+  /** Said once after the v2.0 update: the main window now shows in screen shares unless the person hides it. */
+  shareNotice?: string | null;
 }
 
 /** `config.app_update`: this version is below the server's minimum; `refused`: its other requests are refused. */
@@ -383,7 +385,11 @@ export interface Settings {
   shortcuts: Partial<Record<ShortcutAction, string>>;
   captionsOnRecord: boolean;
   autoMode: boolean;
-  hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection
+  hideFromSharing: ShareHiding; // since v1.8.1, replaces contentProtection; since v2.0 the other floating windows only
+  mainShareHide: MainShareHide | null; // since v2.0: the main window hidden from screen shares, and until when
+  showCardInShares: boolean; // since v2.0: only by the person's choice on the Live Assist card
+  showCaptionsInShares: boolean; // since v2.0: only by the person's choice on the captions
+  shareNotice: boolean; // the one-time notice after the v2.0 update
   oldWindowsSharing: OldWindowsSharing; // Windows before build 19041
   shareOneWindow: boolean; // "I share one window or a tab" (macOS)
   sendDiagnostics: boolean; // Share Check results to the server, off until turned on
@@ -1544,6 +1550,29 @@ export interface ShareSeen {
   hid: boolean;
 }
 
+/** Until when the main window is hidden from screen shares (v2.0). */
+export type HideUntil = { kind: "call_ends" } | { kind: "at"; at_ms: number } | { kind: "until_off" };
+export interface MainShareHide {
+  until: HideUntil;
+  sinceMs: number;
+}
+/** What the person picks under "Hide from screen shares". */
+export type HideFor =
+  | { kind: "call_ends" } | { kind: "minutes15" } | { kind: "hour1" } | { kind: "tomorrow" } | { kind: "until_off" }
+  | { kind: "custom"; minutes: number };
+/** The two windows hidden from screen shares unless the person shows them, each on its own. */
+export type PinnedWindow = "card" | "captions";
+/** What the system reads back for that window: never only the saved choice. */
+export type WindowShareState = "hidden" | "shown" | "could_not_hide";
+export interface WindowShareView {
+  which: PinnedWindow;
+  /** The person showed it in screen shares (the saved choice). */
+  shown: boolean;
+  state: WindowShareState;
+  badge: string;
+  switchLabel: string;
+}
+
 export interface PrivacyStatus {
   platform: string;
   badge: PrivacyBadge;
@@ -1557,6 +1586,13 @@ export interface PrivacyStatus {
   hiddenForShare: boolean;
   /** The person opened the main window during a whole-screen share: it says it may be in the screen share. */
   mainInShare: boolean;
+  /** The main window is hidden from screen shares (v2.0), and until when ("until 14:30"); null: shown. */
+  mainHide?: MainShareHide | null;
+  mainHiddenUntil?: string | null;
+  /** A call is detected: "Until this call ends" is offered. */
+  callDetected?: boolean;
+  showCard?: boolean;
+  showCaptions?: boolean;
   /** Which whole-screen share that is, counted in this run: the notice closed in one share shows again in the next. */
   shareNumber: number;
   /** The share's sharing bar is on screen: "Show EchoLedger windows" is not offered (they come back when it ends). */
@@ -1636,6 +1672,15 @@ export const api = {
   shareCheckCard: (open: boolean) => invoke<void>("share_check_card", { open }),
   shareCheckAnswer: (meetingApp: MeetingApp, visible: boolean) => invoke<PrivacyStatus>("share_check_answer", { meetingApp, visible }),
   privacyShowInShares: (minutes: number) => invoke<void>("privacy_show_in_shares", { minutes }),
+  /** "Hide from screen shares" for the main window, until the time chosen (v2.0). */
+  privacyMainHide: (choice: HideFor) => invoke<PrivacyStatus>("privacy_main_hide", { choice }),
+  /** "Show now": the main window is in screen shares again. */
+  privacyMainShow: () => invoke<PrivacyStatus>("privacy_main_show"),
+  /** The card's or the captions' real state, read back from the system; the main window names the one it means. */
+  privacyWindowShare: (which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share", { which }),
+  /** That window's own switch: shown in screen shares only by this explicit choice. */
+  privacyWindowShareSet: (shown: boolean, which: PinnedWindow | null = null) => invoke<WindowShareView>("privacy_window_share_set", { which, shown }),
+  shareNoticeDismiss: () => invoke<void>("share_notice_dismiss"),
   privacyConcealed: () => invoke<boolean>("privacy_concealed"),
   privacyHideAll: () => invoke<void>("privacy_hide_all"),
   /** Windows: sets every capture flag again after something else on the computer changed one. */

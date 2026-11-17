@@ -13,9 +13,9 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 const switchFor = (name: string) => screen.getByRole("switch", { name });
 
 describe("Captions and screen share", () => {
-  it("says what Settings › Screen-share privacy decides for the captions", () => {
-    expect(captionsShareLine("off")).toBe("Captions are visible in screen share. Change it in Settings › Screen-share privacy.");
-    for (const hiding of ["all", "floating"] as const) expect(captionsShareLine(hiding)).toMatch(/^Captions are hidden from screen share/);
+  it("says the captions are hidden from screen shares unless the person showed them on the captions", () => {
+    expect(captionsShareLine(true)).toBe("Captions show in screen shares, as you chose on the captions. Hide them from their badge or in Settings › Screen-share privacy.");
+    expect(captionsShareLine(false)).toBe("Captions are hidden from screen shares unless you show them from their badge.");
   });
 });
 

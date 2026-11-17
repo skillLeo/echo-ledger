@@ -20,6 +20,7 @@ import { searchSettings } from "../../lib/settingsIndex";
 import { OnboardingView } from "./OnboardingView";
 import { PermissionLossNotice } from "./Permissions";
 import { AfterCallNotice } from "./AfterCallNotice";
+import { ShareDefaultNotice } from "./ShareDefaultNotice";
 import { AlertIcon } from "../../components/Icons";
 import { applyTheme, getThemeChoice, saveThemeChoice, type ThemeChoice } from "../../lib/theme";
 import { SignInView } from "./SignInView";
@@ -728,6 +729,7 @@ export default function MainApp() {
       <ServerBanners server={status.server} notify={notify} />
       {/* The new shell shows its own (ui_v2.shell). */}
       {!ui.flags["ui_v2.shell"] && <AfterCallNotice text={status.afterCallNotice} notify={notify} />}
+      {!ui.flags["ui_v2.shell"] && <ShareDefaultNotice text={status.shareNotice} />}
       <ShareNotice />
       {status.platform === "macos" && <PermissionLossNotice />}
       {/* The last call's side that was never heard (Phase 1C): a click opens the Ready check with its fix. */}
@@ -865,6 +867,7 @@ export default function MainApp() {
             me={account ? { name: account.name || account.email, email: account.email, plan: entitlements?.plan?.name ?? null } : null}
             notices={<Suspense fallback={null}><div className="el-root el-embedded">
               <AfterCallNoticeV2 text={status.afterCallNotice} onStatus={setStatus} />
+              <ShareDefaultNotice text={status.shareNotice} />
             </div></Suspense>}
             ask={ui.flags["ui_v2.ask"] ? (
               <Suspense fallback={null}><div className="el-root el-embedded">
