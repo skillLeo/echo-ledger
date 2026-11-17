@@ -1,7 +1,7 @@
 // Ask in the new look (ui_v2.ask, docs/v2/IA.md 4), the same as the phone's Ask v2: pick what to ask about, ask in
 // your own words, get the answer with the recordings and files it comes from (a recording opens at its moment). The
-// server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project; "All
-// recordings" is said, not offered, until the server can.
+// server answers per project today (`client_ask`, POST /api/clients/{id}/ask), so the scope is a project. "All
+// recordings" isn't offered or mentioned at all until the server can ask across them.
 import { useState } from "react";
 import { api, errorMessage, type AnswerCitation, type AnswerLanguage, type ClientAnswer } from "../../lib/ipc";
 import { timestamp } from "../../lib/format";
@@ -87,8 +87,8 @@ export function AskV2({ projects, initialProjectId = null, onOpenAt, onOpenProje
       {!embedded && <header className="el-page__head"><h1 className="el-title-l">Ask</h1></header>}
       <Card className="el-form">
         {!embedded && <div className="el-field">
+          {/* Projects only: asking across all recordings comes when the server can; until then it isn't offered at all. */}
           <Select label="Ask about" value={chosen?.id ?? ""} onChange={choose} options={projects.map((p) => ({ value: p.id, label: p.name }))} />
-          <span className="el-field__hint">All recordings (not available yet)</span>
         </div>}
         <TextArea label="Your question" value={question} placeholder="What did Bilal Traders agree on payment?" rows={3}
           onChange={(e) => setQuestion(e.target.value)}

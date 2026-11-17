@@ -892,7 +892,6 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-input > input:disabled { color: var(--el-role-text-disabled); cursor: not-allowed; }
 
 /* Microphone & audio: the two level bars and the test's result. */
-.el-meters { display: inline-flex; align-items: center; gap: var(--el-space-8); }
 .el-meter { display: inline-block; inline-size: calc(var(--el-space-64) * 1.5); block-size: var(--el-space-8); border-radius: var(--el-radius-full); background: var(--el-role-border-default); overflow: hidden; }
 /* The fill is scaled (lib/motion fillWidth), so it grows from the start edge, not the middle. */
 .el-meter__fill { display: block; block-size: 100%; background: var(--el-role-accent-default); transform-origin: left center; }
@@ -955,3 +954,15 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 }
 .el-report { display: flex; flex-direction: column; gap: var(--el-space-8); padding: var(--el-space-16); }
 .el-report p { margin: 0; }
+
+/* Settings, Live and Home (their compact rows): a row's name and its line wrap instead of being cut, and a control or
+   value goes under the name when the row is too narrow for both (a small window, large text). The Library's rows keep
+   one line each, cut with an ellipsis, so the list stays scannable. */
+:is([data-v2=settings], [data-v2=settings-page], [data-v2=live], [data-v2=home], [data-v2=help]) .el-row--compact { flex-wrap: wrap; row-gap: var(--el-space-4); }
+:is([data-v2=settings], [data-v2=settings-page], [data-v2=live], [data-v2=home], [data-v2=help]) .el-row--compact .el-row__main { flex: 1 1 calc(var(--el-space-64) * 2.5); }
+:is([data-v2=settings], [data-v2=settings-page], [data-v2=live], [data-v2=home], [data-v2=help]) .el-row--compact :is(.el-row__title, .el-row__meta-text) { white-space: normal; overflow-wrap: break-word; }
+:is([data-v2=settings], [data-v2=settings-page], [data-v2=live], [data-v2=home], [data-v2=help]) .el-row--compact .el-row__control { margin-inline-start: auto; max-inline-size: 100%; }
+.el-setting__select { min-inline-size: min(calc(var(--el-space-64) * 3.5), 100%); }
+/* The two level bars shrink with a narrow row rather than run past the card's edge. */
+.el-meters { display: flex; align-items: center; gap: var(--el-space-8); min-inline-size: 0; max-inline-size: 100%; }
+.el-meters .el-meter { inline-size: calc(var(--el-space-64) * 1.5); flex: 0 1 auto; min-inline-size: var(--el-space-32); }

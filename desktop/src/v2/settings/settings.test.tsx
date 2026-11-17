@@ -156,6 +156,13 @@ describe("the app with ui_v2.settings", () => {
     await act(flushAsync);
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch back to classic" })).toBeInTheDocument();
+    // Settings pressed again from inside one of its pages (the sidebar's Settings) brings its list back, not nothing.
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
+    await act(flushAsync);
+    expect(await screen.findByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
+    fireEvent.click(within(screen.getByRole("navigation", { name: "Main" })).getByRole("button", { name: "Settings" }));
+    await act(flushAsync);
+    expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
   });
 
   it("every Settings page has its v2 page (Help and Setup & health have their own)", () => {

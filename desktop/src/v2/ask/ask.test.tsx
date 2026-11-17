@@ -32,10 +32,12 @@ describe("Ask v2 (as on the phone)", () => {
     expect(p.onLibrary).toHaveBeenCalled();
   });
 
-  it("before asking: the scope, the question, All recordings said as not available yet, and the idle state", () => {
+  it("before asking: the project, the question and the idle state; All recordings isn't offered until the server has it", () => {
     render(<AskV2 projects={PROJECTS} {...props()} />);
     expect(screen.getByRole("combobox", { name: /Ask about/ })).toHaveAccessibleName("Ask about Qureshi Textiles");
-    expect(screen.getByText("All recordings (not available yet)")).toBeInTheDocument();
+    expect(screen.queryByText(/All recordings/)).toBeNull();
+    fireEvent.click(screen.getByRole("combobox", { name: /Ask about/ }));
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(PROJECTS.map((p) => p.name));
     expect(screen.getByRole("button", { name: "Ask" })).toBeDisabled();
     expect(screen.getByRole("region", { name: "Ask your recordings" })).toBeInTheDocument();
   });
