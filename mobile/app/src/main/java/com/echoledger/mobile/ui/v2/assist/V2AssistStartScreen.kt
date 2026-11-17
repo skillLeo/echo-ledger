@@ -10,6 +10,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,8 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.R
 import com.echoledger.mobile.assist.AssistHub
 import com.echoledger.mobile.ui.v2.components.EchoButton
@@ -78,11 +81,16 @@ fun V2AssistStartScreen(
                     Body(stringResource(R.string.v2_assist_start_intro))
                     Text(stringResource(R.string.v2_assist_consent_label), style = EchoV2.type.label, color = c.textSecondary)
                     // The sentence to say is English in every language: laid out left to right, so its "?" stays at the end.
-                    Text(
-                        stringResource(R.string.v2_assist_consent),
-                        style = EchoV2.type.body.copy(textDirection = TextDirection.Ltr),
-                        color = c.textPrimary
-                    )
+                    // In the system face and laid out left to right, as on the card.
+                    val consent = stringResource(R.string.v2_assist_consent)
+                    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+                        Text(
+                            consent,
+                            style = EchoV2.type.content(consent, EchoV2.type.body).copy(textDirection = TextDirection.Ltr),
+                            color = c.textPrimary,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                     ui.problem?.let { Text(it, style = EchoV2.type.body, color = c.danger) }
                     if (ui.busy) {
                         Body(stringResource(R.string.v2_assist_start_busy))

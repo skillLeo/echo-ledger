@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalLayoutDirection
@@ -19,6 +20,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -26,6 +28,8 @@ import androidx.compose.ui.text.style.TextDirection
 import androidx.compose.ui.unit.LayoutDirection
 import com.echoledger.mobile.ui.v2.components.EchoDivider
 import com.echoledger.mobile.ui.v2.theme.EchoV2
+import com.echoledger.mobile.ui.v2.theme.EchoV2Colors
+import com.echoledger.mobile.ui.v2.theme.EchoV2Type
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
 
 /** One block of a guide's Markdown. */
@@ -73,6 +77,35 @@ object Markdown {
     /** A table row's cells: at most [MAX_CELLS] (the rest are dropped). */
     private fun cells(line: String): List<String> =
         line.trim().removePrefix("|").removeSuffix("|").split("|", limit = MAX_CELLS + 1).take(MAX_CELLS).map { it.trim() }
+
+    /**
+     * A line's direction by Unicode's first-strong rule: its first letter, past Markdown marks, quotes, digits and
+     * punctuation, decides; Arabic script (Urdu) is right to left, any other letter left to right. Null when it has no
+     * letter (the line then follows what holds it).
+     */
+    fun firstStrong(text: String): LayoutDirection? {
+        for (span in inline(text)) {
+            for (ch in span.text) {
+                if (!Character.isLetter(ch)) continue
+                val arabic = Character.UnicodeScript.of(ch.code) == Character.UnicodeScript.ARABIC
+                return if (arabic) LayoutDirection.Rtl else LayoutDirection.Ltr
+            }
+        }
+        return null
+    }
+
+    /**
+     * A block's direction: its words' first strong letter; a list's from its first item that has one (each item then
+     * takes its own); a table's from its header row; code is always left to right.
+     */
+    fun direction(block: MdBlock): LayoutDirection? = when (block) {
+        is MdBlock.Heading -> firstStrong(block.text)
+        is MdBlock.Paragraph -> firstStrong(block.text)
+        is MdBlock.Quote -> firstStrong(block.text)
+        is MdBlock.Code -> LayoutDirection.Ltr
+        is MdBlock.ListBlock -> block.items.firstNotNullOfOrNull(::firstStrong)
+        is MdBlock.Table -> block.head.firstNotNullOfOrNull(::firstStrong)
+    }
 
     fun blocks(markdown: String): List<MdBlock> {
         val lines = markdown.take(MAX_CHARS).replace("\r\n", "\n").replace('\r', '\n').split("\n").take(MAX_LINES)
@@ -191,62 +224,81 @@ private fun styled(text: String): AnnotatedString {
     }
 }
 
-/** A guide's text. Headings are marked as headings for screen readers; each block takes its own direction. */
+/**
+ * A guide's text. Headings are marked as headings for screen readers. Each block takes its direction and face from its
+ * own words, not the screen's: an English guide on the Urdu screens reads left to right in the system face (its list
+ * numbers and table columns in English order), an Urdu one right to left on the English screens.
+ */
 @Composable
 fun EchoMarkdown(text: String, modifier: Modifier = Modifier) {
     val c = EchoV2.colors
     val type = EchoV2.type
     val blocks = remember(text) { Markdown.blocks(text) }
+    val screen = LocalLayoutDirection.current
     Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s12)) {
         blocks.forEach { b ->
-            when (b) {
-                is MdBlock.Heading -> Text(
-                    styled(b.text),
-                    style = (if (b.level <= 2) type.titleS else type.bodyStrong).copy(textDirection = TextDirection.Content),
-                    color = c.textPrimary,
-                    modifier = Modifier.semantics { heading() }
-                )
-
-                is MdBlock.Paragraph -> Text(
-                    styled(b.text),
-                    style = type.body.copy(textDirection = TextDirection.Content),
-                    color = c.textPrimary
-                )
-
-                is MdBlock.Quote -> Row {
-                    Text(
-                        styled(b.text),
-                        style = type.body.copy(textDirection = TextDirection.Content),
-                        color = c.textSecondary,
-                        modifier = Modifier.padding(start = EchoTokens.Space.s12)
-                    )
-                }
-
-                is MdBlock.Code -> Text(
-                    b.text,
-                    style = type.mono.copy(textDirection = TextDirection.Ltr),
-                    color = c.textPrimary,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(c.bgSubtle, RoundedCornerShape(EchoTokens.Component.fieldRadius))
-                        .horizontalScroll(rememberScrollState())
-                        .padding(EchoTokens.Space.s8)
-                )
-
-                is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
-                    b.items.forEachIndexed { n, item ->
-                        Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
-                            Text(if (b.ordered) "${n + 1}." else "•", style = type.body, color = c.textSecondary)
-                            Text(styled(item), style = type.body.copy(textDirection = TextDirection.Content), color = c.textPrimary)
-                        }
-                    }
-                }
-
-                is MdBlock.Table -> Table(b)
+            CompositionLocalProvider(LocalLayoutDirection provides (Markdown.direction(b) ?: screen)) {
+                Block(b, c, type)
             }
         }
     }
 }
+
+@Composable
+private fun Block(b: MdBlock, c: EchoV2Colors, type: EchoV2Type) {
+    val wide = Modifier.fillMaxWidth()
+    when (b) {
+        is MdBlock.Heading -> Text(
+            styled(b.text),
+            style = face(b.text, if (b.level <= 2) type.titleS else type.bodyStrong),
+            color = c.textPrimary,
+            modifier = wide.semantics { heading() }
+        )
+
+        is MdBlock.Paragraph -> Text(styled(b.text), style = face(b.text, type.body), color = c.textPrimary, modifier = wide)
+
+        is MdBlock.Quote -> Text(
+            styled(b.text),
+            style = face(b.text, type.body),
+            color = c.textSecondary,
+            modifier = wide.padding(start = EchoTokens.Space.s12)
+        )
+
+        is MdBlock.Code -> Text(
+            b.text,
+            style = type.mono.copy(textDirection = TextDirection.Ltr),
+            color = c.textPrimary,
+            modifier = wide
+                .background(c.bgSubtle, RoundedCornerShape(EchoTokens.Component.fieldRadius))
+                .horizontalScroll(rememberScrollState())
+                .padding(EchoTokens.Space.s8)
+        )
+
+        is MdBlock.ListBlock -> Column(verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)) {
+            val list = LocalLayoutDirection.current
+            b.items.forEachIndexed { n, item ->
+                // Each item its own direction: an English item quoting Urdu stays left to right, and the other way round.
+                CompositionLocalProvider(LocalLayoutDirection provides (Markdown.firstStrong(item) ?: list)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)) {
+                        val mark = if (b.ordered) "${n + 1}." else "•"
+                        Text(mark, style = face(item, type.body), color = c.textSecondary)
+                        Text(styled(item), style = face(item, type.body), color = c.textPrimary, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+
+        is MdBlock.Table -> Table(b)
+    }
+}
+
+/**
+ * A line's face by its first strong letter: one that starts in Latin letters takes the system face on the Urdu screens
+ * too (an English sentence quoting Urdu), one that starts in Urdu the screen's face.
+ */
+@Composable
+private fun face(text: String, style: TextStyle): TextStyle =
+    EchoV2.type.content(if (Markdown.firstStrong(text) == LayoutDirection.Ltr) "A" else text, style)
 
 /** A table that scrolls sideways when it's wider than the page; the header row is strong. */
 @Composable
@@ -259,7 +311,7 @@ private fun Table(table: MdBlock.Table) {
                 row.forEach { cell ->
                     Text(
                         styled(cell),
-                        style = (if (r == 0) EchoV2.type.label else EchoV2.type.meta).copy(textDirection = TextDirection.Content),
+                        style = face(cell, if (r == 0) EchoV2.type.label else EchoV2.type.meta),
                         color = if (r == 0) c.textPrimary else c.textSecondary,
                         modifier = Modifier.width(EchoTokens.Space.s64 * CELL_UNITS).padding(end = EchoTokens.Space.s8)
                     )

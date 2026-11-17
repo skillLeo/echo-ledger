@@ -29,6 +29,7 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [mac, setMac] = useState<CheckReport | null | undefined>(platform === "macos" ? undefined : null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (platform !== "macos") return;
@@ -121,7 +122,7 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
               {report.checks.map((c) => (
                 <HealthCheckRow key={c.id} state={c.ok ? "ok" : c.advisory ? "limited" : "problem"} stateLabel={c.ok ? "OK" : c.advisory ? "Worth a look" : "Needs a fix"} title={c.label} detail={c.detail ?? undefined}
                   action={c.fix ? (
-                    <Button size="sm" variant={c.ok ? "secondary" : "primary"} loading={busy === c.id} loadingLabel="Fixing…"
+                    <Button size="sm" variant={c.ok || c.advisory ? "secondary" : "primary"} loading={busy === c.id} loadingLabel="Fixing…"
                       onClick={() => void doing(c.id, async () => setReport(await api.readyFix(c.fix!.action)))}>{c.fix.label}</Button>
                   ) : undefined} />
               ))}
@@ -156,13 +157,27 @@ export function SetupHealth({ platform, onBack }: { platform: PermissionsStatus[
                 {mac.stopped && <p className="el-caption el-group__note">{mac.stopped}</p>}
                 <div className="el-step__actions el-group__note">
                   <Button onClick={() => void doing("mac", async () => setMac(await api.macCheckRun()))}>Run again</Button>
-                  <Button variant="quiet" onClick={() => void doing("copy", () => api.macCheckCopy())}>Copy the report</Button>
+                  <Button variant="quiet" onClick={() => void doing("copy", () => api.macCheckCopy())}>Copy the Mac check</Button>
                 </div>
               </>
             )}
           </Card>
         </section>
       )}
+
+      {/* Both platforms: the whole report for support, copied only on the press (no recordings, transcripts or keys). */}
+      <section className="el-group" aria-label="Report for support">
+        <h2 className="el-caption el-body-strong el-group__title">Report for support</h2>
+        <Card>
+          <div className="el-report">
+            <p className="el-secondary">This computer's setup, the Ready check and the last checks, as text to paste in a message to support. It has no recordings, transcripts or keys.</p>
+            <div className="el-step__actions">
+              <Button loading={busy === "report"} loadingLabel="Copying…" onClick={() => void doing("report", async () => { setCopied(false); await api.diagnosticReportCopy(); setCopied(true); })}>Copy the report</Button>
+              {copied && <span className="el-caption" role="status">Copied</span>}
+            </div>
+          </div>
+        </Card>
+      </section>
     </div>
   );
 }

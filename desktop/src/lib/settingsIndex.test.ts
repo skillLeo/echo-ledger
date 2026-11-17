@@ -158,7 +158,7 @@ describe("golden queries", () => {
     expect(answer.closest.map((e) => e.id)).toContain("calls");
   });
 
-  it("suggests only genuine misspellings: never unrelated pages for a word three edits away (Hassam's \"recovered recording\")", () => {
+  it("suggests only genuine misspellings: never unrelated pages for a word three edits away (the owner's \"recovered recording\")", () => {
     for (const query of ["recovered recording", "recovered"]) {
       const answer = searchSettings(query);
       expect(answer.settings).toEqual([]);

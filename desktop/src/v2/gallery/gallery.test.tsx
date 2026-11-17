@@ -55,6 +55,14 @@ describe("the entry point", () => {
     expect(document.documentElement.dataset.theme).toBe("dark");
   });
 
+  it("shows Plan & usage right to left in Urdu, its meters inside the right-to-left frame", async () => {
+    await boot("?v2gallery&screen=plan&lang=ur");
+    expect(await screen.findByRole("heading", { name: "پلان اور استعمال", level: 1 })).toBeInTheDocument();
+    const meter = screen.getByRole("meter", { name: /^Transcription/ });
+    expect(meter.closest("[dir]")).toHaveAttribute("dir", "rtl");
+    expect(meter.querySelector(".el-meter__fill")).toHaveStyle({ transform: "scaleX(0.85)" });
+  });
+
   it("shows the app, never the gallery, when the build is not a development build", async () => {
     vi.stubEnv("DEV", false);
     await boot("?v2gallery");

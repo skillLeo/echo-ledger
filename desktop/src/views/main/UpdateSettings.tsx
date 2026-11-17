@@ -41,7 +41,7 @@ export function updateLine(status: UpdateStatus): string {
   }
 }
 
-const RECORDING_BLOCKS = "Stop the recording first: EchoLedger restarts to install the update.";
+export const RECORDING_BLOCKS = "Stop the recording first: EchoLedger restarts to install the update.";
 
 /** Settings → About: the version, Check for updates, and Restart once an update is ready. */
 export function UpdatesPanel({ appStatus }: { appStatus: AppStatus }) {

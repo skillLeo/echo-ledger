@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 vi.mock("@tauri-apps/api/app", () => ({ getVersion: async () => "1.7.0" }));
 
 const ACCOUNT: Account = {
-  name: "Hassam Ali", email: "hassam@example.com", email_verified: true, two_factor: true, google: false,
+  name: "Ayesha Khan", email: "ayesha@example.test", email_verified: true, two_factor: true, google: false,
   created_at: "2025-11-09T09:00:00Z", workspace: { id: 1, name: "Personal", role: "owner" }, deletes_at: null,
 };
 const CLIENTS = { data: [{ id: "c1", name: "Acme Holdings", keyterm_count: 4 }] };
@@ -90,8 +90,8 @@ describe("the Overview and who you are", () => {
     await setup({ e: sampleEntitlements("free") });
     const overview = screen.getByTestId("settings-overview");
     const card = within(overview).getByTestId("profile-card");
-    expect(await within(card).findByText("Hassam Ali")).toBeInTheDocument();
-    expect(within(card).getByText("hassam@example.com")).toBeInTheDocument();
+    expect(await within(card).findByText("Ayesha Khan")).toBeInTheDocument();
+    expect(within(card).getByText("ayesha@example.test")).toBeInTheDocument();
     expect(within(card).getByText("Free")).toHaveClass("plan-chip");
     expect(within(overview).getByText("This month")).toBeInTheDocument();
     expect(screen.queryByText("All settings")).not.toBeInTheDocument();
@@ -145,7 +145,7 @@ describe("the Overview and who you are", () => {
   it("the card's body opens Plan & usage, and the Upgrade button beside it is not inside it", async () => {
     await setup({ e: sampleEntitlements("free") });
     const card = await screen.findByTestId("profile-card");
-    const body = within(card).getByRole("button", { name: /Hassam Ali, hassam@example.com, Free plan\. Opens plan and usage\./ });
+    const body = within(card).getByRole("button", { name: /Ayesha Khan, ayesha@example.test, Free plan\. Opens plan and usage\./ });
     expect(within(body).queryByRole("button", { name: "Upgrade" })).not.toBeInTheDocument();
     fireEvent.click(body);
     expect(await screen.findByRole("heading", { name: "Plan & usage", level: 1 })).toBeInTheDocument();
@@ -159,7 +159,7 @@ describe("the Overview and who you are", () => {
     render(<SettingsView status={makeStatus()} run={makeRun().run} onUnpaired={vi.fn()} />);
     await screen.findAllByRole("heading", { name: "Settings", level: 1 });
     fireEvent.click(await within(list()).findByRole("button", { name: "Profile" }));
-    expect(await screen.findByText("Hassam Ali")).toBeInTheDocument();
+    expect(await screen.findByText("Ayesha Khan")).toBeInTheDocument();
     fireEvent.click(nav("Captions"));
     expect(await screen.findByText("Couldn't read this computer's settings.")).toBeInTheDocument();
     respond("get_settings", makeSettings());

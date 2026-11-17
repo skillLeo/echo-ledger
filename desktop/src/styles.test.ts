@@ -395,7 +395,7 @@ describe("overlay glass contrast (C7)", () => {
   });
 });
 
-describe("Settings' list never scrolls sideways (Hassam's 1000 pt window)", () => {
+describe("Settings' list never scrolls sideways (the owner's 1000 pt window)", () => {
   it("keeps one column no field can widen, room for the search's focus ring, and no sideways scroll", () => {
     // A grid's implicit column grew to the search field's own width (about 20 characters), past the 280 px column:
     // the switch was cut in half and a scroll bar appeared under the search.

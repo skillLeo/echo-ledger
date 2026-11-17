@@ -20,7 +20,7 @@ vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).
 
 const LINK: ShareLink = {
   id: "sh1", session_id: "s1", has_password: false, include_audio: true, expires_at: "2026-11-11T10:00:00Z", revoked_at: null, active: true,
-  view_count: 3, last_viewed_at: "2026-11-02T10:00:00Z", created_by: "Hassam", created_at: "2026-11-01T10:00:00Z",
+  view_count: 3, last_viewed_at: "2026-11-02T10:00:00Z", created_by: "Imran", created_at: "2026-11-01T10:00:00Z",
   kind: "session", client_id: null, audience: "people", people: ["ana@example.com"], allow_download: true,
 };
 const OLD_LINK: ShareLink = { ...LINK, id: "sh0", active: false, revoked_at: "2026-11-01T12:00:00Z", audience: "public", people: [], view_count: 0, last_viewed_at: null, allow_download: false, include_audio: false };

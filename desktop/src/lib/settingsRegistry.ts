@@ -36,6 +36,8 @@ export interface SettingEntry {
   kind: SettingKind;
   description?: string;
   options?: readonly SettingOption[];
+  /** The title in the new look when it differs ("Trash" for the Bin); searched like the title. */
+  titleV2?: string;
   /** Extra titles searched like the title, never shown ("Transcription language"). */
   aliases?: readonly string[];
   keywords?: readonly string[];
@@ -250,7 +252,7 @@ export const SETTINGS: readonly SettingEntry[] = [
   { id: "storage.used", title: "Your storage", page: "storage", kind: "info", keywords: ["used space", "quota"] },
   { id: "storage.count", title: "Recordings", page: "storage", kind: "info", keywords: ["number of recordings"] },
   { id: "storage.retention", title: "Recordings kept", page: "storage", kind: "info", keywords: ["retention", "auto delete", "how long"], ru: ["kitne din"] },
-  { id: "storage.bin", title: "Bin", page: "storage", kind: "info", keywords: ["trash", "deleted", "restore"], ru: ["kachra", "mitaya hua"] },
+  { id: "storage.bin", title: "Bin", titleV2: "Trash", page: "storage", kind: "info", keywords: ["trash", "deleted", "restore"], ru: ["kachra", "mitaya hua"] },
 
   { id: "shortcuts", title: "Keyboard shortcuts", page: null, root: "App", kind: "page", keywords: ["hotkeys", "keys", "keyboard"] },
   ...SHORTCUT_ACTIONS.map(([action, title]): SettingEntry => ({ id: `shortcuts.global.${action}`, title, page: "shortcuts", section: "Global shortcuts", kind: "action", resettable: true, keywords: ["shortcut", "hotkey"] })),
@@ -332,6 +334,11 @@ export function setting(id: string): SettingEntry {
   const entry = BY_ID.get(id);
   if (!entry) throw new Error(`No setting "${id}" in the registry`);
   return entry;
+}
+
+/** The title the new look shows: its own when it has one ("Trash"), else the title. */
+export function titleV2(entry: SettingEntry): string {
+  return entry.titleV2 ?? entry.title;
 }
 
 /** The entry, or none for an id that is not in the registry. */

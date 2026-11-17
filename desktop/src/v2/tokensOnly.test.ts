@@ -95,3 +95,17 @@ describe("v2 uses tokens only", () => {
     for (const px of media) expect(BREAKPOINTS).toContain(px);
   });
 });
+
+describe("scaled fills", () => {
+  it("a meter's fill (scaled by lib/motion fillWidth) grows from the start edge, in both directions", () => {
+    const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\.el-meter__fill \{[^}]*transform-origin: left center;/);
+    expect(css).toContain(".el-meter__fill:dir(rtl) { transform-origin: right center; }");
+  });
+
+  it("text that finds its own direction lines up with its column, in the form Chromium and WebKit read too", () => {
+    const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\.el-row__title, [^{]*\{\s*text-align: match-parent;\s*text-align: -webkit-match-parent;\s*\}/);
+    expect(css).toMatch(/\.el-screens-strip__title \{\s*text-align: match-parent;/);
+  });
+});

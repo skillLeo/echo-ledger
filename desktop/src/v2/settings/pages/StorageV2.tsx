@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { api, errorMessage, type StorageInfo } from "../../../lib/ipc";
 import { fillWidth } from "../../../lib/motion";
-import { setting } from "../../../lib/settingsRegistry";
+import { setting, titleV2 } from "../../../lib/settingsRegistry";
 import { hoursWords, useTrashKeepHours } from "../../../lib/trash";
 import { storageValue } from "../../../views/main/SecuritySettings";
 import { ListRow } from "../../components";
@@ -41,7 +41,7 @@ export function StoragePageV2({ limitBytes = null }: { limitBytes?: number | nul
       <ListRow compact anchor="storage.count" title={setting("storage.count").title}
         value={info ? (info.recordings_count === 1 ? "1 recording" : `${info.recordings_count.toLocaleString("en-US")} recordings`) : undefined} />
       <ListRow compact anchor="storage.retention" title={setting("storage.retention").title} value={info ? retentionWords(info.retention_days) : undefined} />
-      <ListRow compact anchor="storage.bin" title="Trash" value={hoursWords(trashHours)} />
+      <ListRow compact anchor="storage.bin" title={titleV2(setting("storage.bin"))} value={hoursWords(trashHours)} />
     </Group>
   );
 }

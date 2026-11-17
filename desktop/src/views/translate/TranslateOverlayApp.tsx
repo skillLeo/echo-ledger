@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { TRANSLATE_FEED, type TranslateFeed, tailText, translateApi } from "../../lib/translate";
+import { TRANSLATE_FEED, type TranslateFeed, tailText, translateApi, translatePhase } from "../../lib/translate";
 import { useConcealed } from "../../lib/privacy";
 import { PrivacyBadge } from "../../components/PrivacyBadge";
 
@@ -17,7 +17,8 @@ export default function TranslateOverlayApp() {
     void listen<TranslateFeed>(TRANSLATE_FEED, (e) => setFeed(e.payload)).then((u) => (stop = u));
     return () => stop?.();
   }, []);
-  if (!feed || feed.hidden || feed.status === "stopped" || concealed) return null;
+  // Only a running session is drawn: an ended one (or a status this app doesn't know) leaves nothing on screen.
+  if (!feed || feed.hidden || translatePhase(feed) !== "running" || concealed) return null;
   const subtitles = feed.mode === "watch";
   const text = feed.notice ?? tailText(feed.text, subtitles ? 160 : 220);
   const waiting = !feed.notice && !feed.text && !feed.partial;

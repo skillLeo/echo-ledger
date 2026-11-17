@@ -15,7 +15,7 @@ export type Patch = (p: SettingsPatch) => Promise<boolean>;
 export const optionsOf = <T extends string = string>(id: string) => (setting(id).options ?? []).map((o) => ({ value: o.value as T, label: o.label }));
 
 /** This computer's settings, and a patch that saves through the app's runner (a notice when it fails). */
-export function useSettings(run: Run): { settings: Settings | null; patch: Patch } {
+export function useSettings(run: Run): { settings: Settings | null; patch: Patch; setSettings: (s: Settings) => void } {
   const [settings, setSettings] = useState<Settings | null>(null);
   useEffect(() => {
     let live = true;
@@ -29,7 +29,7 @@ export function useSettings(run: Run): { settings: Settings | null; patch: Patch
     if (next) setSettings(next);
     return !!next;
   };
-  return { settings, patch };
+  return { settings, patch, setSettings };
 }
 
 /**
@@ -68,9 +68,14 @@ export function Group({ title, footer, children }: { title?: string; footer?: Re
     <section className="el-group" aria-labelledby={title ? id : undefined}>
       {title && <h2 className="el-caption el-body-strong el-group__title" id={id}>{title}</h2>}
       <Card><List label={title ?? "Settings"} className="el-group__rows">{children}</List></Card>
-      {footer && <div className="el-group__note el-caption el-secondary">{footer}</div>}
+      {footer && <div className="el-group__note el-caption el-secondary" dir="auto">{footer}</div>}
     </section>
   );
+}
+
+/** A page about plans on a server that has none (entitlements answered null): said once, instead of waiting forever. */
+export function NoPlans() {
+  return <Card><p className="el-no-plans el-secondary" role="status">Your server doesn't have plans yet.</p></Card>;
 }
 
 /** While the settings are read. */

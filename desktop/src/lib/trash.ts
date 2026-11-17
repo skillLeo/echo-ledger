@@ -36,9 +36,10 @@ export function useTrashKeepHours(): number | null {
   return hours;
 }
 
-/** "48 hours", "1 hour". */
+/** "48 hours", "1 hour"; whole days above 48 hours as days ("30 days" for 720). */
 export function hoursWords(hours: number | null | undefined): string {
   const h = hours ?? TRASH_KEEP_HOURS_FALLBACK;
+  if (h > 48 && h % 24 === 0) return `${h / 24} days`;
   return h === 1 ? "1 hour" : `${h} hours`;
 }
 

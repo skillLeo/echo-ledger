@@ -38,7 +38,11 @@ class FixtureHelpSource(private val lastReport: String? = null, private val fail
         val q = query.lowercase()
         return HelpResult.Ok(
             all.filter { q.isBlank() || it.title.lowercase().contains(q) || it.markdown.lowercase().contains(q) }
-                .map { GuideHit(it.id, it.title, it.markdown.lines().firstOrNull { l -> l.isNotBlank() && !l.startsWith("#") }) }
+                // As the server's excerpt: plain words, no Markdown marks.
+                .map { g ->
+                    val first = g.markdown.lines().firstOrNull { l -> l.isNotBlank() && !l.startsWith("#") }
+                    GuideHit(g.id, g.title, first?.replace("**", "")?.replace("`", ""))
+                }
         )
     }
 

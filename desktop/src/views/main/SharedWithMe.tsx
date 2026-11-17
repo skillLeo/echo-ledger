@@ -9,7 +9,7 @@ import { AppTileIcon, appKind, FolderIcon, UsersIcon } from "../../components/Ic
 import { SuccessCheck } from "../../components/SuccessCheck";
 import { NO_TARGET, type Notify } from "../../lib/notice";
 
-/** "From Hassam · Oct 30 · 4:05 pm" */
+/** "From Imran · Oct 30 · 4:05 pm" */
 export function sentLine(item: Pick<SharedItem, "from" | "sent_at">): string {
   const who = item.from?.name || item.from?.email || "A teammate";
   return [`From ${who}`, item.sent_at ? formatWhen(item.sent_at) : null].filter(Boolean).join(" · ");

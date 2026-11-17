@@ -41,3 +41,15 @@ export function unmapped(today: readonly string[], keys: readonly (string | RegE
 export function stale(today: readonly string[], keys: readonly (string | RegExp)[]): string[] {
   return keys.filter((k) => !today.some((name) => matches(k, name))).map(String);
 }
+
+/** The switches on the page that can't be changed now ("switch: <name>"): a setting the server or the plan holds off. */
+export function disabledSwitches(): string[] {
+  const off: string[] = [];
+  screen.queryAllByRole("switch", {
+    name: (n, el) => {
+      if ((el as HTMLInputElement).disabled || el.getAttribute("aria-disabled") === "true") off.push(`switch: ${n}`);
+      return true;
+    },
+  });
+  return off.sort();
+}
