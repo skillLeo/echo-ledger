@@ -41,6 +41,7 @@ import com.echoledger.mobile.data.StorageDto
 import com.echoledger.mobile.ui.LocalUnlockPrompter
 import com.echoledger.mobile.ui.LockAfter
 import com.echoledger.mobile.ui.Method
+import com.echoledger.mobile.ui.REASON_NO_SCREEN_LOCK
 import com.echoledger.mobile.ui.REASON_SECURITY_UPDATE
 import com.echoledger.mobile.ui.lockAvailability
 import com.echoledger.mobile.ui.rememberUnlockPrompter
@@ -123,10 +124,8 @@ fun AppLockPage(
             modifier = Modifier.highlightedIf(highlight == "lock.app")
         )
         if (!available) {
-            val reason = when (availability.reason) {
-                REASON_SECURITY_UPDATE -> R.string.v2_priv_lock_security_update
-                else -> R.string.v2_priv_lock_no_screen_lock
-            }
+            // A reason this page doesn't know yet reads as the common one: set a screen lock.
+            val reason = LOCK_REASONS[availability.reason] ?: R.string.v2_priv_lock_no_screen_lock
             EchoBanner(
                 stringResource(reason),
                 EchoBannerKind.Warning,
@@ -168,6 +167,12 @@ fun AppLockPage(
         PageReset("lock", title, update)
     }
 }
+
+/** Why App lock can't be used, in the screen's language: each reason of [lockAvailability] by its own words. */
+internal val LOCK_REASONS: Map<String, Int> = mapOf(
+    REASON_NO_SCREEN_LOCK to R.string.v2_priv_lock_no_screen_lock,
+    REASON_SECURITY_UPDATE to R.string.v2_priv_lock_security_update
+)
 
 /**
  * Privacy & data: recording consent (I understand), the floating windows during a screen share (Private or Show), and
@@ -223,7 +228,7 @@ fun PrivacyPage(
 /**
  * Storage: this person's recordings on the server ([load], `GET /api/storage`; never the server's own disk), the
  * plan's storage with its meter, how long recordings are kept (the server's retention days) and how long Trash can
- * restore them ([keepHours], the server's `trash.keep_hours`: "48 hours", "30 days" for 720).
+ * restore them ([keepHours], the server's `trash.keep_hours`: "48 hours"; 720 in whole days).
  */
 @Composable
 fun StoragePage(

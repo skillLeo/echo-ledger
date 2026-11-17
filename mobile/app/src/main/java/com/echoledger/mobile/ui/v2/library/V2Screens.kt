@@ -122,7 +122,8 @@ private fun ScreenTile(screen: ScreenDto, onOpen: () -> Unit, modifier: Modifier
         verticalArrangement = Arrangement.spacedBy(EchoTokens.Space.s4)
     ) {
         ScreenPicture(screen, full = false)
-        Text(label, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 1)
+        // Two lines at large text, so the moment ("0:26") is never cut off.
+        Text(label, style = EchoV2.type.mono, color = c.textSecondary, maxLines = 2)
         screen.description?.takeIf { it.isNotBlank() }?.let {
             Text(
                 it,

@@ -1,39 +1,16 @@
 package com.echoledger.mobile.ui.v2
 
 import android.app.Application
-import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Rect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.SemanticsActions
-import androidx.compose.ui.semantics.SemanticsNode
-import androidx.compose.ui.semantics.SemanticsProperties
-import androidx.compose.ui.semantics.getOrNull
-import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performTouchInput
-import androidx.compose.ui.test.swipeUp
-import androidx.compose.ui.unit.Density
 import com.echoledger.mobile.core.ReadyChip
 import com.echoledger.mobile.data.AppSettings
 import com.echoledger.mobile.data.AskAnswerDto
@@ -51,7 +28,6 @@ import com.echoledger.mobile.ui.v2.assist.V2AssistCard
 import com.echoledger.mobile.ui.v2.components.EchoBottomBar
 import com.echoledger.mobile.ui.v2.components.EchoDestination
 import com.echoledger.mobile.ui.v2.components.EchoIcons
-import com.echoledger.mobile.ui.v2.components.rememberEchoToastState
 import com.echoledger.mobile.ui.v2.home.HomeActions
 import com.echoledger.mobile.ui.v2.home.HomeModel
 import com.echoledger.mobile.ui.v2.home.V2HomeContent
@@ -68,19 +44,14 @@ import com.echoledger.mobile.ui.v2.live.V2RecordingPill
 import com.echoledger.mobile.ui.v2.settings.AppearancePage
 import com.echoledger.mobile.ui.v2.settings.V2SettingsRoot
 import com.echoledger.mobile.ui.v2.setup.V2SetupHealthContent
-import com.echoledger.mobile.ui.v2.shell.LocalEchoToasts
 import com.echoledger.mobile.ui.v2.shell.Profile
 import com.echoledger.mobile.ui.v2.shell.ProfileState
 import com.echoledger.mobile.ui.v2.shell.UiFlags
 import com.echoledger.mobile.ui.v2.shell.v2Text
-import com.echoledger.mobile.ui.v2.theme.EchoLanguage
 import com.echoledger.mobile.ui.v2.theme.EchoV2
-import com.echoledger.mobile.ui.v2.theme.EchoV2Theme
 import com.echoledger.mobile.ui.v2.tokens.EchoTokens
-import java.io.File
 import java.time.ZonedDateTime
 import java.util.Locale
-import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -100,105 +71,12 @@ class LargeTextTest {
     @get:Rule
     val compose = createComposeRule()
 
-    private val out = File("build/bugbash")
     private val now = ZonedDateTime.parse("2026-11-17T12:00:00+05:00[Asia/Karachi]")
-    private val scales = listOf(1.0f, 1.3f, 2.0f)
-
-    private var dark by mutableStateOf(false)
-    private var language by mutableStateOf(EchoLanguage.English)
-    private var scale by mutableStateOf(1f)
 
     private fun locale(urdu: Boolean) = if (urdu) Locale.forLanguageTag("ur-PK") else Locale.UK
 
-    private fun bash(name: String, screen: @Composable (urdu: Boolean) -> Unit) {
-        compose.setContent {
-            val base = LocalContext.current
-            val config = LocalConfiguration.current
-            val scaled = remember(scale) {
-                base.createConfigurationContext(Configuration(config).apply { fontScale = scale })
-            }
-            CompositionLocalProvider(LocalDensity provides Density(scaled), LocalConfiguration provides scaled.resources.configuration) {
-                EchoV2Theme(darkTheme = dark, language = language) {
-                    CompositionLocalProvider(LocalEchoToasts provides rememberEchoToastState()) {
-                        screen(language == EchoLanguage.Urdu)
-                    }
-                }
-            }
-        }
-        val shoot = out.isDirectory
-        val small = mutableListOf<String>()
-        val sheets = mutableMapOf<Boolean, MutableList<Bitmap>>()
-        for (d in listOf(false, true)) {
-            for (l in EchoLanguage.entries) {
-                for (s in scales) {
-                    dark = d
-                    language = l
-                    scale = s
-                    compose.waitForIdle()
-                    val variant = "${(s * 100).toInt()}-${if (d) "dark" else "light"}-${if (l == EchoLanguage.Urdu) "ur" else "en"}"
-                    if (s == 2.0f && !d) small += tooSmall(variant)
-                    if (shoot) {
-                        val bitmap = compose.onRoot().captureToImage().asAndroidBitmap()
-                        save(bitmap, File(out, "$name/$variant.png"))
-                        sheets.getOrPut(d) { mutableListOf() } += bitmap
-                        if (s == 2.0f && !d) {
-                            repeat(4) { compose.onRoot().performTouchInput { swipeUp() } }
-                            compose.waitForIdle()
-                            save(compose.onRoot().captureToImage().asAndroidBitmap(), File(out, "$name/$variant-end.png"))
-                        }
-                    }
-                }
-            }
-        }
-        sheets.forEach { (d, list) -> save(sheet(list), File(out, "$name-sheet-${if (d) "dark" else "light"}.png")) }
-        assertTrue("$name: controls under 48 dp at 200 %:\n" + small.joinToString("\n"), small.isEmpty())
-    }
-
-    /** Controls a finger can't hit: clickable nodes under 48 dp high or wide. */
-    private fun tooSmall(variant: String): List<String> {
-        val minPx = 48 * compose.density.density - 1
-        val found = mutableListOf<String>()
-        fun visit(node: SemanticsNode) {
-            if (node.config.getOrNull(SemanticsActions.OnClick) != null) {
-                // Its own size, not what the window shows of it (a row half off screen is still a whole row), or the
-                // larger area a small control answers to (a 32 dp chip takes touches over 48 dp).
-                val b = node.size
-                val touch = node.touchBoundsInRoot
-                val high = b.height >= minPx || touch.height >= minPx
-                val wide = b.width >= minPx || touch.width >= minPx
-                if (b.width > 0 && (!high || !wide)) {
-                    val words = node.config.getOrNull(SemanticsProperties.Text)?.joinToString() ?: node.config
-                        .getOrNull(SemanticsProperties.ContentDescription)?.joinToString() ?: "?"
-                    found +=
-                        "$variant: \"$words\" ${(b.width / compose.density.density).toInt()}x${(b.height / compose.density.density).toInt()} dp"
-                }
-            }
-            node.children.forEach(::visit)
-        }
-        visit(compose.onRoot(useUnmergedTree = false).fetchSemanticsNode())
-        return found
-    }
-
-    private fun save(bitmap: Bitmap, file: File) {
-        file.parentFile!!.mkdirs()
-        file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    }
-
-    /** Six shots side by side (100/130/200 %, English then Urdu), at a third of their size. */
-    private fun sheet(shots: List<Bitmap>): Bitmap {
-        val w = shots.first().width / 3
-        val h = shots.first().height / 3
-        val cols = scales.size
-        val rows = (shots.size + cols - 1) / cols
-        val sheet = Bitmap.createBitmap(w * cols, h * rows, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(sheet)
-        shots.forEachIndexed { i, b ->
-            val x = (i % cols) * w
-            val y = (i / cols) * h
-            canvas.drawBitmap(b, null, Rect(x, y, x + w, y + h), null)
-        }
-        return sheet
-    }
+    private fun bash(name: String, screen: @Composable (urdu: Boolean) -> Unit) =
+        BugBash(compose, listOf(1.0f, 1.3f, 2.0f)).run(name, screen = screen)
 
     @Composable
     private fun Backdrop(content: @Composable () -> Unit) = Column(

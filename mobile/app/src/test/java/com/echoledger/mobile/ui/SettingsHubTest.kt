@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import com.echoledger.mobile.core.SettingsIndex
 import com.echoledger.mobile.testsupport.ScreenTest
+import com.echoledger.mobile.testsupport.pumpUntil
 import org.junit.Test
 
 /** Settings (since v1.7; B19 before): the account card, a search that reaches every setting, six sections of pages. */
@@ -100,7 +101,11 @@ class SettingsHubTest : ScreenTest() {
         search("retention")
         compose.onNodeWithText("How long recordings are kept").performClick()
 
-        compose.onNodeWithText("Couldn't load the server's storage. Check the connection.").assertIsDisplayed()
+        // The page asks for the storage on another thread ("Loading…" until it answers), which waitForIdle does not
+        // wait for: asserting at once raced that answer (P-090). Wait for the answer itself.
+        val failed = "Couldn't load the server's storage. Check the connection."
+        pumpUntil("the storage answer") { compose.onAllNodesWithText(failed).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText(failed).assertIsDisplayed()
     }
 
     @Test
