@@ -85,16 +85,22 @@ data class Readiness(
     val ready: Boolean get() = chip == ReadyChip.READY
     val critical: List<ReadyProblem> get() = problems.filter { it.critical }
 
-    /** The line under the check: "Ready to record calls" (shown with a check mark) or the first problem. */
+    /**
+     * The line under the check: "Ready to record calls" (shown with a check mark), or when not ready a general line; the
+     * problem rows under it say what is wrong and how to fix it (since v1.8.1, bug P-017: never the first problem twice).
+     */
     val headline: String
         get() = when (chip) {
             ReadyChip.READY -> "Ready to record calls"
             ReadyChip.OFF -> "Calls are not recorded automatically"
             ReadyChip.NONE -> "Voice notes are ready"
-            ReadyChip.NOT_READY -> problems.first { it.blocking }.title
+            ReadyChip.NOT_READY -> NOT_READY
         }
 
     companion object {
+        /** The headline when not ready; the problem rows say the rest. */
+        const val NOT_READY = "Calls are not being recorded"
+
         /** Below this, a long call might not fit (an hour of a two-sided call is about 30 MB). */
         const val LOW_STORAGE_MB = 200L
 

@@ -104,6 +104,39 @@ import kotlinx.coroutines.launch
 enum class RecordMode { VOICE, CALLS, GAME, WATCH }
 
 /**
+ * The Auto-record calls switch with its one line (on Record › Calls & meetings and, since v1.8.1 (bug P-016), at the
+ * top of Settings › Calls & meetings): the same row in both places.
+ */
+@Composable
+internal fun AutoRecordCallsRow(capabilities: Capabilities, settings: com.echoledger.mobile.data.AppSettings, onSetup: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    SettingsRow(
+        Icons.Rounded.Call,
+        "Auto-record calls",
+        summary = when {
+            !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
+            !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
+            !capabilities.helperConnected -> "Enable call capture in Setup first"
+            settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
+            else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
+        },
+        onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
+        trailing = {
+            Switch(
+                checked = settings.autoRecordArmed,
+                enabled = capabilities.canCaptureCalls,
+                modifier = Modifier.semantics { contentDescription = "Auto-record calls" },
+                onCheckedChange = { on ->
+                    context.startForegroundService(
+                        RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
+                    )
+                }
+            )
+        }
+    )
+}
+
+/**
  * The Record sheet (since v1.3), from the centre button: four modes in a 2×2 grid, each with a one-line status.
  * Game and Watch translate (Phase B) say whether they are on. Since v1.6 (tap audit): Record now on top starts at once,
  * so a voice note is two taps (a call going on is recorded on both sides).
@@ -309,30 +342,7 @@ fun RecordScreen(
         }
         if (mode == RecordMode.CALLS) {
             if (live.active) SectionHeader("Calls & meetings")
-            SettingsRow(
-                Icons.Rounded.Call,
-                "Auto-record calls",
-                summary = when {
-                    !capabilities.helperInBuild -> Capabilities.NOT_IN_THIS_BUILD
-                    !capabilities.callCaptureSupportedByOs -> "Needs Android 12 or newer"
-                    !capabilities.helperConnected -> "Enable call capture in Setup first"
-                    settings.afterCall == PostCallPrompt.ASK -> "The after-call card asks after each call; kept after 10 s"
-                    else -> "Answered calls are kept automatically; unanswered and short ones are skipped"
-                },
-                onClick = if (capabilities.helperConnected || !capabilities.helperInBuild) null else onSetup,
-                trailing = {
-                    Switch(
-                        checked = settings.autoRecordArmed,
-                        enabled = capabilities.canCaptureCalls,
-                        modifier = Modifier.semantics { contentDescription = "Auto-record calls" },
-                        onCheckedChange = { on ->
-                            context.startForegroundService(
-                                RecordingService.intent(context, if (on) RecordingService.ACTION_ARM else RecordingService.ACTION_DISARM)
-                            )
-                        }
-                    )
-                }
-            )
+            AutoRecordCallsRow(capabilities, settings, onSetup)
             // Since v1.5: what a call records on this phone is said before any call, not found out after one.
             DeviceCheck.callLine(capabilities.appCalls)?.takeIf { capabilities.helperInBuild }?.let { line ->
                 InlineBanner(line, Modifier.padding(horizontal = Space.screen, vertical = Space.s2), kind = BannerKind.Info)

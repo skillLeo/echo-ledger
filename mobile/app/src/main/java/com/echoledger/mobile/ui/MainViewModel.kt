@@ -1745,7 +1745,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
             return AskOutcome.Failed(offline = offline, status = refused?.status, code = refused?.code, words = words)
         }
 
-        const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Profile → Devices → Sign in a device."
+        const val NOT_A_PAIRING_QR = "That isn't an EchoLedger sign-in code. In the console open Account → Devices → Sign in a device."
     }
 }
 

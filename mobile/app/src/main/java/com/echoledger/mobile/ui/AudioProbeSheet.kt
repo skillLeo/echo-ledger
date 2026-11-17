@@ -100,7 +100,7 @@ fun AudioProbeSheet(vm: MainViewModel, helperReady: Boolean, onDismiss: () -> Un
             if (!helperReady) {
                 item {
                     Text(
-                        "The capture helper is not running. Start it in Calls & meetings → Microphone → Set up, then open the probe again.",
+                        "The capture helper is not running. Start it from Settings › About › This phone › Setup guide, then open the probe again.",
                         style = type.bodyM,
                         color = c.text
                     )

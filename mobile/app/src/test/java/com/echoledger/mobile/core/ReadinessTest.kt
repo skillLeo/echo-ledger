@@ -62,6 +62,9 @@ class ReadinessTest {
         assertEquals(ReadyChip.NOT_READY, r.chip)
         assertEquals("Not ready — Fix", r.chip.text)
         assertFalse("never 'one-time setup' for a phone that was set up", p.detail.contains("one-time"))
+        // P-017: the headline is general; the problem row alone says what is wrong, so it is never said twice.
+        assertEquals("Calls are not being recorded", r.headline)
+        assertTrue(r.problems.none { it.title == r.headline })
     }
 
     @Test

@@ -651,7 +651,14 @@ private fun SettingsEntryContent(entry: SettingsEntry, vm: MainViewModel, settin
 
         "after-call" -> DecisionTimeoutSection(vm, settings)
 
-        "auto-apps" -> AutoRecordSection(vm, settings)
+        "auto-apps" -> {
+            // Since v1.8.1 (bug P-016): the Auto-record calls switch itself, above the apps it applies to.
+            val helper by vm.helper.collectAsState()
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val caps = remember(helper.connected) { context.capabilities(helper.connected) }
+            AutoRecordCallsRow(caps, settings, onSetup)
+            AutoRecordSection(vm, settings)
+        }
 
         "after-share" -> AfterShareSection(vm, settings)
 

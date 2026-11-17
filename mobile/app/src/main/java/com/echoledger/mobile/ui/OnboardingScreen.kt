@@ -185,7 +185,7 @@ private fun ColumnScope.PermissionsStep(vm: MainViewModel, onNext: () -> Unit, o
                     Text(
                         when {
                             item.granted -> "Allowed"
-                            item.key == "helper" -> "Optional. Set it up later in Settings → Devices."
+                            item.key == "helper" -> "Optional. Set it up later in Settings › About › This phone › Setup guide."
                             else -> item.why
                         },
                         color = if (item.granted) Brand.Success else Brand.Muted,
