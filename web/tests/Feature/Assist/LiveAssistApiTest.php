@@ -8,7 +8,9 @@ use App\Models\AssistPrep;
 use App\Models\AssistSession;
 use App\Models\AssistTurn;
 use App\Models\AssistUsage;
+use App\Models\Client;
 use App\Models\ClientFile;
+use App\Models\Workspace;
 use App\Services\CredentialVault;
 use App\Services\SettingsRepository;
 use App\Services\Workspaces\Workspaces;
@@ -136,6 +138,22 @@ describe('preps', function () {
 });
 
 describe('another workspace', function () {
+    it('answers 404 for a teammate\'s project and its files in the same workspace (projects are private)', function () {
+        $alice = assistPerson();
+        $bob = Fx::user();
+        app(Workspaces::class)->addMember(Workspace::query()->findOrFail($alice->workspace_id), $bob);
+        $bobProject = Client::query()->withoutGlobalScopes()->create(['workspace_id' => $alice->workspace_id, 'user_id' => $bob->id, 'name' => 'BOB-PROJECT', 'color' => '#8B5CF6']);
+        $bobFile = ClientFile::query()->create(['workspace_id' => $alice->workspace_id, 'user_id' => $bob->id, 'client_id' => $bobProject->id,
+            'name' => 'Bob.pdf', 'mime' => 'application/pdf', 'size_bytes' => 10, 'status' => 'ready', 'text' => 'x']);
+        $api = $this->api(Fx::token($alice));
+        $prep = $api->postJson('/api/assist/preps', ['meeting_type' => 'general'])->json('id');
+
+        $api->postJson('/api/assist/preps', ['meeting_type' => 'general', 'project_id' => $bobProject->id])->assertNotFound();
+        $api->patchJson("/api/assist/preps/{$prep}", ['project_id' => $bobProject->id])->assertNotFound();
+        $api->postJson("/api/assist/preps/{$prep}/documents", ['file_ids' => [$bobFile->id]])->assertNotFound();
+        expect(AssistPrep::query()->withoutGlobalScopes()->find($prep)->client_id)->toBeNull();
+    });
+
     it('answers 404 for another person\'s prep, session, project, file and recording', function () {
         $bob = assistPerson();
         $bobApi = $this->api(Fx::token($bob));

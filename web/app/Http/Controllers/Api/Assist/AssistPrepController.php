@@ -98,7 +98,10 @@ final class AssistPrepController extends Controller
         $prep = $this->find($request, $id);
         $data = $request->validate(['file_ids' => ['required', 'array', 'min:1', 'max:20'], 'file_ids.*' => ['string', 'max:26']]);
         $device = $this->device($request);
+        // Files of the person's own projects in this workspace (projects are private, v1.5).
         $files = ClientFile::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+            ->whereIn('client_id', Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+                ->where('user_id', $device->user_id)->select('id'))
             ->whereIn('id', array_unique($data['file_ids']))->get();
         if ($files->count() !== count(array_unique($data['file_ids']))) {
             throw new NotFoundHttpException;
@@ -201,7 +204,10 @@ final class AssistPrepController extends Controller
     /** A project of the device's workspace, or 404. */
     private function project(Request $request, string $id): string
     {
-        $exists = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $this->device($request)->workspace_id)->whereKey($id)->exists();
+        // The person's own project in this workspace: a teammate's is as unknown as any other (projects are private, v1.5).
+        $device = $this->device($request);
+        $exists = Client::query()->withoutGlobalScope(WorkspaceScope::class)->where('workspace_id', $device->workspace_id)
+            ->where('user_id', $device->user_id)->whereKey($id)->exists();
         if (! $exists) {
             throw new NotFoundHttpException;
         }
