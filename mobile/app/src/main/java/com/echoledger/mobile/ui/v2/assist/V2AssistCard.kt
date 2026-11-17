@@ -211,7 +211,8 @@ private fun AssistExpanded(
             }
             // At large text the suggestion gets all its lines: up to six show, and the text scrolls beyond that.
             val large = largeText()
-            val sixLines = with(LocalDensity.current) { (EchoV2.type.contentStrong.lineHeight * MAX_LINES_LARGE).toDp() }
+            // One line converted, then times six: Android scales large sizes less, so 6 × 24 sp would come out short.
+            val sixLines = with(LocalDensity.current) { EchoV2.type.contentStrong.lineHeight.toDp() } * MAX_LINES_LARGE
             Column(
                 Modifier
                     .then(if (large) Modifier.heightIn(max = sixLines).verticalScroll(rememberScrollState()) else Modifier)

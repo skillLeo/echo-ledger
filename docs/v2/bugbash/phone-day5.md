@@ -51,7 +51,7 @@ The tokens-only check (`TokensOnlyTest`) stays at 0.
 | P-084 | S3 | Ask sources (Urdu) | A source's moment was in the Urdu face, not the clock face | Fixed in a31dc027 |
 | P-085 | S3 | Library rows | At 200 %, a title shows about 10 to 12 characters | Logged |
 | P-086 | S3 | Settings profile card | At 200 %, Upgrade squeezes the usage lines to a few words each (Urdu worst) | Logged |
-| P-087 | S3 | Live Assist card | At 200 %, the three-line limit hides most of a suggestion behind an ellipsis | Logged (needs a decision) |
+| P-087 | S3 | Live Assist card | At 200 %, the three-line limit hid most of a suggestion behind an ellipsis | Fixed: from 150 % up to six lines show and the text scrolls beyond |
 | P-088 | S4 | Live tab (Urdu) | At 200 %, the row explanations end with one word alone on a line | Logged |
 | P-089 | S3 | Ask | The view model's ask() gives no failure back, and "Request failed (502)" is not words for a person | Logged (core) |
 
@@ -69,12 +69,12 @@ Fixed:
 - P-081, the theme picker at 200 %: ![](phone-day5/settings-appearance-200-light-en.png)
 - P-082 and P-084, Ask in Urdu with an English answer, sources and project: ![](phone-day5/ask-130-light-ur.png)
 - P-083, the avatar at 200 % in Urdu: ![](phone-day5/home-200-light-ur.png)
+- P-087, the Live Assist card at 200 %: six lines, then the text scrolls: ![](phone-day5/assist-200-light-en-scrolling.png)
 
 Logged:
 
 - P-085, Library at 200 %: ![](phone-day5/library-200-light-en.png)
 - P-086, the profile card at 200 % in Urdu: ![](phone-day5/settings-200-light-ur.png)
-- P-087, the Live Assist card at 200 % (same picture as P-080): ![](phone-day5/assist-200-light-en.png)
 - P-088, the Live tab at 200 % in Urdu: ![](phone-day5/live-tab-200-light-ur.png)
 
 Clean, for reference:
