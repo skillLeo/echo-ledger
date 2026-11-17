@@ -28,6 +28,12 @@ pub fn estimate_micros(spec: &ModelSpec, context_tokens: u32, cacheable_tokens: 
     to_micros(micros)
 }
 
+/// A request's worst case on one model, for budget bounds: the context's upper-bound tokens all as uncached input
+/// (`Context::upper_tokens`), and the longest answer.
+pub fn worst_micros(spec: &ModelSpec, context: &crate::context::Context, max_output_tokens: u32) -> u64 {
+    estimate_micros(spec, context.upper_tokens(), 0, false, max_output_tokens)
+}
+
 fn to_micros(value: f64) -> u64 {
     if value.is_finite() && value > 0.0 { value.ceil() as u64 } else { 0 }
 }

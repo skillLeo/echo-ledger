@@ -221,6 +221,15 @@ pub fn estimate_tokens(text: &str) -> u32 {
     u32::try_from(tokens).unwrap_or(u32::MAX)
 }
 
+/// An upper bound of what `text` costs, for budget bounds (worst cases and reservations), apart from the estimate
+/// the mode choice uses: one token per non-ASCII character (Urdu and Arabic often cost about that), one per three
+/// ASCII characters, and 10 % on top.
+pub fn upper_tokens(text: &str) -> u32 {
+    let (ascii, other) = text.chars().fold((0u64, 0u64), |(a, o), c| if c.is_ascii() { (a + 1, o) } else { (a, o + 1) });
+    let tokens = ascii.div_ceil(3) + other;
+    u32::try_from((tokens + tokens.div_ceil(10)).max(1)).unwrap_or(u32::MAX)
+}
+
 /// Lower-cased words of `text` for phrase checks ("walk me through").
 pub fn has_phrase(text: &str, phrases: &[String]) -> bool {
     let normalized = normalize(text);

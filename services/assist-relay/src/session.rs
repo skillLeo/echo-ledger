@@ -20,7 +20,7 @@ use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
 use crate::auth::{AuthError, Claims, TokenVerifier};
-use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_micros, micros_to_usd};
+use crate::budget::{Cause, allowed_modes, choose_mode, cost_micros, estimate_micros, micros_to_usd, worst_micros};
 use crate::config::{RelayConfig, Shared, TranscriptScope};
 use crate::context::{CallContext, Context, ContextBuilder, RewriteKind, Task, Transcript, TranscriptTurn};
 use crate::domain::{Channel, EffectiveMode, LanguageHelp, Mode, ProviderKind};
@@ -36,7 +36,7 @@ use crate::provider::{CompletionRequest, ProviderError, Providers, Purpose, Stre
 use crate::registry::{Ledger, Registry};
 use crate::skip::{GateEnd, SkipGate, is_skip};
 use crate::telemetry::{Outcome, SessionEvent, SuggestionRecord, TelemetrySink, Trigger};
-use crate::text::{estimate_tokens, has_phrase, is_backchannel, looks_like_question, normalize, same_question, words};
+use crate::text::{estimate_tokens, has_phrase, is_backchannel, looks_like_question, normalize, same_question, upper_tokens, words};
 use crate::time::{iso8601, ms, unix_now};
 
 /// WebSocket close codes the relay uses.
@@ -394,6 +394,8 @@ pub(crate) struct Engine {
     call: CallContext,
     transcript: Transcript,
     fixed_tokens: Option<u32>,
+    /// The fixed part's upper bound (`text::upper_tokens`), for the mode's worst case.
+    fixed_upper: Option<u32>,
     requested: Mode,
     effective: EffectiveMode,
     paused: bool,
@@ -471,6 +473,7 @@ impl Engine {
             call: CallContext::default(),
             transcript,
             fixed_tokens: None,
+            fixed_upper: None,
             requested: Mode::Balanced,
             effective: EffectiveMode::CaptionsOnly,
             paused: false,
@@ -785,6 +788,7 @@ impl Engine {
         }
         if fixed_changed {
             self.fixed_tokens = None;
+            self.fixed_upper = None;
             self.warm();
         }
     }
@@ -1512,11 +1516,14 @@ impl Engine {
     /// Adds what a request cost to the session's spend (kept by the registry across reconnects).
     /// One suggestion's worst case in `mode` with the session's context as it is: the primary and the fallback, no
     /// cache, the mode's longest answer (the upgrade is not counted: without room, a draft runs without it).
-    fn mode_worst(&self, mode: Mode, fixed: u32) -> u64 {
+    fn mode_worst(&self, mode: Mode, _fixed: u32) -> u64 {
         let config = self.config();
         let plan = config.modes.get(mode);
-        let ledger: u32 = self.call.facts.iter().map(|f| estimate_tokens(&f.text) + 2).sum::<u32>() + estimate_tokens(&self.call.summary);
-        let tokens = fixed + ledger + self.transcript.tokens(plan.transcript) + QUESTION_TOKENS;
+        // Upper bounds throughout, as the gate counts them (`text::upper_tokens`).
+        let fixed = self.fixed_upper.unwrap_or(0);
+        let ledger: u32 =
+            self.call.facts.iter().map(|f| upper_tokens(&f.text) + 2).sum::<u32>() + upper_tokens(&self.call.summary);
+        let tokens = fixed + ledger + self.transcript.upper_tokens(plan.transcript) + QUESTION_TOKENS * 2;
         std::iter::once(plan.primary.as_str())
             .chain(plan.fallback.as_deref())
             .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| estimate_micros(spec, tokens, 0, false, plan.max_output_tokens)))
@@ -1526,10 +1533,9 @@ impl Engine {
     /// A model's worst case for a context: no cache, the longest answer; with its fallback, both (both can bill).
     fn worst_case(&self, model: &str, fallback: Option<&str>, context: &Context, max_output_tokens: u32) -> u64 {
         let config = self.config();
-        let tokens = context.tokens();
         std::iter::once(model)
             .chain(fallback)
-            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| estimate_micros(spec, tokens, 0, false, max_output_tokens)))
+            .map(|m| config.model(m).map_or(u64::MAX / 16, |spec| worst_micros(spec, context, max_output_tokens)))
             .fold(0u64, u64::saturating_add)
     }
 
@@ -1585,6 +1591,7 @@ impl Engine {
         let context = builder.build(&self.call, &empty, Task::HelpNow { latest: None }, TranscriptScope::Recent);
         let tokens = context.cacheable_tokens();
         self.fixed_tokens = Some(tokens);
+        self.fixed_upper = Some(context.upper_cacheable_tokens());
         tokens
     }
 
@@ -1691,12 +1698,12 @@ impl Engine {
             return false;
         }
         let config = self.config();
-        let tokens = context.tokens();
-        // The primary and the fallback can both bill (the primary failing after its request was taken).
+        // The primary and the fallback can both bill (the primary failing after its request was taken); upper-bound
+        // tokens (`text::upper_tokens`).
         let worst = models
             .iter()
             .filter_map(|model| config.model(model))
-            .map(|spec| estimate_micros(spec, tokens, 0, false, max_output_tokens))
+            .map(|spec| worst_micros(spec, &context, max_output_tokens))
             .fold(0u64, u64::saturating_add);
         // Room for the suggestions too: the budget's reserve in the mode that runs (one suggestion in Fast).
         let keep = match self.effective.mode() {
@@ -2006,8 +2013,8 @@ impl Engine {
             question: String::new(),
         };
         // The warm-up spends too (a cache write): it starts only when its worst case fits what is free, and holds it.
-        let tokens = request.context.tokens();
-        let worst = estimate_micros(spec, tokens, tokens, false, 0);
+        let tokens = request.context.upper_tokens();
+        let worst = estimate_micros(spec, tokens, tokens, false, 1);
         if self.reserved.contains_key(WARM_KEY) || worst > self.remaining() {
             return;
         }
