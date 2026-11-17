@@ -178,7 +178,8 @@ class Settings extends Page
             'support_email' => $all['support.email'] ?? null,
             'marker_tags' => SessionMarkers::presets($all['markers.tags'] ?? SessionMarkers::DEFAULT_TAGS),
             'assemblyai_region' => $all['assemblyai.region'],
-            'assemblyai_streaming_model' => $all['assemblyai.streaming_model'],
+            'assemblyai_streaming_model' => AssemblyAiDriver::storedStreamingModel($all['assemblyai.streaming_model'] ?? null),
+            'assemblyai_fast_english' => (bool) ($all['assemblyai.fast_english'] ?? false),
             'assemblyai_streaming_mode' => $all['assemblyai.streaming_mode'],
             'assemblyai_fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($all['assemblyai.fastest_min_silence_ms'] ?? null),
             'assemblyai_async_models' => $all['assemblyai.async_models'],
@@ -399,10 +400,10 @@ class Settings extends Page
                     $this->section('assemblyai')->collapsible()->columns(2)->schema([
                         Select::make('assemblyai_region')->label('Data region')->options(['us' => 'US (default)', 'eu' => 'EU'])->required(),
                         Select::make('assemblyai_streaming_model')->label('Streaming model')->options([
-                            'universal-3-6-pro' => 'Universal-3.6 Pro (most accurate)',
-                            'universal-streaming-english' => 'Universal-Streaming English (budget)',
-                            'universal-streaming-multilingual' => 'Universal-Streaming Multilingual (budget)',
-                        ])->required(),
+                            AssemblyAiDriver::STREAMING_MODEL => 'Universal-3.6 Pro (Urdu, English and 30 more)',
+                        ])->required()->selectablePlaceholder(false),
+                        Toggle::make('assemblyai_fast_english')->label('Fast English captions')->inline(false)
+                            ->helperText('English-only recordings use AssemblyAI-STT-3.7 Realtime: words appear sooner. Urdu, mixed and Automatic stay on Universal-3.6 Pro.'),
                         Select::make('assemblyai_streaming_mode')->label('Caption speed')->options([
                             'min_latency' => 'Fastest (default)',
                             'balanced' => 'Balanced',
@@ -831,6 +832,14 @@ class Settings extends Page
     {
         $state = $this->form->getState();
         $before = $settings->all();
+        // Since 2026-11-18 the Universal-Streaming models are no longer offered (gone from AssemblyAI's docs): a server
+        // that still stores one has been reading it as Universal-3.6 Pro; this save writes that down, and says so.
+        $oldModel = $before['assemblyai.streaming_model'] ?? null;
+        if (is_string($oldModel) && $oldModel !== AssemblyAiDriver::STREAMING_MODEL) {
+            app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null,
+                Str::limit("AssemblyAI streaming model {$oldModel} is no longer offered: read as Universal-3.6 Pro", 250, '…'),
+                ['keys' => ['assemblyai.streaming_model'], 'from' => $oldModel, 'to' => AssemblyAiDriver::STREAMING_MODEL]);
+        }
         $settings->setMany([
             'retention_days' => (int) $state['retention_days'],
             'trash.keep_hours' => (int) $state['trash_keep_hours'],
@@ -869,9 +878,13 @@ class Settings extends Page
             'mail.from_name' => filled($state['mail_from_name'] ?? null) ? trim((string) $state['mail_from_name']) : null,
             'support.email' => filled($state['support_email'] ?? null) ? mb_strtolower(trim((string) $state['support_email'])) : null,
             'assemblyai.region' => $state['assemblyai_region'],
-            'assemblyai.streaming_model' => $state['assemblyai_streaming_model'],
+            'assemblyai.streaming_model' => AssemblyAiDriver::storedStreamingModel($state['assemblyai_streaming_model'] ?? null),
+            'assemblyai.fast_english' => (bool) ($state['assemblyai_fast_english'] ?? false),
             'assemblyai.streaming_mode' => $state['assemblyai_streaming_mode'],
-            'assemblyai.fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($state['assemblyai_fastest_min_silence_ms'] ?? null),
+            // Hidden under Balanced and Most accurate, the field is not in getState(): keep the value the form holds
+            // (the stored one, or an imported file's), else the stored one, never the default.
+            'assemblyai.fastest_min_silence_ms' => AssemblyAiDriver::fastestMinSilence($state['assemblyai_fastest_min_silence_ms']
+                ?? $this->form->getRawState()['assemblyai_fastest_min_silence_ms'] ?? $before['assemblyai.fastest_min_silence_ms'] ?? null),
             'assemblyai.async_models' => array_values(array_filter((array) ($state['assemblyai_async_models'] ?? []))) ?: ['universal-3-5-pro', 'universal-2'],
             'groq.plan' => isset(GroqPacer::PLANS[$state['groq_plan'] ?? '']) ? $state['groq_plan'] : GroqPacer::DEFAULT_PLAN,
             'gemini.model' => GeminiDriver::modelOr($state['gemini_model'] ?? null),

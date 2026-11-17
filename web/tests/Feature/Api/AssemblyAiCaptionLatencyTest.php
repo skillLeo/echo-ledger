@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use App\Filament\Admin\Pages\Settings;
+use App\Models\AuditEvent;
 use App\Models\CaptureSession;
 use App\Models\Device;
 use App\Models\User;
@@ -11,6 +12,7 @@ use App\Services\SettingsRepository;
 use App\Services\SettingsTransfer;
 use App\Stt\Drivers\AssemblyAiDriver;
 use Filament\Facades\Filament;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Http;
 use Laravel\Sanctum\Sanctum;
 use Livewire\Livewire;
@@ -90,24 +92,16 @@ it('falls back to the fastest preset for an unknown stored value', function () {
     expect($q['mode'])->toBe('min_latency')->and($q['max_turn_silence'])->toBe('640');
 });
 
-it('sends only the turn silences to the budget Universal-Streaming models, which have no presets', function () {
-    app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-multilingual');
-
-    $q = captionWsQuery(captionLatencyGrant()['grants'][0]['ws_url']);
-
-    expect($q)->not->toHaveKey('mode')
-        ->and($q['min_turn_silence'])->toBe('80')
-        ->and($q['max_turn_silence'])->toBe('640');
-});
-
-it('steers languages and sets presets on Universal-3.6 Pro only', function () {
+it('steers languages and sets presets on Universal-3.6 Pro and 3.7 Realtime (Fast English) only', function () {
     $driver = app(AssemblyAiDriver::class);
 
     expect(AssemblyAiDriver::streamingSupportsLanguages('universal-3-6-pro'))->toBeTrue()
-        ->and(AssemblyAiDriver::streamingSupportsLanguages('assemblyai-stt-3-7-realtime'))->toBeFalse()
+        ->and(AssemblyAiDriver::streamingSupportsLanguages('assemblyai-stt-3-7-realtime'))->toBeTrue()
+        ->and(AssemblyAiDriver::streamingSupportsLanguages('assemblyai-stt-3-7-realtime-agent'))->toBeFalse()
         ->and(AssemblyAiDriver::streamingSupportsLanguages('universal-streaming-english'))->toBeFalse()
         ->and($driver->turnSettings('universal-3-6-pro'))->toHaveKey('mode')
-        ->and($driver->turnSettings('assemblyai-stt-3-7-realtime'))->not->toHaveKey('mode');
+        ->and($driver->turnSettings('assemblyai-stt-3-7-realtime'))->toMatchArray(['mode' => 'min_latency', 'min_turn_silence' => 320])
+        ->and($driver->turnSettings('assemblyai-stt-3-7-realtime-agent'))->not->toHaveKey('mode');
 });
 
 it('imports only a known caption speed from a settings file', function () {
@@ -175,10 +169,24 @@ describe('Fastest\'s quiet before a line may end (target: words on screen within
             ->set('data.assemblyai_fastest_min_silence_ms', 60)->call('save')->assertHasNoErrors();
         expect(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(60);
 
-        // Under another speed the field is hidden: its value is neither checked nor changed.
-        Livewire::test(Settings::class)->set('data.assemblyai_streaming_mode', 'balanced')
-            ->set('data.assemblyai_fastest_min_silence_ms', 5)->call('save')->assertHasNoErrors();
-        expect(app(SettingsRepository::class)->get('assemblyai.streaming_mode'))->toBe('balanced');
+        // Under another speed the field is hidden: saving keeps the stored 60, never the default.
+        Livewire::test(Settings::class)->set('data.assemblyai_streaming_mode', 'balanced')->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->get('assemblyai.streaming_mode'))->toBe('balanced')
+            ->and(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(60);
+        Livewire::test(Settings::class)->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(60);
+
+        // A settings file under Balanced with its own Fastest value: the file's value is saved.
+        $file = UploadedFile::fake()->createWithContent('settings.json', json_encode(['format' => SettingsTransfer::FORMAT, 'version' => 1,
+            'settings' => ['assemblyai.streaming_mode' => 'balanced', 'assemblyai.fastest_min_silence_ms' => 70]]));
+        Livewire::test(Settings::class)->callAction('importSettings', ['file' => $file])->assertNotified('Settings imported');
+        expect(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(70);
+        // One that names no Fastest value keeps the stored one.
+        $file = UploadedFile::fake()->createWithContent('settings.json', json_encode(['format' => SettingsTransfer::FORMAT, 'version' => 1,
+            'settings' => ['assemblyai.streaming_mode' => 'max_accuracy']]));
+        Livewire::test(Settings::class)->callAction('importSettings', ['file' => $file])->assertNotified('Settings imported');
+        expect(app(SettingsRepository::class)->get('assemblyai.streaming_mode'))->toBe('max_accuracy')
+            ->and(app(SettingsRepository::class)->get('assemblyai.fastest_min_silence_ms'))->toBe(70);
     });
 
     it('imports only whole milliseconds between 50 and 600 from a settings file', function () {
@@ -186,5 +194,53 @@ describe('Fastest\'s quiet before a line may end (target: words on screen within
 
         expect($read(90))->toBe(['assemblyai.fastest_min_silence_ms' => 90])
             ->and($read(20))->toBe([])->and($read(900))->toBe([])->and($read('90'))->toBe([]);
+    });
+});
+
+describe('the streaming model', function () {
+    it('offers only Universal-3.6 Pro, reads a stored Universal-Streaming model as it, and says so in the activity log on save', function () {
+        app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-english');
+
+        expect(captionWsQuery(captionLatencyGrant(['language' => 'en'])['grants'][0]['ws_url'])['speech_model'])->toBe('universal-3-6-pro');
+
+        $admin = User::factory()->create(['is_super_admin' => true]);
+        $this->actingAs($admin);
+        Filament::setCurrentPanel('admin');
+        Livewire::test(Settings::class)->assertSet('data.assemblyai_streaming_model', 'universal-3-6-pro')->call('save')->assertHasNoErrors();
+
+        expect(app(SettingsRepository::class)->get('assemblyai.streaming_model'))->toBe('universal-3-6-pro')
+            ->and(AuditEvent::query()->where('summary', 'AssemblyAI streaming model universal-streaming-english is no longer offered: read as Universal-3.6 Pro')->exists())->toBeTrue();
+        Livewire::test(Settings::class)->set('data.assemblyai_streaming_model', 'universal-streaming-multilingual')->call('save')
+            ->assertHasErrors(['data.assemblyai_streaming_model']);
+    });
+});
+
+describe('Fast English captions', function () {
+    it('is off by default: English stays on Universal-3.6 Pro', function () {
+        expect(captionWsQuery(captionLatencyGrant(['language' => 'en'])['grants'][0]['ws_url'])['speech_model'])->toBe('universal-3-6-pro');
+    });
+
+    it('streams English-only recordings on AssemblyAI-STT-3.7 Realtime with its own floor, and nothing else', function () {
+        app(SettingsRepository::class)->set('assemblyai.fast_english', true);
+
+        $grant = captionLatencyGrant(['language' => 'en']);
+        $q = captionWsQuery($grant['grants'][0]['ws_url']);
+        expect($q)->toMatchArray(['speech_model' => 'assemblyai-stt-3-7-realtime', 'mode' => 'min_latency', 'min_turn_silence' => '320', 'max_turn_silence' => '640'])
+            ->and(collect($grant['grants'][0]['init_messages'])->firstWhere('type', 'UpdateConfiguration')['language_codes'])->toBe(['en']);
+
+        foreach (['ur', null] as $language) {
+            $q = captionWsQuery(captionLatencyGrant(array_filter(['language' => $language]))['grants'][0]['ws_url']);
+            expect($q['speech_model'])->toBe('universal-3-6-pro');
+        }
+    });
+
+    it('is a toggle in Admin › Settings, saved and imported as a yes or no', function () {
+        $admin = User::factory()->create(['is_super_admin' => true]);
+        $this->actingAs($admin);
+        Filament::setCurrentPanel('admin');
+
+        Livewire::test(Settings::class)->assertSet('data.assemblyai_fast_english', false)
+            ->set('data.assemblyai_fast_english', true)->call('save')->assertHasNoErrors();
+        expect(app(SettingsRepository::class)->get('assemblyai.fast_english'))->toBeTrue();
     });
 });

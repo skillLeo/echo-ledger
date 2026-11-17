@@ -69,6 +69,7 @@ final class SettingsTransfer
         'assemblyai.streaming_model',
         'assemblyai.streaming_mode',
         'assemblyai.fastest_min_silence_ms',
+        'assemblyai.fast_english',
         'assemblyai.async_models',
         'groq.plan',
         'gemini.model',

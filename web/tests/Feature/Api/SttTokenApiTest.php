@@ -67,12 +67,12 @@ describe('AssemblyAI', function () {
             ]);
     });
 
-    it('follows the configured streaming model', function () {
+    it('reads a stored Universal-Streaming model (no longer offered) as Universal-3.6 Pro', function () {
         app(SettingsRepository::class)->set('assemblyai.streaming_model', 'universal-streaming-english');
 
         $url = $this->postJson('/api/stt/token', ['use_case' => 'live_captions', 'session_id' => $this->sessionId])->json('grants.0.ws_url');
 
-        expect(wsQuery($url)['speech_model'])->toBe('universal-streaming-english');
+        expect(wsQuery($url)['speech_model'])->toBe('universal-3-6-pro');
     });
 
     it('expires the grant within a minute', function () {

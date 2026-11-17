@@ -14,6 +14,7 @@ use App\Models\UsageLedgerEntry;
 use App\Services\FinalTranscriptCoordinator;
 use App\Services\SettingsRepository;
 use App\Stt\Data\NormalizedTranscript;
+use App\Stt\Drivers\AssemblyAiDriver;
 use Illuminate\Support\Carbon;
 
 /**
@@ -202,7 +203,7 @@ final class UsageLedger
     private function streamingModel(SttProviderKey $provider): ?string
     {
         $model = match ($provider) {
-            SttProviderKey::AssemblyAi => $this->settings->get('assemblyai.streaming_model'),
+            SttProviderKey::AssemblyAi => AssemblyAiDriver::storedStreamingModel($this->settings->get('assemblyai.streaming_model')),
             SttProviderKey::ElevenLabs => $this->settings->get('elevenlabs.realtime_model_id'),
             default => null,
         };

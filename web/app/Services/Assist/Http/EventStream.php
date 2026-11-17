@@ -35,6 +35,9 @@ final class EventStream
             @ini_set('zlib.output_compression', '0');
             @ini_set('output_buffering', '0');
             @ini_set('implicit_flush', '1');
+            // The stream's own limit, and the previous one back afterwards: a long-lived process (a test worker, an
+            // Octane worker) must not keep a 75-second limit for everything it runs next.
+            $previous = (int) ini_get('max_execution_time');
             @set_time_limit(self::MAX_SECONDS + 15);
             // The work (a model call that is billed) ends and is settled even when the app has gone: PHP would otherwise
             // stop the script at the next write, with the call's reservation still open. `aborted()` says when to stop.
@@ -45,9 +48,13 @@ final class EventStream
                     ob_end_flush();
                 }
             }
-            $stream = new self;
-            $work($stream);
-            $stream->send('end', []);
+            try {
+                $stream = new self;
+                $work($stream);
+                $stream->send('end', []);
+            } finally {
+                @set_time_limit($previous);
+            }
         }, 200, [
             'Content-Type' => 'text/event-stream; charset=UTF-8',
             'Cache-Control' => 'no-cache, no-transform',

@@ -137,3 +137,12 @@ it('allows 10 messages a second and 4 open streams per session', function () {
     Cache::put('assist-live-open:'.$id, 4, 60);
     $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertStatus(429)->assertJsonPath('message', 'Too many open streams for this session.');
 });
+
+it('gives the stream its own time limit and puts the previous one back afterwards', function () {
+    [$api, $id] = httpSession($this);
+    set_time_limit(0);
+
+    $api->postJson("/api/assist/sessions/{$id}/live", ['type' => 'context_update'])->assertOk()->streamedContent();
+
+    expect((int) ini_get('max_execution_time'))->toBe(0);
+});
