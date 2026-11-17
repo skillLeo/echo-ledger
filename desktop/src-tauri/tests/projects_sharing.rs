@@ -180,13 +180,13 @@ async fn a_recording_is_sent_to_a_teammate_and_a_missing_account_keeps_its_code(
 async fn shared_with_me_is_listed_saved_and_removed() {
     let server = MockServer::start(
         Router::new()
-            .fixed("GET", "/api/shared-with-me", Reply::json(200, json!({"data": [{"id": "01JDSHARE", "kind": "session", "from": {"name": "Hassam", "email": "h@example.com"}, "title": "Call with Omar"}]})))
+            .fixed("GET", "/api/shared-with-me", Reply::json(200, json!({"data": [{"id": "01JDSHARE", "kind": "session", "from": {"name": "Ayesha", "email": "a@example.com"}, "title": "Call with Omar"}]})))
             .fixed("POST", "/api/shared-with-me/01JDSHARE/save", Reply::json(201, json!({"session_id": SESSION})))
             .fixed("DELETE", "/api/shared-with-me/01JDSHARE", Reply::empty(204)),
     );
     let api = client(&server);
 
-    assert_eq!(api.shared_with_me().await.unwrap()["data"][0]["from"]["name"], "Hassam");
+    assert_eq!(api.shared_with_me().await.unwrap()["data"][0]["from"]["name"], "Ayesha");
     assert_eq!(api.save_shared("01JDSHARE").await.unwrap()["session_id"], SESSION);
     api.remove_shared("01JDSHARE").await.unwrap();
 }

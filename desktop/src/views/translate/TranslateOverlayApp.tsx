@@ -17,9 +17,18 @@ export default function TranslateOverlayApp() {
     void listen<TranslateFeed>(TRANSLATE_FEED, (e) => setFeed(e.payload)).then((u) => (stop = u));
     return () => stop?.();
   }, []);
-  // Only a running session is drawn: an ended one (or a status this app doesn't know) leaves nothing on screen.
-  if (!feed || feed.hidden || translatePhase(feed) !== "running" || concealed) return null;
+  // Only a running session is drawn: an ended one (or a status this app doesn't know) leaves nothing on screen, and the
+  // main window's panel says why it ended, with Close. Hidden, a running one still shows the pill below.
+  if (!feed || translatePhase(feed) !== "running" || concealed) return null;
   const subtitles = feed.mode === "watch";
+  // Hidden, it still listens: a small pill says so, and how to show it again, so someone can always see it.
+  if (feed.hidden) {
+    return (
+      <div className={`translate-hidden ${subtitles ? "subtitles" : "box"}`} role="status">
+        Live Translate is listening · {feed.hide_keys || "Ctrl+Shift+H"} to show
+      </div>
+    );
+  }
   const text = feed.notice ?? tailText(feed.text, subtitles ? 160 : 220);
   const waiting = !feed.notice && !feed.text && !feed.partial;
   return (
@@ -37,7 +46,7 @@ export default function TranslateOverlayApp() {
       </div>
       {!feed.locked && (
         <button type="button" className="translate-done" onClick={() => void translateApi.toggleLock()}>
-          Done (Ctrl+Shift+T)
+          Done ({feed.lock_keys || "Ctrl+Shift+T"})
         </button>
       )}
     </div>

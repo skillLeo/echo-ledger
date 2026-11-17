@@ -1003,6 +1003,10 @@ audio.player { display: none; }
 .translate-original { font-size: 12px; opacity: 0.7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .translate-partial { opacity: 0.6; }
 .translate-dots { letter-spacing: 2px; animation: translate-pulse 1.2s ease-in-out infinite; }
+/* Hidden, Live Translate still listens: a small pill says so (top for games, bottom for subtitles). */
+.translate-hidden { position: fixed; left: 50%; transform: translateX(-50%); font: 12px var(--font-sans); padding: 3px 10px; border-radius: 999px; background: rgba(33, 34, 37, 0.86); color: #fff; white-space: nowrap; user-select: none; }
+.translate-hidden.box { top: 6px; }
+.translate-hidden.subtitles { bottom: 6px; }
 .translate-done { position: absolute; top: 6px; right: 8px; font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 0; background: rgba(255, 255, 255, 0.9); color: #1c2024; cursor: pointer; }
 @keyframes translate-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .translate-dots { animation: none; } }

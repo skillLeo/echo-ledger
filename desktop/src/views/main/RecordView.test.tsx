@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import type { ComponentProps } from "react";
 import { RecordView } from "./RecordView";
 import type { AppStatus, MicUser } from "../../lib/ipc";
-import { callsOf, emitEvent, fail, resetTauriMock, respond } from "../../test/tauri";
+import { callsOf, emitEvent, fail, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeMicUser, makeRecording, makeSettings, makeStatus } from "../../test/fixtures";
 import { answerConfirm } from "../../test/confirm";
 import { ConfirmHost } from "./ConfirmHost";
@@ -384,11 +384,11 @@ describe("RecordView Bluetooth microphone (v1.5)", () => {
 describe("Live Translate on the Live tab (live_translate_status)", () => {
   const plan = (liveTranslate: boolean) => ({ ...makeStatus().plan, liveTranslate });
 
-  it("a Mac: says it isn't on the Mac yet, Start stays off, and nothing is asked of the capture", async () => {
+  it("a Mac older than macOS 14.2: says it needs 14.2, Start stays off, and nothing is asked of the capture", async () => {
     respond("live_translate_status", { available: false, reason: "platform" });
     await setup({ platform: "macos" });
     await act(async () => undefined);
-    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate isn't on the Mac yet");
+    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate needs macOS 14.2 or later");
     expect(within(screen.getByTestId("translate-unavailable")).getByRole("button", { name: "Start" })).toBeDisabled();
     expect(callsOf("translate_apps")).toHaveLength(0);
   });
@@ -410,7 +410,18 @@ describe("Live Translate on the Live tab (live_translate_status)", () => {
     expect(await screen.findByRole("option", { name: "Valorant" })).toBeInTheDocument();
   });
 
-  it("a core that doesn't answer: the plan decides, as before, and a Mac is told it isn't there yet", async () => {
+  it("while the core is asked: no reason, no words and no Start, even on a Mac", async () => {
+    respondWith("live_translate_status", () => new Promise(() => undefined));
+    respond("translate_apps", []);
+    respond("translate_status", null);
+    await setup({ platform: "macos" });
+    await act(async () => undefined);
+    expect(screen.queryByTestId("translate-unavailable")).toBeNull();
+    expect(screen.queryByText(/needs macOS 14.2|Not in your plan/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
+  });
+
+  it("a core that doesn't answer: the plan decides, as before, and a Mac is told it needs macOS 14.2", async () => {
     fail("live_translate_status", "unknown command");
     respond("translate_apps", []);
     respond("translate_status", null);
@@ -420,6 +431,6 @@ describe("Live Translate on the Live tab (live_translate_status)", () => {
     cleanup();
     await setup({ platform: "macos" });
     await act(async () => undefined);
-    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate isn't on the Mac yet");
+    expect(screen.getByTestId("translate-unavailable")).toHaveTextContent("Live Translate needs macOS 14.2 or later");
   });
 });

@@ -4,9 +4,10 @@
 //! exclusive-fullscreen games hide every overlay, so the UI says borderless or windowed. Nothing is stored.
 
 pub mod gate;
+pub mod players;
 pub mod protocol;
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
@@ -16,7 +17,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
 
-#[cfg(windows)]
+#[cfg(any(windows, target_os = "macos"))]
 use self::gate::FRAME_SAMPLES;
 use self::gate::SpeechGate;
 use self::protocol::{LiveTranslateToken, Speed};
@@ -58,6 +59,15 @@ pub struct Feed {
     pub notice: Option<String>,
     pub locked: bool,
     pub hidden: bool,
+    /// The keys that show it again and that lock or move it, as this system writes them (⌘⇧H, Ctrl+Shift+H): hidden,
+    /// the window still says it is listening, and how to bring it back.
+    pub hide_keys: String,
+    pub lock_keys: String,
+}
+
+/// The keys of a Live Translate action as this system writes them, tight for the small window: "⌘⇧H", "Ctrl+Shift+H".
+pub fn keys(action: crate::shortcuts::Action, macos: bool) -> String {
+    action.default_accelerator().map(|a| crate::shortcuts::label(a, macos).replace(" + ", "+")).unwrap_or_default()
 }
 
 /// `translate_start`: which app (pid and name), Game or Watch, the language to write in, the languages people speak
@@ -84,11 +94,67 @@ pub struct TranslateApp {
 struct Running {
     stop: Arc<AtomicBool>,
     feed: Arc<Mutex<Feed>>,
+    /// The window it was started with ([`window_generation`]): only that window's going ends it.
+    window: u64,
+}
+
+/// Numbers the Live Translate windows built: a session belongs to the window it started with, so a Stop then a quick
+/// Start never loses the new session when the old window is destroyed.
+static WINDOW_GEN: AtomicU64 = AtomicU64::new(0);
+/// The window Stop closed and that is not destroyed yet: a Start waits for it to go instead of using it.
+static CLOSING: AtomicU64 = AtomicU64::new(0);
+
+/// A Live Translate window was built: its number.
+pub fn window_built() -> u64 {
+    WINDOW_GEN.fetch_add(1, Ordering::SeqCst) + 1
+}
+
+/// The number of the newest Live Translate window.
+pub fn window_generation() -> u64 {
+    WINDOW_GEN.load(Ordering::SeqCst)
+}
+
+/// The window there now is one Stop closed and is still going.
+pub fn window_closing() -> bool {
+    let current = window_generation();
+    current != 0 && CLOSING.load(Ordering::SeqCst) == current
+}
+
+/// Whether window `gone` going ends the session (pure): only the session started with it; none runs, nothing to end.
+pub fn gone_ends(session_window: Option<u64>, gone: u64) -> bool {
+    session_window == Some(gone)
 }
 
 fn running() -> &'static Mutex<Option<Running>> {
     static R: OnceLock<Mutex<Option<Running>>> = OnceLock::new();
     R.get_or_init(|| Mutex::new(None))
+}
+
+/// The feed of the session whose capture ended on its own, until Stop (Close) or the next Start: the main window's
+/// panel, opened later (closed during a game), still says it ended and why, and its Close takes the window away.
+fn last_ended() -> &'static Mutex<Option<Feed>> {
+    static E: OnceLock<Mutex<Option<Feed>>> = OnceLock::new();
+    E.get_or_init(|| Mutex::new(None))
+}
+
+/// The session's feed as it ended (its capture ended on its own): ended, with the reason, never hidden. Kept for the
+/// panel ([`current_feed`]) only while no session runs, decided under `running`'s lock, which a Start holds while it
+/// clears it: a Start never gets an older session's ended feed back. Returned to be sent.
+fn mark_ended(feed: &mut Feed, reason: String) -> Feed {
+    feed.status = "ended".into();
+    feed.notice = Some(reason);
+    // Hidden, the window said it was listening: it shows why it stopped instead.
+    feed.hidden = false;
+    let running = running().lock().unwrap_or_else(|p| p.into_inner());
+    if running.is_none() {
+        *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = Some(feed.clone());
+    }
+    feed.clone()
+}
+
+/// No ended session to show any more (Stop or Close, or a new Start).
+fn clear_ended() {
+    *last_ended().lock().unwrap_or_else(|p| p.into_inner()) = None;
 }
 
 /// Why Live Translate cannot start on this computer now.
@@ -109,8 +175,23 @@ pub struct Availability {
     pub reason: Option<Unavailable>,
 }
 
-/// This system can capture one app's sound for Live Translate.
-pub const PLATFORM_SUPPORTED: bool = cfg!(windows);
+/// Whether this system can hear one app for Live Translate: Windows (its process loopback says so itself when the
+/// build is too old), a Mac with macOS 14.2 or later (Core Audio process taps).
+pub fn platform_supported() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        mac_supports(crate::mac_check::native::version())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        cfg!(windows)
+    }
+}
+
+/// macOS 14.2 or later has process taps (pure).
+pub fn mac_supports(version: (u32, u32, u32)) -> bool {
+    (version.0, version.1) >= crate::mac_check::CALL_AUDIO_FROM
+}
 
 /// The availability (pure): the system first (no plan brings it to a Mac), then the plan.
 pub fn availability(platform: bool, in_plan: bool) -> Availability {
@@ -140,7 +221,11 @@ pub fn apps() -> Vec<TranslateApp> {
         list.dedup_by(|a, b| a.name == b.name);
         list
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        crate::audio::platform::macos::playing_apps().into_iter().map(|(pid, name)| TranslateApp { pid, name }).collect()
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Vec::new()
     }
@@ -161,11 +246,9 @@ pub fn display_name(image: &str) -> String {
 }
 
 pub fn current_feed() -> Option<Feed> {
-    running()
-        .lock()
-        .ok()?
-        .as_ref()
-        .and_then(|r| r.feed.lock().ok().map(|f| f.clone()))
+    let running = running().lock().ok()?.as_ref().and_then(|r| r.feed.lock().ok().map(|f| f.clone()));
+    // None runs: the one that ended on its own, until it is closed.
+    running.or_else(|| last_ended().lock().unwrap_or_else(|p| p.into_inner()).clone())
 }
 
 pub fn is_running() -> bool {
@@ -200,6 +283,8 @@ fn update_feed(app: &AppHandle, change: impl FnOnce(&mut Feed)) -> Option<Feed> 
 /// Ends the session, closes the window and gives Ctrl+Shift+T / H back to other apps.
 pub fn stop(app: &AppHandle) {
     stop_session();
+    // Also Close on an ended session: the panel and the window let it go.
+    clear_ended();
     unregister_hotkeys(app);
     let _ = app.emit(
         FEED_EVENT,
@@ -209,8 +294,38 @@ pub fn stop(app: &AppHandle) {
         },
     );
     if let Some(w) = app.get_webview_window(WINDOW) {
+        CLOSING.store(window_generation(), Ordering::SeqCst);
         let _ = w.close();
     }
+}
+
+/// Before a Start builds its window: a window Stop closed is waited for (at most 2 s), so the new session gets a new
+/// window instead of the one that is going.
+pub async fn wait_closed(app: &AppHandle) -> Result<(), String> {
+    let until = Instant::now() + Duration::from_secs(2);
+    while window_closing() && app.get_webview_window(WINDOW).is_some() {
+        if Instant::now() >= until {
+            return Err("Live Translate is still closing. Try again in a moment.".into());
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    Ok(())
+}
+
+/// Window `gone` went, however (closed, destroyed by the system): its session ends (a newer window's never), the keys go
+/// back to other apps and the main window's panel says it stopped. Blocking (giving keys back waits for the main
+/// thread): run it with `spawn_blocking`, never on the main thread.
+pub fn window_gone(app: &AppHandle, gone: u64) {
+    let ended = match running().lock() {
+        Ok(mut r) if gone_ends(r.as_ref().map(|r| r.window), gone) => r.take().inspect(|run| run.stop.store(true, Ordering::SeqCst)).is_some(),
+        _ => false,
+    };
+    if !ended {
+        return;
+    }
+    unregister_hotkeys(app);
+    let _ = app.emit(FEED_EVENT, Feed { status: "stopped".into(), ..Default::default() });
+    crate::actions::emit_status(app);
 }
 
 fn stop_session() {
@@ -241,7 +356,7 @@ pub fn register_hotkeys(app: &AppHandle) -> Vec<String> {
                     .unwrap()
                     .insert(action, shortcut);
             }
-            Err(_) => taken.push(accelerator.replace("CommandOrControl", "Ctrl")),
+            Err(_) => taken.push(crate::shortcuts::label(accelerator, cfg!(target_os = "macos"))),
         }
     }
     taken
@@ -257,9 +372,87 @@ fn unregister_hotkeys(app: &AppHandle) {
     }
 }
 
+/// Why Live Translate cannot start on this system: only a Mac older than macOS 14.2 is refused for it.
+pub const PLATFORM_TEXT: &str = "Live Translate needs macOS 14.2 or later.";
+
+/// What Live Translate says when the app picked plays nothing by the time it starts.
+pub const STOPPED_PLAYING: &str = "This app stopped playing sound. Play something in it, then start Live Translate again.";
+
+/// The capture thread: `hear` hands it one app's sound (16 kHz mono) until `stop`; it is cut into the speech gate's
+/// frames for the session. Why it ended early is said in the window.
+#[cfg(any(windows, target_os = "macos"))]
+fn spawn_capture(
+    app: AppHandle,
+    feed: Arc<Mutex<Feed>>,
+    stop: Arc<AtomicBool>,
+    tx: mpsc::Sender<Vec<i16>>,
+    hear: impl FnOnce(&AtomicBool, &mut dyn FnMut(Vec<f32>)) -> Result<(), String> + Send + 'static,
+) -> Result<(), String> {
+    std::thread::Builder::new()
+        .name("el-translate-capture".into())
+        .spawn(move || {
+            let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
+            let mut send = |samples: Vec<f32>| {
+                pending.extend(gate::to_pcm16(&samples, 16_000));
+                while pending.len() >= FRAME_SAMPLES {
+                    let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
+                    let _ = tx.blocking_send(frame);
+                }
+            };
+            let result = hear(&stop, &mut send);
+            // Stopped by the person (Stop, the window going): they already ended the session. Otherwise the capture
+            // ended on its own: the session ends too, the window keeps the reason and the tray stops saying "listening".
+            let Some(reason) = ended_reason(stop.load(Ordering::SeqCst), result) else { return };
+            stop.store(true, Ordering::SeqCst);
+            // Only the session still current says anything: an older one's thread never flashes "ended" on a newer
+            // session's window, and never takes its keys.
+            let Some(window) = end_if_current(&stop) else {
+                return;
+            };
+            // Said before the keys go back: a Start during that wait (it waits for the main thread) is never followed
+            // by this session's ended feed.
+            if let Ok(mut f) = feed.lock() {
+                let ended = mark_ended(&mut f, reason);
+                let _ = app.emit(FEED_EVENT, &ended);
+            }
+            // Its own window goes (the panel keeps the reason and Close): an unlocked window never takes clicks over a
+            // game, and nothing counts it as open. Only while it is still the newest; a quick Start waits for it.
+            if window_generation() == window {
+                CLOSING.store(window, Ordering::SeqCst);
+                if let Some(w) = app.get_webview_window(WINDOW) {
+                    let _ = w.close();
+                }
+            }
+            unregister_hotkeys(&app);
+            crate::actions::emit_status(&app);
+        })
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
+
+/// What Live Translate says when the app's sound ended without a reason given.
+pub const STOPPED_HEARING: &str = "Live Translate stopped hearing this app. Start it again to go on.";
+
+/// Why the capture ended on its own (pure): none when the person stopped it; the capture's reason, else
+/// [`STOPPED_HEARING`].
+pub fn ended_reason(stopped_by_person: bool, result: Result<(), String>) -> Option<String> {
+    if stopped_by_person {
+        return None;
+    }
+    Some(result.err().unwrap_or_else(|| STOPPED_HEARING.to_string()))
+}
+
+/// Takes the session out of `running` when it is still the one `stop` belongs to (a newer one is left alone): the
+/// number of its window, which it then closes.
+fn end_if_current(stop: &Arc<AtomicBool>) -> Option<u64> {
+    match running().lock() {
+        Ok(mut r) if r.as_ref().is_some_and(|run| Arc::ptr_eq(&run.stop, stop)) => r.take().map(|run| run.window),
+        _ => None,
+    }
+}
+
 /// Starts Live Translate for `pid`; `fetch_token` asks the server for a temporary Soniox key.
-/// On the Mac it is not there yet: the arguments go unused until it is.
-#[cfg_attr(not(windows), allow(unused_variables))]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(unused_variables))]
 pub fn start<F, Fut>(
     app: AppHandle,
     pid: u32,
@@ -279,46 +472,32 @@ where
         app: name,
         status: "listening".into(),
         locked: true,
+        hide_keys: keys(crate::shortcuts::Action::TranslateHide, cfg!(target_os = "macos")),
+        lock_keys: keys(crate::shortcuts::Action::TranslateLock, cfg!(target_os = "macos")),
         ..Default::default()
     }));
-    *running()
-        .lock()
-        .map_err(|_| "Live Translate is busy.".to_string())? = Some(Running {
-        stop: stop_flag.clone(),
-        feed: feed.clone(),
-    });
+    {
+        let mut running = running().lock().map_err(|_| "Live Translate is busy.".to_string())?;
+        // Under `running`'s lock, as `mark_ended` decides: an older session's ended feed is gone for good.
+        clear_ended();
+        *running = Some(Running { stop: stop_flag.clone(), feed: feed.clone(), window: window_generation() });
+    }
 
     let (tx, rx) = mpsc::channel::<Vec<i16>>(64);
     #[cfg(windows)]
-    {
-        let stop_capture = stop_flag.clone();
-        let app_for_capture = app.clone();
-        let feed_for_capture = feed.clone();
-        std::thread::Builder::new()
-            .name("el-translate-capture".into())
-            .spawn(move || {
-                let mut pending: Vec<i16> = Vec::with_capacity(FRAME_SAMPLES * 2);
-                let result =
-                    crate::audio::platform::windows::app_loopback(pid, &stop_capture, |samples| {
-                        pending.extend(gate::to_pcm16(&samples, 16_000));
-                        while pending.len() >= FRAME_SAMPLES {
-                            let frame: Vec<i16> = pending.drain(..FRAME_SAMPLES).collect();
-                            let _ = tx.blocking_send(frame);
-                        }
-                    });
-                if let Err(message) = result
-                    && let Ok(mut f) = feed_for_capture.lock()
-                {
-                    f.notice = Some(message);
-                    let _ = app_for_capture.emit(FEED_EVENT, &*f);
-                }
-            })
-            .map_err(|e| e.to_string())?;
-    }
-    #[cfg(not(windows))]
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+        crate::audio::platform::windows::app_loopback(pid, stop, send)
+    })?;
+    #[cfg(target_os = "macos")]
+    spawn_capture(app.clone(), feed.clone(), stop_flag.clone(), tx, move |stop, send| {
+        // The app's processes that play sound now (a browser's helpers with it), read when it starts.
+        let pids = crate::audio::platform::macos::playing_pids(pid).ok_or_else(|| STOPPED_PLAYING.to_string())?;
+        crate::audio::platform::macos::app_tap(&pids, stop, send)
+    })?;
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         drop(tx);
-        return Err("Live Translate on the Mac comes in a later version.".into());
+        return Err("Live Translate is not available on this system.".into());
     }
     #[allow(unreachable_code)]
     {
@@ -484,13 +663,142 @@ mod tests {
     use super::*;
 
     #[test]
+    fn the_keys_are_written_as_each_system_writes_them() {
+        use crate::shortcuts::Action;
+        assert_eq!(keys(Action::TranslateHide, false), "Ctrl+Shift+H");
+        assert_eq!(keys(Action::TranslateLock, false), "Ctrl+Shift+T");
+        assert_eq!(keys(Action::TranslateHide, true), "⌘⇧H");
+        assert_eq!(keys(Action::TranslateLock, true), "⌘⇧T");
+    }
+
+    /// The tests that set the one running session, one at a time.
+    static SESSION: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn a_capture_that_ends_on_its_own_ends_its_session_and_says_why() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        assert_eq!(ended_reason(true, Ok(())), None, "Stop: nothing more to say");
+        assert_eq!(ended_reason(true, Err("x".into())), None);
+        assert_eq!(ended_reason(false, Err(STOPPED_PLAYING.into())).as_deref(), Some(STOPPED_PLAYING), "the capture's reason");
+        assert_eq!(ended_reason(false, Ok(())).as_deref(), Some(STOPPED_HEARING));
+
+        let mine = Arc::new(AtomicBool::new(true));
+        *running().lock().unwrap() = Some(Running { stop: mine.clone(), feed: Arc::default(), window: 3 });
+        assert_eq!(end_if_current(&mine), Some(3), "its own session ends (its window, 3, to close): the tray stops saying listening");
+        assert!(running().lock().unwrap().is_none());
+        // A newer session started meanwhile is left alone.
+        let newer = Arc::new(AtomicBool::new(false));
+        *running().lock().unwrap() = Some(Running { stop: newer.clone(), feed: Arc::default(), window: 4 });
+        assert_eq!(end_if_current(&mine), None);
+        assert!(running().lock().unwrap().is_some() && !newer.load(Ordering::SeqCst));
+        *running().lock().unwrap() = None;
+        // The capture thread does it, and says it.
+        let source = include_str!("mod.rs");
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        let thread = &thread[..thread.find("\n}").unwrap()];
+        for step in ["ended_reason(", "mark_ended(&mut f, reason)", "emit_status(&app)"] {
+            assert!(thread.contains(step), "{step}");
+        }
+        // A session no longer current says nothing: the check comes before the keys, the feed and the status.
+        let gate = thread.find("let Some(window) = end_if_current(&stop) else {\n                return;\n            };").expect("an old session's thread returns first");
+        for step in ["unregister_hotkeys(&app)", "app.emit(FEED_EVENT", "emit_status(&app)"] {
+            assert!(thread.find(step).is_some_and(|at| at > gate), "{step} only for the current session");
+        }
+    }
+
+    #[test]
+    fn an_ended_session_stays_on_the_panel_with_its_reason_until_it_is_closed_or_another_starts() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        *running().lock().unwrap() = None;
+        clear_ended();
+        assert_eq!(current_feed(), None);
+        // Its capture ended on its own (the app stopped playing), its session left `running`.
+        let mut feed = Feed { status: "live".into(), app: "Valorant".into(), hidden: true, locked: true, ..Default::default() };
+        let sent = mark_ended(&mut feed, STOPPED_PLAYING.into());
+        let shown = current_feed().expect("the panel opened later still has it");
+        assert_eq!(shown, sent);
+        assert_eq!((shown.status.as_str(), shown.notice.as_deref(), shown.hidden), ("ended", Some(STOPPED_PLAYING), false));
+        assert!(!is_running(), "the tray never says it listens");
+        // A running session's own feed comes first.
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 9 });
+        assert_eq!(current_feed().map(|f| f.status), Some("live".into()));
+        *running().lock().unwrap() = None;
+        // Close (Stop) and a new Start let it go.
+        clear_ended();
+        assert_eq!(current_feed(), None);
+        // A newer session already runs: an older capture's end is sent but never kept, so it can't come back later.
+        *running().lock().unwrap() = Some(Running { stop: Arc::default(), feed: Arc::new(Mutex::new(Feed { status: "live".into(), ..Default::default() })), window: 10 });
+        let mut old = Feed { status: "live".into(), ..Default::default() };
+        assert_eq!(mark_ended(&mut old, STOPPED_HEARING.into()).status, "ended", "still sent to its window");
+        *running().lock().unwrap() = None;
+        assert_eq!(current_feed(), None, "not kept while another session ran");
+        let source = include_str!("mod.rs");
+        let stop = &source[source.find("pub fn stop(app: &AppHandle)").unwrap()..];
+        let stop = &stop[..stop.find("\n}").unwrap()];
+        assert!(stop.contains("clear_ended();") && stop.contains("w.close()"), "Close clears it and closes the window: {stop}");
+        let start = &source[source.find("pub fn start<").unwrap()..];
+        let start = &start[..start.find("let (tx, rx)").unwrap()];
+        let held = start.find("let mut running = running().lock()").expect("Start takes running's lock");
+        assert!(start.find("clear_ended();").is_some_and(|at| at > held), "a new Start clears it under running's lock");
+        // The natural end says it ended before the keys go back.
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        let thread = &thread[..thread.find("\n}").unwrap()];
+        assert!(thread.find("mark_ended(&mut f, reason)") < thread.find("unregister_hotkeys(&app)"), "ended is said before the keys go back");
+        // Then its own window closes: after the ended feed, only while it is the newest, marked closing first.
+        let marked = thread.find("mark_ended(&mut f, reason)").unwrap();
+        let guard = thread.find("if window_generation() == window {").expect("guarded by its window's number");
+        let closing = thread.find("CLOSING.store(window, Ordering::SeqCst);").expect("a quick Start waits for it");
+        let close = thread.find("let _ = w.close();").expect("the window closes");
+        assert!(marked < guard && guard < closing && closing < close && close < thread.find("unregister_hotkeys(&app)").unwrap());
+        let thread = &source[source.find("fn spawn_capture(").unwrap()..];
+        assert!(thread[..thread.find("\n}").unwrap()].contains("mark_ended(&mut f, reason)"));
+    }
+
+    #[test]
+    fn a_window_gone_any_way_ends_the_session_and_its_keys() {
+        let _one = SESSION.lock().unwrap_or_else(|p| p.into_inner());
+        let stop = Arc::new(AtomicBool::new(false));
+        *running().lock().unwrap() = Some(Running { stop: stop.clone(), feed: Arc::default(), window: 1 });
+        stop_session();
+        assert!(stop.load(Ordering::SeqCst), "the capture is told to stop");
+        assert!(running().lock().unwrap().is_none(), "nothing runs");
+        // Stop, then a quick Start in a new window: the old window's going never ends the new session.
+        assert!(gone_ends(Some(7), 7), "its own window");
+        assert!(!gone_ends(Some(8), 7), "the window before the new session's");
+        assert!(!gone_ends(None, 7), "nothing runs: nothing to end");
+        // The window's destruction is handled whatever closed it, off the main thread.
+        let lib = include_str!("../lib.rs");
+        let destroyed = &lib[lib.find("WindowEvent::Destroyed =>").unwrap()..];
+        // The arm ends where the match arm closes (`on_window_event` in lib.rs).
+        let arm = &destroyed[..destroyed.find("\n        }\n").unwrap()];
+        assert!(arm.contains("translate::WINDOW") && arm.contains("translate::window_gone(&app, gone)"), "{arm}");
+        assert!(arm.contains("window_generation()") && arm.find("window_generation()") < arm.find("spawn_blocking"), "the window's number is read when it goes: {arm}");
+        assert!(arm.contains("async_runtime::spawn_blocking"), "blocking, never on the main thread: {arm}");
+        let gone = include_str!("mod.rs");
+        let body = &gone[gone.find("pub fn window_gone").unwrap()..];
+        let body = &body[..body.find("\n}").unwrap()];
+        assert!(body.contains("unregister_hotkeys(app)") && body.contains("status: \"stopped\""), "{body}");
+        // A Start never uses the window Stop closed.
+        let commands = include_str!("../commands.rs");
+        let start = &commands[commands.find("pub async fn translate_start").unwrap()..];
+        assert!(start[..start.find("create_translate_window").unwrap()].contains("wait_closed(&app)"));
+    }
+
+    #[test]
     fn live_translate_says_why_it_cannot_start() {
         let none = |platform, plan| serde_json::to_value(availability(platform, plan)).unwrap();
         assert_eq!(none(true, true), serde_json::json!({"available": true, "reason": null}));
         assert_eq!(none(true, false), serde_json::json!({"available": false, "reason": "plan"}));
         assert_eq!(none(false, true), serde_json::json!({"available": false, "reason": "platform"}));
         assert_eq!(none(false, false), serde_json::json!({"available": false, "reason": "platform"}), "the system first: no plan brings it to a Mac");
-        assert_eq!(PLATFORM_SUPPORTED, cfg!(windows));
+        #[cfg(target_os = "macos")]
+        assert_eq!(platform_supported(), mac_supports(crate::mac_check::native::version()));
+        #[cfg(windows)]
+        assert!(platform_supported());
+        assert!(mac_supports((14, 2, 0)) && mac_supports((15, 0, 0)) && mac_supports((26, 1, 0)));
+        assert!(!mac_supports((14, 1, 2)) && !mac_supports((13, 6, 0)), "below 14.2 the reason stays platform");
+        // Only a Mac below 14.2 is refused for the system (Windows says its own build at the capture).
+        assert_eq!(PLATFORM_TEXT, "Live Translate needs macOS 14.2 or later.");
     }
 
     #[test]

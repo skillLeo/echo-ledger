@@ -823,8 +823,8 @@ mod tests {
 
     #[test]
     fn the_log_never_names_a_device() {
-        let line = DeviceNotice::Moved { channel: Channel::Mic, name: Some("Hassam's AirPods".into()) }.log_line();
-        assert!(line.contains("Mic") && !line.contains("Hassam"), "{line}");
+        let line = DeviceNotice::Moved { channel: Channel::Mic, name: Some("Ayesha's AirPods".into()) }.log_line();
+        assert!(line.contains("Mic") && !line.contains("Ayesha"), "{line}");
         let log = DeviceLog::default();
         log.push(DeviceNotice::Lost { channel: Channel::Mic });
         assert_eq!(log.take().len(), 1);

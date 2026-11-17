@@ -379,6 +379,8 @@ pub fn create_translate_window<R: Runtime>(app: &AppHandle<R>, subtitles: bool) 
     }
     let size = if subtitles { (900.0, 140.0) } else { (560.0, 132.0) };
     let window = build(app, crate::translate::WINDOW, size)?;
+    // A new window, a new number: the session started now belongs to it.
+    crate::translate::window_built();
     #[cfg(target_os = "macos")]
     macos::keep_above_everything(&window);
     let _ = window.set_ignore_cursor_events(true);
