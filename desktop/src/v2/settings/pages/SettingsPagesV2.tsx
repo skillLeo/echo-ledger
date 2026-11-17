@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { setting } from "../../../lib/settingsRegistry";
 import { NoPlans, PageLoading, SettingsPage, useSettings, type Run } from "./rows";
-import { sectionTarget } from "./route";
+import { V2_SETTINGS_PAGES, sectionTarget } from "./route";
 import { HistoryPageV2, ReplacementsPageV2, SnippetsPageV2, VoicePageV2 } from "./VoiceV2";
 import { CaptionStylePageV2, CaptionsPageV2 } from "./CaptionsV2";
 import { CallSitesPageV2, CallsPageV2 } from "./CallsV2";
@@ -13,6 +13,9 @@ import type { AppStatus } from "../../../lib/ipc";
 import { roleOf, useAccount } from "../../../views/main/AccountSettings";
 import { ProfilePageV2 } from "./ProfileV2";
 import { PlanPageV2 } from "./PlanV2";
+import { DevicesPageV2 } from "./DevicesV2";
+import { AboutPageV2, TechnicalPageV2 } from "./AboutV2";
+import { MacCheckPageV2 } from "./MacCheckV2";
 import { ConsentPageV2, PrivacyPageV2 } from "./PrivacyV2";
 import { LockPageV2 } from "./LockV2";
 import { SecurityPageV2, SignInActivityPageV2 } from "./SecurityV2";
@@ -23,9 +26,11 @@ import { StoragePageV2 } from "./StorageV2";
 import { AppearancePageV2, ShortcutsPageV2, useThemeChoice } from "./AppV2";
 import type { ThemeChoice } from "../../../lib/theme";
 
-export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, theme, onTheme }: {
+export function SettingsPagesV2({ section, onHome, onSection, run, status, onUnpaired, theme, onTheme }: {
   section: { id: string; seq: number };
   onHome: () => void;
+  /** Opens a section outside these pages (Help, from the Mac check); without it the way back is Settings. */
+  onSection?: (id: string) => void;
   run: Run;
   status: AppStatus;
   /** The app's status after signing out (Sign out everywhere). */
@@ -84,13 +89,18 @@ export function SettingsPagesV2({ section, onHome, run, status, onUnpaired, them
       case "plan": return entitlements === undefined ? <PageLoading /> : entitlements
         ? <PlanPageV2 e={entitlements} role={roleOf(account, status)} workspace={account?.workspace?.name || status.plan.workspace || null} onKey={() => open("key")} />
         : <NoPlans />;
+      case "devices": return <DevicesPageV2 run={run} />;
+      case "about": return <AboutPageV2 status={status} run={run} onImported={setSettings} onDevices={() => open("devices")} onTechnical={() => open("about.technical")} />;
+      case "about.technical": return <TechnicalPageV2 status={status} />;
+      // On a Mac only, as today (the registry asks for macOS).
+      case "help.mac_check": return platform === "macos" ? <MacCheckPageV2 status={status} /> : null;
       case "calls.sites": return <CallSitesPageV2 rules={settings.siteRules} onSave={(siteRules) => patch({ siteRules })} />;
       default: return null;
     }
   })();
   return (
     <SettingsPage key={page} title={setting(page).title} back={parent ? setting(parent).title : "Settings"} target={target}
-      onBack={() => (parent ? open(parent) : onHome())}>
+      onBack={() => (!parent ? onHome() : V2_SETTINGS_PAGES.has(parent) ? open(parent) : onSection ? onSection(parent) : onHome())}>
       {body}
     </SettingsPage>
   );

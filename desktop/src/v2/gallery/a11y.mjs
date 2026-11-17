@@ -90,6 +90,11 @@ const SCREENS = [
   ["a-set-plan-pro", `${app("settings")}&plan=pro`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-plan-request", `${app("settings")}&plan=free&request=awaiting_payment`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
   ["a-set-plan-near", `${app("settings")}&plan=pro&near=1`, async (page) => { await page.getByRole("button", { name: "Plan & usage", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-devices", app("settings"), async (page) => { await page.getByRole("button", { name: "Devices", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-about", app("settings"), async (page) => { await page.getByRole("button", { name: "About", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-technical", app("settings"), async (page) => { await page.getByRole("button", { name: "About", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: "Technical details", exact: true }).click(); await page.waitForTimeout(900); }],
+  ["a-set-mac-check", app("settings-mac"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: /^Mac check/ }).first().click(); await page.waitForTimeout(900); }],
+  ["a-set-mac-check-report", app("settings-mac-check"), async (page) => { await page.getByRole("button", { name: "Help", exact: true }).click(); await page.waitForTimeout(900); await page.getByRole("button", { name: /^Mac check/ }).first().click(); await page.waitForTimeout(900); }],
   ["a-controls", app("controls"), async (page) => { await page.getByRole("button", { name: /Show the controls/ }).click(); await page.waitForTimeout(400); }],
 ];
 

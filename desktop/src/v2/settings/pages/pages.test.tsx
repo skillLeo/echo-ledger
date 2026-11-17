@@ -2,23 +2,25 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactElement } from "react";
 import type { AppStatus, PermissionsStatus, ScreensStatus, Settings, SettingsPatch } from "../../../lib/ipc";
-import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
+import { callsOf, emitEvent, fail, flushAsync, resetTauriMock, respond, respondWith } from "../../../test/tauri";
 import { answerConfirm } from "../../../test/confirm";
 import { collectControls, disabledSwitches, stale, type ControlRole, type RolelessField } from "../../../test/parity";
 import { makeItem, makeMicUser, makeSettings, makeStatus, makeUpgradeRequest, sampleEntitlements } from "../../../test/fixtures";
 import { resetEntitlementsForTests } from "../../../lib/entitlements";
-import { AppearancePage, LanguagePage, ShortcutsPage, WordsPage } from "../../../views/main/AppSettings";
+import { AboutPage, AppearancePage, LanguagePage, ShortcutsPage, WordsPage } from "../../../views/main/AppSettings";
 import { getThemeChoice } from "../../../lib/theme";
 import { loadPreferences } from "../../../lib/shell";
 import { TranscriptionKeyPage } from "../../../views/main/Upgrade";
 import { ConsentPage, PrivacyPage, ProfilePage, SecurityPage } from "../../../views/main/AccountSettings";
 import { PlanUsagePage } from "../../../views/main/Upgrade";
 import { useUpgradeSheet } from "../../../lib/entitlements";
-import { LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
+import { DevicesPage, LockPage, NotificationsPage, StoragePage } from "../../../views/main/SecuritySettings";
 import { resetTrashKeepHoursForTests } from "../../../lib/trash";
 import type { Account } from "../../../lib/ipc";
 import MainApp from "../../../views/main/MainApp";
 import { CallSitesPage, CallsPage, CaptionStylePage, CaptionsPage, MicrophonePage } from "../../../views/main/CaptureSettings";
+import { MacCheckCard } from "../../../views/main/MacCheck";
+import type { CheckItem, CheckReport } from "../../../lib/ipc";
 import { ExcludedAppsPage, MONTHLY_NOTE, ScreenMomentsPage, TARGET_HINT, WINDOWS_WHOLE_SCREEN, screensBlocked } from "../../../views/main/ScreenSettings";
 import { setting } from "../../../lib/settingsRegistry";
 import { HistoryPage, ReplacementsPage, SnippetsPage, VoicePage } from "../../../views/main/DictationSettings";
@@ -36,6 +38,18 @@ const SETTINGS = makeSettings({
 const ACCOUNT: Account = { name: "Ayesha Siddiqui", email: "ayesha@qureshitextiles.pk", email_verified: true, two_factor: true, google: false, created_at: null, workspace: null, deletes_at: null };
 const HISTORY = [{ at: "2026-11-17T08:00:00Z", text: "Send the proforma today." }];
 const run = <T,>(fn: () => Promise<T>) => fn().catch(() => undefined);
+const CHECK_OK: CheckItem = { key: "macos_version", title: "macOS version", state: "ok", detail: "macOS 15.1: call audio works on this version.", fix: null };
+const CHECK_OFF: CheckItem = { key: "system_audio_permission", title: "System audio permission", state: "off",
+  detail: "Off. Without it a recording has your voice, not the other side of the call.", fix: { label: "Open System Settings", settings: "system_audio" } };
+const CHECK_REOPEN: CheckItem = { key: "screen_permission", title: "Screen Recording", state: "limited", detail: "Allowed while EchoLedger ran: it applies after a reopen.",
+  fix: { label: "Quit & reopen", settings: "screen", reopen: true } };
+const macReport = (over: Partial<CheckReport> = {}): CheckReport =>
+  ({ items: [CHECK_OK, CHECK_OFF, CHECK_REOPEN], stopped: null, finishedAt: "2026-11-17T08:00:00Z", appVersion: "2.0.0", osVersion: "15.1", model: "Mac14,2", sentAt: null, ...over });
+const UPDATE_IDLE = { phase: "idle", current: "2.0.0", version: null, notes: null, checkedAt: "2026-11-17T08:00:00Z", message: null, progress: null };
+const DEVICES = [
+  { id: "d2", name: "Ayesha's S25", platform: "android", app_version: "2.0.0", last_seen_at: "2026-11-17T07:00:00Z", paired_at: null, current: false },
+  { id: "d1", name: "Work laptop", platform: "windows", app_version: "2.0.0", last_seen_at: null, paired_at: null, current: true },
+];
 
 beforeEach(() => {
   resetTauriMock();
@@ -55,6 +69,8 @@ beforeEach(() => {
   respond("screens_status", { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true });
   respond("screens_permission", false);
   respond("lock_status", { enabled: false, locked: false, hasPin: false, osMethod: "windows_hello", retryAfterSeconds: 0 });
+  respond("update_status", UPDATE_IDLE);
+  respond("mac_check_last", null);
 });
 
 let onUnpaired = vi.fn();
@@ -736,6 +752,163 @@ describe("Plan & usage v2", () => {
   });
 });
 
+describe("Devices v2", () => {
+  it("this computer first and said so, the others with when they were active; rename any, sign the others out after asking", async () => {
+    respond("security_overview", { devices: DEVICES, events: [] });
+    respond("device_rename", "Office laptop");
+    respond("device_revoke", null);
+    await show("devices");
+    const rows = within(screen.getByRole("list", { name: "Signed-in devices" })).getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent("Work laptop");
+    expect(rows[0]).toHaveTextContent("This computer");
+    expect(rows[1]).toHaveTextContent(/Android phone, active/);
+    expect(screen.queryByRole("button", { name: "Sign out Work laptop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Rename Work laptop" }));
+    const dialog = screen.getByRole("dialog", { name: "Rename Work laptop" });
+    expect(within(dialog).getByRole("button", { name: "Save" })).toBeDisabled();
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "Name" }), { target: { value: "  Office laptop " } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Save" }));
+    await act(flushAsync);
+    expect(callsOf("device_rename")).toEqual([{ id: "d1", name: "Office laptop" }]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    const asked = answerConfirm();
+    asked.mockReturnValue(true);
+    fireEvent.click(screen.getByRole("button", { name: "Sign out Ayesha's S25" }));
+    await act(flushAsync);
+    expect(asked.mock.calls[0][0]).toMatch(/^Sign out Ayesha's S25\? It will need to sign in again\./);
+    expect(callsOf("device_revoke")).toEqual([{ id: "d2" }]);
+  });
+});
+
+describe("About v2", () => {
+  it("version, updates, this computer's name (opens Devices), the server, Technical details, settings export and import, policies", async () => {
+    respond("security_overview", { devices: DEVICES, events: [] });
+    respond("update_check", { ...UPDATE_IDLE, phase: "up_to_date", message: "EchoLedger is up to date." });
+    respond("settings_export", "C:/Users/a/Downloads/echoledger-settings.json");
+    respond("server_page_open", null);
+    await show("about");
+    expect(screen.getByText(/EchoLedger looks for updates when it starts and every 6 hours/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    await act(flushAsync);
+    expect(screen.getByText("EchoLedger is up to date.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Export settings" }));
+    await act(flushAsync);
+    expect(callsOf("settings_export")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Terms, opens in browser" }));
+    await act(flushAsync);
+    expect(callsOf("server_page_open")).toEqual([{ page: "terms", serverUrl: null }]);
+    fireEvent.click(screen.getByRole("button", { name: /^Device name/ }));
+    expect(screen.getByRole("heading", { level: 1, name: "Devices" })).toBeInTheDocument();
+  });
+
+  it("Technical details: whether the connection is verified, and the server's whole address; back goes to About", async () => {
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "about.technical", seq: 1 }} onHome={vi.fn()} run={run} onUnpaired={vi.fn()}
+      status={makeStatus({ pinned: false, serverUrl: "https://app.echoledger.pk" })} /></div>);
+    await act(flushAsync);
+    expect(screen.getByText("Not verified")).toBeInTheDocument();
+    expect(screen.getByText("https://app.echoledger.pk")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "About" }));
+    expect(screen.getByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
+  });
+
+  it("imports a settings file and reads it back", async () => {
+    respondWith("settings_import", ({ text }) => ({ ...SETTINGS, ...(JSON.parse(text as string) as Partial<Settings>) }));
+    await show("about");
+    const input = screen.getByLabelText("Import settings", { selector: "input" }) as HTMLInputElement;
+    const file = new File([JSON.stringify({ farSideWarning: false })], "s.json", { type: "application/json" });
+    Object.defineProperty(file, "text", { value: () => Promise.resolve(JSON.stringify({ farSideWarning: false })) });
+    fireEvent.change(input, { target: { files: [file] } });
+    await act(flushAsync);
+    expect(callsOf("settings_import")).toEqual([{ text: JSON.stringify({ farSideWarning: false }) }]);
+  });
+
+  it("an update ready: Restart, its notes, and while recording it waits and says why", async () => {
+    respond("update_status", { ...UPDATE_IDLE, phase: "ready", version: "2.0.1", notes: "Fixes for Live Translate." });
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "about", seq: 1 }} onHome={vi.fn()} run={run} onUnpaired={vi.fn()}
+      status={makeStatus({ recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } })} /></div>);
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Restart" })).toBeDisabled();
+    expect(screen.getByText("Fixes for Live Translate.")).toBeInTheDocument();
+    expect(screen.getByText("Stop the recording first: EchoLedger restarts to install the update.")).toBeInTheDocument();
+  });
+});
+
+describe("Mac check v2", () => {
+  const mac = (over: Partial<AppStatus> = {}) => makeStatus({ platform: "macos", ...over });
+  const showMac = async (status = mac()) => {
+    const onSection = vi.fn();
+    render(<div className="el-root"><SettingsPagesV2 section={{ id: "help.mac_check", seq: 1 }} onHome={vi.fn()} onSection={onSection} run={run} status={status} onUnpaired={vi.fn()} /></div>);
+    await act(flushAsync);
+    return onSection;
+  };
+
+  it("runs one check at a time with a progress line, then a mark, the state in words, the sentence and the fix per item", async () => {
+    let finish: (r: CheckReport) => void = () => undefined;
+    respondWith("mac_check_run", () => new Promise((resolve) => { finish = resolve; }));
+    respond("open_privacy_settings", null);
+    respond("quit_and_reopen", null);
+    await showMac();
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Checking…" })).toBeDisabled();
+    await act(async () => emitEvent("mac_check:progress", { index: 4, total: 9, line: "Listening to the microphone for 5 seconds: say something…", done: [CHECK_OK] }));
+    expect(screen.getByTestId("mac-check-progress")).toHaveTextContent("5 of 9: Listening to the microphone for 5 seconds: say something…");
+    await act(async () => finish(macReport()));
+    const results = screen.getByRole("list", { name: "Mac check results" });
+    const rows = within(results).getAllByRole("listitem");
+    expect(rows).toHaveLength(3);
+    expect(rows[1]).toHaveAccessibleDescription(/^Off/);
+    fireEvent.click(within(rows[1]).getByRole("button", { name: "Open System Settings" }));
+    expect(callsOf("open_privacy_settings")).toEqual([{ kind: "system_audio" }]);
+    fireEvent.click(within(rows[2]).getByRole("button", { name: "Quit & reopen" }));
+    await act(flushAsync);
+    expect(callsOf("quit_and_reopen")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Run Mac check again" })).toBeInTheDocument();
+  });
+
+  it("copies and sends only when asked, says when it was sent, and why Send waits when signed out", async () => {
+    respond("mac_check_last", macReport());
+    respond("mac_check_copy", null);
+    respond("mac_check_send", "2026-11-17T08:05:00Z");
+    await showMac();
+    expect(callsOf("mac_check_copy")).toHaveLength(0);
+    fireEvent.click(screen.getByRole("button", { name: "Copy report" }));
+    await act(flushAsync);
+    expect(screen.getByRole("button", { name: "Copied" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Send to my admin" }));
+    await act(flushAsync);
+    expect(callsOf("mac_check_send")).toHaveLength(1);
+    expect(screen.getByTestId("mac-check-sent")).toHaveTextContent(/^Sent to your admin/);
+    cleanup();
+    await showMac(mac({ paired: false }));
+    expect(screen.getByRole("button", { name: "Send to my admin" })).toBeDisabled();
+    expect(screen.getByTestId("mac-check-send-blocked")).toHaveTextContent("Sign in to send this to your admin.");
+  });
+
+  it("never during a recording; a recording that stopped it is said; a failure is shown; back goes to Help", async () => {
+    await showMac(mac({ recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } }));
+    expect(screen.getByTestId("mac-check-recording")).toHaveTextContent("Finish the current recording to run the Mac check.");
+    expect(screen.queryByRole("button", { name: /Run Mac check/ })).toBeNull();
+    cleanup();
+    respond("mac_check_run", macReport({ items: [CHECK_OK], stopped: "A recording started, so the check stopped." }));
+    const onSection = await showMac();
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check" }));
+    await act(flushAsync);
+    expect(screen.getByText("A recording started, so the check stopped.")).toBeInTheDocument();
+    fail("mac_check_run", "The check couldn't start.");
+    fireEvent.click(screen.getByRole("button", { name: "Run Mac check again" }));
+    await act(flushAsync);
+    expect(screen.getByRole("alert")).toHaveTextContent("The check couldn't start.");
+    fireEvent.click(screen.getByRole("button", { name: "Help" }));
+    expect(onSection).toHaveBeenCalledWith("help");
+  });
+
+  it("isn't on Windows", async () => {
+    await show("help.mac_check");
+    expect(screen.queryByTestId("mac-check")).toBeNull();
+  });
+});
+
 /**
  * Parity with today's pages: each page is rendered as today's and as the v2 page in each of its states (the page as it
  * opens, then each dialog and form opened, from a fresh page each time), and every control today's page shows in a
@@ -749,7 +922,7 @@ describe("parity with today's Settings pages, in every state", () => {
   type Step = { name: string; today: Act; v2?: Act };
   type Page = {
     name: string; section: string; platform?: string; settings?: Partial<Settings>; entitlements?: ReturnType<typeof sampleEntitlements>; account?: Account;
-    lock?: { hasPin: boolean }; status?: Partial<AppStatus>; permissions?: Partial<PermissionsStatus>; screens?: Partial<ScreensStatus>;
+    lock?: { hasPin: boolean }; status?: Partial<AppStatus>; devices?: boolean; update?: object; macLast?: CheckReport | null; permissions?: Partial<PermissionsStatus>; screens?: Partial<ScreensStatus>;
     today: (settings: Settings) => ReactElement; stalesOk?: boolean; steps?: Step[]; map?: Record<string, [ControlRole | RolelessField, string | RegExp]>;
     /** Lines the page may say (its footer's): in every state, the ones today's page shows must be the ones the v2 page shows. */
     lines?: readonly string[];
@@ -916,6 +1089,26 @@ describe("parity with today's Settings pages, in every state", () => {
       map: { "button: See every featureShown below": ["button", /^See every feature/], "button: See every feature": ["button", /^See every feature/] },
       mapLike: [[/^button: Promo code/, ["button", "Promo code"]], [/^button: (Free|Pro|Ultra), 1 month/, ["button", /^(Free|Pro|Ultra), 1 month$/]]],
     })),
+    { name: "Devices", section: "devices", today: () => <DevicesPage run={run} />, devices: true,
+      steps: [{ name: "Rename, the dialog", today: press("Rename Work laptop") }, { name: "Sign out, asked", today: press("Sign out Ayesha's S25") }] },
+    ...([["idle", {}, false], ["update ready", { phase: "ready", version: "2.0.1", notes: "Fixes." }, false], ["update ready, while recording", { phase: "ready", version: "2.0.1", notes: null }, true],
+      ["check failed", { phase: "failed", message: "The server didn't answer." }, false]] as const).map(([label, update, recording]): Page => ({
+      name: `About, ${label}`, section: "about", update, status: recording ? { recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } } : {},
+      today: () => <AboutPage status={makeStatus(recording ? { recording: { clientRef: "r", mode: "call", sourceApp: "zoom", clientId: null, startedAt: "", backend: "mock" } } : {})} run={run} onImported={() => undefined} onDevices={() => undefined} onTechnical={() => undefined} />,
+      map: { "button: Device nameWork laptop": ["button", /^Device name/], "button: Privacy policy, opens in browser": ["button", "Privacy policy, opens in browser"],
+        "button: Terms, opens in browser": ["button", "Terms, opens in browser"] },
+      stalesOk: true,
+      lines: ["EchoLedger looks for updates when it starts and every 6 hours.", "Update ready — EchoLedger 2.0.1.", "Fixes.", "Stop the recording first: EchoLedger restarts to install the update.",
+        "The server didn't answer.", "Last checked", "The file has your preferences only, never the sign-in, keys or PIN.", "Work laptop"],
+    })),
+    ...([["no report yet", null, {}], ["the last report", macReport(), {}], ["the last report, sent", macReport({ sentAt: "2026-11-17T08:05:00Z" }), {}],
+      // While recording today's page has no controls at all; its sentence is checked by the tests above.
+      ["the last report, signed out", macReport(), { paired: false }]] as const).map(([label, last, status]): Page => ({
+      name: `Mac check, ${label}`, section: "help.mac_check", platform: "macos", status, macLast: last,
+      today: () => <MacCheckCard status={makeStatus({ platform: "macos", ...status })} />,
+      lines: ["The Mac check looks at macOS", "Finish the current recording to run the Mac check.", "Sign in to send this to your admin.", "Sent to your admin",
+        "The report has no names, no recordings and no account. It is sent only when you press the button.", CHECK_OFF.detail, CHECK_REOPEN.detail],
+    })),
     { name: "Sign-in & security", section: "security", today: () => <SecurityPage account={ACCOUNT} run={run} onSignedOut={() => undefined} onActivity={() => undefined} />,
       map: { "button: Two-step sign-in, opens in browser": ["button", "Two-step sign-in, opens in browser"] },
       steps: [{ name: "Sign out everywhere", today: press("Sign out everywhere") }] },
@@ -944,6 +1137,9 @@ describe("parity with today's Settings pages, in every state", () => {
       respond("lock_status", { enabled: !!page.settings?.appLock, locked: false, hasPin: page.lock?.hasPin ?? false, osMethod: "windows_hello", retryAfterSeconds: 0 });
       resetEntitlementsForTests(page.entitlements ?? sampleEntitlements("free"));
       respond("account_get", page.account ?? ACCOUNT);
+      respond("security_overview", { devices: page.devices ? DEVICES : [], events: [{ id: 1, event: "sign_in", label: "Signed in", summary: "Signed in", actor: "device", device: "Work laptop", at: "2026-11-17T08:00:00Z" }] });
+      respond("update_status", { ...UPDATE_IDLE, ...page.update });
+      respond("mac_check_last", page.macLast ?? null);
       respond("permissions_status", { microphone: "allowed", systemAudio: "allowed", screen: "allowed", browserAutomation: true, platform: "windows", ...page.permissions });
       respond("screens_status", { supported: true, platform: "windows", borderless: false, permission: true, inPlan: true, onServer: true, ...page.screens });
       const today = await capture(() => render(page.today(settings)), step?.today ?? null);

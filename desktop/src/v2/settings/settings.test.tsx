@@ -5,7 +5,8 @@ import { callsOf, flushAsync, resetTauriMock, respond } from "../../test/tauri";
 import { makeEntitlements, makeItem, makeSettings, makeStatus } from "../../test/fixtures";
 import { resetEntitlementsForTests } from "../../lib/entitlements";
 import { GOAL_GROUPS, SettingsV2, sectionFor, ungrouped } from "./SettingsV2";
-import { findSetting } from "../../lib/settingsRegistry";
+import { SETTINGS, findSetting } from "../../lib/settingsRegistry";
+import { hasV2Page } from "./pages/route";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -128,7 +129,7 @@ describe("start-up", () => {
 });
 
 describe("the app with ui_v2.settings", () => {
-  it("Settings opens the new list; a page opens today's page and its back link returns", async () => {
+  it("Settings opens the new list; About opens its v2 page, Devices from it, and the way back returns to the list", async () => {
     respond("app_status", makeStatus());
     respond("library_list", [makeItem("a")]);
     respond("library_refresh", [makeItem("a")]);
@@ -137,6 +138,7 @@ describe("the app with ui_v2.settings", () => {
     respond("session_detail", {});
     respond("security_overview", { devices: [], events: [] });
     respond("input_devices", []);
+    respond("update_status", { phase: "idle", current: "2.0.0", version: null, notes: null, checkedAt: null, message: null, progress: null });
     respond("ui_flags", { ui_flags: { "ui_v2.shell": true, "ui_v2.settings": true } });
     render(<MainApp />);
     await act(flushAsync);
@@ -145,14 +147,20 @@ describe("the app with ui_v2.settings", () => {
     fireEvent.click(within(nav).getByRole("button", { name: "Settings" }));
     await act(flushAsync);
     await act(flushAsync);
-    // A page without its v2 page yet (About) opens today's page inside the frame.
     fireEvent.click(await screen.findByRole("button", { name: "About" }));
     await act(flushAsync);
     expect(await screen.findByRole("heading", { level: 1, name: "About" })).toBeInTheDocument();
-    expect(document.querySelector(".settings-list")).toBeNull();
-    fireEvent.click(document.querySelector(".settings-root.page-only .back-link")!);
+    expect(document.querySelector("[data-v2=settings-page]")).not.toBeNull();
+    expect(document.querySelector(".settings-root")).toBeNull();
+    fireEvent.click(document.querySelector("[data-v2=settings-page] > .el-page__back")!);
     await act(flushAsync);
     expect(screen.getByRole("heading", { level: 1, name: "Settings" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Switch back to classic" })).toBeInTheDocument();
+  });
+
+  it("every Settings page has its v2 page (Help and Setup & health have their own)", () => {
+    const pages = SETTINGS.filter((e) => e.kind === "page").map((e) => e.id);
+    expect(pages.length).toBeGreaterThan(30);
+    expect(pages.filter((id) => id !== "help" && !hasV2Page(id))).toEqual([]);
   });
 });

@@ -34,6 +34,7 @@ export {
   LucideCalendarIcon as CalendarIcon,
   LucideCopyIcon as CopyIcon,
   LucideSmartphoneIcon as DeviceIcon,
+  LucideLaptopIcon as LaptopIcon,
 } from "../../components/Icons";
 export {
   SourceAppIcon,
@@ -50,5 +51,6 @@ export {
   VideoIcon,
   SkipIcon,
   RefreshIcon,
+  DownloadIcon,
 } from "../../components/Icons";
 export { PlayIcon, PauseIcon, StopIcon, ChevronDownIcon, MoreIcon } from "../../components/ControlIcons";
