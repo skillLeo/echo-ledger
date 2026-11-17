@@ -102,4 +102,9 @@ describe("scaled fills", () => {
     expect(css).toMatch(/\.el-meter__fill \{[^}]*transform-origin: left center;/);
     expect(css).toContain(".el-meter__fill:dir(rtl) { transform-origin: right center; }");
   });
+
+  it("text that finds its own direction lines up with its column, in the form Chromium and WebKit read too", () => {
+    const css = readFileSync(join(here, "styles", "v2.css"), "utf8");
+    expect(css).toMatch(/\.el-row__title, [^{]*\{\s*text-align: match-parent;\s*text-align: -webkit-match-parent;\s*\}/);
+  });
 });

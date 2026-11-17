@@ -24,6 +24,12 @@ const theme = params.get("theme") === "dark" ? "dark" : "light";
 localStorage.setItem("echoledger-theme", theme);
 document.documentElement.dataset.theme = theme;
 document.documentElement.style.colorScheme = theme;
+// "&lang=ur": the window right to left, as for an Urdu reader. The desktop's own words are English (it has no Urdu
+// interface yet); recordings, transcripts and names keep their own script and direction.
+if (params.get("lang") === "ur") {
+  document.documentElement.lang = "ur";
+  document.documentElement.dir = "rtl";
+}
 const controls = screen.startsWith("controls");
 document.documentElement.dataset.window = controls ? "controls" : "main";
 

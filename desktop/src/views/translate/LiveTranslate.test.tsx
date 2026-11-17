@@ -126,6 +126,18 @@ describe("Live Translate's status: running, ended, stopped", () => {
     expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
   });
 
+  it("card, opened on a session that already ended (status() keeps its feed): the reason, Close, and Close stops it", async () => {
+    respond("translate_status", feed({ status: "ended", notice: "Valorant stopped playing sound, so Live Translate ended." }));
+    render(<LiveTranslateCard run={run} />);
+    expect(await screen.findByRole("button", { name: "Close" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Valorant stopped playing sound, so Live Translate ended.");
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Valorant · ended");
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(callsOf("translate_stop")).toHaveLength(1));
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("card, stopped: the form and Start, no status line", async () => {
     render(<LiveTranslateCard run={run} />);
     await subscribed();

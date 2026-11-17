@@ -945,3 +945,10 @@ pre.el-code { padding: var(--el-space-12); overflow-x: auto; white-space: pre; }
 .el-mac-check__stopped { margin: 0; color: var(--el-role-warning-default); }
 .el-update { display: flex; flex-direction: column; gap: var(--el-space-2); white-space: normal; }
 .el-update__line--failed { color: var(--el-role-danger-default); }
+/* Text that finds its own direction (dir="auto": an English name in a right-to-left window, an Urdu title in a left-to-
+   right one) still lines up with the column it sits in, at the window's start edge. */
+/* Chromium (WebView2) and WebKit read only the prefixed value; others read the standard one. */
+.el-row__title, .el-row__meta-text, .el-row__value-text, .el-group__note, .el-plan-card__body p, .el-health__title {
+  text-align: match-parent;
+  text-align: -webkit-match-parent;
+}

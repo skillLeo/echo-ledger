@@ -204,6 +204,9 @@ describe("ListRow", () => {
     expect(row).toHaveAccessibleDescription("Call the customs agent 9:18 am2:14");
     fireEvent.click(row);
     expect(onClick).toHaveBeenCalledTimes(1);
+    // A time and a length keep their own order inside a right-to-left row.
+    expect(screen.getByText("9:18 am")).toHaveAttribute("dir", "auto");
+    expect(screen.getByText("2:14")).toHaveAttribute("dir", "auto");
   });
 
   it("a row with a control is not a button; the value sits on the end side", () => {

@@ -64,6 +64,19 @@ describe("Live Translate v2: running, ended, stopped", () => {
     expect(screen.queryByTestId("translate-ended")).toBeNull();
   });
 
+  it("opened on a session that already ended (status() keeps its feed): the reason, Close, and Close stops it", async () => {
+    respond("translate_status", feed({ status: "ended", notice: "Valorant stopped playing sound, so Live Translate ended." }));
+    render(<LiveTranslateV2 run={run} />);
+    await act(flushAsync);
+    expect(screen.getByTestId("translate-ended")).toHaveTextContent("Valorant stopped playing sound, so Live Translate ended.");
+    expect(screen.getByText("Valorant · Ended")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await act(flushAsync);
+    expect(callsOf("translate_stop")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Start" })).toBeInTheDocument();
+  });
+
   it("a status it doesn't know is never shown as running", async () => {
     respond("translate_status", feed({ status: "warming_up_v9" }));
     render(<LiveTranslateV2 run={run} />);
