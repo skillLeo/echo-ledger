@@ -95,7 +95,8 @@ fun EchoTextField(
                     leadingIcon?.let { Icon(it, null, Modifier.size(EchoTokens.Icon.md), tint = c.textSecondary) }
                     Box(Modifier.weight(1f)) {
                         if (value.isEmpty() && placeholder != null) {
-                            Text(placeholder, style = type.body, color = c.textSecondary, maxLines = 1)
+                            // A field of several lines shows its whole example, wrapped, not cut at the first line.
+                            Text(placeholder, style = type.body, color = c.textSecondary, maxLines = if (singleLine) 1 else Int.MAX_VALUE)
                         }
                         inner()
                     }
