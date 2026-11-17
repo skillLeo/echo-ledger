@@ -6,6 +6,7 @@ import androidx.work.workDataOf
 import com.echoledger.mobile.testsupport.AppTest
 import com.echoledger.mobile.testsupport.DEFAULT_RECORDING_ID
 import com.echoledger.mobile.testsupport.FakeServer
+import com.echoledger.mobile.testsupport.awaitAppIdle
 import com.echoledger.mobile.testsupport.pairLocally
 import com.echoledger.mobile.testsupport.pumpUntil
 import com.echoledger.mobile.testsupport.storeRecording
@@ -48,6 +49,32 @@ class UploadStoppedTest : AppTest() {
         val rec = app.graph.recordings.get(id)!!
         assertEquals("queued", rec.state)
         assertNull(rec.lastError)
+        assertTrue(app.graph.recordings.encryptedFile(id).exists())
+    }
+
+    @Test
+    fun `a Discard that stops a running upload is never undone by it`() {
+        runBlocking { app.pairLocally(server) }
+        app.storeRecording(id = id)
+        val reached = CountDownLatch(1)
+        val release = CountDownLatch(1)
+        server.on("POST", "/api/sessions") {
+            reached.countDown()
+            release.await(10, TimeUnit.SECONDS)
+            FakeServer.json(503, """{"message":"late"}""")
+        }
+
+        val future = TestListenableWorkerBuilder<UploadWorker>(app).setInputData(workDataOf("recording_id" to id)).build().startWork()
+        assertTrue("the upload reached the server", reached.await(10, TimeUnit.SECONDS))
+        pumpUntil("the recording to show as uploading") { app.graph.recordings.get(id)?.state == "uploading" }
+        // The person discards the call: the Discard calls the upload off, as Android does.
+        runBlocking { com.echoledger.mobile.calls.Decisions.discardLater(app, id) }
+        future.cancel(true)
+        release.countDown()
+        pumpUntil("the stopped upload to settle") { future.isDone }
+        awaitAppIdle()
+
+        assertEquals("never put back to queued", com.echoledger.mobile.calls.Decisions.DISCARDING, app.graph.recordings.get(id)?.state)
         assertTrue(app.graph.recordings.encryptedFile(id).exists())
     }
 

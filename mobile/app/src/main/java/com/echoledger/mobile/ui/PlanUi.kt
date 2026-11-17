@@ -603,6 +603,9 @@ internal fun CancelRequestDialog(onKeep: () -> Unit, onCancel: () -> Unit) {
     )
 }
 
+/** Asked before Remove key: on the Free plan nothing new is transcribed without it. */
+internal const val REMOVE_KEY_QUESTION = "Remove your key? New recordings won't be transcribed until you add a key again."
+
 /**
  * You → Transcription key (since v1.6, the Free plan): this person's own free Groq key, in three steps; the server checks
  * it and keeps it encrypted for them only. A plan with EchoLedger's engines needs none.
@@ -613,6 +616,14 @@ fun TranscriptionKeySection(vm: MainViewModel, plan: PlanState) {
     val scope = rememberCoroutineScope()
     var key by remember { mutableStateOf("") }
     var saving by remember { mutableStateOf(false) }
+    // Since v1.8.1 (bug P-009): without the key nothing is transcribed, so removing it asks first.
+    var removing by remember { mutableStateOf(false) }
+    if (removing) {
+        ConfirmDialog(REMOVE_KEY_QUESTION, "Remove", onConfirm = {
+            removing = false
+            scope.launch { vm.removeTranscriptionKey() }
+        }, onDismiss = { removing = false })
+    }
     SectionCard {
         Text("Transcription key", fontWeight = FontWeight.SemiBold, color = Brand.Text)
         if (!plan.needsOwnKey && plan.transcriptionKey?.set != true) {
@@ -622,7 +633,7 @@ fun TranscriptionKeySection(vm: MainViewModel, plan: PlanState) {
         val saved = plan.transcriptionKey?.takeIf { it.set }
         if (saved != null) {
             Text("Your Groq key ending in ${saved.last4 ?: "····"} is saved. New recordings are transcribed with it.", color = Brand.Text)
-            EchoButton("Remove key", { scope.launch { vm.removeTranscriptionKey() } }, kind = ButtonKind.Text)
+            EchoButton("Remove key", { removing = true }, kind = ButtonKind.Text)
         } else {
             Text("The Free plan transcribes with your own free Groq key. It takes two minutes:", color = Brand.Text)
             Text("1. Open console.groq.com and sign in (free).", color = Brand.Text)

@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use App\Filament\Support\CommandPalette;
+use App\Models\AssistPrep;
+use App\Models\AssistSession;
+use App\Models\AssistTurn;
 use App\Models\CaptureSession;
 use App\Models\Client;
 use App\Models\Device;
@@ -83,7 +86,10 @@ it('never lets workspace A read, change or delete workspace B through the API', 
             ->and(SessionMarker::query()->find($b['marker']->id))->not->toBeNull()
             ->and(Screen::query()->find($b['screen']->id))->not->toBeNull()
             ->and($b['transcript']->fresh()->text)->toContain('BOBSECRETTRANSCRIPT')
-            ->and($b['bob']->fresh()->ui_classic)->toBeFalse();
+            ->and($b['bob']->fresh()->ui_classic)->toBeFalse()
+            ->and(AssistPrep::query()->find($b['assistPrep']->id)?->title)->toBe('BOB-SECRET-TITLE prep')
+            ->and(AssistSession::query()->find($b['assistSession']->id)?->status)->toBe('active')
+            ->and(AssistTurn::query()->where('assist_session_id', $b['assistSession']->id)->count())->toBe(1);
     });
 });
 

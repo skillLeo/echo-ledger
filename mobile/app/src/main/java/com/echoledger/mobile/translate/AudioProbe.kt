@@ -99,7 +99,7 @@ object AudioProbe {
             return HelperPlayers(emptyList(), "The capture helper stopped answering; it is being connected again.", helperBuild, stale)
         } catch (e: Exception) {
             if (!helper.asBinder().isBinderAlive) onDead(helper)
-            return HelperPlayers(emptyList(), "The capture helper did not answer (${e.javaClass.simpleName}).$older", helperBuild, stale)
+            return HelperPlayers(emptyList(), "The capture helper did not answer.$older", helperBuild, stale)
         } ?: return HelperPlayers(emptyList(), "The capture helper gave no answer.$older", helperBuild, stale)
         return runCatching { HelperPlayers(parseOrThrow(json), null, helperBuild, stale) }
             .getOrElse { HelperPlayers(emptyList(), "The capture helper's answer could not be read.$older", helperBuild, stale) }

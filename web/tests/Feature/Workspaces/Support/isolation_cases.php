@@ -2,6 +2,9 @@
 
 declare(strict_types=1);
 
+use App\Models\AssistPrep;
+use App\Models\AssistSession;
+use App\Models\AssistTurn;
 use App\Models\MissedRecording;
 use App\Models\Screen;
 use App\Models\SentItem;
@@ -11,6 +14,7 @@ use App\Models\ShareCheckResult;
 use App\Models\UpgradeRequest;
 use App\Models\UpgradeRequestProof;
 use App\Models\Workspace;
+use App\Services\InterfaceFlags;
 use App\Services\ShareLinks;
 use App\Services\Sharing\RequestLinks;
 use App\Services\Workspaces\Workspaces;
@@ -37,6 +41,13 @@ const ISO_API_BYPASS = [
     'api.auth.sign-up' => 'signing up (v1.6): the new account and its own new workspace',
     'api.webhooks.stt' => 'provider callback: found by transcript id and verified signature',
     'api.recordings.audio' => 'signed, expiring URL issued to a device of the workspace',
+    // Since v1.9 (L1): the Live Assist relay, HMAC-signed with the server's own secret, never a device token; it finds
+    // a session by its id, which only a relay token the server minted for that session carries.
+    'api.internal.assist.providers' => 'the relay: provider keys and the model catalog, no workspace data',
+    'api.internal.assist.usage' => 'the relay: a suggestion\'s cost, found by the session id of its signed token',
+    'api.internal.assist.suggestions' => 'the relay: a suggestion\'s words, found by the session id of its signed token',
+    'api.internal.assist.facts' => 'the relay: the facts ledger, found by the session id of its signed token',
+    'api.internal.assist.summary' => 'the relay: the running summary, found by the session id of its signed token',
 ];
 
 /** Named web routes outside Filament, each with the reason it is safe without a workspace. */
@@ -139,9 +150,16 @@ function isoWorld(bool $sameWorkspace = false): array
     // Since v1.8: a call Bob's phone saw but did not record.
     $missed = MissedRecording::query()->create(['user_id' => $bob->id, 'device_id' => $device->id, 'workspace_id' => $device->workspace_id, 'client_ref' => '7d1e0c2a-5b3f-4e8d-9a61-0f2b4c6d8e10',
         'platform' => 'android', 'source_app' => 'whatsapp', 'call_started_at' => now()->subHour(), 'call_duration_s' => 60, 'reason' => 'permission']);
+    // Since v1.9 (L1): Live Assist on for everyone, and Bob's prep and session with words of his.
+    app(InterfaceFlags::class)->set('live_assist', true, 0, [], []);
+    $assistPrep = AssistPrep::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $bob->id, 'meeting_type' => 'boss', 'title' => 'BOB-SECRET-TITLE prep',
+        'hint_level' => 'full', 'mode' => 'fast', 'language_help' => 'off', 'status' => 'draft']);
+    $assistSession = AssistSession::query()->create(['workspace_id' => $device->workspace_id, 'user_id' => $bob->id, 'device_id' => $device->id, 'mode' => 'fast',
+        'platform' => 'android', 'status' => 'active', 'started_at' => now(), 'last_token_at' => now(), 'summary' => 'BOBSECRETNOTE summary']);
+    AssistTurn::query()->create(['assist_session_id' => $assistSession->id, 'client_ref' => 'bob-1', 'channel' => 'other', 'start_ms' => 0, 'end_ms' => 10, 'text' => 'BOBSECRETTRANSCRIPT asked']);
     app('auth')->forgetGuards();
 
-    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed');
+    return compact('alice', 'aliceDevice', 'bob', 'device', 'client', 'session', 'recording', 'transcript', 'marker', 'share', 'binned', 'upload', 'requestLink', 'shareUrl', 'screen', 'sent', 'upgrade', 'proof', 'missed', 'assistPrep', 'assistSession');
 }
 
 /** Every id of workspace B; none may appear in an answer to workspace A. */
@@ -298,6 +316,24 @@ function isoApiCases(array $b): array
         'api.account.export' => ['POST', '/api/account/export', [], fn (TestResponse $r): bool => $r->status() === 202],
         'api.account.export.show' => ['GET', '/api/account/export/'.ISO_MISSING_EXPORT, [], 404],
         'api.account.sign-out-everywhere' => ['POST', '/api/account/sign-out-everywhere', [], fn (TestResponse $r): bool => $r->status() === 204],
+        // Since v1.9 (L1): Live Assist. Lists hold only Alice's own; Bob's prep and session are the same 404 as unknown ids.
+        'api.assist.preps' => ['GET', '/api/assist/preps', [], 'list'],
+        'api.assist.preps.store' => ['POST', '/api/assist/preps', ['meeting_type' => 'general'], fn (TestResponse $r): bool => $r->status() === 201],
+        'api.assist.preps.show' => ['GET', "/api/assist/preps/{$b['assistPrep']->id}", [], 404],
+        'api.assist.preps.update' => ['PATCH', "/api/assist/preps/{$b['assistPrep']->id}", ['title' => 'HIJACK'], 404],
+        'api.assist.preps.destroy' => ['DELETE', "/api/assist/preps/{$b['assistPrep']->id}", [], 404],
+        'api.assist.preps.documents' => ['POST', "/api/assist/preps/{$b['assistPrep']->id}/documents", ['file_ids' => ['01ARZ3NDEKTSV4RRFFQ69G5FAV']], 404],
+        'api.assist.preps.documents.destroy' => ['DELETE', "/api/assist/preps/{$b['assistPrep']->id}/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV", [], 404],
+        'api.assist.preps.arm' => ['POST', "/api/assist/preps/{$b['assistPrep']->id}/arm", [], 404],
+        'api.assist.sessions' => ['GET', '/api/assist/sessions', [], 'list'],
+        'api.assist.sessions.store' => ['POST', '/api/assist/sessions', ['platform' => 'desktop', 'prep_id' => $b['assistPrep']->id], 404],
+        'api.assist.sessions.show' => ['GET', "/api/assist/sessions/{$b['assistSession']->id}", [], 404],
+        'api.assist.sessions.report' => ['GET', "/api/assist/sessions/{$b['assistSession']->id}/report", [], 404],
+        'api.assist.sessions.token' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/token", [], 404],
+        'api.assist.sessions.turns' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/turns", ['turns' => [['client_ref' => 'x', 'channel' => 'other', 'start_ms' => 0, 'end_ms' => 1, 'text' => 'HIJACK']]], 404],
+        'api.assist.sessions.end' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/end", [], 404],
+        'api.assist.sessions.destroy' => ['DELETE', "/api/assist/sessions/{$b['assistSession']->id}", [], 404],
+        'api.assist.sessions.suggestions.action' => ['POST', "/api/assist/sessions/{$b['assistSession']->id}/suggestions/s1/action", ['action' => 'used'], 404],
     ];
 }
 

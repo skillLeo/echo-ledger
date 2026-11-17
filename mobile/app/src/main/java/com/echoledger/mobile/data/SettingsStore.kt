@@ -131,7 +131,15 @@ data class AppSettings(
     /** The workspace plan's features and this person's role (since v1.5, from the server's config; this phone only). */
     val plan: com.echoledger.mobile.core.PlanState = com.echoledger.mobile.core.PlanState(),
     /** The account this phone signs in as (since v1.5), kept after signing out: whose waiting recordings these are ([com.echoledger.mobile.core.Owner]). */
-    val account: com.echoledger.mobile.core.Owner? = null
+    val account: com.echoledger.mobile.core.Owner? = null,
+    /** When this phone last saved the Free plan's own key (since v1.8.1, an instant): a refused key's Retry follows it. */
+    val ownKeySavedAt: String? = null,
+    /** The redesigned screens' flags for this person, from the server (since 2.0.0-a); never decided on the phone. */
+    val uiFlags: Map<String, Boolean> = emptyMap(),
+    /** This person chose "Switch back to classic" (since 2.0.0-a). */
+    val uiClassic: Boolean = false,
+    /** How long a deleted recording can be restored, in hours, from the server (since 2.0.0-b; 48 on an older one). */
+    val trashKeepHours: Int = com.echoledger.mobile.data.TrashConfig.DEFAULT_HOURS
 ) {
     /** What happens to an undecided recording: "keep", "discard" or "wait" (the default; nothing is uploaded or paid for). */
     val afterCallTimeout: String get() = if (decisionTimeoutChosen) decisionTimeout else "wait"

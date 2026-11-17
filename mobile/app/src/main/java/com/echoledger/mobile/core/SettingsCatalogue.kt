@@ -53,7 +53,7 @@ object SettingsCatalogue {
             "help",
             SettingsGroup.General,
             "Help & diagnostics",
-            "audio probe players capture test diagnostics copy support helper"
+            "capture test diagnostics copy support helper"
         ),
         SettingsEntry("about", SettingsGroup.General, "About", "version server export import backup settings file json"),
         SettingsEntry("after-share", SettingsGroup.VoiceNotes, "After sharing", "share whatsapp voice note file open stay notification"),

@@ -126,7 +126,7 @@ object SettingsIndex {
         item("account.delete", "account", "", "Delete my account", "remove close account erase"),
         item("devices.list", "devices", "devices", "Devices", "phones computers signed in revoke remove rename"),
         item("privacy.consent", "privacy", "consent", "Recording consent", "consent law tell people participants permission privacy"),
-        item("help.check", "help", "help", "Device check", "test diagnostics audio probe capture test support problem not working"),
+        item("help.check", "help", "help", "Device check", "test diagnostics capture test support problem not working"),
         item("about.version", "about", "about", "Version and updates", "version update check app"),
         item("about.transfer", "about", "about", "Export and import settings", "backup restore settings file json move phone"),
         item("about.phone", "about", "this-phone", "This phone", "name server certificate setup guide technical")

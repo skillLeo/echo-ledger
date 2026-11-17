@@ -89,6 +89,8 @@ pub enum SessionEvent {
     /// A connection turned away before the upgrade (`relay_busy`).
     Refused { reason: &'static str },
     Warmed { session: String, model: String, cost_micros: u64, error: Option<&'static str> },
+    /// One of the relay's own calls: a practice question, facts, or the summary (no content).
+    Background { session: String, task: &'static str, model: String, cost_micros: u64, error: Option<&'static str> },
 }
 
 pub trait TelemetrySink: Send + Sync + std::fmt::Debug {
@@ -155,6 +157,9 @@ impl TelemetrySink for LogSink {
             }
             SessionEvent::Refused { reason } => {
                 tracing::warn!(target: "assist_relay::telemetry", event = "connection_refused", reason);
+            }
+            SessionEvent::Background { session, task, model, cost_micros, error } => {
+                tracing::info!(target: "assist_relay::telemetry", event = "background", session = %session, task, model = %model, cost_micros, error);
             }
             SessionEvent::Warmed { session, model, cost_micros, error } => {
                 tracing::debug!(target: "assist_relay::telemetry", event = "warmed", session = %session, model = %model, cost_micros, error);

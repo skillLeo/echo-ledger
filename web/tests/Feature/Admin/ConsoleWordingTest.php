@@ -147,6 +147,8 @@ describe('the word for a folder', function () {
             'app/Services/Accuracy/ReferenceText.php' => ['(?:speaker(?:[ _-]?[0-9a-z]{1,3})?|me|client)'],
             'app/Filament/Admin/Pages/Settings.php' => ['Both (Me + Client)', 'Client only (half the streaming cost)'],
             'app/Services/SettingsSearch.php' => ['engine provider channels client only cost streaming'],
+            // Live Assist's meeting types (v1.9): the clients people meet, as docs/API_ASSIST.md names them.
+            'app/Services/Assist/AssistRecords.php' => ['Existing client', 'New client'],
             // The person the notes are about (the heading the apps also show, in docs/API.md).
             'app/Models/CallNote.php' => ['To confirm with the client'],
             // Google's own names for its sign-in credentials, as its console shows them.

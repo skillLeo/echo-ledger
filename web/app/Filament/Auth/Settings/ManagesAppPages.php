@@ -107,7 +107,6 @@ trait ManagesAppPages
         return ['rows' => EmailPreferences::rows($this->account())];
     }
 
-    /** One category of emails on or off. */
     /** Settings › Appearance → Switch back to classic (since 2.0.0-a): the same setting as PUT /api/account/ui. */
     public function toggleClassic(): void
     {
@@ -119,6 +118,7 @@ trait ManagesAppPages
         SettingsContext::forget();
     }
 
+    /** One category of emails on or off. */
     public function toggleEmail(string $category): void
     {
         if (! isset(EmailPreferences::CATEGORIES[$category])) {

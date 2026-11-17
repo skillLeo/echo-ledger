@@ -4,10 +4,12 @@
 //! inside its plan and budget. PROTOCOL.md describes the messages, README.md how to run it.
 
 pub mod auth;
+pub mod background;
 pub mod budget;
 pub mod config;
 pub mod context;
 pub mod domain;
+pub mod eval;
 pub mod internal;
 pub mod logging;
 pub mod pack;

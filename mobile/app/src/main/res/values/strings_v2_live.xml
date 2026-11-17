@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The v2 screens' words (live). values/ is English, values-ur/ Urdu: keep the keys the same. -->
+<resources>
+    <string name="v2_live_pill_recording">Recording %1$s. Tap for the controls.</string>
+    <string name="v2_live_pill_paused">Paused</string>
+    <string name="v2_live_pill_on_hold">On hold</string>
+    <string name="v2_live_pill_captions">Captions</string>
+    <string name="v2_live_pill_captions_off">Captions off</string>
+    <string name="v2_live_pill_pause">Pause</string>
+    <string name="v2_live_pill_resume">Resume</string>
+    <string name="v2_live_pill_stop">Stop</string>
+    <string name="v2_live_pill_stop_again">Tap again to stop</string>
+    <string name="v2_live_pill_language">Language: %1$s</string>
+    <string name="v2_live_pill_discard">Discard</string>
+    <string name="v2_live_pill_discarded">Discarded</string>
+    <string name="v2_live_pill_undo">Undo %1$d</string>
+    <string name="v2_live_pill_hide">Hide controls</string>
+    <string name="v2_live_card_saved">Saved</string>
+    <string name="v2_live_card_save">Save audio</string>
+    <string name="v2_live_card_transcribe">Transcribe</string>
+    <string name="v2_live_card_discard">Delete</string>
+    <string name="v2_live_card_discarded">Deleted</string>
+    <string name="v2_live_card_rename">Rename or pick a project</string>
+    <string name="v2_live_card_ask">Keep %1$s?</string>
+    <string name="v2_live_card_time_left">%1$d seconds to decide</string>
+    <string name="v2_live_call_with">Call with %1$s</string>
+</resources>

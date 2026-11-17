@@ -1033,3 +1033,29 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   workspace / person; Admin → Interface flags, super admin only), `ui_flags` and `ui_classic` in GET /api/config,
   PUT /api/account/ui, Switch back to classic in the console; prompt pack 1.0.2; the Usage screenshots retaken.
   The web deploy for v1.8.1 is now v1.1 at this point (the flags ship off).
+- v1.8.1 is cut as `release/v1.8.1` at a6c7cc53 (everything v1.8.1 needs; the interface flags ship off). v2 work keeps
+  merging into v1.1. Release notes must mention: the Windows permission step now names Windows Settings and has no
+  Allow button that did nothing (D-136 follow-up).
+- Merged `39963b5e` (b-desktop-ui at the reviewed dee55ae0): desktop v2 components, shell, Library, Settings,
+  Setup & health, pill and after-call card, all behind the ui_v2 flags.
+- Contracts: API.md 2.0.0-b (trash.keep_hours), API_ASSIST.md 1.9.0-f (aligned with the relay). Decided: Practice
+  uses Fast on every plan; Trash stays 48 hours until the owner decides on 30 days (privacy policy).
+- Merged b-relay at the reviewed fea082fe: the streaming clients (Anthropic, Groq, OpenAI, Gemini) on the server's
+  keys with mid-stream fallback; refusals never shown (held answers on Sonnet/Opus, streamed refusals ended at once);
+  prompt pack 1.0.2; the L9 golden set, the rule scorer (an upper bound) and the judge-required live verdict; the
+  latency benchmark. Waiting on keys: the smoke-record release gate (DEPLOY.md §11), the live eval, the latency run.
+- Merged b-phone-sweep at the reviewed a26febd4: batches 2–3 (P-006–P-009, P-018–P-024, P-077), the v2 wiring data
+  side (ui_flags, ui_classic, trash.keep_hours read leniently; setClassicUi; binOrError; deleteAwait) and a discarded
+  call never reaching the server. Next: Undo after a server-side discard (restore), batches 4–6, then the v2 activity
+  hook once b-phone-ui is approved.
+- Merged b-phone-ui at the reviewed 4c3e96ab: phone v2 (components, shell, Home, Library, Trash, Settings, Setup &
+  health, pill and after-call card, Urdu strings) behind the ui_v2 flags. The activity hook that shows it is the
+  phone core's next step; until then nothing of v2 is reachable in the app.
+- Merged b-web-l7 at the reviewed 7b97507c: the post-call report (Urdu-safe worst-case budget, billed failures counted, its
+  own assist-reports queue: deploy needs the second worker), practice and facts endpoints, document text on the single
+  read, /end across workspaces, escaped Markdown downloads, the console's Preps, Sessions and Report pages, all behind
+  live_assist.
+- Merged b-relay at the reviewed aca8ee86: practice over the relay, facts and summary within the budget, the hard
+  budget gate with Urdu-safe upper bounds, held questions (finals only, 5 s, dropped on new speech or disconnect),
+  RELEASE.md (the owner's VPS release steps) and EVAL_RUN.md (the owner's eval and latency runs). Waiting on keys and
+  the VPS.

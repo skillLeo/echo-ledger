@@ -36,7 +36,8 @@ pub enum Plan {
 }
 
 impl Plan {
-    /// Free has practice only (no live suggestions), Pro has Fast and Balanced, Ultra has every mode.
+    /// The live modes: Free has none, Pro has Fast and Balanced, Ultra has every mode. (Practice sessions get Fast on
+    /// every plan: see `budget::allowed_modes`.)
     pub fn allows(self, mode: Mode) -> bool {
         match self {
             Plan::Free => false,

@@ -145,6 +145,20 @@ stopwaitsecs=960
 stdout_logfile=/var/log/echoledger-worker.log
 ```
 
+Since v1.9 Live Assist's reports have a queue of their own (a report waits up to 300 s for the model; its connection,
+`assist-reports` in `config/queue.php`, gives a job back only after 480 s). Add a second program to the same file:
+
+```
+[program:echoledger-assist-reports]
+command=/usr/bin/php /var/www/echoledger/web/artisan queue:work assist-reports --queue=assist-reports --sleep=1 --tries=1 --timeout=420 --max-time=3600
+user=www-data
+numprocs=1
+autostart=true
+autorestart=true
+stopwaitsecs=480
+stdout_logfile=/var/log/echoledger-assist-reports.log
+```
+
 Start them with `supervisorctl reread && supervisorctl update`. Every deploy ends with `php artisan queue:restart`,
 so the workers pick up the new code.
 

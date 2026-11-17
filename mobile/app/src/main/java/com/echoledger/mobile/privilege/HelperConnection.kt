@@ -105,7 +105,7 @@ class HelperConnection(private val context: Context) {
         // The one before no longer speaks for the helper: its death must not take this one's place away.
         if (current != null && current.asBinder() !== binder.asBinder()) runCatching { current.asBinder().unlinkToDeath(death, 0) }
         helper = binder
-        com.echoledger.mobile.recording.ReadinessWatch.helperSeen(context)
+        com.echoledger.mobile.recording.ReadinessWatch.helperSeen(context, source)
         callListener?.let { runCatching { binder.setCallListener(it) } }
         _state.value = State(
             connected = true,

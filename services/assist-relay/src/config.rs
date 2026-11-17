@@ -41,7 +41,43 @@ pub struct RelayConfig {
     pub limits: Limits,
     pub modes: ModesConfig,
     pub upgrade: UpgradeConfig,
+    #[serde(default)]
+    pub practice: PracticeConfig,
+    #[serde(default)]
+    pub background: BackgroundConfig,
     pub models: BTreeMap<String, ModelSpec>,
+}
+
+/// Practice sessions: the relay asks the questions.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PracticeConfig {
+    /// Questions in one practice session; then `practice_done`.
+    pub questions: u32,
+    pub max_output_tokens: u32,
+}
+
+impl Default for PracticeConfig {
+    fn default() -> Self {
+        PracticeConfig { questions: 8, max_output_tokens: 120 }
+    }
+}
+
+/// The facts ledger and the running summary, written by the relay in the background (never blocking a suggestion).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct BackgroundConfig {
+    /// New facts from the latest final turns, after this many of them.
+    pub facts_every_finals: u32,
+    /// The running summary, at most this often, when the call moved on.
+    pub summary_every_secs: u64,
+    pub max_output_tokens: u32,
+}
+
+impl Default for BackgroundConfig {
+    fn default() -> Self {
+        BackgroundConfig { facts_every_finals: 3, summary_every_secs: 300, max_output_tokens: 400 }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -72,6 +108,19 @@ pub struct BudgetConfig {
     pub reserve_suggestions: u32,
     pub expected_output_tokens: u32,
     pub upgrade_share: f64,
+    /// How long a question the budget gate held may still start once budget frees up (milliseconds).
+    #[serde(default = "default_hold_max_ms")]
+    pub hold_max_ms: u64,
+}
+
+impl BudgetConfig {
+    pub fn hold_max(&self) -> Duration {
+        Duration::from_millis(self.hold_max_ms)
+    }
+}
+
+fn default_hold_max_ms() -> u64 {
+    5_000
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -125,6 +174,15 @@ impl ModesConfig {
             Mode::Balanced => &self.balanced,
             Mode::Deep => &self.deep,
             Mode::Max => &self.max,
+        }
+    }
+
+    pub fn get_mut(&mut self, mode: Mode) -> &mut ModePlan {
+        match mode {
+            Mode::Fast => &mut self.fast,
+            Mode::Balanced => &mut self.balanced,
+            Mode::Deep => &mut self.deep,
+            Mode::Max => &mut self.max,
         }
     }
 }
@@ -206,6 +264,10 @@ pub struct ModelSpec {
     pub options: toml::Table,
     #[serde(default)]
     pub mock: MockLatency,
+    /// Show none of the answer until it is complete, so that a refusal at the end of the stream is never shown (models
+    /// with safety classifiers). Costs the streaming: the first word comes with the last.
+    #[serde(default)]
+    pub hold_until_complete: bool,
 }
 
 fn enabled_by_default() -> bool {
@@ -219,10 +281,41 @@ fn default_first_token_timeout_ms() -> u64 {
 /// The part of `GET /api/internal/assist/providers` that replaces the file's models and mode map.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct Catalog {
-    #[serde(default)]
+    /// Models of a provider this relay has no client for are left out (and logged), so a new provider in the server's
+    /// list never makes the whole answer fail.
+    #[serde(default, deserialize_with = "known_models")]
     pub models: Option<BTreeMap<String, ModelSpec>>,
     #[serde(default)]
     pub modes: Option<ModesConfig>,
+}
+
+/// A name from the server, shortened and limited to plain characters before it goes in a log line.
+pub fn safe_name(name: &str) -> String {
+    name.chars().filter(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.' | '/' | ':')).take(64).collect()
+}
+
+fn known_models<'de, D>(deserializer: D) -> Result<Option<BTreeMap<String, ModelSpec>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let Some(raw) = Option::<BTreeMap<String, serde_json::Value>>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+    let mut models = BTreeMap::new();
+    for (id, value) in raw {
+        let provider = value.get("provider").cloned().unwrap_or_default();
+        if serde_json::from_value::<ProviderKind>(provider.clone()).is_err() {
+            tracing::warn!(
+                event = "catalog_model_skipped",
+                model = %safe_name(&id),
+                provider = %safe_name(provider.as_str().unwrap_or_default())
+            );
+            continue;
+        }
+        models.insert(id, serde_json::from_value(value).map_err(D::Error::custom)?);
+    }
+    Ok(Some(models))
 }
 
 impl ModelSpec {

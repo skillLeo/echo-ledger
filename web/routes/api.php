@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 use App\Http\Controllers\Api\AccountController;
 use App\Http\Controllers\Api\ActivityController;
+use App\Http\Controllers\Api\Assist\AssistPrepController;
+use App\Http\Controllers\Api\Assist\AssistSessionController;
+use App\Http\Controllers\Api\Assist\InternalAssistController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BinController;
 use App\Http\Controllers\Api\ClientWorkspaceController;
@@ -38,9 +41,11 @@ use App\Http\Controllers\Api\UpgradeRequestController;
 use App\Http\Controllers\Api\UsageController;
 use App\Http\Controllers\Api\VocabularyController;
 use App\Http\Middleware\EnsureCanRecord;
+use App\Http\Middleware\EnsureLiveAssist;
 use App\Http\Middleware\EnsureNotSuspended;
 use App\Http\Middleware\EnsurePlatformAvailable;
 use App\Http\Middleware\TouchDevice;
+use App\Http\Middleware\VerifyAssistRelay;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -222,6 +227,34 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         });
     });
 
+    // Live Assist (v1.9 L1, docs/API_ASSIST.md): only for a person the live_assist flag is on for, 404 otherwise (after
+    // the ability check, which answers 403 as on every other route).
+    Route::middleware('throttle:device')->prefix('assist')->group(function (): void {
+        Route::middleware(['abilities:library:read', EnsureLiveAssist::class])->group(function (): void {
+            Route::get('preps', [AssistPrepController::class, 'index'])->name('api.assist.preps');
+            Route::get('preps/{id}', [AssistPrepController::class, 'show'])->name('api.assist.preps.show');
+            Route::get('sessions', [AssistSessionController::class, 'index'])->name('api.assist.sessions');
+            Route::get('sessions/{id}', [AssistSessionController::class, 'show'])->name('api.assist.sessions.show');
+            Route::get('sessions/{id}/report', [AssistSessionController::class, 'report'])->name('api.assist.sessions.report');
+        });
+        Route::middleware(['abilities:sessions:write', EnsureLiveAssist::class])->group(function (): void {
+            Route::post('preps', [AssistPrepController::class, 'store'])->name('api.assist.preps.store');
+            Route::patch('preps/{id}', [AssistPrepController::class, 'update'])->name('api.assist.preps.update');
+            Route::delete('preps/{id}', [AssistPrepController::class, 'destroy'])->name('api.assist.preps.destroy');
+            Route::post('preps/{id}/documents', [AssistPrepController::class, 'attach'])->name('api.assist.preps.documents');
+            Route::delete('preps/{id}/documents/{fileId}', [AssistPrepController::class, 'detach'])->name('api.assist.preps.documents.destroy');
+            Route::post('preps/{id}/arm', [AssistPrepController::class, 'arm'])->name('api.assist.preps.arm');
+            Route::post('sessions/{id}/turns', [AssistSessionController::class, 'turns'])->name('api.assist.sessions.turns');
+            Route::post('sessions/{id}/end', [AssistSessionController::class, 'end'])->name('api.assist.sessions.end');
+            Route::delete('sessions/{id}', [AssistSessionController::class, 'destroy'])->name('api.assist.sessions.destroy');
+            Route::post('sessions/{id}/suggestions/{suggestionId}/action', [AssistSessionController::class, 'action'])->name('api.assist.sessions.suggestions.action');
+        });
+        Route::middleware(['abilities:stt:token', EnsureLiveAssist::class])->group(function (): void {
+            Route::post('sessions', [AssistSessionController::class, 'store'])->name('api.assist.sessions.store');
+            Route::post('sessions/{id}/token', [AssistSessionController::class, 'token'])->name('api.assist.sessions.token');
+        });
+    });
+
     // Screen moments (v1.5): pictures sent during a meeting count against the upload limit, not the general one.
     Route::post('sessions/{id}/screens', [ScreenController::class, 'store'])
         ->middleware(['abilities:sessions:write', 'throttle:uploads', EnsureCanRecord::class])->name('api.sessions.screens.store');
@@ -232,4 +265,14 @@ Route::middleware(['auth:sanctum', EnsureNotSuspended::class, TouchDevice::class
         Route::post('recordings/{id}/chunks', [RecordingController::class, 'chunk'])->middleware(EnsureCanRecord::class)->name('api.recordings.chunks');
         Route::post('recordings/{id}/complete', [RecordingController::class, 'complete'])->middleware(EnsureCanRecord::class)->name('api.recordings.complete');
     });
+});
+
+// Live Assist's internal API (relay → server, docs/API_ASSIST.md "Internal"): HMAC-signed by the relay, never a device
+// token. The limit comes first, so a flood of bad signatures is turned away before any HMAC is worked out.
+Route::middleware(['throttle:assist-relay', VerifyAssistRelay::class])->prefix('internal/assist')->group(function (): void {
+    Route::get('providers', [InternalAssistController::class, 'providers'])->name('api.internal.assist.providers');
+    Route::post('usage', [InternalAssistController::class, 'usage'])->name('api.internal.assist.usage');
+    Route::post('suggestions', [InternalAssistController::class, 'suggestions'])->name('api.internal.assist.suggestions');
+    Route::post('facts', [InternalAssistController::class, 'facts'])->name('api.internal.assist.facts');
+    Route::post('summary', [InternalAssistController::class, 'summary'])->name('api.internal.assist.summary');
 });

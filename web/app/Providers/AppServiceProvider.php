@@ -22,6 +22,8 @@ use App\Models\WebhookEvent;
 use App\Services\Accounts\AccountSessions;
 use App\Services\Accounts\KnownBrowsers;
 use App\Services\ActivityFeed;
+use App\Services\Assist\AssistReportAi;
+use App\Services\Assist\ClaudeAssistReportAi;
 use App\Services\AuditLog;
 use App\Services\ClientAi\ClaudeClientAi;
 use App\Services\ClientAi\ClientAi;
@@ -96,6 +98,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(TranscriptConverter::class, ClaudeTranscriptConverter::class);
         // Client workspaces (v1.4) ask Claude through one interface; tests swap in a fake.
         $this->app->bind(ClientAi::class, ClaudeClientAi::class);
+        $this->app->bind(AssistReportAi::class, ClaudeAssistReportAi::class);
         // Screen moments (v1.5) are read by Claude Haiku through one interface; tests swap in a fake.
         $this->app->bind(ScreenDescriber::class, ClaudeScreenDescriber::class);
         $this->app->bind(TitleWriter::class, ClaudeTitleWriter::class);
@@ -208,6 +211,8 @@ class AppServiceProvider extends ServiceProvider
         ]);
 
         RateLimiter::for('device', fn (Request $request) => Limit::perMinute(240)->by('device:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
+        // Since v1.9 (L1): the Live Assist relay reports every suggestion; a busy relay sends a few a second.
+        RateLimiter::for('assist-relay', fn (Request $request) => Limit::perMinute(3000)->by('assist-relay:'.$request->ip()));
         RateLimiter::for('uploads', fn (Request $request) => Limit::perMinute(600)->by('upload:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         RateLimiter::for('stt-token', fn (Request $request) => Limit::perMinute(30)->by('stt:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // A device check is sent by hand; ten an hour is plenty for one device.

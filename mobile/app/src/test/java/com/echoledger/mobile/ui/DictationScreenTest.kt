@@ -186,8 +186,17 @@ class DictationScreenTest : ScreenTest() {
         compose.onNodeWithText("first thing I said").assertIsDisplayed()
         compose.onNodeWithText("The last ${DictationHistory.LIMIT}, kept on this phone only.").assertIsDisplayed()
 
+        // Since v1.8.1 (P-008) it asks first, and Cancel keeps them.
         compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText(
+            "Clear your recent dictations? They are kept only on this phone and can't be brought back."
+        ).assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        assertEquals(2, history.all().size)
+        compose.onNodeWithText("first thing I said").assertIsDisplayed()
 
+        compose.onNodeWithText("Clear history").performClick()
+        compose.onNodeWithText("Clear").performClick()
         compose.onNodeWithText("Nothing dictated yet.").assertIsDisplayed()
         assertTrue(history.all().isEmpty())
     }

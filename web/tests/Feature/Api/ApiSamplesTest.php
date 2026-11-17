@@ -11,6 +11,7 @@ use App\Models\Transcript;
 use App\Models\User;
 use App\Services\Accounts\SignUp;
 use App\Services\CredentialVault;
+use App\Services\InterfaceFlags;
 use App\Services\RecordingIngestor;
 use App\Services\SettingsRepository;
 use App\Services\Views\TranscriptConverter;
@@ -198,6 +199,9 @@ it('keeps the shape of every answer the apps read', function () {
     app(DemoSeeder::class)->run(app(RecordingIngestor::class));
     $teammate = User::factory()->create(['email' => 'teammate@example.test']);
     $teammate->workspaces()->syncWithoutDetaching([$me->current_workspace_id => ['role' => 'member']]);
+    // Since 1.9.0-g: Live Assist on for this person, so the config shows the relay host's pins the apps read.
+    app(InterfaceFlags::class)->set('live_assist', false, 0, [], [$me->id]);
+    app(SettingsRepository::class)->set('relay.pins', ['sha256/AQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQEBAQE=', 'sha256/AgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgI=']);
 
     // Signing in: what the sign-in screen offers (since v1.5, Phase 1C), then the email and password.
     $record('auth_options', $this->api()->getJson('/api/auth/options'));

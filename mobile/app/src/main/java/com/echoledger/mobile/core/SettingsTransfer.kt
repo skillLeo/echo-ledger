@@ -63,6 +63,11 @@ object SettingsTransfer {
      * (switched on on the phone itself, with its call-log permission).
      */
     val NOT_PORTABLE: Set<String> = setOf(
+        // What the server says for this person (since 2.0.0), and when this phone saved the Free plan's key (v1.8.1).
+        "uiFlags",
+        "uiClassic",
+        "trashKeepHours",
+        "ownKeySavedAt",
         "phoneCalls",
         // The Phone app's own recordings belong to this phone (since v1.8).
         "phoneAppImport",

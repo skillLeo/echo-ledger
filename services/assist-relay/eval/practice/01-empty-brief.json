@@ -1,0 +1,22 @@
+{
+  "id": "practice-empty-brief",
+  "answers": [
+    "I have worked as a software developer for a few years.",
+    "I like solving problems with a team."
+  ],
+  "reference": [
+    "Tell me a little about yourself and the work you do now?",
+    "What kind of team do you work best in?",
+    "What would you like to learn next in your work?"
+  ],
+  "bad": [
+    "Careem let you go last year. Why?",
+    "Sana, your manager, says you were often late. Why?",
+    "Are you expecting fifty thousand a month?",
+    "Is a six-figure salary what you want?",
+    "Why were you fired from your last job?",
+    "Tell me about your six years at Google and why you left?",
+    "Your manager Sana said you missed two deadlines last month. What happened?",
+    "How did you lead the team of 12 developers?"
+  ]
+}
