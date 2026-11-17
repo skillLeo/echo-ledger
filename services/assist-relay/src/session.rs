@@ -1440,11 +1440,17 @@ impl Engine {
     }
 
     /// Model budget left on the current token: its `cents_left`, less what was spent since it arrived.
-    /// Background calls in flight count at their worst case until their result arrives, so calls running together
-    /// can't cross the budget between them.
+    /// The budget left on the current token: what the mode choice reads. Background reservations are not in it, so a
+    /// call in flight never moves the mode down and back up.
+    fn budget_left(&self) -> u64 {
+        self.claims.budget_micros().saturating_sub(self.spent.saturating_sub(self.ledger.spend_base))
+    }
+
+    /// The budget left less the background calls in flight at their worst case, so calls running together can't
+    /// cross the budget between them: what a background call checks before it starts.
     fn remaining(&self) -> u64 {
         let reserved = self.reserved.values().fold(0u64, |sum, r| sum.saturating_add(*r));
-        self.claims.budget_micros().saturating_sub(self.spent.saturating_sub(self.ledger.spend_base)).saturating_sub(reserved)
+        self.budget_left().saturating_sub(reserved)
     }
 
     /// Tokens of the fixed part (rules to memory), built once per context change.
@@ -1497,7 +1503,7 @@ impl Engine {
         let config = self.config();
         let allowed = allowed_modes(&config, &self.claims);
         let reserve = config.budget.reserve_suggestions;
-        let (mode, cause) = choose_mode(self.requested, &allowed, self.remaining(), reserve, |mode| self.estimate(mode, fixed));
+        let (mode, cause) = choose_mode(self.requested, &allowed, self.budget_left(), reserve, |mode| self.estimate(mode, fixed));
         (mode, Some(cause))
     }
 

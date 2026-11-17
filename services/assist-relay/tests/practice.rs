@@ -337,3 +337,27 @@ async fn practice_stops_after_three_failed_tries_at_a_question() {
     s.send(json!({"type": "practice_next"})).await;
     assert_eq!(s.next().await, json!({"type": "practice_done", "asked": 0}));
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_background_call_in_flight_never_moves_the_mode() {
+    let h = harness(pricey_output());
+    let mut token = claims("s-no-flap");
+    token.modes = vec![Mode::Fast];
+    // 10 cents: a facts call at its worst (8 cents) fits beside one Fast suggestion (1.6 cents).
+    token.budget.cents_left = 10;
+    let mut s = h.connect(token);
+    ready_now(&mut s).await;
+    // The facts call is slow: it is in flight while two questions are answered.
+    h.mock(assist_relay::domain::ProviderKind::Anthropic).push(assist_relay::provider::MockBehavior::Late(Duration::from_secs(20)));
+    for (i, line) in ["I can start on the 3rd.", "My rate is 35 dollars an hour.", "The first build takes 2 weeks."].iter().enumerate() {
+        s.send(final_turn(&format!("m-{i}"), "me", line)).await;
+    }
+    let mut seen = Vec::new();
+    for turn in ["o-1", "o-2"] {
+        s.send(final_turn(turn, "other", "What is your notice period?")).await;
+        seen.extend(s.until("suggestion_end").await);
+    }
+    seen.extend(s.drain(Duration::from_secs(25)).await);
+    assert!(of_type(&seen, "mode_changed").is_empty(), "the reservation moved the mode: {:?}", of_type(&seen, "mode_changed"));
+    assert!(h.reports.reports().iter().any(|r| matches!(r, Report::Facts(_))), "the facts call finished");
+}
