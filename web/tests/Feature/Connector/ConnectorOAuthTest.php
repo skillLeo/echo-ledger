@@ -27,7 +27,7 @@ require_once __DIR__.'/Support/connector_helpers.php';
 beforeEach(function () {
     connectorKeys();
     Mail::fake();
-    $this->person = Fx::user(['name' => 'Hassam', 'email' => 'hassam@example.test']);
+    $this->person = Fx::user(['name' => 'Ayesha Khan', 'email' => 'ayesha@example.test']);
 });
 
 describe('discovery and registration', function () {
@@ -189,7 +189,7 @@ describe('the code flow with PKCE', function () {
         [$verifier, $challenge] = connectorPkce();
 
         $page = $this->actingAs($this->person, 'web')->get(connectorAuthorizeUrl($client, $challenge))->assertOk();
-        $page->assertSee('Allow Claude to read your EchoLedger recordings?')->assertSee('hassam@example.test')
+        $page->assertSee('Allow Claude to read your EchoLedger recordings?')->assertSee('ayesha@example.test')
             ->assertSee('It can only read')->assertSee('claude.ai')->assertSee('Allow')->assertSee('Cancel');
         // The form can only go back to the app that registered that address.
         expect($page->headers->get('Content-Security-Policy'))->toContain("form-action 'self' https://claude.ai")->not->toContain('*');

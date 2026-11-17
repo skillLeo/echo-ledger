@@ -22,7 +22,7 @@ require_once __DIR__.'/Support/golden.php';
 function classicAdmin(object $test): User
 {
     Carbon::setTestNow(Carbon::parse('2026-11-17 11:42:00', 'UTC'));
-    $admin = $test->makeAdmin(['name' => 'Hassam Owner', 'email' => 'owner@echoledger.example']);
+    $admin = $test->makeAdmin(['name' => 'Ayesha Khan', 'email' => 'ayesha@example.test']);
     foreach ([['Bilal Qureshi', 'bilal@qureshi-textiles.example'], ['Sadia Hassan', 'sadia@zamzam-travels.example']] as [$name, $email]) {
         User::factory()->create(['name' => $name, 'email' => $email]);
     }

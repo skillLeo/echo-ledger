@@ -45,7 +45,7 @@ afterEach(fn () => Fx::cleanupDisks());
 /** A person with a project and subfolder, a filed call with its transcript and screens, and an Inbox call. */
 function connectorWorld(): array
 {
-    $person = Fx::user(['name' => 'Hassam']);
+    $person = Fx::user(['name' => 'Ayesha Khan']);
     $device = Fx::device($person);
     $acme = Fx::client($person, 'Acme');
     $site = Client::query()->create(['user_id' => $person->id, 'parent_id' => $acme->id, 'name' => 'Website', 'color' => '#8B5CF6']);

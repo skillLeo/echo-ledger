@@ -27,11 +27,11 @@ function everyMail(): array
     $u = 'https://example.test';
 
     return [
-        'invitation' => new InvitationMail('Acme team', 'Hassam', "$u/register", true, 'Nov 15', false),
+        'invitation' => new InvitationMail('Acme team', 'Ayesha', "$u/register", true, 'Nov 15', false),
         'verify' => new VerifyEmailMail("$u/verify"),
         'reset' => new ResetPasswordMail("$u/reset"),
         'login alert' => new LoginAlertMail('Chrome on macOS', 'Nov 8', '203.0.113.7', 'Pakistan', "$u/profile"),
-        'share' => new ShareReceivedMail('Hassam', 'Call with Omar', false, "$u/shared", 'For tomorrow'),
+        'share' => new ShareReceivedMail('Ayesha', 'Call with Omar', false, "$u/shared", 'For tomorrow'),
         'export' => new ExportReadyMail("$u/export", 'Nov 9', '12 MB'),
         'deletion' => new DeletionScheduledMail('Nov 15', "$u/admin"),
         'transcript' => new TranscriptReadyMail('Call with Omar', "$u/s/1"),
