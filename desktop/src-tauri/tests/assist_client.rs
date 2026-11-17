@@ -16,7 +16,7 @@ use tokio_tungstenite::tungstenite::protocol::CloseFrame;
 use tokio_tungstenite::tungstenite::protocol::frame::coding::CloseCode;
 
 use desktop_lib::assist::client::{self, AssistEvent, EndReason, Policy, Refresh, RelayGrant};
-use desktop_lib::assist::protocol::{Channel, ClientMessage, ServerMessage, Turn};
+use desktop_lib::assist::protocol::{Brief, Channel, ClientMessage, ContextUpdate, ServerMessage, Settings, Turn};
 
 type Ws = tokio_tungstenite::WebSocketStream<tokio::net::TcpStream>;
 
@@ -261,6 +261,58 @@ async fn a_restart_or_a_dropped_connection_reconnects_and_resumes() {
     assert_eq!(reconnecting, AssistEvent::Reconnecting { attempt: 1, after: Duration::from_millis(20), why: "connection".into() });
     assert_eq!(relay.connections().iter().map(|c| c.authorization.clone()).collect::<Vec<_>>(), ["Bearer t1", "Bearer t1"]);
     assert_eq!(*calls.lock().unwrap(), 0, "the same token while it is valid");
+    session.stop();
+}
+
+#[tokio::test]
+async fn a_relay_that_lost_the_session_gets_the_whole_context_again_first() {
+    // 0: a fresh session, closed by a restart; 1: the restarted relay lost it (resumed false), restarts again;
+    // 2: a resume (resumed true), which needs nothing again.
+    let got: Arc<Mutex<Vec<(usize, Value)>>> = Arc::default();
+    let log = got.clone();
+    let relay = Relay::start(never, move |index, mut ws: Ws| {
+        let log = log.clone();
+        async move {
+            let _ = ws.send(ready(index == 2)).await;
+            let wanted = if index == 0 { 2 } else { 1 };
+            for _ in 0..wanted {
+                let message = next_json(&mut ws).await;
+                log.lock().unwrap().push((index, message));
+            }
+            if index < 2 {
+                close_with(&mut ws, 1012).await;
+            } else {
+                while let Some(Ok(_)) = ws.next().await {}
+            }
+        }
+    })
+    .await;
+    let (refresh, _) = refresher(&relay.url);
+    let events = Events::default();
+    let session = client::spawn(grant(&relay.url, "t1", chrono::Duration::minutes(15)), refresh, quick(), events.sink());
+    let brief = ContextUpdate { brief: Some(Brief { meeting_type: "interview".into(), title: "Backend role".into(), ..Brief::default() }), ..ContextUpdate::default() };
+    assert!(session.send(ClientMessage::ContextUpdate(Box::new(brief))));
+    events.wait_for("the first ready", |e| matches!(e, AssistEvent::Connected { resumed: false, .. })).await;
+    let settings = ContextUpdate { settings: Some(Settings { mode: Some("fast".into()), ..Settings::default() }), ..ContextUpdate::default() };
+    assert!(session.send(ClientMessage::ContextUpdate(Box::new(settings))));
+    events.wait_for("the second connection", |e| matches!(e, AssistEvent::Reconnecting { .. })).await;
+    events.wait_for("the resume", |e| matches!(e, AssistEvent::Connected { resumed: true, .. })).await;
+    assert!(session.send(turn("Hello?")));
+    for _ in 0..300 {
+        if got.lock().unwrap().len() == 4 {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let got = got.lock().unwrap().clone();
+    assert_eq!(got[0], (0, json!({"type": "context_update", "seq": 1, "brief": {"meeting_type": "interview", "title": "Backend role"}})));
+    assert_eq!(got[1], (0, json!({"type": "context_update", "seq": 2, "settings": {"mode": "fast"}})));
+    assert_eq!(
+        got[2],
+        (1, json!({"type": "context_update", "seq": 1, "brief": {"meeting_type": "interview", "title": "Backend role"}, "settings": {"mode": "fast"}})),
+        "a lost session gets everything given so far, merged, before anything else"
+    );
+    assert_eq!((got[3].0, got[3].1["type"].as_str()), (2, Some("turn_final")), "a resumed session needs nothing again");
     session.stop();
 }
 

@@ -84,6 +84,13 @@ impl Outbox {
         self.queue.push_front((message, n));
     }
 
+    /// Puts `context` first in line in place of any `context_update` still waiting (it already holds them).
+    pub fn context_first(&mut self, context: ClientMessage) {
+        self.queue.retain(|(waiting, _)| !is_context(waiting));
+        self.bytes = self.queue.iter().map(|(_, n)| n).sum();
+        self.unpop(context);
+    }
+
     /// When the socket goes down, what is already waiting is thinned as if it had been queued while down.
     pub fn went_down(&mut self) {
         let waiting: Vec<ClientMessage> = self.queue.drain(..).map(|(m, _)| m).collect();
@@ -168,6 +175,16 @@ mod tests {
         assert!(outbox.bytes() <= MAX_BYTES, "{}", outbox.bytes());
         assert_eq!(outbox.len(), 2);
         assert_eq!(outbox.dropped, 2);
+    }
+
+    #[test]
+    fn the_whole_context_goes_first_in_place_of_a_waiting_one() {
+        let mut outbox = Outbox::default();
+        outbox.push(turn(true, "first"), false);
+        outbox.push(context("fast"), false);
+        outbox.context_first(context("deep"));
+        assert_eq!(drain(&mut outbox), ["context_update deep", "turn_final first"]);
+        assert_eq!(outbox.bytes(), 0);
     }
 
     #[test]

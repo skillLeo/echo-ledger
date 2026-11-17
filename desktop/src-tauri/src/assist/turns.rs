@@ -4,8 +4,10 @@
 //! their partials.
 //!
 //! Partials and the final of one turn share `turn_id` (`o-1`, `o-2`… and `m-1`…); a final closes the turn. The speech
-//! engines say nothing about silence, so a partial's `silence_ms` is how long its words have not changed: 0 when they
-//! just did, more when the same words come again.
+//! engines say nothing about silence, so a partial's `silence_ms` is an approximation: how long its words have not
+//! changed (0 when they just did, more when the same words come again). It grows only when a partial repeats, which
+//! the engines do every few hundred milliseconds while someone pauses; a real silence measure from the audio can
+//! replace it later.
 
 use std::time::Instant;
 

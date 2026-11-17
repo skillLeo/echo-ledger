@@ -7,7 +7,8 @@
 //!   connection in plain words, and recording goes on unaffected. Plain `ws://` only to this computer, in debug builds
 //!   and tests;
 //! - waits for `ready`, then sends what waits, paced to its `limits.messages_per_second`, with a `seq` per connection
-//!   from 1 (the outbox, [`super::outbox`]);
+//!   from 1 (the outbox, [`super::outbox`]); a `ready` with `resumed: false` after a context was given (the relay
+//!   restarted and lost the session) gets the whole context again first: every `context_update` so far, merged;
 //! - sends `token_refresh` with a new token 2 minutes before the current one expires (`refresh` fetches it from the
 //!   server's `POST /api/assist/sessions/{id}/token`); when the relay rejects one, another is fetched at once the
 //!   first time, then after the usual growing pauses, and the session ends once rejections have gone on for the
@@ -309,15 +310,25 @@ struct Session {
     stop: watch::Receiver<bool>,
     on_event: OnEvent,
     outbox: Outbox,
+    /// Every `context_update` the app gave, merged: what the relay should hold.
+    context: Option<super::protocol::ContextUpdate>,
 }
 
 async fn run(grant: RelayGrant, refresh: Refresh, policy: Policy, outgoing: mpsc::UnboundedReceiver<ClientMessage>, stop: watch::Receiver<bool>, on_event: OnEvent) {
-    let mut session = Session { grant, refresh, policy, outgoing, stop, on_event, outbox: Outbox::default() };
+    let mut session = Session { grant, refresh, policy, outgoing, stop, on_event, outbox: Outbox::default(), context: None };
     let reason = session.run().await;
     (session.on_event)(AssistEvent::Ended(reason));
 }
 
 impl Session {
+    /// A message from the app into the outbox; a `context_update` is also merged into the context kept for resends.
+    fn take_in(&mut self, message: ClientMessage, down: bool) {
+        if let ClientMessage::ContextUpdate(update) = &message {
+            self.context.get_or_insert_with(Default::default).merge(update);
+        }
+        self.outbox.push(message, down);
+    }
+
     async fn run(&mut self) -> EndReason {
         let mut attempt: u32 = 0;
         let mut down_since: Option<Instant> = None;
@@ -388,7 +399,7 @@ impl Session {
                 _ = tokio::time::sleep_until(until) => return true,
                 _ = self.stop.changed() => return false,
                 message = self.outgoing.recv() => match message {
-                    Some(message) => self.outbox.push(message, true),
+                    Some(message) => self.take_in(message, true),
                     None => return false,
                 },
             }
@@ -424,6 +435,10 @@ impl Session {
                             ServerMessage::Ready(r) => {
                                 ready = true;
                                 rejections.reset();
+                                // A session the relay lost (its restart): it gets the whole context again, first.
+                                if !r.resumed && let Some(context) = &self.context {
+                                    self.outbox.context_first(ClientMessage::ContextUpdate(Box::new(context.clone())));
+                                }
                                 pace = gap(r.limits.and_then(|l| l.messages_per_second));
                                 next_send = Instant::now();
                                 (self.on_event)(AssistEvent::Connected { resumed: r.resumed, mode: r.mode.clone() });
@@ -449,7 +464,7 @@ impl Session {
                     Some(Err(_)) | None => return closed(None, ready),
                 },
                 message = self.outgoing.recv() => match message {
-                    Some(message) => self.outbox.push(message, false),
+                    Some(message) => self.take_in(message, false),
                     None => return Outcome::Stopped,
                 },
                 _ = tokio::time::sleep_until(next_send), if can_send => {

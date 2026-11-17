@@ -126,6 +126,30 @@ pub struct ContextUpdate {
     pub summary: Option<String>,
 }
 
+impl ContextUpdate {
+    /// What the relay holds after `later` arrives: every field `later` carries replaces this one's.
+    pub fn merge(&mut self, later: &ContextUpdate) {
+        if later.brief.is_some() {
+            self.brief.clone_from(&later.brief);
+        }
+        if later.settings.is_some() {
+            self.settings.clone_from(&later.settings);
+        }
+        if later.documents.is_some() {
+            self.documents.clone_from(&later.documents);
+        }
+        if later.memory.is_some() {
+            self.memory.clone_from(&later.memory);
+        }
+        if later.facts.is_some() {
+            self.facts.clone_from(&later.facts);
+        }
+        if later.summary.is_some() {
+            self.summary.clone_from(&later.summary);
+        }
+    }
+}
+
 /// One turn of the speech engine's text; partials and the final of a turn share `turn_id`.
 #[derive(Clone, PartialEq, Eq, Serialize)]
 pub struct Turn {
@@ -427,6 +451,15 @@ mod tests {
         assert_eq!(serde_json::to_value(&start).unwrap()["kind"], "fallback");
         assert_eq!(serde_json::to_value(EndStatus::Superseded).unwrap(), "superseded");
         assert_eq!(serde_json::to_value(ModeReason::AssistTime).unwrap(), "assist_time");
+    }
+
+    #[test]
+    fn a_later_context_replaces_only_the_fields_it_carries() {
+        let mut held = ContextUpdate { brief: Some(Brief { meeting_type: "boss".into(), ..Brief::default() }), memory: Some("old".into()), ..ContextUpdate::default() };
+        held.merge(&ContextUpdate { settings: Some(Settings { mode: Some("fast".into()), ..Settings::default() }), memory: Some(String::new()), ..ContextUpdate::default() });
+        assert_eq!(held.brief.as_ref().map(|b| b.meeting_type.as_str()), Some("boss"), "kept");
+        assert_eq!(held.settings.as_ref().and_then(|s| s.mode.as_deref()), Some("fast"), "added");
+        assert_eq!(held.memory.as_deref(), Some(""), "an empty field clears it, as on the relay");
     }
 
     #[test]
