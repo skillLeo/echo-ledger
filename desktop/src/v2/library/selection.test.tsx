@@ -7,7 +7,7 @@ import type { LibraryItem } from "../../lib/ipc";
 import { callsOf, flushAsync, resetTauriMock, respond, respondWith } from "../../test/tauri";
 import { makeItem, makeTranscript } from "../../test/fixtures";
 import { LibraryV2 } from "./LibraryV2";
-import { aiHeader, EXPORT_FORMATS } from "./organise";
+import { aiHeader, ZIP_FORMATS } from "./organise";
 
 vi.mock("@tauri-apps/api/core", async () => (await import("../../test/tauri")).coreModule);
 vi.mock("@tauri-apps/api/event", async () => (await import("../../test/tauri")).eventModule);
@@ -144,8 +144,8 @@ describe("selection mode", () => {
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     fireEvent.click(menuItem("Export"));
     const formats = screen.getByRole("menu", { name: "Export" });
-    expect(within(formats).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(EXPORT_FORMATS.map((f) => f.label));
-    expect(EXPORT_FORMATS.map((f) => f.format)).toEqual(["docx", "txt", "md", "srt", "vtt", "json"]);
+    expect(within(formats).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(ZIP_FORMATS.map((f) => f.label));
+    expect(ZIP_FORMATS.map((f) => f.format)).toEqual(["docx", "txt", "md", "srt", "vtt", "json"]);
     fireEvent.click(within(formats).getByRole("menuitem", { name: "Subtitles (.srt)" }));
     await act(flushAsync);
     expect(callsOf("sessions_export")).toEqual([{ ids: ["bilal", "usman"], format: "srt", view: undefined }]);
@@ -230,7 +230,7 @@ describe("selection mode", () => {
     fireEvent.click(row("Voice note"));
     fireEvent.click(within(bar()).getByRole("button", { name: "Share or export" }));
     const menu = screen.getByRole("menu", { name: "Share or export" });
-    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([...EXPORT_FORMATS.map((f) => f.label), "Copy for AI"]);
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([...ZIP_FORMATS.map((f) => f.label), "Copy for AI"]);
     fireEvent.click(menuItem("Copy for AI"));
     await act(flushAsync);
     const text = (writeText.mock.calls[0] as unknown as [string])[0];
@@ -406,6 +406,61 @@ describe("menus stay inside the window", () => {
     spy.mockRestore();
   });
 
+  it("in a short window a long ⋮ scrolls inside its room and Export ▸ opens in place under its item", async () => {
+    Object.assign(window, { innerHeight: 300 });
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.getAttribute("role") === "menu" && !this.classList.contains("el-menu--sub")) return box(120, 420);
+      if (this.classList.contains("el-menu-anchor")) return box(84, 32);
+      return box(0, 0);
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
+    const menu = screen.getByRole("menu", { name: "More for Habib & Co." });
+    expect(menu.style.maxBlockSize).toBe("172px");
+    expect(menu.style.overflowY).toBe("auto");
+    fireEvent.mouseEnter(menuItem("Export"));
+    expect(screen.queryByRole("menu", { name: "Export" })).toBeNull();
+    fireEvent.click(menuItem("Export"));
+    expect(screen.getByRole("menu", { name: "Export" })).toHaveClass("el-menu--inline");
+    spy.mockRestore();
+  });
+
+  it("a sub-menu is placed once, where it opens: a later render never moves it back (no flicker)", async () => {
+    let calls = 0;
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains("el-menu--sub")) {
+        calls++;
+        return calls === 1 ? box(100, 200, 1200) : box(100, 200, 700);
+      }
+      return box(0, 0);
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.click(screen.getByRole("button", { name: "More for Habib & Co." }));
+    fireEvent.click(menuItem("Export"));
+    const sub = screen.getByRole("menu", { name: "Export" });
+    fireEvent.mouseEnter(within(sub).getAllByRole("menuitem")[2]);
+    fireEvent.mouseEnter(within(sub).getAllByRole("menuitem")[3]);
+    expect(sub).toHaveAttribute("data-flip", "true");
+    expect(calls).toBe(1);
+    spy.mockRestore();
+  });
+
+  it("a right-click menu taller than the window scrolls inside it", async () => {
+    Object.assign(window, { innerHeight: 300 });
+    const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains("el-menu--context") ? box(0, 420, 0, 240) : box(0, 0);
+    });
+    render(<LibraryV2 />);
+    await act(flushAsync);
+    fireEvent.contextMenu(row("Habib & Co."), { clientX: 20, clientY: 20 });
+    const menu = screen.getByRole("menu", { name: "Recording actions" });
+    expect(menu.style.maxBlockSize).toBe("284px");
+    expect(menu.style.overflowY).toBe("auto");
+    spy.mockRestore();
+  });
+
   it("a right-click near the window's corner keeps the whole menu in view, in right-to-left too", async () => {
     const spy = vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
       return this.classList.contains("el-menu--context") ? box(0, 400, 0, 240) : box(0, 0);
@@ -461,6 +516,25 @@ describe("Trash, Undo and the limits", () => {
     expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("1 back · 1 still in Trash: Already erased");
   });
 
+  it("when the server moves only some, the list is read again, it says N of M, and Undo brings back only those", async () => {
+    respond("sessions_bulk", 1);
+    respondWith("session_restore", () => ({ data: ITEMS[0] }));
+    await show();
+    fireEvent.click(row("Bilal Qureshi"), { metaKey: true });
+    fireEvent.click(row("Usman Chaudhry"));
+    respond("library_list", ITEMS.filter((i) => i.id !== "bilal"));
+    fireEvent.click(within(bar()).getByRole("button", { name: "Delete" }));
+    await act(flushAsync);
+    expect(rows().map((r) => r.dataset.rowId)).toEqual(["voice", "usman", "habib"]);
+    const toast = screen.getByRole("status", { name: "Notifications" });
+    expect(toast).toHaveTextContent("1 of 2 moved to Trash · kept there for 36 hours");
+    respond("library_list", ITEMS);
+    fireEvent.click(within(toast).getByRole("button", { name: "Undo" }));
+    await act(flushAsync);
+    expect(callsOf("session_restore")).toEqual([{ id: "bilal" }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("1 recording back");
+  });
+
   it("deleting every recording shown asks first; Cancel leaves them", async () => {
     await show();
     fireEvent.keyDown(document.body, { key: "a", metaKey: true });
@@ -498,6 +572,17 @@ describe("Trash, Undo and the limits", () => {
     for (const r of rows().slice(0, 51)) fireEvent.click(r);
     fireEvent.click(within(bar()).getByRole("button", { name: "More actions" }));
     expect(menuItem("Transcribe (50 at a time)")).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    // Over 200: the Delete key and a right-click on a picked row say the limit and do nothing else.
+    fireEvent.keyDown(document.body, { key: "a", metaKey: true });
+    fireEvent.keyDown(rows()[0], { key: "Delete" });
+    await act(flushAsync);
+    expect(callsOf("sessions_bulk")).toEqual([]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Up to 200 at a time: unselect 1");
+    fireEvent.contextMenu(rows()[0], { clientX: 10, clientY: 10 });
+    const menu = screen.getByRole("menu", { name: "Actions for 201 recordings" });
+    expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual(["Up to 200 at a time: unselect 1"]);
+    expect(within(menu).getByRole("menuitem")).toHaveAttribute("aria-disabled", "true");
   }, 30_000);
 });
 

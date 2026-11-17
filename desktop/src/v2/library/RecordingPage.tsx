@@ -14,13 +14,13 @@ import { useSessionScreens } from "../../views/main/ScreenMoments";
 import { LineScreens, ScreensStrip, ScreenViewerV2 } from "./screens";
 import { itemState } from "../../lib/library";
 import { copiedTranscript, DEFAULT_UNSURE, formatDuration, formatWhen, sourceAppLabel, type UnsureMarkers } from "../../lib/format";
-import { activeIndex, KEY_SECONDS, playerKey, skipTarget, speakerName } from "../../lib/player";
+import { activeIndex, KEY_SECONDS, playerKey, playerLength, skipTarget, speakerName } from "../../lib/player";
 import { normalizeLanguage } from "../../lib/languages";
-import { EXPORTS, PACKS, PDF_HINT } from "../../views/main/TranscriptTools";
+import { PDF_HINT } from "../../views/main/TranscriptTools";
 import { screenMarker } from "../../lib/screens";
 import { Badge, Button, Card, EmptyState, Icons, Loading, Player, Segmented, Select, Skeleton, Tabs, Toggle, Transcript, type Segment } from "../components";
 import { Menu, type MenuItem } from "../components/Menu";
-import { aiHeader, LanguageDialog, WhatsAppDialog } from "./organise";
+import { aiHeader, CHANGE_LANGUAGE, LanguageDialog, recordingExportItems, TranscribeDialog, WhatsAppDialog } from "./organise";
 import type { RecordingMenuParts } from "./LibraryV2";
 
 type Tab = "transcript" | "details";
@@ -56,6 +56,8 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
   const [speed, setSpeed] = useState("1");
   const [busy, setBusy] = useState(false);
   const [skipSilence, setSkipSilence] = useState(false);
+  const [mediaSeconds, setMediaSeconds] = useState<number | null>(null);
+  const [transcribeOpen, setTranscribeOpen] = useState(false);
   const [follow, setFollow] = useState(true);
   const [showAs, setShowAs] = useState<ShowAs>("original");
   const [views, setViews] = useState<TranscriptViewsState | null>(null);
@@ -141,7 +143,6 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
   const viewText = (i: number): string | null => (showAs !== "original" && views?.status === "ready" ? views[showAs]?.[i] ?? null : null);
   const exportView = showAs !== "original" && views?.status === "ready" ? showAs : null;
 
-  const durationS = Math.max(1, Math.round((item.duration_ms ?? 0) / 1000));
   const names = detail.state === "ready" ? detail.value.names : {};
   const segments: Segment[] = transcript.state === "ready" && transcript.value
     ? transcript.value.segments.map((s, i) => ({ speaker: speakerName(names, s.speaker), start: s.start_ms / 1000, text: viewText(i) ?? s.text }))
@@ -150,6 +151,8 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
   const active = transcript.state === "ready" && transcript.value && (playing || position > 0) ? activeIndex(transcript.value.segments, position * 1000) : -1;
   // The screens at their moments: after the line that started at or before each one (the phone's rule).
   const rawSegments = transcript.state === "ready" && transcript.value ? transcript.value.segments : null;
+  // The player's length: the server's, else the audio file's own (on loadedmetadata), else the last line's end.
+  const durationS = Math.max(1, Math.round(playerLength(item.duration_ms, rawSegments, mediaSeconds) / 1000));
   const screensAfter = useMemo(() => screensByLine(rawSegments ?? [], screens ?? []), [rawSegments, screens]);
   const lines = useMemo(() => (rawSegments ?? []).map((s) => ({ ...s, speaker: speakerName(names, s.speaker) })), [rawSegments, names]);
   const openScreen = (screen: ScreenMoment) => setScreenOpen(Math.max(0, (screens ?? []).findIndex((s) => s.id === screen.id)));
@@ -201,19 +204,26 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
     }
   };
   const canExport = !!tDetail && tDetail.segments.length > 0;
-  const exportItems: MenuItem[] = [
-    ...EXPORTS.map(([format, label]) => ({ label, group: exportView ? `As ${VIEW_LABELS[exportView]}` : "Transcript", onPick: () => void exportAs(format) })),
-    ...(item.screen_count !== undefined ? PACKS.map(([, format, withAudio, label]) => ({ label, group: "With the screens", onPick: () => void packAs(format, withAudio) })) : []),
-  ];
+  // Classic offers Re-transcribe only on a recording that has a final transcript and some audio (LibraryView 1452).
+  const canChangeLanguage = item.transcript?.final_error_code !== "no_audio" && !!item.transcript?.final_status;
   const [whatsApp, setWhatsApp] = useState(false);
-  const sendToWhatsApp = () => setWhatsApp(true);
-  const saveAudio = () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); });
-  const recordingMenu = menu({
-    organise: [{ label: "Change language & re-transcribe…", icon: Icons.LanguagesIcon, onPick: () => setLanguageOpen(true) }],
+  // The menus are made once per recording, view and transcript: never on the player's position.
+  const exportsRef = useRef({ exportAs, packAs });
+  exportsRef.current = { exportAs, packAs };
+  const exportItems: MenuItem[] = useMemo(() => recordingExportItems({
+    exportAs: (f) => void exportsRef.current.exportAs(f),
+    packAs: item.screen_count !== undefined ? (f, a) => void exportsRef.current.packAs(f, a) : undefined,
+    view: exportView ? VIEW_LABELS[exportView] : null,
+  }), [exportView, item.screen_count]);
+  const recordingMenu = useMemo(() => menu({
+    organise: canChangeLanguage ? [{ label: CHANGE_LANGUAGE, icon: Icons.LanguagesIcon, onPick: () => setLanguageOpen(true) }] : [],
     export: canExport ? { label: "Export", icon: Icons.DownloadIcon, group: "Export", items: exportItems } : undefined,
-    export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: saveAudio }],
-    whatsapp: sendToWhatsApp,
-  }).filter((i) => canExport || i.label !== "Export");
+    export_more: [{ label: "Save audio", icon: Icons.StorageIcon, onPick: () => void act(async () => { if (await api.saveAudio(item.id)) onMessage("Audio saved"); }) }],
+    whatsapp: () => setWhatsApp(true),
+  }).filter((i) => canExport || i.label !== "Export"),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  [menu, canChangeLanguage, canExport, exportItems, item.id]);
+  const sendToWhatsApp = () => setWhatsApp(true);
 
   const toggle = () => {
     const a = audio.current;
@@ -309,6 +319,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
           <>
             {detail.state === "ready" && detail.value.url && (
               <audio ref={audio} src={detail.value.url} preload="metadata" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)}
+                onLoadedMetadata={(e) => setMediaSeconds(e.currentTarget.duration)}
                 onEnded={() => setPlaying(false)} onTimeUpdate={(e) => timeUpdate(e.currentTarget)} />
             )}
             <Player playing={playing} position={Math.round(position)} duration={durationS} onToggle={toggle} onSeek={seek}
@@ -372,7 +383,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
             <EmptyState icon={Icons.TranscriptIcon} title={state === "failed" ? "The transcription failed" : "Not transcribed yet"}
               body={`Transcribe this recording to read, search and share what was said.${item.duration_ms ? ` It is ${formatDuration(item.duration_ms)} long.` : ""}`}
               action={<Button variant="primary" loading={busy} loadingLabel="Starting…"
-                onClick={() => void act(() => api.retranscribe(item.id, null), "Transcription started")}>Transcribe</Button>} />
+                onClick={() => setTranscribeOpen(true)}>Transcribe</Button>} />
           )
         ) : (
           <dl className="el-details">
@@ -387,6 +398,7 @@ export function RecordingPage({ item, onBack, onMessage, menu }: RecordingPagePr
       </Tabs>
       {whatsApp && <WhatsAppDialog item={item} onClose={() => setWhatsApp(false)} say={onMessage}
         text={lines.length ? copiedTranscript(lines, viewText, false, unsure) : null} hasAudio={detail.state === "ready" && !!detail.value.url} />}
+      {transcribeOpen && <TranscribeDialog ids={[item.id]} onClose={() => setTranscribeOpen(false)} say={onMessage} />}
       {languageOpen && <LanguageDialog item={item} onClose={() => setLanguageOpen(false)} say={onMessage} />}
       {screenOpen !== null && screens?.[screenOpen] && (
         <ScreenViewerV2 screens={screens} index={screenOpen} onIndex={setScreenOpen} onClose={() => setScreenOpen(null)} onExpired={reloadScreens}

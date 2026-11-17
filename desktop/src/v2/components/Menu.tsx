@@ -32,6 +32,8 @@ type ListProps = {
   onPick: (item: MenuItem) => void;
   style?: CSSProperties;
   listRef?: Ref<HTMLUListElement>;
+  /** A sub-menu shown in place under its item (its parent scrolls, so a flyout would be cut off). */
+  inline?: boolean;
 };
 
 /** The gap a menu keeps from the window's edges. */
@@ -39,7 +41,7 @@ const EDGE = 8;
 const rtl = (el: Element | null) => !!el && getComputedStyle(el).direction === "rtl";
 
 /** The list itself: arrow keys, Home and End move; Enter, Space or ArrowRight opens a sub-menu; Esc closes a level. */
-function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef }: ListProps) {
+function MenuList({ label, items, id, className, initial, onBack, onLeave, onPick, style, listRef, inline = false }: ListProps) {
   const [active, setActive] = useState(initial);
   const [sub, setSub] = useState<number | null>(null);
   const own = useRef<HTMLUListElement | null>(null);
@@ -48,13 +50,14 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
     if (typeof listRef === "function") listRef(el);
     else if (listRef) (listRef as MutableRefObject<HTMLUListElement | null>).current = el;
   };
-  // The list stays inside the window. A sub-menu with no room on its end side opens on the start side, and moves up
-  // when it would run off the bottom. A button's menu with no room below opens upwards when there is more room above
-  // (a ⋮ on the last rows), and a list without sub-menus scrolls inside the room it has.
+  // The list stays inside the window, measured once where it first opens (never again from a moved spot, so it can't
+  // flicker). A sub-menu with no room on its end side opens on the start side, and moves up when it would run off the
+  // bottom. A button's menu with no room below opens upwards when there is more room above (a ⋮ on the last rows). A
+  // list taller than its room scrolls inside it; its sub-menus then open in place under their item.
   const [fit, setFit] = useState<{ flip?: boolean; up?: boolean; shift?: number; room?: number }>({});
   useLayoutEffect(() => {
     const el = own.current;
-    if (!el || className.includes("el-menu--context")) return;
+    if (!el || inline) return;
     const box = el.getBoundingClientRect();
     if (!box.height) return;
     const bottom = window.innerHeight - EDGE;
@@ -65,14 +68,21 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
       });
       return;
     }
+    if (className.includes("el-menu--context")) {
+      const room = window.innerHeight - 2 * EDGE;
+      if (box.height > room) setFit({ room });
+      return;
+    }
     if (box.bottom <= bottom) return;
     const anchor = el.parentElement?.getBoundingClientRect();
     const above = (anchor?.top ?? box.top) - EDGE;
     const below = bottom - box.top;
     const up = above > below;
-    const scrolls = !items.some((i) => i.items);
-    setFit({ up, room: scrolls && box.height > (up ? above : below) ? Math.floor(up ? above : below) : undefined });
-  }, [className, items]);
+    const room = Math.floor(up ? above : below);
+    setFit({ up, room: box.height > room ? room : undefined });
+    // Measured once, when the list opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const fitted: CSSProperties = {
     ...style,
     ...(fit.shift ? { transform: `translateY(-${fit.shift}px)` } : {}),
@@ -123,7 +133,7 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
               aria-keyshortcuts={item.shortcut ? keyNames(item.shortcut) : undefined}
               className={`el-menu__option${item.danger ? " el-menu__option--danger" : ""}`}
               data-active={i === active || undefined}
-              onMouseEnter={() => { setActive(i); setSub(item.items ? i : null); }}
+              onMouseEnter={() => { setActive(i); if (!fit.room) setSub(item.items ? i : null); }}
               onClick={() => (item.items ? setSub(subOpen ? null : i) : choose(i))}>
               {item.icon ? <Icon icon={item.icon} /> : <span className="el-menu__icon-space" aria-hidden="true" />}
               <span className="el-menu__label">{item.label}</span>
@@ -131,8 +141,8 @@ function MenuList({ label, items, id, className, initial, onBack, onLeave, onPic
               {item.items && <Icon icon={ChevronEndIcon} directional />}
             </div>
             {subOpen && item.items && (
-              <MenuList label={item.label} items={item.items} className="el-menu el-menu--sub" initial={0}
-                onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
+              <MenuList label={item.label} items={item.items} className={`el-menu el-menu--sub${fit.room ? " el-menu--inline" : ""}`} initial={0}
+                inline={!!fit.room} onBack={() => { setSub(null); }} onLeave={onLeave} onPick={onPick} />
             )}
           </li>,
         ];

@@ -177,7 +177,7 @@ DT-REC-037,desktop,Recording page,"""Backup engine — Re-transcribe?""",Under t
 DT-REC-038,desktop,Recording page,Read-only recording from a teammate (banner; editing tools hidden),Shared with me › Open,None,missing,none
 DT-REC-039,desktop,Recording page,"Project picker (Inbox / projects / ""New project…"")",Organise › Project,"⋮ › Move to project… (Inbox, projects, New project…)",done,"src/v2/library/selection.test.tsx › ""Move to project and Label from the bar"""
 DT-REC-040,desktop,Recording page,Create a new project from the picker,Project › New project…,Move › New project… creates and moves,done,"src/v2/library/selection.test.tsx › ""Move to project and Label from the bar"""
-DT-REC-041,desktop,Recording page,Change the language and re-transcribe,Language select + Re-transcribe,⋮ › Change language & re-transcribe…,done,"src/v2/library/recording.test.tsx › ""Change language & re-transcribe, with the English-only warning once"""
+DT-REC-041,desktop,Recording page,Change the language and re-transcribe,Language select + Re-transcribe,⋮ › Change language and re-transcribe… (not on a recording without audio or a final transcript),done,"src/v2/library/recording.test.tsx › ""no Change language on a recording without audio or without a final transcript (classic's rule)"""
 DT-REC-042,desktop,Recording page,"English-only warning and ""Re-transcribe anyway""",Language select,"Change language: English-only warning, ""Re-transcribe anyway""",done,"src/v2/library/recording.test.tsx › ""Change language & re-transcribe, with the English-only warning once"""
 DT-REC-043,desktop,Recording page,"""Premium engines"" locked chip",Organise,None,missing,none
 DT-REC-044,desktop,Recording page,"Version switch ""Current"" / ""Previous (<language>)""",After a re-transcription,None,missing,none
@@ -244,7 +244,7 @@ DT-REC-104,desktop,Recording page,"""Always write X as Y for <project>?"" offer"
 DT-REC-105,desktop,Recording page,Add new words to the vocabulary,After an edit,None,missing,none
 DT-REC-106,desktop,Recording page,"Suggested fixes note and ""Review""",Transcript bar,None,missing,none
 DT-REC-107,desktop,Recording page,Suggested fix: Accept / Dismiss / Close,Underlined word,None,missing,none
-DT-REC-108,desktop,Recording page,Click a line to play from it,Transcript line,A line's time or words play from it,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
+DT-REC-108,desktop,Recording page,Click a line to play from it,Transcript line,A line's time or words play from it (seeks within the real length),done,"src/v2/library/recording.test.tsx › ""without a length from the server, the audio file's own length is used, so seeking and lines past the first second work"""
 DT-REC-109,desktop,Recording page,Line being played highlighted,Transcript,Active line highlighted,done,"src/v2/components/layers.test.tsx › ""lists who spoke when, and marks the line being played"""
 DT-REC-110,desktop,Recording page,Word being played highlighted,Transcript,None,missing,none
 DT-REC-111,desktop,Recording page,Unsure words underlined (click to hear),Transcript,None,missing,none
@@ -260,10 +260,10 @@ DT-REC-120,desktop,Recording page,Play / Pause,Player,Player Play / Pause,done,"
 DT-REC-121,desktop,Recording page,"""Back 10 seconds""",Player,Player › Back 10 seconds,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
 DT-REC-122,desktop,Recording page,"""Forward 10 seconds""",Player,Player › Forward 10 seconds,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
 DT-REC-123,desktop,Recording page,Time now / length,Player,Time / length,done,"src/v2/library/library.test.tsx › ""a recording: loading, a transcript that didn't load with Try again, Save audio, time and length, and its Details (DT-REC-013, 062, 063, 123, 137 to 142)"""
-DT-REC-124,desktop,Recording page,Player length when the server has none,Player,Server length only,partial,none
+DT-REC-124,desktop,Recording page,Player length when the server has none,Player,"The audio file's own length (loadedmetadata), else the last line's end",done,"src/v2/library/recording.test.tsx › ""without a length from the server, the audio file's own length is used, so seeking and lines past the first second work"""
 DT-REC-125,desktop,Recording page,Speed 0.5× … 2×,Player › Speed,Speed 0.5× … 2×,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
-DT-REC-126,desktop,Recording page,"""Skip silence""",Player,Skip silence toggle,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
-DT-REC-127,desktop,Recording page,"""Follow"" (scroll with playback)",Player,Follow toggle,done,"src/v2/library/recording.test.tsx › ""the player: back and forward 10 s, speeds 0.5× to 2×, Skip silence and Follow, Space, a line plays from its moment"""
+DT-REC-126,desktop,Recording page,"""Skip silence""",Player,Skip silence toggle: jumps gaps while playing,done,"src/v2/library/recording.test.tsx › ""Skip silence jumps a gap while playing; Follow keeps the playing line in view"""
+DT-REC-127,desktop,Recording page,"""Follow"" (scroll with playback)",Player,Follow toggle: the playing line stays in view,done,"src/v2/library/recording.test.tsx › ""Skip silence jumps a gap while playing; Follow keeps the playing line in view"""
 DT-REC-128,desktop,Recording page,Player keys hint,Player,None,missing,none
 DT-REC-129,desktop,Recording page,Seek on the waveform (speaker-coloured bars),Player,"Range slider ""Position""; no waveform",partial,none
 DT-REC-130,desktop,Recording page,"Open a recording at a moment (search hit, palette, Ask source)",From outside,No start position,missing,none

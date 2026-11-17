@@ -188,17 +188,28 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
     }
     try {
       const gone = await api.bulkSessions([...ids], "delete");
-      const order = items ? viewItems(items, view === "trash" ? "all" : view, query) : [];
-      const next = order.find((i) => !ids.includes(i.id)) ?? null;
-      setItems((list) => list?.filter((i) => !ids.includes(i.id)) ?? list);
       endSelection();
-      setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
       if (!gone) {
         say("Nothing was moved to Trash. Try again, or reload the Library.");
         void load();
         return;
       }
-      say(`${recordingsWord(gone)} moved to Trash · kept there for ${hoursWords(keepHours)}`, { label: "Undo", run: () => void restoreMany(ids) });
+      const kept = `kept there for ${hoursWords(keepHours)}`;
+      if (gone !== ids.length) {
+        // Only some went: the server's list says which. Undo brings back only those that are gone from it.
+        const before = new Set((items ?? []).map((i) => i.id));
+        const now = await api.library();
+        const still = new Set(now.filter((i) => !i.deleted).map((i) => i.id));
+        const moved = ids.filter((id) => before.has(id) && !still.has(id));
+        setItems(now);
+        say(`${gone} of ${ids.length} moved to Trash · ${kept}`, moved.length ? { label: "Undo", run: () => void restoreMany(moved) } : undefined);
+        return;
+      }
+      const order = items ? viewItems(items, view === "trash" ? "all" : view, query) : [];
+      const next = order.find((i) => !ids.includes(i.id)) ?? null;
+      setItems((list) => list?.filter((i) => !ids.includes(i.id)) ?? list);
+      setFocusAfter({ rowId: next?.id ?? null, seq: ++seq.current });
+      say(`${recordingsWord(gone)} moved to Trash · ${kept}`, { label: "Undo", run: () => void restoreMany(ids) });
     } catch (e) {
       say(errorMessage(e));
     }
@@ -218,6 +229,8 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
    * out what the selection bar already shows as buttons.
    */
   const menuFor = (ids: readonly string[], without: ReadonlySet<string> = new Set(), own: RecordingMenuParts = {}): MenuItem[] => {
+    // More than the core takes at once: the menu says so and does nothing else.
+    if (ids.length > MAX_BULK) return [{ label: `Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`, disabled: true }];
     const chosen = (items ?? []).filter((i) => ids.includes(i.id));
     const one = chosen.length === 1 ? chosen[0] : null;
     const all = (test: (i: LibraryItem) => boolean) => chosen.length > 0 && chosen.every(test);
@@ -331,6 +344,10 @@ export function LibraryV2({ onImport, onRecord, openRequest, viewRequest }: Libr
       const ids = selecting && pickedIds.length ? pickedIds : focused ? [focused] : [];
       if (!ids.length) return;
       e.preventDefault();
+      if (ids.length > MAX_BULK) {
+        say(`Up to ${MAX_BULK} at a time: unselect ${ids.length - MAX_BULK}`);
+        return;
+      }
       deleteOrAsk(ids);
     } else if (e.key === "Escape" && selecting) {
       e.preventDefault();

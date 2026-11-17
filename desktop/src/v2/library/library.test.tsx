@@ -264,16 +264,21 @@ describe("LibraryV2", () => {
     expect(screen.getByRole("list", { name: "Recordings" })).toBeInTheDocument();
   });
 
-  it("an untranscribed recording offers Transcribe", async () => {
+  it("an untranscribed recording offers Transcribe, with its minutes first", async () => {
     respond("session_detail", { playback_url: null });
-    respond("session_retranscribe", {});
+    respond("sessions_transcribe_estimate", { minutes: 3, minutes_left: 120, items: [] });
+    respond("sessions_transcribe", { started: ["voice"], skipped: [], minutes: 3 });
     await show();
     fireEvent.click(screen.getByRole("button", { name: "Voice note" }));
     await act(flushAsync);
     fireEvent.click(screen.getByRole("button", { name: "Transcribe" }));
     await act(flushAsync);
-    expect(callsOf("session_retranscribe")).toEqual([{ id: "voice", language: null }]);
-    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcription started");
+    const dialog = screen.getByRole("dialog", { name: "Transcribe this recording?" });
+    expect(dialog).toHaveAccessibleDescription("About 3 minutes of the 120 minutes left this month.");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Transcribe" }));
+    await act(flushAsync);
+    expect(callsOf("sessions_transcribe")).toEqual([{ ids: ["voice"] }]);
+    expect(screen.getByRole("status", { name: "Notifications" })).toHaveTextContent("Transcribing 1 recording");
   });
 
   it("Delete moves the recording to Trash and Undo brings it back", async () => {

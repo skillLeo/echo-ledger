@@ -196,6 +196,7 @@
 .el-menu--has-sub { overflow: visible; max-block-size: none; }
 .el-menu--sub { inset-block-start: calc(-1 * var(--el-space-4)); inset-inline-start: calc(100% - var(--el-space-4)); min-inline-size: calc(var(--el-space-64) * 3); }
 .el-menu--sub[data-flip] { inset-inline-start: auto; inset-inline-end: calc(100% - var(--el-space-4)); }
+.el-menu--inline { position: static; inset: auto; transform: none; min-inline-size: 0; border: 0; box-shadow: none; padding: 0; padding-inline-start: var(--el-space-16); background: transparent; }
 .el-menu[data-up] { inset-block-start: auto; inset-block-end: calc(100% + var(--el-space-4)); }
 .el-menu--context { position: fixed; inset: auto; min-inline-size: calc(var(--el-space-64) * 3.5); }
 

@@ -3,7 +3,7 @@
 // dialogs behind Move, Label, Rename and Transcribe. Selection mode, the row ⋮, the right-click menu and the recording
 // page all build from here, so an action is in the same place everywhere (PLAN_V2_PARITY 3, 4 and 7).
 import { useEffect, useId, useRef, useState } from "react";
-import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type TranscribeEstimate, type TranscriptionLanguage } from "../../lib/ipc";
+import { api, errorMessage, type BulkExportFormat, type ClientFolder, type LibraryItem, type ExportFormat, type MeetingPackFormat, type TranscribeEstimate, type TranscriptionLanguage } from "../../lib/ipc";
 import { englishOnlyRisk, languageLabel, MAIN_LANGUAGES, menuLabel, MORE_LANGUAGES } from "../../lib/languages";
 import { transcriptText, copiedTranscript, DEFAULT_UNSURE, formatDuration, formatTime, sentenceDate, sourceAppLabel } from "../../lib/format";
 import { speakerName } from "../../lib/player";
@@ -12,25 +12,46 @@ import { MAX_LABEL_CHARS } from "../../lib/organise";
 import { MAX_TITLE_CHARS } from "../../lib/importFiles";
 import { moveRecordings, movedText } from "../../views/main/ProjectDialogs";
 import { ATTACH_NOTE, fileName, linkMessage, WHATSAPP_LINK_SECONDS } from "../../views/main/WhatsAppSheet";
+import { PACKS } from "../../views/main/TranscriptTools";
 import { Button, Dialog, Icons, Select, TextField } from "../components";
 import type { MenuItem } from "../components/Menu";
 
-/** Every format the core exports, in classic's words and order (one zip for several recordings). */
-export const EXPORT_FORMATS: readonly { format: BulkExportFormat; label: string }[] = [
+/**
+ * Every format, in one order and one set of words for every Export menu. `one` formats exist only for one recording
+ * (PDF opens the print page); the zip of several recordings has the rest.
+ */
+export const EXPORT_FORMATS: readonly { format: ExportFormat; label: string; one?: true }[] = [
   { format: "docx", label: "Word (.docx)" },
+  { format: "html", label: "PDF (print)", one: true },
   { format: "txt", label: "Text (.txt)" },
   { format: "md", label: "Markdown (.md)" },
   { format: "srt", label: "Subtitles (.srt)" },
   { format: "vtt", label: "Web subtitles (.vtt)" },
-  { format: "json", label: "JSON" },
+  { format: "json", label: "JSON (.json)" },
 ];
+/** The formats a zip of several recordings takes (sessions_export). */
+export const ZIP_FORMATS = EXPORT_FORMATS.filter((f): f is { format: BulkExportFormat; label: string } => !f.one);
+/** The menu's words for Change language, everywhere. */
+export const CHANGE_LANGUAGE = "Change language and re-transcribe…";
 
-/** The Export ▸ sub-menu: one item per format. */
+/** The Export ▸ sub-menu of the Library (a zip): one item per format. */
 export function exportMenu(run: (format: BulkExportFormat) => void, group = "Export"): MenuItem {
   return {
     label: "Export", icon: Icons.DownloadIcon, group,
-    items: EXPORT_FORMATS.map(({ format, label }) => ({ label, onPick: () => run(format) })),
+    items: ZIP_FORMATS.map(({ format, label }) => ({ label, onPick: () => run(format) })),
   };
+}
+
+/** One recording's Export items: every format in the view on screen, then the meeting packs when it has screens. */
+export function recordingExportItems({ exportAs, packAs, view }: {
+  exportAs: (format: ExportFormat) => void;
+  packAs?: (format: MeetingPackFormat, withAudio: boolean) => void;
+  view: string | null;
+}): MenuItem[] {
+  return [
+    ...EXPORT_FORMATS.map(({ format, label }) => ({ label, group: view ? `As ${view}` : "Transcript", onPick: () => exportAs(format) })),
+    ...(packAs ? PACKS.map(([, format, withAudio, label]) => ({ label, group: "With the screens", onPick: () => packAs(format, withAudio) })) : []),
+  ];
 }
 
 export type Say = (text: string, action?: { label: string; run: () => void }) => void;
@@ -383,7 +404,7 @@ export function LanguageDialog({ item, onClose, say }: { item: LibraryItem; onCl
     }
   };
   return (
-    <Dialog open title="Change language and re-transcribe" onClose={onClose}
+    <Dialog open title={CHANGE_LANGUAGE.replace("…", "")} onClose={onClose}
       description={warned ? "English only would translate the Urdu in this recording into English. Choose Urdu (with English words) to keep what was said." : "The current transcript stays until the new one is ready."}
       actions={<><Button onClick={onClose}>Cancel</Button>
         <Button variant="primary" loading={busy} loadingLabel="Starting…" onClick={() => void run()}>{warned ? "Re-transcribe anyway" : "Re-transcribe"}</Button></>}>

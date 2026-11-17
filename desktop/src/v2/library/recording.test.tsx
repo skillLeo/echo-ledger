@@ -55,12 +55,12 @@ describe("the recording page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
     const menu = screen.getByRole("menu", { name: "Recording actions" });
     expect(within(menu).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
-      "Rename…", "Move to project…", "Label…", "Pin", "Keep forever", "Change language & re-transcribe…",
+      "Rename…", "Move to project…", "Label…", "Pin", "Keep forever", "Change language and re-transcribe…",
       "Export", "Save audio", "Copy for AI", "Send to WhatsApp…", "DeleteDel",
     ]);
     fireEvent.click(menuItem("Export"));
     expect(within(screen.getByRole("menu", { name: "Export" })).getAllByRole("menuitem").map((m) => m.textContent)).toEqual([
-      "Text (.txt)", "Word (.docx)", "PDF (print)", "Subtitles (.srt)", "JSON (.json)", "Markdown (.md)", "Web subtitles (.vtt)",
+      "Word (.docx)", "PDF (print)", "Text (.txt)", "Markdown (.md)", "Subtitles (.srt)", "Web subtitles (.vtt)", "JSON (.json)",
       "Meeting pack (PDF)", "Meeting pack (.zip)", "Meeting pack with audio (.zip)",
     ]);
   });
@@ -140,7 +140,7 @@ describe("the recording page", () => {
     respond("session_retranscribe", {});
     await open();
     fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
-    fireEvent.click(menuItem("Change language & re-transcribe…"));
+    fireEvent.click(menuItem("Change language and re-transcribe…"));
     const dialog = screen.getByRole("dialog", { name: "Change language and re-transcribe" });
     fireEvent.click(within(dialog).getByRole("combobox", { name: /^Language/ }));
     fireEvent.click(screen.getByRole("option", { name: "English only" }));
@@ -174,6 +174,53 @@ describe("the recording page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Play from 1:05 · Me" }));
     expect(screen.getByText(/1:05 \/ 1:02:10/)).toBeInTheDocument();
     expect(play).toHaveBeenCalledTimes(2);
+  });
+
+  it("no Change language on a recording without audio or without a final transcript (classic's rule)", async () => {
+    const silent = { ...BILAL, transcript: { ...BILAL.transcript!, final_status: "failed", final_error_code: "no_audio" } } as LibraryItem;
+    respond("library_list", [silent]);
+    respond("library_refresh", [silent]);
+    await open(makeTranscript({ id: "tr-bilal", status: "failed", segments: [] }));
+    fireEvent.click(screen.getByRole("button", { name: "Recording actions" }));
+    expect(screen.queryByRole("menuitem", { name: "Change language and re-transcribe…" })).toBeNull();
+  });
+
+  it("Skip silence jumps a gap while playing; Follow keeps the playing line in view", async () => {
+    const scrolled: Element[] = [];
+    Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this); };
+    await open();
+    const audio = document.querySelector("audio") as HTMLAudioElement;
+    Object.defineProperty(audio, "paused", { configurable: true, get: () => false });
+    fireEvent.play(audio);
+    // 5 s is in the 4 s to 12.4 s gap: off, playing goes on there.
+    audio.currentTime = 5;
+    fireEvent.timeUpdate(audio);
+    expect(audio.currentTime).toBe(5);
+    fireEvent.click(screen.getByRole("switch", { name: "Skip silence" }));
+    fireEvent.timeUpdate(audio);
+    expect(audio.currentTime).toBeCloseTo(12.2);
+    // Follow: the line being played is scrolled into view.
+    audio.currentTime = 13;
+    fireEvent.timeUpdate(audio);
+    expect(scrolled.at(-1)).toHaveTextContent("Hi Sam, thanks for calling back.");
+    fireEvent.click(screen.getByRole("switch", { name: "Follow" }));
+    const before = scrolled.length;
+    audio.currentTime = 66;
+    fireEvent.timeUpdate(audio);
+    expect(scrolled.length).toBe(before);
+  });
+
+  it("without a length from the server, the audio file's own length is used, so seeking and lines past the first second work", async () => {
+    const noLength = { ...BILAL, duration_ms: null } as LibraryItem;
+    respond("library_list", [noLength]);
+    respond("library_refresh", [noLength]);
+    await open(makeTranscript({ id: "tr-bilal", segments: [{ channel: 1, speaker: "Me", start_ms: 0, end_ms: 2000, text: "Hi." }] }));
+    const audio = document.querySelector("audio") as HTMLAudioElement;
+    Object.defineProperty(audio, "duration", { configurable: true, get: () => 95 });
+    fireEvent.loadedMetadata(audio);
+    expect(screen.getByText(/0:00 \/ 1:35/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Forward 10 seconds" }));
+    expect(screen.getByText(/0:10 \/ 1:35/)).toBeInTheDocument();
   });
 
   it("Esc goes back to the Library and gives focus to the recording's row; inside a menu Esc only closes the menu", async () => {
