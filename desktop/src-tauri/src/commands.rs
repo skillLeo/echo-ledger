@@ -2532,22 +2532,30 @@ fn access_word(access: crate::permissions::Access) -> &'static str {
 
 #[tauri::command]
 pub async fn permissions_status(app: AppHandle) -> AppResult<PermissionsStatus> {
-    let reader = app.clone();
-    let now = tauri::async_runtime::spawn_blocking(move || reader.state::<AppState>().permissions_now()).await.map_err(|e| AppError::msg(e.to_string()))?;
-    let state = app.state::<AppState>();
+    tauri::async_runtime::spawn_blocking(move || permissions_status_of(&app.state::<AppState>())).await.map_err(|e| AppError::msg(e.to_string()))
+}
+
+/// What `permissions_status` answers (blocking: it reads the system). Each lock of the permission memory is its own
+/// statement and is let go before the next: a guard left alive in the literal below froze the app on its next lock.
+pub fn permissions_status_of(state: &AppState) -> PermissionsStatus {
+    let now = state.permissions_now();
     let settings = state.settings();
-    Ok(PermissionsStatus {
+    let can_tell = crate::permissions::can_tell_not_asked();
+    let lost = state.permission_memory_now().sentence(can_tell);
+    let allowed_before = state.permissions_allowed_before(&now);
+    let reopen_did_not_apply = state.screen_reopen_did_not_apply(&now);
+    PermissionsStatus {
         microphone: access_word(now.microphone),
         system_audio: access_word(now.system_audio),
         screen: access_word(now.screen),
         browser_automation: settings.browser_automation,
         platform: if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" },
         missing: crate::permissions::missing_now(&now, settings.screen_moments),
-        lost: state.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).sentence(crate::permissions::can_tell_not_asked()),
-        allowed_before: state.permissions_allowed_before(&now),
-        reopen_did_not_apply: state.screen_reopen_did_not_apply(&now),
-        can_tell_not_asked: crate::permissions::can_tell_not_asked(),
-    })
+        lost,
+        allowed_before,
+        reopen_did_not_apply,
+        can_tell_not_asked: can_tell,
+    }
 }
 
 /// The person pressed Allow: macOS shows its prompt the first time (later only System Settings can change it).

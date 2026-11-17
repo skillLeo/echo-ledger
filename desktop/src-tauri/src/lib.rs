@@ -275,12 +275,19 @@ impl AppState {
         if !cfg!(target_os = "macos") {
             return Vec::new();
         }
-        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).allowed_before(now, permissions::can_tell_not_asked())
+        let can_tell = permissions::can_tell_not_asked();
+        self.permission_memory_now().allowed_before(now, can_tell)
     }
 
     /// Whether Screen Recording still waits for a reopen although EchoLedger was reopened since it was allowed.
     pub fn screen_reopen_did_not_apply(&self, now: &permissions::Permissions) -> bool {
-        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).reopen_did_not_apply(now, permissions::this_run())
+        self.permission_memory_now().reopen_did_not_apply(now, permissions::this_run())
+    }
+
+    /// A copy of what is remembered about the permissions, the lock let go at once: nothing is ever called while it is
+    /// held, and a caller that locks it again (a struct literal's later field, say) can never wait on itself.
+    pub fn permission_memory_now(&self) -> permissions::Memory {
+        self.permission_memory.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
     /// What the system allows now, taken into the memory of what was granted (a permission that went is said once).
@@ -288,8 +295,10 @@ impl AppState {
         let now = permissions::read();
         if cfg!(target_os = "macos") {
             let screens_wanted = self.lock_settings().screen_moments;
+            let (can_tell, run) = (permissions::can_tell_not_asked(), permissions::this_run());
+            // Held only to take in what the system says (pure) and keep it: no other call made under it.
             let mut memory = self.permission_memory.lock().unwrap_or_else(|p| p.into_inner());
-            let next = memory.observe(&now, screens_wanted, permissions::can_tell_not_asked()).note_reopen(&now, permissions::this_run());
+            let next = memory.observe(&now, screens_wanted, can_tell).note_reopen(&now, run);
             if next != *memory {
                 next.save(&permissions::Memory::path(&self.data_dir));
                 *memory = next;

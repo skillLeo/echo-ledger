@@ -41,6 +41,11 @@ const SAY_AGAIN: Duration = Duration::from_secs(10);
 pub const ALIVE: Duration = Duration::from_millis(4 * 250);
 /// Once every window is ready, the runtime must stay alive this long before the test passes.
 pub const SETTLE: Duration = Duration::from_secs(5);
+/// Asking what the permissions are (`permissions_status`, as every page that shows them does) got no answer within
+/// [`PERMISSIONS_WITHIN`]: a lock waited on itself.
+pub const EXIT_PERMISSIONS_HUNG: i32 = 9;
+/// How long the permissions may take to answer: they read the system once, never a prompt.
+pub const PERMISSIONS_WITHIN: Duration = Duration::from_secs(10);
 
 /// What is wrong with the Mac app's set-up, if anything (pure): the Dock's Quit must keep a recording first, and every
 /// floating window must be a non-activating panel (it floats over a full-screen meeting without taking the focus) that,
@@ -270,6 +275,27 @@ pub fn drive(app: tauri::AppHandle) {
             say(&warning);
         }
         say(&format!("ok: {} windows ready in {} ms, the async runtime alive {} s after; {pause}", labels.len(), started.elapsed().as_millis(), SETTLE.as_secs()));
+        // The permissions, asked once as the pages ask them (read only: nothing is prompted, the memory is the test's).
+        let asked = Instant::now();
+        let (answered, answer) = std::sync::mpsc::channel();
+        let reader = app.clone();
+        std::thread::spawn(move || {
+            use tauri::Manager;
+            let _ = answered.send(crate::commands::permissions_status_of(&reader.state::<crate::AppState>()));
+        });
+        match answer.recv_timeout(PERMISSIONS_WITHIN) {
+            Ok(status) => say(&format!(
+                "ok: the permissions answered in {} ms (microphone {}, system audio {}, screen {})",
+                asked.elapsed().as_millis(),
+                status.microphone,
+                status.system_audio,
+                status.screen
+            )),
+            Err(_) => {
+                say(&format!("failed: the permissions gave no answer within {} s", PERMISSIONS_WITHIN.as_secs()));
+                finish(&dir, EXIT_PERMISSIONS_HUNG);
+            }
+        }
         // A Mac: the app runs as a normal one, its quit answer is in and the floating windows are panels.
         #[cfg(target_os = "macos")]
         {

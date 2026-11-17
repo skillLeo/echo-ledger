@@ -402,3 +402,24 @@ fn the_console_pages_are_the_customer_app_and_the_staff_panel() {
     assert!(!SERVER_PAGES.contains(&"admin/workspace") && !SERVER_PAGES.contains(&"admin/profile"));
     assert!(!SERVER_PAGES.contains(&"app/../admin"), "only the listed pages open");
 }
+
+#[test]
+fn permissions_status_answers_on_one_thread_and_never_waits_on_itself() {
+    // The real path, as the command runs it: one thread reads the system, the memory, and builds the answer. A guard on
+    // the permission memory left alive while it was locked again froze the app (every permission read after it waited).
+    let dir = tempfile::tempdir().unwrap();
+    let state = std::sync::Arc::new(crate::AppState::load(dir.path().to_path_buf(), true));
+    // Something remembered, so every field reads the memory.
+    state.permission_memory.lock().unwrap().notice = vec![crate::permissions::Kind::Screen];
+    for round in 0..2 {
+        let (tx, rx) = std::sync::mpsc::channel();
+        let reader = state.clone();
+        std::thread::spawn(move || {
+            let _ = tx.send(permissions_status_of(&reader));
+        });
+        let status = rx.recv_timeout(std::time::Duration::from_secs(10)).unwrap_or_else(|_| panic!("permissions_status never answered (round {round}): a lock waits on itself"));
+        assert_eq!(status.platform, if cfg!(windows) { "windows" } else if cfg!(target_os = "macos") { "macos" } else { "other" });
+    }
+    // And the memory is free afterwards.
+    assert!(state.permission_memory.try_lock().is_ok());
+}
