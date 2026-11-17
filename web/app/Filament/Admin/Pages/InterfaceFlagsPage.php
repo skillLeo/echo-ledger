@@ -13,12 +13,12 @@ use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Pages\Page;
 use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\EmbeddedSchema;
 use Filament\Schemas\Components\Form;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use UnitEnum;
@@ -26,6 +26,8 @@ use UnitEnum;
 /**
  * Admin panel → Interface flags (since 2.0.0-a): the super admin turns each redesigned screen and Live Assist on for
  * everyone, for a share of accounts (the same accounts every time), for workspaces or for people. Off by default.
+ * Since 2.0.0-g each flag has an availability: Off (not available: only the lists below), Opt-in (people may try the
+ * new design in Settings › Appearance) or Everyone; the nine console screens can be set together.
  *
  * @property-read Schema $form
  */
@@ -60,22 +62,46 @@ class InterfaceFlagsPage extends Page
         foreach (InterfaceFlags::names() as $name) {
             $rule = $rules[$name] ?? null;
             $state[self::key($name)] = [
-                'everyone' => $rule !== null && $rule->everyone,
+                'availability' => $rule !== null ? InterfaceFlags::availabilityOf($rule) : 'off',
                 'percent' => $rule !== null ? $rule->percent : 0,
                 'workspaces' => array_map('intval', $rule !== null ? ($rule->workspace_ids ?? []) : []),
                 'people' => array_map('intval', $rule !== null ? ($rule->user_ids ?? []) : []),
             ];
         }
+        $console = array_unique(array_map(fn (string $f): string => $state[self::key($f)]['availability'], InterfaceFlags::CONSOLE));
+        $state['console_availability'] = count($console) === 1 ? reset($console) : null;
         $this->form->fill($state);
+    }
+
+    /** @return array<string, string> the availabilities a flag can have (Live Assist has no opt-in) */
+    private static function availabilities(string $flag): array
+    {
+        return $flag === InterfaceFlags::LIVE_ASSIST
+            ? ['off' => 'Off — only the lists below', 'everyone' => 'Everyone']
+            : ['off' => 'Off — not available (only the lists below)', 'opt_in' => 'Opt-in — people may try it', 'everyone' => 'Everyone'];
     }
 
     public function form(Schema $schema): Schema
     {
-        $sections = [];
+        $sections = [
+            Section::make('The new console design')->description('The nine console screens together. Opt-in: people may try the new design in Settings › Appearance and switch back at any time.')
+                ->schema([
+                    Select::make('console_availability')->label('Availability')->placeholder('Mixed: set one by one below')
+                        ->options(self::availabilities('ui_v2.shell'))->live()->dehydrated(false)
+                        ->afterStateUpdated(function (?string $state, Set $set): void {
+                            if ($state !== null) {
+                                foreach (InterfaceFlags::CONSOLE as $flag) {
+                                    $set(self::key($flag).'.availability', $state);
+                                }
+                            }
+                        }),
+                ]),
+        ];
         foreach (InterfaceFlags::names() as $name) {
             $key = self::key($name);
             $sections[] = Section::make(InterfaceFlags::LABELS[$name])->description($name)->statePath($key)->columns(2)->schema([
-                Toggle::make('everyone')->label('On for everyone'),
+                Select::make('availability')->label('Availability')->options(self::availabilities($name))->required()->selectablePlaceholder(false)
+                    ->helperText('The lists below get it whatever is chosen here, for testing.'),
                 TextInput::make('percent')->label('Share of accounts')->suffix('%')->integer()->minValue(0)->maxValue(100)->required()
                     ->helperText('The same accounts every time.'),
                 Select::make('workspaces')->label('Workspaces')->multiple()->searchable()
@@ -105,7 +131,8 @@ class InterfaceFlagsPage extends Page
         $data = $this->form->getState();
         foreach (InterfaceFlags::names() as $name) {
             $row = (array) ($data[self::key($name)] ?? []);
-            $flags->set($name, (bool) ($row['everyone'] ?? false), (int) ($row['percent'] ?? 0), (array) ($row['workspaces'] ?? []), (array) ($row['people'] ?? []));
+            $availability = (string) ($row['availability'] ?? 'off');
+            $flags->set($name, $availability === 'everyone', (int) ($row['percent'] ?? 0), (array) ($row['workspaces'] ?? []), (array) ($row['people'] ?? []), $availability);
         }
         app(AuditLog::class)->record('settings_changed', (int) auth()->id(), null, 'Interface flags changed');
         Notification::make()->title('Saved')->success()->send();

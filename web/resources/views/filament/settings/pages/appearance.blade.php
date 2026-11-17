@@ -35,13 +35,20 @@
         </div>
     @endforeach
 </x-el.section>
-@if ($classicOffered || $classic)
-    {{-- Since 2.0.0-a: the redesigned screens off for this person, here and in the apps. --}}
-    <x-el.section footer="Turns the redesigned screens off for you, here and in the apps. Turn it off to see them again.">
-        <button type="button" class="el-set-row" id="setting-appearance.classic" role="switch" aria-checked="{{ $classic ? 'true' : 'false' }}"
-            wire:click="toggleClassic" data-classic-switch>
+@if ($design['can_try'])
+    {{-- Since 2.0.0-g: the design switch, from classic. --}}
+    <x-el.section footer="See the redesigned screens, here and in the apps. You can switch back to classic at any time.">
+        <button type="button" class="el-set-row" id="setting-appearance.design" wire:click="tryNewDesign" data-design-switch="v2">
+            <span class="el-set-text"><span class="el-set-title">Try the new design</span></span>
+            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true'])</span>
+        </button>
+    </x-el.section>
+@elseif ($design['can_switch_back'])
+    {{-- Since 2.0.0-a ("Switch back to classic"); 2.0.0-g: the design switch, from the new design. --}}
+    <x-el.section footer="Turns the redesigned screens off for you, here and in the apps. You can try them again at any time.">
+        <button type="button" class="el-set-row" id="setting-appearance.design" wire:click="switchBackToClassic" data-design-switch="classic">
             <span class="el-set-text"><span class="el-set-title">Switch back to classic</span></span>
-            <span class="el-toggle" aria-hidden="true"></span>
+            <span class="el-set-control" aria-hidden="true">@svg('heroicon-o-chevron-right', ['class' => 'el-set-chevron', 'aria-hidden' => 'true'])</span>
         </button>
     </x-el.section>
 @endif

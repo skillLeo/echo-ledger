@@ -3,7 +3,7 @@
 Server: `web/` (Laravel). Clients: `desktop/` (Tauri, all HTTP in Rust) and `mobile/` (Kotlin, OkHttp).
 If implementation and this file disagree, fix one of them in the same change — never leave drift.
 
-**Contract revision: 2.0.0-g (2026-11-18, proposed by the web lane)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
+**Contract revision: 2.0.0-g (2026-11-18, accepted by the lead)** — bumped whenever a section below changes; briefs name the revision they build on. After the freeze, only the lead changes this file, always with a bump.
 2.0.0-g: the design switch both ways (docs/PLAN_V2_PARITY.md section 0): each `ui_v2.*` flag has an availability (`off`,
 `opt_in`, `everyone`); a person's own design choice (`classic`, `v2` or none); `GET /api/config` and the new `GET
 /api/account/ui` carry `ui_design`; `PUT /api/account/ui` takes `{"design": …}` (the 2.0.0-a `{"classic": …}` still works).
