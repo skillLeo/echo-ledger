@@ -1,0 +1,5 @@
+{
+  "id": "after-a-call",
+  "title": "After a call",
+  "markdown": "## After a call\n\nWhen a call ends, EchoLedger asks whether to keep it.\n\n- **Keep automatically** keeps every call.\n- **Ask me** asks each time."
+}

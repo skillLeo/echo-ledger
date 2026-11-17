@@ -488,10 +488,16 @@ pub async fn stop_recording_for_quit(app: &AppHandle) -> AppResult<()> {
 /// Stop and discard at once (the pill's Cancel): nothing is kept, uploaded or transcribed; no card.
 /// The pill's Discard (also a Live Assist start the person declined): the recording ends and nothing of it is kept or
 /// uploaded; its open server session is queued for deletion.
-pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
+/// `expected`: the recording meant (a declined Live Assist start names the one it started); when another runs by now,
+/// nothing is discarded.
+pub async fn cancel_recording(app: &AppHandle, expected: Option<&str>) -> AppResult<()> {
     let state = app.state::<crate::AppState>();
     if !state.capture.is_recording() {
         return Err(AppError::msg("Nothing is recording."));
+    }
+    let running = state.capture.info().map(|i| i.client_ref);
+    if !discards(expected, running.as_deref()) {
+        return Ok(());
     }
     if let Some((finished, session, _)) = end_capture(app).await? {
         let late = state.session_link.lock().unwrap_or_else(|p| p.into_inner()).end_stop(&finished.info.client_ref);
@@ -504,6 +510,15 @@ pub async fn cancel_recording(app: &AppHandle) -> AppResult<()> {
     emit_status(app);
     emit_recording_state(app);
     Ok(())
+}
+
+/// Whether a discard meant for `expected` (any recording when `None`) applies to the recording `running` now (pure).
+pub fn discards(expected: Option<&str>, running: Option<&str>) -> bool {
+    match (expected, running) {
+        (_, None) => false,
+        (None, Some(_)) => true,
+        (Some(expected), Some(running)) => expected == running,
+    }
 }
 
 /// What a finished recording does next (v1.5 "After a call"): kept at once with the "Saved · Undo" toast, or asked

@@ -1,0 +1,53 @@
+/*
+ * The admin panel on Echo DS's values (ui_v2.admin, docs/v2/DESIGN_SYSTEM.md): the same colours, type, radii and flat
+ * surfaces as the v2.0 console (values.css), and no change to the panel's layout, its navigation or its pages. Loaded
+ * only while ui_v2.admin is on for the member of staff (filament.v2.head). Values from tokens only.
+ */
+@import './values.css';
+
+/* The sidebar takes the roles of the page's theme, whichever sidebar style (Light, Dark, Soft grey) was chosen: under
+   the design values the theme decides light or dark, not the sidebar. */
+.el-sb,
+.el-sb[data-style='soft'],
+.el-sb[data-style='dark'] {
+    --sb-bg: var(--el-role-bg-subtle);
+    --sb-text: var(--el-role-text-primary);
+    --sb-muted: var(--el-role-text-secondary);
+    --sb-faint: var(--el-role-text-secondary);
+    --sb-hover: var(--el-role-bg-surface);
+    --sb-active-bg: var(--el-role-accent-soft);
+    --sb-active-text: var(--el-role-accent-text);
+    --sb-border: var(--el-role-border-default);
+    --sb-field: var(--el-role-bg-surface);
+}
+
+/* Tables and their headers: flat on the surface, with hairlines. */
+.fi-ta-ctn {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.fi-ta-header-cell {
+    background-color: var(--el-role-bg-subtle);
+    color: var(--el-role-text-secondary);
+    font-size: var(--el-text-caption-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.fi-section {
+    border: var(--el-border-hairline) solid var(--el-role-border-default);
+    border-radius: var(--el-component-card-radius);
+    background-color: var(--el-role-bg-surface);
+}
+
+.fi-badge {
+    border-radius: var(--el-radius-sm);
+}
+
+/* Counts on icon buttons (filters, the bell): the accent with its own text colour, readable in both themes. */
+.fi-icon-btn-badge-ctn .fi-badge {
+    border-radius: var(--el-radius-full);
+    background-color: var(--el-role-accent-default);
+    color: var(--el-role-text-on-accent);
+}

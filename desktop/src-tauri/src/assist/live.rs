@@ -549,8 +549,10 @@ async fn undo(app: &AppHandle, attempt: &Attempt) {
     let state = app.state::<crate::AppState>();
     let running = state.capture.info().map(|i| i.client_ref);
     match undo_for(attempt, running.as_deref()) {
+        // The recording it started, by name: one that took its place since (the person stopped it and started their
+        // own) is left alone.
         Undo::Discard => {
-            if let Err(e) = crate::actions::cancel_recording(app).await {
+            if let Err(e) = crate::actions::cancel_recording(app, attempt.started_recording.as_deref()).await {
                 eprintln!("[echoledger] discarding the recording Live Assist started: {}", e.code().unwrap_or("error"));
             }
         }
@@ -1084,6 +1086,11 @@ mod tests {
         assert_eq!(undo_for(&Attempt::default(), Some("rec-0")), Undo::Nothing, "it turned nothing on");
         assert_eq!(undo_for(&attempt, Some("rec-9")), Undo::Nothing, "another recording runs now");
         assert_eq!(undo_for(&attempt, None), Undo::Nothing, "it already stopped");
+        // The discard itself names the recording it means, so one that took its place before it ran is left alone.
+        assert!(crate::actions::discards(Some("rec-1"), Some("rec-1")));
+        assert!(!crate::actions::discards(Some("rec-1"), Some("rec-2")), "the person's new recording stays");
+        assert!(!crate::actions::discards(Some("rec-1"), None));
+        assert!(crate::actions::discards(None, Some("rec-2")), "the pill's Discard: whatever runs");
     }
 
     #[test]

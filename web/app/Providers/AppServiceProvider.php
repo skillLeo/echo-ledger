@@ -228,7 +228,9 @@ class AppServiceProvider extends ServiceProvider
         RateLimiter::for('search', fn (Request $request) => Limit::perMinute(60)->by('search:'.($request->user()?->getAuthIdentifier() ?? $request->ip())));
         // Ask costs money on every question: at most 20 a minute for a device.
         // Per person, whichever of their devices asks (each answer is a model call on their allowance).
-        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id : ($u?->getAuthIdentifier() ?? $request->ip()))));
+        // Since v2.0 the console's Ask page counts in the same bucket: a signed-in person is 'u' and their id too.
+        RateLimiter::for('ask', fn (Request $request) => Limit::perMinute(20)->by('ask:'.(($u = $request->user()) instanceof Device ? 'u'.$u->user_id
+            : ($u instanceof User ? 'u'.$u->id : $request->ip()))));
         // Send to a teammate: 30 sends an hour per person, whichever of their devices sends (an email goes to each address).
         RateLimiter::for('send', function (Request $request) {
             $device = $request->user();

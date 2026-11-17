@@ -93,6 +93,89 @@ async fn sent_screens_are_deleted_here_and_the_folder_goes_with_the_last() {
 }
 
 #[tokio::test]
+async fn the_server_already_keeping_a_screen_counts_as_kept() {
+    // 200 with the existing screen: the same picture, or a near-duplicate of the one before (2.0.0-e).
+    let server = MockServer::start(inbox_session().fixed("POST", &screens_path(), Reply::json(200, common::fixture("screen_existing_200.json"))));
+    let (dir, store) = stored(2);
+
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
+
+    assert_eq!((result.sent, result.dropped, result.stopped), (2, 0, None), "kept, not dropped or retried");
+    assert!(!dir.path().join("screens").join("rec").exists(), "nothing waits here any more");
+}
+
+#[tokio::test]
+async fn a_screen_s_file_name_and_what_was_said_are_the_server_s() {
+    let upload = ScreenUpload { at_ms: 872_000, width: 1920, height: 1080, trigger: "change".into(), sha256: "ab".repeat(32) };
+    let server = MockServer::start(
+        Router::new()
+            .fixed("POST", &screens_path(), Reply::json(200, common::fixture("screen_existing_200.json")))
+            .fixed("GET", &screens_path(), Reply::json(200, common::fixture("screens_index.json"))),
+    );
+    let kept = client(&server).upload_screen(SESSION, &upload, WEBP).await.unwrap();
+    assert_eq!((kept.index, kept.file_name.as_deref()), (7, Some("S07_14-32_the-clients-invoice-page-with-the-pay-button.webp")));
+    assert_eq!(kept.said.as_deref(), Some("Client: Can you see the invoice?\nMe: Yes, the Pay button is at the bottom."));
+
+    // The list goes to the window as the server sent it: its names, its lines, a null where nothing was said.
+    let list = client(&server).session_screens(SESSION).await.unwrap();
+    assert_eq!(list, common::fixture("screens_index.json"));
+    let typed: Vec<desktop_lib::net::models::ScreenMoment> = serde_json::from_value(list["data"].clone()).unwrap();
+    assert_eq!(typed[0].file_name.as_deref(), Some("S01_00-12_screen.webp"));
+    assert_eq!(typed[0].said, None);
+    // An older server's screen, without them, still reads.
+    let old: desktop_lib::net::models::ScreenMoment = serde_json::from_value(json!({"id": "s", "index": 1, "at_ms": 0})).unwrap();
+    assert_eq!((old.file_name, old.said), (None, None));
+}
+
+/// The stored files of `rec`, in order.
+fn files(store: &ScreenStore) -> Vec<String> {
+    store.load("rec").map(|m| m.items.into_iter().map(|s| s.file).collect()).unwrap_or_default()
+}
+
+#[tokio::test]
+async fn a_repeat_of_a_screen_the_server_confirmed_is_not_sent() {
+    let server = MockServer::start(inbox_session().fixed("POST", &screens_path(), Reply::json(201, json!({"data": {}}))));
+    let (dir, store) = stored(3);
+    let f = files(&store);
+    store.mark_repeat("rec", &f[1], &f[0]).unwrap();
+
+    let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
+
+    assert_eq!((result.sent, result.repeats, result.dropped), (2, 1, 0));
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 2, "the first and the third; the second repeats the first");
+    assert_eq!(part(&posts[1], "at_ms"), Some("30000"));
+    assert!(!dir.path().join("screens").join("rec").exists());
+}
+
+#[tokio::test]
+async fn a_repeat_of_a_screen_the_server_refused_goes_and_the_confirmation_outlasts_a_round() {
+    // The first is taken, the second meets a busy server; the next round the second is refused for good.
+    let server = MockServer::start(inbox_session().route("POST", &screens_path(), |_, nth| match nth {
+        0 => Action::Reply(Reply::json(201, json!({"data": {}}))),
+        1 => Action::Reply(Reply::json(503, json!({"message": "Busy.", "code": "server_busy"})).header("Retry-After", "5")),
+        2 => Action::Reply(Reply::json(422, json!({"message": "Not an image.", "code": "validation_failed"}))),
+        _ => Action::Reply(Reply::json(201, json!({"data": {}}))),
+    }));
+    let (_dir, store) = stored(4);
+    let f = files(&store);
+    // The third repeats the first (confirmed in round one); the fourth repeats the second (refused in round two).
+    store.mark_repeat("rec", &f[2], &f[0]).unwrap();
+    store.mark_repeat("rec", &f[3], &f[1]).unwrap();
+    let now = Utc::now();
+
+    let first = drain(&client(&server), &store, &key(), None, now).await;
+    assert_eq!((first.sent, first.busy_for), (1, Some(5)));
+    assert_eq!(store.load("rec").unwrap().last_confirmed.as_deref(), Some(f[0].as_str()), "remembered for the next round");
+
+    let second = drain(&client(&server), &store, &key(), None, now + chrono::Duration::seconds(6)).await;
+    assert_eq!((second.dropped, second.repeats, second.sent), (1, 1, 1), "the third not sent; the fourth sent, as the server never took the second");
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 4);
+    assert_eq!(part(&posts[3], "at_ms"), Some("40000"));
+}
+
+#[tokio::test]
 async fn screens_wait_for_their_session() {
     let server = MockServer::start(inbox_session());
     let dir = tempfile::tempdir().unwrap();
@@ -120,6 +203,7 @@ async fn four_hundred_screens_end_the_recordings_screens() {
     let result = drain(&client(&server), &store, &key(), None, Utc::now()).await;
 
     assert_eq!((result.sent, result.dropped, result.stopped), (1, 3, None));
+    assert_eq!(result.limited, ["rec"], "the recording is named, so its capture stops and the pill says why");
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 2, "no screen is sent after 409");
     assert!(!dir.path().join("screens").join("rec").exists());
 }
@@ -135,6 +219,7 @@ async fn a_deleted_recording_drops_its_screens() {
 
     assert_eq!(result.dropped, 2);
     assert!(server.requests_to("POST", &screens_path()).is_empty());
+    assert!(result.limited.is_empty(), "a deleted recording is not a limit reached");
     assert!(!dir.path().join("screens").join("rec").exists());
 }
 
@@ -181,6 +266,35 @@ async fn a_busy_server_keeps_the_screens_and_waits_longer() {
     // Not due again before its time: the next round sends nothing.
     drain(&client(&server), &store, &key(), None, now).await;
     assert_eq!(server.requests_to("POST", &screens_path()).len(), 1);
+}
+
+#[tokio::test]
+async fn a_server_busy_decoding_pictures_gets_the_same_screen_again_after_its_wait() {
+    // 2.0.0-f: 503 server_busy with Retry-After: 5, then the server takes it.
+    let server = MockServer::start(inbox_session().route("POST", &screens_path(), |_, nth| {
+        if nth == 0 {
+            Action::Reply(Reply::json(503, json!({"message": "Busy.", "code": "server_busy"})).header("Retry-After", "5"))
+        } else {
+            Action::Reply(Reply::json(201, json!({"data": {}})))
+        }
+    }));
+    let (_dir, store) = stored(2);
+    let now = Utc::now();
+
+    let busy = drain(&client(&server), &store, &key(), None, now).await;
+    assert_eq!((busy.sent, busy.dropped, busy.stopped, busy.busy_for), (0, 0, None, Some(5)));
+    let manifest = store.load("rec").unwrap();
+    assert_eq!(manifest.items.len(), 2, "nothing is lost");
+    assert_eq!(manifest.failures, 0, "not a failure: the wait does not grow");
+    let at = manifest.next_try_at.unwrap();
+    assert!(at >= now + chrono::Duration::seconds(5) && at < Utc::now() + chrono::Duration::seconds(6), "after Retry-After, not the 30 s backoff");
+    assert!(drain(&client(&server), &store, &key(), None, now).await.sent == 0, "not before its wait");
+
+    let later = drain(&client(&server), &store, &key(), None, at).await;
+    assert_eq!(later.sent, 2, "the same screens go");
+    let posts = server.requests_to("POST", &screens_path());
+    assert_eq!(posts.len(), 3);
+    assert_eq!(part(&posts[0], "sha256"), part(&posts[1], "sha256"), "the screen the server was too busy for is sent again");
 }
 
 #[tokio::test]

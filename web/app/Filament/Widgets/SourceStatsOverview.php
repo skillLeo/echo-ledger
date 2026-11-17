@@ -6,6 +6,7 @@ namespace App\Filament\Widgets;
 
 use App\Enums\SessionStatus;
 use App\Enums\SourceDevice;
+use App\Filament\Support\ConsoleV2;
 use App\Models\CaptureSession;
 use App\Services\Usage\UsageSummary;
 use App\Services\Workspaces\ConsoleAccess;
@@ -13,6 +14,7 @@ use App\Services\Workspaces\CurrentWorkspace;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\StatsOverviewWidget;
 use Filament\Widgets\StatsOverviewWidget\Stat;
+use Illuminate\Support\HtmlString;
 
 /** Counts by source device (icon + label), transcribed minutes in the last 30 days and this month's usage. */
 class SourceStatsOverview extends StatsOverviewWidget
@@ -34,15 +36,16 @@ class SourceStatsOverview extends StatsOverviewWidget
 
         $stats = [];
         foreach (SourceDevice::cases() as $device) {
-            $stats[] = Stat::make($device->getLabel(), (int) ($counts[$device->value] ?? 0))
+            // Since v2.0 in the console's language (English is unchanged).
+            $stats[] = Stat::make(__($device->getLabel()), (int) ($counts[$device->value] ?? 0))
                 ->icon($device->getIcon())
-                ->description('recordings')
+                ->description(__('recordings'))
                 ->color($device->getColor());
         }
 
         $ms = (int) (clone $base)->where('status', SessionStatus::Completed->value)
             ->where('started_at', '>=', now()->subDays(30))->sum('duration_ms');
-        $stats[] = Stat::make('Transcribed (30 days)', number_format($ms / 60000, 0).' min')
+        $stats[] = Stat::make(__('Transcribed (30 days)'), __(':n min', ['n' => number_format($ms / 60000, 0)]))
             ->icon(Heroicon::OutlinedClock)
             ->color('primary');
 
@@ -63,14 +66,20 @@ class SourceStatsOverview extends StatsOverviewWidget
         $cost = (float) ($usage['cost_usd'] ?? 0);
         $limits = [];
         if (is_numeric($usage['limit_minutes'] ?? null)) {
-            $limits[] = number_format((float) $usage['limit_minutes'], 0).' min';
+            $limits[] = __(':n min', ['n' => number_format((float) $usage['limit_minutes'], 0)]);
         }
         if (is_numeric($usage['limit_usd'] ?? null)) {
             $limits[] = '$'.number_format((float) $usage['limit_usd'], 2);
         }
 
-        return Stat::make('This month', number_format($minutes, 1).' min · $'.number_format($cost, 2))
-            ->description($limits === [] ? 'No monthly limit' : 'of '.implode(' · ', $limits))
+        $value = __(':n min', ['n' => number_format($minutes, 1)]).' · $'.number_format($cost, 2);
+        // Since v2.0, right to left: the amount keeps its sign before it (one isolated run).
+        if (ConsoleV2::rtl()) {
+            $value = new HtmlString(e(__(':n min', ['n' => number_format($minutes, 1)])).' · <bdi>'.e('$'.number_format($cost, 2)).'</bdi>');
+        }
+
+        return Stat::make(__('This month'), $value)
+            ->description($limits === [] ? __('No monthly limit') : __('of :limits', ['limits' => implode(' · ', $limits)]))
             ->icon(Heroicon::OutlinedBanknotes)
             ->color(match (true) {
                 (bool) ($usage['limit_reached'] ?? false) => 'danger',

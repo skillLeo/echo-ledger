@@ -109,6 +109,8 @@ final class Shell
             'clock' => is_string($saved['clock'] ?? null) && isset(self::CLOCKS[$saved['clock']]) ? $saved['clock'] : '12h',
             'layout' => is_string($saved['layout'] ?? null) && isset(self::LAYOUTS[$saved['layout']]) ? $saved['layout'] : 'list',
             'language' => is_string($saved['language'] ?? null) && LanguageChoice::normalize($saved['language']) !== null ? $saved['language'] : '',
+            // Since v2.0 (ui_v2.shell): the console's own language, apart from the transcripts' (ConsoleV2::language).
+            'app_language' => is_string($saved['app_language'] ?? null) && isset(ConsoleV2::LANGUAGES[$saved['app_language']]) ? $saved['app_language'] : 'en',
         ];
     }
 
@@ -126,6 +128,7 @@ final class Shell
             'layout' => is_string($value) && isset(self::LAYOUTS[$value]) ? $value : null,
             // The language new uploads start in ('' = Automatic).
             'language' => $value === '' ? '' : (is_string($value) && LanguageChoice::normalize($value) === $value ? $value : null),
+            'app_language' => is_string($value) && isset(ConsoleV2::LANGUAGES[$value]) ? $value : null,
             'open' => is_array($value) ? array_values(array_intersect(self::GROUPS, array_filter($value, 'is_string'))) : null,
             default => null,
         };

@@ -23,6 +23,6 @@ class Dashboard extends FilamentDashboard
 
     public function getTitle(): string|Htmlable
     {
-        return 'Home';
+        return __('Home');
     }
 }

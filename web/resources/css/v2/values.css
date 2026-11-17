@@ -1,0 +1,172 @@
+/*
+ * Echo DS's values for any Filament panel (docs/v2/DESIGN_SYSTEM.md): tokens.css, then the classic theme's and
+ * Filament's own variables pointed at the token roles, so a page takes the new colours, type, radii and flat
+ * surfaces without changing its layout. The v2.0 console (console.css) and the admin panel (admin.css, ui_v2.admin)
+ * both start here. Values from tokens only (tests/Feature/V2/TokensOnlyTest.php).
+ */
+@import '../tokens.css';
+
+/* ================================================================== 1. the bridge */
+
+html:root:root,
+html.dark:root {
+    --font-family: var(--el-font-family-sans);
+    --mono-font-family: var(--el-font-family-mono);
+    --font-sans-stack: var(--el-font-family-sans);
+
+    /* the classic theme's names */
+    --bg: var(--el-role-bg-canvas);
+    --surface: var(--el-role-bg-surface);
+    --surface-2: var(--el-role-bg-subtle);
+    --surface-3: var(--el-role-bg-subtle);
+    --border: var(--el-role-border-default);
+    --border-strong: var(--el-role-border-strong);
+    --text: var(--el-role-text-primary);
+    --text-muted: var(--el-role-text-secondary);
+    --text-faint: var(--el-role-text-secondary);
+    --accent: var(--el-role-accent-default);
+    --accent-text: var(--el-role-accent-text);
+    --accent-strong: var(--el-role-accent-default);
+    --accent-pressed: var(--el-role-accent-hover);
+    --accent-soft: var(--el-role-accent-soft);
+    --on-accent: var(--el-role-text-on-accent);
+    --danger: var(--el-role-danger-default);
+    --danger-strong: var(--el-role-danger-default);
+    --danger-soft: var(--el-role-danger-soft);
+    --success: var(--el-role-success-default);
+    --warning: var(--el-role-warning-default);
+    --warning-fill: var(--el-role-warning-default);
+    --me: var(--el-role-accent-text);
+    --client: var(--el-role-text-primary);
+    --shadow-float: var(--el-shadow-1);
+
+    /* three radii (4, 8, 12) and the pill */
+    --radius-tag: var(--el-radius-sm);
+    --radius-sm: var(--el-radius-sm);
+    --radius-field: var(--el-radius-sm);
+    --radius-md: var(--el-radius-md);
+    --radius-lg: var(--el-radius-md);
+    --radius-xl: var(--el-radius-lg);
+    --radius-2xl: var(--el-radius-lg);
+    --radius-3xl: var(--el-radius-lg);
+    --radius-full: var(--el-radius-full);
+
+    --motion-press: var(--el-motion-fast);
+    --motion-fast: var(--el-motion-fast);
+    --motion-base: var(--el-motion-base);
+    --motion-slow: var(--el-motion-slow);
+    --ease-standard: var(--el-motion-ease-out);
+    --ease-out: var(--el-motion-ease-out);
+
+    /* Filament's accent: teal, from the roles */
+    --primary-50: var(--el-role-accent-soft);
+    --primary-100: var(--el-role-accent-soft);
+    --primary-200: var(--el-role-accent-soft);
+    --primary-300: var(--el-role-accent-focus);
+    --primary-400: var(--el-role-accent-default);
+    --primary-500: var(--el-role-accent-default);
+    --primary-600: var(--el-role-accent-default);
+    --primary-700: var(--el-role-accent-hover);
+    --primary-800: var(--el-role-accent-hover);
+    --primary-900: var(--el-role-accent-hover);
+    --primary-950: var(--el-role-accent-hover);
+    --info-50: var(--el-role-accent-soft);
+    --info-400: var(--el-role-accent-default);
+    --info-500: var(--el-role-accent-default);
+    --info-600: var(--el-role-accent-default);
+    --info-700: var(--el-role-accent-hover);
+    --danger-50: var(--el-role-danger-soft);
+    --danger-400: var(--el-role-danger-default);
+    --danger-500: var(--el-role-danger-default);
+    --danger-600: var(--el-role-danger-default);
+    --danger-700: var(--el-role-danger-default);
+    --success-50: var(--el-role-success-soft);
+    --success-400: var(--el-role-success-default);
+    --success-500: var(--el-role-success-default);
+    --success-600: var(--el-role-success-default);
+    --success-700: var(--el-role-success-default);
+    --warning-50: var(--el-role-warning-soft);
+    --warning-400: var(--el-role-warning-default);
+    --warning-500: var(--el-role-warning-default);
+    --warning-600: var(--el-role-warning-default);
+    --warning-700: var(--el-role-warning-default);
+}
+
+/* Filament's greys are neutral too: light surfaces at the low end, text at the high end. */
+html:root:not(.dark) {
+    --gray-50: var(--el-role-bg-canvas);
+    --gray-100: var(--el-role-bg-subtle);
+    --gray-200: var(--el-role-border-default);
+    --gray-300: var(--el-role-border-strong);
+    --gray-400: var(--el-role-text-secondary);
+    --gray-500: var(--el-role-text-secondary);
+    --gray-600: var(--el-role-text-secondary);
+    --gray-700: var(--el-role-text-primary);
+    --gray-800: var(--el-role-text-primary);
+    --gray-900: var(--el-role-text-primary);
+    --gray-950: var(--el-role-text-primary);
+}
+
+/* In the dark the order turns round: the high end is the surfaces, the low end the text. */
+html.dark:root {
+    --gray-50: var(--el-role-text-primary);
+    --gray-100: var(--el-role-text-primary);
+    --gray-200: var(--el-role-text-primary);
+    --gray-300: var(--el-role-text-secondary);
+    --gray-400: var(--el-role-text-secondary);
+    --gray-500: var(--el-role-text-secondary);
+    --gray-600: var(--el-role-border-strong);
+    --gray-700: var(--el-role-border-default);
+    --gray-800: var(--el-role-bg-subtle);
+    --gray-900: var(--el-role-bg-surface);
+    --gray-950: var(--el-role-bg-canvas);
+}
+
+html.fi body,
+.fi-body {
+    background-color: var(--el-role-bg-canvas);
+    color: var(--el-role-text-primary);
+    font-family: var(--el-font-family-sans);
+    font-feature-settings: normal;
+}
+
+/* Shadows only on floating layers: panels, sections and tables are flat with a hairline. */
+.fi-section,
+.fi-ta-ctn,
+.fi-wi-stats-overview-stat,
+.fi-fo-field-wrp .fi-input-wrp,
+.fi-input-wrp {
+    box-shadow: none;
+}
+
+.fi-dropdown-panel,
+.fi-modal-window {
+    box-shadow: var(--el-shadow-2);
+}
+
+.fi-btn {
+    border-radius: var(--el-component-button-radius);
+    min-height: var(--el-component-button-height);
+    padding-inline: var(--el-component-button-padding-x);
+    font-size: var(--el-text-body-strong-size);
+    font-weight: var(--el-text-body-strong-weight);
+}
+
+.fi-header-heading {
+    font-size: var(--el-text-title-l-size);
+    line-height: var(--el-text-title-l-line);
+    font-weight: var(--el-text-title-l-weight);
+    letter-spacing: normal;
+    color: var(--el-role-text-primary);
+}
+
+.fi-header-subheading {
+    font-size: var(--el-text-body-size);
+    line-height: var(--el-text-body-line);
+    color: var(--el-role-text-secondary);
+}
+
+:focus-visible {
+    outline: var(--el-focus-width) solid var(--el-role-accent-focus);
+    outline-offset: var(--el-focus-offset);
+}

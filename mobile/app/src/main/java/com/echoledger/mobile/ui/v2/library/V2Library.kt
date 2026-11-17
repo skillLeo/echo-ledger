@@ -2,8 +2,10 @@ package com.echoledger.mobile.ui.v2.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -20,8 +22,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import com.echoledger.mobile.R
 import com.echoledger.mobile.core.SourceApp
 import com.echoledger.mobile.data.LibraryItem
 import com.echoledger.mobile.data.LocalRecording
@@ -96,7 +100,9 @@ fun V2LibraryScreen(
     onTrash: () -> Unit,
     onAccount: () -> Unit,
     modifier: Modifier = Modifier,
-    initialViews: Set<SavedView> = emptySet()
+    initialViews: Set<SavedView> = emptySet(),
+    /** Projects (Workspaces), while `ui_v2.ask` is on. */
+    onProjects: (() -> Unit)? = null
 ) {
     val text = v2Text
     val library by vm.library.collectAsState()
@@ -135,7 +141,8 @@ fun V2LibraryScreen(
         onRetry = { vm.refresh() },
         onTrash = onTrash,
         onAccount = onAccount,
-        modifier = modifier
+        modifier = modifier,
+        onProjects = onProjects
     )
 }
 
@@ -154,13 +161,15 @@ fun V2LibraryContent(
     onRetry: () -> Unit,
     onTrash: () -> Unit,
     onAccount: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onProjects: (() -> Unit)? = null
 ) {
     val c = EchoV2.colors
     val text = v2Text
     var actionsFor by remember { mutableStateOf<V2Row?>(null) }
     Column(modifier.fillMaxSize().background(c.bgCanvas)) {
         EchoTopBar(text.recordings, large = true) {
+            onProjects?.let { EchoIconButton(EchoIcons.Folder, stringResource(R.string.v2_ws_projects), it) }
             EchoIconButton(EchoIcons.Delete, text.trash, onTrash)
             Box(
                 Modifier
@@ -222,7 +231,17 @@ fun V2LibraryContent(
                         title = row.title,
                         meta = row.meta,
                         titleEnd = row.time,
-                        metaEnd = { Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary) },
+                        metaEnd = {
+                            // The screens icon and count (meeting assets) before the length, when it has any.
+                            val screens = row.item.screenCount ?: 0
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(EchoTokens.Space.s8)
+                            ) {
+                                if (screens > 0) ScreensCountMark(screens)
+                                Text(row.duration, style = EchoV2.type.mono, color = c.textSecondary)
+                            }
+                        },
                         status = statusBadge(row.status, text),
                         leading = { EchoAvatar(icon = row.icon, contentDescription = row.source) },
                         tall = true,

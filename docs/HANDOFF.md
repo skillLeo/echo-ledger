@@ -1077,3 +1077,6 @@ Checked 2026-10-27 against the code and the built artefacts. Nothing needed the 
   deleted.
 - Owner decision 2026-11-17: v2.1 (the name and the public launch) is out of scope; focus on v1.9 (Live Assist) and v2.0
   (the redesign). v1.8.1 is finished and released as planned; v1.8.0 items continue only where v1.9/v2.0 need them.
+
+- 2026-11-17: merged phone Help v2 (63d2056e, reviewer B approve) as 7bebd4ee. Desktop UI 9c3f5000 sent back: parity tests must walk dialog/form/switch states. Phone core owns the real HelpSource.
+- 2026-11-17: website v2 (b-web-v2 56b1b21f) sent to reviewer A. Disk cleanup: removed review-core/-dui/-phone/-relay/-pui/-core2 and b-web-l1 worktrees (branches kept), phone build outputs in main and rel-181.

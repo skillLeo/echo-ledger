@@ -224,7 +224,7 @@ mod tests {
     }
 
     fn facts() -> Facts {
-        Facts { enabled: true, call: true, plan: true, server: true, project: Some(true), supported: true, keychain: true, permission: true, user_paused: false, recording_paused: false, capped: false }
+        Facts { enabled: true, call: true, plan: true, server: true, project: Some(true), supported: true, keychain: true, permission: true, user_paused: false, recording_paused: false, capped: false, limited: false }
     }
 
     fn zoom() -> MeetingTree {

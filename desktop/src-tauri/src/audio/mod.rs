@@ -13,6 +13,7 @@ pub mod mock;
 pub mod notes;
 pub mod platform;
 pub mod recorder;
+pub mod sleep;
 pub mod timeline;
 pub mod types;
 pub mod writer;

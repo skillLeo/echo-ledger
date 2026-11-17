@@ -8,6 +8,7 @@ use chrono::{TimeZone, Utc};
 use desktop_lib::audio::clock::RecordingClock;
 use desktop_lib::audio::recorder::Recorder;
 use desktop_lib::audio::recorder::RecordingOutput;
+use desktop_lib::audio::sleep::{Reading, SleepClock};
 use desktop_lib::audio::types::{AudioChunk, Channel, TARGET_RATE};
 use desktop_lib::audio::writer::read_mono_i16;
 use desktop_lib::audio::{FinishedRecording, RecordingInfo, RecordingMode};
@@ -106,26 +107,169 @@ fn a_ten_second_pause_leaves_no_gap_and_keeps_both_channels_equal() {
     );
 }
 
+// ---- sleep and silence ---------------------------------------------------------------------------------------------
+
+/// The two system clocks, moved by hand: time awake and time asleep.
+#[derive(Clone, Default)]
+struct HandClock(std::sync::Arc<std::sync::Mutex<Reading>>);
+
+impl SleepClock for HandClock {
+    fn read(&self) -> Reading {
+        *self.0.lock().unwrap()
+    }
+}
+
+impl HandClock {
+    fn sleep(&self, seconds: f64) {
+        self.0.lock().unwrap().asleep_ns += (seconds * 1e9) as u64;
+    }
+    fn asleep_s(&self) -> f64 {
+        self.0.lock().unwrap().asleep_ns as f64 / 1e9
+    }
+    fn set_awake(&self, seconds: f64) {
+        self.0.lock().unwrap().awake_ns = (seconds * 1e9) as u64;
+    }
+}
+
+/// Which device clock the packets are stamped with.
+#[derive(Clone, Copy, PartialEq)]
+enum DeviceClock {
+    /// Runs on through sleep (what made DC-01).
+    RunsInSleep,
+    /// Stops in sleep, like the awake clock (a Mac's host time).
+    StopsInSleep,
+}
+
+/// A recorder on a hand-moved clock, fed 100 ms packets in time order: `sides(t)` says which channels speak at device
+/// time `t`. Each packet reaches the recorder as it ends.
+struct Feed {
+    recorder: Recorder,
+    clock: HandClock,
+    device: DeviceClock,
+    /// How late packets reach the recorder (a busy recorder thread works through a backlog).
+    lag: f64,
+    _dir: tempfile::TempDir,
+}
+
+impl Feed {
+    fn new(device: DeviceClock) -> Self {
+        let dir = tempfile::tempdir().unwrap();
+        let clock = HandClock::default();
+        let recorder = Recorder::create(dir.path(), false).unwrap().with_sleep_clock(Box::new(clock.clone()));
+        Self { recorder, clock, device, lag: 0.0, _dir: dir }
+    }
+
+    fn run(&mut self, from: f64, to: f64, sides: impl Fn(f64) -> Vec<Channel>) {
+        let ticks = ((to - from) * 10.0).round() as usize;
+        for i in 0..ticks {
+            let t = from + i as f64 * 0.1;
+            let asleep = if self.device == DeviceClock::RunsInSleep { self.clock.asleep_s() } else { 0.0 };
+            self.clock.set_awake(t + 0.1 + self.lag - asleep);
+            for channel in sides(t) {
+                self.recorder.push(tone(channel, t, 0.1).remove(0)).unwrap();
+            }
+        }
+    }
+
+    fn finish(self) -> (RecordingOutput, Vec<i16>, Vec<i16>) {
+        let output = self.recorder.finish().unwrap();
+        let mic = read_mono_i16(&output.mic_wav).unwrap();
+        let system = read_mono_i16(&output.system_wav).unwrap();
+        assert_eq!(mic.len(), system.len(), "both sides stay aligned");
+        (output, mic, system)
+    }
+}
+
+fn near(got_ms: u64, want_ms: i64, why: &str) {
+    assert!((got_ms as i64 - want_ms).abs() < 300, "{why}: want {want_ms} ms, got {got_ms} ms");
+}
+
+/// Whether a channel has sound in the 100 ms starting `at_s` seconds into the file.
+fn sounds_at(samples: &[i16], at_s: f64) -> bool {
+    let from = (at_s * TARGET_RATE as f64) as usize;
+    samples[from..from + TARGET_RATE as usize / 10].iter().any(|&s| s.unsigned_abs() > 100)
+}
+
+#[test]
+fn the_other_side_quiet_for_90_s_while_the_microphone_flows_keeps_the_90_s() {
+    let mut feed = Feed::new(DeviceClock::RunsInSleep);
+    feed.run(1.0, 101.0, |t| if !(4.0..95.0).contains(&t) { vec![Channel::Mic, Channel::System] } else { vec![Channel::Mic] });
+    let (output, _, system) = feed.finish();
+    near(output.duration_ms, 100_000, "the whole call");
+    assert!(!sounds_at(&system, 50.0), "the other person's silence is silence");
+    assert!(sounds_at(&system, 96.0), "and they speak again where they did");
+}
+
+#[test]
+fn a_system_only_recording_quiet_for_90_s_with_no_sleep_keeps_it() {
+    // The microphone denied: only this computer's side, which sends nothing on Windows' loopback while it is quiet.
+    let mut feed = Feed::new(DeviceClock::RunsInSleep);
+    feed.run(1.0, 97.0, |t| if !(4.0..94.0).contains(&t) { vec![Channel::System] } else { vec![] });
+    let (output, _, system) = feed.finish();
+    near(output.duration_ms, 96_000, "a long silence is not a sleep");
+    assert!(sounds_at(&system, 93.5));
+}
+
+#[test]
+fn a_late_recorder_before_a_quiet_spell_drops_nothing_without_a_sleep() {
+    // The packets before the quiet reached the recorder 5 s late: measured by arrival, the quiet looks 5 s shorter
+    // than its gap. Without a sleep on the clocks, nothing goes.
+    let mut feed = Feed::new(DeviceClock::RunsInSleep);
+    feed.lag = 5.0;
+    feed.run(1.0, 4.0, |_| vec![Channel::System]);
+    feed.lag = 0.0;
+    feed.run(4.0, 97.0, |t| if t >= 94.0 { vec![Channel::System] } else { vec![] });
+    let (output, _, _) = feed.finish();
+    near(output.duration_ms, 96_000, "missing packets alone are never a sleep");
+}
+
 #[test]
 fn a_computer_that_slept_mid_recording_adds_no_hours_of_silence() {
-    let dir = tempfile::tempdir().unwrap();
-    let mut recorder = Recorder::create(dir.path(), false).unwrap();
-    let both = |recorder: &mut Recorder, start: f64, seconds: f64| {
-        for (mic, system) in tone(Channel::Mic, start, seconds).into_iter().zip(tone(Channel::System, start, seconds)) {
-            recorder.push(mic).unwrap();
-            recorder.push(system).unwrap();
-        }
-    };
-    both(&mut recorder, 1.0, 3.0);
-    // The device clock ran on through two hours of sleep.
-    both(&mut recorder, 4.0 + 7_200.0, 3.0);
+    let mut feed = Feed::new(DeviceClock::RunsInSleep);
+    let both = |_: f64| vec![Channel::Mic, Channel::System];
+    feed.run(1.0, 4.0, both);
+    feed.clock.sleep(7_200.0); // the device clock ran on through two hours of sleep
+    feed.run(4.0 + 7_200.0, 7.0 + 7_200.0, both);
     // A short gap (a device that went quiet for 2 s) is still kept as silence.
-    both(&mut recorder, 4.0 + 7_200.0 + 3.0 + 2.0, 1.0);
-    let output = recorder.finish().unwrap();
-    let mic = read_mono_i16(&output.mic_wav).unwrap();
-    let system = read_mono_i16(&output.system_wav).unwrap();
-    assert_eq!(mic.len(), system.len(), "both sides stay aligned across the sleep");
-    assert!((output.duration_ms as i64 - 9_000).abs() < 300, "recorded time and the short gap only, got {} ms", output.duration_ms);
+    feed.run(9.0 + 7_200.0, 10.0 + 7_200.0, both);
+    let (output, mic, _) = feed.finish();
+    near(output.duration_ms, 9_000, "recorded time and the short gap only");
+    assert!(sounds_at(&mic, 3.5) && !sounds_at(&mic, 6.5) && sounds_at(&mic, 8.5));
+}
+
+#[test]
+fn a_quiet_side_then_a_sleep_keeps_the_quiet_and_drops_the_sleep() {
+    let mut feed = Feed::new(DeviceClock::RunsInSleep);
+    feed.run(1.0, 94.0, |t| if t < 4.0 { vec![Channel::System] } else { vec![] }); // 90 s of quiet, awake
+    feed.clock.sleep(3_600.0);
+    feed.run(94.0 + 3_600.0, 97.0 + 3_600.0, |_| vec![Channel::System]);
+    let (output, _, system) = feed.finish();
+    near(output.duration_ms, 96_000, "the quiet stays, the hour asleep goes");
+    assert!(!sounds_at(&system, 50.0) && sounds_at(&system, 93.5));
+}
+
+#[test]
+fn a_quiet_side_then_a_sleep_on_a_clock_that_stops_in_sleep_keeps_the_quiet() {
+    // The packets' gap is the quiet only: the time asleep must not be taken out of it.
+    let mut feed = Feed::new(DeviceClock::StopsInSleep);
+    feed.run(1.0, 94.0, |t| if t < 4.0 { vec![Channel::System] } else { vec![] });
+    feed.clock.sleep(3_600.0);
+    feed.run(94.0, 97.0, |_| vec![Channel::System]);
+    let (output, _, system) = feed.finish();
+    near(output.duration_ms, 96_000, "the quiet stays");
+    assert!(sounds_at(&system, 93.5));
+}
+
+#[test]
+fn a_device_clock_that_stops_in_sleep_loses_nothing() {
+    let mut feed = Feed::new(DeviceClock::StopsInSleep);
+    let both = |_: f64| vec![Channel::Mic, Channel::System];
+    feed.run(1.0, 4.0, both);
+    feed.clock.sleep(3_600.0); // the packets show no gap: nothing to drop, and no audio skipped
+    feed.run(4.0, 7.0, both);
+    let (output, mic, system) = feed.finish();
+    near(output.duration_ms, 6_000, "all of it");
+    assert!((0..59).all(|i| sounds_at(&mic, i as f64 * 0.1) && sounds_at(&system, i as f64 * 0.1)), "no hole anywhere");
 }
 
 /// The 60-minute soak (Day 5 bug bash): an hour of both channels with a slowly drifting system clock, jitter and a

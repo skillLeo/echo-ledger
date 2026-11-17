@@ -22,6 +22,7 @@ import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.lifecycleScope
 import com.echoledger.mobile.BuildConfig
 import com.echoledger.mobile.EchoLedgerApp
+import com.echoledger.mobile.assist.AssistHub
 import com.echoledger.mobile.calls.CallEffect
 import com.echoledger.mobile.calls.CallEvent
 import com.echoledger.mobile.calls.CallState
@@ -976,6 +977,7 @@ class RecordingService : LifecycleService() {
         journalFailed(session.id, if (failure is SecurityException) MissedReason.PERMISSION else MissedReason.MIC_BUSY)
         session.cancel()
         capture = null
+        AssistHub.recordingSession(null)
         Notifications.noAudio(this, CaptureProblems.recent(this), callNotRecorded = false)
         settle()
     }
@@ -1133,6 +1135,7 @@ class RecordingService : LifecycleService() {
         }
         session.serverSessionId = outcome.sessionId
         if (!session.active) return
+        if (capture === session) AssistHub.recordingSession(outcome.sessionId, bothSides = session.channels == 2)
         val token = when (outcome) {
             is CaptionTokens.Outcome.Token -> outcome.token
 
@@ -1263,16 +1266,22 @@ class RecordingService : LifecycleService() {
         val speaker = Speakers.forChannel(channel, session.channels == 2)
         when (event) {
             // Display only: Hindi letters from an engine that guessed Hindi are shown in Urdu script.
-            is SttEvent.Partial -> main.post {
-                captionFeed.value = captionFeed.value.copy(partial = CaptionLine(speaker, Devanagari.toUrdu(event.text)))
+            is SttEvent.Partial -> {
+                // Live Assist of this phone, when one runs: the other side (or one mixed channel) is what it answers.
+                AssistHub.caption(speaker != Speakers.ME, event.text, final = false)
+                main.post {
+                    captionFeed.value = captionFeed.value.copy(partial = CaptionLine(speaker, Devanagari.toUrdu(event.text)))
+                }
             }
 
             is SttEvent.Final -> {
                 val offset = session.recordedMs()
+                val startMs = event.startMs ?: (offset - 1500).coerceAtLeast(0)
+                val endMs = event.endMs ?: offset
                 synchronized(session.segments) {
-                    session.segments +=
-                        SegmentDto(channel, speaker, event.startMs ?: (offset - 1500).coerceAtLeast(0), event.endMs ?: offset, event.text)
+                    session.segments += SegmentDto(channel, speaker, startMs, endMs, event.text)
                 }
+                AssistHub.caption(speaker != Speakers.ME, event.text, final = true, startMs = startMs, endMs = endMs)
                 main.post {
                     val feed = captionFeed.value
                     captionFeed.value =
@@ -1306,6 +1315,7 @@ class RecordingService : LifecycleService() {
         CaptureLog.add(this, "stopped", if (callState is CallState.InCall && !fromCall) "$reason, call still going on" else reason)
         capture = null
         isRecording = false
+        AssistHub.recordingSession(null)
         main.removeCallbacks(ticker)
         publish(null)
         // The pill and captions go at once; saving the file takes a moment more.
@@ -1511,6 +1521,7 @@ class RecordingService : LifecycleService() {
         if (session?.id == recordingId) {
             capture = null
             isRecording = false
+            AssistHub.recordingSession(null)
             main.removeCallbacks(ticker)
             publish(null)
             finalizing++

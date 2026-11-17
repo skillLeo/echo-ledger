@@ -96,8 +96,17 @@ final class LibraryOrganiser
             'failed' => $query->where(fn (Builder $q) => $q->where($q->qualifyColumn('status'), SessionStatus::Failed->value)
                 ->orWhereHas('recordings', fn (Builder $r) => $r->where('upload_status', UploadStatus::Failed->value))),
             'pinned' => $query->where($query->qualifyColumn('pinned'), true),
+            // Since v2.0 (the v2.0 Library's saved view): recordings kept with audio but no finished transcript yet.
+            'untranscribed' => $query->where($query->qualifyColumn('status'), SessionStatus::Completed->value)
+                ->whereDoesntHave('finalTranscript', fn (Builder $t): Builder => $t->where('status', TranscriptStatus::Completed->value)),
             default => $query,
         };
+    }
+
+    /** How many of the workspace's recordings have no finished transcript (the v2.0 Library's Untranscribed). */
+    public function untranscribedCount(int $workspaceId, ?string $zone = null): int
+    {
+        return $this->applyView(CaptureSession::query()->where('workspace_id', $workspaceId)->ofPerson(), 'untranscribed', $zone)->count();
     }
 
     /**

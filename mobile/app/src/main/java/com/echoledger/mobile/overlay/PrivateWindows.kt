@@ -87,6 +87,13 @@ internal enum class FloatingWindow(val title: String, val flags: Int) {
             WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
     ),
     LIVE_TRANSLATE("EchoLedger Live Translate", TranslateOverlay.LOCKED_FLAGS),
+
+    /** This phone's Live Assist card: touchable, never takes the keyboard; touches outside go to the call underneath. */
+    ASSIST_CARD(
+        "EchoLedger Live Assist card",
+        WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+            WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
+    ),
     LIVE_TRANSLATE_GRIP(
         "EchoLedger Live Translate grip",
         WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN

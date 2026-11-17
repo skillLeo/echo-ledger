@@ -479,6 +479,35 @@ impl ApiClient {
         }
     }
 
+    /// `GET /api/help/guides?q=` (2.0.0-d): the user guide's sections; with `q`, those that match, best first.
+    pub async fn help_guides(&self, q: Option<&str>) -> AppResult<DataList<HelpGuideHit>> {
+        let mut request = self.http.get(self.url("help/guides"));
+        if let Some(q) = q {
+            request = request.query(&[("q", q)]);
+        }
+        let resp = self.authed(request)?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/help/guides/{id}` (2.0.0-d): one section in full; `404` for an unknown id.
+    pub async fn help_guide(&self, id: &str) -> AppResult<HelpGuide> {
+        let resp = self.authed(self.http.get(self.url(&format!("help/guides/{id}"))))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `GET /api/help/whats-new?platform=` (2.0.0-d): the platform's last releases with notes, newest first.
+    pub async fn help_whats_new(&self, platform: &str) -> AppResult<DataList<WhatsNewRelease>> {
+        let resp = self.authed(self.http.get(self.url("help/whats-new")).query(&[("platform", platform)]))?.send().await?;
+        Self::parse(resp).await
+    }
+
+    /// `POST /api/support/messages` (2.0.0-d): `202` with nothing in it; 5 an hour per person.
+    pub async fn support_message(&self, subject: &str, message: &str, include_device_report: bool) -> AppResult<()> {
+        let body = json!({ "subject": subject, "message": message, "include_device_report": include_device_report });
+        let resp = self.authed(self.http.post(self.url("support/messages")))?.json(&body).send().await?;
+        Self::ok_empty(resp).await
+    }
+
     /// `POST /api/devices/report` (since v1.5): a device check the person chose to send; returns when the server took it.
     pub async fn device_report(&self, report: &DeviceReport) -> AppResult<String> {
         let resp = self.authed(self.http.post(self.url("devices/report")))?.json(report).send().await?;
@@ -1241,7 +1270,7 @@ impl ApiClient {
 
     /// `POST /api/sessions/{id}/screens` (since v1.5): one screen moment as `multipart/form-data`, the WebP `image`
     /// with its moment, size, trigger and SHA-256. The same image again is `200` with the screen the server has.
-    pub async fn upload_screen(&self, session_id: &str, screen: &ScreenUpload, image: &[u8]) -> AppResult<serde_json::Value> {
+    pub async fn upload_screen(&self, session_id: &str, screen: &ScreenUpload, image: &[u8]) -> AppResult<ScreenMoment> {
         let boundary = format!("echoledger-{}", uuid::Uuid::new_v4().simple());
         let fields = [
             ("at_ms", screen.at_ms.to_string()),
@@ -1257,7 +1286,8 @@ impl ApiClient {
             .body(body)
             .send()
             .await?;
-        Self::parse(resp).await
+        // 201 with the new screen or 200 with the one the server kept already: either way the server holds it.
+        Ok(Self::parse::<UploadedScreen>(resp).await?.data)
     }
 
     /// `GET /api/sessions/{id}/screens` (since v1.5): the recording's screens in time order, with signed image links.
